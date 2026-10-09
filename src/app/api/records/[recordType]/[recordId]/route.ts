@@ -1,4 +1,4 @@
-import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, route, searchParams, withRecord } from "@/lib/api/http";
 import { getRecordExtras } from "@/lib/records/extras";
 
 type Context = { params: Promise<{ recordType: string; recordId: string }> };
@@ -10,7 +10,7 @@ type Context = { params: Promise<{ recordType: string; recordId: string }> };
  */
 export const GET = route<Context>(async (request, context) => {
   const { recordType, recordId } = await context.params;
-  const extras = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", (tx, { membership }) =>
+  const extras = await withRecord(request, searchParams(request).get("organisationId"), recordType, "read", (tx, { membership }) =>
     getRecordExtras(tx, membership.role, recordType, recordId),
   );
   return json(extras);

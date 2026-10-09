@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withRecord } from "@/lib/api/http";
 import { deleteNote, editNote } from "@/lib/records/extras";
 
 type Context = { params: Promise<{ recordType: string; recordId: string; noteId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ recordType: string; recordId: string; noteId:
 export const PATCH = route<Context>(async (request, context) => {
   const { recordType, recordId, noteId } = await context.params;
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  const result = await withRecord(request, body.organisationId, recordType, "write", (tx, { membership }) =>
     editNote(tx, membership.role, recordType, recordId, noteId, { body: body.body, version: body.version }),
   );
   return json(result);
@@ -17,7 +17,7 @@ export const PATCH = route<Context>(async (request, context) => {
 export const DELETE = route<Context>(async (request, context) => {
   const { recordType, recordId, noteId } = await context.params;
   const body = await readJson(request);
-  await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  await withRecord(request, body.organisationId, recordType, "write", (tx, { membership }) =>
     deleteNote(tx, membership.role, recordType, recordId, noteId, { version: body.version }),
   );
   return json({ deleted: true });

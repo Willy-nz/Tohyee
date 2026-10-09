@@ -11,10 +11,11 @@ import {
   type StageType,
   weightedAmount,
 } from "@/lib/crm/forecast-figures";
+import type { CrmScope } from "@/lib/crm/access";
 import { requireCrm } from "@/lib/crm/switch";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { ValidationError } from "@/lib/errors";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { listMembers } from "@/lib/organisations/members";
@@ -100,11 +101,15 @@ function parseCount(input: unknown, kind: ForecastPeriodKind): number {
 export async function forecast(
   tx: OrgTx,
   input: { period?: unknown; from?: unknown; periods?: unknown; ownerUserId?: unknown } = {},
+  scope?: CrmScope,
 ): Promise<Forecast> {
   const kind = parsePeriodKind(input.period);
   const from = input.from === undefined || input.from === null || input.from === "" ? todayIsoDate() : parseIsoDate(input.from, "from");
   const count = parseCount(input.periods, kind);
   const owner = typeof input.ownerUserId === "string" && input.ownerUserId !== "" ? input.ownerUserId : null;
+  // A sales rep's forecast is their own; a manager's, their teams' (decision 491).
+  if (owner !== null && scope?.owners && !scope.owners.includes(owner)) throw new NotFoundError("That person's forecast isn't yours to see.");
+  const owners = scope?.owners ?? null;
   const settings = await tx.query<{ financial_year_end_month: number }>("select financial_year_end_month from organisation_settings where id = true");
   const yearEndMonth = settings.rows[0]?.financial_year_end_month ?? 3;
   const periods = forecastPeriods(from, kind, count, yearEndMonth);
@@ -133,8 +138,9 @@ export async function forecast(
        join contacts c on c.id = o.contact_id
       where o.close_date between $1::date and $2::date
         and ($3::text is null or ($3 = 'none' and o.owner_user_id is null) or o.owner_user_id = $3)
+        and ($4::text[] is null or o.owner_user_id = any($4::text[]))
       order by o.close_date, s.sort_order, o.id`,
-    [start, end, owner],
+    [start, end, owner, owners],
   );
   const opportunities: ForecastOpportunity[] = result.rows.map((row) => ({
     id: row.id,
@@ -155,15 +161,17 @@ export async function forecast(
   const noCloseDate = await tx.query<{ count: number }>(
     `select count(*)::int as count from crm_opportunities o join crm_opportunity_stages s on s.key = o.stage
       where o.close_date is null and s.stage_type = 'open'
-        and ($1::text is null or ($1 = 'none' and o.owner_user_id is null) or o.owner_user_id = $1)`,
-    [owner],
+        and ($1::text is null or ($1 = 'none' and o.owner_user_id is null) or o.owner_user_id = $1)
+        and ($2::text[] is null or o.owner_user_id = any($2::text[]))`,
+    [owner, owners],
   );
 
   // Quotas per owner per period: a quarter's are its months' added (decision 89).
   const quotaRows = await tx.query<{ owner_user_id: string; month: string; amount: string }>(
     `select owner_user_id, month::text, amount::text from crm_forecast_quotas
-      where month between $1::date and $2::date and ($3::text is null or owner_user_id = $3)`,
-    [start, end, owner],
+      where month between $1::date and $2::date and ($3::text is null or owner_user_id = $3)
+        and ($4::text[] is null or owner_user_id = any($4::text[]))`,
+    [start, end, owner, owners],
   );
   const quotaSums = new Map<string, ReturnType<typeof dec>>();
   for (const row of quotaRows.rows) {

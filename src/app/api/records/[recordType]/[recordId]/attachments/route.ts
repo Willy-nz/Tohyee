@@ -1,4 +1,4 @@
-import { json, route, withOrganisation } from "@/lib/api/http";
+import { json, route, withRecord } from "@/lib/api/http";
 import { readUploadForm, requireFormFile } from "@/lib/api/upload";
 import { addAttachment } from "@/lib/records/extras";
 
@@ -13,7 +13,7 @@ export const POST = route<Context>(async (request, context) => {
   const { recordType, recordId } = await context.params;
   const form = await readUploadForm(request);
   const file = await requireFormFile(form);
-  const result = await withOrganisation(request, form.get("organisationId"), "bookkeeper", (tx, { membership }) =>
+  const result = await withRecord(request, form.get("organisationId"), recordType, "write", (tx, { membership }) =>
     addAttachment(tx, membership.role, recordType, recordId, {
       source: form.get("source") ?? undefined,
       idempotencyKey: form.get("idempotencyKey"),

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
-import { type Role, roleAtLeast } from "@/lib/auth/roles";
+import { type Role, roleAtLeast, crmAllows } from "@/lib/auth/roles";
 
 export type WorkspaceUser = {
   id: string;
@@ -25,6 +25,8 @@ type Workspace = {
   selectOrganisation(id: string): void;
   /** True if the signed-in user has at least this role in the current organisation. */
   can(role: Role): boolean;
+  /** True if they may use the CRM at this level (decision 491): sales roles read and change CRM records. */
+  canCrm(need: "read" | "write" | "admin"): boolean;
   /** Where server settings open on the server computer (for server admins); null if they're off. */
   serverSettingsUrl: string | null;
 };
@@ -92,6 +94,7 @@ export function WorkspaceProvider({
       current,
       selectOrganisation,
       can: (role: Role) => (current ? roleAtLeast(current.role, role) : false),
+      canCrm: (need: "read" | "write" | "admin") => (current ? crmAllows(current.role, need) : false),
       serverSettingsUrl,
     }),
     [user, organisations, current, selectOrganisation, serverSettingsUrl],

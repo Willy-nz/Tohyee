@@ -1733,6 +1733,15 @@ run time.
   server-side cursors (`declare … cursor` / `fetch`, `BOOKS_BATCH_SIZE` rows
   at a time) inside its read-only transaction and appends each batch to
   DuckDB as it arrives, so its memory doesn't grow with the ledger.
+- **Sales roles** (decision 491): `sales_rep` and `sales_manager` rank below
+  `report_viewer`, so every route guarded by rank refuses them. The CRM's
+  routes use `withCrm` (`src/lib/api/http.ts`), which admits them, and pass a
+  `CrmScope` (`src/lib/crm/access.ts`: whose deals and tasks they see) to the
+  CRM services, which filter lists and treat anything outside it as not
+  found. Notes and files on a company use `withRecord`; `/api/contacts` and
+  `/api/custom-fields` reads use `withCrm`, and contact changes from a sales
+  role are limited to contact details (`src/lib/crm/sales-contacts.ts`).
+  Teams are tenant tables `crm_teams` and `crm_team_members` (migration 0114).
 - **Sharing** (decision 368): the `report_viewer` role ranks below viewer
   (`src/lib/auth/roles.ts`), so routes guarded at viewer refuse it. The
   dashboard routes accept it and filter through `analytics_dashboard_shares`

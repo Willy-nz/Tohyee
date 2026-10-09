@@ -1,4 +1,4 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withCrm } from "@/lib/api/http";
 import { getRecordType } from "@/lib/crm/record-types/service";
 import { getPerson, listActivities, listOpportunities, listTasks, personTimeline, updatePerson } from "@/lib/crm/service";
 
@@ -7,15 +7,15 @@ type Context = { params: Promise<{ personId: string }> };
 /** A person's record page (CRT11): the person, their record type, opportunities, tasks, activities and timeline. */
 export const GET = route<Context>(async (request, context) => {
   const { personId } = await context.params;
-  const result = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
+  const result = await withCrm(request, searchParams(request).get("organisationId"), "read", async (tx, { scope }) => {
     const person = await getPerson(tx, personId);
     return {
       person,
       recordType: await getRecordType(tx, person.recordTypeId),
-      opportunities: await listOpportunities(tx, { personId: person.id }),
-      tasks: await listTasks(tx, { personId: person.id }),
-      activities: await listActivities(tx, { personId: person.id }),
-      timeline: await personTimeline(tx, person.id),
+      opportunities: await listOpportunities(tx, { personId: person.id, scope }),
+      tasks: await listTasks(tx, { personId: person.id, scope }),
+      activities: await listActivities(tx, { personId: person.id, scope }),
+      timeline: await personTimeline(tx, person.id, scope),
     };
   });
   return json(result);
@@ -25,7 +25,7 @@ export const GET = route<Context>(async (request, context) => {
 export const PATCH = route<Context>(async (request, context) => {
   const { personId } = await context.params;
   const body = await readJson(request);
-  const person = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  const person = await withCrm(request, body.organisationId, "write", (tx, { membership }) =>
     updatePerson(
       tx,
       personId,

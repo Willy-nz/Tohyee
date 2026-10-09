@@ -32,13 +32,19 @@ export function useModules(organisationId: string | null): Modules | null {
   const { current } = useWorkspace();
   // Report viewers see only shared dashboards (decision 360), not the organisation's settings.
   const reportViewer = current?.id === organisationId && current?.role === "report_viewer";
-  const settings = useApiData<{ settings: OrganisationSettings }>(organisationId && !reportViewer ? `/api/organisations/${organisationId}/settings` : null);
+  // Sales reps and managers use the CRM only (decision 491): whether it's on comes from the CRM, not the settings.
+  const salesRole = current?.id === organisationId && (current?.role === "sales_rep" || current?.role === "sales_manager");
+  const settings = useApiData<{ settings: OrganisationSettings }>(
+    organisationId && !reportViewer && !salesRole ? `/api/organisations/${organisationId}/settings` : null,
+  );
+  const crmTeam = useApiData<{ crmEnabled: boolean }>(organisationId && salesRole ? "/api/crm/team" : null, organisationId ? { organisationId } : {});
   const { reload } = settings;
   useEffect(() => {
     window.addEventListener(CHANGED, reload);
     return () => window.removeEventListener(CHANGED, reload);
   }, [reload]);
   if (reportViewer) return { crm: false, reporting: false, notForProfit: false, analytics: true, gst: false, accounting: false };
+  if (salesRole) return crmTeam.data ? { crm: crmTeam.data.crmEnabled, reporting: false, notForProfit: false, analytics: false, gst: false, accounting: false } : null;
   if (!settings.data) return null;
   return {
     crm: settings.data.settings.crmEnabled,

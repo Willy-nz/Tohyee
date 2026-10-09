@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
 import { updateTask } from "@/lib/crm/service";
 
 type Context = { params: Promise<{ taskId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ taskId: string }> };
 export const PATCH = route<Context>(async (request, context) => {
   const { taskId } = await context.params;
   const body = await readJson(request);
-  const task = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
+  const task = await withCrm(request, body.organisationId, "write", (tx, { scope }) =>
     updateTask(tx, taskId, {
       title: body.title,
       body: body.body,
@@ -17,7 +17,7 @@ export const PATCH = route<Context>(async (request, context) => {
       contactId: body.contactId,
       personId: body.personId,
       opportunityId: body.opportunityId,
-    }),
+    }, scope),
   );
   return json({ task });
 });

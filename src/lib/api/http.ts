@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { assertSameOrigin, authenticate, type AuthContext, requireOrganisationRole } from "@/lib/auth/guard";
 import type { Role } from "@/lib/auth/roles";
 import { type OrgRunner, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
-import { HttpError, PayloadTooLargeError, ValidationError } from "@/lib/errors";
+import { type CrmNeed, type CrmScope, crmAllows, crmScope } from "@/lib/crm/access";
+import { ForbiddenError, HttpError, PayloadTooLargeError, ValidationError } from "@/lib/errors";
 import type { Membership } from "@/lib/organisations/registry";
 import { parseOrganisationId } from "@/lib/organisations/registry";
 import { PAYROLL_MINIMUM_ROLE, requirePayrollAccess } from "@/lib/payroll/access";
@@ -135,6 +136,57 @@ export async function withOrganisation<T>(
     { people },
   );
   return addPersonNames(result, people);
+}
+
+/**
+ * `withOrganisation` for the CRM (decision 491): admits sales reps and
+ * managers as well as viewers and up, at the level needed ("read", "write" or
+ * "admin"), and hands `work` the person's CRM scope (whose deals and tasks
+ * they see). Every CRM route uses this, not `withOrganisation`.
+ */
+export async function withCrm<T>(
+  request: Request,
+  organisationIdInput: unknown,
+  need: CrmNeed,
+  work: (tx: OrgTx, context: { auth: AuthContext; membership: Membership; scope: CrmScope }) => Promise<T>,
+): Promise<T> {
+  const auth = await requireAuth(request);
+  const organisationId = parseOrganisationId(organisationIdInput);
+  const membership = await requireOrganisationRole(auth, organisationId, "sales_rep");
+  if (!crmAllows(membership.role, need)) {
+    throw new ForbiddenError(
+      need === "admin"
+        ? "Setting up the CRM needs the admin role or higher in this organisation."
+        : need === "write"
+          ? "Changing CRM records needs the bookkeeper role or higher, or a sales role, in this organisation."
+          : "The CRM needs the viewer role or higher, or a sales role, in this organisation.",
+    );
+  }
+  const people = await loadMemberNames(membership.organisation.id);
+  const result = await withOrganisationTransaction(
+    membership.organisation,
+    { userId: auth.user.id, email: auth.user.email },
+    async (tx) => work(tx, { auth, membership, scope: await crmScope(tx, membership.role, auth.user.id) }),
+    { people },
+  );
+  return addPersonNames(result, people);
+}
+
+/**
+ * Notes and files on a record (NF1-NF14): a company's ("contact") are part of
+ * the CRM's shared address book, so sales reps and managers reach them too
+ * (decision 491); every other record type is the books' and needs viewer to
+ * read or bookkeeper to change, as before.
+ */
+export async function withRecord<T>(
+  request: Request,
+  organisationIdInput: unknown,
+  recordType: string,
+  level: "read" | "write",
+  work: (tx: OrgTx, context: { auth: AuthContext; membership: Membership }) => Promise<T>,
+): Promise<T> {
+  if (recordType === "contact") return withCrm(request, organisationIdInput, level, work);
+  return withOrganisation(request, organisationIdInput, level === "read" ? "viewer" : "bookkeeper", work);
 }
 
 /**

@@ -182,7 +182,7 @@ function AccountRow({ organisationId, account, isAdmin, onChanged }: { organisat
 }
 
 export function MailPage({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
+  const { can, canCrm } = useWorkspace();
   const params = useSearchParams();
   const loaded = useApiData<{ accounts: ConnectedAccount[] }>("/api/crm/mail/accounts", { organisationId });
   const [accounts, setAccounts] = useState<ConnectedAccount[] | null>(null);
@@ -208,7 +208,7 @@ export function MailPage({ organisationId }: { organisationId: string }) {
         title="Connected mailboxes"
         description="Connect your own mailbox and calendar. Only emails and meetings with people and companies in the CRM are kept, with their subject and a short preview; never full emails or attachments. Syncs every 15 minutes."
         actions={
-          can("bookkeeper") ? (
+          canCrm("write") ? (
             <span className={ui.actions}>
               <Button size="small" disabled={busy} onClick={() => void connect("google")}>
                 Connect Gmail

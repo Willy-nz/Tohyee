@@ -1,9 +1,13 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withCrm, withOrganisation } from "@/lib/api/http";
 import { createCustomField, getCustomFieldSetup } from "@/lib/custom-fields/service";
 
-/** GET: whether advanced features and the CRM are on, the sections, and every custom field with its options (examples CF1-CF10, CRMF1-CRMF9). */
+/**
+ * GET: whether advanced features and the CRM are on, the sections, and every
+ * custom field with its options (examples CF1-CF10, CRMF1-CRMF9). Viewers and
+ * up, and sales roles, whose CRM pages show the fields (decision 491).
+ */
 export const GET = route(async (request) => {
-  const setup = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", (tx) => getCustomFieldSetup(tx));
+  const setup = await withCrm(request, searchParams(request).get("organisationId"), "read", (tx) => getCustomFieldSetup(tx));
   return json(setup);
 });
 

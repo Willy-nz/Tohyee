@@ -153,7 +153,7 @@ function RecordHeader({
   backHref: string;
   onChanged: () => void;
 }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const types = useRecordTypes(organisationId, record);
   const { busy, error, run } = useBusy();
   const choices = (types.data?.recordTypes ?? []).filter((type) => type.isActive || type.id === recordType.id);
@@ -171,7 +171,7 @@ function RecordHeader({
         }
         actions={
           <span className={ui.actions}>
-            {can("bookkeeper") && choices.length > 1 ? (
+            {canCrm("write") && choices.length > 1 ? (
               <label className={ui.inlineForm}>
                 <span className={ui.muted}>Record type</span>{" "}
                 <select
@@ -523,7 +523,7 @@ function TasksRelated({
   addForm: (done: () => void) => ReactNode;
   onChanged: () => void;
 }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const [adding, setAdding] = useState(false);
   return (
     <RelatedCard
@@ -532,7 +532,7 @@ function TasksRelated({
       items={tasks}
       empty="No tasks."
       actions={
-        can("bookkeeper") && !adding ? (
+        canCrm("write") && !adding ? (
           <Button size="small" variant="secondary" onClick={() => setAdding(true)}>
             New task
           </Button>
@@ -566,7 +566,7 @@ function ActivityPanel({
   /** The quick-add form for a call, meeting, note or task. */
   form: (kind: QuickAdd, done: () => void) => ReactNode;
 }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const [adding, setAdding] = useState<QuickAdd | null>(null);
   // Fixed for this render, so "upcoming" and "past" split at the same moment.
   const [now] = useState(() => new Date().toISOString());
@@ -574,7 +574,7 @@ function ActivityPanel({
   const past = pastByMonth(tasks, timeline, now);
   return (
     <Card title="Activity">
-      {can("bookkeeper") ? (
+      {canCrm("write") ? (
         <div className={ui.actions}>
           {QUICK_ADD.map(([kind, label]) => (
             <Button key={kind} size="small" variant={adding === kind ? "primary" : "secondary"} onClick={() => setAdding(adding === kind ? null : kind)}>
@@ -627,7 +627,7 @@ function ActivityPanel({
 // Companies
 
 export function CompanyRecordPage({ organisationId, contactId }: { organisationId: string; contactId: string }) {
-  const { can } = useWorkspace();
+  const { can, canCrm } = useWorkspace();
   const data = useApiData<CompanyData>(`/api/crm/companies/${contactId}`, { organisationId });
   const baseCurrency = useBaseCurrency();
   const team = useTeam(organisationId);
@@ -638,7 +638,7 @@ export function CompanyRecordPage({ organisationId, contactId }: { organisationI
   if (!data.data) return <p className={ui.muted}>Loading…</p>;
   const page = data.data;
   const { contact, people, opportunities, tasks } = page;
-  const editable = can("bookkeeper");
+  const editable = canCrm("write");
   const open = opportunities.filter((o) => o.stageType === "open");
   const values: RecordValues = {
     standard: {
@@ -690,7 +690,7 @@ export function CompanyRecordPage({ organisationId, contactId }: { organisationI
           ]}
           actions={
             <>
-              {editable && !contact.isCustomer ? (
+              {editable && can("bookkeeper") && !contact.isCustomer ? (
                 <Button
                   size="small"
                   variant="secondary"

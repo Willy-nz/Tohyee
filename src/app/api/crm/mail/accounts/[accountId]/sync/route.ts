@@ -1,5 +1,5 @@
 import { roleAtLeast } from "@/lib/auth/roles";
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
 import { accountForSync, listAccounts, syncAccount } from "@/lib/crm/mail/service";
 
 type Context = { params: Promise<{ accountId: string }> };
@@ -8,11 +8,11 @@ type Context = { params: Promise<{ accountId: string }> };
 export const POST = route<Context>(async (request, context) => {
   const { accountId } = await context.params;
   const body = await readJson(request);
-  const { id, organisation } = await withOrganisation(request, body.organisationId, "viewer", async (tx, { membership }) => ({
+  const { id, organisation } = await withCrm(request, body.organisationId, "read", async (tx, { membership }) => ({
     id: await accountForSync(tx, accountId, roleAtLeast(membership.role, "admin")),
     organisation: membership.organisation,
   }));
   const result = await syncAccount(organisation, id);
-  const accounts = await withOrganisation(request, body.organisationId, "viewer", (tx) => listAccounts(tx));
+  const accounts = await withCrm(request, body.organisationId, "read", (tx) => listAccounts(tx));
   return json({ ...result, accounts });
 });

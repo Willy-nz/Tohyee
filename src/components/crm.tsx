@@ -221,7 +221,7 @@ function NewProspectForm({ organisationId, onSaved }: { organisationId: string; 
 }
 
 export function CompaniesPage({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const baseCurrency = useBaseCurrency();
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -236,7 +236,7 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
         title="Companies"
         description="Everyone you deal with: prospects, customers and suppliers. Open one for its people, opportunities, tasks and timeline."
         actions={
-          can("bookkeeper") && !adding ? (
+          canCrm("write") && !adding ? (
             <Button size="small" onClick={() => setAdding(true)}>
               New prospect
             </Button>
@@ -422,7 +422,7 @@ export function PeopleTable({
   customSetup: CustomFieldSetup | null | undefined;
   onChanged: () => void;
 }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const [editing, setEditing] = useState<string | null>(null);
   const { error, run } = useBusy();
   // People fields marked "show in lists" (CRMF7).
@@ -477,7 +477,7 @@ export function PeopleTable({
                   <CustomValueCell key={field.id} field={field} values={person.customFields} />
                 ))}
                 <td className={ui.num}>
-                  {can("bookkeeper") ? (
+                  {canCrm("write") ? (
                     <span className={ui.rowButtons}>
                       <Button size="small" variant="secondary" onClick={() => setEditing(person.id)}>
                         Edit
@@ -510,7 +510,7 @@ export function PeopleTable({
 }
 
 export function PeoplePage({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -529,7 +529,7 @@ export function PeoplePage({ organisationId }: { organisationId: string }) {
           <label className={ui.checkbox}>
             <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived
           </label>
-          {can("bookkeeper") && !adding ? (
+          {canCrm("write") && !adding ? (
             <Button size="small" onClick={() => setAdding(true)}>
               New person
             </Button>
@@ -760,13 +760,16 @@ export function InvoiceAction({ organisationId, opportunity, onChanged }: { orga
   const [askingRate, setAskingRate] = useState(false);
   const [typedRate, setTypedRate] = useState<string | null>(null);
   const suggestedRate = useLastRate(organisationId, opportunity.currencyCode, baseCurrency, askingRate ? todayInBrowser() : "");
+  // Sales reps and managers don't open the books (decision 491): the document's number only.
   if (opportunity.invoiceId) {
-    return <Link href={`/operations/invoices/${opportunity.invoiceId}`}>{opportunity.invoiceNumber ?? "Draft invoice"}</Link>;
+    const label = opportunity.invoiceNumber ?? "Draft invoice";
+    return can("viewer") ? <Link href={`/operations/invoices/${opportunity.invoiceId}`}>{label}</Link> : <span>{label}</span>;
   }
   if (opportunity.salesOrderId) {
-    return <Link href={`/operations/sales-orders/${opportunity.salesOrderId}`}>{opportunity.salesOrderNumber ?? "Draft sales order"}</Link>;
+    const label = opportunity.salesOrderNumber ?? "Draft sales order";
+    return can("viewer") ? <Link href={`/operations/sales-orders/${opportunity.salesOrderId}`}>{label}</Link> : <span>{label}</span>;
   }
-  // A Closed won stage, whatever it's called (CRMS4).
+  // A Closed won stage, whatever it's called (CRMS4). Making the invoice or sales order is the books': bookkeepers and up.
   if (opportunity.stageType !== "won" || !can("bookkeeper")) return null;
   const make = () =>
     void run(async () => {
@@ -826,11 +829,11 @@ export function OpportunityCard({
   /** The stages it can move to; without them its stage only shows. */
   stages?: OpportunityStageSetup[];
 }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const baseCurrency = useBaseCurrency();
   const [editing, setEditing] = useState(false);
   const { error, run } = useBusy();
-  const editable = can("bookkeeper");
+  const editable = canCrm("write");
   if (editing) {
     return (
       <div className={ui.crmCard}>
@@ -911,7 +914,7 @@ export function OpportunityCard({
  * pick its stage to move it (CRM4, CRM9, CRMS7).
  */
 export function PipelinePage({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const [adding, setAdding] = useState(false);
   const [over, setOver] = useState<OpportunityStage | null>(null);
   const opportunities = useApiData<{ opportunities: Opportunity[] }>("/api/crm/opportunities", { organisationId });
@@ -938,7 +941,7 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
         title="Pipeline"
         description="Opportunities by stage, amounts excluding GST. Drag a card to another stage, or pick its stage. A won opportunity can make its invoice."
         actions={
-          can("bookkeeper") && !adding ? (
+          canCrm("write") && !adding ? (
             <Button size="small" onClick={() => setAdding(true)}>
               New opportunity
             </Button>
@@ -1125,7 +1128,7 @@ export function TaskForm({
 }
 
 export function TaskList({ organisationId, tasks, onChanged, showAbout }: { organisationId: string; tasks: Task[]; onChanged: () => void; showAbout: boolean }) {
-  const { can } = useWorkspace();
+  const { canCrm } = useWorkspace();
   const team = useTeam(organisationId);
   const { error, run } = useBusy();
   const today = todayInBrowser();
@@ -1164,7 +1167,7 @@ export function TaskList({ organisationId, tasks, onChanged, showAbout }: { orga
               </td>
               <td>{memberName(team.data?.team, task.assigneeUserId)}</td>
               <td>
-                {can("bookkeeper") ? (
+                {canCrm("write") ? (
                   <select
                     aria-label={`Status of ${task.title}`}
                     value={task.status}
@@ -1194,7 +1197,7 @@ export function TaskList({ organisationId, tasks, onChanged, showAbout }: { orga
 }
 
 export function TasksPage({ organisationId }: { organisationId: string }) {
-  const { user, can } = useWorkspace();
+  const { user, canCrm } = useWorkspace();
   const [filter, setFilter] = useState<"mine" | "open" | "all">("mine");
   const [adding, setAdding] = useState(false);
   const tasks = useApiData<{ tasks: Task[] }>("/api/crm/tasks", {
@@ -1212,7 +1215,7 @@ export function TasksPage({ organisationId }: { organisationId: string }) {
             <option value="open">Everyone&apos;s open tasks</option>
             <option value="all">All tasks, including done</option>
           </select>
-          {can("bookkeeper") && !adding ? (
+          {canCrm("write") && !adding ? (
             <Button size="small" onClick={() => setAdding(true)}>
               New task
             </Button>

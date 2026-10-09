@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
-import { type Role, roleAtLeast } from "@/lib/auth/roles";
+import { isSalesRole, type Role, roleAtLeast } from "@/lib/auth/roles";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
@@ -126,8 +126,13 @@ function isAuthor(tx: OrgTx, row: { created_by_user_id: string | null; created_b
   return row.created_by_email.toLowerCase() === tx.actor.email.toLowerCase();
 }
 
+/** Who adds notes and files: bookkeepers and up, and sales roles, who only reach a company's (decision 491). */
+function canAddExtras(role: Role): boolean {
+  return roleAtLeast(role, "bookkeeper") || isSalesRole(role);
+}
+
 function canChange(tx: OrgTx, role: Role, row: { created_by_user_id: string | null; created_by_email: string }): boolean {
-  return roleAtLeast(role, "admin") || (roleAtLeast(role, "bookkeeper") && isAuthor(tx, row));
+  return roleAtLeast(role, "admin") || (canAddExtras(role) && isAuthor(tx, row));
 }
 
 function toNote(tx: OrgTx, role: Role, row: NoteRow): RecordNote {
@@ -314,7 +319,7 @@ export async function getRecordExtras(
     notes: notes.rows.map((row) => toNote(tx, role, row)),
     attachments: attachments.rows.map((row) => toAttachment(tx, role, row)),
     history: await historyFor(tx, recordType, recordId),
-    canAdd: roleAtLeast(role, "bookkeeper"),
+    canAdd: canAddExtras(role),
   };
 }
 
