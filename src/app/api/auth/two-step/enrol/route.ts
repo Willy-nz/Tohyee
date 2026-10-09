@@ -2,6 +2,7 @@ import { json, readJson, route, searchParams } from "@/lib/api/http";
 import { assertSignInRate } from "@/lib/auth/rate-limit";
 import { assertSameOrigin, authenticateAnyStage } from "@/lib/auth/guard";
 import { sessionCookieHeader, sessionMetaFrom } from "@/lib/auth/sessions";
+import { loggedSignIn } from "@/lib/auth/sign-in-log";
 import { completeEnrolment, startEnrolment } from "@/lib/auth/two-step";
 
 /** GET: the key to add to an authenticator app (QR code and text). `fresh=true` makes a new one. */
@@ -16,7 +17,13 @@ export const POST = route(async (request) => {
   assertSignInRate(request);
   const state = await authenticateAnyStage(request);
   const body = await readJson(request);
-  const result = await completeEnrolment(state, { code: body.code }, sessionMetaFrom(request));
+  const result = await loggedSignIn(
+    request,
+    { email: state.user.email, userId: state.user.id },
+    "code",
+    () => completeEnrolment(state, { code: body.code }, sessionMetaFrom(request)),
+    () => ({ outcome: "signed_in" }),
+  );
   return json(
     { user: result.user, backupCodes: result.backupCodes },
     { headers: { "set-cookie": sessionCookieHeader(request, result.token) } },

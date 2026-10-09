@@ -149,6 +149,7 @@ namespace Tohyee.Tray
                 case "email": return new EmailPage(_app.Api);
                 case "updates": return new UpdatesPage(_app);
                 case "stats": return new StatsPage(_app.Api);
+                case "signins": return new SignInsPage(_app.Api, count => SetBadge("signins", count, Theme.Warning));
                 default: throw new ArgumentException(key);
             }
         }
@@ -296,6 +297,7 @@ namespace Tohyee.Tray
             Group("Keep safe");
             Add(navigate, "backups", "Backups", Glyph.Backups);
             Add(navigate, "updates", "Updates", Glyph.Updates);
+            Add(navigate, "signins", "Sign-ins", Glyph.Users);
             Group("Connect");
             Add(navigate, "phone", "Remote access", Glyph.Phone);
             Add(navigate, "email", "Email", Glyph.Email);
@@ -351,7 +353,7 @@ namespace Tohyee.Tray
             if (_open == null) return; // still being built
             var side = Theme.S(12);
             var width = Width - side * 2 - 1;
-            var itemHeight = Theme.S(36);
+            var itemHeight = Theme.S(34);
             _logo.Location = new Point(side + Theme.S(8), Theme.S(22));
             var block = _name.Height + _kind.Height - Theme.S(2);
             _name.Location = new Point(_logo.Right + Theme.S(10), _logo.Top + (_logo.Height - block) / 2 - Theme.S(2));

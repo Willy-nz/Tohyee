@@ -3824,3 +3824,36 @@ testing) and #154's code signing (later, Jess).
        the analytics folder; streaming mode and a real Google Drive haven't
        been tried.
 
+### The sign-in monitor (decision 487)
+
+487. **Sign-ins are recorded and suspicious ones reported** (#208 item 1,
+     Jess 9 Oct 2026: no country lookup; report, don't block).
+     - **What's recorded:** every sign-in attempt (password, authenticator
+       code, backup code, setup link, emailed reset, first admin), with its
+       outcome, the address (the one the nearest proxy wrote), the browser,
+       and whether it came through remote access. Core migration 0011,
+       `sign_in_events`, kept for a year. The per-address rate-limit brake
+       isn't recorded.
+     - **What's flagged:**
+       - a successful sign-in from a browser that login hasn't used before,
+         or from a new address through remote access
+       - 3 or more failures for one login within 15 minutes (once per
+         window)
+       - failures for 5 or more different logins from one address within 15
+         minutes
+       - a locked login
+       - a backup code used
+       - an emailed two-step reset
+       - a server admin signing in through remote access
+     - **Who's told:** flags are emailed to the server admins, and to the
+       person for the ones about their own login, when the server can send
+       email. They show in the server app (Sign-ins page, a badge, and
+       Home's Needs attention until "I've looked") and at `/server/sign-ins`.
+     - **What's not done:** nothing is blocked, and there's no country lookup
+       or unusual-hours flag. Repeated failures still lock the login, as
+       before.
+     - **Where you're signed in:** people see their sessions (browser,
+       address, last used) on Your account and can sign one out, or all the
+       others. Server admins can sign anyone out everywhere (server app and
+       `/server/users`).
+

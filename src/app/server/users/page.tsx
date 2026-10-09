@@ -211,6 +211,17 @@ export default function UsersPage() {
                           <Button
                             variant="secondary"
                             size="small"
+                            onClick={async () => {
+                              if (await confirm(`Sign ${user.email} out everywhere? They can sign straight back in with their password and two-step sign-in.`)) {
+                                void act(() => api(`/api/admin/users/${user.id}/sign-out`, { method: "POST" }), `${user.email} is signed out everywhere.`);
+                              }
+                            }}
+                          >
+                            Sign out everywhere
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="small"
                             onClick={() =>
                               void act(
                                 () => api(`/api/admin/users/${user.id}`, { method: "PATCH", body: { isServerAdmin: !user.isServerAdmin } }),

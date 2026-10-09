@@ -49,6 +49,10 @@ Tohyee (the books) are at the bottom.
   organisation's owners can't add a new owner (decision 485): a new owner
   after 7 days, which its owners and admins are told about and can cancel.
 - **Email**: as before.
+- **Sign-ins** (decision 487): every sign-in attempt for the last year,
+  with suspicious ones flagged (a new device, failed tries, someone
+  guessing, a backup code…) and reported, never blocked. Flags since
+  "I've looked" show as a badge and on Home.
 - **Users**: with two-step sign-in on, adding someone (or resetting their
   two-step sign-in) gives a one-time setup link to send them, emailed too
   when the server can send email; they choose their own password with it

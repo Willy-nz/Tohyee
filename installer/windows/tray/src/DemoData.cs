@@ -39,7 +39,7 @@ namespace Tohyee.Tray
                 Pump();
                 Save(form, folder, "0-sign-in");
                 form.ShowSettings();
-                foreach (var page in new[] { "home", "organisations", "users", "backups", "analytics", "email", "stats", "updates" })
+                foreach (var page in new[] { "home", "organisations", "users", "backups", "analytics", "email", "stats", "updates", "signins" })
                 {
                     if (Transitions)
                     {
@@ -132,7 +132,7 @@ namespace Tohyee.Tray
 
         private static string Name(string page)
         {
-            var order = new[] { "home", "organisations", "users", "phone", "backups", "analytics", "email", "stats", "updates" };
+            var order = new[] { "home", "organisations", "users", "phone", "backups", "analytics", "email", "stats", "updates", "signins" };
             return (Array.IndexOf(order, page) + 1) + "-" + page;
         }
 
@@ -309,6 +309,13 @@ namespace Tohyee.Tray
                 return Parse("{'currentVersion':'0.2.1','latestVersion':'0.3.0','updateAvailable':true,'releaseName':'Tohyee v0.3.0','publishedAt':'" + Ago(20) + "','releaseNotesUrl':'https://github.com/Willy-nz/Tohyee/releases/tag/v0.3.0','checkedAt':'" + Ago(3) + "','nextCheckAt':'" + Ago(-21) + "','checkError':null,"
                     + "'lastStart':{'version':'0.2.1','previousVersion':'0.2.0','startedAt':'" + Ago(77) + "','organisationsChecked':3,'organisationsUpgraded':3,'organisationsBlocked':0},"
                     + "'lastUpdate':{'version':'0.2.1','previousVersion':'0.2.0','startedAt':'" + Ago(77) + "','organisationsChecked':3,'organisationsUpgraded':3,'organisationsBlocked':[]},'blockedOrganisations':[],'platform':'win32'}");
+            }
+            if (path.StartsWith("/api/admin/sign-ins"))
+            {
+                return Parse("{'unseen':{'count':1,'reviewedAt':null},'events':[" +
+                    "{'id':'5','at':'" + Ago(0.3) + "','email':'jess@example.nz','step':'code','outcome':'signed_in','detail':null,'address':'127.0.0.1','userAgent':'TohyeeTray/1.0','remote':false,'flag':null}," +
+                    "{'id':'4','at':'" + Ago(5) + "','email':'kim@example.nz','step':'code','outcome':'signed_in','detail':null,'address':'203.0.113.9','userAgent':'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)','remote':true,'flag':'A new device or browser for this login'}," +
+                    "{'id':'3','at':'" + Ago(26) + "','email':'sam@example.nz','step':'password','outcome':'failed','detail':null,'address':'198.51.100.4','userAgent':'Mozilla/5.0','remote':true,'flag':null}]}");
             }
             if (path.StartsWith("/api/admin/stats"))
             {

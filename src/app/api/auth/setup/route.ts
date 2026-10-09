@@ -4,6 +4,7 @@ import { assertSignInRate } from "@/lib/auth/rate-limit";
 import { assertRemoteAllowed } from "@/lib/auth/remote";
 import { completeSetup, needsSetup } from "@/lib/auth/service";
 import { sessionCookieHeader, sessionMetaFrom } from "@/lib/auth/sessions";
+import { loggedSignIn } from "@/lib/auth/sign-in-log";
 
 /** Whether first-time setup is still needed (no users yet). Public. */
 export const GET = route(async () => {
@@ -14,16 +15,24 @@ export const GET = route(async () => {
 export const POST = route(async (request) => {
   assertSameOrigin(request);
   assertSignInRate(request);
-  assertRemoteAllowed(request.headers);
   const body = await readJson(request);
-  const result = await completeSetup(
-    {
-      setupToken: body.setupToken,
-      email: body.email,
-      displayName: body.displayName,
-      password: body.password,
+  const result = await loggedSignIn(
+    request,
+    { email: typeof body.email === "string" ? body.email : null },
+    "first_admin",
+    async () => {
+      assertRemoteAllowed(request.headers);
+      return completeSetup(
+        {
+          setupToken: body.setupToken,
+          email: body.email,
+          displayName: body.displayName,
+          password: body.password,
+        },
+        sessionMetaFrom(request),
+      );
     },
-    sessionMetaFrom(request),
+    (signed) => ({ outcome: signed.stage === "full" ? "signed_in" : "password_ok", userId: signed.user.id }),
   );
   return json(
     { user: result.user, stage: result.stage },

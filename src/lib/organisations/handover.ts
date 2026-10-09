@@ -170,7 +170,7 @@ export async function cancelHandover(actor: AdminActor, organisationIdInput: unk
 /** Carries out handovers whose wait is over: the person becomes an owner (an existing role is raised to owner). */
 export async function completeDueHandovers(now = new Date()): Promise<number> {
   const due = await coreQuery<{ id: string; organisation_id: string }>(
-    "select id::text, organisation_id from organisation_handovers where status = 'waiting' and takes_effect_at <= $1 order by id",
+    "select id::text, organisation_id from organisation_handovers where status = 'waiting' and takes_effect_at <= $1 order by organisation_handovers.id",
     [now],
   );
   let done = 0;

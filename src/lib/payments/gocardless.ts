@@ -306,7 +306,7 @@ function toAuthority(row: AuthorityRow): DirectDebitAuthority {
 export async function getContactDirectDebit(tx: OrgTx, contactIdInput: unknown): Promise<ContactDirectDebit> {
   const contactId = requireId(contactIdInput, "contactId");
   const row = await settingsRow(tx);
-  const latest = (await tx.query<AuthorityRow>(`${AUTHORITY_SELECT} where contact_id = $1 order by id desc limit 1`, [contactId])).rows[0];
+  const latest = (await tx.query<AuthorityRow>(`${AUTHORITY_SELECT} where contact_id = $1 order by gocardless_authorities.id desc limit 1`, [contactId])).rows[0];
   const reason = !row.access_token_ciphertext ? "GoCardless isn't connected (Settings › Online payments)." : !row.enabled ? "Direct debit is off (Settings › Online payments)." : null;
   const waiting = latest?.status === "pending" && latest.flow_expires_at !== null && new Date(latest.flow_expires_at).getTime() > Date.now();
   return { available: reason === null, reason, current: latest ? toAuthority(latest) : null, canStart: reason === null && latest?.status !== "active" && !waiting };
@@ -424,7 +424,7 @@ export async function retryDirectDebit(organisation: OrganisationRecord, actor: 
     const state = await getInvoiceDirectDebit(tx, invoiceId);
     if (!state.canRetry) throw new ConflictError("There's no failed collection to try again for this invoice (or it has been tried three times, or the authority isn't active).");
     const row = (await tx.query<{ id: string; provider_payment_id: string }>(
-      "select id::text, provider_payment_id from gocardless_collections where invoice_id = $1 order by id desc limit 1 for update",
+      "select id::text, provider_payment_id from gocardless_collections where invoice_id = $1 order by gocardless_collections.id desc limit 1 for update",
       [invoiceId],
     )).rows[0];
     const credentials = credentialsOf(await settingsRow(tx));
@@ -486,7 +486,7 @@ export async function checkGoCardless(organisation: OrganisationRecord, actor: A
 
   try {
     // 1. Authorities (GC2, GC7).
-    const authorities = await run((tx) => tx.query<AuthorityRow>(`${AUTHORITY_SELECT} where status in ('pending', 'active') order by id`));
+    const authorities = await run((tx) => tx.query<AuthorityRow>(`${AUTHORITY_SELECT} where status in ('pending', 'active') order by gocardless_authorities.id`));
     for (const authority of authorities.rows) {
       try {
         let mandateId = authority.mandate_id;
@@ -519,7 +519,7 @@ export async function checkGoCardless(organisation: OrganisationRecord, actor: A
       tx.query<{ id: string; invoice_id: string; provider_payment_id: string; amount: string; status: string; provider_status: string | null; customer_payment_id: string | null; retries: number }>(
         `select id::text, invoice_id::text, provider_payment_id, amount::text, status, provider_status, customer_payment_id::text, retries from gocardless_collections
           where status = 'scheduled' or (status = 'confirmed' and (charge_date is null or charge_date >= $1::date))
-          order by id`,
+          order by gocardless_collections.id`,
         [addDays(today, -WATCH_DAYS)],
       ),
     );
@@ -536,7 +536,7 @@ export async function checkGoCardless(organisation: OrganisationRecord, actor: A
     // 3. Collections an invoice no longer needs (GC8, GC9, "don't collect").
     const open = await run((tx) =>
       tx.query<{ id: string; invoice_id: string; provider_payment_id: string; amount: string; provider_status: string | null; notice: string | null }>(
-        "select id::text, invoice_id::text, provider_payment_id, amount::text, provider_status, notice from gocardless_collections where status = 'scheduled' order by id",
+        "select id::text, invoice_id::text, provider_payment_id, amount::text, provider_status, notice from gocardless_collections where status = 'scheduled' order by gocardless_collections.id",
       ),
     );
     for (const collection of open.rows) {
