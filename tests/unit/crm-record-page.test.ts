@@ -124,6 +124,8 @@ const task = (id: string, title: string, dueDate: string | null, status: Task["s
   personName: null,
   opportunityId: null,
   opportunityName: null,
+  leadId: null,
+  leadName: null,
   completedAt,
   createdByEmail: "owner@example.com",
   createdAt: "2026-09-01T00:00:00.000Z",

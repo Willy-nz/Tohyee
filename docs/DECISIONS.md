@@ -3979,3 +3979,31 @@ testing) and #154's code signing (later, Jess).
      - **Search:** a sales role finds companies, people and its own deals.
      - Viewers and up see and change the CRM as before.
 
+### CRM leads (decision 492)
+
+492. **Leads are their own records, worked then converted** (#216 stage 1,
+     Jess 10 Oct 2026: "a separate Lead record", typed in, imported, from a
+     web form and from emails).
+     - **Statuses:** new, working, unqualified (with a reason) and
+       converted. A converted lead doesn't change; an unqualified one is set
+       back to working before converting. Leads are never deleted (tenant
+       migration 0115).
+     - **Owner:** whoever adds or imports it unless they choose someone; web
+       form and email leads start unassigned and "to review". A rep sees
+       their own; a manager their teams' and unassigned ones; viewers and up
+       all (`seesLead`).
+     - **Converting:** into an existing company or a new prospect named as
+       the lead's company; an existing person there or a new one from the
+       lead; and, unless left out, a new opportunity owned by the lead's
+       owner with that person as point of contact. The lead's tasks and
+       activities keep their lead and also get the company and person, so
+       its history shows on them. Converting again returns what it made.
+     - **Importing:** a CSV or Excel file whose first row is headings
+       (Name or First and Last name, Company, Email, Phone, Job title,
+       Source, Notes; common other spellings too), at most 2,000 rows. Each
+       row is its own: a bad row or one whose email is already an open lead
+       is skipped with the reason; the same file with the same key again adds
+       nothing.
+     - The web form and email come next (decision 493); finding and merging
+       duplicates after that.
+

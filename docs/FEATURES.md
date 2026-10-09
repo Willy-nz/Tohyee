@@ -811,6 +811,13 @@ that something happened.
   and files on a company. **CRM › Teams**: admins and owners make teams (a
   manager and members; one team each). Search finds only a sales person's
   CRM records. Viewers and up see every CRM record as before.
+- **CRM leads** (decision 492, #216): CRM › Leads, for enquiries before
+  they're customers, after Salesforce's leads: typed in or imported from a
+  CSV or Excel file (duplicates of open leads skipped), owned by whoever adds
+  them, worked (new, working, unqualified with a reason) and converted into a
+  company (a new prospect or an existing one), a person and optionally an
+  opportunity, keeping their calls, notes and tasks. Leads show in search,
+  scoped like deals for sales roles.
   **CRM custom fields** (like Salesforce's): the organisation's own fields
   on companies (contact fields used on prospects), people and
   opportunities, with the same types, required fields, defaults and

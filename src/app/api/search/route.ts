@@ -12,7 +12,9 @@ export const GET = route(async (request) => {
       filter: params.get("kind") ?? "all",
       onlyDashboards: membership.role === "report_viewer",
       userId: auth.user.id,
-      ...(isSalesRole(membership.role) ? { salesOwners: (await crmScope(tx, membership.role, auth.user.id)).owners ?? [] } : {}),
+      ...(isSalesRole(membership.role)
+        ? { salesOwners: (await crmScope(tx, membership.role, auth.user.id)).owners ?? [], salesManager: membership.role === "sales_manager" }
+        : {}),
     }),
   );
   return json(result);

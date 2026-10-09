@@ -8,6 +8,7 @@ export const GET = route(async (request) => {
     listTasks(tx, {
       contactId: params.get("contactId"),
       opportunityId: params.get("opportunityId"),
+      leadId: params.get("leadId"),
       open: params.get("open") === "true",
       assigneeUserId: params.get("assigneeUserId"),
       scope,
@@ -28,6 +29,7 @@ export const POST = route(async (request) => {
       contactId: body.contactId,
       personId: body.personId,
       opportunityId: body.opportunityId,
+      leadId: body.leadId,
     }, scope),
   );
   return json({ task }, { status: 201 });

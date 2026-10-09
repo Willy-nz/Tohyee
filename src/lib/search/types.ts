@@ -21,6 +21,7 @@ export type SearchKind =
   | "crm_company"
   | "crm_person"
   | "crm_opportunity"
+  | "crm_lead"
   | "dashboard";
 
 export type SearchRecord = {
