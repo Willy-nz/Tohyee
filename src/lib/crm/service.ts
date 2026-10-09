@@ -5,6 +5,7 @@ import { dueDateFromTerms } from "@/lib/customers/service";
 import { keptCustom, loadCustomFieldContext, missingRequiredField, parseCustomInput, resolveCustomValues } from "@/lib/custom-fields/service";
 import { type CustomValues, customValuesKey, defaultValues, isSwitchedOn } from "@/lib/custom-fields/values";
 import type { Role } from "@/lib/auth/roles";
+import { assertSeesOwner, type CrmScope, ownerFor, seesOwner } from "@/lib/crm/access";
 import { checkAgainstLayout, chooseRecordType, getRecordType, type LayoutValues } from "@/lib/crm/record-types/service";
 import type { RecordType } from "@/lib/crm/record-types/layout";
 import { todayIsoDate } from "@/lib/dates";
@@ -198,8 +199,19 @@ async function crmCustomValues(
   return values;
 }
 
-/** Who is saving: read-only fields on a record type are for admins and owners (CRT6). */
-export type SaveOptions = { role?: Role };
+/**
+ * Who is saving: read-only fields on a record type are for admins and owners
+ * (CRT6), and a sales rep or manager only reaches the deals and tasks in their
+ * scope (decision 491).
+ */
+export type SaveOptions = { role?: Role; scope?: CrmScope };
+
+/** SQL that limits an owner column to the scope's owners, adding them as the next parameter; "true" for everyone. */
+function ownerSql(scope: CrmScope | undefined, column: string, params: unknown[]): string {
+  if (!scope || scope.owners === null) return "true";
+  params.push(scope.owners);
+  return `${column} = any($${params.length}::text[])`;
+}
 
 /**
  * Checks a person's or opportunity's values against its record type's page
@@ -514,23 +526,31 @@ function toOpportunity(row: OpportunityRow): Opportunity {
   };
 }
 
-export async function listOpportunities(tx: OrgTx, options: { contactId?: unknown; personId?: unknown } = {}): Promise<Opportunity[]> {
+export async function listOpportunities(
+  tx: OrgTx,
+  options: { contactId?: unknown; personId?: unknown; scope?: CrmScope } = {},
+): Promise<Opportunity[]> {
   const contactId = optionalId(options.contactId, "contactId");
   const personId = optionalId(options.personId, "personId");
+  const params: unknown[] = [contactId, personId];
+  const owned = ownerSql(options.scope, "o.owner_user_id", params);
   const result = await tx.query<OpportunityRow>(
     `${OPPORTUNITY_SELECT}
-      where ($1::bigint is null or o.contact_id = $1) and ($2::bigint is null or o.point_of_contact_id = $2)
+      where ($1::bigint is null or o.contact_id = $1) and ($2::bigint is null or o.point_of_contact_id = $2) and ${owned}
       order by s.sort_order, o.position, o.id`,
-    [contactId, personId],
+    params,
   );
   return result.rows.map(toOpportunity);
 }
 
-export async function getOpportunity(tx: OrgTx, idInput: unknown): Promise<Opportunity> {
+/** One opportunity; outside a sales person's scope it's "not found" (decision 491). */
+export async function getOpportunity(tx: OrgTx, idInput: unknown, scope?: CrmScope): Promise<Opportunity> {
   const id = requireId(idInput, "opportunityId");
   const result = await tx.query<OpportunityRow>(`${OPPORTUNITY_SELECT} where o.id = $1`, [id]);
   if (!result.rows[0]) throw new NotFoundError("Opportunity not found.");
-  return toOpportunity(result.rows[0]);
+  const opportunity = toOpportunity(result.rows[0]);
+  assertSeesOwner(scope, opportunity.ownerUserId, "Opportunity");
+  return opportunity;
 }
 
 function parseAmount(input: unknown): string {
@@ -589,7 +609,7 @@ function forecastValues(input: OpportunityInput, stage: OpportunityStageSetup, c
   return { probability, forecastCategory };
 }
 
-async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null, stage: OpportunityStageSetup) {
+async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null, stage: OpportunityStageSetup, scope?: CrmScope) {
   const contactId = input.contactId === undefined && current ? current.contactId : requireId(input.contactId, "contactId");
   await requireContact(tx, contactId);
   if (current?.invoiceId && contactId !== current.contactId) {
@@ -614,7 +634,11 @@ async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Op
     name: input.name === undefined && current ? current.name : requireString(input.name, "name", { maxLength: 200 }),
     contactId,
     pointOfContactId,
-    ownerUserId: input.ownerUserId === undefined ? (current?.ownerUserId ?? null) : await parseMember(tx, input.ownerUserId, "The owner"),
+    ownerUserId: ownerFor(
+      scope,
+      input.ownerUserId === undefined ? (current?.ownerUserId ?? null) : await parseMember(tx, input.ownerUserId, "The owner"),
+      current?.ownerUserId ?? null,
+    ),
     amount,
     currencyCode,
     closeDate: input.closeDate === undefined ? (current?.closeDate ?? null) : parseOptionalIsoDate(input.closeDate, "close date"),
@@ -632,7 +656,7 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput, opti
   await requireCrm(tx);
   const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, null);
   const stage = await chooseStage(tx, input.stage, null, recordType.id);
-  const values = await opportunityValues(tx, input, null, stage);
+  const values = await opportunityValues(tx, input, null, stage, options.scope);
   const customFields = await crmCustomValues(tx, "opportunity", input.customFields, null);
   const startingStage = await chooseStage(tx, undefined, null, recordType.id);
   await checkCrmLayout(tx, "opportunity", recordType, opportunityLayoutValues(values, customFields), null, options, startingStage.key);
@@ -670,7 +694,7 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput, opti
 /** Changes an opportunity; a new stage puts it at the end of that column (CRM4). Refused once it has made an invoice. */
 export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: OpportunityInput, options: SaveOptions = {}): Promise<Opportunity> {
   await requireCrm(tx);
-  const current = await getOpportunity(tx, idInput);
+  const current = await getOpportunity(tx, idInput, options.scope);
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
   const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, current.recordTypeId);
   if (current.invoiceId && input.stage !== undefined && input.stage !== current.stage) {
@@ -680,7 +704,7 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
     throw new ConflictError("This opportunity has made a sales order, so its stage can't change.");
   }
   const stage = await chooseStage(tx, input.stage, { key: current.stage, recordTypeId: current.recordTypeId }, recordType.id);
-  const values = await opportunityValues(tx, input, current, stage);
+  const values = await opportunityValues(tx, input, current, stage, options.scope);
   const customFields = await crmCustomValues(tx, "opportunity", input.customFields, current.customFields);
   const currentType = recordType.id === current.recordTypeId ? recordType : await getRecordType(tx, current.recordTypeId);
   await checkCrmLayout(
@@ -867,7 +891,12 @@ export async function makeSalesOrderFromOpportunity(tx: OrgTx, idInput: unknown)
 
 type Targets = { contactId: string | null; personId: string | null; opportunityId: string | null };
 
-async function parseTargets(tx: OrgTx, input: { contactId?: unknown; personId?: unknown; opportunityId?: unknown }, current: Targets | null): Promise<Targets> {
+async function parseTargets(
+  tx: OrgTx,
+  input: { contactId?: unknown; personId?: unknown; opportunityId?: unknown },
+  current: Targets | null,
+  scope?: CrmScope,
+): Promise<Targets> {
   const pick = (value: unknown, now: string | null, what: string) => (value === undefined ? now : optionalId(value === "" ? null : value, what));
   const targets = {
     contactId: pick(input.contactId, current?.contactId ?? null, "contactId"),
@@ -876,7 +905,7 @@ async function parseTargets(tx: OrgTx, input: { contactId?: unknown; personId?: 
   };
   if (targets.contactId) await requireContact(tx, targets.contactId);
   if (targets.personId) await getPerson(tx, targets.personId);
-  if (targets.opportunityId) await getOpportunity(tx, targets.opportunityId);
+  if (targets.opportunityId) await getOpportunity(tx, targets.opportunityId, scope);
   return targets;
 }
 
@@ -947,26 +976,30 @@ function toTask(row: TaskRow): Task {
 
 export async function listTasks(
   tx: OrgTx,
-  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; open?: boolean; assigneeUserId?: unknown } = {},
+  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; open?: boolean; assigneeUserId?: unknown; scope?: CrmScope } = {},
 ): Promise<Task[]> {
   const contactId = optionalId(options.contactId, "contactId");
   const personId = optionalId(options.personId, "personId");
   const opportunityId = optionalId(options.opportunityId, "opportunityId");
   const assignee = typeof options.assigneeUserId === "string" && options.assigneeUserId ? options.assigneeUserId : null;
+  const params: unknown[] = [contactId, personId, opportunityId, options.open ?? false, assignee];
+  const assigned = ownerSql(options.scope, "x.assignee_user_id", params);
   const result = await tx.query<TaskRow>(
     `${TASK_SELECT}
       where ${ABOUT_CONTACT} and ($2::bigint is null or x.person_id = $2) and ($3::bigint is null or x.opportunity_id = $3)
-        and (not $4::boolean or x.status <> 'done') and ($5::text is null or x.assignee_user_id = $5)
+        and (not $4::boolean or x.status <> 'done') and ($5::text is null or x.assignee_user_id = $5) and ${assigned}
       order by x.status = 'done', x.due_date nulls last, x.id`,
-    [contactId, personId, opportunityId, options.open ?? false, assignee],
+    params,
   );
   return result.rows.map(toTask);
 }
 
-async function getTask(tx: OrgTx, id: string): Promise<Task> {
+async function getTask(tx: OrgTx, id: string, scope?: CrmScope): Promise<Task> {
   const result = await tx.query<TaskRow>(`${TASK_SELECT} where x.id = $1`, [id]);
   if (!result.rows[0]) throw new NotFoundError("Task not found.");
-  return toTask(result.rows[0]);
+  const task = toTask(result.rows[0]);
+  assertSeesOwner(scope, task.assigneeUserId, "Task");
+  return task;
 }
 
 type TaskInput = {
@@ -980,7 +1013,7 @@ type TaskInput = {
   opportunityId?: unknown;
 };
 
-async function taskValues(tx: OrgTx, input: TaskInput, current: Task | null) {
+async function taskValues(tx: OrgTx, input: TaskInput, current: Task | null, scope?: CrmScope) {
   if (input.status !== undefined && !(TASK_STATUSES as readonly unknown[]).includes(input.status)) {
     throw new ValidationError("The status must be todo, in_progress or done.");
   }
@@ -989,14 +1022,18 @@ async function taskValues(tx: OrgTx, input: TaskInput, current: Task | null) {
     body: input.body === undefined ? (current?.body ?? null) : optionalString(input.body, "details", { maxLength: 4000 }),
     dueDate: input.dueDate === undefined ? (current?.dueDate ?? null) : parseOptionalIsoDate(input.dueDate, "due date"),
     status: (input.status ?? current?.status ?? "todo") as TaskStatus,
-    assigneeUserId: input.assigneeUserId === undefined ? (current?.assigneeUserId ?? null) : await parseMember(tx, input.assigneeUserId, "The assignee"),
-    ...(await parseTargets(tx, input, current)),
+    assigneeUserId: ownerFor(
+      scope,
+      input.assigneeUserId === undefined ? (current?.assigneeUserId ?? null) : await parseMember(tx, input.assigneeUserId, "The assignee"),
+      current?.assigneeUserId ?? null,
+    ),
+    ...(await parseTargets(tx, input, current, scope)),
   };
 }
 
-export async function createTask(tx: OrgTx, input: TaskInput): Promise<Task> {
+export async function createTask(tx: OrgTx, input: TaskInput, scope?: CrmScope): Promise<Task> {
   await requireCrm(tx);
-  const v = await taskValues(tx, input, null);
+  const v = await taskValues(tx, input, null, scope);
   const inserted = await tx.query<{ id: string }>(
     `insert into crm_tasks (title, body, due_date, status, assignee_user_id, contact_id, person_id, opportunity_id, created_by_email, completed_at)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, case when $4 = 'done' then now() end) returning id`,
@@ -1007,10 +1044,10 @@ export async function createTask(tx: OrgTx, input: TaskInput): Promise<Task> {
   return getTask(tx, id);
 }
 
-export async function updateTask(tx: OrgTx, idInput: unknown, input: TaskInput): Promise<Task> {
+export async function updateTask(tx: OrgTx, idInput: unknown, input: TaskInput, scope?: CrmScope): Promise<Task> {
   await requireCrm(tx);
-  const current = await getTask(tx, requireId(idInput, "taskId"));
-  const v = await taskValues(tx, input, current);
+  const current = await getTask(tx, requireId(idInput, "taskId"), scope);
+  const v = await taskValues(tx, input, current, scope);
   await tx.query(
     `update crm_tasks set title = $2, body = $3, due_date = $4, status = $5, assignee_user_id = $6, contact_id = $7, person_id = $8,
             opportunity_id = $9, completed_at = case when $5 = 'done' then coalesce(completed_at, now()) end, updated_at = now()
@@ -1055,27 +1092,39 @@ function toActivity(row: ActivityRow): Activity {
   };
 }
 
+/**
+ * Activities are the company's shared history, so a sales rep sees them too,
+ * except ones about an opportunity outside their scope (decision 491).
+ */
 export async function listActivities(
   tx: OrgTx,
-  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown } = {},
+  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; scope?: CrmScope } = {},
 ): Promise<Activity[]> {
   const contactId = optionalId(options.contactId, "contactId");
   const personId = optionalId(options.personId, "personId");
   const opportunityId = optionalId(options.opportunityId, "opportunityId");
+  const params: unknown[] = [contactId, personId, opportunityId];
+  const visible = ownerSql(options.scope, "o.owner_user_id", params);
   const result = await tx.query<ActivityRow>(
     `${ACTIVITY_SELECT}
       where ${ABOUT_CONTACT} and ($2::bigint is null or x.person_id = $2) and ($3::bigint is null or x.opportunity_id = $3)
+        and (x.opportunity_id is null or ${visible})
       order by x.happened_at desc, x.id desc
       limit 500`,
-    [contactId, personId, opportunityId],
+    params,
   );
   return result.rows.map(toActivity);
 }
 
-async function getActivity(tx: OrgTx, id: string): Promise<Activity> {
-  const result = await tx.query<ActivityRow>(`${ACTIVITY_SELECT} where x.id = $1`, [id]);
-  if (!result.rows[0]) throw new NotFoundError("Activity not found.");
-  return toActivity(result.rows[0]);
+async function getActivity(tx: OrgTx, id: string, scope?: CrmScope): Promise<Activity> {
+  const result = await tx.query<ActivityRow & { opportunity_owner: string | null }>(
+    `select a.*, o2.owner_user_id as opportunity_owner from (${ACTIVITY_SELECT} where x.id = $1) a
+       left join crm_opportunities o2 on o2.id = a.opportunity_id`,
+    [id],
+  );
+  const row = result.rows[0];
+  if (!row || (row.opportunity_id !== null && !seesOwner(scope, row.opportunity_owner))) throw new NotFoundError("Activity not found.");
+  return toActivity(row);
 }
 
 type ActivityInput = {
@@ -1093,11 +1142,11 @@ function parseHappenedAt(input: unknown): string {
   return new Date(input).toISOString();
 }
 
-async function activityValues(tx: OrgTx, input: ActivityInput, current: Activity | null) {
+async function activityValues(tx: OrgTx, input: ActivityInput, current: Activity | null, scope?: CrmScope) {
   if (input.kind !== undefined && !(ACTIVITY_KINDS as readonly unknown[]).includes(input.kind)) {
     throw new ValidationError("The kind must be call, meeting or note.");
   }
-  const targets = await parseTargets(tx, input, current);
+  const targets = await parseTargets(tx, input, current, scope);
   if (!targets.contactId && !targets.personId && !targets.opportunityId) {
     throw new ValidationError("An activity must be about a company, a person or an opportunity.");
   }
@@ -1110,9 +1159,9 @@ async function activityValues(tx: OrgTx, input: ActivityInput, current: Activity
   };
 }
 
-export async function createActivity(tx: OrgTx, input: ActivityInput): Promise<Activity> {
+export async function createActivity(tx: OrgTx, input: ActivityInput, scope?: CrmScope): Promise<Activity> {
   await requireCrm(tx);
-  const v = await activityValues(tx, input, null);
+  const v = await activityValues(tx, input, null, scope);
   const inserted = await tx.query<{ id: string }>(
     `insert into crm_activities (kind, happened_at, subject, body, contact_id, person_id, opportunity_id, created_by_email)
      values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
@@ -1123,10 +1172,10 @@ export async function createActivity(tx: OrgTx, input: ActivityInput): Promise<A
   return getActivity(tx, id);
 }
 
-export async function updateActivity(tx: OrgTx, idInput: unknown, input: ActivityInput): Promise<Activity> {
+export async function updateActivity(tx: OrgTx, idInput: unknown, input: ActivityInput, scope?: CrmScope): Promise<Activity> {
   await requireCrm(tx);
-  const current = await getActivity(tx, requireId(idInput, "activityId"));
-  const v = await activityValues(tx, input, current);
+  const current = await getActivity(tx, requireId(idInput, "activityId"), scope);
+  const v = await activityValues(tx, input, current, scope);
   await tx.query(
     `update crm_activities set kind = $2, happened_at = $3, subject = $4, body = $5, contact_id = $6, person_id = $7, opportunity_id = $8,
             updated_at = now()
@@ -1156,7 +1205,7 @@ export type CrmHome = {
 const HOME_ACTIVITIES = 10;
 
 /** What the signed-in person (`tx.actor`) has on: read-only (example CRM10). */
-export async function crmHome(tx: OrgTx): Promise<CrmHome> {
+export async function crmHome(tx: OrgTx, scope?: CrmScope): Promise<CrmHome> {
   const today = todayIsoDate();
   const me = tx.actor.userId;
   const opportunities = me
@@ -1187,8 +1236,13 @@ export async function crmHome(tx: OrgTx): Promise<CrmHome> {
         )
       ).rows.map(toTask)
     : [];
+  const activityParams: unknown[] = [HOME_ACTIVITIES];
+  const visible = ownerSql(scope, "o.owner_user_id", activityParams);
   const activities = (
-    await tx.query<ActivityRow>(`${ACTIVITY_SELECT} order by x.happened_at desc, x.id desc limit $1`, [HOME_ACTIVITIES])
+    await tx.query<ActivityRow>(
+      `${ACTIVITY_SELECT} where (x.opportunity_id is null or ${visible}) order by x.happened_at desc, x.id desc limit $1`,
+      activityParams,
+    )
   ).rows.map(toActivity);
   return { today, opportunities, totals, tasks, activities };
 }
@@ -1214,9 +1268,16 @@ export type CompanySummary = {
   customFields: CustomValues;
 };
 
-export async function listCompanies(tx: OrgTx, options: { search?: unknown; includeArchived?: boolean } = {}): Promise<CompanySummary[]> {
+export async function listCompanies(
+  tx: OrgTx,
+  options: { search?: unknown; includeArchived?: boolean; scope?: CrmScope } = {},
+): Promise<CompanySummary[]> {
   const search = optionalString(options.search, "search", { maxLength: 100 });
   const pattern = search === null ? null : `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+  // A sales person's counts and pipeline are of their own deals and tasks (decision 491).
+  const params: unknown[] = [options.includeArchived ?? false, pattern];
+  const ownTasks = ownerSql(options.scope, "t.assignee_user_id", params);
+  const ownDeals = ownerSql(options.scope, "o.owner_user_id", params);
   const result = await tx.query<{
     id: string;
     name: string;
@@ -1235,16 +1296,16 @@ export async function listCompanies(tx: OrgTx, options: { search?: unknown; incl
             (select count(*) from crm_people p where p.contact_id = c.id and not p.is_archived)::text as people,
             (select count(*) from crm_tasks t
                left join crm_people p on p.id = t.person_id left join crm_opportunities o on o.id = t.opportunity_id
-              where t.status <> 'done' and (t.contact_id = c.id or p.contact_id = c.id or o.contact_id = c.id))::text as open_tasks,
+              where t.status <> 'done' and (t.contact_id = c.id or p.contact_id = c.id or o.contact_id = c.id) and ${ownTasks})::text as open_tasks,
             (select coalesce(sum(o.amount), 0) from crm_opportunities o
-              where o.contact_id = c.id and o.stage in (select key from crm_opportunity_stages where stage_type = 'open'))::text as open_pipeline,
+              where o.contact_id = c.id and o.stage in (select key from crm_opportunity_stages where stage_type = 'open') and ${ownDeals})::text as open_pipeline,
             (select max(a.happened_at) from crm_activities a
                left join crm_people p on p.id = a.person_id left join crm_opportunities o on o.id = a.opportunity_id
               where a.contact_id = c.id or p.contact_id = c.id or o.contact_id = c.id) as last_activity_at
        from contacts c
       where ($1::boolean or not c.is_archived) and ($2::text is null or c.name ilike $2 or c.email ilike $2)
       order by lower(c.name), c.id`,
-    [options.includeArchived ?? false, pattern],
+    params,
   );
   return result.rows.map((row) => ({
     contactId: row.id,
@@ -1287,10 +1348,10 @@ export type TimelineEntry = {
  * Everything that happened with a company, newest first (CRM8): its CRM
  * records and its approved documents and payments.
  */
-export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promise<TimelineEntry[]> {
+export async function companyTimeline(tx: OrgTx, contactIdInput: unknown, scope?: CrmScope): Promise<TimelineEntry[]> {
   const contactId = requireId(contactIdInput, "contactId");
   await requireContact(tx, contactId);
-  return timelineFor(tx, { contactId });
+  return timelineFor(tx, { contactId }, scope);
 }
 
 /**
@@ -1298,18 +1359,18 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
  * tasks, the opportunities they're the point of contact for, and their
  * synced emails and meetings.
  */
-export async function personTimeline(tx: OrgTx, personIdInput: unknown): Promise<TimelineEntry[]> {
+export async function personTimeline(tx: OrgTx, personIdInput: unknown, scope?: CrmScope): Promise<TimelineEntry[]> {
   const person = await getPerson(tx, personIdInput);
-  return timelineFor(tx, { personId: person.id });
+  return timelineFor(tx, { personId: person.id }, scope);
 }
 
 /**
  * An opportunity's timeline for its record page (CRT11): its activities,
  * tasks, stage changes, and its invoice once approved and paid.
  */
-export async function opportunityTimeline(tx: OrgTx, opportunityIdInput: unknown): Promise<TimelineEntry[]> {
-  const opportunity = await getOpportunity(tx, opportunityIdInput);
-  return timelineFor(tx, { opportunityId: opportunity.id });
+export async function opportunityTimeline(tx: OrgTx, opportunityIdInput: unknown, scope?: CrmScope): Promise<TimelineEntry[]> {
+  const opportunity = await getOpportunity(tx, opportunityIdInput, scope);
+  return timelineFor(tx, { opportunityId: opportunity.id }, scope);
 }
 
 /** One row of an opportunity's stage history (CRMS6). Probability and category are null for changes made before they were kept. */
@@ -1331,8 +1392,8 @@ export type StageHistoryEntry = {
  * stage, amount, probability, forecast category or expected close date
  * changed, with who and when. It's read from the audit history.
  */
-export async function opportunityStageHistory(tx: OrgTx, opportunityIdInput: unknown): Promise<StageHistoryEntry[]> {
-  const opportunity = await getOpportunity(tx, opportunityIdInput);
+export async function opportunityStageHistory(tx: OrgTx, opportunityIdInput: unknown, scope?: CrmScope): Promise<StageHistoryEntry[]> {
+  const opportunity = await getOpportunity(tx, opportunityIdInput, scope);
   const minor = currencyMinorUnits(opportunity.currencyCode);
   const stageNames = new Map((await listStages(tx)).map((stage) => [stage.key, stage.name]));
   const events = await tx.query<{ details: Record<string, unknown>; actor_email: string | null; created_at: string }>(
@@ -1376,12 +1437,16 @@ export async function opportunityStageHistory(tx: OrgTx, opportunityIdInput: unk
 
 type TimelineTarget = { contactId: string } | { personId: string } | { opportunityId: string };
 
-async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineEntry[]> {
+/**
+ * For a sales rep or manager (decision 491): only their deals' and tasks'
+ * entries, and none of the books (invoices, credit notes, bills, payments).
+ */
+async function timelineFor(tx: OrgTx, target: TimelineTarget, scope?: CrmScope): Promise<TimelineEntry[]> {
   const contactId = "contactId" in target ? target.contactId : null;
   const personId = "personId" in target ? target.personId : null;
   const opportunityId = "opportunityId" in target ? target.opportunityId : null;
   const entries: TimelineEntry[] = [];
-  for (const activity of await listActivities(tx, target)) {
+  for (const activity of await listActivities(tx, { ...target, scope })) {
     entries.push({
       kind: "activity",
       at: activity.happenedAt,
@@ -1392,7 +1457,7 @@ async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineE
       by: activity.createdByEmail,
     });
   }
-  for (const task of await listTasks(tx, target)) {
+  for (const task of await listTasks(tx, { ...target, scope })) {
     entries.push({
       kind: "task",
       at: task.completedAt ? new Date(task.completedAt).toISOString() : new Date(task.createdAt).toISOString(),
@@ -1403,13 +1468,15 @@ async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineE
       by: task.createdByEmail,
     });
   }
+  const eventParams: unknown[] = [contactId, personId, opportunityId];
+  const ownDeals = ownerSql(scope, "o.owner_user_id", eventParams);
   const events = await tx.query<{ entity_id: string; event_type: string; details: Record<string, unknown>; actor_email: string | null; created_at: string; name: string }>(
     `select e.entity_id, e.event_type, e.details, e.actor_email, e.created_at, o.name
        from audit_events e join crm_opportunities o on o.id::text = e.entity_id
       where e.entity_type = 'crm_opportunity'
-        and (o.contact_id = $1 or o.point_of_contact_id = $2 or o.id = $3)
+        and (o.contact_id = $1 or o.point_of_contact_id = $2 or o.id = $3) and ${ownDeals}
         and (e.event_type = 'crm.opportunity_created' or (e.event_type = 'crm.opportunity_updated' and e.details ? 'stageFrom'))`,
-    [contactId, personId, opportunityId],
+    eventParams,
   );
   const stageNames = new Map((await listStages(tx)).map((stage) => [stage.key, stage.name]));
   const stageName = (key: unknown) => stageNames.get(String(key)) ?? String(key);
@@ -1426,7 +1493,9 @@ async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineE
       by: event.actor_email,
     });
   }
-  const documents = await tx.query<{ kind: TimelineEntry["kind"]; id: string; label: string; at: string; amount: string; by: string | null }>(
+  const documents = scope?.sales
+    ? { rows: [] }
+    : await tx.query<{ kind: TimelineEntry["kind"]; id: string; label: string; at: string; amount: string; by: string | null }>(
     `select 'invoice' as kind, id::text, coalesce(invoice_number, 'Invoice') as label, approved_at as at, total::text as amount, approved_by_email as by
        from sales_invoices where contact_id = $1 and approved_at is not null
      union all
@@ -1534,9 +1603,18 @@ const RELATED_LIMIT = 50;
  * related lists on an account: its invoices and credit notes (drafts too, as
  * the operations lists show them) and how many notes and files it has.
  */
-export async function companyRelated(tx: OrgTx, contactIdInput: unknown): Promise<CompanyRelated> {
+export async function companyRelated(tx: OrgTx, contactIdInput: unknown, scope?: CrmScope): Promise<CompanyRelated> {
   const contactId = requireId(contactIdInput, "contactId");
   await requireContact(tx, contactId);
+  if (scope?.sales) {
+    // Sales reps and managers see none of the books (decision 491): notes and files only.
+    const counts = await tx.query<{ notes: number; files: number }>(
+      `select (select count(*)::int from record_notes where record_type = 'contact' and record_id = $1 and deleted_at is null) as notes,
+              (select count(*)::int from record_attachments where record_type = 'contact' and record_id = $1 and removed_at is null) as files`,
+      [contactId],
+    );
+    return { invoices: [], invoiceCount: 0, creditNotes: [], creditNoteCount: 0, notesCount: counts.rows[0].notes, filesCount: counts.rows[0].files };
+  }
   type Row = { id: string; number: string | null; date: string; due_date: string | null; status: RelatedDocument["status"]; currency_code: string; total: string };
   const toDocument = (row: Row): RelatedDocument => ({
     id: row.id,

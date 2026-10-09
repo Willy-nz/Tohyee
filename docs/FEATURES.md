@@ -798,6 +798,19 @@ that something happened.
   assignees; logged **calls, meetings and notes**; and a **timeline** per
   company that also shows its invoices, credit notes, bills and payments.
   People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
+- **CRM sales roles and teams** (decision 491, #216, Jess 10 Oct 2026):
+  **Sales rep** and **Sales manager** roles use the CRM and nothing else (no
+  books, payroll, analytics or settings; anywhere else goes to the CRM, apart
+  from their own profile). Everyone in sales sees every company and person
+  (one address book) and the company's shared history, but a rep sees only
+  the deals and tasks they own or are assigned, their own forecast, and
+  activities other than those on someone else's deal; a manager also sees
+  their teams'. Sales roles see no invoices, credit notes or payments on a
+  company or deal, can't make an invoice or sales order from a won deal, add
+  companies as prospects with their contact details only, and can add notes
+  and files on a company. **CRM › Teams**: admins and owners make teams (a
+  manager and members; one team each). Search finds only a sales person's
+  CRM records. Viewers and up see every CRM record as before.
   **CRM custom fields** (like Salesforce's): the organisation's own fields
   on companies (contact fields used on prospects), people and
   opportunities, with the same types, required fields, defaults and

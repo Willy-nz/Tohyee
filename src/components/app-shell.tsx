@@ -673,8 +673,11 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   const { can, current } = useWorkspace();
   const modules = useModules(current?.id ?? null);
   const reportViewer = current?.role === "report_viewer";
+  // Sales reps and managers have the CRM and their own profile only (decision 491).
+  const salesRole = current?.role === "sales_rep" || current?.role === "sales_manager";
+  const salesAway = salesRole && app !== "crm" && !pathname.startsWith("/operations/profile");
   const noticeData = useApiData<{ notices: TopNotice[] }>(
-    current?.id && !reportViewer ? "/api/notices" : null,
+    current?.id && !reportViewer && !salesRole ? "/api/notices" : null,
     current?.id ? { organisationId: current.id } : {},
   );
   const notices = useMemo(
@@ -707,6 +710,9 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   useEffect(() => {
     if (reportViewer && app !== "analytics") router.replace("/analytics");
   }, [reportViewer, app, router]);
+  useEffect(() => {
+    if (salesAway) router.replace("/crm");
+  }, [salesAway, router]);
   // MOD2: with Accounting off, its home goes to the app that's on, and its other pages say it's off.
   const accountingOff = app === "accounting" && !reportViewer && modules?.accounting === false;
   const accountingPageOff = accountingOff && !ACCOUNTING_OFF_PAGES.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -763,7 +769,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       <main id="main-content" className={styles.content} tabIndex={-1}>
         <div ref={page} className={styles.page}>
           {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}
-          {reportViewer && app !== "analytics" ? null : accountingPageOff ? <AccountingOff /> : children}
+          {(reportViewer && app !== "analytics") || salesAway ? null : accountingPageOff ? <AccountingOff /> : children}
         </div>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={items} />

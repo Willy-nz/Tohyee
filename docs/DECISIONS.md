@@ -3951,3 +3951,31 @@ testing) and #154's code signing (later, Jess).
        the domain) and tunnel credentials when it starts, in case Connect to
        Cloudflare was interrupted.
 
+### CRM sales roles and teams (decision 491)
+
+491. **Sales reps and managers use the CRM only** (#216 stage 1, Jess 10 Oct
+     2026).
+     - **Roles:** `sales_rep` and `sales_manager` (core migration 0013),
+       ranked below `report_viewer` so nothing of the books, payroll,
+       analytics or settings lets them in; the CRM's routes admit them
+       through `withCrm`. They have no AI keys or payroll access.
+     - **What they see:** every company and person, a shared address book
+       (Jess: "all companies and people, own deals and leads"); a rep only
+       the deals and tasks they own or are assigned, their own forecast, and
+       activities except those on a deal they can't see; a manager also the
+       members' of the teams they manage. Others' records are "not found".
+       A rep can't give a deal or task to anyone else; a manager only within
+       their teams.
+     - **No books:** no invoices, credit notes, bills or payments on a
+       company's page or timeline, no invoice on a deal, and making an
+       invoice or sales order from a won deal stays with bookkeepers. A sales
+       role adds a company as a prospect with its name, email, phone,
+       address, owner and CRM fields, changes only those, and doesn't
+       archive; it can add notes and files on a company.
+     - **Teams:** admins and owners make them (Jess: "admins make teams"),
+       each with one manager; a person is in one team at most (tenant
+       migration 0114). Removing a team leaves everyone's records as they
+       are.
+     - **Search:** a sales role finds companies, people and its own deals.
+     - Viewers and up see and change the CRM as before.
+

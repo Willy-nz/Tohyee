@@ -1,10 +1,10 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withCrm } from "@/lib/api/http";
 import { createPerson, listPeople } from "@/lib/crm/service";
 
 /** People, optionally at one company or matching a search (example CRM2). */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const people = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
+  const people = await withCrm(request, params.get("organisationId"), "read", (tx) =>
     listPeople(tx, { contactId: params.get("contactId"), search: params.get("search"), includeArchived: params.get("includeArchived") === "true" }),
   );
   return json({ people });
@@ -12,7 +12,7 @@ export const GET = route(async (request) => {
 
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const person = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  const person = await withCrm(request, body.organisationId, "write", (tx, { membership }) =>
     createPerson(
       tx,
       {

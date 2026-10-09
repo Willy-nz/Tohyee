@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
 import { setSalesProcess } from "@/lib/crm/stages";
 
 type Context = { params: Promise<{ recordTypeId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ recordTypeId: string }> };
 export const PUT = route<Context>(async (request, context) => {
   const { recordTypeId } = await context.params;
   const body = await readJson(request);
-  const salesProcess = await withOrganisation(request, body.organisationId, "admin", (tx) =>
+  const salesProcess = await withCrm(request, body.organisationId, "admin", (tx) =>
     setSalesProcess(tx, recordTypeId, body.stageKeys === undefined ? null : body.stageKeys),
   );
   return json({ salesProcess });

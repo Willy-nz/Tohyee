@@ -1,4 +1,4 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withCrm } from "@/lib/api/http";
 import { getRecordType } from "@/lib/crm/record-types/service";
 import { getOpportunity, listActivities, listTasks, opportunityStageHistory, opportunityTimeline, updateOpportunity } from "@/lib/crm/service";
 import { getInvoice } from "@/lib/invoices/service";
@@ -8,16 +8,17 @@ type Context = { params: Promise<{ opportunityId: string }> };
 /** An opportunity's record page (CRT11): the opportunity, its record type, tasks, activities, timeline, stage history (CRMS6) and invoice. */
 export const GET = route<Context>(async (request, context) => {
   const { opportunityId } = await context.params;
-  const result = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
-    const opportunity = await getOpportunity(tx, opportunityId);
+  const result = await withCrm(request, searchParams(request).get("organisationId"), "read", async (tx, { scope }) => {
+    const opportunity = await getOpportunity(tx, opportunityId, scope);
     return {
       opportunity,
       recordType: await getRecordType(tx, opportunity.recordTypeId),
-      tasks: await listTasks(tx, { opportunityId: opportunity.id }),
-      activities: await listActivities(tx, { opportunityId: opportunity.id }),
-      timeline: await opportunityTimeline(tx, opportunity.id),
-      stageHistory: await opportunityStageHistory(tx, opportunity.id),
-      invoice: opportunity.invoiceId ? await getInvoice(tx, opportunity.invoiceId) : null,
+      tasks: await listTasks(tx, { opportunityId: opportunity.id, scope }),
+      activities: await listActivities(tx, { opportunityId: opportunity.id, scope }),
+      timeline: await opportunityTimeline(tx, opportunity.id, scope),
+      stageHistory: await opportunityStageHistory(tx, opportunity.id, scope),
+      // Sales reps and managers see none of the books (decision 491).
+      invoice: opportunity.invoiceId && !scope.sales ? await getInvoice(tx, opportunity.invoiceId) : null,
     };
   });
   return json(result);
@@ -27,7 +28,7 @@ export const GET = route<Context>(async (request, context) => {
 export const PATCH = route<Context>(async (request, context) => {
   const { opportunityId } = await context.params;
   const body = await readJson(request);
-  const opportunity = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  const opportunity = await withCrm(request, body.organisationId, "write", (tx, { membership, scope }) =>
     updateOpportunity(
       tx,
       opportunityId,
@@ -44,7 +45,7 @@ export const PATCH = route<Context>(async (request, context) => {
         customFields: body.customFields,
         recordTypeId: body.recordTypeId,
       },
-      { role: membership.role },
+      { role: membership.role, scope },
     ),
   );
   return json({ opportunity });

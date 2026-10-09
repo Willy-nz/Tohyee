@@ -1,4 +1,4 @@
-import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, route, searchParams, withCrm } from "@/lib/api/http";
 import { forecast } from "@/lib/crm/forecast";
 
 /**
@@ -8,8 +8,8 @@ import { forecast } from "@/lib/crm/forecast";
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const result = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
-    forecast(tx, { period: params.get("period"), from: params.get("from"), periods: params.get("periods"), ownerUserId: params.get("ownerUserId") }),
+  const result = await withCrm(request, params.get("organisationId"), "read", (tx, { scope }) =>
+    forecast(tx, { period: params.get("period"), from: params.get("from"), periods: params.get("periods"), ownerUserId: params.get("ownerUserId") }, scope),
   );
   return json({ forecast: result });
 });

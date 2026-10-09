@@ -60,7 +60,14 @@ function splitPrefix(query: string): { query: string; forcedFilter: SearchFilter
   return { query: trimmed, forcedFilter: null };
 }
 
-type SearchInput = { query: string; filter: unknown; onlyDashboards: boolean; userId: string | null };
+type SearchInput = {
+  query: string;
+  filter: unknown;
+  onlyDashboards: boolean;
+  userId: string | null;
+  /** A sales rep or manager (decision 491): CRM records only, and only the opportunities of these owners. */
+  salesOwners?: string[];
+};
 
 function whereParts(
   textColumns: string[],
@@ -136,7 +143,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
 
   const groups: SearchGroup[] = [];
   const crmOn = await crmEnabled(tx);
-  const include = (name: SearchFilter) => filter === "all" || filter === name;
+  const sales = input.salesOwners !== undefined;
+  const include = (name: SearchFilter) => (sales ? name === "crm" && (filter === "all" || filter === "crm") : filter === "all" || filter === name);
 
   if (include("contacts")) {
     const where = whereParts(["c.name", "coalesce(c.email, '')", "coalesce(c.phone, '')"], query, null, null);
@@ -424,8 +432,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
   }
 
   if (crmOn && include("crm")) {
-    // With "All", companies are already in Contacts (the same records).
-    if (filter === "crm") {
+    // With "All", companies are already in Contacts (the same records); a sales role has no Contacts group.
+    if (filter === "crm" || sales) {
     const companyWhere = whereParts(["c.name", "coalesce(c.email, '')", "coalesce(c.phone, '')"], query, null, null);
     groups.push(
       await queryRecords(
@@ -463,6 +471,10 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
       ),
     );
     const opportunityWhere = whereParts(["o.name", "c.name"], query, "o.amount", "o.close_date");
+    if (input.salesOwners) {
+      opportunityWhere.params.push(input.salesOwners);
+      opportunityWhere.sql = `(${opportunityWhere.sql}) and o.owner_user_id = any($${opportunityWhere.params.length}::text[])`;
+    }
     groups.push(
       await queryRecords(
         tx,

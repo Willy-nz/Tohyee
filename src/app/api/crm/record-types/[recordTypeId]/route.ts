@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
 import { updateRecordType } from "@/lib/crm/record-types/service";
 
 type Context = { params: Promise<{ recordTypeId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ recordTypeId: string }> };
 export const PATCH = route<Context>(async (request, context) => {
   const { recordTypeId } = await context.params;
   const body = await readJson(request);
-  const recordType = await withOrganisation(request, body.organisationId, "admin", (tx) =>
+  const recordType = await withCrm(request, body.organisationId, "admin", (tx) =>
     updateRecordType(tx, recordTypeId, {
       name: body.name,
       description: body.description,

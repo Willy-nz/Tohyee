@@ -1,10 +1,15 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withCrm } from "@/lib/api/http";
+import { salesContactInput } from "@/lib/crm/sales-contacts";
 import { createContact, listContacts } from "@/lib/contacts/service";
 
-/** Contacts, searched by name or email. `includeArchived=true` also returns archived contacts. */
+/**
+ * Contacts, searched by name or email. `includeArchived=true` also returns
+ * archived contacts. Viewers and up, and sales reps and managers: the
+ * contacts are the CRM's shared address book (decision 491).
+ */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const contacts = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
+  const contacts = await withCrm(request, params.get("organisationId"), "read", (tx) =>
     listContacts(tx, {
       search: params.get("search"),
       includeArchived: params.get("includeArchived") === "true",
@@ -15,10 +20,11 @@ export const GET = route(async (request) => {
 
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  // Bookkeepers and up; a sales rep or manager adds a prospect with its contact details only (decision 491).
+  const result = await withCrm(request, body.organisationId, "write", (tx, { membership, scope }) =>
     createContact(
       tx,
-      {
+      scope.sales ? salesContactInput(body, "create") : {
       source: body.source,
       idempotencyKey: body.idempotencyKey,
       name: body.name,

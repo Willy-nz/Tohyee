@@ -1,5 +1,5 @@
 import { assertSameOrigin } from "@/lib/auth/guard";
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
 import { requestOrigin } from "@/lib/crm/mail/origin";
 import { startConnect } from "@/lib/crm/mail/service";
 
@@ -7,6 +7,6 @@ import { startConnect } from "@/lib/crm/mail/service";
 export const POST = route(async (request) => {
   assertSameOrigin(request);
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) => startConnect(tx, body.provider, requestOrigin(request)));
+  const result = await withCrm(request, body.organisationId, "write", (tx) => startConnect(tx, body.provider, requestOrigin(request)));
   return json(result);
 });

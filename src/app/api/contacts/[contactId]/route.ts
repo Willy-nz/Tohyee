@@ -1,4 +1,6 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
+import { salesContactInput } from "@/lib/crm/sales-contacts";
+import { ForbiddenError } from "@/lib/errors";
 import { archiveContact, unarchiveContact, updateContact } from "@/lib/contacts/service";
 import { ValidationError } from "@/lib/errors";
 import { requireBoolean } from "@/lib/validation";
@@ -40,7 +42,12 @@ export const PATCH = route<{ params: Promise<{ contactId: string }> }>(async (re
     recordTypeId: body.recordTypeId,
     ownerUserId: body.ownerUserId,
   };
-  const contact = await withOrganisation(request, body.organisationId, "bookkeeper", async (tx, { membership }) => {
+  const contact = await withCrm(request, body.organisationId, "write", async (tx, { membership, scope }) => {
+    if (scope.sales) {
+      // A sales rep or manager changes contact details only, and doesn't archive (decision 491).
+      if (body.isArchived !== undefined) throw new ForbiddenError("Archiving a company needs the bookkeeper role or higher.");
+      return updateContact(tx, contactId, salesContactInput(body, "update"), { role: membership.role });
+    }
     if (body.isArchived === undefined) {
       return updateContact(tx, contactId, details, { role: membership.role });
     }

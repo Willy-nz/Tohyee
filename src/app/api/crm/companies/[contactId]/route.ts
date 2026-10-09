@@ -1,4 +1,4 @@
-import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, route, searchParams, withCrm } from "@/lib/api/http";
 import { getContact } from "@/lib/contacts/service";
 import { getRecordType } from "@/lib/crm/record-types/service";
 import { companyRelated, companyTimeline, listActivities, listOpportunities, listPeople, listTasks } from "@/lib/crm/service";
@@ -12,17 +12,17 @@ type Context = { params: Promise<{ contactId: string }> };
  */
 export const GET = route<Context>(async (request, context) => {
   const { contactId } = await context.params;
-  const result = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
+  const result = await withCrm(request, searchParams(request).get("organisationId"), "read", async (tx, { scope }) => {
     const contact = await getContact(tx, contactId);
     return {
       contact,
       recordType: await getRecordType(tx, contact.recordTypeId),
       people: await listPeople(tx, { contactId, includeArchived: true }),
-      opportunities: await listOpportunities(tx, { contactId }),
-      tasks: await listTasks(tx, { contactId }),
-      activities: await listActivities(tx, { contactId }),
-      timeline: await companyTimeline(tx, contactId),
-      ...(await companyRelated(tx, contactId)),
+      opportunities: await listOpportunities(tx, { contactId, scope }),
+      tasks: await listTasks(tx, { contactId, scope }),
+      activities: await listActivities(tx, { contactId, scope }),
+      timeline: await companyTimeline(tx, contactId, scope),
+      ...(await companyRelated(tx, contactId, scope)),
     };
   });
   return json(result);

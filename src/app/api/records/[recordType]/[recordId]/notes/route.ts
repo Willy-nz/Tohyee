@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withRecord } from "@/lib/api/http";
 import { addNote } from "@/lib/records/extras";
 
 type Context = { params: Promise<{ recordType: string; recordId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ recordType: string; recordId: string }> };
 export const POST = route<Context>(async (request, context) => {
   const { recordType, recordId } = await context.params;
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+  const result = await withRecord(request, body.organisationId, recordType, "write", (tx, { membership }) =>
     addNote(tx, membership.role, recordType, recordId, {
       source: body.source,
       idempotencyKey: body.idempotencyKey,

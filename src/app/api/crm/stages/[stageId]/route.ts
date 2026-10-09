@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withCrm } from "@/lib/api/http";
 import { updateStage } from "@/lib/crm/stages";
 
 type Context = { params: Promise<{ stageId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ stageId: string }> };
 export const PATCH = route<Context>(async (request, context) => {
   const { stageId } = await context.params;
   const body = await readJson(request);
-  const stage = await withOrganisation(request, body.organisationId, "admin", (tx) =>
+  const stage = await withCrm(request, body.organisationId, "admin", (tx) =>
     updateStage(tx, stageId, {
       name: body.name,
       type: body.type,
