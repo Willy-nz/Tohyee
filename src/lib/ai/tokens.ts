@@ -2,7 +2,7 @@ import { writeAdminAuditEvent } from "@/lib/audit";
 import type { AuthContext } from "@/lib/auth/guard";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { coreQuery, type DbClient, withCoreTransaction } from "@/lib/db/transactions";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
 import { readServerSetting } from "@/lib/server-settings";
 import { requireId, requireString } from "@/lib/validation";
@@ -70,12 +70,19 @@ export async function listAiTokens(auth: AuthContext, organisationId: string): P
 export async function createAiToken(
   auth: AuthContext,
   organisationId: string,
-  input: { name: unknown; accessLevel?: unknown },
+  input: { name: unknown; accessLevel?: unknown; role: Role; confirmFullAccess?: unknown },
 ): Promise<{ token: string; key: AiAccessToken }> {
   const name = requireString(input.name, "Name", { maxLength: 100 });
   const accessLevel = input.accessLevel == null || input.accessLevel === "" ? "read" : input.accessLevel;
   if (!isAiAccessLevel(accessLevel)) {
-    throw new ValidationError("accessLevel must be read, draft or post.");
+    throw new ValidationError("accessLevel must be read, draft, post or full.");
+  }
+  // Full access (decision 488): Owners only, after reading the warning.
+  if (accessLevel === "full") {
+    if (!roleAtLeast(input.role, "owner")) throw new ForbiddenError("Only an Owner can make a Full access AI key.");
+    if (input.confirmFullAccess !== true) {
+      throw new ValidationError("Read the warning about Full access keys and tick the box to confirm before making one.");
+    }
   }
   const token = newAiToken();
   const key = await withCoreTransaction(async (client) => {

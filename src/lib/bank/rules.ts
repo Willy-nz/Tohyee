@@ -148,7 +148,8 @@ export async function listBankRules(tx: OrgTx, options: { activeOnly?: boolean }
   return result.rows.map(toRule);
 }
 
-async function getRule(tx: OrgTx, id: string): Promise<BankRule> {
+export async function getBankRule(tx: OrgTx, idInput: unknown): Promise<BankRule> {
+  const id = requireId(idInput, "ruleId");
   const result = await tx.query<RuleRow>(`${SELECT} where r.id = $1`, [id]);
   if (!result.rows[0]) throw new NotFoundError("Bank rule not found.");
   return toRule(result.rows[0]);
@@ -391,12 +392,12 @@ export async function createBankRule(tx: OrgTx, input: RuleInput): Promise<BankR
   const id = inserted.rows[0].id;
   await writeParts(tx, id, rule);
   await writeAuditEvent(tx, { eventType: "bank_rule.created", entityType: "bank_rule", entityId: id, details: auditDetails(rule) });
-  return getRule(tx, id);
+  return getBankRule(tx, id);
 }
 
 export async function updateBankRule(tx: OrgTx, idInput: unknown, input: RuleInput): Promise<BankRule> {
   const id = requireId(idInput, "ruleId");
-  await getRule(tx, id);
+  await getBankRule(tx, id);
   const rule = await resolveRule(tx, input);
   // Old lines out, then the new direction, then the new lines, so the database
   // checks each new line's tax code against the new direction (TAO8).
@@ -409,12 +410,12 @@ export async function updateBankRule(tx: OrgTx, idInput: unknown, input: RuleInp
   );
   await writeParts(tx, id, rule);
   await writeAuditEvent(tx, { eventType: "bank_rule.updated", entityType: "bank_rule", entityId: id, details: auditDetails(rule) });
-  return getRule(tx, id);
+  return getBankRule(tx, id);
 }
 
 export async function deleteBankRule(tx: OrgTx, idInput: unknown): Promise<void> {
   const id = requireId(idInput, "ruleId");
-  const rule = await getRule(tx, id);
+  const rule = await getBankRule(tx, id);
   await tx.query("delete from bank_rules where id = $1", [id]);
   await writeAuditEvent(tx, { eventType: "bank_rule.deleted", entityType: "bank_rule", entityId: id, details: { name: rule.name } });
 }

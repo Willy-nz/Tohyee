@@ -260,12 +260,16 @@ re-runs the whole sequence.
   tohyee_ai_…`, a personal AI key (SHA-256 in `ai_access_tokens`, core
   database) for one organisation, which works while its owner's login is
   active and they're still a member, with their current role. The key's
-  access level (look only, make drafts, make and post; decision 346) is
-  capped by that role, and only those tools are offered. Read tools run in
+  access level (look only, make drafts, make and post, full access;
+  decisions 346 and 488) is capped by that role (full access by Owner), and only those tools are offered. Read tools run in
   a read-only PostgreSQL transaction (`withOrganisationTransaction(...,
   { readOnly: true })`); write tools call the screens' services as the
   person, with `actor.via` naming the key, which `writeAuditEvent` adds to
-  every audit event. No tool deletes anything (decision 347). No
+  every audit event. No tool deletes anything (decision 347). The bank
+  tools (`src/lib/ai/bank-tools.ts`) send the reconcile screen's commands
+  with the command source `ai-<key id>`, which is how unmatch_bank_line
+  knows a reconciliation is the key's own; their bulk tools do each line in
+  a savepoint inside the one transaction. No
   same-origin check (AI services call it from elsewhere) and no CORS
   headers; cookies are ignored.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`

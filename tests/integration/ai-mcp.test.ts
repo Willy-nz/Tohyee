@@ -6,6 +6,9 @@ import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[
 import { AI_TOOLS } from "@/lib/ai/catalogue";
 import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { listBankAccounts } from "@/lib/bank/accounts";
+import { importStatementFile } from "@/lib/bank/imports";
+import { createBankRule } from "@/lib/bank/rules";
 import { addInboxItem } from "@/lib/bills/inbox";
 import { createBill, approveBill } from "@/lib/bills/service";
 import { createGroup } from "@/lib/consolidation/groups";
@@ -250,6 +253,12 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "cash_flow_forecast",
         "list_consolidations",
         "consolidated_report",
+        "list_bank_accounts",
+        "list_bank_lines",
+        "get_bank_line",
+        "list_bank_rules",
+        "get_bank_rule",
+        "reconciliation_summary",
       ].sort(),
     );
     for (const tool of tools) {
@@ -310,7 +319,21 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     await createTestOrganisation(owner, "ai-group-member");
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", ["ai-group-member", viewer.id]);
     const consolidation = await createGroup({ id: owner.id, email: owner.email }, { name: "AI test group", parentOrganisationId: ORG, organisationIds: ["ai-group-member"] });
+    // A statement line and a bank rule for the bank tools (#205).
+    const bankAccount = (await asOwner((tx) => listBankAccounts(tx))).find((account) => account.code === "1000")!;
+    await asOwner((tx) =>
+      importStatementFile(tx, bankAccount.id, {
+        idempotencyKey: key("import"),
+        fileName: "s.csv",
+        fileBase64: Buffer.from("Date,Amount,Payee\n21/05/2026,-46.00,Z ENERGY\n").toString("base64"),
+      }),
+    );
+    const statementLineId = (await asOwner((tx) => tx.query<{ id: string }>("select id::text from bank_statement_lines order by bank_statement_lines.id limit 1"))).rows[0].id;
+    const bankRule = await asOwner((tx) => createBankRule(tx, { name: "Fuel", matchText: "z energy", direction: "out", targetAccountCode: "6120", taxCode: "GST", amountsMode: "inclusive", contactMode: "payee" }));
     const args: Record<string, Json> = {
+      list_bank_lines: { accountId: bankAccount.id },
+      get_bank_line: { lineId: statementLineId },
+      get_bank_rule: { ruleId: bankRule.id },
       consolidated_report: { groupId: consolidation.id, report: "profit_and_loss", from: "2026-04-01", to: "2026-06-30" },
       read_bill_inbox_item: { itemId: inboxItem.id },
       account_transactions: { accountCode: "1100" },
