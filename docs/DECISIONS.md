@@ -3979,3 +3979,96 @@ testing) and #154's code signing (later, Jess).
      - **Search:** a sales role finds companies, people and its own deals.
      - Viewers and up see and change the CRM as before.
 
+### CRM leads (decision 492)
+
+492. **Leads are their own records, worked then converted** (#216 stage 1,
+     Jess 10 Oct 2026: "a separate Lead record", typed in, imported, from a
+     web form and from emails).
+     - **Statuses:** new, working, unqualified (with a reason) and
+       converted. A converted lead doesn't change; an unqualified one is set
+       back to working before converting. Leads are never deleted (tenant
+       migration 0115).
+     - **Owner:** whoever adds or imports it unless they choose someone; web
+       form and email leads start unassigned and "to review". A rep sees
+       their own; a manager their teams' and unassigned ones; viewers and up
+       all (`seesLead`).
+     - **Converting:** into an existing company or a new prospect named as
+       the lead's company; an existing person there or a new one from the
+       lead; and, unless left out, a new opportunity owned by the lead's
+       owner with that person as point of contact. The lead's tasks and
+       activities keep their lead and also get the company and person, so
+       its history shows on them. Converting again returns what it made.
+     - **Importing:** a CSV or Excel file whose first row is headings
+       (Name or First and Last name, Company, Email, Phone, Job title,
+       Source, Notes; common other spellings too), at most 2,000 rows. Each
+       row is its own: a bad row or one whose email is already an open lead
+       is skipped with the reason; the same file with the same key again adds
+       nothing.
+     - The web form and email come next (decision 493); finding and merging
+       duplicates after that.
+
+### Leads from a web form and from email (decision 493)
+
+493. **Web form and email leads arrive unassigned, to review** (#216 stage
+     1; Jess 10 Oct 2026: web form and emails to an address; spam handled
+     with a hidden trap field and a rate limit, no outside service).
+     - **Web form:** admins add forms on CRM › Leads (a name and an optional
+       thank-you page). Each has a random 40-character key; the website's
+       form posts to `/api/lead-forms/<organisation>/<key>` at the server's
+       remote access address, and Tohyee shows the HTML to paste once remote
+       access is on. A form can be switched off. Name (or first and last),
+       company, email, phone, job title and message are read; other fields
+       go into the lead's notes as "field: value".
+     - **Spam:** a hidden `website_url` field only robots fill in (they're
+       thanked and nothing is kept), at most 5 sends from one address in 10
+       minutes and 60 per form an hour (kept in memory, so a restart starts
+       again), the same submission twice in a minute makes one lead, and
+       every web lead waits "to review". Unknown keys, switched-off forms and
+       organisations without the CRM all get the same "not taking messages".
+     - **Email:** admins link a mailbox folder or Gmail label (their own
+       CRM mailbox, or IMAP with an app password), read like the bills
+       inbox: each email once, never moved, marked or deleted. The sender
+       becomes the lead (name and email), the subject and the start of the
+       text (Gmail's snippet, Microsoft's preview; none over IMAP) its notes.
+       An email from someone who's already an open lead is added to that
+       lead as a note instead. Checked every 1-24 hours, or Check now.
+     - **Who sees them:** nobody owns them yet, so sales managers, and
+       viewers and up, see them (reps don't) until someone takes them.
+     - **Not checked against real services:** the form against a real
+       website through a real tunnel, and the mailboxes against real Gmail,
+       Microsoft and IMAP accounts.
+
+494. **Duplicates: merge CRM-only companies, link ones with accounting
+     records** (#216 stage 1; Jess 10 Oct 2026: "merge CRM-only; link if
+     invoiced").
+     - **Suggested:** companies whose names match once case, accents,
+       punctuation and endings like Ltd, Limited, NZ and Co are ignored, or
+       that share an email or a phone number (digits only, +64 read as 0);
+       people with the same email, or the same name at the same company.
+       Archived and merged records, and pairs someone has reviewed, aren't
+       suggested again. Adding a company or a lead shows similar companies,
+       people and open leads (only leads the person can see) as a warning;
+       it never stops the save.
+     - **Merging a company:** only one with nothing in the books can be
+       merged away. "In the books" means any reference to it outside the
+       CRM, found from the database's foreign keys, so a new table that
+       refers to companies counts automatically. Its people, deals, tasks,
+       activities, converted leads and email links move to the one kept;
+       the kept one's empty email, phone and postal address are filled from
+       it; its primary person stops being primary if the kept company has
+       one. It's archived with `merged_into_contact_id` pointing at the one
+       kept. Its notes and files stay on it, because notes and file records
+       can't be changed (NF rules); the archived company says where it went.
+       No journal, invoice or balance changes, so there's no accounting
+       example.
+     - **Both have accounting records:** they can't be merged; they're
+       marked as the same customer, and each company's page links to the
+       other. Merging customers with invoices (moving invoices, statements
+       and balances) would change the books and isn't built.
+     - **People:** merged only within the same company and only when nothing
+       outside the CRM refers to the one merged away; deals, tasks,
+       activities, converted leads and email links move; blanks are filled.
+       People at different companies can be marked as not duplicates.
+     - **Who:** anyone who can change CRM records can mark pairs; merging
+       archives a record, so it needs the bookkeeper role or higher (not
+       sales reps or managers).

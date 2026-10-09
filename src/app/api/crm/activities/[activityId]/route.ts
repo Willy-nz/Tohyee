@@ -16,6 +16,7 @@ export const PATCH = route<Context>(async (request, context) => {
       contactId: body.contactId,
       personId: body.personId,
       opportunityId: body.opportunityId,
+      leadId: body.leadId,
     }, scope),
   );
   return json({ activity });

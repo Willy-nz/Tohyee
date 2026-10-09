@@ -231,6 +231,15 @@ export async function register() {
     }
   }
 
+  if (process.env.TOHYEE_LEAD_MAILBOX_SCHEDULER !== "off") {
+    try {
+      const { startLeadMailboxScheduler } = await import("@/lib/crm/lead-intake");
+      startLeadMailboxScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Lead mailboxes couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
   if (process.env.TOHYEE_BILL_INBOX_SCHEDULER !== "off") {
     try {
       const { startBillInboxScheduler } = await import("@/lib/bills/inbox-mailbox");

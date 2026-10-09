@@ -56,6 +56,17 @@ export function seesOwner(scope: CrmScope | undefined, ownerUserId: string | nul
   return ownerUserId !== null && scope.owners.includes(ownerUserId);
 }
 
+/**
+ * Whether the scope sees a lead (decision 492): its owner's, as a deal; one
+ * nobody owns yet (from a web form or email, waiting to be picked up) is seen
+ * by sales managers, and by viewers and up, but not by reps.
+ */
+export function seesLead(scope: CrmScope | undefined, ownerUserId: string | null): boolean {
+  if (!scope || scope.owners === null) return true;
+  if (ownerUserId === null) return scope.role === "sales_manager";
+  return scope.owners.includes(ownerUserId);
+}
+
 /** Refuses a record outside the person's scope as "not found", so ids can't be probed. */
 export function assertSeesOwner(scope: CrmScope | undefined, ownerUserId: string | null, what: string): void {
   if (!seesOwner(scope, ownerUserId)) throw new NotFoundError(`${what} not found.`);

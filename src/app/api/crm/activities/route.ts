@@ -5,7 +5,7 @@ import { createActivity, listActivities } from "@/lib/crm/service";
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const activities = await withCrm(request, params.get("organisationId"), "read", (tx, { scope }) =>
-    listActivities(tx, { contactId: params.get("contactId"), personId: params.get("personId"), opportunityId: params.get("opportunityId"), scope }),
+    listActivities(tx, { contactId: params.get("contactId"), personId: params.get("personId"), opportunityId: params.get("opportunityId"), leadId: params.get("leadId"), scope }),
   );
   return json({ activities });
 });
@@ -21,6 +21,7 @@ export const POST = route(async (request) => {
       contactId: body.contactId,
       personId: body.personId,
       opportunityId: body.opportunityId,
+      leadId: body.leadId,
     }, scope),
   );
   return json({ activity }, { status: 201 });

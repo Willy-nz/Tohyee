@@ -248,7 +248,9 @@ re-runs the whole sequence.
 - Every API route needs a signed-in user and checks their role, except the sign-in routes themselves
   (`/api/auth/*`: setup, login, logout, two-step, setup links and the emailed reset), `/api/health`
   (which, through remote access, says only whether the server is up: no version or database state),
-  `/api/mcp` (below), and
+  `/api/mcp` (below), the CRM's web lead forms (`/api/lead-forms/<organisation>/<random
+  key>`, decision 493: the key finds the form; what's sent is only ever an
+  unassigned lead to review, behind a trap field and per-address limits), and
   the sales platform webhook address
   (`/api/sales-platforms/webhooks/<organisation>/<random key>`), which a
   store calls. It authenticates only by the platform's signature (Shopify:

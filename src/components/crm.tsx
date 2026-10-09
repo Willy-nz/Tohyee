@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
+import { SimilarRecords } from "@/components/crm-similar";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -210,6 +211,7 @@ function NewProspectForm({ organisationId, onSaved }: { organisationId: string; 
         </Field>
         <RecordTypeSelect types={recordTypes.data?.recordTypes} value={recordTypeId} onChange={setRecordTypeId} disabled={busy} />
       </div>
+      <SimilarRecords organisationId={organisationId} name={name} email={email} phone={phone} />
       <CustomFieldInputs setup={customSetup.data} record="contact" uses={["prospect"]} value={customFields} onChange={setCustom} disabled={busy} />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy || !name.trim()}>

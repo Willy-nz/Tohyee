@@ -5,7 +5,7 @@ import { dueDateFromTerms } from "@/lib/customers/service";
 import { keptCustom, loadCustomFieldContext, missingRequiredField, parseCustomInput, resolveCustomValues } from "@/lib/custom-fields/service";
 import { type CustomValues, customValuesKey, defaultValues, isSwitchedOn } from "@/lib/custom-fields/values";
 import type { Role } from "@/lib/auth/roles";
-import { assertSeesOwner, type CrmScope, ownerFor, seesOwner } from "@/lib/crm/access";
+import { assertSeesOwner, type CrmScope, ownerFor, seesLead, seesOwner } from "@/lib/crm/access";
 import { checkAgainstLayout, chooseRecordType, getRecordType, type LayoutValues } from "@/lib/crm/record-types/service";
 import type { RecordType } from "@/lib/crm/record-types/layout";
 import { todayIsoDate } from "@/lib/dates";
@@ -131,6 +131,9 @@ export type Task = {
   personName: string | null;
   opportunityId: string | null;
   opportunityName: string | null;
+  /** The lead it's about (decision 492); kept after the lead is converted. */
+  leadId: string | null;
+  leadName: string | null;
   completedAt: string | null;
   createdByEmail: string | null;
   createdAt: string;
@@ -148,6 +151,9 @@ export type Activity = {
   personName: string | null;
   opportunityId: string | null;
   opportunityName: string | null;
+  /** The lead it's about (decision 492); kept after the lead is converted. */
+  leadId: string | null;
+  leadName: string | null;
   createdByEmail: string | null;
   createdAt: string;
 };
@@ -205,6 +211,13 @@ async function crmCustomValues(
  * scope (decision 491).
  */
 export type SaveOptions = { role?: Role; scope?: CrmScope };
+
+/** SQL for "this lead is one the scope sees" (decision 492): its owner's, or an unowned one for a sales manager. */
+function leadSql(scope: CrmScope | undefined, column: string, params: unknown[]): string {
+  if (!scope || scope.owners === null) return "true";
+  params.push(scope.owners);
+  return `(${column} = any($${params.length}::text[])${scope.role === "sales_manager" ? ` or ${column} is null` : ""})`;
+}
 
 /** SQL that limits an owner column to the scope's owners, adding them as the next parameter; "true" for everyone. */
 function ownerSql(scope: CrmScope | undefined, column: string, params: unknown[]): string {
@@ -889,11 +902,11 @@ export async function makeSalesOrderFromOpportunity(tx: OrgTx, idInput: unknown)
 // ---------------------------------------------------------------------------
 // Targets shared by tasks and activities
 
-type Targets = { contactId: string | null; personId: string | null; opportunityId: string | null };
+type Targets = { contactId: string | null; personId: string | null; opportunityId: string | null; leadId: string | null };
 
 async function parseTargets(
   tx: OrgTx,
-  input: { contactId?: unknown; personId?: unknown; opportunityId?: unknown },
+  input: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; leadId?: unknown },
   current: Targets | null,
   scope?: CrmScope,
 ): Promise<Targets> {
@@ -902,7 +915,12 @@ async function parseTargets(
     contactId: pick(input.contactId, current?.contactId ?? null, "contactId"),
     personId: pick(input.personId, current?.personId ?? null, "personId"),
     opportunityId: pick(input.opportunityId, current?.opportunityId ?? null, "opportunityId"),
+    leadId: pick(input.leadId, current?.leadId ?? null, "leadId"),
   };
+  if (targets.leadId) {
+    const lead = (await tx.query<{ owner_user_id: string | null }>("select owner_user_id from crm_leads where id = $1", [targets.leadId])).rows[0];
+    if (!lead || !seesLead(scope, lead.owner_user_id)) throw new NotFoundError("Lead not found.");
+  }
   if (targets.contactId) await requireContact(tx, targets.contactId);
   if (targets.personId) await getPerson(tx, targets.personId);
   if (targets.opportunityId) await getOpportunity(tx, targets.opportunityId, scope);
@@ -911,9 +929,11 @@ async function parseTargets(
 
 const TARGET_JOINS = `left join contacts c on c.id = x.contact_id
   left join crm_people p on p.id = x.person_id
-  left join crm_opportunities o on o.id = x.opportunity_id`;
+  left join crm_opportunities o on o.id = x.opportunity_id
+  left join crm_leads l on l.id = x.lead_id`;
 const TARGET_COLUMNS = `x.contact_id, c.name as contact_name, x.person_id,
-  nullif(concat_ws(' ', p.first_name, p.last_name), '') as person_name, x.opportunity_id, o.name as opportunity_name`;
+  nullif(concat_ws(' ', p.first_name, p.last_name), '') as person_name, x.opportunity_id, o.name as opportunity_name,
+  x.lead_id, coalesce(nullif(concat_ws(' ', l.first_name, l.last_name), ''), l.company_name, l.email) as lead_name`;
 
 type TargetRow = {
   contact_id: string | null;
@@ -922,6 +942,8 @@ type TargetRow = {
   person_name: string | null;
   opportunity_id: string | null;
   opportunity_name: string | null;
+  lead_id: string | null;
+  lead_name: string | null;
 };
 
 function targetsOf(row: TargetRow) {
@@ -932,6 +954,8 @@ function targetsOf(row: TargetRow) {
     personName: row.person_name,
     opportunityId: row.opportunity_id,
     opportunityName: row.opportunity_name,
+    leadId: row.lead_id,
+    leadName: row.lead_name,
   };
 }
 
@@ -976,18 +1000,20 @@ function toTask(row: TaskRow): Task {
 
 export async function listTasks(
   tx: OrgTx,
-  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; open?: boolean; assigneeUserId?: unknown; scope?: CrmScope } = {},
+  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; leadId?: unknown; open?: boolean; assigneeUserId?: unknown; scope?: CrmScope } = {},
 ): Promise<Task[]> {
   const contactId = optionalId(options.contactId, "contactId");
   const personId = optionalId(options.personId, "personId");
   const opportunityId = optionalId(options.opportunityId, "opportunityId");
   const assignee = typeof options.assigneeUserId === "string" && options.assigneeUserId ? options.assigneeUserId : null;
-  const params: unknown[] = [contactId, personId, opportunityId, options.open ?? false, assignee];
+  const leadId = optionalId(options.leadId, "leadId");
+  const params: unknown[] = [contactId, personId, opportunityId, options.open ?? false, assignee, leadId];
   const assigned = ownerSql(options.scope, "x.assignee_user_id", params);
   const result = await tx.query<TaskRow>(
     `${TASK_SELECT}
       where ${ABOUT_CONTACT} and ($2::bigint is null or x.person_id = $2) and ($3::bigint is null or x.opportunity_id = $3)
-        and (not $4::boolean or x.status <> 'done') and ($5::text is null or x.assignee_user_id = $5) and ${assigned}
+        and (not $4::boolean or x.status <> 'done') and ($5::text is null or x.assignee_user_id = $5) and ($6::bigint is null or x.lead_id = $6)
+        and ${assigned}
       order by x.status = 'done', x.due_date nulls last, x.id`,
     params,
   );
@@ -1011,6 +1037,7 @@ type TaskInput = {
   contactId?: unknown;
   personId?: unknown;
   opportunityId?: unknown;
+  leadId?: unknown;
 };
 
 async function taskValues(tx: OrgTx, input: TaskInput, current: Task | null, scope?: CrmScope) {
@@ -1035,9 +1062,9 @@ export async function createTask(tx: OrgTx, input: TaskInput, scope?: CrmScope):
   await requireCrm(tx);
   const v = await taskValues(tx, input, null, scope);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_tasks (title, body, due_date, status, assignee_user_id, contact_id, person_id, opportunity_id, created_by_email, completed_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, case when $4 = 'done' then now() end) returning id`,
-    [v.title, v.body, v.dueDate, v.status, v.assigneeUserId, v.contactId, v.personId, v.opportunityId, tx.actor.email],
+    `insert into crm_tasks (title, body, due_date, status, assignee_user_id, contact_id, person_id, opportunity_id, created_by_email, completed_at, lead_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, case when $4 = 'done' then now() end, $10) returning id`,
+    [v.title, v.body, v.dueDate, v.status, v.assigneeUserId, v.contactId, v.personId, v.opportunityId, tx.actor.email, v.leadId],
   );
   const id = inserted.rows[0].id;
   await writeAuditEvent(tx, { eventType: "crm.task_created", entityType: "crm_task", entityId: id, details: v });
@@ -1050,9 +1077,9 @@ export async function updateTask(tx: OrgTx, idInput: unknown, input: TaskInput, 
   const v = await taskValues(tx, input, current, scope);
   await tx.query(
     `update crm_tasks set title = $2, body = $3, due_date = $4, status = $5, assignee_user_id = $6, contact_id = $7, person_id = $8,
-            opportunity_id = $9, completed_at = case when $5 = 'done' then coalesce(completed_at, now()) end, updated_at = now()
+            opportunity_id = $9, completed_at = case when $5 = 'done' then coalesce(completed_at, now()) end, lead_id = $10, updated_at = now()
       where id = $1`,
-    [current.id, v.title, v.body, v.dueDate, v.status, v.assigneeUserId, v.contactId, v.personId, v.opportunityId],
+    [current.id, v.title, v.body, v.dueDate, v.status, v.assigneeUserId, v.contactId, v.personId, v.opportunityId, v.leadId],
   );
   await writeAuditEvent(tx, {
     eventType: "crm.task_updated",
@@ -1098,17 +1125,20 @@ function toActivity(row: ActivityRow): Activity {
  */
 export async function listActivities(
   tx: OrgTx,
-  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; scope?: CrmScope } = {},
+  options: { contactId?: unknown; personId?: unknown; opportunityId?: unknown; leadId?: unknown; scope?: CrmScope } = {},
 ): Promise<Activity[]> {
   const contactId = optionalId(options.contactId, "contactId");
   const personId = optionalId(options.personId, "personId");
   const opportunityId = optionalId(options.opportunityId, "opportunityId");
-  const params: unknown[] = [contactId, personId, opportunityId];
+  const leadId = optionalId(options.leadId, "leadId");
+  const params: unknown[] = [contactId, personId, opportunityId, leadId];
   const visible = ownerSql(options.scope, "o.owner_user_id", params);
+  const leadVisible = leadSql(options.scope, "l.owner_user_id", params);
   const result = await tx.query<ActivityRow>(
     `${ACTIVITY_SELECT}
       where ${ABOUT_CONTACT} and ($2::bigint is null or x.person_id = $2) and ($3::bigint is null or x.opportunity_id = $3)
-        and (x.opportunity_id is null or ${visible})
+        and ($4::bigint is null or x.lead_id = $4)
+        and (x.opportunity_id is null or ${visible}) and (x.lead_id is null or ${leadVisible})
       order by x.happened_at desc, x.id desc
       limit 500`,
     params,
@@ -1135,6 +1165,7 @@ type ActivityInput = {
   contactId?: unknown;
   personId?: unknown;
   opportunityId?: unknown;
+  leadId?: unknown;
 };
 
 function parseHappenedAt(input: unknown): string {
@@ -1147,8 +1178,8 @@ async function activityValues(tx: OrgTx, input: ActivityInput, current: Activity
     throw new ValidationError("The kind must be call, meeting or note.");
   }
   const targets = await parseTargets(tx, input, current, scope);
-  if (!targets.contactId && !targets.personId && !targets.opportunityId) {
-    throw new ValidationError("An activity must be about a company, a person or an opportunity.");
+  if (!targets.contactId && !targets.personId && !targets.opportunityId && !targets.leadId) {
+    throw new ValidationError("An activity must be about a company, a person, an opportunity or a lead.");
   }
   return {
     kind: (input.kind ?? current?.kind ?? "note") as ActivityKind,
@@ -1163,9 +1194,9 @@ export async function createActivity(tx: OrgTx, input: ActivityInput, scope?: Cr
   await requireCrm(tx);
   const v = await activityValues(tx, input, null, scope);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_activities (kind, happened_at, subject, body, contact_id, person_id, opportunity_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-    [v.kind, v.happenedAt, v.subject, v.body, v.contactId, v.personId, v.opportunityId, tx.actor.email],
+    `insert into crm_activities (kind, happened_at, subject, body, contact_id, person_id, opportunity_id, created_by_email, lead_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+    [v.kind, v.happenedAt, v.subject, v.body, v.contactId, v.personId, v.opportunityId, tx.actor.email, v.leadId],
   );
   const id = inserted.rows[0].id;
   await writeAuditEvent(tx, { eventType: "crm.activity_created", entityType: "crm_activity", entityId: id, details: v });
@@ -1178,9 +1209,9 @@ export async function updateActivity(tx: OrgTx, idInput: unknown, input: Activit
   const v = await activityValues(tx, input, current, scope);
   await tx.query(
     `update crm_activities set kind = $2, happened_at = $3, subject = $4, body = $5, contact_id = $6, person_id = $7, opportunity_id = $8,
-            updated_at = now()
+            lead_id = $9, updated_at = now()
       where id = $1`,
-    [current.id, v.kind, v.happenedAt, v.subject, v.body, v.contactId, v.personId, v.opportunityId],
+    [current.id, v.kind, v.happenedAt, v.subject, v.body, v.contactId, v.personId, v.opportunityId, v.leadId],
   );
   await writeAuditEvent(tx, { eventType: "crm.activity_updated", entityType: "crm_activity", entityId: current.id, details: v });
   return getActivity(tx, current.id);

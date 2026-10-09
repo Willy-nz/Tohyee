@@ -67,6 +67,8 @@ type SearchInput = {
   userId: string | null;
   /** A sales rep or manager (decision 491): CRM records only, and only the opportunities of these owners. */
   salesOwners?: string[];
+  /** A sales manager also finds unassigned leads. */
+  salesManager?: boolean;
 };
 
 function whereParts(
@@ -490,6 +492,31 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
           order by coalesce(o.close_date, '1900-01-01'::date) desc, o.id desc
           limit ${PER_KIND}`,
         opportunityWhere.params,
+      ),
+    );
+  }
+
+  if (crmOn && include("crm")) {
+    // Leads (decision 492): a sales rep's own; a manager's, their teams' and unassigned ones.
+    const leadWhere = whereParts(["coalesce(l.first_name, '')", "coalesce(l.last_name, '')", "coalesce(l.company_name, '')", "coalesce(l.email, '')", "coalesce(l.phone, '')"], query, null, null);
+    if (input.salesOwners) {
+      leadWhere.params.push(input.salesOwners);
+      leadWhere.sql = `(${leadWhere.sql}) and (l.owner_user_id = any($${leadWhere.params.length}::text[])${input.salesManager ? " or l.owner_user_id is null" : ""})`;
+    }
+    groups.push(
+      await queryRecords(
+        tx,
+        "crm_lead",
+        "CRM leads",
+        `select coalesce(nullif(concat_ws(' ', l.first_name, l.last_name), ''), l.company_name, l.email) as title,
+                concat_ws(' · ', l.company_name, l.email, l.phone) as subtitle,
+                l.status as status,
+                '/crm/leads/' || l.id::text as href
+           from crm_leads l
+          where ${leadWhere.sql}
+          order by l.id desc
+          limit ${PER_KIND}`,
+        leadWhere.params,
       ),
     );
   }

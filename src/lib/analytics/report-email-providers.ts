@@ -19,6 +19,8 @@ export type ReportMessage = {
   /** The sender and subject, when the mailbox gave them (the bills inbox shows them, BI2). */
   from?: string | null;
   subject?: string | null;
+  /** The start of the message's text, when the mailbox gives it (Gmail's snippet, Microsoft's body preview); leads from email use it (decision 493). */
+  preview?: string | null;
 };
 
 /** A header value cut to a sensible length, without control characters. */
@@ -221,7 +223,7 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
       for (const listed of page.messages ?? []) {
         if (skip(listed.id)) continue;
         yield await oneMessage(listed.id, async () => {
-          const message = await request<{ internalDate: string; payload?: GmailPart }>(
+          const message = await request<{ internalDate: string; payload?: GmailPart; snippet?: string }>(
             `${GOOGLE}/messages/${id(listed.id)}?format=full`, token, MAX_ENCODED_BYTES,
           );
           return {
@@ -229,6 +231,7 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
             attachments: gmailAttachments(message.payload, listed.id, token),
             from: gmailHeader(message.payload, "from"),
             subject: gmailHeader(message.payload, "subject"),
+            preview: headerText(message.snippet, 2000),
           };
         });
       }
@@ -244,9 +247,10 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
     receivedDateTime: string;
     hasAttachments: boolean;
     subject?: string;
+    bodyPreview?: string;
     from?: { emailAddress?: { name?: string; address?: string } };
   }>(
-    `${folder}/messages?$top=100&$select=id,receivedDateTime,hasAttachments,subject,from&$orderby=receivedDateTime%20asc`, token,
+    `${folder}/messages?$top=100&$select=id,receivedDateTime,hasAttachments,subject,from,bodyPreview&$orderby=receivedDateTime%20asc`, token,
   )) {
     for (const message of page) {
       if (skip(message.id)) continue;
@@ -276,6 +280,7 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
         attachments,
         from: headerText(sender?.name && sender.address ? `${sender.name} <${sender.address}>` : (sender?.address ?? sender?.name)),
         subject: headerText(message.subject, 1000),
+        preview: headerText(message.bodyPreview, 2000),
       };
       });
     }

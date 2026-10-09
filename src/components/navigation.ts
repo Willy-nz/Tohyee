@@ -263,6 +263,7 @@ export const NEW_ACTIONS: MenuGroup[] = [
 /** The CRM's tabs (its own app, under /crm); shown only while the CRM is on (MOD1). */
 export const CRM_MENUS: Menu[] = [
   { label: "Home", href: "/crm", area: ["/crm"] },
+  { label: "Leads", href: "/crm/leads", area: ["/crm/leads"] },
   { label: "Companies", href: "/crm/companies", area: ["/crm/companies"] },
   { label: "People", href: "/crm/people", area: ["/crm/people"] },
   { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline", "/crm/opportunities"] },
@@ -270,6 +271,7 @@ export const CRM_MENUS: Menu[] = [
   { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
   { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
   { label: "Teams", href: "/crm/teams", area: ["/crm/teams"] },
+  { label: "Duplicates", href: "/crm/duplicates", area: ["/crm/duplicates"] },
   { label: "Record types", href: "/crm/record-types", area: ["/crm/record-types"], minRole: "admin" as const },
   { label: "Stages", href: "/crm/stages", area: ["/crm/stages"], minRole: "admin" as const },
 ].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));

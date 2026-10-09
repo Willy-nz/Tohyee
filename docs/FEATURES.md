@@ -811,6 +811,28 @@ that something happened.
   and files on a company. **CRM › Teams**: admins and owners make teams (a
   manager and members; one team each). Search finds only a sales person's
   CRM records. Viewers and up see every CRM record as before.
+- **CRM leads** (decision 492, #216): CRM › Leads, for enquiries before
+  they're customers, after Salesforce's leads: typed in or imported from a
+  CSV or Excel file (duplicates of open leads skipped), owned by whoever adds
+  them, worked (new, working, unqualified with a reason) and converted into a
+  company (a new prospect or an existing one), a person and optionally an
+  opportunity, keeping their calls, notes and tasks. Leads show in search,
+  scoped like deals for sales roles. Leads also arrive from a **web form**
+  on the business's own website (HTML to paste, a hidden trap field and
+  limits per sender against spam) and from a **mailbox folder or label**
+  (each email once; one from an open lead adds a note to it), unassigned and
+  "to review" (decision 493).
+- **CRM duplicates** (decision 494, #216): CRM › Duplicates suggests
+  companies with the same name (ignoring case, accents, punctuation and
+  endings like Ltd), email or phone, and people with the same email or the
+  same name at the same company. A company with no accounting records can
+  be merged into the other (its people, deals, tasks, activities and
+  converted leads move across; it's archived and says where it went); two
+  that both have accounting records are only linked as the same customer,
+  shown on each company's page. People merge within their company. Adding
+  a company or a lead warns about similar companies, people and open leads.
+  Merging needs the bookkeeper role or higher; anyone who changes CRM
+  records can mark a pair as not duplicates.
   **CRM custom fields** (like Salesforce's): the organisation's own fields
   on companies (contact fields used on prospects), people and
   opportunities, with the same types, required fields, defaults and
