@@ -36,7 +36,7 @@ type GroupRow = { id: string; name: string; parent_organisation_id: string; vers
 async function groupRows(where: string, params: unknown[]): Promise<ConsolidationGroup[]> {
   const groups = await coreQuery<GroupRow>(
     `select id::text, name, parent_organisation_id, version, created_by_email, created_at, updated_at from consolidation_groups
-      where archived_at is null and ${where} order by lower(name), id`,
+      where archived_at is null and ${where} order by lower(name), consolidation_groups.id`,
     params,
   );
   if (groups.rows.length === 0) return [];
@@ -283,7 +283,7 @@ export async function setBudgetRate(user: GroupUser, groupIdInput: unknown, inpu
 
 export async function listAdjustments(groupId: string): Promise<ConsolidationAdjustment[]> {
   const heads = await coreQuery<{ id: string; adjustment_date: string; description: string; created_by_email: string; created_at: string }>(
-    "select id::text, adjustment_date::text, description, created_by_email, created_at from consolidation_adjustments where group_id = $1 and removed_at is null order by adjustment_date, id",
+    "select id::text, adjustment_date::text, description, created_by_email, created_at from consolidation_adjustments where group_id = $1 and removed_at is null order by consolidation_adjustments.adjustment_date, consolidation_adjustments.id",
     [groupId],
   );
   const lines = await coreQuery<{ adjustment_id: string; organisation_id: string; account_code: string; debit: string; credit: string }>(

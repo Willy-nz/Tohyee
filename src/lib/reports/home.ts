@@ -172,7 +172,7 @@ export async function getHomeSummary(tx: OrgTx, input: { today?: unknown } = {})
     months.push({ monthStart: month, netProfit: report.netProfit });
   }
   const journals = await tx.query<{ id: string; posting_date: string; reference: string; description: string | null; total_debit: string }>(
-    "select id::text, posting_date::text, reference, description, total_debit::text from ledger_journals order by id desc limit 4",
+    "select id::text, posting_date::text, reference, description, total_debit::text from ledger_journals order by ledger_journals.id desc limit 4",
   );
   return {
     today,

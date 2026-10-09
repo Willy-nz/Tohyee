@@ -97,7 +97,7 @@ async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow
   const result = await tx.query<ConnectionRow>(
     `select id::text, name, token_ciphertext, profile_id::text, profile_name, sync_every_hours, balances, last_synced_at, last_sync_status, last_sync_error,
             lease_until, created_at, created_by_email
-       from wise_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
+       from wise_connections where status = 'active' order by wise_connections.id ${lock ? "for update" : ""}`,
   );
   return result.rows;
 }

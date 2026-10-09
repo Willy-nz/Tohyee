@@ -385,7 +385,7 @@ export const READ_TOOLS: readonly AiTool[] = (
         const number = optionalString(args.supplierInvoiceNumber, "supplierInvoiceNumber", { maxLength: 60 });
         if (!number) throw new ValidationError("Give the bill's id or the supplier's invoice number.");
         const found = await tx.query<{ id: string }>(
-          "select id::text from bills where upper(supplier_invoice_number) = upper($1) order by id desc limit 20",
+          "select id::text from bills where upper(supplier_invoice_number) = upper($1) order by bills.id desc limit 20",
           [number],
         );
         if (found.rows.length === 0) throw new NotFoundError(`There's no bill with the supplier invoice number ${number}.`);

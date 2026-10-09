@@ -125,7 +125,7 @@ async function loadItems(tx: OrgTx, where: string, values: unknown[]): Promise<A
   if (rows.rows.length === 0) return [];
   const ids = rows.rows.map((row) => row.id);
   const units = await tx.query<{ id: string; item_id: string; name: string; factor: string; is_active: boolean }>(
-    "select id, item_id, name, factor::text, is_active from item_units where item_id = any($1::bigint[]) order by factor, id",
+    "select id, item_id, name, factor::text, is_active from item_units where item_id = any($1::bigint[]) order by item_units.factor, item_units.id",
     [ids],
   );
   const prices = await tx.query<{ item_id: string; price_level_id: string; name: string; price: string }>(

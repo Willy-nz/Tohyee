@@ -879,7 +879,7 @@ export async function timesheetTargets(tx: OrgTx): Promise<TimesheetTargets> {
         )
       ).rows
     : [];
-  const projects = (await tx.query<{ id: string; name: string }>("select id::text, name from projects where status = 'in_progress' order by lower(name), id")).rows;
+  const projects = (await tx.query<{ id: string; name: string }>("select id::text, name from projects where status = 'in_progress' order by lower(name), projects.id")).rows;
   const rdActivities = (await tx.query<{ id: string; code: string; name: string }>("select id::text, code, name from rd_activities where status = 'active' order by lower(code)")).rows;
   return { departments, projects, rdActivities };
 }

@@ -112,7 +112,7 @@ async function customersCovered(tx: OrgTx, contactId: string, includeSubs: boole
        select id, name, 0 as depth from contacts where id = $1
        union all
        select c.id, c.name, t.depth + 1 from contacts c join tree t on c.parent_contact_id = t.id
-     ) select id::text, name, depth from tree order by depth, lower(name), id`,
+     ) select id::text, name, depth from tree order by depth, lower(name), tree.id`,
     [contactId],
   );
   return tree.rows.map(({ id, name }) => ({ id, name }));
@@ -176,7 +176,7 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
      select 'overpayment', id::text, id::text, invoice_number, payment_date, null, contact_id::text, overpayment_amount::text, (-unused)::text,
             (-coalesce(base_unused, unused))::text
        from overpayments_open where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
-     order by date, type desc, document_id`,
+     order by date, type desc, length(document_id), document_id`,
     [asAt, ids],
   );
   let buckets: Buckets = emptyBuckets();

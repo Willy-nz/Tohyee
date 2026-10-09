@@ -86,7 +86,7 @@ type Actions = ApprovalAction[];
 
 async function loadActions(tx: OrgTx, requestId: string): Promise<Actions> {
   const found = await tx.query<{ id: string; step_number: number; action: "approved" | "declined"; email: string; reason: string | null; created_at: string; user_id: string | null }>(
-    "select id::text, step_number, action, email, reason, created_at, user_id::text from approval_actions where request_id = $1 order by id",
+    "select id::text, step_number, action, email, reason, created_at, user_id::text from approval_actions where request_id = $1 order by approval_actions.id",
     [requestId],
   );
   return found.rows.map((row) => ({ id: row.id, stepNumber: row.step_number, action: row.action, email: row.email, name: nameOf(tx.people, row.email), reason: row.reason, at: row.created_at }));

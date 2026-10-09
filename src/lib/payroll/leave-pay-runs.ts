@@ -371,7 +371,7 @@ async function workOutKept(tx: OrgTx, run: DraftRun, facts: EmployeeFacts, recor
               in_advance_agreed
          from payroll_leave_bookings
         where employee_id::text = $1 and status = 'booked' and start_date <= $3 and end_date >= $2
-        order by start_date, booking_number`,
+        order by payroll_leave_bookings.start_date, payroll_leave_bookings.booking_number`,
       [facts.id, from, to],
     )
   ).rows;

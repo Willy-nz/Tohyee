@@ -425,7 +425,7 @@ export async function runDueReportEmailChecks(now = new Date()): Promise<ReportE
         if (!enabled.rows[0]?.analytics_enabled) return [];
         const mailboxes = await tx.query<{ id: string; owner_user_id: string; created_by_email: string; last_check_at: Date | null }>(
           `select id::text, owner_user_id, created_by_email, last_check_at from analytics_report_mailboxes
-           where lease_until is null or lease_until <= now() order by id`);
+           where lease_until is null or lease_until <= now() order by analytics_report_mailboxes.id`);
         return mailboxes.rows.filter((mailbox) => reportEmailCheckDue(now, mailbox.last_check_at ? new Date(mailbox.last_check_at) : null));
       });
       for (const mailbox of due) {

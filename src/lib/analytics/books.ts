@@ -32,9 +32,9 @@ type Lookups = {
 };
 
 async function lookups(tx: OrgTx): Promise<Lookups> {
-  const categories = await tx.query<{ id: string; name: string }>("select id::text, name from tracking_categories order by sort_order, id");
+  const categories = await tx.query<{ id: string; name: string }>("select id::text, name from tracking_categories order by sort_order, tracking_categories.id");
   const values = await tx.query<{ id: string; name: string }>("select id::text, name from tracking_values");
-  const fields = await tx.query<{ id: string; record: string; label: string }>("select id::text, record, label from custom_fields order by sort_order, id");
+  const fields = await tx.query<{ id: string; record: string; label: string }>("select id::text, record, label from custom_fields order by sort_order, custom_fields.id");
   const options = await tx.query<{ id: string; name: string }>("select id::text, name from custom_field_options");
   const taken = new Set<string>();
   return {
@@ -320,7 +320,7 @@ export async function readBooks(
   const contacts = await tx.query<Record<string, string | null> & { custom_fields: Record<string, unknown> | null }>(
     `select id::text, name, is_customer::text, is_supplier::text, is_prospect::text, email, phone, postal_address,
             delivery_address, billing_country, delivery_country, gst_number, is_archived::text, custom_fields
-       from contacts order by name, id`,
+       from contacts order by name, contacts.id`,
   );
   tables.push({
     name: "tohyee_contacts",

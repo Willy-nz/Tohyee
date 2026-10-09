@@ -119,7 +119,7 @@ type SourceRow = {
 export async function listSources(tx: OrgTx): Promise<AnalyticsSource[]> {
   const sources = await tx.query<SourceRow>(
     `select id::text, name, table_name, file_name, sheet_name, delimiter, columns, reload_daily, created_by_email, created_at, updated_by_email, updated_at
-       from analytics_sources order by name, id`,
+       from analytics_sources order by name, analytics_sources.id`,
   );
   const runs = await tx.query<RunRow>(
     `select distinct on (source_id) ${RUN_COLUMNS} from analytics_load_runs where source_id is not null order by source_id, started_at desc, id desc`,
