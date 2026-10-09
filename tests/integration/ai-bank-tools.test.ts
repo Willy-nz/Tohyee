@@ -175,9 +175,9 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
     expect(await toolNames(tokens.post)).toEqual(UP_TO_POST);
     expect(await toolNames(tokens.former)).toEqual(UP_TO_POST);
     expect(UP_TO_POST).toEqual(expect.arrayContaining(["list_bank_accounts", "list_bank_lines", "get_bank_line", "reconciliation_summary"]));
-    expect(FULL_ONLY).toEqual(
+    expect(FULL_ONLY).toEqual(expect.arrayContaining(
       ["apply_bank_rule", "bulk_reconcile", "create_and_match", "create_bank_rule", "match_bank_line", "transfer_and_match", "unmatch_bank_line", "update_bank_rule"],
-    );
+    ));
     const refused = await rpc(tokens.post, "tools/call", { name: "create_and_match", arguments: {} });
     expect(refused.error).toMatchObject({ message: expect.stringContaining('"Full access" access and the Owner role') });
     expect(((await rpc(tokens.full, "initialize", {})).result as Json).instructions).toContain("unmatch_bank_line");
@@ -443,7 +443,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
   it("no tool deletes, excludes or switches anything off", () => {
     for (const tool of AI_TOOLS) {
       for (const word of ["delete", "void", "archive", "exclude", "deactivate", "unreconcile"]) expect(tool.name.split("_"), tool.name).not.toContain(word);
-      if (tool.level !== "read") expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|void|delete|"excluded"/i);
+      if (tool.level !== "read" && !tool.readOnly) expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|void|delete|"excluded"/i);
     }
   });
 

@@ -1489,9 +1489,12 @@ that something happened.
   **never deletes**: nothing at any level deletes, voids, archives, rolls
   back or refunds anything, except that a Full access key can undo its own
   bank reconciliation within 24 hours, reversing what it posted for the line
-  on the line's date (AIB7). Payroll isn't included. Full access's other
-  day-to-day actions (#205 section 4: quotes, credit notes, purchase orders,
-  fixed assets and more) aren't built yet. A key stops working
+  on the line's date (AIB7). Full access also makes, edits and approves
+  credit notes, quotes, sales and purchase orders and repeating invoices and
+  bills, applies credit and records refunds, approves and pays expense
+  claims, adds and edits items, accounts, tracking, budgets and fixed assets,
+  and runs depreciation (decision 489, AIF1-AIF6); anything an approval rule
+  covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
   turned off. Not yet tried against each AI app; no OAuth sign-in yet, so
   AI services that only take OAuth connectors can't connect.

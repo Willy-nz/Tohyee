@@ -28,19 +28,19 @@ import { requireId, requireIdempotencyKey } from "@/lib/validation";
  * (command source "ai-<key id>"), so a retried call doesn't double up.
  */
 
-const IDEMPOTENCY: JsonSchema = {
+export const IDEMPOTENCY: JsonSchema = {
   type: "string",
   pattern: "^[A-Za-z0-9._:-]{8,120}$",
   description:
     "8-120 letters, numbers, dots, colons, dashes or underscores. Send the same key if you retry the same call, so it isn't done twice; a new key for a new one. Made up for you if left out (then a retry would do it again).",
 };
-const ID = (what: string): JsonSchema => ({ type: "string", description: `The ${what}'s id.` });
-const AMOUNTS_MODE: JsonSchema = {
+export const ID = (what: string): JsonSchema => ({ type: "string", description: `The ${what}'s id.` });
+export const AMOUNTS_MODE: JsonSchema = {
   type: "string",
   enum: ["exclusive", "inclusive", "no_tax"],
   description: "Whether unit prices exclude GST, include GST, or have no GST.",
 };
-const DOCUMENT_LINES: JsonSchema = {
+export const DOCUMENT_LINES: JsonSchema = {
   type: "array",
   minItems: 1,
   maxItems: 200,
@@ -74,7 +74,7 @@ const JOURNAL_LINES: JsonSchema = {
   },
 };
 
-function idempotencyKey(input: unknown): string {
+export function idempotencyKey(input: unknown): string {
   return input === undefined || input === null || input === "" ? `ai-${randomBytes(12).toString("hex")}` : requireIdempotencyKey(input);
 }
 
@@ -131,7 +131,7 @@ const billDetail = async (tx: Parameters<AiTool["run"]>[0], id: string) => {
   return { ...billSummary(bill), amountsMode: bill.amountsMode, ...documentLines(bill.lines) };
 };
 
-const PAYMENT_FIELDS: Record<string, JsonSchema> = {
+export const PAYMENT_FIELDS: Record<string, JsonSchema> = {
   paymentDate: DATE,
   amount: { type: "string", description: "A decimal, at most what's still due." },
   bankAccountCode: { type: "string", description: "A bank or credit card account's code from list_accounts." },

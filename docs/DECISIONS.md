@@ -3894,3 +3894,34 @@ testing) and #154's code signing (later, Jess).
      - **Not yet:** the rest of #205 section 4 (other Full access actions
        outside banking).
 
+### Full access outside banking (decision 489)
+
+489. **A Full access key also does day-to-day accounting outside banking**
+     (#205 section 4, 9 Oct 2026). Examples AIF1-AIF6.
+     - **Added (Full access):** make, edit and approve sales and supplier
+       credit notes, apply them and record refunds; apply and refund customer
+       overpayments; make, edit and finalise quotes; make, edit and approve
+       sales and purchase orders; make and edit repeating invoices and bills;
+       approve and pay expense claims; add and edit items, accounts, tracking
+       categories and options, and fixed assets; make budgets and set their
+       amounts; run depreciation. Each calls the screen's own service.
+     - **Reading** (any level): credit notes, supplier credit notes,
+       overpayments, quotes, sales and purchase orders, repeating invoices and
+       bills, items, tracking, fixed assets and their types, a depreciation
+       preview, and budgets. Expense claims (people's own spending) only with
+       Full access, read-only.
+     - **Approval rules:** a purchase order, bill or expense claim an
+       approval rule covers is approved by people only, as AW13 (Jess, 9 Oct
+       2026: keep people-only, not "approve where the owner is an approver").
+     - **Never:** delete, void, archive, switch off (no tool takes
+       `isActive`, and edits keep it as it was), pause or stop a repeating
+       document, dispose of an asset, roll back a depreciation run, accept or
+       decline a quote, close or cancel an order, payroll, lock dates, GST
+       filing, users, roles, keys or settings. Refunds are recorded only at
+       Full access (decision 347's "never refunds" stays for the lower
+       levels).
+     - **Notes:** bills from the bills inbox were already covered (BI4,
+       approve_bill). Tracking needs the Advanced reporting module switched
+       on, as on the screen. create_account has no idempotency key; a retry
+       is refused because the code is taken.
+

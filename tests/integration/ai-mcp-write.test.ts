@@ -126,11 +126,13 @@ describeWithDatabase("AI keys that make drafts and post (decisions 346-348)", ()
   it("no tool deletes, voids, archives, rolls back, refunds or removes anything", () => {
     for (const tool of AI_TOOLS) {
       const words = tool.name.split("_");
-      for (const word of ["delete", "void", "archive", "unarchive", "rollback", "roll", "refund", "remove", "revoke", "undo", "unreconcile", "reopen"]) {
+      for (const word of ["delete", "void", "archive", "unarchive", "rollback", "roll", "remove", "revoke", "undo", "unreconcile", "reopen", "dispose"]) {
         expect(words, tool.name).not.toContain(word);
       }
+      // Recording a refund paid or received is Full access only (#205 section 4, decision 489).
+      if (words.includes("refund")) expect(tool.level, tool.name).toBe("full");
       // Write tools can't archive by passing a flag either.
-      if (tool.level !== "read") expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/archiv|void|delete/i);
+      if (tool.level !== "read" && !tool.readOnly) expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/archiv|void|delete/i);
     }
   });
 

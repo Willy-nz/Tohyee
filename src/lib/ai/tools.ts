@@ -58,8 +58,10 @@ export type AiTool = {
   title: string;
   description: string;
   inputSchema: JsonSchema;
-  /** The access level a key needs for this tool (decision 346). Only "read" tools run read-only. */
+  /** The access level a key needs for this tool (decision 346). Only "read" tools run read-only, unless `readOnly` says otherwise. */
   level: AiAccessLevel;
+  /** Run in a read-only transaction even though the level isn't "read" (a Full access tool that only looks, decision 488). */
+  readOnly?: boolean;
   run(tx: OrgTx, args: Record<string, unknown>, context: ToolContext): Promise<unknown>;
 };
 

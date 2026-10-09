@@ -259,6 +259,30 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_bank_rules",
         "get_bank_rule",
         "reconciliation_summary",
+        "list_credit_notes",
+        "get_credit_note",
+        "list_supplier_credit_notes",
+        "get_supplier_credit_note",
+        "list_overpayments",
+        "list_quotes",
+        "get_quote",
+        "list_sales_orders",
+        "get_sales_order",
+        "list_purchase_orders",
+        "get_purchase_order",
+        "list_repeating_invoices",
+        "get_repeating_invoice",
+        "list_repeating_bills",
+        "get_repeating_bill",
+        "list_items",
+        "get_item",
+        "list_tracking",
+        "list_fixed_assets",
+        "get_fixed_asset",
+        "list_fixed_asset_types",
+        "preview_depreciation",
+        "list_budgets",
+        "get_budget",
       ].sort(),
     );
     for (const tool of tools) {
@@ -346,7 +370,15 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       balance_sheet: { asAt: "2026-06-30" },
       trial_balance: { asAt: "2026-06-30" },
     };
+    args.preview_depreciation = { periodEnd: "2026-06-30" };
     for (const tool of AI_TOOLS.filter((entry) => entry.level === "read")) {
+      const required = ((tool.inputSchema as { required?: string[] }).required ?? []).filter((name) => name.endsWith("Id"));
+      if (!args[tool.name] && required.length > 0) {
+        // A record this test doesn't make: still read inside the read-only transaction, and found missing.
+        const result = await callTool(viewerToken, tool.name, Object.fromEntries(required.map((name) => [name, "999999"])));
+        expect(result.text, tool.name).toMatch(/not found|doesn't exist|no such|isn't/i);
+        continue;
+      }
       const result = await callTool(viewerToken, tool.name, args[tool.name] ?? {});
       expect(result.isError, `${tool.name}: ${result.text}`).toBe(false);
     }
