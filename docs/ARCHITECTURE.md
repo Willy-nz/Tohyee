@@ -246,7 +246,8 @@ re-runs the whole sequence.
 - State-changing requests from another site are rejected (`Origin` /
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
 - Every API route needs a signed-in user and checks their role, except the sign-in routes themselves
-  (`/api/auth/*`: setup, login, logout, two-step and the emailed reset), `/api/health`,
+  (`/api/auth/*`: setup, login, logout, two-step, setup links and the emailed reset), `/api/health`
+  (which, through remote access, says only whether the server is up: no version or database state),
   `/api/mcp` (below), and
   the sales platform webhook address
   (`/api/sales-platforms/webhooks/<organisation>/<random key>`), which a

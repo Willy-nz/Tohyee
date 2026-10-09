@@ -339,6 +339,16 @@ namespace Tohyee.Tray
 
         public void Forget()
         {
+            RemoveSignInFiles();
+        }
+
+        /// <summary>
+        /// Deletes cloudflared's cert.pem (an API token for the domain) and tunnel
+        /// credentials from Tohyee's own folder. Done after connecting, and when the
+        /// app starts in case it stopped partway through connecting (#208).
+        /// </summary>
+        public static void RemoveSignInFiles()
+        {
             try
             {
                 var folder = Path.Combine(Home, ".cloudflared");

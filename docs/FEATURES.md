@@ -1096,6 +1096,11 @@ that something happened.
     arriving through Funnel; the Tailscale steps themselves still need trying
     on a real Windows computer.
   Each shows the address with a QR code, Copy address, Open and Turn off.
+  The Remote access pages say plainly who can see the traffic (#208): with a
+  Tohyee address or your own domain, Cloudflare decrypts it on its network;
+  with Funnel it stays encrypted to this computer. Through remote access,
+  `/api/health` gives only up or down, and a Cloudflare sign-in file left by
+  an interrupted Connect to Cloudflare is deleted when the server app starts.
 - **Updates** (decisions 328-331): Tohyee checks GitHub for a new release a
   minute after it starts and then daily. On Windows the server app shows a
   notification and installs it in one click: every organisation is backed

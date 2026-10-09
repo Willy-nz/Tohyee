@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import * as healthRoute from "@/app/api/health/route";
 import * as loginRoute from "@/app/api/auth/login/route";
 import * as sessionRoute from "@/app/api/auth/session/route";
 import * as resetRoute from "@/app/api/auth/two-step/reset/route";
@@ -81,6 +82,14 @@ describeWithDatabase("remote access hardening (#208)", () => {
     // Locked now: even the right password waits, here and at sign-in.
     expect((await reset(TEST_PASSWORD)).status).toBe(429);
     expect((await login("reset-lock@example.com", { "x-forwarded-for": "198.51.100.32" })).status).toBe(429);
+  });
+
+  it("item 8: the health check gives the version on this network but only up or down through remote access", async () => {
+    const local = await healthRoute.GET(new Request("http://127.0.0.1:3000/api/health"));
+    expect(await local.json()).toMatchObject({ status: "ok", database: "ok", version: expect.any(String) });
+    const remote = await healthRoute.GET(new Request("https://books.example.nz/api/health", { headers: { "cf-ray": "abc-AKL", host: "books.example.nz" } }));
+    expect(remote.status).toBe(200);
+    expect(await remote.json()).toEqual({ status: "ok" });
   });
 
   it("item 5: knows a request that came through remote access", () => {

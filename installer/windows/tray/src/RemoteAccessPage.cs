@@ -125,7 +125,7 @@ namespace Tohyee.Tray
             _tohyeeRelease = Ui.Btn("Give this address back", async (s, e) => await ReleaseTohyee());
             _tohyeeButtons.Controls.Add(_tohyeeRelease);
             _tohyee.Body.Controls.Add(_tohyeeButtons);
-            _tohyee.AddStatusAndNote("Run by the Tohyee project. Your books still stay on this computer; the address service never sees them.");
+            _tohyee.AddStatusAndNote("Run by the Tohyee project. Your books stay on this computer, but the traffic passes through Cloudflare's network, where Cloudflare can read it (under Cloudflare's privacy policy), and whoever runs the Tohyee address's Cloudflare account decides where the address points.");
 
             // ---- 2. Your own domain (Cloudflare)
             _cloud = new Section(_page, "FREE FOR BUSINESSES", Theme.Muted, "Your own domain (Cloudflare)", (s, e) => CopyAddress(_cloud), async (s, e) => await TurnOffCloudflare());
@@ -179,7 +179,7 @@ namespace Tohyee.Tray
             _paste.Controls.Add(save);
             _paste.Visible = false;
             _cloud.Body.Controls.Add(_paste);
-            _cloud.AddStatusAndNote("Tohyee keeps the tunnel's key (encrypted), never your Cloudflare login.");
+            _cloud.AddStatusAndNote("Tohyee keeps the tunnel's key (encrypted), never your Cloudflare login. The traffic passes through Cloudflare's network, where Cloudflare can read it (under Cloudflare's privacy policy); your books stay on this computer.");
 
             // ---- 3. Tailscale Funnel
             _ts = new Section(_page, "PAID PLAN FOR BUSINESSES", Theme.Warning, "Tailscale Funnel", (s, e) => CopyAddress(_ts), async (s, e) => await TurnOffTailscale());
@@ -187,7 +187,7 @@ namespace Tohyee.Tray
             _tsButtons.Controls.Add(_tsSetUp);
             _tsButtons.Controls.Add(Ui.Btn("Check again", async (s, e) => await ReloadTailscale()));
             _ts.Body.Controls.Add(_tsButtons);
-            _ts.AddStatusAndNote("Tailscale gives this computer an address like https://your-computer.your-tailnet.ts.net. You sign in to Tailscale once in your browser; Tohyee never sees or keeps that login.");
+            _ts.AddStatusAndNote("Tailscale gives this computer an address like https://your-computer.your-tailnet.ts.net. You sign in to Tailscale once in your browser; Tohyee never sees or keeps that login. The traffic stays encrypted until it reaches this computer: Tailscale's relay doesn't decrypt it.");
             var pricing = new LinkLabel
             {
                 Text = "The simplest set-up, but Tailscale's free plan is for non-commercial use only; businesses need a paid Tailscale plan (from US$8 per user a month). See tailscale.com/pricing",
