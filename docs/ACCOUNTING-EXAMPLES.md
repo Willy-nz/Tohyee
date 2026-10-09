@@ -1342,6 +1342,52 @@ B1 (total 230.00, 10 May 2026), contact Z Energy.
   with the same idempotency key and content returns the same result; the same
   key with different content is refused (409).
 
+### Reconciling through an AI key (#205; the undo's void date approved by Jess, 9 Oct 2026)
+
+A **Full access** AI key (decision 488) can reconcile statement lines with
+the same commands a person uses on the reconcile screen (BK4-BK9, BK24-BK28),
+so each one posts exactly what the screen would. It never excludes a line,
+deletes an import, voids, or deletes or switches off a rule. Only an Owner
+can make a Full access key, and the key does no more than its owner's role
+allows when it's used. The history shows "Jess via AI key \"Claude\"".
+
+Setup as BK1-BK9; Jess (owner) has a Full access key "Claude" and a Make
+and post key "Helper".
+
+- **AIB1** Claude calls `match_bank_line` for the +115.00 line with the
+  customer payment's 1000 journal line: as BK4, nothing is posted and the line
+  is reconciled. Totals that don't add up are refused with the BK4 message.
+- **AIB2** Claude calls `create_and_match` for the -46.00 line: spend money to
+  Z Energy, 6120, GST, inclusive, 46.00. It posts BK6's journal (Dr 6120 40.00
+  / Dr 2100 6.00 / Cr 1000 46.00, 21 May) and reconciles the line. Retrying with
+  the same `idempotencyKey` returns the same result and posts nothing more.
+- **AIB3** Claude calls `transfer_and_match` for the -500.00 line to 1010: as
+  BK8. If 1010 has exactly one unreconciled line of +500.00 on the same day,
+  it's matched to the transfer too (BK8's second step); otherwise it's left
+  for later. `apply_bank_rule` on a line the BK10 rule fits posts BK6's journal, as
+  OKing the suggestion does.
+- **AIB4** `bulk_reconcile` with three actions, the second for a line already
+  reconciled: the first and third are done, the second is refused with its
+  reason, and the summary says 2 done, 1 refused. At most 100 actions a call.
+- **AIB5** Helper (Make and post) can read lines and rules but every
+  reconciling tool is refused. A Full access key whose owner is now a
+  bookkeeper works as Make and post.
+- **AIB6** A line dated in a locked period is refused (BK13), and nothing
+  changes.
+- **AIB7 (undo)** Within 24 hours of AIB2, Claude calls `unmatch_bank_line`
+  for the -46.00 line: the line is unreconciled and, because the match made
+  that spend money, the spend money is voided **on the line's date**, 21 May
+  (Dr 1000 46.00 / Cr 6120 40.00 / Cr 2100 6.00, as BK11). May's GST return
+  is back to what it was without it. Undoing AIB1 (a match to something
+  already posted) unreconciles the line only and voids nothing, and so does
+  undoing a match that paid invoices or bills: the payments stay for a person
+  to void. Undoing AIB3's transfer unreconciles both sides it matched and
+  voids the transfer on 22 May.
+- **AIB8** `unmatch_bank_line` is refused, and a person must do it on the
+  reconcile screen, when the match was made by a person, by another key, more
+  than 24 hours ago, or is in a locked period; or when the other side of its
+  transfer was matched by someone else.
+
 ### Bank feeds (Akahu)
 
 Bank feeds come from Akahu (NZ open finance). Each organisation sets up its

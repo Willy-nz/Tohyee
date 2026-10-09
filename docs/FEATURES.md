@@ -1471,8 +1471,13 @@ that something happened.
   edit contacts, make and edit draft invoices, bills and journals, add files
   to the bills inbox and make draft bills from them) or
   **Make and post** (also approve invoices and bills, post draft journals
-  and record payments). The level is capped by the person's role (a
-  viewer's key only looks). It shows how to connect Claude Desktop (through
+  and record payments) or **Full access** (decision 488, #205; Owners only,
+  after ticking a warning: also reconcile bank statement lines, up to 100 a
+  call, and make and edit bank rules; examples AIB1-AIB8). The level is
+  capped by the person's role (a viewer's key only looks; a Full access key
+  whose owner is no longer an Owner works as Make and post). Any key can
+  read bank accounts, statement lines with Tohyee's suggestions, bank rules
+  and a reconciliation summary. It shows how to connect Claude Desktop (through
   `mcp-remote`), Claude.ai or ChatGPT custom connectors, or any MCP client
   to `/api/mcp`. The AI can look up the organisation's settings, chart of
   accounts, profit and loss, balance sheet, trial balance, aged receivables
@@ -1482,7 +1487,11 @@ that something happened.
   transaction; writing tools use the same services as the screens, as the
   key's owner, and the history shows "<person> via AI key <name>". It
   **never deletes**: nothing at any level deletes, voids, archives, rolls
-  back or refunds anything. Payroll isn't included. A key stops working
+  back or refunds anything, except that a Full access key can undo its own
+  bank reconciliation within 24 hours, reversing what it posted for the line
+  on the line's date (AIB7). Payroll isn't included. Full access's other
+  day-to-day actions (#205 section 4: quotes, credit notes, purchase orders,
+  fixed assets and more) aren't built yet. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
   turned off. Not yet tried against each AI app; no OAuth sign-in yet, so
   AI services that only take OAuth connectors can't connect.

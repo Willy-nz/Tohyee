@@ -3,6 +3,7 @@ import { createAccount } from "@/lib/accounts/service";
 import { isBankOrCreditCard, type AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import type { ParsedStatementLine } from "@/lib/bank/formats/common";
+import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { convertAtRate, foreignAccountState, type ForeignOpeningBalance, defaultRates, lastRateOnOrBefore, type RateUsed } from "@/lib/ledger/foreign";
@@ -591,11 +592,13 @@ export async function getStatementLine(tx: OrgTx, lineIdInput: unknown): Promise
 /**
  * An account's statement lines, oldest first for unreconciled lines (the
  * order they're worked through) and newest first otherwise, 100 at a time.
+ * `search` is text in the description or an exact amount; `from` and `to`
+ * limit the dates (both included).
  */
 export async function listStatementLines(
   tx: OrgTx,
   accountIdInput: unknown,
-  filters: { status?: unknown; limit?: unknown; offset?: unknown; search?: unknown } = {},
+  filters: { status?: unknown; limit?: unknown; offset?: unknown; search?: unknown; from?: unknown; to?: unknown } = {},
 ): Promise<{ lines: StatementLine[]; total: number }> {
   const accountId = requireId(accountIdInput, "accountId");
   const status =
@@ -607,14 +610,19 @@ export async function listStatementLines(
   const offsetRaw = Number(filters.offset ?? 0);
   const offset = Number.isInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
   const search = optionalString(filters.search, "search", { maxLength: 100 });
+  const from = filters.from == null || filters.from === "" ? null : parseIsoDate(filters.from, "from");
+  const to = filters.to == null || filters.to === "" ? null : parseIsoDate(filters.to, "to");
   const where = `b.account_id = $1 and ($2::text is null or b.status = $2) and ($2::text is not null or b.status <> 'deleted')
-     and ($3::text is null or b.description ilike '%' || $3 || '%' or b.amount::text = $3)`;
+     and ($3::text is null or b.description ilike '%' || $3 || '%' or b.amount::text = $3)
+     and ($4::date is null or b.line_date >= $4::date) and ($5::date is null or b.line_date <= $5::date)`;
   const order = status === "unreconciled" ? "b.line_date, b.id" : "b.line_date desc, b.id desc";
   const [rows, count] = await Promise.all([
-    tx.query<StatementLineRow>(`${LINE_SELECT} where ${where} order by ${order} limit $4 offset $5`, [
+    tx.query<StatementLineRow>(`${LINE_SELECT} where ${where} order by ${order} limit $6 offset $7`, [
       accountId,
       status,
       search,
+      from,
+      to,
       limit,
       offset,
     ]),
@@ -622,6 +630,8 @@ export async function listStatementLines(
       accountId,
       status,
       search,
+      from,
+      to,
     ]),
   ]);
   return {

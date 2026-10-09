@@ -153,12 +153,20 @@ describe("AI key access levels (decision 346)", () => {
     expect(effectiveAccessLevel("draft", "bookkeeper")).toBe("draft");
     expect(effectiveAccessLevel("post", "bookkeeper")).toBe("post");
     expect(effectiveAccessLevel("post", "admin")).toBe("post");
+    // Full access (decision 488): Owners only; anyone else's works as "post" or less.
+    expect(effectiveAccessLevel("full", "owner")).toBe("full");
+    expect(effectiveAccessLevel("full", "admin")).toBe("post");
+    expect(effectiveAccessLevel("full", "bookkeeper")).toBe("post");
+    expect(effectiveAccessLevel("full", "viewer")).toBe("read");
   });
 
   it("orders the levels", () => {
     expect(levelAllows("post", "draft")).toBe(true);
     expect(levelAllows("draft", "post")).toBe(false);
     expect(levelAllows("read", "draft")).toBe(false);
+    expect(levelAllows("full", "post")).toBe(true);
+    expect(levelAllows("post", "full")).toBe(false);
+    expect(isAiAccessLevel("full")).toBe(true);
     expect(isAiAccessLevel("draft")).toBe(true);
     expect(isAiAccessLevel("delete")).toBe(false);
   });

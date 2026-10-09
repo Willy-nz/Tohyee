@@ -3857,3 +3857,40 @@ testing) and #154's code signing (later, Jess).
        others. Server admins can sign anyone out everywhere (server app and
        `/server/users`).
 
+### Full access AI keys and bank reconciliation tools (decision 488)
+
+488. **A fourth AI key level, "Full access", that reconciles bank lines**
+     (#205, 9 Oct 2026; the undo's void date chosen by Jess: the line's
+     date). Examples AIB1-AIB8.
+     - **Who:** only an Owner can make one, after ticking a warning (the API
+       needs `confirmFullAccess: true`). Core migration 0012 allows the
+       level. Like the others it's capped by the owner's role when used: an
+       Owner's key is Full access; anyone else's works as Make and post or
+       less.
+     - **What it adds:** match_bank_line, create_and_match,
+       transfer_and_match, apply_bank_rule, bulk_reconcile (at most 100 lines
+       a call, each done or refused on its own), create_bank_rule and
+       update_bank_rule. Each sends the same command the reconcile screen
+       does, so it posts what a person's click would and respects locked
+       periods, GST and currencies. Matching an adjustment or splitting one
+       transaction across lines is left to people for now.
+     - **Reading** (any level): list_bank_accounts, list_bank_lines (with
+       dates, status, text or amount, paged), get_bank_line (with the reconcile
+       screen's suggestions), list_bank_rules, get_bank_rule and
+       reconciliation_summary.
+     - **Never:** no tool excludes a line, deletes an import, voids, or
+       deletes or switches off a rule; update_bank_rule keeps a rule on or off
+       as it was.
+     - **The one undo:** unmatch_bank_line, for a reconciliation the same
+       key made within 24 hours in an unlocked period. When it made spend
+       money, receive money or a transfer, that's voided on the line's date
+       (so the period is as if it never happened); a transfer's other side is
+       unreconciled first if this key matched it. Payments made by paying
+       invoices or bills stay for a person to void. Anything else is refused
+       with "a person must unreconcile it".
+     - **Idempotency:** the tools take `idempotencyKey` (up to 80
+       characters; #205 called it `clientRequestId`, named like the other AI
+       tools here). Bulk calls add the line id to it for each line.
+     - **Not yet:** the rest of #205 section 4 (other Full access actions
+       outside banking).
+

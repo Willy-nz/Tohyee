@@ -12,6 +12,7 @@ import {
   AI_ACCESS_LEVELS,
   type AiAccessLevel,
   effectiveAccessLevel,
+  FULL_ACCESS_WARNING,
   roleCeiling,
 } from "@/lib/ai/access-levels";
 import { AI_TOOL_PLAIN_WORDS } from "@/lib/ai/tool-names";
@@ -93,6 +94,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [name, setName] = useState("");
   const [accessLevel, setAccessLevel] = useState<AiAccessLevel>("read");
+  const [fullConfirmed, setFullConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const ceiling = current ? roleCeiling(current.role) : "read";
   const [newToken, setNewToken] = useState<string | null>(null);
@@ -107,11 +109,15 @@ function AiConnect({ organisationId }: { organisationId: string }) {
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api<{ token: string; key: AiAccessToken }>("/api/ai/tokens", { method: "POST", body: { organisationId, name, accessLevel } });
+      const result = await api<{ token: string; key: AiAccessToken }>("/api/ai/tokens", {
+        method: "POST",
+        body: { organisationId, name, accessLevel, ...(accessLevel === "full" ? { confirmFullAccess: fullConfirmed } : {}) },
+      });
       setNewToken(result.token);
       setStatus({ tone: "success", text: `Made the key “${result.key.name}”.` });
       setName("");
       setAccessLevel("read");
+      setFullConfirmed(false);
       keys.reload();
     } catch (caught) {
       setStatus({ tone: "error", text: errorMessage(caught) });
@@ -146,18 +152,39 @@ function AiConnect({ organisationId }: { organisationId: string }) {
             <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} required />
           </Field>
           <Field label="What it can do" hint={AI_ACCESS_LEVEL_HELP[accessLevel]}>
-            <select value={accessLevel} onChange={(event) => setAccessLevel(event.target.value as AiAccessLevel)}>
-              {AI_ACCESS_LEVELS.map((level) => (
+            <select
+              value={accessLevel}
+              onChange={(event) => {
+                setAccessLevel(event.target.value as AiAccessLevel);
+                setFullConfirmed(false);
+              }}
+            >
+              {/* Full access is for Owners only (decision 488). */}
+              {AI_ACCESS_LEVELS.filter((level) => level !== "full" || ceiling === "full").map((level) => (
                 <option key={level} value={level}>
                   {AI_ACCESS_LEVEL_LABELS[level]}
                 </option>
               ))}
             </select>
           </Field>
-          <Button type="submit" disabled={busy || (keys.data ? active.length >= keys.data.maxActiveKeys : false)}>
+          <Button
+            type="submit"
+            disabled={busy || (accessLevel === "full" && !fullConfirmed) || (keys.data ? active.length >= keys.data.maxActiveKeys : false)}
+          >
             Create a key
           </Button>
         </form>
+        {accessLevel === "full" ? (
+          <Notice tone="warning">
+            <p>
+              <strong>Full access posts into your books.</strong> {FULL_ACCESS_WARNING}
+            </p>
+            <label>
+              <input type="checkbox" checked={fullConfirmed} onChange={(event) => setFullConfirmed(event.target.checked)} /> I understand. Make a Full access
+              key.
+            </label>
+          </Notice>
+        ) : null}
         {ceiling === "read" ? (
           <Notice tone="info">
             Your role here is {current ? ROLE_LABELS[current.role] : "viewer"}, so any key you make can only look things up, whatever you choose. Making
@@ -290,7 +317,9 @@ function AiConnect({ organisationId }: { organisationId: string }) {
         ))}
         <Notice tone="info">
           <strong>It never deletes.</strong> At every level, your AI can&apos;t delete, void, archive, roll back, refund or remove anything, not even a
-          draft. Those stay with people, in Tohyee. Payroll isn&apos;t included.
+          draft. Those stay with people, in Tohyee. The one exception: a Full access key can undo a bank reconciliation it made itself in the last 24
+          hours, which reverses what it posted for that line on the line&apos;s date. Payroll isn&apos;t included, nor are users, roles, keys, lock
+          dates or server settings.
         </Notice>
       </Card>
 

@@ -1,5 +1,5 @@
 import packageJson from "../../../package.json";
-import { AI_ACCESS_LEVEL_LABELS, levelAllows } from "@/lib/ai/access-levels";
+import { AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeededFor } from "@/lib/ai/access-levels";
 import { findAiTool, toolsForLevel } from "@/lib/ai/catalogue";
 import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
 import type { CallToolResult, McpServer, ToolContent } from "@/lib/ai/mcp-protocol";
@@ -32,6 +32,8 @@ const LEVEL_WORDS = {
     "You can look things up, add and edit contacts, and make and edit draft invoices, bills and journals (drafts post nothing). You can't approve, post, delete, void or archive anything.",
   post:
     "You can look things up, add and edit contacts, make and edit drafts, approve invoices and bills, post draft journals and record payments. You can't delete, void, archive, roll back or refund anything.",
+  full:
+    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines and make and edit bank rules. You can't delete, void, archive, roll back or refund anything, exclude lines or switch rules off. The only undo you have is unmatch_bank_line, for your own reconciliations in the last 24 hours; anything else a person must unreconcile in Tohyee. Reconcile in small batches and check the results.",
 } as const;
 
 /**
@@ -58,7 +60,7 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
       if (!tool) return null;
       return levelAllows(level, tool.level)
         ? null
-        : `${name} needs an AI key with "${AI_ACCESS_LEVEL_LABELS[tool.level]}" access and the bookkeeper role or higher; this key is "${AI_ACCESS_LEVEL_LABELS[level]}".`;
+        : `${name} needs an AI key with "${AI_ACCESS_LEVEL_LABELS[tool.level]}" access and ${roleNeededFor(tool.level)}; this key is "${AI_ACCESS_LEVEL_LABELS[level]}".`;
     },
     async callTool(name, args) {
       const tool = findAiTool(name);
