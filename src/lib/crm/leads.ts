@@ -215,6 +215,23 @@ async function insertLead(
   return id;
 }
 
+/**
+ * A lead from the web form or an email (decision 493): unassigned and to
+ * review. `idempotencyKey` (per form submission or email) makes a repeat do
+ * nothing. Returns null for a repeat.
+ */
+export async function createIntakeLead(
+  tx: OrgTx,
+  input: LeadInput,
+  command: { source: "web_form" | "email"; commandSource: string; idempotencyKey: string },
+): Promise<Lead | null> {
+  const earlier = await tx.query("select 1 from crm_leads where command_source = $1 and idempotency_key = $2", [command.commandSource, command.idempotencyKey]);
+  if ((earlier.rowCount ?? 0) > 0) return null;
+  const values = await leadValues(tx, { ...input, ownerUserId: null }, null, undefined);
+  const id = await insertLead(tx, values, { source: command.source, commandSource: command.commandSource, idempotencyKey: command.idempotencyKey, needsReview: true });
+  return getLead(tx, id);
+}
+
 /** A lead typed in (source "manual"). A retry with the same key returns the same lead. */
 export async function createLead(
   tx: OrgTx,

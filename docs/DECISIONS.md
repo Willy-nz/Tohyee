@@ -4007,3 +4007,34 @@ testing) and #154's code signing (later, Jess).
      - The web form and email come next (decision 493); finding and merging
        duplicates after that.
 
+### Leads from a web form and from email (decision 493)
+
+493. **Web form and email leads arrive unassigned, to review** (#216 stage
+     1; Jess 10 Oct 2026: web form and emails to an address; spam handled
+     with a hidden trap field and a rate limit, no outside service).
+     - **Web form:** admins add forms on CRM › Leads (a name and an optional
+       thank-you page). Each has a random 40-character key; the website's
+       form posts to `/api/lead-forms/<organisation>/<key>` at the server's
+       remote access address, and Tohyee shows the HTML to paste once remote
+       access is on. A form can be switched off. Name (or first and last),
+       company, email, phone, job title and message are read; other fields
+       go into the lead's notes as "field: value".
+     - **Spam:** a hidden `website_url` field only robots fill in (they're
+       thanked and nothing is kept), at most 5 sends from one address in 10
+       minutes and 60 per form an hour (kept in memory, so a restart starts
+       again), the same submission twice in a minute makes one lead, and
+       every web lead waits "to review". Unknown keys, switched-off forms and
+       organisations without the CRM all get the same "not taking messages".
+     - **Email:** admins link a mailbox folder or Gmail label (their own
+       CRM mailbox, or IMAP with an app password), read like the bills
+       inbox: each email once, never moved, marked or deleted. The sender
+       becomes the lead (name and email), the subject and the start of the
+       text (Gmail's snippet, Microsoft's preview; none over IMAP) its notes.
+       An email from someone who's already an open lead is added to that
+       lead as a note instead. Checked every 1-24 hours, or Check now.
+     - **Who sees them:** nobody owns them yet, so sales managers, and
+       viewers and up, see them (reps don't) until someone takes them.
+     - **Not checked against real services:** the form against a real
+       website through a real tunnel, and the mailboxes against real Gmail,
+       Microsoft and IMAP accounts.
+

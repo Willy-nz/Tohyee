@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { readFileAsBase64 } from "@/components/bank/common";
 import { memberName, useBusy, useTeam } from "@/components/crm";
+import { LeadSources } from "@/components/crm-lead-sources";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -240,6 +241,7 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
           </div>
         ) : null}
       </Card>
+      <LeadSources organisationId={organisationId} onChecked={() => leads.reload()} />
     </>
   );
 }

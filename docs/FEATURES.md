@@ -817,7 +817,11 @@ that something happened.
   them, worked (new, working, unqualified with a reason) and converted into a
   company (a new prospect or an existing one), a person and optionally an
   opportunity, keeping their calls, notes and tasks. Leads show in search,
-  scoped like deals for sales roles.
+  scoped like deals for sales roles. Leads also arrive from a **web form**
+  on the business's own website (HTML to paste, a hidden trap field and
+  limits per sender against spam) and from a **mailbox folder or label**
+  (each email once; one from an open lead adds a note to it), unassigned and
+  "to review" (decision 493).
   **CRM custom fields** (like Salesforce's): the organisation's own fields
   on companies (contact fields used on prospects), people and
   opportunities, with the same types, required fields, defaults and
