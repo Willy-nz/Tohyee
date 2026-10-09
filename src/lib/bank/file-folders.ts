@@ -4,6 +4,7 @@ import { type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { readServerSetting } from "@/lib/server-settings";
+import { canListFolder, folderAccessHint } from "@/lib/server-admin/folder-access";
 
 /**
  * Each organisation's bank files folder on the server (BF1-BF10, decision
@@ -27,12 +28,7 @@ export async function organisationBankFilesFolder(organisationId: string): Promi
 }
 
 function readableFolder(folder: string): boolean {
-  try {
-    fs.accessSync(folder, fs.constants.R_OK);
-    return fs.statSync(folder).isDirectory();
-  } catch {
-    return false;
-  }
+  return canListFolder(folder);
 }
 
 /** For the organisation's own pages: whether a folder is chosen and readable, and its subfolders' names (the path stays on the server). */
@@ -79,11 +75,11 @@ export async function setBankFilesFolder(auth: ServerAdminAuth, organisationId: 
     let stat: fs.Stats;
     try {
       stat = fs.statSync(/* turbopackIgnore: true */ folder);
-      fs.accessSync(folder, fs.constants.R_OK);
     } catch {
-      throw new ValidationError("Tohyee can't open that folder. Check it exists and the Tohyee service can read it.");
+      throw new ValidationError("Tohyee can't find that folder. Check it exists.");
     }
     if (!stat.isDirectory()) throw new ValidationError("That's a file, not a folder.");
+    if (!canListFolder(folder)) throw new ValidationError(`Tohyee can't open that folder.${folderAccessHint(folder, "read")}`);
   }
   const folders = await bankFileFolders();
   if (folder) folders[organisationId] = folder;

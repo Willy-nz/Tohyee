@@ -33,7 +33,7 @@ namespace Tohyee.Tray
             _status.Height = Theme.S(150);
             _files.Height = Theme.S(200);
             BackColor = Theme.Bg;
-            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, and checks each file after it's made. Choose a OneDrive folder to get copies off this computer.");
+            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, and checks each file after it's made. Choose a OneDrive or Google Drive folder to get copies off this computer.");
 
             var nightly = Ui.Card(page, "Nightly backups", null);
             nightly.Body.Controls.Add(_state);
@@ -47,6 +47,7 @@ namespace Tohyee.Tray
             _folder.Margin = new Padding(0, 4, 8, 0);
             folderRow.Controls.Add(Ui.Btn("Browse…", (s, e) => Browse()));
             folderRow.Controls.Add(Ui.Btn("Use OneDrive", (s, e) => UseOneDrive()));
+            folderRow.Controls.Add(Ui.Btn("Use Google Drive", (s, e) => UseGoogleDrive()));
             form.RowCount += 1;
             form.Controls.Add(new Label { Text = "Folder", AutoSize = true, ForeColor = Theme.Muted, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 7) });
             form.Controls.Add(folderRow);
@@ -201,6 +202,30 @@ namespace Tohyee.Tray
             _folder.Text = Path.Combine(oneDrive, "Tohyee backups");
         }
 
+        /// <summary>
+        /// Google Drive for desktop in "Mirror files" mode keeps a real "My Drive" folder in your profile,
+        /// which works like OneDrive. "Stream files" mode puts it on its own drive letter that belongs to
+        /// whoever is signed in, which the Tohyee service may not be able to use (decision 486).
+        /// </summary>
+        private void UseGoogleDrive()
+        {
+            var drive = FolderAccess.FindGoogleDrive();
+            if (drive == null)
+            {
+                Ui.Show(_message, "Google Drive isn't set up for you on this computer. Install Google Drive for desktop, sign in, and choose \"Mirror files\" in its settings (Google Drive, Preferences, My Drive). Or choose a folder with Browse.", true);
+                return;
+            }
+            _folder.Text = Path.Combine(drive.Path, "Tohyee backups");
+            if (drive.Streamed)
+            {
+                Ui.Show(_message, "Google Drive is streaming files (" + drive.Path + "), which the Tohyee service may not be able to use. In Google Drive's settings choose \"Mirror files\" for My Drive, then press Use Google Drive again.", true);
+            }
+            else
+            {
+                Ui.Show(_message, "Google Drive mirrors files here, so backups are uploaded while you're signed in to Windows. Press Save.", false);
+            }
+        }
+
         private async Task Save()
         {
             var body = new Dictionary<string, object>
@@ -209,6 +234,9 @@ namespace Tohyee.Tray
                 { "time", _time.Text.Trim() },
                 { "folder", _folder.Text.Trim() == _defaultFolder ? "" : _folder.Text.Trim() },
             };
+            // Decision 486: the service runs as its own account, so it's given the chosen folder first.
+            var chosen = (string)body["folder"];
+            var problem = FolderAccess.Grant(chosen, true);
             if (await Ui.Busy(this, _message, async () =>
             {
                 await _api.Put("/api/admin/backups", body);
@@ -216,6 +244,10 @@ namespace Tohyee.Tray
             }))
             {
                 await Reload();
+            }
+            else if (problem != null)
+            {
+                Ui.Show(_message, _message.Text + " " + problem, true);
             }
         }
 

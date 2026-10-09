@@ -3789,3 +3789,38 @@ testing) and #154's code signing (later, Jess).
      - **Architecture:** this is the one deliberate exception to "being a
        server admin doesn't give access to any organisation's books".
 
+### The Windows service runs as its own account (decision 486)
+
+486. **The Tohyee service runs as `NT SERVICE\Tohyee`, not SYSTEM** (#208
+     item 7 and #152, Jess 9 Oct 2026). Before, a flaw in Tohyee or in its
+     cloudflared would have given control of the whole computer. Now the
+     service runs as its own Windows virtual account (no password; set with
+     `sc.exe config` by the installer).
+     - **What the installer gives it:** read on the program folder and its
+       service settings, and write on its logs, backups, analytics data and
+       a temporary folder (`TEMP` points there, not at the account's
+       profile).
+     - **Chosen folders:** a backup folder in OneDrive, say, or analytics
+       and bank files folders. Jess's suggestion: backups go in a folder,
+       so give the service that folder.
+       - The server app gives the service access when a backup or analytics
+         folder is chosen; it runs as the person, who owns their own
+         folders.
+       - `tohyee-admin` does the same for `backups set --folder`,
+         `analytics folder` and `bank folder`.
+       - The installer gives it every folder already chosen, so an update
+         keeps backups working.
+     - **Error messages:** when the service still can't use a folder, they
+       give the `icacls` command.
+     - **Readable checks:** folder checks now really list the folder;
+       `fs.accessSync(R_OK)` doesn't look at Windows permissions.
+     - **"Use Google Drive"** sits beside "Use OneDrive". It finds Google
+       Drive for desktop's "My Drive" in the person's profile ("Mirror
+       files", a real folder that works like OneDrive). If Google Drive is
+       streaming files on its own drive letter (which belongs to whoever is
+       signed in, so the service may not be able to use it), it says to
+       switch to "Mirror files".
+     - **Not tested here:** the Windows install test checks the account and
+       the analytics folder; streaming mode and a real Google Drive haven't
+       been tried.
+

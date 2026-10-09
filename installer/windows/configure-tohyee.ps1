@@ -6,7 +6,8 @@
 #
 # Services (both start automatically when Windows starts, before anyone signs in):
 #   TohyeePostgres  PostgreSQL, listening on localhost only
-#   Tohyee          the Tohyee server (node), http://localhost:<port>, and its
+#   Tohyee          the Tohyee server (node), running as NT SERVICE\Tohyee (its own
+#                   limited account, decision 486), http://localhost:<port>, and its
 #                   server settings address, http://127.0.0.1:<admin port>
 #                   (this computer only; the tray app uses it)
 #
@@ -222,6 +223,8 @@ try {
     $addressServiceEnv = "  <env name=""TOHYEE_ADDRESS_SERVICE_URL"" value=""$(X $settings['TOHYEE_ADDRESS_SERVICE_URL'])""/>`r`n"
   }
 
+  # The service's own temporary folder (its account's profile isn't relied on).
+  $TempDir = Join-Path $DataRoot 'tmp'
   $databaseUrl = "postgresql://tohyee_app:$($settings['TOHYEE_DB_APP_PASSWORD'])@localhost:$pgPort/tohyee"
   $databaseAdminUrl = "postgresql://tohyee_admin:$($settings['TOHYEE_DB_ADMIN_PASSWORD'])@localhost:$pgPort/tohyee"
   $xml = @"
@@ -256,6 +259,8 @@ try {
   <env name="TOHYEE_PG_BIN" value="$(X $PgBin)"/>
   <env name="TOHYEE_BACKUP_DIR" value="$(X (Join-Path $DataRoot 'backups'))"/>
   <env name="TOHYEE_ANALYTICS_DIR" value="$(X (Join-Path $DataRoot 'analytics'))"/>
+  <env name="TEMP" value="$(X $TempDir)"/>
+  <env name="TMP" value="$(X $TempDir)"/>
 $addressServiceEnv</service>
 "@
   [System.IO.File]::WriteAllText((Join-Path $ServiceDir 'TohyeeServer.xml'), $xml)
@@ -263,6 +268,42 @@ $addressServiceEnv</service>
   Write-Host 'Installing and starting the Tohyee service.'
   Invoke-Checked $serviceExe @('install')
   Invoke-Checked 'sc.exe' @('config', 'Tohyee', 'start=', 'delayed-auto')
+
+  # Decision 486 (#208 item 7): the service runs as its own virtual account,
+  # NT SERVICE\Tohyee, not as SYSTEM, so a flaw in Tohyee or cloudflared
+  # can't take over the computer. It gets only what it needs: to read the
+  # program and its service settings, to write its logs, backups, analytics
+  # data and temporary files, and each folder a server admin has chosen
+  # (backups: write; analytics and bank files: read). The command line goes
+  # to sc.exe exactly as written, so the empty password (a virtual account
+  # has none) isn't dropped.
+  $account = 'NT SERVICE\Tohyee'
+  $sc = Start-Process -FilePath 'sc.exe' -ArgumentList "config Tohyee obj= ""$account"" password= """"" -Wait -PassThru -NoNewWindow
+  if ($sc.ExitCode -ne 0) { throw "Couldn't set the Tohyee service to run as $account (sc.exe exit code $($sc.ExitCode))." }
+  Invoke-Checked 'icacls.exe' @($InstallDir, '/grant', "$($account):(OI)(CI)RX", '/T', '/C', '/Q')
+  Invoke-Checked 'icacls.exe' @($DataRoot, '/grant', "$($account):(RX)", '/Q')
+  Invoke-Checked 'icacls.exe' @($ServiceDir, '/grant', "$($account):(OI)(CI)RX", '/T', '/Q')
+  foreach ($dir in @($LogDir, (Join-Path $DataRoot 'backups'), (Join-Path $DataRoot 'analytics'), $TempDir)) {
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Invoke-Checked 'icacls.exe' @($dir, '/grant', "$($account):(OI)(CI)M", '/T', '/Q')
+  }
+  # Folders already chosen in Tohyee (a OneDrive backup folder, say), from before this change.
+  $env:PGPASSWORD = $settings['POSTGRES_PASSWORD']
+  $chosen = & $psql -h localhost -p $pgPort -U tohyee -d tohyee -tA -F '|' -c @"
+select 'M', value->>'folder' from server_settings where key = 'backups' and coalesce(value->>'folder', '') <> ''
+union all
+select 'RX', f.value from server_settings s, jsonb_each_text(coalesce(s.value->'folders', '{}'::jsonb)) f
+ where s.key in ('analytics_folders', 'bank_file_folders') and f.value <> ''
+"@
+  if ($LASTEXITCODE -ne 0) { Write-Host 'Could not read the folders chosen in Tohyee; choose them again in the server app if backups or imports fail.'; $chosen = @() }
+  foreach ($line in @($chosen | ForEach-Object { "$_".Trim() } | Where-Object { $_ })) {
+    $rights, $folder = $line.Split('|', 2)
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { Write-Host "Skipping $folder (not found)."; continue }
+    & icacls.exe $folder /grant "$($account):(OI)(CI)$rights" /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Host "Could not give the Tohyee service access to $folder; choose it again in the server app." }
+    else { Write-Host "The Tohyee service can use $folder." }
+  }
+
   Invoke-Checked $serviceExe @('start')
 
   $url = "http://localhost:$($settings['TOHYEE_PORT'])"

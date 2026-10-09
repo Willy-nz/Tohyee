@@ -42,9 +42,9 @@ Where each concern stands (6 Oct 2026, for 0.7.0):
       approved by Jess).
 - [x] #152 Windows install: ordinary database logins (`tohyee_admin`,
       `tohyee_app`) instead of the superuser, and the data folder readable
-      only by Administrators and SYSTEM (decision 474). Still open: running
-      the service as something other than SYSTEM (Jess: later, because of
-      OneDrive backup folders).
+      only by Administrators and SYSTEM (decision 474). The service now runs as
+      its own account, NT SERVICE\Tohyee, and is given each chosen folder
+      (decision 486, #208).
 
 ## List of 3 October 2026
 
