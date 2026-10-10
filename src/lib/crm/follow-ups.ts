@@ -1,5 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { createTask } from "@/lib/crm/service";
+import { advanceSequences } from "@/lib/crm/sequences";
 import { listStages } from "@/lib/crm/stages";
 import { crmEnabled, requireCrm } from "@/lib/crm/switch";
 import { isoDateAt, todayIsoDate } from "@/lib/dates";
@@ -434,7 +435,7 @@ export async function runFollowUpRules(tx: OrgTx, options: { ruleId?: unknown; t
 
 let running = false;
 
-/** Runs the rules of every organisation with the CRM on. */
+/** Runs the rules, and moves sequences on (decision 497), for every organisation with the CRM on. */
 export async function runDueFollowUpRules(organisations?: Organisation[]): Promise<{ organisations: number; tasksCreated: number; failed: number }> {
   if (running) return { organisations: 0, tasksCreated: 0, failed: 0 };
   running = true;
@@ -445,8 +446,16 @@ export async function runDueFollowUpRules(organisations?: Organisation[]): Promi
       try {
         const done = await withOrganisationTransaction(organisation, FOLLOW_UP_ACTOR, async (tx) => {
           if (!(await crmEnabled(tx))) return null;
-          const any = await tx.query("select 1 from crm_follow_up_rules where is_active limit 1");
-          return (any.rowCount ?? 0) > 0 ? runFollowUpRules(tx) : null;
+          const any = await tx.query<{ rules: boolean; enrolments: boolean }>(
+            `select exists (select 1 from crm_follow_up_rules where is_active) as rules,
+                    exists (select 1 from crm_sequence_enrolments where status = 'active') as enrolments`,
+          );
+          const { rules, enrolments } = any.rows[0];
+          if (!rules && !enrolments) return null;
+          const fromRules = rules ? await runFollowUpRules(tx) : { tasksCreated: 0, skipped: 0 };
+          // Sequences' steps (decision 497) are moved on in the same check.
+          const fromSequences = enrolments ? await advanceSequences(tx) : { tasksCreated: 0 };
+          return { tasksCreated: fromRules.tasksCreated + fromSequences.tasksCreated };
         });
         if (done) {
           total.organisations += 1;

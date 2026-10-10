@@ -4103,3 +4103,62 @@ testing) and #154's code signing (later, Jess).
        (`TOHYEE_FOLLOW_UP_SCHEDULER=off` turns it off), or Run now. Dates
        are in the business time zone. Nothing is emailed: tasks show on
        the person's task list and CRM home.
+
+496. **Sales emails go from the rep's own mailbox, only when they press
+     Send** (#216 stage 2; Jess 10 Oct 2026: the rep's own mailbox; sequences
+     make tasks and the rep sends).
+     - **Allowing sending:** a member's connected CRM mailbox reads only,
+       as before. "Allow sending" signs in again asking for reading plus
+       Gmail's gmail.send or Microsoft's Mail.Send; if the sign-in comes
+       back without sending (the box unticked), nothing changes and it says
+       so. Only the mailbox's own member can send from it.
+     - **What can be sent:** one plain-text email to one person: a lead
+       (not a converted one), a person, or a deal's point of contact (or a
+       person at the deal's company). No attachments, HTML, tracking or
+       bulk sending. A sales rep can email only leads and deals they can
+       see (decision 491); everyone sees all people.
+     - **Templates:** admins and owners write them, with merge fields
+       {{first_name}}, {{last_name}}, {{full_name}}, {{company}}, {{deal}},
+       {{my_name}} and {{my_email}}; an unknown one is refused when saved,
+       and one left in an email is refused when sending. The sender sees
+       and can change the filled-in words first.
+     - **Don't email:** a lead or person can be marked; Tohyee then refuses
+       to send them one.
+     - **Once:** every send has an idempotency key. The send is recorded
+       before the network call, the call happens outside any transaction,
+       and the result is recorded after. A retry with the same key returns
+       the result. A clear failure (an error back from Google or Microsoft,
+       or no sign-in) can be tried again; one with no clear answer (a
+       timeout after handing it over) is marked "may have been sent" and is
+       never retried, as for documents (#146).
+     - **Logged:** a sent email becomes a note on the lead, person or deal
+       ("Email: subject", who it went to and from, and the words). If mail
+       sync also picks up the same email from the Sent folder, it can show
+       twice on a person's or company's timeline.
+     - **Not checked against real services:** Gmail and Microsoft 365
+       sending were tested against pretend providers only.
+
+497. **Sequences make tasks; nothing is sent by itself** (#216 stage 2;
+     Jess 10 Oct 2026: "make tasks; rep sends").
+     - **Steps:** admins and owners set out up to 30 steps on days counted
+       from the start (day 0 is the day someone's added): an email (a task
+       to send a chosen template), a call, or another task. Steps are in day
+       order. They can't change while anyone is part-way through; make a
+       new sequence instead. A sequence can be switched off (no one new can
+       be added; those in it carry on).
+     - **Adding someone:** a lead, a person or a deal, by anyone who can
+       change CRM records and can see it (decision 491). Only once at a time
+       per sequence. Tasks go to the lead's or deal's owner, else to whoever
+       added it.
+     - **Tasks:** each step becomes a task on its day (checked with the
+       follow-up rules every 15 minutes; day 0 straight away), due that
+       day, once each. Email steps are skipped for someone marked "Don't
+       email" (decision 496), and say so.
+     - **Stops by itself** when a lead is unqualified or converted, a deal
+       is won or lost, a person is archived, or they reply: an email from
+       their address synced from a member's mailbox after they were added,
+       or for a lead, an email from them into a lead mailbox (decision 493).
+       Replies only count if a mailbox that receives them is connected.
+       Anyone who can see it can stop it. Tasks already made stay.
+     - **Merging people** (decision 494) moves their sequences; if both are
+       in the same one, the merged-away person's is stopped.

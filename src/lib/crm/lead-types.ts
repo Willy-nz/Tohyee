@@ -31,6 +31,8 @@ export type Lead = {
   convertedContactId: string | null;
   convertedPersonId: string | null;
   convertedOpportunityId: string | null;
+  /** Asked not to be emailed (decision 496). */
+  emailOptOut: boolean;
   createdByEmail: string | null;
   createdAt: string;
   updatedAt: string;

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
+import { EmailOptOut, SendEmail } from "@/components/crm-send-email";
+import { SequencePanel } from "@/components/crm-sequences";
 import { SimilarRecords } from "@/components/crm-similar";
 import { readFileAsBase64 } from "@/components/bank/common";
 import { memberName, useBusy, useTeam } from "@/components/crm";
@@ -362,6 +364,13 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
           ) : null
         }
       >
+        {lead.status !== "converted" && !editing && !converting ? (
+          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+            <EmailOptOut organisationId={organisationId} target={{ leadId: lead.id }} optOut={lead.emailOptOut} onChanged={data.reload} />
+            {lead.email && !lead.emailOptOut ? <SendEmail organisationId={organisationId} target={{ leadId: lead.id }} onSent={data.reload} /> : null}
+            <SequencePanel organisationId={organisationId} target={{ leadId: lead.id }} onChanged={data.reload} />
+          </div>
+        ) : null}
         {converting ? (
           <ConvertLead
             organisationId={organisationId}

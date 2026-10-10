@@ -3,7 +3,8 @@ import { UnavailableError, ValidationError } from "@/lib/errors";
 /**
  * Google (Gmail and Google Calendar) and Microsoft 365 (Graph) for CRM email
  * and calendar sync (examples MAIL1-MAIL9). Read-only: nothing here sends,
- * changes or deletes anything in a mailbox or calendar (sending documents
+ * changes or deletes anything in a mailbox or calendar (sales emails, once a
+ * member allows sending, go through `src/lib/crm/sales-email.ts`; sending documents
  * through Microsoft Graph or the Gmail API is in `src/lib/email/microsoft.ts`
  * and `src/lib/email/google.ts`, with their own sign-in and scopes). Every call has a
  * timeout, and none is made inside a database transaction.

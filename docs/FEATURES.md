@@ -822,17 +822,6 @@ that something happened.
   limits per sender against spam) and from a **mailbox folder or label**
   (each email once; one from an open lead adds a note to it), unassigned and
   "to review" (decision 493).
-- **CRM duplicates** (decision 494, #216): CRM › Duplicates suggests
-  companies with the same name (ignoring case, accents, punctuation and
-  endings like Ltd), email or phone, and people with the same email or the
-  same name at the same company. A company with no accounting records can
-  be merged into the other (its people, deals, tasks, activities and
-  converted leads move across; it's archived and says where it went); two
-  that both have accounting records are only linked as the same customer,
-  shown on each company's page. People merge within their company. Adding
-  a company or a lead warns about similar companies, people and open leads.
-  Merging needs the bookkeeper role or higher; anyone who changes CRM
-  records can mark a pair as not duplicates.
   **CRM custom fields** (like Salesforce's): the organisation's own fields
   on companies (contact fields used on prospects), people and
   opportunities, with the same types, required fields, defaults and
@@ -900,12 +889,23 @@ that something happened.
   snapshots, converting currencies in forecasts, and quotas by quarter or
   in other currencies (questions for Jess under CRMS11).
   **Email and calendar sync**: each member connects their own Gmail or
-  Microsoft 365 mailbox (read-only, through the organisation's own Google or
-  Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
+  Microsoft 365 mailbox (read-only unless they allow sending, decision 496;
+  through the organisation's own Google or Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
   emails and meetings with known people and companies (subject and a short
   preview, never full bodies or attachments) and shows them on timelines,
   with each mailbox choosing whether the team sees subjects or only that
   something happened (MAIL1-MAIL9).
+- **CRM duplicates** (decision 494, #216): CRM › Duplicates suggests
+  companies with the same name (ignoring case, accents, punctuation and
+  endings like Ltd), email or phone, and people with the same email or the
+  same name at the same company. A company with no accounting records can
+  be merged into the other (its people, deals, tasks, activities and
+  converted leads move across; it's archived and says where it went); two
+  that both have accounting records are only linked as the same customer,
+  shown on each company's page. People merge within their company. Adding
+  a company or a lead warns about similar companies, people and open leads.
+  Merging needs the bookkeeper role or higher; anyone who changes CRM
+  records can mark a pair as not duplicates.
 - **CRM follow-up rules** (decision 495, #216 stage 2): CRM › Follow-ups,
   for admins and owners. Rules make a task for the right person when a new
   lead arrives (its owner, or each sales team manager if nobody owns it), a
@@ -915,6 +915,23 @@ that something happened.
   every 15 minutes or with Run now, and the page lists what each run did.
   Each event makes its task once, even if a check runs twice. Reminders stay
   in Tohyee; nothing is emailed.
+- **CRM sales emails** (decision 496, #216 stage 2): each person can allow
+  sending from their own connected Gmail or Microsoft 365 mailbox (a second
+  sign-in that adds sending), then use **Send email** on a lead, a person or
+  a deal's point of contact. Admins write **email templates** with merge
+  fields ({{first_name}}, {{company}}, {{my_name}} and others); the sender
+  checks and edits the words, and nothing goes until they press Send. Plain
+  text only, logged as a note on the record. People and leads can be marked
+  **Don't email**, and are then never sent one. A retry never sends twice;
+  one that may have gone is shown as "check your Sent folder" and isn't
+  retried.
+- **CRM sequences** (decision 497, #216 stage 2): admins set out steps
+  (email from a template, call, or task) on days from the start; a lead,
+  person or deal is added to one from its page, and each step becomes a
+  task on its day for the owner. Nothing is sent by itself. It stops when
+  they reply, a lead is unqualified or converted, a deal is won or lost, or
+  someone stops it; email steps are skipped for people marked "Don't
+  email".
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
