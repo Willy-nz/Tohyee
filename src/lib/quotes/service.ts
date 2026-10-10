@@ -622,6 +622,9 @@ export async function acceptQuote(
     entityId: invoice.id,
     details: { quoteId: current.id, quoteNumber: current.quoteNumber },
   });
+  // A quote made from a deal wins it (DS9, decision 502). Imported here so the CRM stays out of the quote module's load.
+  const { winDealFromQuote } = await import("@/lib/crm/quote-deals");
+  await winDealFromQuote(tx, current.id, { invoiceId: invoice.id });
   return { created: true, quote: await getQuote(tx, current.id), invoice };
 }
 
@@ -679,6 +682,8 @@ export async function acceptQuoteAsSalesOrder(
     entityId: salesOrder.id,
     details: { quoteId: current.id, quoteNumber: current.quoteNumber },
   });
+  const { winDealFromQuote } = await import("@/lib/crm/quote-deals");
+  await winDealFromQuote(tx, current.id, { salesOrderId: salesOrder.id });
   return { created: true, quote: await getQuote(tx, current.id), salesOrder: await getSalesOrder(tx, salesOrder.id) };
 }
 

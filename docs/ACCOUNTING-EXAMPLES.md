@@ -7087,8 +7087,13 @@ percentage** (0 to 100, up to 2 decimal places). Nothing else changes:
 | DS8 | DS7's quote finalised QU-0001; the deal's keyrings change to 25 x; New revision | QU-0001 **declined** ("Replaced by QU-0002"); draft QU from 25 x 25.00 less 10% = 562.50 + 50.00: deal amount **612.50**, GST **91.88** (84.38 + 7.50), total **704.38** |
 | DS9 | DS8's new quote finalised QU-0002 and accepted on 20 Oct | Draft invoice with the same lines and discounts; the deal moves to **Won** with the invoice linked. Approved: Dr 1100 704.38 / Cr 4000 612.50 / Cr 2100 91.88 |
 
-Tests: `tests/integration/line-discounts.test.ts` (DS1-DS6). DS7-DS9 are
-built with deal products (decision 502).
+Tests: `tests/integration/line-discounts.test.ts` (DS1-DS6) and
+`tests/integration/crm-deal-products.test.ts` (DS7-DS9, decision 502).
+
+Clarified when built (10 Oct 2026): in DS8 the new quote is a draft, so it
+has no number yet when QU-0001 is declined; QU-0001's history records that
+it was replaced by a new revision from the deal, and the deal lists both
+quotes. The new draft gets QU-0002 when it's finalised.
 
 ## Quotes (examples not yet approved by Jess)
 

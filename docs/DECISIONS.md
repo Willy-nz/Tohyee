@@ -4264,3 +4264,31 @@ testing) and #154's code signing (later, Jess).
        `discountPercent` on sales document lines.
      - A line with no discount saves and hashes exactly as before, so
        retries of older requests still match.
+
+502. **Deal products and quotes win the deal** (DS7-DS9; Jess 10 Oct 2026:
+     optional lines, the amount from them; quote from the deal, accepting
+     wins it, a new revision replaces the open one).
+     - **Products:** a deal can have up to 100 lines: an item (optional), a
+       description, quantity, unit price and discount, excluding GST. A
+       line with an item can leave its description and price blank (the
+       item's name and sale price; a deal in another currency needs a
+       typed price). With lines, the deal's amount is their total, through
+       the usual deal update (so the stage history keeps it) and can't be
+       typed; removing every line lets it be typed again. A closed deal's
+       products don't change. Sales reps can set products.
+     - **Make quote** (bookkeeper or higher, as quotes are in the books):
+       a draft quote for the deal's company with its lines, tax exclusive;
+       item lines take the item's account and tax code, others the first
+       revenue account and the company's (or the standard) GST code. A deal
+       with no products quotes its name and amount as one line. A prospect
+       becomes a customer. A retry with the same key returns the same quote.
+     - **New revision:** a deal has at most one open quote; making another
+       deletes the open draft, or declines the open finalised quote (its
+       history says it was replaced).
+     - **Accepting** a quote made from a deal (as an invoice or a sales
+       order) moves the deal to the first active Closed won stage of its
+       sales process and links the invoice or order. It never stops the
+       quote being accepted: with the CRM off, a deal that already has a
+       document, no won stage, or a page layout that won't let it move, the
+       deal is left and its history says why.
+     - Sales reps and managers see a deal's products but not its quotes.
