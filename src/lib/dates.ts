@@ -42,12 +42,17 @@ export function businessTimeZone(): string {
 
 /** Today's date (YYYY-MM-DD) in the business time zone. */
 export function todayIsoDate(timeZone = businessTimeZone()): string {
+  return isoDateAt(new Date(), timeZone);
+}
+
+/** The date (YYYY-MM-DD) a moment fell on in the business time zone. */
+export function isoDateAt(instant: Date, timeZone = businessTimeZone()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date());
+  }).formatToParts(instant);
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }

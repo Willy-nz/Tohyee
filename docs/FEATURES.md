@@ -906,6 +906,15 @@ that something happened.
   preview, never full bodies or attachments) and shows them on timelines,
   with each mailbox choosing whether the team sees subjects or only that
   something happened (MAIL1-MAIL9).
+- **CRM follow-up rules** (decision 495, #216 stage 2): CRM › Follow-ups,
+  for admins and owners. Rules make a task for the right person when a new
+  lead arrives (its owner, or each sales team manager if nobody owns it), a
+  deal reaches a chosen stage (its owner, due N days later), an open deal
+  goes quiet for N days (a reminder for its owner, once per quiet spell), or
+  a task is N days overdue (the assignee's team manager). Rules are checked
+  every 15 minutes or with Run now, and the page lists what each run did.
+  Each event makes its task once, even if a check runs twice. Reminders stay
+  in Tohyee; nothing is emailed.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
