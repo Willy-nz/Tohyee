@@ -1,0 +1,63 @@
+ServerSettingsForm {X=12,Y=10,Width=1000,Height=699} "Tohyee server"
+  Panel {X=236,Y=0,Width=748,Height=660}
+    AnalyticsPage {X=0,Y=0,Width=748,Height=660}
+      PageFlow {X=0,Y=0,Width=748,Height=660}
+        Label {X=32,Y=28,Width=120,Height=36} auto "Analytics"
+        Label {X=32,Y=68,Width=664,Height=34} auto "The folder on this computer each organis…"
+        Card {X=32,Y=122,Width=667,Height=144}
+          FlowLayoutPanel {X=20,Y=20,Width=627,Height=104} auto
+            Label {X=0,Y=0,Width=131,Height=21} auto "Analytics folders"
+            Label {X=0,Y=27,Width=540,Height=17} auto "Use a full path. Saving gives the Tohyee…"
+            FlowLayoutPanel {X=0,Y=62,Width=90,Height=40} auto
+              FlatButton {X=0,Y=0,Width=82,Height=32} auto "Refresh"
+        Card {X=32,Y=282,Width=667,Height=214}
+          FlowLayoutPanel {X=20,Y=20,Width=627,Height=174} auto
+            Label {X=0,Y=0,Width=171,Height=21} auto "Harbour Bowling Club"
+            Label {X=0,Y=27,Width=94,Height=17} auto "harbour-bowls"
+            TableLayoutPanel {X=0,Y=56,Width=627,Height=33} auto
+              Label {X=0,Y=8,Width=45,Height=17} auto "Folder"
+              TextBox {X=160,Y=4,Width=467,Height=25} auto "D:\Reports\Harbour"
+            Label {X=0,Y=97,Width=66,Height=19} auto "Readable"
+            FlowLayoutPanel {X=0,Y=132,Width=171,Height=40} auto
+              FlatButton {X=0,Y=0,Width=89,Height=32} auto "Browse…"
+              FlatButton {X=97,Y=0,Width=66,Height=32} auto "Save"
+        Card {X=32,Y=512,Width=667,Height=214}
+          FlowLayoutPanel {X=20,Y=20,Width=627,Height=174} auto
+            Label {X=0,Y=0,Width=189,Height=21} auto "Kōwhai Kindergarten Inc"
+            Label {X=0,Y=27,Width=83,Height=17} auto "kowhai-kindy"
+            TableLayoutPanel {X=0,Y=56,Width=627,Height=33} auto
+              Label {X=0,Y=8,Width=45,Height=17} auto "Folder"
+              TextBox {X=160,Y=4,Width=467,Height=25} auto
+            Label {X=0,Y=97,Width=43,Height=19} auto "None"
+            FlowLayoutPanel {X=0,Y=132,Width=171,Height=40} auto
+              FlatButton {X=0,Y=0,Width=89,Height=32} auto "Browse…"
+              FlatButton {X=97,Y=0,Width=66,Height=32} auto "Save"
+    BackupsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    UsersPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    OrganisationsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    HomePage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+  Sidebar {X=0,Y=0,Width=236,Height=660}
+    Picture {X=20,Y=22,Width=36,Height=36}
+    Label {X=66,Y=20,Width=72,Height=25} auto "Tohyee"
+    Label {X=68,Y=43,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=80,Width=211,Height=34} "Home"
+    Label {X=24,Y=126,Width=44,Height=13} auto "PEOPLE"
+    NavItem {X=12,Y=143,Width=211,Height=34} "Organisations"
+    NavItem {X=12,Y=179,Width=211,Height=34} "Users"
+    Label {X=24,Y=225,Width=60,Height=13} auto "KEEP SAFE"
+    NavItem {X=12,Y=242,Width=211,Height=34} "Backups"
+    NavItem {X=12,Y=278,Width=211,Height=34} "Updates"
+    NavItem {X=12,Y=314,Width=211,Height=34} "Sign-ins"
+    Label {X=24,Y=360,Width=57,Height=13} auto "CONNECT"
+    NavItem {X=12,Y=377,Width=211,Height=34} "Remote access"
+    NavItem {X=12,Y=413,Width=211,Height=34} "Email"
+    NavItem {X=12,Y=449,Width=211,Height=34} "Analytics"
+    Label {X=24,Y=495,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=512,Width=211,Height=34} "Stats"
+    Label {X=20,Y=568,Width=203,Height=15} "Signed in as jess@example.nz"
+    LinkLabel {X=20,Y=585,Width=51,Height=15} auto "Sign out"
+    FlatButton {X=12,Y=608,Width=211,Height=36} "Open Tohyee (the books)"

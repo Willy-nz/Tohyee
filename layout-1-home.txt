@@ -1,0 +1,96 @@
+ServerSettingsForm {X=12,Y=10,Width=1000,Height=699} "Tohyee server"
+  Panel {X=236,Y=0,Width=748,Height=660}
+    HomePage {X=0,Y=0,Width=748,Height=660}
+      PageFlow {X=0,Y=0,Width=748,Height=660}
+        TableLayoutPanel {X=32,Y=28,Width=650,Height=48}
+          Label {X=0,Y=6,Width=87,Height=36} auto "Home"
+          StatusPill {X=101,Y=9,Width=207,Height=30} "Running · v0.2.1 · up 3 days"
+          FlatButton {X=532,Y=8,Width=118,Height=32} auto "Open Tohyee"
+        Card {X=32,Y=88,Width=650,Height=151}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=111} auto
+            Label {X=0,Y=0,Width=101,Height=13} auto "NEEDS ATTENTION"
+            FlowLayoutPanel {X=0,Y=19,Width=610,Height=92} auto
+              TableLayoutPanel {X=0,Y=4,Width=610,Height=38} auto
+                FlowLayoutPanel {X=0,Y=0,Width=238,Height=38} auto
+                  Label {X=0,Y=0,Width=170,Height=19} auto "Tohyee v0.3.0 is available."
+                  Label {X=0,Y=21,Width=238,Height=17} auto "Install backs up every organisation firs…"
+                FlatButton {X=487,Y=3,Width=123,Height=32} auto "Review update"
+              TableLayoutPanel {X=0,Y=50,Width=610,Height=38} auto
+                FlowLayoutPanel {X=0,Y=0,Width=419,Height=38} auto
+                  Label {X=0,Y=0,Width=148,Height=19} auto "A sign-in was flagged."
+                  Label {X=0,Y=21,Width=419,Height=17} auto "Check they were expected (a new device, …"
+                FlatButton {X=490,Y=3,Width=120,Height=32} auto "Open Sign-ins"
+        CardGrid {X=32,Y=255,Width=650,Height=234}
+          Card {X=0,Y=0,Width=317,Height=109}
+            FlowLayoutPanel {X=20,Y=20,Width=277,Height=69} auto
+              Label {X=0,Y=0,Width=76,Height=13} auto "LAST BACKUP"
+              FlowLayoutPanel {X=0,Y=19,Width=157,Height=31} auto
+                Dot {X=0,Y=11,Width=12,Height=12}
+                Label {X=20,Y=0,Width=137,Height=31} auto "7 hours ago"
+              Label {X=0,Y=52,Width=277,Height=17} "Every night at 02:00"
+          Card {X=333,Y=0,Width=317,Height=109}
+            FlowLayoutPanel {X=20,Y=20,Width=277,Height=69} auto
+              Label {X=0,Y=0,Width=92,Height=13} auto "REMOTE ACCESS"
+              FlowLayoutPanel {X=0,Y=19,Width=64,Height=31} auto
+                Dot {X=0,Y=11,Width=12,Height=12}
+                Label {X=20,Y=0,Width=44,Height=31} auto "On"
+              Label {X=0,Y=52,Width=277,Height=17} "k7m2q9.tohyee.example"
+          Card {X=0,Y=125,Width=317,Height=109}
+            FlowLayoutPanel {X=20,Y=20,Width=277,Height=69} auto
+              Label {X=0,Y=0,Width=91,Height=13} auto "ORGANISATIONS"
+              FlowLayoutPanel {X=0,Y=19,Width=27,Height=31} auto
+                Label {X=0,Y=0,Width=27,Height=31} auto "4"
+              Label {X=0,Y=52,Width=277,Height=17} "In use · 11 people"
+          Card {X=333,Y=125,Width=317,Height=109}
+            FlowLayoutPanel {X=20,Y=20,Width=277,Height=69} auto
+              Label {X=0,Y=0,Width=38,Height=13} auto "EMAIL"
+              FlowLayoutPanel {X=0,Y=19,Width=100,Height=31} auto
+                Dot {X=0,Y=11,Width=12,Height=12}
+                Label {X=20,Y=0,Width=80,Height=31} auto "Set up"
+              Label {X=0,Y=52,Width=277,Height=17} "tohyee.alerts@gmail.com"
+        Card {X=32,Y=505,Width=650,Height=280}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=240} auto
+            Label {X=0,Y=0,Width=95,Height=21} auto "Latest news"
+            FlowLayoutPanel {X=0,Y=27,Width=610,Height=213} auto
+              FlowLayoutPanel {X=0,Y=0,Width=610,Height=47} auto
+                Label {X=0,Y=8,Width=130,Height=20} "RELEASE · 29 Sept 2026"
+                FlowLayoutPanel {X=140,Y=7,Width=398,Height=33} auto
+                  LinkLabel {X=0,Y=0,Width=80,Height=17} auto "Tohyee 0.2.1"
+                  Label {X=0,Y=18,Width=398,Height=15} auto "Bank reconciliation with one-click OK, b…"
+              FlowLayoutPanel {X=0,Y=47,Width=610,Height=47} auto
+                Label {X=0,Y=8,Width=130,Height=20} "NEWS · 20 Sept 2026"
+                FlowLayoutPanel {X=140,Y=7,Width=399,Height=33} auto
+                  Label {X=0,Y=0,Width=192,Height=17} auto "Remote access is getting easier"
+                  Label {X=0,Y=18,Width=399,Height=15} auto "The next server app gives you three ways…"
+              FlowLayoutPanel {X=0,Y=94,Width=610,Height=47} auto
+                Label {X=0,Y=8,Width=130,Height=20} "RELEASE · 2 Sept 2026"
+                FlowLayoutPanel {X=140,Y=7,Width=411,Height=33} auto
+                  LinkLabel {X=0,Y=0,Width=80,Height=17} auto "Tohyee 0.2.0"
+                  Label {X=0,Y=18,Width=411,Height=15} auto "Encrypted nightly backups with OneDrive …"
+              FlowLayoutPanel {X=0,Y=141,Width=610,Height=47} auto
+                Label {X=0,Y=8,Width=130,Height=20} "CONFERENCE"
+                FlowLayoutPanel {X=140,Y=7,Width=215,Height=33} auto
+                  Label {X=0,Y=0,Width=158,Height=17} auto "Save the date: TohyeeCon"
+                  Label {X=0,Y=18,Width=215,Height=15} auto "Ōtepoti Dunedin · date to be confirmed"
+              LinkLabel {X=0,Y=196,Width=137,Height=17} auto "All releases on GitHub"
+  Sidebar {X=0,Y=0,Width=236,Height=660}
+    Picture {X=20,Y=22,Width=36,Height=36}
+    Label {X=66,Y=20,Width=72,Height=25} auto "Tohyee"
+    Label {X=68,Y=43,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=80,Width=211,Height=34} "Home"
+    Label {X=24,Y=126,Width=44,Height=13} auto "PEOPLE"
+    NavItem {X=12,Y=143,Width=211,Height=34} "Organisations"
+    NavItem {X=12,Y=179,Width=211,Height=34} "Users"
+    Label {X=24,Y=225,Width=60,Height=13} auto "KEEP SAFE"
+    NavItem {X=12,Y=242,Width=211,Height=34} "Backups"
+    NavItem {X=12,Y=278,Width=211,Height=34} "Updates"
+    NavItem {X=12,Y=314,Width=211,Height=34} "Sign-ins"
+    Label {X=24,Y=360,Width=57,Height=13} auto "CONNECT"
+    NavItem {X=12,Y=377,Width=211,Height=34} "Remote access"
+    NavItem {X=12,Y=413,Width=211,Height=34} "Email"
+    NavItem {X=12,Y=449,Width=211,Height=34} "Analytics"
+    Label {X=24,Y=495,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=512,Width=211,Height=34} "Stats"
+    Label {X=20,Y=568,Width=203,Height=15} "Signed in as jess@example.nz"
+    LinkLabel {X=20,Y=585,Width=51,Height=15} auto "Sign out"
+    FlatButton {X=12,Y=608,Width=211,Height=36} "Open Tohyee (the books)"

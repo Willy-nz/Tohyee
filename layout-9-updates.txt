@@ -1,0 +1,54 @@
+ServerSettingsForm {X=12,Y=10,Width=1000,Height=699} "Tohyee server"
+  Panel {X=236,Y=0,Width=748,Height=660}
+    UpdatesPage {X=0,Y=0,Width=748,Height=660}
+      PageFlow {X=0,Y=0,Width=748,Height=660}
+        Label {X=32,Y=28,Width=113,Height=36} auto "Updates"
+        Label {X=32,Y=68,Width=665,Height=51} auto "Tohyee checks GitHub for a new version a…"
+        Card {X=32,Y=139,Width=667,Height=184}
+          FlowLayoutPanel {X=20,Y=20,Width=627,Height=144} auto
+            Label {X=0,Y=0,Width=110,Height=21} auto "Latest release"
+            Label {X=0,Y=31,Width=462,Height=19} auto "This server runs v0.2.1. The latest rele…"
+            Label {X=0,Y=54,Width=401,Height=34} auto "Tohyee v0.3.0, published 9 Oct 2026 2:51…"
+            FlowLayoutPanel {X=0,Y=102,Width=355,Height=40} auto
+              FlatButton {X=0,Y=0,Width=112,Height=32} auto "Install v0.3.0"
+              FlatButton {X=120,Y=0,Width=100,Height=32} auto "Check now"
+              FlatButton {X=228,Y=0,Width=119,Height=32} auto "Release notes"
+        Card {X=32,Y=339,Width=667,Height=88}
+          FlowLayoutPanel {X=20,Y=20,Width=627,Height=48} auto
+            Label {X=0,Y=0,Width=95,Height=21} auto "Last update"
+            Label {X=0,Y=27,Width=400,Height=17} auto "v0.2.0 → v0.2.1 on 7 Oct 2026 5:51 am: a…"
+    StatsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    EmailPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    AnalyticsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    BackupsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    UsersPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    OrganisationsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    HomePage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+  Sidebar {X=0,Y=0,Width=236,Height=660}
+    Picture {X=20,Y=22,Width=36,Height=36}
+    Label {X=66,Y=20,Width=72,Height=25} auto "Tohyee"
+    Label {X=68,Y=43,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=80,Width=211,Height=34} "Home"
+    Label {X=24,Y=126,Width=44,Height=13} auto "PEOPLE"
+    NavItem {X=12,Y=143,Width=211,Height=34} "Organisations"
+    NavItem {X=12,Y=179,Width=211,Height=34} "Users"
+    Label {X=24,Y=225,Width=60,Height=13} auto "KEEP SAFE"
+    NavItem {X=12,Y=242,Width=211,Height=34} "Backups"
+    NavItem {X=12,Y=278,Width=211,Height=34} "Updates"
+    NavItem {X=12,Y=314,Width=211,Height=34} "Sign-ins"
+    Label {X=24,Y=360,Width=57,Height=13} auto "CONNECT"
+    NavItem {X=12,Y=377,Width=211,Height=34} "Remote access"
+    NavItem {X=12,Y=413,Width=211,Height=34} "Email"
+    NavItem {X=12,Y=449,Width=211,Height=34} "Analytics"
+    Label {X=24,Y=495,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=512,Width=211,Height=34} "Stats"
+    Label {X=20,Y=568,Width=203,Height=15} "Signed in as jess@example.nz"
+    LinkLabel {X=20,Y=585,Width=51,Height=15} auto "Sign out"
+    FlatButton {X=12,Y=608,Width=211,Height=36} "Open Tohyee (the books)"

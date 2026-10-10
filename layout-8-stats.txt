@@ -1,0 +1,84 @@
+ServerSettingsForm {X=12,Y=10,Width=1000,Height=699} "Tohyee server"
+  Panel {X=236,Y=0,Width=748,Height=660}
+    StatsPage {X=0,Y=0,Width=748,Height=660}
+      PageFlow {X=0,Y=0,Width=748,Height=660}
+        Label {X=32,Y=28,Width=71,Height=36} auto "Stats"
+        Label {X=32,Y=68,Width=635,Height=34} auto "How busy this computer and Tohyee are. I…"
+        SplitRow {X=32,Y=122,Width=650,Height=176}
+          Card {X=0,Y=0,Width=150,Height=176}
+            FlowLayoutPanel {X=20,Y=20,Width=110,Height=88} auto
+              Label {X=0,Y=0,Width=28,Height=13} auto "CPU"
+              Label {X=0,Y=21,Width=74,Height=31} auto "18.2%"
+              Label {X=0,Y=54,Width=110,Height=34} auto "Tohyee 4.6% · 12 cores"
+          Card {X=166,Y=0,Width=150,Height=176}
+            FlowLayoutPanel {X=20,Y=20,Width=110,Height=88} auto
+              Label {X=0,Y=0,Width=54,Height=13} auto "MEMORY"
+              Label {X=0,Y=21,Width=82,Height=31} auto "9.8 GB"
+              Label {X=0,Y=54,Width=97,Height=34} auto "of 14.9 GB · Tohyee 381 MB"
+          Card {X=332,Y=0,Width=150,Height=176}
+            FlowLayoutPanel {X=20,Y=20,Width=110,Height=136} auto
+              Label {X=0,Y=0,Width=44,Height=13} auto "PEOPLE"
+              Label {X=0,Y=21,Width=109,Height=62} auto "3 using it now"
+              Label {X=0,Y=85,Width=106,Height=51} auto "5 in the last 24 hours · 6 signed in · 8…"
+          Card {X=498,Y=0,Width=152,Height=176}
+            FlowLayoutPanel {X=20,Y=20,Width=112,Height=119} auto
+              Label {X=0,Y=0,Width=60,Height=13} auto "REQUESTS"
+              Label {X=0,Y=21,Width=88,Height=62} auto "36 last minute"
+              Label {X=0,Y=85,Width=106,Height=34} auto "Average 45 ms · 0 server errors"
+        Card {X=32,Y=314,Width=650,Height=779}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=739} auto
+            Label {X=0,Y=0,Width=64,Height=21} auto "History"
+            FlowLayoutPanel {X=0,Y=33,Width=271,Height=40} auto
+              FlatButton {X=0,Y=0,Width=76,Height=32} auto "1 hour"
+              FlatButton {X=84,Y=0,Width=82,Height=32} auto "6 hours"
+              FlatButton {X=174,Y=0,Width=89,Height=32} auto "24 hours"
+            Graph {X=0,Y=83,Width=610,Height=150}
+            Graph {X=0,Y=249,Width=610,Height=150}
+            Graph {X=0,Y=415,Width=610,Height=150}
+            Graph {X=0,Y=581,Width=610,Height=150}
+        Card {X=32,Y=1109,Width=650,Height=191}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=151} auto
+            Label {X=0,Y=0,Width=86,Height=21} auto "Disk space"
+            ListView {X=0,Y=31,Width=610,Height=110}
+        Card {X=32,Y=1316,Width=650,Height=379}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=339} auto
+            Label {X=0,Y=0,Width=84,Height=21} auto "Databases"
+            Label {X=0,Y=27,Width=610,Height=34} auto "All together 239 MB, measured every 15 m…"
+            ListView {X=0,Y=69,Width=610,Height=260}
+        Card {X=32,Y=1711,Width=650,Height=173}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=133} auto
+            Label {X=0,Y=0,Width=89,Height=21} auto "This server"
+            Label {X=0,Y=27,Width=597,Height=102} auto "Tohyee v0.2.1, running for 3 days (since…"
+    EmailPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    AnalyticsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    BackupsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    UsersPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    OrganisationsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    HomePage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+  Sidebar {X=0,Y=0,Width=236,Height=660}
+    Picture {X=20,Y=22,Width=36,Height=36}
+    Label {X=66,Y=20,Width=72,Height=25} auto "Tohyee"
+    Label {X=68,Y=43,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=80,Width=211,Height=34} "Home"
+    Label {X=24,Y=126,Width=44,Height=13} auto "PEOPLE"
+    NavItem {X=12,Y=143,Width=211,Height=34} "Organisations"
+    NavItem {X=12,Y=179,Width=211,Height=34} "Users"
+    Label {X=24,Y=225,Width=60,Height=13} auto "KEEP SAFE"
+    NavItem {X=12,Y=242,Width=211,Height=34} "Backups"
+    NavItem {X=12,Y=278,Width=211,Height=34} "Updates"
+    NavItem {X=12,Y=314,Width=211,Height=34} "Sign-ins"
+    Label {X=24,Y=360,Width=57,Height=13} auto "CONNECT"
+    NavItem {X=12,Y=377,Width=211,Height=34} "Remote access"
+    NavItem {X=12,Y=413,Width=211,Height=34} "Email"
+    NavItem {X=12,Y=449,Width=211,Height=34} "Analytics"
+    Label {X=24,Y=495,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=512,Width=211,Height=34} "Stats"
+    Label {X=20,Y=568,Width=203,Height=15} "Signed in as jess@example.nz"
+    LinkLabel {X=20,Y=585,Width=51,Height=15} auto "Sign out"
+    FlatButton {X=12,Y=608,Width=211,Height=36} "Open Tohyee (the books)"

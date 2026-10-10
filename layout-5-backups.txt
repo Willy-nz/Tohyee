@@ -1,0 +1,74 @@
+ServerSettingsForm {X=12,Y=10,Width=1000,Height=699} "Tohyee server"
+  Panel {X=236,Y=0,Width=748,Height=660}
+    BackupsPage {X=0,Y=0,Width=748,Height=660}
+      PageFlow {X=0,Y=0,Width=748,Height=660}
+        Label {X=32,Y=28,Width=113,Height=36} auto "Backups"
+        Label {X=32,Y=68,Width=645,Height=51} auto "Every night Tohyee backs up each organis…"
+        Card {X=32,Y=139,Width=650,Height=338}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=298} auto
+            Label {X=0,Y=0,Width=127,Height=21} auto "Nightly backups"
+            Label {X=0,Y=27,Width=164,Height=19} auto "On: every night at 02:00."
+            TableLayoutPanel {X=0,Y=56,Width=610,Height=186} auto
+              Label {X=0,Y=7,Width=49,Height=17} auto "Nightly"
+              DarkCheckBox {X=160,Y=4,Width=450,Height=23} auto "Back up every night"
+              Label {X=0,Y=39,Width=78,Height=17} auto "At (24-hour)"
+              TextBox {X=160,Y=35,Width=80,Height=25} auto "02:00"
+              Label {X=0,Y=95,Width=45,Height=17} auto "Folder"
+              FlowLayoutPanel {X=160,Y=64,Width=435,Height=80} auto
+                TextBox {X=0,Y=4,Width=330,Height=25} auto "C:\Users\Jess\OneDrive\Tohyee backups"
+                FlatButton {X=338,Y=0,Width=89,Height=32} auto "Browse…"
+                FlatButton {X=0,Y=40,Width=118,Height=32} auto "Use OneDrive"
+                FlatButton {X=126,Y=40,Width=141,Height=32} auto "Use Google Drive"
+              Label {X=3,Y=144,Width=100,Height=23}
+              Label {X=160,Y=146,Width=447,Height=34} auto "Tohyee's service writes here, so it must…"
+            FlowLayoutPanel {X=0,Y=256,Width=332,Height=40} auto
+              FlatButton {X=0,Y=0,Width=66,Height=32} auto "Save"
+              FlatButton {X=74,Y=0,Width=111,Height=32} auto "Back up now"
+              FlatButton {X=193,Y=0,Width=131,Height=32} auto "Open the folder"
+        Card {X=32,Y=493,Width=650,Height=207}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=167} auto
+            Label {X=0,Y=0,Width=129,Height=21} auto "Your backup key"
+            Label {X=0,Y=27,Width=608,Height=51} auto "Backups can only be opened with this ser…"
+            Label {X=0,Y=90,Width=469,Height=19} auto "Saved: jess@example.nz checked a saved c…"
+            FlowLayoutPanel {X=0,Y=125,Width=311,Height=40} auto
+              FlatButton {X=0,Y=0,Width=123,Height=32} auto "Show the key…"
+              FlatButton {X=131,Y=0,Width=172,Height=32} auto "Check my saved copy…"
+        Card {X=32,Y=716,Width=650,Height=231}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=191} auto
+            Label {X=0,Y=0,Width=138,Height=21} auto "Each organisation"
+            ListView {X=0,Y=31,Width=610,Height=150}
+        Card {X=32,Y=963,Width=650,Height=375}
+          FlowLayoutPanel {X=20,Y=20,Width=610,Height=335} auto
+            Label {X=0,Y=0,Width=97,Height=21} auto "Backup files"
+            Label {X=0,Y=27,Width=581,Height=34} auto "Restoring one makes a new organisation, …"
+            ListView {X=0,Y=77,Width=610,Height=200}
+            FlowLayoutPanel {X=0,Y=293,Width=250,Height=40} auto
+              FlatButton {X=0,Y=0,Width=152,Height=32} auto "Restore as a copy…"
+              FlatButton {X=160,Y=0,Width=82,Height=32} auto "Refresh"
+    UsersPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    OrganisationsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    HomePage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+  Sidebar {X=0,Y=0,Width=236,Height=660}
+    Picture {X=20,Y=22,Width=36,Height=36}
+    Label {X=66,Y=20,Width=72,Height=25} auto "Tohyee"
+    Label {X=68,Y=43,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=80,Width=211,Height=34} "Home"
+    Label {X=24,Y=126,Width=44,Height=13} auto "PEOPLE"
+    NavItem {X=12,Y=143,Width=211,Height=34} "Organisations"
+    NavItem {X=12,Y=179,Width=211,Height=34} "Users"
+    Label {X=24,Y=225,Width=60,Height=13} auto "KEEP SAFE"
+    NavItem {X=12,Y=242,Width=211,Height=34} "Backups"
+    NavItem {X=12,Y=278,Width=211,Height=34} "Updates"
+    NavItem {X=12,Y=314,Width=211,Height=34} "Sign-ins"
+    Label {X=24,Y=360,Width=57,Height=13} auto "CONNECT"
+    NavItem {X=12,Y=377,Width=211,Height=34} "Remote access"
+    NavItem {X=12,Y=413,Width=211,Height=34} "Email"
+    NavItem {X=12,Y=449,Width=211,Height=34} "Analytics"
+    Label {X=24,Y=495,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=512,Width=211,Height=34} "Stats"
+    Label {X=20,Y=568,Width=203,Height=15} "Signed in as jess@example.nz"
+    LinkLabel {X=20,Y=585,Width=51,Height=15} auto "Sign out"
+    FlatButton {X=12,Y=608,Width=211,Height=36} "Open Tohyee (the books)"

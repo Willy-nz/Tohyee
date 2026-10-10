@@ -1,0 +1,63 @@
+ServerSettingsForm {X=12,Y=10,Width=1000,Height=699} "Tohyee server"
+  Panel {X=236,Y=0,Width=748,Height=660}
+    EmailPage {X=0,Y=0,Width=748,Height=660}
+      PageFlow {X=0,Y=0,Width=748,Height=660}
+        Label {X=32,Y=28,Width=79,Height=36} auto "Email"
+        Label {X=32,Y=68,Width=657,Height=34} auto "The email account this server sends from…"
+        Card {X=32,Y=122,Width=667,Height=455}
+          FlowLayoutPanel {X=20,Y=20,Width=627,Height=415} auto
+            Label {X=0,Y=0,Width=611,Height=38} auto "Set up: sending as tohyee.alerts@gmail.c…"
+            TableLayoutPanel {X=0,Y=48,Width=627,Height=311} auto
+              Label {X=0,Y=7,Width=93,Height=17} auto "Email provider"
+              ComboBox {X=160,Y=4,Width=467,Height=25} "Gmail"
+              Label {X=3,Y=31,Width=100,Height=23}
+              Label {X=160,Y=33,Width=401,Height=51} auto "Gmail needs an app password, not your no…"
+              Label {X=0,Y=98,Width=81,Height=17} auto "SMTP server"
+              TextBox {X=160,Y=94,Width=467,Height=25} auto "smtp.gmail.com"
+              Label {X=0,Y=131,Width=107,Height=17} auto "Port (465 or 587)"
+              TextBox {X=160,Y=127,Width=467,Height=25} auto "465"
+              Label {X=0,Y=164,Width=88,Height=17} auto "Email account"
+              TextBox {X=160,Y=160,Width=467,Height=25} auto "tohyee.alerts@gmail.com"
+              Label {X=0,Y=197,Width=64,Height=17} auto "Password"
+              TextBox {X=160,Y=193,Width=467,Height=25} auto
+              Label {X=3,Y=222,Width=100,Height=23}
+              Label {X=163,Y=222,Width=180,Height=17} auto "Saved. Leave blank to keep it."
+              Label {X=0,Y=253,Width=69,Height=17} auto "Send from"
+              TextBox {X=160,Y=249,Width=467,Height=25} auto "tohyee.alerts@gmail.com"
+              Label {X=0,Y=286,Width=74,Height=17} auto "From name"
+              TextBox {X=160,Y=282,Width=467,Height=25} auto "Tohyee"
+            FlowLayoutPanel {X=0,Y=373,Width=313,Height=40} auto
+              FlatButton {X=0,Y=0,Width=66,Height=32} auto "Save"
+              FlatButton {X=74,Y=0,Width=138,Height=32} auto "Send a test email"
+              FlatButton {X=220,Y=0,Width=85,Height=32} auto "Remove"
+    AnalyticsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    BackupsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    UsersPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    OrganisationsPage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+    HomePage {X=0,Y=0,Width=748,Height=660} hidden
+      PageFlow {X=0,Y=0,Width=748,Height=660} hidden
+  Sidebar {X=0,Y=0,Width=236,Height=660}
+    Picture {X=20,Y=22,Width=36,Height=36}
+    Label {X=66,Y=20,Width=72,Height=25} auto "Tohyee"
+    Label {X=68,Y=43,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=80,Width=211,Height=34} "Home"
+    Label {X=24,Y=126,Width=44,Height=13} auto "PEOPLE"
+    NavItem {X=12,Y=143,Width=211,Height=34} "Organisations"
+    NavItem {X=12,Y=179,Width=211,Height=34} "Users"
+    Label {X=24,Y=225,Width=60,Height=13} auto "KEEP SAFE"
+    NavItem {X=12,Y=242,Width=211,Height=34} "Backups"
+    NavItem {X=12,Y=278,Width=211,Height=34} "Updates"
+    NavItem {X=12,Y=314,Width=211,Height=34} "Sign-ins"
+    Label {X=24,Y=360,Width=57,Height=13} auto "CONNECT"
+    NavItem {X=12,Y=377,Width=211,Height=34} "Remote access"
+    NavItem {X=12,Y=413,Width=211,Height=34} "Email"
+    NavItem {X=12,Y=449,Width=211,Height=34} "Analytics"
+    Label {X=24,Y=495,Width=46,Height=13} auto "SERVER"
+    NavItem {X=12,Y=512,Width=211,Height=34} "Stats"
+    Label {X=20,Y=568,Width=203,Height=15} "Signed in as jess@example.nz"
+    LinkLabel {X=20,Y=585,Width=51,Height=15} auto "Sign out"
+    FlatButton {X=12,Y=608,Width=211,Height=36} "Open Tohyee (the books)"
