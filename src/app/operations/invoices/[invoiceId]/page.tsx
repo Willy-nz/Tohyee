@@ -316,6 +316,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   }
   const invoice = updated ?? details.data.invoice;
   const hasTax = invoice.amountsMode !== "no_tax";
+  const discounted = invoice.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   const { creditApplied, overpaymentCreditApplied, fromQuote, fromRepeating } = details.data;
   return (
     <>
@@ -381,6 +382,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
                 <th>Description</th>
                 <th className={ui.num}>Quantity</th>
                 <th className={ui.num}>Unit price</th>
+              {discounted ? <th className={ui.num}>Disc %</th> : null}
                 <th>Account</th>
                 {hasTax ? <th>Tax code</th> : null}
                 {hasTax ? <th className={ui.num}>GST</th> : null}
@@ -399,6 +401,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
                   <td>{line.description}</td>
                   <td className={ui.num}>{formatQuantity(line.quantity)}</td>
                   <td className={ui.num}>{formatUnitPrice(line.unitPrice)}</td>
+                  {discounted ? <td className={ui.num}>{line.discountPercent && Number(line.discountPercent) !== 0 ? `${Number(line.discountPercent)}%` : ""}</td> : null}
                   <td>
                     {line.accountCode} · {line.accountName}
                     <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />

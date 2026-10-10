@@ -57,6 +57,17 @@ export const DOCUMENT_LINES: JsonSchema = {
     required: ["description", "quantity", "unitPrice", "accountCode"],
   },
 };
+/** Sales document lines (invoices, quotes, sales orders, credit notes) also take a discount (DS1-DS6). */
+export const SALES_DOCUMENT_LINES: JsonSchema = {
+  ...DOCUMENT_LINES,
+  items: {
+    ...(DOCUMENT_LINES.items as Record<string, unknown>),
+    properties: {
+      ...((DOCUMENT_LINES.items as { properties: Record<string, JsonSchema> }).properties),
+      discountPercent: { type: ["string", "null"], description: "Percent off the line, 0 to 100, e.g. \"10\". Left out for none." },
+    },
+  },
+} as JsonSchema;
 const JOURNAL_LINES: JsonSchema = {
   type: "array",
   minItems: 2,
@@ -99,7 +110,7 @@ const INVOICE_FIELDS: Record<string, JsonSchema> = {
   dueDate: { ...DATE, description: "Left out, from the customer's or the organisation's payment terms." },
   reference: { type: "string" },
   amountsMode: AMOUNTS_MODE,
-  lines: DOCUMENT_LINES,
+  lines: SALES_DOCUMENT_LINES,
 };
 
 const BILL_FIELDS: Record<string, JsonSchema> = {

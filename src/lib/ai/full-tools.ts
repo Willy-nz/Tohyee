@@ -1,7 +1,7 @@
 import { createAccount, updateAccount } from "@/lib/accounts/service";
 import { boundedLimit } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema } from "@/lib/ai/tools";
-import { AMOUNTS_MODE, DOCUMENT_LINES, ID, IDEMPOTENCY, idempotencyKey } from "@/lib/ai/write-tools";
+import { AMOUNTS_MODE, DOCUMENT_LINES, ID, IDEMPOTENCY, idempotencyKey, SALES_DOCUMENT_LINES } from "@/lib/ai/write-tools";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
 import { createBudget, getBudget, listBudgets, setBudgetAmounts } from "@/lib/budgets/service";
 import { applyCreditNote } from "@/lib/credit-notes/applications";
@@ -93,7 +93,7 @@ const QUOTE_FIELDS: Record<string, JsonSchema> = {
   reference: { type: "string" },
   terms: { type: "string" },
   amountsMode: AMOUNTS_MODE,
-  lines: DOCUMENT_LINES,
+  lines: SALES_DOCUMENT_LINES,
 };
 const SALES_ORDER_FIELDS: Record<string, JsonSchema> = {
   contactId: ID("customer"),
@@ -102,7 +102,7 @@ const SALES_ORDER_FIELDS: Record<string, JsonSchema> = {
   reference: { type: "string" },
   memo: { type: "string" },
   amountsMode: AMOUNTS_MODE,
-  lines: DOCUMENT_LINES,
+  lines: SALES_DOCUMENT_LINES,
 };
 const PURCHASE_ORDER_FIELDS: Record<string, JsonSchema> = {
   contactId: ID("supplier"),
@@ -119,7 +119,7 @@ const CREDIT_NOTE_FIELDS: Record<string, JsonSchema> = {
   creditNoteDate: DATE,
   reference: { type: "string" },
   amountsMode: AMOUNTS_MODE,
-  lines: DOCUMENT_LINES,
+  lines: SALES_DOCUMENT_LINES,
   exchangeRate: EXCHANGE_RATE,
 };
 const SUPPLIER_CREDIT_NOTE_FIELDS: Record<string, JsonSchema> = {

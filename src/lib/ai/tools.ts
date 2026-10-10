@@ -124,6 +124,7 @@ type DocumentLine = {
   description: string;
   quantity: string;
   unitPrice: string;
+  discountPercent?: string;
   accountCode: string;
   accountName: string;
   taxCode: string | null;
@@ -158,6 +159,7 @@ export function documentLines(lines: readonly DocumentLine[]) {
       description: line.description,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
+      ...(line.discountPercent && Number(line.discountPercent) !== 0 ? { discountPercent: line.discountPercent } : {}),
       account: `${line.accountCode} ${line.accountName}`,
       taxCode: line.taxCode,
       amount: line.lineAmount,

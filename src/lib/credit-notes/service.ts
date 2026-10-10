@@ -19,7 +19,7 @@ import {
   type AmountsMode,
   type CreditStatus,
 } from "@/lib/invoices/amounts";
-import { controlAccountCode, GST_ACCOUNT, RECEIVABLE_ACCOUNT, setBaseLineAmounts } from "@/lib/invoices/service";
+import { controlAccountCode, GST_ACCOUNT, parseDiscountPercent, RECEIVABLE_ACCOUNT, setBaseLineAmounts } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import {
   assertForeignLinesSupported,
@@ -76,6 +76,8 @@ export type CreditNoteLine = LineItemFields & {
   description: string;
   quantity: string;
   unitPrice: string;
+  /** Percent off the line, "0.00" to "100.00" (DS6). */
+  discountPercent: string;
   accountId: string;
   accountCode: string;
   accountName: string;
@@ -228,6 +230,7 @@ type LineRow = LineItemRow & {
   description: string;
   quantity: string;
   unit_price: string;
+  discount_percent: string;
   account_id: string;
   account_code: string;
   account_name: string;
@@ -300,6 +303,7 @@ function toLine(row: LineRow): CreditNoteLine {
     description: row.description,
     quantity: row.quantity,
     unitPrice: row.unit_price,
+    discountPercent: toFixedString(dec(row.discount_percent ?? "0"), 2),
     accountId: row.account_id,
     accountCode: row.account_code,
     accountName: row.account_name,
@@ -326,6 +330,8 @@ type DraftDetails = {
     description: string;
     quantity: string;
     unitPrice: string;
+    /** Left out when there's none, so older requests hash the same (DS6). */
+    discountPercent?: string;
     accountCode: string;
     taxCode: string | null;
     tracking: TrackingTags;
@@ -362,6 +368,7 @@ type ResolvedDraft = DraftDetails & {
     description: string;
     quantity: string;
     unitPrice: string;
+    discountPercent: string;
     accountId: string;
     accountCode: string;
     taxCodeId: string | null;
@@ -401,6 +408,7 @@ function parseDraft(input: CreditNoteInput): DraftDetails {
     if (amountsMode !== "no_tax" && taxCode === null && !fillable) {
       throw new ValidationError(`${label} needs a tax code (use a zero-rated code for sales without GST).`);
     }
+    const discountPercent = parseDiscountPercent(line.discountPercent, label);
     return {
       description: fillable && isBlank(line.description) ? "" : requireString(line.description, `${label} description`, { maxLength: 500 }),
       quantity: parseDecimalInput(line.quantity, `${label} quantity`, { maxScale: LINE_INPUT_SCALE }),
@@ -410,6 +418,7 @@ function parseDraft(input: CreditNoteInput): DraftDetails {
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
       customFields: parseCustomInput(line.customFields, `${label}: `),
+      ...(discountPercent ? { discountPercent } : {}),
     };
   });
   return {
@@ -556,12 +565,14 @@ async function resolveDraft(
   const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
-    if (isZero(dec(line.lineAmount))) {
+    // Only a discounted line can come to 0.00 (DS4).
+    if (isZero(dec(line.lineAmount)) && !draft.lines[index].discountPercent) {
       throw new ValidationError(
         `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
+  if (isZero(dec(amounts.total))) throw new ValidationError(`This credit note comes to ${amounts.total} ${currencyCode} in all.`);
   // A foreign-currency credit note (MC7): as a foreign-currency invoice.
   let exchangeRate: string | null = null;
   let exchangeRateSource: string | null = null;
@@ -599,6 +610,7 @@ async function resolveDraft(
       description: line.description,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
+      discountPercent: line.discountPercent ?? "0.00",
       accountId: line.accountId,
       accountCode: line.accountCode,
       taxCodeId: line.taxCodeId,
@@ -620,6 +632,7 @@ type StoredLine = {
   description: string;
   quantity: string;
   unitPrice: string;
+  discountPercent?: string;
   accountId: string;
   taxCodeId: string | null;
   taxRate: string;
@@ -673,6 +686,7 @@ function linesState(lines: readonly StoredLine[]): string {
       line.description,
       plain(line.quantity),
       plain(line.unitPrice),
+      plain(line.discountPercent ?? "0"),
       line.accountId,
       line.taxCodeId,
       plain(line.taxRate),
@@ -705,6 +719,7 @@ function draftOf(creditNote: CreditNote): DraftDetails {
       description: line.description,
       quantity: toPlainString(dec(line.quantity)),
       unitPrice: toPlainString(dec(line.unitPrice)),
+      ...(isZero(dec(line.discountPercent)) ? {} : { discountPercent: line.discountPercent }),
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
@@ -739,14 +754,15 @@ async function insertLines(tx: OrgTx, creditNoteId: string, lines: ResolvedDraft
       line.itemId,
       line.unitId,
       line.baseQuantity,
+      line.discountPercent ?? "0",
     );
-    const base = index * 16;
+    const base = index * 17;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric, ${p(17)}::numeric)`;
   });
   await tx.query(
     `insert into sales_credit_note_lines (credit_note_id, line_order, description, quantity, unit_price, account_id,
-                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity)
+                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity, discount_percent)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -791,7 +807,7 @@ export async function getCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Prom
     throw new NotFoundError("Credit note not found.");
   }
   const lines = await tx.query<LineRow>(
-    `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
+    `select l.line_order, l.description, l.quantity, l.unit_price, l.discount_percent::text, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
             l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS},
             l.base_net_amount::text, l.base_tax_amount::text

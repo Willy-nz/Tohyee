@@ -20,6 +20,8 @@ function fromInvoice(invoice: Invoice): CreditNoteStart {
       description: line.description,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
+      // The invoice line's discount comes with it (DS6).
+      discountPercent: line.discountPercent,
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,

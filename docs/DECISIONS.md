@@ -4245,3 +4245,22 @@ testing) and #154's code signing (later, Jess).
      - Sales reps and managers see only their own (or their teams') figures
        (decision 491). Amounts are never added across currencies. Counts of
        deals open the deals behind them.
+501. **Discounts on sales lines** (DS1-DS6; Jess 10 Oct 2026: "add
+     discounts to invoices too", sales lines only, examples approved).
+     - Invoices, quotes, sales orders, repeating invoices and sales credit
+       notes have a "Disc %" on each line, 0 to 100 with up to 2 decimal
+       places. Bills, purchase orders, supplier credit notes and expense
+       claims don't.
+     - Line amount = quantity x unit price x (1 - discount), rounded once
+       (`src/lib/invoices/amounts.ts`, the one place line maths lives); GST
+       is worked out on that, per line, as before. Revenue is credited with
+       the discounted net; there's no separate discounts account.
+     - Only a discounted line can come to 0.00 (100% off); a document that
+       comes to 0.00 in all is refused, as before.
+     - Copying keeps it: quote to invoice, sales order to invoice, repeating
+       invoice to invoice, invoice to credit note.
+     - The editors, the document pages, printed and PDF documents show a
+       "Disc %" column when any line has one. The AI tools take
+       `discountPercent` on sales document lines.
+     - A line with no discount saves and hashes exactly as before, so
+       retries of older requests still match.

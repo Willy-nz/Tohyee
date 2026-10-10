@@ -40,7 +40,21 @@ export type InvoiceLineInput = {
   quantity: string;
   unitPrice: string;
   taxRate: string;
+  /** Percent off the line, 0 to 100 (DS1-DS6); sales lines only. Absent is none. */
+  discountPercent?: string;
 };
+
+const HUNDRED = dec("100");
+
+/**
+ * Quantity x unit price x (1 - discount%), rounded once to `scale` places,
+ * half away from zero (DS1-DS3): not the discounted unit price rounded first.
+ */
+export function discountedLineAmount(quantity: string, unitPrice: string, discountPercent: string | undefined, scale: number): Decimal {
+  const gross = mul(dec(quantity), dec(unitPrice));
+  if (!discountPercent || isZero(dec(discountPercent))) return roundHalfUp(gross, scale);
+  return mulDiv(gross, sub(HUNDRED, dec(discountPercent)), HUNDRED, scale);
+}
 
 export type InvoiceLineAmounts = {
   /** Quantity x unit price, as entered (includes GST in inclusive mode). */
@@ -63,8 +77,8 @@ const ONE = dec("1");
  * The single place invoice amounts are rounded (worked examples I1-I6 in
  * docs/ACCOUNTING-EXAMPLES.md):
  *
- * - line amount = quantity x unit price, rounded once to the currency's minor
- *   units, half away from zero;
+ * - line amount = quantity x unit price, less the line's discount (DS1-DS6),
+ *   rounded once to the currency's minor units, half away from zero;
  * - GST is worked out and rounded on each line, then added up. Exclusive:
  *   line amount x rate. Inclusive: line amount x rate / (1 + rate), with the
  *   net being the line amount less its GST. No tax: none.
@@ -77,7 +91,7 @@ export function calculateInvoice(mode: AmountsMode, lines: readonly InvoiceLineI
   let subtotal: Decimal = ZERO_DECIMAL;
   let taxTotal: Decimal = ZERO_DECIMAL;
   const results = lines.map((line) => {
-    const lineAmount = roundHalfUp(mul(dec(line.quantity), dec(line.unitPrice)), scale);
+    const lineAmount = discountedLineAmount(line.quantity, line.unitPrice, line.discountPercent, scale);
     const rate = dec(line.taxRate);
     let taxAmount: Decimal = ZERO_DECIMAL;
     if (mode !== "no_tax" && !isZero(rate)) {

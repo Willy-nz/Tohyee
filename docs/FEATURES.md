@@ -950,6 +950,11 @@ that something happened.
   cycle (average and median days), open deals by stage with how long
   they've been there, activity per person, quota attainment and campaign
   results. A sales rep sees their own; deal counts open the deals.
+- **Line discounts** (decision 501, DS1-DS6): a "Disc %" on invoice, quote,
+  sales order, repeating invoice and credit note lines, rounded once per
+  line with GST worked out on the discounted amount, shown on screen and on
+  printed and PDF documents, and kept when one document is made from
+  another.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never

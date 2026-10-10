@@ -77,6 +77,8 @@ export type InvoiceLine = LineItemFields & {
   description: string;
   quantity: string;
   unitPrice: string;
+  /** Percent off the line, "0.00" to "100.00" (DS1-DS6); always there on sales lines, never on bills. */
+  discountPercent?: string;
   accountId: string;
   accountCode: string;
   accountName: string;
@@ -255,6 +257,7 @@ type LineRow = LineItemRow & {
   description: string;
   quantity: string;
   unit_price: string;
+  discount_percent: string;
   account_id: string;
   account_code: string;
   account_name: string;
@@ -327,6 +330,7 @@ function toLine(row: LineRow): InvoiceLine {
     description: row.description,
     quantity: row.quantity,
     unitPrice: row.unit_price,
+    discountPercent: toFixedString(dec(row.discount_percent ?? "0"), 2),
     accountId: row.account_id,
     accountCode: row.account_code,
     accountName: row.account_name,
@@ -358,6 +362,8 @@ type DraftDetails = {
     description: string;
     quantity: string;
     unitPrice: string;
+    /** Percent off (DS1-DS6), left out when there's none so older requests hash the same. */
+    discountPercent?: string;
     accountCode: string;
     taxCode: string | null;
     tracking: TrackingTags;
@@ -395,6 +401,7 @@ type ResolvedDraft = DraftDetails & {
     description: string;
     quantity: string;
     unitPrice: string;
+    discountPercent: string;
     accountId: string;
     accountCode: string;
     taxCodeId: string | null;
@@ -447,6 +454,7 @@ export function parseSalesLines(
       throw new ValidationError(`${label} needs a tax code (use a zero-rated code for sales without GST).`);
     }
     const salesOrderLineId = options.salesOrderLinks ? optionalId(line.salesOrderLineId, `${label} sales order line`) : null;
+    const discountPercent = parseDiscountPercent(line.discountPercent, label);
     return {
       description: fillable && isBlank(line.description) ? "" : requireString(line.description, `${label} description`, { maxLength: 500 }),
       quantity: parseDecimalInput(line.quantity, `${label} quantity`, { maxScale: LINE_INPUT_SCALE }),
@@ -456,9 +464,24 @@ export function parseSalesLines(
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
       customFields: parseCustomInput(line.customFields, `${label}: `),
+      ...(discountPercent ? { discountPercent } : {}),
       ...(salesOrderLineId ? { salesOrderLineId } : {}),
     };
   });
+}
+
+/**
+ * A line's discount as sent (DS1-DS6): a percent from 0 to 100 with at most 2
+ * decimal places, as "10.00"; null when there's none (blank or 0).
+ */
+export function parseDiscountPercent(input: unknown, label: string): string | null {
+  if (input === undefined || input === null || (typeof input === "string" && input.trim() === "")) return null;
+  const text = typeof input === "number" ? String(input) : typeof input === "string" ? input.trim().replace(/%$/, "").trim() : "";
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(text) || Number(text) > 100) {
+    throw new ValidationError(`${label} discount must be a percent from 0 to 100 with at most 2 decimal places, like 10 or 12.5.`);
+  }
+  const value = toFixedString(dec(text), 2);
+  return value === "0.00" ? null : value;
 }
 
 /** Lines for an idempotency fingerprint, normalised the way invoices hash them. */
@@ -642,12 +665,14 @@ async function resolveDraft(
   const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
-    if (isZero(dec(line.lineAmount))) {
+    // Only a discounted line can come to 0.00 (DS4: 100% off).
+    if (isZero(dec(line.lineAmount)) && !draft.lines[index].discountPercent) {
       throw new ValidationError(
         `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
+  if (isZero(dec(amounts.total))) throw new ValidationError(`This comes to ${amounts.total} ${currencyCode} in all. A document needs something to charge.`);
   // A foreign-currency invoice (MC2, MC71): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
   let exchangeRateSource: string | null = null;
@@ -687,6 +712,7 @@ async function resolveDraft(
       description: line.description,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
+      discountPercent: line.discountPercent ?? "0.00",
       accountId: line.accountId,
       accountCode: line.accountCode,
       taxCodeId: line.taxCodeId,
@@ -709,6 +735,7 @@ type StoredLine = {
   description: string;
   quantity: string;
   unitPrice: string;
+  discountPercent?: string;
   accountId: string;
   taxCodeId: string | null;
   taxRate: string;
@@ -763,6 +790,7 @@ export function linesState(lines: readonly StoredLine[]): string {
       line.description,
       plain(line.quantity),
       plain(line.unitPrice),
+      plain(line.discountPercent ?? "0"),
       line.accountId,
       line.taxCodeId,
       plain(line.taxRate),
@@ -791,6 +819,7 @@ export function linesAsSent(lines: readonly InvoiceLine[]): SalesLineDraft[] {
     description: line.description,
     quantity: toPlainString(dec(line.quantity)),
     unitPrice: toPlainString(dec(line.unitPrice)),
+    ...(isZero(dec(line.discountPercent ?? "0")) ? {} : { discountPercent: line.discountPercent }),
     accountCode: line.accountCode,
     taxCode: line.taxCode,
     tracking: line.tracking,
@@ -812,6 +841,7 @@ function draftOf(invoice: Invoice): DraftDetails {
       description: line.description,
       quantity: toPlainString(dec(line.quantity)),
       unitPrice: toPlainString(dec(line.unitPrice)),
+      ...(isZero(dec(line.discountPercent ?? "0")) ? {} : { discountPercent: line.discountPercent }),
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
@@ -866,7 +896,7 @@ export async function insertSalesLines(
   const parentColumn = SALES_LINE_PARENT[table];
   // Only invoice lines name the sales order line they came from (SO3).
   const invoice = table === "sales_invoice_lines";
-  const width = invoice ? 17 : 16;
+  const width = invoice ? 18 : 17;
   const values: unknown[] = [];
   const tuples = lines.map((line, index) => {
     values.push(
@@ -886,15 +916,16 @@ export async function insertSalesLines(
       line.itemId,
       line.unitId,
       line.baseQuantity,
+      line.discountPercent ?? "0",
     );
     if (invoice) values.push(line.salesOrderLineId ?? null);
     const base = index * width;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric${invoice ? `, ${p(17)}` : ""})`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric, ${p(17)}::numeric${invoice ? `, ${p(18)}` : ""})`;
   });
   await tx.query(
     `insert into ${table} (${parentColumn}, line_order, description, quantity, unit_price, account_id,
-                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity${invoice ? ", sales_order_line_id" : ""})
+                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity, discount_percent${invoice ? ", sales_order_line_id" : ""})
      values ${tuples.join(", ")}`,
     values,
   );
@@ -944,7 +975,7 @@ export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<In
 /** A sales document's lines, in order. */
 export async function loadSalesLines(tx: OrgTx, table: SalesLineTable, parentId: string): Promise<InvoiceLine[]> {
   const lines = await tx.query<LineRow>(
-    `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
+    `select l.line_order, l.description, l.quantity, l.unit_price, l.discount_percent::text, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
             l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS},
             ${table === "sales_invoice_lines" ? "l.base_net_amount::text, l.base_tax_amount::text, l.sales_order_line_id" : "null as base_net_amount, null as base_tax_amount"}

@@ -20,7 +20,7 @@ import { requireOneOf } from "@/lib/validation";
  * name and billing address, the lines, GST and totals, and the dates. Worked
  * out from the stored document; nothing is stored or posted.
  */
-export type PrintedLine = Pick<InvoiceLine, "lineOrder" | "description" | "quantity" | "unitPrice" | "taxRate" | "lineAmount" | "taxAmount"> & {
+export type PrintedLine = Pick<InvoiceLine, "lineOrder" | "description" | "quantity" | "unitPrice" | "discountPercent" | "taxRate" | "lineAmount" | "taxAmount"> & {
   unitName: string | null;
 };
 
@@ -61,12 +61,13 @@ export type PrintedDocument = {
 
 const NO_DELIVERY = { deliveryDate: null, deliveryAddress: null, deliveryInstructions: null };
 
-function printedLines(lines: Array<Pick<InvoiceLine, "lineOrder" | "description" | "quantity" | "unitPrice" | "unitName" | "taxRate" | "lineAmount" | "taxAmount">>): PrintedLine[] {
+function printedLines(lines: Array<Pick<InvoiceLine, "lineOrder" | "description" | "quantity" | "unitPrice" | "discountPercent" | "unitName" | "taxRate" | "lineAmount" | "taxAmount">>): PrintedLine[] {
   return lines.map((line) => ({
     lineOrder: line.lineOrder,
     description: line.description,
     quantity: line.quantity,
     unitPrice: line.unitPrice,
+    discountPercent: line.discountPercent,
     unitName: line.unitName,
     taxRate: line.taxRate,
     lineAmount: line.lineAmount,

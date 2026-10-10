@@ -2,7 +2,7 @@
 
 import { Money } from "@/components/books";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
-import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
+import { discountText, formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Stat, ui } from "@/components/ui";
 import { formatQuantity } from "@/lib/format";
@@ -24,6 +24,8 @@ export function SalesLinesTable({
   const trackingSetup = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const hasTax = document.amountsMode !== "no_tax";
+  // The discount column only when a line has one (DS1-DS6).
+  const discounted = document.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   return (
     <>
       <div className={ui.tableWrap}>
@@ -33,6 +35,7 @@ export function SalesLinesTable({
               <th>Description</th>
               <th className={ui.num}>Quantity</th>
               <th className={ui.num}>Unit price</th>
+              {discounted ? <th className={ui.num}>Disc %</th> : null}
               <th>Account</th>
               {hasTax ? <th>Tax code</th> : null}
               {hasTax ? <th className={ui.num}>GST</th> : null}
@@ -56,6 +59,11 @@ export function SalesLinesTable({
                 <td data-label="Unit price" className={ui.num}>
                   {formatUnitPrice(line.unitPrice)}
                 </td>
+                {discounted ? (
+                  <td data-label="Disc %" className={ui.num}>
+                    {discountText(line.discountPercent)}
+                  </td>
+                ) : null}
                 <td data-label="Account">
                   {line.accountCode} · {line.accountName}
                   <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
