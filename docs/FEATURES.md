@@ -945,6 +945,11 @@ that something happened.
   person's page, and move from added to sent (emailed) to responded
   (replied). Each campaign's page shows leads and deals from it, won and
   open amounts per currency, and cost per lead and per won deal.
+- **CRM sales dashboard** (decision 500, #216 stage 3): CRM › Dashboard,
+  by month or quarter: lead conversion, win rate and won amounts, sales
+  cycle (average and median days), open deals by stage with how long
+  they've been there, activity per person, quota attainment and campaign
+  results. A sales rep sees their own; deal counts open the deals.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
