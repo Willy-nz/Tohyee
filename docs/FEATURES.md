@@ -884,10 +884,14 @@ that something happened.
   owner and currency (never added together), Salesforce's cumulative
   Closed, Commit, Best case and Open pipeline, the weighted pipeline, and
   each figure opens its opportunities; admins set **quotas** per owner per
-  month (base currency) and see attainment. Not built: forecast manager
-  adjustments, a forecast hierarchy (teams) and submitted forecast
-  snapshots, converting currencies in forecasts, and quotas by quarter or
-  in other currencies (questions for Jess under CRMS11).
+  month (base currency) and see attainment. **Team forecasts**
+  (decision 499): each sales team's figures added up with its quotas; a
+  team manager (or an admin) can adjust a member's Commit or Best case with
+  a reason, shown next to the deals' own figure, with every change kept;
+  and a person, a team's manager or an admin can submit a period's
+  forecast, kept as it was to compare with now. Not built: converting
+  currencies in forecasts (kept apart, decisions 324 and 499) and quotas by
+  quarter or in other currencies.
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only unless they allow sending, decision 496;
   through the organisation's own Google or Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
