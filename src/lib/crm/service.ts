@@ -215,7 +215,7 @@ async function crmCustomValues(
  * (CRT6), and a sales rep or manager only reaches the deals and tasks in their
  * scope (decision 491).
  */
-export type SaveOptions = { role?: Role; scope?: CrmScope };
+export type SaveOptions = { role?: Role; scope?: CrmScope; /** Set by deal products (decision 502): the amount is their total. */ fromLines?: boolean };
 
 /** SQL for "this lead is one the scope sees" (decision 492): its owner's, or an unowned one for a sales manager. */
 function leadSql(scope: CrmScope | undefined, column: string, params: unknown[]): string {
@@ -730,6 +730,11 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
   }
   const stage = await chooseStage(tx, input.stage, { key: current.stage, recordTypeId: current.recordTypeId }, recordType.id);
   const values = await opportunityValues(tx, input, current, stage, options.scope);
+  // With product lines the amount is their total (decision 502, DS7).
+  if (!options.fromLines && values.amount !== current.amount) {
+    const lines = (await tx.query<{ count: number }>("select count(*)::int as count from crm_opportunity_lines where opportunity_id = $1", [current.id])).rows[0].count;
+    if (lines > 0) throw new ValidationError("This deal's amount comes from its products. Change the products instead.");
+  }
   const customFields = await crmCustomValues(tx, "opportunity", input.customFields, current.customFields);
   const currentType = recordType.id === current.recordTypeId ? recordType : await getRecordType(tx, current.recordTypeId);
   await checkCrmLayout(

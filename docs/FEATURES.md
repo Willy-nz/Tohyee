@@ -955,6 +955,11 @@ that something happened.
   line with GST worked out on the discounted amount, shown on screen and on
   printed and PDF documents, and kept when one document is made from
   another.
+- **Deal products and quotes** (decision 502, DS7-DS9): a deal's product
+  lines (item, quantity, price, discount, excluding GST) set its amount;
+  Make quote turns them into a draft quote, New revision replaces the open
+  one, and accepting the quote wins the deal and links its invoice or
+  sales order.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never

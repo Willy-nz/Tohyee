@@ -259,7 +259,7 @@ export async function listSalesProcesses(tx: OrgTx): Promise<SalesProcess[]> {
   return result.rows.map((row) => ({ recordTypeId: row.id, recordTypeName: row.name, isActive: row.is_active, stageKeys: row.stage_keys }));
 }
 
-async function salesProcessOf(tx: OrgTx, recordTypeId: string): Promise<{ name: string; stageKeys: string[] | null }> {
+export async function salesProcessOf(tx: OrgTx, recordTypeId: string): Promise<{ name: string; stageKeys: string[] | null }> {
   const result = await tx.query<{ name: string; stage_keys: string[] | null }>("select name, stage_keys from crm_record_types where id = $1", [recordTypeId]);
   return { name: result.rows[0]?.name ?? "", stageKeys: result.rows[0]?.stage_keys ?? null };
 }
