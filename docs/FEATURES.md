@@ -925,6 +925,13 @@ that something happened.
   **Don't email**, and are then never sent one. A retry never sends twice;
   one that may have gone is shown as "check your Sent folder" and isn't
   retried.
+- **CRM sequences** (decision 497, #216 stage 2): admins set out steps
+  (email from a template, call, or task) on days from the start; a lead,
+  person or deal is added to one from its page, and each step becomes a
+  task on its day for the owner. Nothing is sent by itself. It stops when
+  they reply, a lead is unqualified or converted, a deal is won or lost, or
+  someone stops it; email steps are skipped for people marked "Don't
+  email".
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never

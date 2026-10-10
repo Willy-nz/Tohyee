@@ -23,6 +23,7 @@ import {
   useTeam,
 } from "@/components/crm";
 import { EmailOptOut, SendEmail } from "@/components/crm-send-email";
+import { SequencePanel } from "@/components/crm-sequences";
 import { RecordDetails } from "@/components/crm-record-details";
 import { useRecordTypes } from "@/components/crm-record-type-picker";
 import { FieldInput, useCustomFields, visibleFields } from "@/components/custom-fields";
@@ -936,6 +937,7 @@ export function PersonRecordPage({ organisationId, personId }: { organisationId:
               <>
                 <EmailOptOut organisationId={organisationId} target={{ personId: person.id }} optOut={person.emailOptOut} onChanged={data.reload} />
                 {person.email && !person.emailOptOut ? <SendEmail organisationId={organisationId} target={{ personId: person.id }} onSent={data.reload} /> : null}
+                <SequencePanel organisationId={organisationId} target={{ personId: person.id }} onChanged={data.reload} />
               </>
             )
           }
@@ -1098,6 +1100,7 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
               {opportunity.pointOfContactId && opportunity.stageType === "open" ? (
                 <SendEmail organisationId={organisationId} target={{ opportunityId: opportunity.id }} onSent={data.reload} />
               ) : null}
+              {opportunity.stageType === "open" ? <SequencePanel organisationId={organisationId} target={{ opportunityId: opportunity.id }} onChanged={data.reload} /> : null}
             </>
           }
         />

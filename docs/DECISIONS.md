@@ -4137,3 +4137,28 @@ testing) and #154's code signing (later, Jess).
        twice on a person's or company's timeline.
      - **Not checked against real services:** Gmail and Microsoft 365
        sending were tested against pretend providers only.
+
+497. **Sequences make tasks; nothing is sent by itself** (#216 stage 2;
+     Jess 10 Oct 2026: "make tasks; rep sends").
+     - **Steps:** admins and owners set out up to 30 steps on days counted
+       from the start (day 0 is the day someone's added): an email (a task
+       to send a chosen template), a call, or another task. Steps are in day
+       order. They can't change while anyone is part-way through; make a
+       new sequence instead. A sequence can be switched off (no one new can
+       be added; those in it carry on).
+     - **Adding someone:** a lead, a person or a deal, by anyone who can
+       change CRM records and can see it (decision 491). Only once at a time
+       per sequence. Tasks go to the lead's or deal's owner, else to whoever
+       added it.
+     - **Tasks:** each step becomes a task on its day (checked with the
+       follow-up rules every 15 minutes; day 0 straight away), due that
+       day, once each. Email steps are skipped for someone marked "Don't
+       email" (decision 496), and say so.
+     - **Stops by itself** when a lead is unqualified or converted, a deal
+       is won or lost, a person is archived, or they reply: an email from
+       their address synced from a member's mailbox after they were added,
+       or for a lead, an email from them into a lead mailbox (decision 493).
+       Replies only count if a mailbox that receives them is connected.
+       Anyone who can see it can stop it. Tasks already made stay.
+     - **Merging people** (decision 494) moves their sequences; if both are
+       in the same one, the merged-away person's is stopped.
