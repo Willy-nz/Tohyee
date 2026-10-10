@@ -4217,6 +4217,34 @@ testing) and #154's code signing (later, Jess).
        see their own, managers their team's and members', viewers and up
        all.
 
+500. **The standard sales dashboard and its definitions** (#216 stage 3;
+     Jess 10 Oct 2026: win rate by close, conversion of leads added, cycle
+     from deal added to won). CRM › Dashboard, by month or quarter of the
+     financial year (6 months or 4 quarters ending with today's by
+     default), worked out from the records each time:
+     - **Lead conversion:** of the leads added in a period, how many have
+       been converted so far; also by how they came in.
+     - **Closed on:** the day a deal moved into the Closed won or lost stage
+       it's in now, from its stage history, not its expected close date
+       (which Tohyee doesn't change when a deal is won).
+     - **Win rate:** won ÷ (won + lost) for deals closed in the period, with
+       the won amounts per currency.
+     - **Sales cycle:** days from the deal being added to its closed-on
+       day, for deals won in the period: average and median, to 1 place.
+     - **Stage ageing:** open deals today by stage: how many, their amounts
+       per currency, and the average and longest days since they got to
+       the stage they're in.
+     - **Activity:** calls, meetings and notes by who logged them, tasks by
+       who they're assigned to when done, and sales emails by who sent
+       them, per period. Ones Tohyee made itself (lead mailbox notes) don't
+       count.
+     - **Quota attainment:** the forecast's own figure (CRMS10), so the two
+       pages agree.
+     - **Campaigns:** leads added and deals won in the periods by their
+       source campaign (decision 498).
+     - Sales reps and managers see only their own (or their teams') figures
+       (decision 491). Amounts are never added across currencies. Counts of
+       deals open the deals behind them.
 501. **Discounts on sales lines** (DS1-DS6; Jess 10 Oct 2026: "add
      discounts to invoices too", sales lines only, examples approved).
      - Invoices, quotes, sales orders, repeating invoices and sales credit
