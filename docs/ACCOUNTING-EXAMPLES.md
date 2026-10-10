@@ -15771,3 +15771,197 @@ Question for Jess: which one next, and is it one Glimmers uses?
 Answered (8 Oct 2026, the suggestion): no new platform yet; first check the
 Shopify connection against Glimmers' real store, the one thing the audit
 found never checked.
+
+## Livestock (#221), stage 1: rules and first examples (examples not yet approved by Jess)
+
+Drafted 11 Oct 2026. Nothing here is built. These are the examples #221 asks
+for before any livestock code, with real 2025-26 IRD rates, for Jess to check,
+correct and approve.
+
+### What was checked, and what wasn't
+
+Checked on IRD's site on 11 Oct 2026:
+- [NAMV 2026](https://www.taxtechnical.ird.govt.nz/determinations/livestock/average-market-value/namv-2026)
+  (made 26 May 2026, for livestock on hand at the end of the 2025-26 income
+  year). Dairy cattle used below: rising one-year heifers **1,326.00**, rising
+  two-year heifers **2,598.00**, mixed-age cows **2,824.00**.
+- [NSC 2026](https://www.taxtechnical.ird.govt.nz/determinations/livestock/standard-costs/nsc-2026)
+  (signed 23 Feb 2026, 2025-26 income year). Dairy cattle: purchased bobby
+  calves **282.50**, rising 1 year **788.90**, rising 2 year **535.50**.
+- [NSC 2025](https://www.taxtechnical.ird.govt.nz/determinations/livestock/standard-costs/nsc-2025)
+  (2024-25): dairy rising 1 year **709.60**, rising 2 year **489.00**.
+- IRD's 2011 herd scheme issues paper, [chapter 2](https://taxpolicy.ird.govt.nz/publications/2011/2011-ip-herd-scheme-elections/chapter-2):
+  under the herd scheme, opening stock is revalued to this year's values and
+  that change is non-taxable; changes in numbers are taxable. Under NSC, both
+  are taxable.
+
+Not checked:
+- **IRD OS 25/02** (the operational statement #221 starts from) couldn't be
+  opened from here. Election rules, high-priced livestock, entering and
+  leaving the herd scheme, male breeding stock and associated persons are
+  all unchecked. Until they are, Tohyee refuses them (see "Not supported in
+  the first release").
+- The 2025 NAMV figures (only the PDF has them). The opening values below
+  are last year's workpaper figures, made up for the example.
+- How NSC groups dairy cattle. The NSC 2026 explanatory note says the
+  rising 1 year cost applies to each year's farm-bred stock, and the rising
+  2 year cost is added to opening young stock that moves into the mature
+  group by year end. Mature stock keep their historic costs, by FIFO or
+  averaging. LV4 reads that as: the mature group is everything rising two
+  and older. **Jess to confirm.**
+
+### The farm
+
+Kōwhai Dairies Ltd (made up), GST registered on the invoice basis, balance date
+**31 May**, so 1 Jun 2025 to 31 May 2026 is the 2025-26
+income year. Dairy cattle only. Proposed accounts (question 3):
+
+| Code | Name | Type |
+| --- | --- | --- |
+| 1500 | Livestock on hand | asset |
+| 4300 | Livestock sales | revenue |
+| 5200 | Livestock purchases | direct costs |
+| 5210 | Livestock: change in value | direct costs |
+| 7060 | Herd scheme revaluation (non-taxable) | other income (question 2) |
+
+The same year's movements are used in LV1, LV4 and LV6:
+- 80 heifer calves born and kept (rising one-year heifers at 31 May 2026).
+- 60 mixed-age cull cows sold for **66,000.00** plus GST.
+- 10 mixed-age cows bought for **24,000.00** plus GST.
+- 5 mixed-age cows died.
+- On 31 May 2026, the opening rising one-years become rising two-years, and
+  the opening rising two-years become mixed-age cows.
+
+### Head count (stage 2: no postings)
+
+- **LV1** Head count reconciliation, 2025-26:
+
+  | Class | Opening | Births | Bought | Sold | Died | Ageing | Closing |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Mixed-age cows | 300 | | 10 | (60) | (5) | +70 | **315** |
+  | Rising two-year heifers | 70 | | | | | -70 +75 | **75** |
+  | Rising one-year heifers | 75 | 80 | | | | -75 | **80** |
+  | **Total** | **445** | **80** | **10** | **(60)** | **(5)** | **0** | **470** |
+
+  Ageing nets to 0 across the herd. Ageing is run once a year, previewed
+  first; running it again for the same year is refused.
+- **LV2** A count that doesn't add up isn't fixed silently. If the farmer
+  counts 312 mixed-age cows at 31 May against 315 expected, Tohyee shows
+  "3 not explained" and won't value the year until a movement explains them
+  (for example, 3 more deaths, or "missing").
+- **LV3** Stock on the farm that belongs to someone else (50 grazing
+  heifers owned by a neighbour) are recorded as "held for others". They're
+  shown on the farm's head count but not counted in LV1 or valued. Kōwhai's
+  own heifers grazing off the farm are counted and valued.
+
+### Herd scheme
+
+- **LV4** Herd scheme year end, 2025-26. Last year's workpaper (made up):
+
+  | Class | Head | Last year's value per head | Opening |
+  | --- | ---: | ---: | ---: |
+  | Mixed-age cows | 300 | 2,500.00 | 750,000.00 |
+  | Rising two-year heifers | 70 | 2,200.00 | 154,000.00 |
+  | Rising one-year heifers | 75 | 1,150.00 | 86,250.00 |
+  | **Total** | **445** | | **990,250.00** |
+
+  Opening revalued at 2026 NAMV (opening head, opening classes): 300 x
+  2,824.00 + 70 x 2,598.00 + 75 x 1,326.00 = 847,200.00 + 181,860.00 +
+  99,450.00 = **1,128,510.00**. Herd scheme revaluation (non-taxable):
+  1,128,510.00 - 990,250.00 = **138,260.00**.
+
+  Closing at 2026 NAMV: 315 x 2,824.00 + 75 x 2,598.00 + 80 x 1,326.00 =
+  889,560.00 + 194,850.00 + 106,080.00 = **1,190,490.00**.
+
+  Livestock trading statement:
+
+  | | |
+  | ---: | ---: |
+  | Sales | 66,000.00 |
+  | less purchases | (24,000.00) |
+  | plus closing value | 1,190,490.00 |
+  | less opening value, revalued | (1,128,510.00) |
+  | **Taxable livestock profit** | **103,980.00** |
+  | Herd scheme revaluation (non-taxable, shown separately) | 138,260.00 |
+
+  Value bridge: last year's closing **990,250.00** (exactly as reported) +
+  revaluation 138,260.00 = opening revalued 1,128,510.00 + change in value
+  61,980.00 = closing **1,190,490.00**.
+
+  Year-end journal, approved by an accountant (dated 31 May 2026): Dr 1500
+  **200,240.00**, Cr 7060 **138,260.00**, Cr 5210 **61,980.00**. No GST.
+- **LV5** Rates only. 100 mixed-age cows, nothing bought, sold, born or
+  died. Last year's value 2,500.00; this year's NAMV 2,824.00. Revaluation
+  **32,400.00** (non-taxable), taxable livestock profit **0.00**. Journal:
+  Dr 1500 32,400.00, Cr 7060 32,400.00.
+
+### National standard cost (NSC)
+
+- **LV6** The same farm and year under NSC, averaging the mature group
+  (question 5). Last year's workpaper (made up): rising one-year heifers 75
+  at 709.60 (2025 NSC) = **53,220.00**; mature group (rising two and older)
+  370 head, **440,300.00** (1,190.00 average). Opening **493,520.00**.
+
+  Closing:
+  - Rising one-year heifers born this year: 80 x 788.90 = **63,112.00**.
+  - Mature group:
+    - Survivors: 370 - 60 sold - 5 died = 305 x 1,190.00 = 362,950.00.
+    - Intake from last year's rising one-years: 75 x (709.60 + 535.50) =
+      75 x 1,245.10 = 93,382.50.
+    - Bought: 10 cows at cost, 24,000.00.
+    - Total 390 head, **480,332.50** (average 1,231.62, carried to next
+      year).
+  - Closing **543,444.50**.
+
+  Taxable livestock profit: 66,000.00 - 24,000.00 + 543,444.50 - 493,520.00
+  = **91,924.50**. There's no non-taxable part under NSC.
+
+  Journal: Dr 1500 **49,924.50**, Cr 5210 **49,924.50**.
+
+### Sales and purchases come from documents, once
+
+- **LV7** The 60 cull cows are sold through an agent. The account sale says:
+  gross 66,000.00 + GST 9,900.00 = 75,900.00, less commission 3,300.00 +
+  GST 495.00, less freight 600.00 + GST 90.00, net **71,415.00** paid in.
+  It's entered once as an ordinary sales document with its deductions: Cr
+  4300 66,000.00, Cr 2100 9,900.00; Dr 6230 Stock agent commission 3,300.00,
+  Dr 6060 600.00, Dr 2100 585.00; Dr bank 71,415.00. Its line for the 60
+  cows is linked to the "sold 60 mixed-age cows" movement. Importing the
+  same account sale again, or making the movement again, is refused.
+  Question 4 asks how account sales are entered.
+- **LV8** Deaths, births and ageing post nothing at the time. Their effect
+  is in the year-end change in value.
+- **LV9** Re-running and changes. Approving LV4 twice posts once. If a
+  movement in the year changes after the valuation is approved, the
+  valuation is marked out of date. A replacement is posted as a reversing
+  journal and a new one, never by editing. A locked period refuses it.
+
+### Not supported in the first release (refused with a reason)
+
+High-priced livestock; self-assessed cost; market or replacement value;
+mixed methods within one class; male breeding stock rules; associated-person
+transfers; starting or leaving a scheme; Chatham Islands; species other than
+the first ones chosen (question 1); monthly management valuations; budgets
+and forecasts (#221 stage 5).
+
+### Questions for Jess
+
+1. **First release:** dairy cattle only (herd scheme and NSC), or dairy,
+   beef and sheep together?
+2. **Herd scheme revaluation (LV4):** where should the non-taxable
+   revaluation go? Either:
+   - **(a)** profit and loss, as its own non-taxable line below trading
+     (the draft), or
+   - **(b)** an equity reserve. Does it depend on the reporting basis
+     (special-purpose tax-basis statements vs. GAAP)?
+3. **Accounts:** are the proposed codes and names right? Should livestock be
+   a current or non-current asset?
+4. **Agent account sales (LV7):** one sales document with deductions (the
+   draft), or an invoice to the agent plus a bill from them?
+5. **NSC mature group:** averaging or FIFO, or let each farm choose? Is my
+   reading of the grouping (mature = rising two and older) right?
+6. **Opening position:** a new farm in Tohyee brings last year's closing by
+   class and value from its previous workpaper (LV4 and LV6 start this
+   way). Is that enough, or do we need the NSC cost layers too?
+7. **Elections:** record each farm's method by class, with the year
+   elected and the evidence (a file), without Tohyee filing anything. Agree?
