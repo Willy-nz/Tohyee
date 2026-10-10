@@ -269,6 +269,7 @@ export const CRM_MENUS: Menu[] = [
   { label: "People", href: "/crm/people", area: ["/crm/people"] },
   { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline", "/crm/opportunities"] },
   { label: "Forecasts", href: "/crm/forecasts", area: ["/crm/forecasts"] },
+  { label: "Dashboard", href: "/crm/dashboard", area: ["/crm/dashboard"] },
   { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
   { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
   { label: "Teams", href: "/crm/teams", area: ["/crm/teams"] },
