@@ -240,6 +240,15 @@ export async function register() {
     }
   }
 
+  if (process.env.TOHYEE_FOLLOW_UP_SCHEDULER !== "off") {
+    try {
+      const { startFollowUpScheduler } = await import("@/lib/crm/follow-ups");
+      startFollowUpScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Follow-up rules couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
   if (process.env.TOHYEE_BILL_INBOX_SCHEDULER !== "off") {
     try {
       const { startBillInboxScheduler } = await import("@/lib/bills/inbox-mailbox");

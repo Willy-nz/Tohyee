@@ -4072,3 +4072,34 @@ testing) and #154's code signing (later, Jess).
      - **Who:** anyone who can change CRM records can mark pairs; merging
        archives a record, so it needs the bookkeeper role or higher (not
        sales reps or managers).
+
+495. **Follow-up rules make tasks, once each** (#216 stage 2; Jess 10 Oct
+     2026: all four rules, reminders in Tohyee only).
+     - **Rules:** admins and owners add them on CRM › Follow-ups. A rule's
+       kind is fixed once made; its name, stage, days and task title can
+       change, and it can be switched off.
+       - *A new lead arrives:* a task for the lead's owner, due in N days
+         (0 = the same day). A lead nobody owns gets one task for each sales
+         team manager, or one with nobody assigned when there are no teams.
+       - *A deal reaches a stage* (an open one): a task for the deal's
+         owner, due N days after it got there. Reaching it again after
+         leaving makes a new task; other changes while it stays there don't.
+       - *A deal goes quiet:* an open deal with no call, meeting or note, no
+         task done and no change by a person for N days (at least 1) gets a
+         reminder for its owner, due that day. Once per quiet spell: the
+         next one only after something happens and it goes quiet again.
+       - *A task is overdue* by N days (at least 1): a task for the
+         assignee's sales team manager, once per due date. Tasks of people
+         who aren't in a team, or who manage it, are left alone.
+     - **Only from when the rule was made:** a lead or a stage change from
+       before the rule is ignored, so adding a rule doesn't flood people
+       with tasks. Quiet deals and overdue tasks are judged as they stand.
+     - **Once each:** every run is kept with a key for its rule and event
+       (unique), and the task is made in the same transaction; checks for
+       one organisation take turns. A check that runs twice, or two at
+       once, never makes a second task. A deal with no owner is recorded as
+       skipped, with the reason, instead of making a task.
+     - **When:** every 15 minutes while the server runs
+       (`TOHYEE_FOLLOW_UP_SCHEDULER=off` turns it off), or Run now. Dates
+       are in the business time zone. Nothing is emailed: tasks show on
+       the person's task list and CRM home.
