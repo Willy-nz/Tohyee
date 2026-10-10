@@ -19,6 +19,6 @@ export const GET = route(async (request) => {
 /** Adds a form: `name`, optional `thankYouUrl`. Admins. */
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const form = await withCrm(request, body.organisationId, "admin", (tx) => createLeadForm(tx, { name: body.name, thankYouUrl: body.thankYouUrl }));
+  const form = await withCrm(request, body.organisationId, "admin", (tx) => createLeadForm(tx, { name: body.name, thankYouUrl: body.thankYouUrl, campaignId: body.campaignId }));
   return json({ form }, { status: 201 });
 });

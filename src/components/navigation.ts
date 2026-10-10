@@ -264,6 +264,7 @@ export const NEW_ACTIONS: MenuGroup[] = [
 export const CRM_MENUS: Menu[] = [
   { label: "Home", href: "/crm", area: ["/crm"] },
   { label: "Leads", href: "/crm/leads", area: ["/crm/leads"] },
+  { label: "Campaigns", href: "/crm/campaigns", area: ["/crm/campaigns"] },
   { label: "Companies", href: "/crm/companies", area: ["/crm/companies"] },
   { label: "People", href: "/crm/people", area: ["/crm/people"] },
   { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline", "/crm/opportunities"] },

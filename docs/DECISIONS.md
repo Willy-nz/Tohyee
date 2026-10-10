@@ -4162,3 +4162,35 @@ testing) and #154's code signing (later, Jess).
        Anyone who can see it can stop it. Tasks already made stay.
      - **Merging people** (decision 494) moves their sequences; if both are
        in the same one, the merged-away person's is stopped.
+
+498. **Campaigns: one source each, costs for reports only** (#216 stage 2;
+     Jess 10 Oct 2026: one source campaign; budget and cost; members added
+     by hand, in bulk, by a form or mailbox, or by an import; added, sent,
+     responded).
+     - **Campaigns:** admins and owners add them (name, kind, planned /
+       active / finished, dates, budget, actual cost, description). Anyone
+       in the CRM sees them.
+     - **Source:** each lead and each deal has at most one source campaign,
+       set by hand, by the web form or lead mailbox it came in through, or
+       by choosing one when importing. A deal made from a lead keeps the
+       lead's. Changing a deal's source moves it; it's never in two.
+     - **Members:** leads and people, added from the Leads list (several at
+       once), a lead's or person's page, or automatically with the source.
+       "Added", then "sent" once a sales email (decision 496) went to them
+       after they were added, and "responded" once they reply (a synced
+       email from their address, or for a lead an email into a lead
+       mailbox), or when they came in through the campaign's form or
+       mailbox. Anyone can set it by hand. A lead's reply is only noticed
+       through a lead mailbox, because mail sync keeps only emails with
+       people and companies (MAIL3). Merging two people in the same
+       campaign keeps one membership.
+     - **Costs:** budget and actual cost are typed in, in the base
+       currency, for the report: cost per lead (cost ÷ leads it was the
+       source of) and per won deal (cost ÷ won deals). When no actual cost
+       is entered, the budget is used and the report says so. Nothing is
+       posted to the books, so there's no accounting example.
+     - **Report:** members by status; leads it was the source of (open,
+       converted, unqualified); deals (open, won, lost) with won and open
+       amounts per currency, never added across currencies (as forecasts,
+       CRMS11). A sales rep or manager sees only their own leads and deals
+       counted (decision 491).

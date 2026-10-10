@@ -58,6 +58,8 @@ type LeadRow = {
   converted_person_id: string | null;
   converted_opportunity_id: string | null;
   email_opt_out: boolean;
+  source_campaign_id: string | null;
+  source_campaign_name: string | null;
   created_by_email: string | null;
   created_at: string;
   updated_at: string;
@@ -65,7 +67,8 @@ type LeadRow = {
 
 const LEAD_COLUMNS = `l.id::text, l.first_name, l.last_name, l.company_name, l.email, l.phone, l.job_title, l.description, l.source,
   l.source_detail, l.status, l.unqualified_reason, l.needs_review, l.owner_user_id, l.converted_at,
-  l.converted_contact_id::text, l.converted_person_id::text, l.converted_opportunity_id::text, l.email_opt_out, l.created_by_email, l.created_at, l.updated_at`;
+  l.converted_contact_id::text, l.converted_person_id::text, l.converted_opportunity_id::text, l.email_opt_out, l.source_campaign_id::text,
+  (select c.name from crm_campaigns c where c.id = l.source_campaign_id) as source_campaign_name, l.created_by_email, l.created_at, l.updated_at`;
 
 function toLead(row: LeadRow): Lead {
   const person = [row.first_name, row.last_name].filter(Boolean).join(" ");
@@ -90,6 +93,8 @@ function toLead(row: LeadRow): Lead {
     convertedPersonId: row.converted_person_id,
     convertedOpportunityId: row.converted_opportunity_id,
     emailOptOut: row.email_opt_out,
+    sourceCampaignId: row.source_campaign_id,
+    sourceCampaignName: row.source_campaign_name,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -186,6 +191,30 @@ async function leadValues(tx: OrgTx, input: LeadInput, current: Lead | null, sco
   return values;
 }
 
+/**
+ * Makes a campaign a lead's source (if it has none yet) and the lead one of
+ * its members (decision 498). `responded` for a lead that came in from the
+ * campaign's web form or mailbox.
+ */
+export async function linkLeadToCampaign(tx: OrgTx, leadId: string, campaignId: string, status: "added" | "responded"): Promise<void> {
+  await tx.query("update crm_leads set source_campaign_id = coalesce(source_campaign_id, $2), updated_at = now() where id = $1", [leadId, campaignId]);
+  await tx.query(
+    `insert into crm_campaign_members (campaign_id, lead_id, status, responded_at, added_by_email)
+     values ($1, $2, $3, case when $3 = 'responded' then now() end, $4)
+     on conflict (campaign_id, lead_id) where lead_id is not null do nothing`,
+    [campaignId, leadId, status, tx.actor.email || null],
+  );
+}
+
+/** A campaign id from a request, checked to exist (decision 498). */
+export async function optionalCampaign(tx: OrgTx, input: unknown): Promise<string | null> {
+  const id = optionalId(input === "" ? null : input, "campaignId");
+  if (!id) return null;
+  const found = await tx.query("select 1 from crm_campaigns where id = $1", [id]);
+  if ((found.rowCount ?? 0) === 0) throw new NotFoundError("That campaign wasn't found.");
+  return id;
+}
+
 async function insertLead(
   tx: OrgTx,
   values: Awaited<ReturnType<typeof leadValues>>,
@@ -225,12 +254,14 @@ async function insertLead(
 export async function createIntakeLead(
   tx: OrgTx,
   input: LeadInput,
-  command: { source: "web_form" | "email"; commandSource: string; idempotencyKey: string },
+  command: { source: "web_form" | "email"; commandSource: string; idempotencyKey: string; campaignId?: string | null },
 ): Promise<Lead | null> {
   const earlier = await tx.query("select 1 from crm_leads where command_source = $1 and idempotency_key = $2", [command.commandSource, command.idempotencyKey]);
   if ((earlier.rowCount ?? 0) > 0) return null;
   const values = await leadValues(tx, { ...input, ownerUserId: null }, null, undefined);
   const id = await insertLead(tx, values, { source: command.source, commandSource: command.commandSource, idempotencyKey: command.idempotencyKey, needsReview: true });
+  // From a form or mailbox tied to a campaign: they answered it (decision 498).
+  if (command.campaignId) await linkLeadToCampaign(tx, id, command.campaignId, "responded");
   return getLead(tx, id);
 }
 
@@ -373,6 +404,9 @@ export async function convertLead(
         { scope },
       )
     ).id;
+    // The deal keeps the lead's source campaign, so what it earns is credited once (decision 498).
+    const source = (await tx.query<{ source_campaign_id: string | null }>("select source_campaign_id::text from crm_leads where id = $1", [lead.id])).rows[0]?.source_campaign_id;
+    if (source) await tx.query("update crm_opportunities set source_campaign_id = $2 where id = $1", [opportunityId, source]);
   }
 
   // Its history goes with it.
@@ -447,10 +481,11 @@ function readRows(fileName: string, fileBase64: unknown): string[][] {
  */
 export async function importLeads(
   tx: OrgTx,
-  input: { fileName?: unknown; fileBase64?: unknown; idempotencyKey?: unknown; source?: unknown },
+  input: { fileName?: unknown; fileBase64?: unknown; idempotencyKey?: unknown; source?: unknown; campaignId?: unknown },
   scope?: CrmScope,
 ): Promise<LeadImportResult> {
   await requireCrm(tx);
+  const campaignId = await optionalCampaign(tx, input.campaignId);
   const commandSource = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   if (idempotencyKey.length > 100) throw new ValidationError("idempotencyKey must be at most 100 characters for an import.");
@@ -466,7 +501,7 @@ export async function importLeads(
   if (columns.firstName < 0 && columns.lastName < 0 && fullName < 0 && columns.companyName < 0 && columns.email < 0) {
     throw new ValidationError("The first row must be headings, with at least one of Name, First name, Last name, Company or Email.");
   }
-  const hash = requestHash("crm_lead_import", { fileName, rows });
+  const hash = requestHash("crm_lead_import", { fileName, rows, ...(campaignId ? { campaignId } : {}) });
   const earlier = await tx.query<{ details: { hash: string } }>(
     "select details from audit_events where event_type = 'crm.leads_imported' and entity_type = 'crm_lead_import' and entity_id = $1",
     [`${commandSource}:${idempotencyKey}`],
@@ -513,6 +548,7 @@ export async function importLeads(
     try {
       const values = await leadValues(tx, { ...input, ownerUserId: tx.actor.userId || null }, null, scope);
       const id = await insertLead(tx, values, { source: "import", commandSource, idempotencyKey: rowKey, needsReview: false });
+      if (campaignId) await linkLeadToCampaign(tx, id, campaignId, "added");
       await tx.query("release savepoint lead_import_row");
       result.created += 1;
       if (result.leads.length < 50) result.leads.push(await getLead(tx, id, scope));

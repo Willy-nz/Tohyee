@@ -932,6 +932,15 @@ that something happened.
   they reply, a lead is unqualified or converted, a deal is won or lost, or
   someone stops it; email steps are skipped for people marked "Don't
   email".
+- **CRM campaigns** (decision 498, #216 stage 2): CRM › Campaigns, for
+  events, adverts, emails and the like, with dates, a budget and an actual
+  cost (for reports only). Each lead and deal has one source campaign
+  (set by hand, by a web form or lead mailbox tied to the campaign, or on
+  import; a deal from a lead keeps it), so won revenue is counted once.
+  Members are added from the Leads list in bulk or from a lead's or
+  person's page, and move from added to sent (emailed) to responded
+  (replied). Each campaign's page shows leads and deals from it, won and
+  open amounts per currency, and cost per lead and per won deal.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never

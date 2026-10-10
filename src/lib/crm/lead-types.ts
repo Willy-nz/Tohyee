@@ -33,6 +33,9 @@ export type Lead = {
   convertedOpportunityId: string | null;
   /** Asked not to be emailed (decision 496). */
   emailOptOut: boolean;
+  /** The campaign it came from (decision 498): at most one, so revenue is counted once. */
+  sourceCampaignId: string | null;
+  sourceCampaignName: string | null;
   createdByEmail: string | null;
   createdAt: string;
   updatedAt: string;

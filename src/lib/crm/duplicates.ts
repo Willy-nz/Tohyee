@@ -45,6 +45,7 @@ const PERSON_MOVABLE = new Set([
   "crm_people.merged_into_person_id",
   "crm_sent_emails.person_id",
   "crm_sequence_enrolments.person_id",
+  "crm_campaign_members.person_id",
 ]);
 
 export type DuplicateRecord = "company" | "person";
@@ -362,6 +363,12 @@ export async function mergePeople(tx: OrgTx, input: { keepId?: unknown; mergeId?
   if (keep.contact_id !== merge.contact_id) throw new ConflictError("Those people are at different companies, so they can't be merged. Mark them as not duplicates, or move one first.");
   const outside = await outsideReferences(tx, "crm_people", mergeId, PERSON_MOVABLE);
   if (outside.length > 0) throw new ConflictError("That person is used outside the CRM, so they can't be merged away. Keep them instead.");
+  // Both in the same campaign: the kept person's membership stays (decision 498).
+  await tx.query(
+    `delete from crm_campaign_members m
+      where m.person_id = $2 and exists (select 1 from crm_campaign_members k where k.person_id = $1 and k.campaign_id = m.campaign_id)`,
+    [keepId, mergeId],
+  );
   // Both in the same sequence: the kept person's carries on (decision 497).
   await tx.query(
     `update crm_sequence_enrolments m set status = 'stopped', stop_reason = 'Merged into someone already in this sequence.', ended_at = now()
@@ -378,6 +385,7 @@ export async function mergePeople(tx: OrgTx, input: { keepId?: unknown; mergeId?
     ["crm_people", "merged_into_person_id"],
     ["crm_sent_emails", "person_id"],
     ["crm_sequence_enrolments", "person_id"],
+    ["crm_campaign_members", "person_id"],
   ];
   const moved: Record<string, number> = {};
   for (const [table, column] of moves) {

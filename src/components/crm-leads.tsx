@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
+import { CampaignPanel, CampaignSelect } from "@/components/crm-campaigns";
 import { EmailOptOut, SendEmail } from "@/components/crm-send-email";
 import { SequencePanel } from "@/components/crm-sequences";
 import { SimilarRecords } from "@/components/crm-similar";
@@ -91,6 +92,7 @@ function ImportLeads({ organisationId, onDone }: { organisationId: string; onDon
   const [file, setFile] = useState<File | null>(null);
   const [key] = useState(() => newIdempotencyKey());
   const [result, setResult] = useState<LeadImportResult | null>(null);
+  const [campaignId, setCampaignId] = useState("");
   const { busy, error, run } = useBusy();
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -100,6 +102,7 @@ function ImportLeads({ organisationId, onDone }: { organisationId: string; onDon
         becomes a lead you own. Rows whose email is already an open lead are skipped.
       </p>
       <input type="file" accept=".csv,.txt,.xlsx" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+      <CampaignSelect organisationId={organisationId} label="From campaign (optional)" value={campaignId} onChange={setCampaignId} disabled={busy || result !== null} />
       <span className={ui.rowButtons}>
         <Button
           disabled={!file || busy}
@@ -108,7 +111,7 @@ function ImportLeads({ organisationId, onDone }: { organisationId: string; onDon
               if (!file) return;
               const imported = await api<LeadImportResult>("/api/crm/leads/import", {
                 method: "POST",
-                body: { organisationId, source: "ui", idempotencyKey: key, fileName: file.name, fileBase64: await readFileAsBase64(file) },
+                body: { organisationId, source: "ui", idempotencyKey: key, fileName: file.name, fileBase64: await readFileAsBase64(file), campaignId: campaignId || null },
               });
               setResult(imported);
             })
@@ -154,6 +157,10 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("open");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<"lead" | "import" | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [campaignId, setCampaignId] = useState("");
+  const [added, setAdded] = useState<string | null>(null);
+  const bulk = useBusy();
   const leads = useApiData<{ leads: Lead[] }>("/api/crm/leads", {
     organisationId,
     status: filter === "review" ? "open" : filter,
@@ -212,11 +219,42 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
           </Field>
         </div>
         {leads.data && leads.data.leads.length === 0 ? <Empty>No leads here.</Empty> : null}
+        {bulk.error ? <Notice tone="error">{bulk.error}</Notice> : null}
+        {added ? <Notice tone="success">{added}</Notice> : null}
+        {canCrm("write") && picked.length > 0 ? (
+          <span className={ui.rowButtons}>
+            <CampaignSelect organisationId={organisationId} label={`Add ${picked.length} to campaign`} blank="Choose…" value={campaignId} onChange={setCampaignId} disabled={bulk.busy} />
+            <Button
+              size="small"
+              disabled={bulk.busy || !campaignId}
+              onClick={() =>
+                void bulk.run(async () => {
+                  const result = await api<{ added: number; alreadyIn: number }>(`/api/crm/campaigns/${campaignId}/members`, { method: "POST", body: { organisationId, leadIds: picked } });
+                  setAdded(`Added ${result.added}.${result.alreadyIn ? ` ${result.alreadyIn} already in it.` : ""}`);
+                  setPicked([]);
+                  setCampaignId("");
+                })
+              }
+            >
+              Add
+            </Button>
+          </span>
+        ) : null}
         {leads.data && leads.data.leads.length > 0 ? (
           <div className={ui.tableWrap}>
             <table className={ui.table}>
               <thead>
                 <tr>
+                  {canCrm("write") ? (
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label="Choose all"
+                        checked={picked.length > 0 && picked.length === leads.data.leads.length}
+                        onChange={(event) => setPicked(event.target.checked ? leads.data!.leads.map((lead) => lead.id) : [])}
+                      />
+                    </th>
+                  ) : null}
                   <th>Lead</th>
                   <th>Company</th>
                   <th>Email</th>
@@ -229,6 +267,16 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
               <tbody>
                 {leads.data.leads.map((lead) => (
                   <tr key={lead.id}>
+                    {canCrm("write") ? (
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Choose ${lead.name}`}
+                          checked={picked.includes(lead.id)}
+                          onChange={(event) => setPicked((now) => (event.target.checked ? [...now, lead.id] : now.filter((id) => id !== lead.id)))}
+                        />
+                      </td>
+                    ) : null}
                     <td>
                       <Link href={`/crm/leads/${lead.id}`}>{lead.name}</Link> {lead.needsReview ? <Badge>To review</Badge> : null}
                     </td>
@@ -369,6 +417,7 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
             <EmailOptOut organisationId={organisationId} target={{ leadId: lead.id }} optOut={lead.emailOptOut} onChanged={data.reload} />
             {lead.email && !lead.emailOptOut ? <SendEmail organisationId={organisationId} target={{ leadId: lead.id }} onSent={data.reload} /> : null}
             <SequencePanel organisationId={organisationId} target={{ leadId: lead.id }} onChanged={data.reload} />
+            <CampaignPanel organisationId={organisationId} target={{ leadId: lead.id }} source={{ id: lead.sourceCampaignId, editable: true }} onChanged={data.reload} />
           </div>
         ) : null}
         {converting ? (
