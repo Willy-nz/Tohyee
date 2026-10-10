@@ -8,7 +8,7 @@ export const PATCH = route<Context>(async (request, context) => {
   const { formId } = await context.params;
   const body = await readJson(request);
   const form = await withCrm(request, body.organisationId, "admin", (tx) =>
-    updateLeadForm(tx, formId, { name: body.name, thankYouUrl: body.thankYouUrl, isActive: body.isActive }),
+    updateLeadForm(tx, formId, { name: body.name, thankYouUrl: body.thankYouUrl, isActive: body.isActive, campaignId: body.campaignId }),
   );
   return json({ form });
 });

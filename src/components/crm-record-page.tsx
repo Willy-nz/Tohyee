@@ -22,6 +22,7 @@ import {
   useStages,
   useTeam,
 } from "@/components/crm";
+import { CampaignPanel } from "@/components/crm-campaigns";
 import { EmailOptOut, SendEmail } from "@/components/crm-send-email";
 import { SequencePanel } from "@/components/crm-sequences";
 import { RecordDetails } from "@/components/crm-record-details";
@@ -938,6 +939,7 @@ export function PersonRecordPage({ organisationId, personId }: { organisationId:
                 <EmailOptOut organisationId={organisationId} target={{ personId: person.id }} optOut={person.emailOptOut} onChanged={data.reload} />
                 {person.email && !person.emailOptOut ? <SendEmail organisationId={organisationId} target={{ personId: person.id }} onSent={data.reload} /> : null}
                 <SequencePanel organisationId={organisationId} target={{ personId: person.id }} onChanged={data.reload} />
+                <CampaignPanel organisationId={organisationId} target={{ personId: person.id }} />
               </>
             )
           }
@@ -1101,6 +1103,7 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
                 <SendEmail organisationId={organisationId} target={{ opportunityId: opportunity.id }} onSent={data.reload} />
               ) : null}
               {opportunity.stageType === "open" ? <SequencePanel organisationId={organisationId} target={{ opportunityId: opportunity.id }} onChanged={data.reload} /> : null}
+              <CampaignPanel organisationId={organisationId} target={{ opportunityId: opportunity.id }} source={{ id: opportunity.sourceCampaignId, editable: true }} onChanged={data.reload} />
             </>
           }
         />

@@ -3,7 +3,7 @@ import { RequestLimiter } from "@/lib/ai/limits";
 import { assertPublicMailHost } from "@/lib/analytics/mail-host";
 import { imapReportMessages, reportMessages } from "@/lib/analytics/report-email-providers";
 import { writeAuditEvent } from "@/lib/audit";
-import { createIntakeLead } from "@/lib/crm/leads";
+import { createIntakeLead, optionalCampaign } from "@/lib/crm/leads";
 import { reportMailboxToken } from "@/lib/crm/mail/service";
 import { crmEnabled, requireCrm } from "@/lib/crm/switch";
 import { type Actor, assertOrganisationUsable, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
@@ -54,6 +54,8 @@ export type LeadForm = {
   formKey: string;
   isActive: boolean;
   thankYouUrl: string | null;
+  /** Leads from it come from this campaign (decision 498). */
+  campaignId: string | null;
   leadsReceived: number;
   lastLeadAt: string | null;
   createdAt: string;
@@ -65,12 +67,13 @@ type FormRow = {
   form_key: string;
   is_active: boolean;
   thank_you_url: string | null;
+  campaign_id: string | null;
   leads_received: number;
   last_lead_at: string | null;
   created_at: string;
 };
 
-const FORM_SELECT = "select id::text, name, form_key, is_active, thank_you_url, leads_received, last_lead_at, created_at from crm_lead_forms";
+const FORM_SELECT = "select id::text, name, form_key, is_active, thank_you_url, campaign_id::text, leads_received, last_lead_at, created_at from crm_lead_forms";
 
 function toForm(row: FormRow): LeadForm {
   return {
@@ -79,6 +82,7 @@ function toForm(row: FormRow): LeadForm {
     formKey: row.form_key,
     isActive: row.is_active,
     thankYouUrl: row.thank_you_url,
+    campaignId: row.campaign_id,
     leadsReceived: row.leads_received,
     lastLeadAt: row.last_lead_at,
     createdAt: row.created_at,
@@ -97,14 +101,15 @@ function thankYou(input: unknown): string | null {
 }
 
 /** Adds a web form (admins). Its key is random and is the only secret in its address. */
-export async function createLeadForm(tx: OrgTx, input: { name?: unknown; thankYouUrl?: unknown }): Promise<LeadForm> {
+export async function createLeadForm(tx: OrgTx, input: { name?: unknown; thankYouUrl?: unknown; campaignId?: unknown }): Promise<LeadForm> {
   await requireCrm(tx);
   const name = requireString(input.name, "name", { maxLength: 100 });
+  const campaignId = await optionalCampaign(tx, input.campaignId);
   try {
     const inserted = await tx.query<FormRow>(
-      `insert into crm_lead_forms (name, form_key, thank_you_url, created_by_email) values ($1, $2, $3, $4)
-       returning id::text, name, form_key, is_active, thank_you_url, leads_received, last_lead_at, created_at`,
-      [name, randomBytes(20).toString("hex"), thankYou(input.thankYouUrl), tx.actor.email],
+      `insert into crm_lead_forms (name, form_key, thank_you_url, created_by_email, campaign_id) values ($1, $2, $3, $4, $5)
+       returning id::text, name, form_key, is_active, thank_you_url, campaign_id::text, leads_received, last_lead_at, created_at`,
+      [name, randomBytes(20).toString("hex"), thankYou(input.thankYouUrl), tx.actor.email, campaignId],
     );
     const form = toForm(inserted.rows[0]);
     await writeAuditEvent(tx, { eventType: "crm.lead_form_created", entityType: "crm_lead_form", entityId: form.id, details: { name, thankYouUrl: form.thankYouUrl } });
@@ -116,20 +121,31 @@ export async function createLeadForm(tx: OrgTx, input: { name?: unknown; thankYo
 }
 
 /** Renames a form, changes its thank-you page, or switches it off or on (admins). */
-export async function updateLeadForm(tx: OrgTx, idInput: unknown, input: { name?: unknown; thankYouUrl?: unknown; isActive?: unknown }): Promise<LeadForm> {
+export async function updateLeadForm(
+  tx: OrgTx,
+  idInput: unknown,
+  input: { name?: unknown; thankYouUrl?: unknown; isActive?: unknown; campaignId?: unknown },
+): Promise<LeadForm> {
   const id = requireId(idInput, "formId");
   const current = (await tx.query<FormRow>(`${FORM_SELECT} where id = $1 for update`, [id])).rows[0];
   if (!current) throw new NotFoundError("Form not found.");
   const name = input.name === undefined ? current.name : requireString(input.name, "name", { maxLength: 100 });
   const url = input.thankYouUrl === undefined ? current.thank_you_url : thankYou(input.thankYouUrl);
   const isActive = optionalBoolean(input.isActive, "isActive") ?? current.is_active;
+  const campaignId = input.campaignId === undefined ? current.campaign_id : await optionalCampaign(tx, input.campaignId);
   try {
-    await tx.query("update crm_lead_forms set name = $2, thank_you_url = $3, is_active = $4, updated_at = now() where id = $1", [id, name, url, isActive]);
+    await tx.query("update crm_lead_forms set name = $2, thank_you_url = $3, is_active = $4, campaign_id = $5, updated_at = now() where id = $1", [
+      id,
+      name,
+      url,
+      isActive,
+      campaignId,
+    ]);
   } catch (error) {
     if ((error as { code?: string }).code === "23505") throw new ConflictError(`There's already a form called ${name}.`);
     throw error;
   }
-  await writeAuditEvent(tx, { eventType: "crm.lead_form_updated", entityType: "crm_lead_form", entityId: id, details: { name, thankYouUrl: url, isActive } });
+  await writeAuditEvent(tx, { eventType: "crm.lead_form_updated", entityType: "crm_lead_form", entityId: id, details: { name, thankYouUrl: url, isActive, campaignId } });
   return toForm((await tx.query<FormRow>(`${FORM_SELECT} where id = $1`, [id])).rows[0]);
 }
 
@@ -225,7 +241,7 @@ export async function receiveFormLead(
           sourceDetail: form.name,
         },
         // The same submission twice in a minute (a double click) makes one lead.
-        { source: "web_form", commandSource: "web-form", idempotencyKey: `form-${form.id}-${submission}` },
+        { source: "web_form", commandSource: "web-form", idempotencyKey: `form-${form.id}-${submission}`, campaignId: form.campaign_id },
       );
       if (lead) await tx.query("update crm_lead_forms set leads_received = leads_received + 1, last_lead_at = now() where id = $1", [form.id]);
     });
@@ -269,6 +285,8 @@ export type LeadMailbox = {
   lastStatus: "ok" | "failed" | null;
   lastError: string | null;
   lastLeadsAdded: number | null;
+  /** Leads from it come from this campaign (decision 498). */
+  campaignId: string | null;
 };
 
 type MailboxRow = {
@@ -288,12 +306,13 @@ type MailboxRow = {
   last_error: string | null;
   last_leads_added: number | null;
   lease_until: string | null;
+  campaign_id: string | null;
 };
 
 const MAILBOX_SELECT = `
   select m.id::text, m.mail_kind, m.mail_account_id::text, c.email as mail_account_email, m.imap_host, m.imap_username,
          m.imap_password_ciphertext, m.mail_folder_id, m.mail_folder_name, m.owner_user_id::text, m.sync_every_hours,
-         m.last_check_at, m.last_status, m.last_error, m.last_leads_added, m.lease_until
+         m.last_check_at, m.last_status, m.last_error, m.last_leads_added, m.lease_until, m.campaign_id::text
     from crm_lead_mailboxes m
     left join crm_connected_accounts c on c.id = m.mail_account_id`;
 
@@ -311,6 +330,7 @@ function toMailbox(row: MailboxRow): LeadMailbox {
     lastStatus: row.last_status,
     lastError: row.last_error,
     lastLeadsAdded: row.last_leads_added,
+    campaignId: row.campaign_id,
   };
 }
 
@@ -364,13 +384,14 @@ export async function createLeadMailbox(tx: OrgTx, input: Record<string, unknown
     login = { host, username, password };
   }
   const hours = parseHours(input.syncEveryHours);
+  const campaignId = await optionalCampaign(tx, input.campaignId);
   const location = locationOf({ mail_kind: mailKind, mail_account_id: mailAccountId, imap_host: login?.host ?? null, imap_username: login?.username ?? null, mail_folder_id: folderId });
   if ((await tx.query<MailboxRow>(MAILBOX_SELECT)).rows.some((row) => locationOf(row) === location)) throw new ConflictError("Leads already come from that folder.");
   const inserted = await tx.query<{ id: string }>(
     `insert into crm_lead_mailboxes (mail_kind, mail_account_id, imap_host, imap_username, imap_password_ciphertext, mail_folder_id,
-                                     mail_folder_name, owner_user_id, sync_every_hours, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text`,
-    [mailKind, mailAccountId, login?.host ?? null, login?.username ?? null, login ? encryptSecret(login.password) : null, folderId, folderName, tx.actor.userId, hours, tx.actor.email],
+                                     mail_folder_name, owner_user_id, sync_every_hours, created_by_email, campaign_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id::text`,
+    [mailKind, mailAccountId, login?.host ?? null, login?.username ?? null, login ? encryptSecret(login.password) : null, folderId, folderName, tx.actor.userId, hours, tx.actor.email, campaignId],
   );
   const id = inserted.rows[0].id;
   await writeAuditEvent(tx, { eventType: "crm.lead_mailbox_created", entityType: "crm_lead_mailbox", entityId: id, details: { mailKind, folderName, syncEveryHours: hours } });
@@ -472,7 +493,7 @@ export async function checkLeadMailbox(organisation: OrganisationRecord, actor: 
                 description: notes || null,
                 sourceDetail: row.mail_folder_name.slice(0, 300),
               },
-              { source: "email", commandSource: "lead-mailbox", idempotencyKey: key },
+              { source: "email", commandSource: "lead-mailbox", idempotencyKey: key, campaignId: row.campaign_id },
             );
             if (lead) {
               leadId = lead.id;

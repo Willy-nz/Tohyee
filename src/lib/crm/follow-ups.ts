@@ -1,5 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { createTask } from "@/lib/crm/service";
+import { refreshCampaignMembers } from "@/lib/crm/campaigns";
 import { advanceSequences } from "@/lib/crm/sequences";
 import { listStages } from "@/lib/crm/stages";
 import { crmEnabled, requireCrm } from "@/lib/crm/switch";
@@ -446,11 +447,14 @@ export async function runDueFollowUpRules(organisations?: Organisation[]): Promi
       try {
         const done = await withOrganisationTransaction(organisation, FOLLOW_UP_ACTOR, async (tx) => {
           if (!(await crmEnabled(tx))) return null;
-          const any = await tx.query<{ rules: boolean; enrolments: boolean }>(
+          const any = await tx.query<{ rules: boolean; enrolments: boolean; members: boolean }>(
             `select exists (select 1 from crm_follow_up_rules where is_active) as rules,
-                    exists (select 1 from crm_sequence_enrolments where status = 'active') as enrolments`,
+                    exists (select 1 from crm_sequence_enrolments where status = 'active') as enrolments,
+                    exists (select 1 from crm_campaign_members where status <> 'responded') as members`,
           );
-          const { rules, enrolments } = any.rows[0];
+          const { rules, enrolments, members } = any.rows[0];
+          // Campaign members who were emailed or replied (decision 498).
+          if (members) await refreshCampaignMembers(tx);
           if (!rules && !enrolments) return null;
           const fromRules = rules ? await runFollowUpRules(tx) : { tasksCreated: 0, skipped: 0 };
           // Sequences' steps (decision 497) are moved on in the same check.

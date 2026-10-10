@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CampaignSelect } from "@/components/crm-campaigns";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useBusy } from "@/components/crm";
 import { useApiData } from "@/components/hooks";
@@ -19,6 +20,7 @@ function WebForms({ organisationId }: { organisationId: string }) {
   const data = useApiData<{ publicAddress: string | null; forms: FormWithSnippet[] }>("/api/crm/lead-forms", { organisationId });
   const [name, setName] = useState("");
   const [thankYouUrl, setThankYouUrl] = useState("");
+  const [formCampaign, setFormCampaign] = useState("");
   const [shown, setShown] = useState<string | null>(null);
   const { busy, error, run } = useBusy();
   const forms = data.data?.forms ?? [];
@@ -81,9 +83,10 @@ function WebForms({ organisationId }: { organisationId: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           void run(async () => {
-            await api("/api/crm/lead-forms", { method: "POST", body: { organisationId, name, thankYouUrl: thankYouUrl || null } });
+            await api("/api/crm/lead-forms", { method: "POST", body: { organisationId, name, thankYouUrl: thankYouUrl || null, campaignId: formCampaign || null } });
             setName("");
             setThankYouUrl("");
+            setFormCampaign("");
             data.reload();
           });
         }}
@@ -94,6 +97,7 @@ function WebForms({ organisationId }: { organisationId: string }) {
         <Field label="Thank-you page (optional)" hint="Where people go after sending; else a plain thank-you.">
           <input value={thankYouUrl} placeholder="https://" onChange={(event) => setThankYouUrl(event.target.value)} />
         </Field>
+        <CampaignSelect organisationId={organisationId} label="Campaign (optional)" value={formCampaign} onChange={setFormCampaign} />
         <Button type="submit" disabled={busy || name.trim() === ""}>
           Add form
         </Button>
@@ -113,6 +117,7 @@ function AddMailbox({ organisationId, onAdded, onCancel }: { organisationId: str
   const [folders, setFolders] = useState<MailFolder[]>([]);
   const [folderId, setFolderId] = useState("");
   const [hours, setHours] = useState(1);
+  const [campaignId, setCampaignId] = useState("");
   const { busy, error, run } = useBusy();
   const mailBody = () =>
     choice === "imap" ? { mailKind: "imap", imapHost: host.trim(), imapUsername: username.trim(), imapPassword: password } : { mailKind: "crm", mailAccountId: choice };
@@ -197,6 +202,7 @@ function AddMailbox({ organisationId, onAdded, onCancel }: { organisationId: str
           </select>
         </Field>
       ) : null}
+      {folders.length > 0 ? <CampaignSelect organisationId={organisationId} label="Campaign (optional)" value={campaignId} onChange={setCampaignId} disabled={busy} /> : null}
       <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
         <Button
           disabled={busy || !folderId}
@@ -204,7 +210,7 @@ function AddMailbox({ organisationId, onAdded, onCancel }: { organisationId: str
             void run(async () => {
               await api("/api/crm/lead-mailboxes", {
                 method: "POST",
-                body: { organisationId, ...mailBody(), mailFolderId: folderId, mailFolderName: folders.find((folder) => folder.id === folderId)?.name ?? "", syncEveryHours: hours },
+                body: { organisationId, ...mailBody(), mailFolderId: folderId, mailFolderName: folders.find((folder) => folder.id === folderId)?.name ?? "", syncEveryHours: hours, campaignId: campaignId || null },
               });
               onAdded();
             })
