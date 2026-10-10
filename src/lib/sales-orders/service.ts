@@ -801,6 +801,8 @@ export async function invoiceSalesOrder(
         description: line.description,
         quantity,
         unitPrice: toPlainString(dec(line.unitPrice)),
+        // The order line's discount comes with it (DS rules).
+        ...(isZero(dec(line.discountPercent ?? "0")) ? {} : { discountPercent: line.discountPercent }),
         accountCode: line.accountCode,
         taxCode: line.taxCode,
         tracking: line.tracking,

@@ -234,6 +234,7 @@ function LinesWithInvoicing({ organisationId, salesOrder }: { organisationId: st
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const hasTax = salesOrder.amountsMode !== "no_tax";
+  const discounted = salesOrder.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   const approved = salesOrder.status !== "draft";
   return (
     <>
@@ -244,6 +245,7 @@ function LinesWithInvoicing({ organisationId, salesOrder }: { organisationId: st
               <th>Description</th>
               <th className={ui.num}>Ordered</th>
               <th className={ui.num}>Unit price</th>
+              {discounted ? <th className={ui.num}>Disc %</th> : null}
               <th>Account</th>
               {hasTax ? <th>Tax code</th> : null}
               <th className={ui.num}>Amount</th>
@@ -263,6 +265,11 @@ function LinesWithInvoicing({ organisationId, salesOrder }: { organisationId: st
                 <td data-label="Unit price" className={ui.num}>
                   {formatUnitPrice(line.unitPrice)}
                 </td>
+                {discounted ? (
+                  <td data-label="Disc %" className={ui.num}>
+                    {line.discountPercent && Number(line.discountPercent) !== 0 ? `${Number(line.discountPercent)}%` : ""}
+                  </td>
+                ) : null}
                 <td data-label="Account">
                   {line.accountCode} · {line.accountName}
                   <TrackingTagsText setup={tracking.data} tags={line.tracking} />

@@ -190,6 +190,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
   }
   const creditNote = updated ?? details.data.creditNote;
   const hasTax = creditNote.amountsMode !== "no_tax";
+  const discounted = creditNote.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   const onChanged = (next: CreditNote, text: string) => {
     setUpdated(next);
     setMessage(text);
@@ -228,6 +229,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
                 <th>Description</th>
                 <th className={ui.num}>Quantity</th>
                 <th className={ui.num}>Unit price</th>
+              {discounted ? <th className={ui.num}>Disc %</th> : null}
                 <th>Account</th>
                 {hasTax ? <th>Tax code</th> : null}
                 {hasTax ? <th className={ui.num}>GST</th> : null}
@@ -246,6 +248,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
                   <td>{line.description}</td>
                   <td className={ui.num}>{formatQuantity(line.quantity)}</td>
                   <td className={ui.num}>{formatUnitPrice(line.unitPrice)}</td>
+                  {discounted ? <td className={ui.num}>{line.discountPercent && Number(line.discountPercent) !== 0 ? `${Number(line.discountPercent)}%` : ""}</td> : null}
                   <td>
                     {line.accountCode} · {line.accountName}
                     <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />

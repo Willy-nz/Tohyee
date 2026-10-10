@@ -516,8 +516,9 @@ and it's still typed for accounts with postings from before (FXB7).
 An invoice's amounts are tax **exclusive** (GST is added on top), tax
 **inclusive** (the prices already include GST) or **no tax**.
 
-- Line amount = quantity x unit price, rounded once to cents, half away from
-  zero. Quantities and unit prices allow up to 4 decimal places.
+- Line amount = quantity x unit price (less the line's discount, DS1-DS6),
+  rounded once to cents, half away from zero. Quantities and unit prices
+  allow up to 4 decimal places.
 - GST is worked out and rounded on each line, then added up. Exclusive:
   line amount x rate. Inclusive: line amount x rate / (1 + rate), which is
   3/23 at 15%, and the net is the line amount less its GST. Per-line rounding
@@ -7036,6 +7037,58 @@ on 25 Jun (**10.00** of it an overpayment); **11.50** of CN-0001 refunded on
 - Foreign-currency statements (invoices are in the base currency).
 - Showing credit and overpayments applied to invoices as lines (they don't
   change the balance, so they're left out, as in Xero's activity statement).
+
+## Line discounts and deal products (approved by Jess, 10 Oct 2026)
+
+Asked for on 10 Oct 2026 (#216 stage 3: "add discounts to invoices too");
+Jess approved DS1-DS9 as written the same day, with discounts on sales lines
+only.
+Following Xero's "Disc %" column. A sales line can have a **discount
+percentage** (0 to 100, up to 2 decimal places). Nothing else changes:
+
+- Line amount = quantity x unit price x (1 - discount%), **rounded once** to
+  cents, half away from zero (not the discounted unit price rounded first).
+- GST is then worked out on that line amount, per line, exactly as I1-I6.
+- The journal credits revenue with the discounted net. There's no separate
+  "discounts given" account; the invoice shows the discount on the line.
+- Stock and cost of sales are unchanged by a discount (cost is still cost).
+- Lines on quotes, sales orders, invoices, repeating invoices and sales
+  credit notes can have one. Copying (quote to invoice, order to invoice,
+  invoice to credit note) keeps it. Bills and purchase orders don't get one.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| DS1 | Exclusive: 2 x 50.00 less 10% at 15% | Line **90.00**, GST **13.50**, total **103.50**. Approved: Dr 1100 103.50 / Cr 4000 90.00 / Cr 2100 13.50 |
+| DS2 | Inclusive: 1 x 115.00 less 10% at 15% | Line **103.50**, GST 103.50 x 3/23 = **13.50**, net **90.00** |
+| DS3 | Exclusive: 3 x 3.33 less 12.5% at 15% | 9.99 x 0.875 = 8.74125 -> line **8.74** (rounding the unit price first would give 8.73); GST 1.311 -> **1.31**; total **10.05** |
+| DS4 | A line 100% off: 1 x 40.00 less 100% | Line **0.00**, GST **0.00**; it still shows on the invoice |
+| DS5 | USD invoice for Acme, 2 x USD 50.00 less 10%, zero-rated, rate 1.60 | **USD 90.00** = NZD **144.00**. Approved: Dr 1100 144.00 (USD 90.00) / Cr 4000 144.00 |
+| DS6 | Credit note from DS1's invoice | Same line: 2 x 50.00 less 10%, credit **103.50** |
+
+### Deal products, quotes and winning the deal
+
+- A deal can have product lines: item (optional), description, quantity,
+  unit price and discount, **excluding GST**. With lines, the deal's amount
+  is their line amounts added (DS rules); without, it's typed as now.
+- **Make quote** makes a draft quote for the deal's company with the deal's
+  lines, tax exclusive, each line's account and tax code as an invoice line
+  for that item would get. The quote is linked to the deal.
+- **New revision**: a deal has at most one open quote. Making another
+  declines the open finalised one ("Replaced by QU-0002") or deletes the
+  open draft, then makes a new draft from the deal's lines now.
+- **Accepting** the quote (as an invoice or as a sales order, as today)
+  also moves the deal to its first Closed won stage and links the invoice
+  or order to the deal, so the deal can't make a second one.
+- Quotes post nothing; only the invoice, when approved.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| DS7 | Deal "Clinic keyrings" for Harbour Vets: 20 x Keyring 25.00 less 10%, 1 x Setup 50.00, both GST | Deal amount **500.00** (450.00 + 50.00). Make quote: draft quote, exclusive, net 500.00, GST **75.00**, total **575.00** |
+| DS8 | DS7's quote finalised QU-0001; the deal's keyrings change to 25 x; New revision | QU-0001 **declined** ("Replaced by QU-0002"); draft QU from 25 x 25.00 less 10% = 562.50 + 50.00: deal amount **612.50**, GST **91.88** (84.38 + 7.50), total **704.38** |
+| DS9 | DS8's new quote finalised QU-0002 and accepted on 20 Oct | Draft invoice with the same lines and discounts; the deal moves to **Won** with the invoice linked. Approved: Dr 1100 704.38 / Cr 4000 612.50 / Cr 2100 91.88 |
+
+Tests: `tests/integration/line-discounts.test.ts` (DS1-DS6). DS7-DS9 are
+built with deal products (decision 502).
 
 ## Quotes (examples not yet approved by Jess)
 

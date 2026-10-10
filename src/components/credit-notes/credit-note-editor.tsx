@@ -14,7 +14,7 @@ import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
 import { TrackingSelects, useTracking } from "@/components/tracking";
-import { formatRate } from "@/components/invoices/invoice-editor";
+import { discountText, formatRate } from "@/components/invoices/invoice-editor";
 import { ExportBadge, ExportWarning, useExportSettings } from "@/components/exports";
 import { contactSalesTaxCode, type ExportSettings, retaxLines, usualWithContact } from "@/lib/tax/exports";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
@@ -67,6 +67,8 @@ type EditorLine = {
   description: string;
   quantity: string;
   unitPrice: string;
+  /** Percent off (DS6), as typed; blank is none. */
+  discountPercent?: string;
   accountCode: string;
   taxCode: string;
   tracking: TrackingTags;
@@ -117,6 +119,7 @@ export type CreditNoteStart = {
     description: string;
     quantity: string;
     unitPrice: string;
+    discountPercent?: string;
     accountCode: string;
     taxCode: string | null;
     tracking?: TrackingTags;
@@ -201,6 +204,7 @@ function CreditNoteForm({
           description: line.description,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
+          discountPercent: discountText(line.discountPercent),
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaults.taxCode,
           tracking: line.tracking ?? {},
@@ -232,13 +236,22 @@ function CreditNoteForm({
   const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
   // Live totals use the same calculation the server does when it saves.
   const complete = lines.map(
-    (line) => usable(line.quantity) && usable(line.unitPrice) && (!hasTax || rates.has(line.taxCode)),
+    (line) =>
+      usable(line.quantity) &&
+      usable(line.unitPrice) &&
+      (!line.discountPercent?.trim() || (usable(line.discountPercent) && Number(line.discountPercent) <= 100)) &&
+      (!hasTax || rates.has(line.taxCode)),
   );
   const amounts = calculateInvoice(
     amountsMode,
     lines.map((line, index) =>
       complete[index]
-        ? { quantity: line.quantity, unitPrice: line.unitPrice, taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0" }
+        ? {
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0",
+            ...(line.discountPercent?.trim() ? { discountPercent: line.discountPercent.trim() } : {}),
+          }
         : { quantity: "0", unitPrice: "0", taxRate: "0" },
     ),
     scale,
@@ -268,6 +281,7 @@ function CreditNoteForm({
         description: line.description,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
+        discountPercent: line.discountPercent?.trim() || null,
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
         tracking: line.tracking,
@@ -377,6 +391,9 @@ function CreditNoteForm({
               <th className={ui.num} style={{ width: 130 }}>
                 Unit price
               </th>
+              <th className={ui.num} style={{ width: 80 }}>
+                Disc %
+              </th>
               <th style={{ width: "20%" }}>Account</th>
               {hasTax ? <th style={{ width: "14%" }}>Tax code</th> : null}
               {hasTax ? <th className={ui.num}>GST</th> : null}
@@ -429,6 +446,16 @@ function CreditNoteForm({
                     value={line.unitPrice}
                     onChange={(event) => update(line.key, { unitPrice: event.target.value })}
                     required
+                  />
+                </td>
+                <td data-label="Disc %">
+                  <input
+                    aria-label={`Line ${index + 1} discount percent`}
+                    inputMode="decimal"
+                    className={ui.num}
+                    value={line.discountPercent ?? ""}
+                    placeholder="0"
+                    onChange={(event) => update(line.key, { discountPercent: event.target.value })}
                   />
                 </td>
                 <td data-label="Account">
@@ -495,7 +522,7 @@ function CreditNoteForm({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={hasTax ? 8 : 6}>
+              <td colSpan={hasTax ? 9 : 7}>
                 <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, ...salesDefaults([blankLine(defaults, lineDefaults, contactTaxCode)], chosenCustomer)])}>
                   Add line
                 </Button>

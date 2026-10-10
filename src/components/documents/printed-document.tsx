@@ -38,6 +38,7 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
   const doc = loaded.data.document;
   const { labels } = doc;
   const hasTax = doc.amountsMode !== "no_tax";
+  const discounted = doc.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   const money = (value: string) => formatMoney(value);
   return (
     <>
@@ -126,6 +127,7 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
                 <th>Description</th>
                 <th className={ui.num}>Quantity</th>
                 <th className={ui.num}>Unit price</th>
+              {discounted ? <th className={ui.num}>Disc %</th> : null}
                 {hasTax ? <th className={ui.num}>GST</th> : null}
                 <th className={ui.num}>
                   Amount {doc.amountsMode === "inclusive" ? "(incl. GST)" : doc.amountsMode === "exclusive" ? "(excl. GST)" : ""} ({doc.currencyCode})
@@ -143,6 +145,11 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
                   <td data-label="Unit price" className={ui.num}>
                     {formatUnitPrice(line.unitPrice)}
                   </td>
+                  {discounted ? (
+                    <td data-label="Disc %" className={ui.num}>
+                      {line.discountPercent && Number(line.discountPercent) !== 0 ? `${Number(line.discountPercent)}%` : ""}
+                    </td>
+                  ) : null}
                   {hasTax ? (
                     <td data-label="GST" className={ui.num}>
                       {formatRate(line.taxRate)}
@@ -158,13 +165,13 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
               {labels.gstLine ? (
                 <>
                   <tr>
-                    <td colSpan={hasTax ? 4 : 3}>Subtotal</td>
+                    <td colSpan={(hasTax ? 4 : 3) + (discounted ? 1 : 0)}>Subtotal</td>
                     <td className={ui.num}>
                       <Money value={doc.subtotal} />
                     </td>
                   </tr>
                   <tr>
-                    <td colSpan={4}>Total GST</td>
+                    <td colSpan={4 + (discounted ? 1 : 0)}>Total GST</td>
                     <td className={ui.num}>
                       <Money value={doc.taxTotal} />
                     </td>
@@ -172,7 +179,7 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
                 </>
               ) : null}
               <tr>
-                <td colSpan={hasTax ? 4 : 3}>
+                <td colSpan={(hasTax ? 4 : 3) + (discounted ? 1 : 0)}>
                   <strong>Total {doc.currencyCode}</strong>
                 </td>
                 <td className={ui.num}>
@@ -184,13 +191,13 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
               {doc.amountDue !== null && doc.amountPaid !== null ? (
                 <>
                   <tr>
-                    <td colSpan={hasTax ? 4 : 3}>Paid or credited</td>
+                    <td colSpan={(hasTax ? 4 : 3) + (discounted ? 1 : 0)}>Paid or credited</td>
                     <td className={ui.num}>
                       <Money value={doc.amountPaid} />
                     </td>
                   </tr>
                   <tr>
-                    <td colSpan={hasTax ? 4 : 3}>
+                    <td colSpan={(hasTax ? 4 : 3) + (discounted ? 1 : 0)}>
                       <strong>Amount due {doc.currencyCode}</strong>
                     </td>
                     <td className={ui.num}>

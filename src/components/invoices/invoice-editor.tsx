@@ -73,6 +73,8 @@ export type EditorLine = {
   description: string;
   quantity: string;
   unitPrice: string;
+  /** Percent off (DS1-DS6), as typed; blank is none. */
+  discountPercent?: string;
   accountCode: string;
   taxCode: string;
   tracking: TrackingTags;
@@ -84,6 +86,12 @@ export type EditorLine = {
   /** An invoice line made from a sales order line (SO3); it keeps that line's item and unit. */
   salesOrderLineId?: string;
 };
+
+/** A saved discount as the editor shows it: blank for none, else "10" or "12.5". */
+export function discountText(saved: string | undefined): string {
+  if (!saved || Number(saved) === 0) return "";
+  return saved.replace(/\.?0+$/, "");
+}
 
 let lineKey = 0;
 function nextLineKey(): number {
@@ -193,6 +201,7 @@ function InvoiceForm({
           description: line.description,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
+          discountPercent: discountText(line.discountPercent),
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaults.taxCode,
           tracking: line.tracking ?? {},
@@ -247,6 +256,7 @@ function InvoiceForm({
         description: line.description,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
+        discountPercent: line.discountPercent?.trim() || null,
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
         tracking: line.tracking,
@@ -474,14 +484,20 @@ export function SalesLines({
   const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
   const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
   // Live totals use the same calculation the server does when it saves.
+  const discountOk = (value: string | undefined) => !value?.trim() || (usable(value) && Number(value) <= 100);
   const complete = lines.map(
-    (line) => usable(line.quantity) && usable(line.unitPrice) && (!hasTax || rates.has(line.taxCode)),
+    (line) => usable(line.quantity) && usable(line.unitPrice) && discountOk(line.discountPercent) && (!hasTax || rates.has(line.taxCode)),
   );
   const amounts = calculateInvoice(
     amountsMode,
     lines.map((line, index) =>
       complete[index]
-        ? { quantity: line.quantity, unitPrice: line.unitPrice, taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0" }
+        ? {
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0",
+            ...(line.discountPercent?.trim() ? { discountPercent: line.discountPercent.trim() } : {}),
+          }
         : { quantity: "0", unitPrice: "0", taxRate: "0" },
     ),
     scale,
@@ -515,6 +531,9 @@ export function SalesLines({
               </th>
               <th className={ui.num} style={{ width: 130 }}>
                 Unit price
+              </th>
+              <th className={ui.num} style={{ width: 80 }}>
+                Disc %
               </th>
               <th style={{ width: "20%" }}>Account</th>
               {hasTax ? <th style={{ width: "14%" }}>Tax code</th> : null}
@@ -572,6 +591,16 @@ export function SalesLines({
                     value={line.unitPrice}
                     onChange={(event) => update(line.key, { unitPrice: event.target.value })}
                     required
+                  />
+                </td>
+                <td data-label="Disc %">
+                  <input
+                    aria-label={`Line ${index + 1} discount percent`}
+                    inputMode="decimal"
+                    className={ui.num}
+                    value={line.discountPercent ?? ""}
+                    placeholder="0"
+                    onChange={(event) => update(line.key, { discountPercent: event.target.value })}
                   />
                 </td>
                 <td data-label="Account">
@@ -638,7 +667,7 @@ export function SalesLines({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={hasTax ? 8 : 6}>
+              <td colSpan={hasTax ? 9 : 7}>
                 <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, ...(withDefaults ?? ((fresh: EditorLine[]) => fresh))([blankLine(defaults, lineDefaults, contactTaxCode)])])}>
                   Add line
                 </Button>
@@ -705,7 +734,7 @@ export function salesDefaults(accounts: Account[], taxCodes: TaxCode[]): Default
 }
 
 /** Saved lines as editor lines. */
-export function editorLines(saved: ReadonlyArray<{ itemId: string | null; unitId: string | null; description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking: TrackingTags; customFields: CustomValues }>, defaults: Defaults): EditorLine[] {
+export function editorLines(saved: ReadonlyArray<{ itemId: string | null; unitId: string | null; description: string; quantity: string; unitPrice: string; discountPercent?: string; accountCode: string; taxCode: string | null; tracking: TrackingTags; customFields: CustomValues }>, defaults: Defaults): EditorLine[] {
   return saved.map((line) => ({
     key: nextLineKey(),
     itemId: line.itemId ?? "",
@@ -713,6 +742,7 @@ export function editorLines(saved: ReadonlyArray<{ itemId: string | null; unitId
     description: line.description,
     quantity: line.quantity,
     unitPrice: line.unitPrice,
+    discountPercent: discountText(line.discountPercent),
     accountCode: line.accountCode,
     taxCode: line.taxCode ?? defaults.taxCode,
     tracking: line.tracking ?? {},
@@ -730,6 +760,7 @@ export function linesForApi(lines: EditorLine[], hasTax: boolean) {
     description: line.description,
     quantity: line.quantity,
     unitPrice: line.unitPrice,
+    discountPercent: line.discountPercent?.trim() || null,
     accountCode: line.accountCode,
     taxCode: hasTax ? line.taxCode || null : null,
     tracking: line.tracking,

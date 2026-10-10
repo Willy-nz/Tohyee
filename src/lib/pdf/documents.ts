@@ -126,10 +126,13 @@ export async function renderDocumentPdf(doc: PrintedDocument, options: { logo?: 
   writer.space(18);
 
   const amountHeader = `Amount${doc.amountsMode === "inclusive" ? " (incl. GST)" : doc.amountsMode === "exclusive" ? " (excl. GST)" : ""} (${doc.currencyCode})`;
+  // A "Disc %" column only when a line has a discount (DS1-DS6), as Xero prints it.
+  const discounted = doc.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   const columns: Column[] = [
-    { header: "Description", width: hasTax ? 44 : 50 },
+    { header: "Description", width: (hasTax ? 44 : 50) - (discounted ? 8 : 0) },
     { header: "Quantity", width: 13, align: "right" },
     { header: "Unit price", width: 14, align: "right" },
+    ...(discounted ? [{ header: "Disc %", width: 8, align: "right" as const }] : []),
     ...(hasTax ? [{ header: "GST", width: 9, align: "right" as const }] : []),
     { header: amountHeader, width: 20, align: "right" },
   ];
@@ -137,6 +140,7 @@ export async function renderDocumentPdf(doc: PrintedDocument, options: { logo?: 
     line.description,
     `${formatQuantity(line.quantity)}${line.unitName ? ` ${line.unitName}` : ""}`,
     formatUnitPrice(line.unitPrice),
+    ...(discounted ? [line.discountPercent && Number(line.discountPercent) !== 0 ? `${Number(line.discountPercent)}%` : ""] : []),
     ...(hasTax ? [formatRate(line.taxRate)] : []),
     formatMoney(line.lineAmount),
   ]);
