@@ -121,7 +121,8 @@ function AccountRow({ organisationId, account, isAdmin, onChanged }: { organisat
         {account.lastError ? <div className={ui.muted}>Last error: {account.lastError}</div> : null}
       </td>
       <td>
-        {account.status === "active" ? <Badge tone="green">Syncing</Badge> : <Badge tone="red">Paused</Badge>}
+        {account.status === "active" ? <Badge tone="green">Syncing</Badge> : <Badge tone="red">Paused</Badge>}{" "}
+        {account.canSend ? <Badge tone="blue">Can send</Badge> : null}
         <div className={ui.muted}>{account.lastSyncAt ? `Last sync ${formatDateTime(account.lastSyncAt)}` : "Not synced yet"}</div>
       </td>
       <td className={ui.num}>
@@ -150,6 +151,26 @@ function AccountRow({ organisationId, account, isAdmin, onChanged }: { organisat
       </td>
       <td className={ui.num}>
         <span className={ui.rowButtons}>
+          {account.isMine && !account.canSend ? (
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={busy !== null}
+              title="Sign in again and allow Tohyee to send email for you. Nothing is sent until you press Send on an email."
+              onClick={() => {
+                setBusy("send");
+                setError(null);
+                api<{ url: string }>("/api/crm/mail/connect", { method: "POST", body: { organisationId, provider: account.provider, send: true } })
+                  .then(({ url }) => window.location.assign(url))
+                  .catch((caught) => {
+                    setError(errorMessage(caught));
+                    setBusy(null);
+                  });
+              }}
+            >
+              Allow sending
+            </Button>
+          ) : null}
           {(account.isMine || isAdmin) && account.status === "active" ? (
             <Button
               size="small"
@@ -206,7 +227,7 @@ export function MailPage({ organisationId }: { organisationId: string }) {
       {params.get("error") ? <Notice tone="error">{params.get("error")}</Notice> : null}
       <Card
         title="Connected mailboxes"
-        description="Connect your own mailbox and calendar. Only emails and meetings with people and companies in the CRM are kept, with their subject and a short preview; never full emails or attachments. Syncs every 15 minutes."
+        description="Connect your own mailbox and calendar. Only emails and meetings with people and companies in the CRM are kept, with their subject and a short preview; never full emails or attachments. Syncs every 15 minutes. Allow sending to email leads, people and deals from your own mailbox: nothing goes until you press Send."
         actions={
           canCrm("write") ? (
             <span className={ui.actions}>

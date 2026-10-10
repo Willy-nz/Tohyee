@@ -75,6 +75,8 @@ export type Person = {
   /** The company's primary contact for invoices (RC6); at most one per company. */
   isPrimary: boolean;
   isArchived: boolean;
+  /** Asked not to be emailed: Tohyee won't send them sales emails (decision 496). */
+  emailOptOut: boolean;
   /** Custom field values (CRMF4); they never change anything else. */
   customFields: CustomValues;
   /** The CRM record type (CRT1): its page layout and required and read-only fields. */
@@ -270,7 +272,7 @@ async function requireContact(tx: OrgTx, id: string): Promise<{ id: string; name
 // ---------------------------------------------------------------------------
 // People (CRM2)
 
-const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_primary, p.is_archived,
+const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_primary, p.is_archived, p.email_opt_out,
     p.custom_fields, p.record_type_id, t.name as record_type_name
   from crm_people p left join contacts c on c.id = p.contact_id join crm_record_types t on t.id = p.record_type_id`;
 
@@ -285,6 +287,7 @@ type PersonRow = {
   phone: string | null;
   is_primary: boolean;
   is_archived: boolean;
+  email_opt_out: boolean;
   custom_fields: CustomValues;
   record_type_id: string;
   record_type_name: string;
@@ -303,6 +306,7 @@ function toPerson(row: PersonRow): Person {
     phone: row.phone,
     isPrimary: row.is_primary,
     isArchived: row.is_archived,
+    emailOptOut: row.email_opt_out,
     customFields: row.custom_fields ?? {},
     recordTypeId: row.record_type_id,
     recordTypeName: row.record_type_name,

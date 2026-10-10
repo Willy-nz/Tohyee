@@ -57,6 +57,7 @@ type LeadRow = {
   converted_contact_id: string | null;
   converted_person_id: string | null;
   converted_opportunity_id: string | null;
+  email_opt_out: boolean;
   created_by_email: string | null;
   created_at: string;
   updated_at: string;
@@ -64,7 +65,7 @@ type LeadRow = {
 
 const LEAD_COLUMNS = `l.id::text, l.first_name, l.last_name, l.company_name, l.email, l.phone, l.job_title, l.description, l.source,
   l.source_detail, l.status, l.unqualified_reason, l.needs_review, l.owner_user_id, l.converted_at,
-  l.converted_contact_id::text, l.converted_person_id::text, l.converted_opportunity_id::text, l.created_by_email, l.created_at, l.updated_at`;
+  l.converted_contact_id::text, l.converted_person_id::text, l.converted_opportunity_id::text, l.email_opt_out, l.created_by_email, l.created_at, l.updated_at`;
 
 function toLead(row: LeadRow): Lead {
   const person = [row.first_name, row.last_name].filter(Boolean).join(" ");
@@ -88,6 +89,7 @@ function toLead(row: LeadRow): Lead {
     convertedContactId: row.converted_contact_id,
     convertedPersonId: row.converted_person_id,
     convertedOpportunityId: row.converted_opportunity_id,
+    emailOptOut: row.email_opt_out,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

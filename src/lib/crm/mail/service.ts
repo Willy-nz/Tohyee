@@ -12,6 +12,9 @@ import { UnavailableError } from "@/lib/errors";
 import {
   authorisationUrl,
   exchangeCode,
+  GMAIL_SEND_SCOPE,
+  GOOGLE_SCOPES,
+  MICROSOFT_SCOPES,
   listEvents,
   listMessages,
   MAIL_PROVIDERS,
@@ -57,6 +60,8 @@ export type ConnectedAccount = {
   messages: number;
   meetings: number;
   isMine: boolean;
+  /** Its owner allowed sending sales emails from it (decision 496). */
+  canSend: boolean;
 };
 
 type SettingsRow = {
@@ -173,8 +178,24 @@ function redirectUri(origin: string): string {
   return `${origin.replace(/\/+$/, "")}${CALLBACK_PATH}`;
 }
 
-/** The provider's sign-in address, with a one-time state tied to this user and organisation. */
-export async function startConnect(tx: OrgTx, providerInput: unknown, origin: string): Promise<{ url: string }> {
+/** Reading plus sending (decision 496): what a mailbox signs in with when its owner allows sales emails from it. */
+export const MICROSOFT_READ_SEND_SCOPES = [...MICROSOFT_SCOPES, "Mail.Send"];
+export const GOOGLE_READ_SEND_SCOPES = [...GOOGLE_SCOPES, GMAIL_SEND_SCOPE];
+
+/** Whether the granted scopes (when the provider says) include sending. */
+export function grantsSending(provider: MailProvider, scope: string | null | undefined, asked: boolean): boolean {
+  if (!asked) return false;
+  if (!scope) return true;
+  const granted = scope.split(/\s+/).map((entry) => entry.toLowerCase());
+  return provider === "google" ? granted.includes(GMAIL_SEND_SCOPE.toLowerCase()) : granted.some((entry) => entry === "mail.send" || entry.endsWith("/mail.send"));
+}
+
+/**
+ * The provider's sign-in address, with a one-time state tied to this user
+ * and organisation. With `send`, it also asks to send email as the mailbox
+ * (decision 496): Gmail's gmail.send or Microsoft's Mail.Send.
+ */
+export async function startConnect(tx: OrgTx, providerInput: unknown, origin: string, options: { send?: unknown } = {}): Promise<{ url: string }> {
   await requireCrm(tx);
   const provider = requireOneOf(providerInput, "provider", MAIL_PROVIDERS);
   if (!tx.actor.userId) throw new ForbiddenError("Sign in to connect a mailbox.");
@@ -182,8 +203,12 @@ export async function startConnect(tx: OrgTx, providerInput: unknown, origin: st
   const app = await providerApp(tx, provider);
   const state = `${tx.organisationId}.${randomBytes(24).toString("base64url")}`;
   await tx.query("delete from crm_oauth_states where created_at < now() - interval '1 day'");
-  await tx.query("insert into crm_oauth_states (state, user_id, provider) values ($1, $2, $3)", [state, tx.actor.userId, provider]);
-  return { url: authorisationUrl(provider, app, redirectUri(origin), state) };
+  const send = options.send === true;
+  await tx.query("insert into crm_oauth_states (state, user_id, provider, with_send) values ($1, $2, $3, $4)", [state, tx.actor.userId, provider, send]);
+  const scopes = send ? (provider === "google" ? GOOGLE_READ_SEND_SCOPES : MICROSOFT_READ_SEND_SCOPES) : undefined;
+  // Google: keep the scopes already granted, so adding sending doesn't drop reading.
+  const url = authorisationUrl(provider, app, redirectUri(origin), state, scopes);
+  return { url: send && provider === "google" ? `${url}&include_granted_scopes=true` : url };
 }
 
 /** The organisation a callback's state belongs to (its id comes first). */
@@ -194,7 +219,7 @@ export function organisationFromState(state: unknown): string {
   return state.slice(0, state.indexOf("."));
 }
 
-type StateRow = { user_id: string; provider: MailProvider; fresh: boolean; used_at: string | null };
+type StateRow = { user_id: string; provider: MailProvider; with_send: boolean; fresh: boolean; used_at: string | null };
 
 /**
  * Checks the state (unused, under 15 minutes old, the same signed-in user)
@@ -202,8 +227,13 @@ type StateRow = { user_id: string; provider: MailProvider; fresh: boolean; used_
  * ever be used once.
  */
 export async function claimState(tx: OrgTx, state: string): Promise<MailProvider> {
+  return (await claimConnectState(tx, state)).provider;
+}
+
+/** `claimState`, also saying whether the sign-in asked to send (decision 496). */
+export async function claimConnectState(tx: OrgTx, state: string): Promise<{ provider: MailProvider; withSend: boolean }> {
   const found = await tx.query<StateRow>(
-    `select user_id, provider, created_at > now() - make_interval(mins => $2) as fresh, used_at
+    `select user_id, provider, with_send, created_at > now() - make_interval(mins => $2) as fresh, used_at
        from crm_oauth_states where state = $1 for update`,
     [state, STATE_MINUTES],
   );
@@ -212,7 +242,7 @@ export async function claimState(tx: OrgTx, state: string): Promise<MailProvider
     throw new ValidationError("That sign-in link has expired or was already used. Start connecting again.");
   }
   await tx.query("update crm_oauth_states set used_at = now() where state = $1", [state]);
-  return row.provider;
+  return { provider: row.provider, withSend: row.with_send };
 }
 
 /** Everything needed to finish outside the database: the app for the provider. */
@@ -222,11 +252,13 @@ export async function appForProvider(tx: OrgTx, provider: MailProvider): Promise
 }
 
 /** Exchanges the code and finds the mailbox address (network, no transaction). */
-export async function fetchConnection(provider: MailProvider, app: ProviderApp, code: string, origin: string) {
-  const tokens = await exchangeCode(provider, app, code, redirectUri(origin));
+export async function fetchConnection(provider: MailProvider, app: ProviderApp, code: string, origin: string, withSend = false) {
+  const tokens = await exchangeCode(provider, app, code, redirectUri(origin), withSend ? MICROSOFT_READ_SEND_SCOPES : MICROSOFT_SCOPES);
   if (!tokens.refreshToken) throw new ValidationError("The sign-in didn't allow offline access, so Tohyee can't keep syncing. Try connecting again.");
   const email = (await mailboxAddress(provider, tokens.accessToken)).toLowerCase();
-  return { tokens, email };
+  const canSend = grantsSending(provider, tokens.scope, withSend);
+  if (withSend && !canSend) throw new ValidationError("The sign-in didn't allow sending email. Try again and tick the box that lets Tohyee send email for you.");
+  return { tokens, email, canSend };
 }
 
 /** Stores the connected account (tokens encrypted); reconnecting the same mailbox replaces its tokens. */
@@ -254,19 +286,19 @@ export async function saveConnection(
     await tx.query(
       `update crm_connected_accounts
           set refresh_token_ciphertext = $2, access_token_ciphertext = $3, access_token_expires_at = $4, status = 'active',
-              failures = 0, last_error = null, updated_at = now()
+              failures = 0, last_error = null, can_send = $5, updated_at = now()
         where id = $1`,
-      [id, ...values],
+      [id, ...values, connection.canSend ?? false],
     );
   } else {
     const inserted = await tx.query<{ id: string }>(
-      `insert into crm_connected_accounts (user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at)
-       values ($1, $2, $3, $4, $5, $6) returning id`,
-      [tx.actor.userId, provider, email, ...values],
+      `insert into crm_connected_accounts (user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at, can_send)
+       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [tx.actor.userId, provider, email, ...values, connection.canSend ?? false],
     );
     id = inserted.rows[0].id;
   }
-  await writeAuditEvent(tx, { eventType: "crm.mail_connected", entityType: "crm_connected_account", entityId: id, details: { provider, email } });
+  await writeAuditEvent(tx, { eventType: "crm.mail_connected", entityType: "crm_connected_account", entityId: id, details: { provider, email, canSend: connection.canSend ?? false } });
   const account = (await listAccounts(tx)).find((entry) => entry.id === id);
   if (!account) throw new NotFoundError("Connected account not found.");
   return account;
@@ -288,8 +320,9 @@ export async function listAccounts(tx: OrgTx): Promise<ConnectedAccount[]> {
     failures: number;
     messages: string;
     meetings: string;
+    can_send: boolean;
   }>(
-    `select a.id, a.user_id, a.provider, a.email, a.visibility, a.status, a.last_sync_at, a.last_error, a.failures,
+    `select a.id, a.user_id, a.provider, a.email, a.visibility, a.status, a.last_sync_at, a.last_error, a.failures, a.can_send,
             (select count(*) from crm_messages m where m.account_id = a.id)::text as messages,
             (select count(*) from crm_calendar_events e where e.account_id = a.id)::text as meetings
        from crm_connected_accounts a order by lower(a.email), a.id`,
@@ -309,6 +342,7 @@ export async function listAccounts(tx: OrgTx): Promise<ConnectedAccount[]> {
     messages: Number(row.messages),
     meetings: Number(row.meetings),
     isMine: row.user_id === tx.actor.userId,
+    canSend: row.can_send,
   }));
 }
 

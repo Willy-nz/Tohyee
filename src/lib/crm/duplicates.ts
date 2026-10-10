@@ -34,6 +34,7 @@ const COMPANY_MOVABLE = new Set([
   "crm_leads.converted_contact_id",
   "crm_participant_links.contact_id",
   "contacts.merged_into_contact_id",
+  "crm_sent_emails.contact_id",
 ]);
 const PERSON_MOVABLE = new Set([
   "crm_opportunities.point_of_contact_id",
@@ -42,6 +43,7 @@ const PERSON_MOVABLE = new Set([
   "crm_leads.converted_person_id",
   "crm_participant_links.person_id",
   "crm_people.merged_into_person_id",
+  "crm_sent_emails.person_id",
 ]);
 
 export type DuplicateRecord = "company" | "person";
@@ -318,6 +320,7 @@ export async function mergeCompanies(tx: OrgTx, input: { keepId?: unknown; merge
     ["crm_leads", "converted_contact_id"],
     ["crm_participant_links", "contact_id"],
     ["contacts", "merged_into_contact_id"],
+    ["crm_sent_emails", "contact_id"],
   ];
   // One primary person per company (RC6): if the kept company has one, it stays primary.
   await tx.query(
@@ -365,6 +368,7 @@ export async function mergePeople(tx: OrgTx, input: { keepId?: unknown; mergeId?
     ["crm_leads", "converted_person_id"],
     ["crm_participant_links", "person_id"],
     ["crm_people", "merged_into_person_id"],
+    ["crm_sent_emails", "person_id"],
   ];
   const moved: Record<string, number> = {};
   for (const [table, column] of moves) {

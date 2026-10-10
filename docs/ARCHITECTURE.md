@@ -1278,6 +1278,12 @@ Enforced by the app (and covered by tests):
   `crm_calendar_events`, linked through `crm_participant_links`.
   Disconnecting deletes those rows. Every 15 minutes, off with
   TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+  Sales emails (decision 496) reuse a member's connection once
+  `crm_connected_accounts.can_send` is set (a sign-in that also granted
+  gmail.send or Mail.Send); `src/lib/crm/sales-email.ts` records each send
+  in `crm_sent_emails` (idempotency key) before calling Gmail or Graph with
+  no transaction open. Follow-up rules (decision 495) run every 15 minutes
+  (`TOHYEE_FOLLOW_UP_SCHEDULER=off`) in `src/lib/crm/follow-ups.ts`.
 - WooCommerce (decisions 451-455, tenant migration 0105):
   `src/lib/sales-platforms/woocommerce.ts` is the second connector (REST
   API v3; `wooOrderFrom` turns an order and its refunds into the shared
