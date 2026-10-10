@@ -4194,3 +4194,25 @@ testing) and #154's code signing (later, Jess).
        amounts per currency, never added across currencies (as forecasts,
        CRMS11). A sales rep or manager sees only their own leads and deals
        counted (decision 491).
+
+499. **Team forecasts: roll-ups, adjustments and snapshots** (#216 stage 3;
+     Jess 10 Oct 2026; replaces the "later" in decision 325).
+     - **Teams:** a sales team's figures are its members' and its manager's
+       added up, per period and per currency. Currencies are never added
+       together or converted (decision 324, kept). Its quota is its people's
+       quotas added (base currency). Managers see their own teams; viewers
+       and up see every team; reps see no team rows.
+     - **Adjustments:** a person's team manager, or an admin or owner, can
+       set a different Commit or Best case for one person, period and
+       currency, with a reason (required). Managers can't adjust their own.
+       The deals don't change. Every change is kept and shown (who, when,
+       why); the newest counts; clearing it goes back to the deals' figure.
+       Team rows and submitted forecasts show the adjusted figures with the
+       deals' own beside them.
+     - **Submitted forecasts:** for one period, a person submits their own,
+       a manager their team's (or a member's), an admin everyone's. Its
+       figures (Closed, Commit, Best case, Open pipeline, weighted, count,
+       the adjusted figures and quota, per currency) are kept as they were,
+       with an optional note. Later changes to deals don't change it. Reps
+       see their own, managers their team's and members', viewers and up
+       all.
