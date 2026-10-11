@@ -16142,7 +16142,7 @@ and forecasts (#221 stage 5).
    elected and the evidence (a file), without Tohyee filing anything. Agree?
    **Answered: yes.**
 
-## Livestock (#221), next: account sales, beef steers under NSC, management valuations (examples not yet approved by Jess)
+## Livestock (#221), next: account sales, beef steers under NSC, management valuations (LV13-LV20 approved by Jess, 11 Oct 2026)
 
 Drafted 11 Oct 2026, after LV1-LV12 were built (decisions 503-505). These
 are the next pieces Jess asked to keep building. Nothing here is built.
@@ -16223,4 +16223,11 @@ cows 2,700.00, rising two-year heifers 2,400.00, rising one-year heifers
 4. **LV18-LV20:** should monthly management valuations be a report only
    to start with, or post an interim journal each month (reversed the next
    month and at year end) so the monthly profit and loss includes them?
+
+Answered (11 Oct 2026):
+1. The agent owes the net: a receivable, matched when the payment arrives.
+2. Yes, the agent's account sale is the farmer's tax invoice; Tohyee
+   issues none of its own.
+3. Yes, the beef rule is right as drafted.
+4. Report only to start with.
 
