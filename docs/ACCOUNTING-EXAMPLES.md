@@ -16014,6 +16014,38 @@ out: the male breeding stock rules aren't checked.
   Proposed (not decided): changing the setting applies from the next year
   not yet approved. Approved years are never re-posted.
 
+### Built (stage 2, head counts): how LV1-LV3 came out
+
+`tests/integration/livestock-head-counts.test.ts`, decision 504.
+
+- **Ageing (LV1):**
+  - **When:** ageing happens at the **start** of each income year (1 June for
+    Kōwhai), not on 31 May. Each class's head at the end of the year before
+    moves to the next class, so during the year the classes already say
+    what each animal will be at balance date. A sale of the older heifers
+    in the year is then a sale of rising two-year heifers, and a calf born
+    this season goes into rising one-year.
+  - **Worked out, not run:** that's how "it can't run twice" is kept, and a
+    late entry in an earlier year flows through. The preview shows the
+    year's ageing.
+  - **Same figures:** LV1's table comes out the same: 300/70/75 opening;
+    315/75/80 closing; ageing +70, -70 +75, -75.
+- **Mixed-age ewes** (rising three and four) are one NAMV class, so how
+  many turn rising five is said for each year. Until it's said, the head
+  count lists them under "needs a split".
+- **LV2:** counts are entered for the year end by class, after ageing. The
+  difference shows as "not explained" until a movement (for example,
+  missing) explains it. The refusal to value comes with stage 3.
+- **LV3:** stock held for others has its own movements (arrived, left), by
+  whose it is. It's never in the farm's totals. Own stock can be moved
+  between locations, and the head by location (by kind) is shown.
+- **LV7, in part:** a sale or purchase links an approved invoice or bill
+  line, once per class. The account sale document comes later.
+- **Refused:**
+  - Births into anything but the youngest classes.
+  - Any change that takes a class below zero on any date.
+  - Changes on or before the lock date.
+
 ### Not supported in the first release (refused with a reason)
 
 High-priced livestock; self-assessed cost; market or replacement value;
