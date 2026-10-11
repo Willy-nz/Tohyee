@@ -15,7 +15,7 @@ import {
   updateLivestockSettings,
   voidMovement,
 } from "@/lib/livestock/movements";
-import { updateOrganisationSettings } from "@/lib/organisations/settings";
+import { getOrganisationSettings, updateOrganisationSettings } from "@/lib/organisations/settings";
 import {
   apiRequest,
   createTestOrganisation,
@@ -58,7 +58,11 @@ describeWithDatabase("livestock head counts (LV1-LV3)", () => {
 
   it("is off until turned on, and starts on the first day of a financial year", async () => {
     await expect(move({ movementType: "birth", movementDate: "2025-08-15", classCode: "r1_heifers", head: 1 })).rejects.toThrow(/isn't turned on/);
-    await expect(run((tx) => updateLivestockSettings(tx, { enabled: true }))).rejects.toThrow(/Say which income year/);
+    // Turned on from Modules: the current financial year to start with, changeable until movements exist.
+    const fromModules = await run((tx) => updateLivestockSettings(tx, { enabled: true }));
+    expect(fromModules.firstYearStart).toMatch(/^\d{4}-06-01$/);
+    expect((await run((tx) => getOrganisationSettings(tx))).livestockEnabled).toBe(true);
+    await run((tx) => updateLivestockSettings(tx, { enabled: false }));
     await expect(run((tx) => updateLivestockSettings(tx, { enabled: true, firstYearStart: "2025-07-01" }))).rejects.toThrow(/first day of a financial year/);
     const settings = await run((tx) => updateLivestockSettings(tx, { enabled: true, firstYearStart: "2025-06-01" }));
     expect(settings).toMatchObject({ enabled: true, firstYearStart: "2025-06-01", financialYearEndMonth: 5 });
@@ -205,5 +209,13 @@ describeWithDatabase("livestock head counts (LV1-LV3)", () => {
       ["r5_ewes", 40],
     ]);
     await expect(run((tx) => setAgeingSplit(tx, { yearEnd: "2027-05-31", kind: "dairy_cattle", classCode: "ma_cows", head: 1 }))).rejects.toThrow(/nothing to split/);
+  });
+
+  it("is part of Accounting: turning Accounting off turns livestock off, and its records are kept", async () => {
+    await run((tx) => updateOrganisationSettings(tx, { accountingEnabled: false, crmEnabled: true }));
+    expect((await run((tx) => getOrganisationSettings(tx))).livestockEnabled).toBe(false);
+    await run((tx) => updateOrganisationSettings(tx, { accountingEnabled: true }));
+    await run((tx) => updateLivestockSettings(tx, { enabled: true }));
+    expect(row(await count(), "ma_cows").closing).toBeGreaterThan(0);
   });
 });
