@@ -16046,6 +16046,63 @@ out: the male breeding stock rules aren't checked.
   - Any change that takes a class below zero on any date.
   - Changes on or before the lock date.
 
+### Built (stage 3, the valuation): how LV4-LV12 came out
+
+`tests/integration/livestock-valuation.test.ts`, decision 505.
+
+- **LV4, LV5, LV6, LV10 and LV11** come out to the cent. The journal for
+  each kind is: livestock on hand (closing less last year's closing), the
+  herd scheme revaluation, and the change in value. Tussock's beef and
+  sheep go in one journal.
+- **Rates:**
+  - IRD's 2026 NAMV and NSC for dairy, beef and sheep come with Tohyee,
+    with their source. Other years are added by an admin, with where they
+    came from.
+  - A year's rates can't change once a valuation using them is approved.
+- **Income year:** taken from the balance date. April to September (a late
+  balance date) belongs to the income year ending the 31 March before;
+  October to March belongs to the next. So Kōwhai's 31 May 2026 and
+  Tussock's 30 June 2026 are both 2026, as the examples assume.
+  **Jess to confirm the rule.**
+- **Elections:** recorded per kind from an income year, with a note and
+  files attached (decision 503).
+  - Mixing methods within a kind isn't possible. Changing method from one
+    approved year to the next is refused.
+- **Approval** (admins, the accountant) is refused while any of these is
+  true:
+  - A count isn't explained (LV2).
+  - Mixed-age ewes are waiting for their split.
+  - An election or rate is missing.
+  - A sale or purchase has no amount. A linked invoice or bill line's net
+    amount counts as the amount.
+  - Something unsupported is on hand.
+  - Last year's valuation isn't approved.
+  - The livestock account's balance at the year end isn't the opening
+    value. That's LV4's value bridge: the books must carry last year's
+    closing exactly.
+- **LV9:**
+  - Approving twice posts once.
+  - Once a year is approved, its movements, opening, rates and elections
+    can't change. They are refused, rather than marking the valuation out
+    of date as LV9 says.
+  - **Replace** reverses the journal, with a reason. The year can then
+    change and be approved again.
+- **LV6 and LV11 (NSC):**
+  - The mature group's value is shared across its classes by head, with
+    any rounding on the last class, so next year opens with it.
+  - Under NSC, these are refused:
+    - Bought young stock.
+    - Found stock.
+    - Class changes between young and mature stock.
+    - More mature stock leaving than was on hand at the start.
+    - Steers and bulls rising two and older.
+- **LV12:** the setting applies to the next approval. The tax workings are
+  the same either way.
+- **Not built yet:**
+  - LV7's agent account sale as its own document. A sale's amount comes
+    from the movement or its linked invoice line.
+  - The screens.
+
 ### Not supported in the first release (refused with a reason)
 
 High-priced livestock; self-assessed cost; market or replacement value;

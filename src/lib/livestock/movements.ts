@@ -6,6 +6,7 @@ import { addDays, financialYearEnd, financialYearStart } from "@/lib/financial-y
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { dec, isZero, parseDecimalInput } from "@/lib/money/decimal";
+import { createAccount } from "@/lib/accounts/service";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { optionalId, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 import { classKey, className, findClass, KIND_NAMES, LIVESTOCK_CLASSES, LIVESTOCK_KINDS, type LivestockKind } from "./classes";
@@ -34,11 +35,25 @@ export const MOVEMENT_LABELS: Readonly<Record<MovementType, string>> = {
   departure: "Left (held for others)",
 };
 
+export type LivestockAccount = { code: string; name: string } | null;
+
 export type LivestockSettings = {
   enabled: boolean;
   firstYearStart: string | null;
   financialYearEndMonth: number;
+  /** Where the herd scheme revaluation goes (LV12, decision 503): profit and loss, or an equity reserve. */
+  revaluationTarget: "profit_and_loss" | "reserve";
+  accounts: { asset: LivestockAccount; valueChange: LivestockAccount; revaluation: LivestockAccount; reserve: LivestockAccount };
 };
+
+/** The accounts LV4 and LV12 post to, made when livestock is first turned on unless the code is already used. */
+const DEFAULT_ACCOUNTS = {
+  asset: { column: "asset_account_id", code: "1500", name: "Livestock on hand", type: "non_current_asset", accountClass: "asset" },
+  valueChange: { column: "value_change_account_id", code: "5210", name: "Livestock: change in value", type: "direct_costs", accountClass: "expense" },
+  revaluation: { column: "revaluation_account_id", code: "7060", name: "Herd scheme revaluation (non-taxable)", type: "other_income", accountClass: "revenue" },
+  reserve: { column: "reserve_account_id", code: "3300", name: "Herd scheme revaluation reserve", type: "equity", accountClass: "equity" },
+} as const;
+type AccountRole = keyof typeof DEFAULT_ACCOUNTS;
 
 export type LivestockOpening = { kind: LivestockKind; classCode: string; className: string; head: number; value: string };
 
@@ -79,12 +94,82 @@ function isUniqueViolation(error: unknown): boolean {
 
 export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings> {
   const row = (
-    await tx.query<{ enabled: boolean; first_year_start: string | null }>(
-      "select enabled, first_year_start::text from livestock_settings where id = true",
+    await tx.query<{
+      enabled: boolean;
+      first_year_start: string | null;
+      revaluation_target: "profit_and_loss" | "reserve";
+      asset_code: string | null;
+      asset_name: string | null;
+      value_change_code: string | null;
+      value_change_name: string | null;
+      revaluation_code: string | null;
+      revaluation_name: string | null;
+      reserve_code: string | null;
+      reserve_name: string | null;
+    }>(
+      `select s.enabled, s.first_year_start::text, s.revaluation_target,
+              a.code as asset_code, a.name as asset_name, v.code as value_change_code, v.name as value_change_name,
+              r.code as revaluation_code, r.name as revaluation_name, e.code as reserve_code, e.name as reserve_name
+         from livestock_settings s
+         left join accounts a on a.id = s.asset_account_id
+         left join accounts v on v.id = s.value_change_account_id
+         left join accounts r on r.id = s.revaluation_account_id
+         left join accounts e on e.id = s.reserve_account_id
+        where s.id = true`,
     )
   ).rows[0];
   const organisation = await getOrganisationSettings(tx);
-  return { enabled: row?.enabled ?? false, firstYearStart: row?.first_year_start ?? null, financialYearEndMonth: organisation.financialYearEndMonth };
+  const account = (code: string | null | undefined, name: string | null | undefined) => (code && name ? { code, name } : null);
+  return {
+    enabled: row?.enabled ?? false,
+    firstYearStart: row?.first_year_start ?? null,
+    financialYearEndMonth: organisation.financialYearEndMonth,
+    revaluationTarget: row?.revaluation_target ?? "profit_and_loss",
+    accounts: {
+      asset: account(row?.asset_code, row?.asset_name),
+      valueChange: account(row?.value_change_code, row?.value_change_name),
+      revaluation: account(row?.revaluation_code, row?.revaluation_name),
+      reserve: account(row?.reserve_code, row?.reserve_name),
+    },
+  };
+}
+
+/**
+ * Makes the default livestock accounts that aren't set yet. A code that's
+ * already used for a different kind of account is left for an admin to
+ * choose instead.
+ */
+async function ensureAccounts(tx: OrgTx): Promise<void> {
+  for (const spec of Object.values(DEFAULT_ACCOUNTS)) {
+    const set = await tx.query<{ id: string | null }>(`select ${spec.column}::text as id from livestock_settings where id = true`);
+    if (set.rows[0]?.id) continue;
+    const existing = await tx.query<{ id: string; account_type: string }>("select id::text, account_type from accounts where lower(code) = lower($1)", [spec.code]);
+    let id: string | null = null;
+    if (existing.rows[0]) {
+      if (existing.rows[0].account_type === spec.type) id = existing.rows[0].id;
+    } else {
+      id = (await createAccount(tx, { code: spec.code, name: spec.name, accountType: spec.type })).id;
+    }
+    if (id) await tx.query(`update livestock_settings set ${spec.column} = $1 where id = true`, [id]);
+  }
+}
+
+async function chooseAccount(tx: OrgTx, role: AccountRole, input: unknown): Promise<void> {
+  const spec = DEFAULT_ACCOUNTS[role];
+  const code = requireString(input, `The ${role} account`, { maxLength: 20 });
+  const row = await tx.query<{ id: string; account_class: string; is_active: boolean; currency_code: string | null; system_key: string | null }>(
+    "select id::text, account_class, is_active, currency_code, system_key from accounts where lower(code) = lower($1)",
+    [code],
+  );
+  const account = row.rows[0];
+  if (!account) throw new ValidationError(`There's no account ${code}.`);
+  if (!account.is_active) throw new ValidationError(`Account ${code} is archived.`);
+  if (account.currency_code) throw new ValidationError(`Account ${code} holds a foreign currency.`);
+  if (account.system_key) throw new ValidationError(`Account ${code} is used by Tohyee for something else.`);
+  if (account.account_class !== spec.accountClass) {
+    throw new ValidationError(`Account ${code} has to be ${spec.accountClass === "expense" ? "an expense" : spec.accountClass === "asset" ? "an asset" : spec.accountClass === "revenue" ? "an income" : "an equity"} account.`);
+  }
+  await tx.query(`update livestock_settings set ${spec.column} = $1 where id = true`, [account.id]);
 }
 
 /** Livestock is part of Accounting (#221): it needs Accounting on and Livestock turned on. */
@@ -107,7 +192,18 @@ async function hasMovements(tx: OrgTx): Promise<boolean> {
  * can't change once movements are recorded (its opening is where every head
  * count starts).
  */
-export async function updateLivestockSettings(tx: OrgTx, input: { enabled?: unknown; firstYearStart?: unknown }): Promise<LivestockSettings> {
+export async function updateLivestockSettings(
+  tx: OrgTx,
+  input: {
+    enabled?: unknown;
+    firstYearStart?: unknown;
+    revaluationTarget?: unknown;
+    assetAccount?: unknown;
+    valueChangeAccount?: unknown;
+    revaluationAccount?: unknown;
+    reserveAccount?: unknown;
+  },
+): Promise<LivestockSettings> {
   const current = await getLivestockSettings(tx);
   const organisation = await getOrganisationSettings(tx);
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw new ValidationError("enabled must be true or false.");
@@ -125,15 +221,29 @@ export async function updateLivestockSettings(tx: OrgTx, input: { enabled?: unkn
     firstYearStart = date;
   }
   if (enabled && !firstYearStart) throw new ValidationError("Say which income year livestock starts in (the first day of that financial year).");
-  await tx.query("update livestock_settings set enabled = $1, first_year_start = $2, updated_by_email = $3, updated_at = now() where id = true", [
-    enabled,
-    firstYearStart,
-    tx.actor.email,
-  ]);
-  if (enabled !== current.enabled || firstYearStart !== current.firstYearStart) {
-    await writeAuditEvent(tx, { eventType: "livestock.settings_updated", entityType: "livestock_settings", entityId: "1", details: { enabled, firstYearStart } });
-  }
-  return getLivestockSettings(tx);
+  const revaluationTarget =
+    input.revaluationTarget === undefined ? current.revaluationTarget : requireOneOf(input.revaluationTarget, "revaluationTarget", ["profit_and_loss", "reserve"] as const);
+  // A new revaluation target applies from the next valuation approved (LV12); approved years are never re-posted.
+  await tx.query(
+    "update livestock_settings set enabled = $1, first_year_start = $2, revaluation_target = $3, updated_by_email = $4, updated_at = now() where id = true",
+    [enabled, firstYearStart, revaluationTarget, tx.actor.email],
+  );
+  if (enabled) await ensureAccounts(tx);
+  const choices: Array<[AccountRole, unknown]> = [
+    ["asset", input.assetAccount],
+    ["valueChange", input.valueChangeAccount],
+    ["revaluation", input.revaluationAccount],
+    ["reserve", input.reserveAccount],
+  ];
+  for (const [role, value] of choices) if (value !== undefined) await chooseAccount(tx, role, value);
+  const updated = await getLivestockSettings(tx);
+  await writeAuditEvent(tx, {
+    eventType: "livestock.settings_updated",
+    entityType: "livestock_settings",
+    entityId: "1",
+    details: { enabled, firstYearStart, revaluationTarget, accounts: updated.accounts },
+  });
+  return updated;
 }
 
 // Opening position ----------------------------------------------------------
@@ -882,3 +992,70 @@ export async function recordCounts(tx: OrgTx, input: { countDate: unknown; lines
   await writeAuditEvent(tx, { eventType: "livestock.counted", entityType: "livestock_settings", entityId: "1", details: { countDate, lines: lines.length } });
   return headCount(tx, { yearEnd: countDate });
 }
+
+// For the valuation -------------------------------------------------------------
+
+export type YearMovement = HerdMovement & { id: string; amount: string | null; linkedNetAmount: string | null };
+
+export type YearFacts = {
+  yearStart: string;
+  yearEnd: string;
+  /** Head by class at the end of the year before (before ageing). */
+  opening: Map<string, number>;
+  ageing: { steps: AgeingStep[]; needsSplit: AgeingStep[] };
+  /** The year's own movements of the farm's own stock. */
+  movements: YearMovement[];
+  closing: Map<string, number>;
+  unexplained: HeadCount["unexplained"];
+};
+
+/** Everything the year-end valuation needs from the head count (LV4-LV11). */
+export async function yearFacts(tx: OrgTx, yearEnd: string): Promise<YearFacts> {
+  const settings = await requireLivestock(tx);
+  const yearStart = financialYearStart(yearEnd, settings.financialYearEndMonth);
+  const state = await loadHerd(tx, settings);
+  const opening = walk(state, addDays(yearStart, -1)).balances;
+  const closing = walk(state, yearEnd).balances;
+  const rows = await tx.query<{
+    id: string;
+    movement_date: string;
+    movement_type: string;
+    kind: string;
+    class_code: string;
+    to_class_code: string | null;
+    head: number;
+    amount: string | null;
+    linked: string | null;
+  }>(
+    `select m.id::text, m.movement_date::text, m.movement_type, m.kind, m.class_code, m.to_class_code, m.head, m.amount::text,
+            coalesce(il.net_amount, bl.net_amount)::text as linked
+       from livestock_movements m
+       left join sales_invoice_lines il on il.id = m.sales_invoice_line_id
+       left join bill_lines bl on bl.id = m.bill_line_id
+      where m.voided_at is null and m.ownership = 'owned' and m.movement_date between $1 and $2
+      order by m.movement_date, m.id`,
+    [yearStart, yearEnd],
+  );
+  const counted = await headCount(tx, { yearEnd });
+  return {
+    yearStart,
+    yearEnd,
+    opening,
+    ageing: ageingSteps(opening, state.splits.get(yearStart) ?? new Map()),
+    movements: rows.rows.map((row) => ({
+      id: row.id,
+      movementDate: row.movement_date,
+      movementType: row.movement_type,
+      kind: row.kind,
+      classCode: row.class_code,
+      toClassCode: row.to_class_code,
+      head: row.head,
+      amount: row.amount,
+      linkedNetAmount: row.linked,
+    })),
+    closing,
+    unexplained: counted.unexplained,
+  };
+}
+
+export { requireYearEnd };
