@@ -4292,3 +4292,19 @@ testing) and #154's code signing (later, Jess).
        document, no won stage, or a page layout that won't let it move, the
        deal is left and its history says why.
      - Sales reps and managers see a deal's products but not its quotes.
+503. **Livestock (#221) stage 1, first answers** (Jess 11 Oct 2026). The
+     examples LV1-LV12 are still drafts, not approved, and no livestock code
+     is built.
+     - **First release:** dairy cattle, beef cattle and sheep.
+     - **Herd scheme revaluation:** each organisation chooses where it goes,
+       either profit and loss (its own non-taxable line) or an equity
+       reserve (LV12).
+     - **NSC mature group:** averaging only (no FIFO yet).
+     - **Agent account sales:** one sales document with its deductions
+       (LV7).
+     - **Still open:**
+       - Account codes, and current or non-current.
+       - The NSC grouping.
+       - Opening cost layers.
+       - Recording elections.
+       - Anything in IRD OS 25/02, which hasn't been read.
