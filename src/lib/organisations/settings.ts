@@ -45,6 +45,8 @@ export type OrganisationSettings = {
   analyticsEnabled: boolean;
   /** The Not-for-profit module (NFP1). */
   notForProfitEnabled: boolean;
+  /** Livestock (#221), part of Accounting; turned on in Modules or Livestock settings. */
+  livestockEnabled: boolean;
   /** Whether stock may go below zero (ST9-ST12); off by default. */
   allowNegativeStock: boolean;
   /** NetSuite's "Foreign Trade" (EX3, EX4): overseas customers' new sales lines start with the tax code for exports. Off by default. */
@@ -80,6 +82,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     crm_enabled: boolean;
     analytics_enabled: boolean;
     not_for_profit_enabled: boolean;
+    livestock_enabled: boolean;
     allow_negative_stock: boolean;
     foreign_trade: boolean;
     export_tax_code: string | null;
@@ -94,6 +97,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, accounting_enabled, crm_enabled, analytics_enabled, not_for_profit_enabled, allow_negative_stock,
             foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
             postal_address, gst_number, gst_registered, gst_registered_from::text, gst_registered_until::text, payment_details,
+            coalesce((select enabled from livestock_settings where id = true), false) as livestock_enabled,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
   );
@@ -113,6 +117,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     crmEnabled: row.crm_enabled,
     analyticsEnabled: row.analytics_enabled,
     notForProfitEnabled: row.not_for_profit_enabled,
+    livestockEnabled: row.livestock_enabled,
     allowNegativeStock: row.allow_negative_stock,
     foreignTrade: row.foreign_trade,
     exportTaxCode: row.export_tax_code,
@@ -269,6 +274,8 @@ export async function updateOrganisationSettings(
     // Turning Accounting off turns them off too (the screen asks first, listing them).
     advancedFeatures = false;
     notForProfitEnabled = false;
+    // Livestock is part of Accounting too; its records are kept.
+    await tx.query("update livestock_settings set enabled = false where id = true and enabled");
   }
   if (input.allowNegativeStock !== undefined && typeof input.allowNegativeStock !== "boolean") {
     throw new ValidationError("allowNegativeStock must be true or false.");

@@ -21,6 +21,8 @@ export type Modules = {
   analytics: boolean;
   /** Registered for GST at any time (issue #180): the GST return and GST audit show. */
   gst: boolean;
+  /** Livestock (#221), part of Accounting. */
+  livestock?: boolean;
   /** Accounting (#181, MOD2): false only when it's been turned off; left out means on. */
   accounting?: boolean;
 };
@@ -53,6 +55,7 @@ export function useModules(organisationId: string | null): Modules | null {
     analytics: settings.data.settings.analyticsEnabled,
     gst: settings.data.settings.gstRegistered,
     accounting: settings.data.settings.accountingEnabled,
+    livestock: settings.data.settings.accountingEnabled && settings.data.settings.livestockEnabled,
   };
 }
 
@@ -152,6 +155,20 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
   }
   const current = settings.data?.settings;
   const accountingOn = current?.accountingEnabled !== false;
+  const livestockOn = current?.livestockEnabled === true;
+  async function toggleLivestock(on: boolean) {
+    setBusy("livestock");
+    setError(null);
+    try {
+      await api("/api/livestock/settings", { method: "PATCH", body: { organisationId, enabled: !on } });
+      settings.reload();
+      window.dispatchEvent(new Event(CHANGED));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
   return (
     <Card
       title="Modules"
@@ -190,6 +207,29 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
               </td>
               <td>{!accountingOn ? <Badge>Off with Accounting</Badge> : current?.gstRegistered ? <Badge tone="green">Registered for GST</Badge> : <Badge>Not registered</Badge>}</td>
               <td />
+            </tr>
+            <tr>
+              <td>
+                <strong>Livestock</strong>
+                <div className={ui.muted}>
+                  Part of Accounting, for farms: dairy cattle, beef cattle and sheep by IRD&apos;s classes, head counts, and the year-end valuation under the herd scheme or
+                  national standard cost, with its journal.
+                </div>
+                {livestockOn && accountingOn ? (
+                  <div className={ui.actions}>
+                    <Link href="/operations/livestock">Head count</Link>
+                    <Link href="/operations/livestock/movements">Movements</Link>
+                    <Link href="/operations/livestock/valuation">Valuation</Link>
+                    <Link href="/operations/livestock/settings">Livestock settings</Link>
+                  </div>
+                ) : null}
+              </td>
+              <td>{!accountingOn ? <Badge>Needs Accounting</Badge> : livestockOn ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>}</td>
+              <td className={ui.num}>
+                <Button variant={livestockOn ? "secondary" : "primary"} size="small" disabled={!current || busy !== null || !accountingOn} onClick={() => void toggleLivestock(livestockOn)}>
+                  {busy === "livestock" ? "Saving…" : livestockOn ? "Turn off Livestock" : "Turn on Livestock"}
+                </Button>
+              </td>
             </tr>
             {OPTIONAL.map((row) => {
               const on = current ? current[row.setting] : false;

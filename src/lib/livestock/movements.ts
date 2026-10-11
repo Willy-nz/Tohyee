@@ -1,5 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
-import { parseIsoDate } from "@/lib/dates";
+import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays, financialYearEnd, financialYearStart } from "@/lib/financial-year";
@@ -220,7 +220,8 @@ export async function updateLivestockSettings(
     }
     firstYearStart = date;
   }
-  if (enabled && !firstYearStart) throw new ValidationError("Say which income year livestock starts in (the first day of that financial year).");
+  // Turned on from Modules without a first year: the current financial year, changeable in Livestock settings until movements are recorded.
+  if (enabled && !firstYearStart) firstYearStart = financialYearStart(todayIsoDate(), organisation.financialYearEndMonth);
   const revaluationTarget =
     input.revaluationTarget === undefined ? current.revaluationTarget : requireOneOf(input.revaluationTarget, "revaluationTarget", ["profit_and_loss", "reserve"] as const);
   // A new revaluation target applies from the next valuation approved (LV12); approved years are never re-posted.
