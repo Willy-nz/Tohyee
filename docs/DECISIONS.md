@@ -4337,3 +4337,11 @@ testing) and #154's code signing (later, Jess).
      - **Elections:** by kind, not by class.
      - **NSC:** mature stock that leaves comes out at the opening average,
        before intake and purchases join, as LV6.
+506. **Livestock account sales, beef males under NSC, management
+     valuations** (#221; Jess 11 Oct 2026, LV13-LV20 approved).
+     - **Account sales:** the agent's account sale is the farmer's tax
+       invoice (buyer-created). Tohyee issues none of its own. The net is
+       owed by the agent and matched when paid.
+     - **Beef males under NSC:** non-breeding beef males add NSC until
+       rising three, then join the mature group.
+     - **Management valuations:** monthly, report only to start with.
