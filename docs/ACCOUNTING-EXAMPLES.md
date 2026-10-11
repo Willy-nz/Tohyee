@@ -16098,10 +16098,8 @@ out: the male breeding stock rules aren't checked.
     - Steers and bulls rising two and older.
 - **LV12:** the setting applies to the next approval. The tax workings are
   the same either way.
-- **Not built yet:**
-  - LV7's agent account sale as its own document. A sale's amount comes
-    from the movement or its linked invoice line.
-  - The screens.
+- **Not built yet:** LV7's agent account sale as its own document. A
+  sale's amount comes from the movement or its linked invoice line.
 
 ### Not supported in the first release (refused with a reason)
 

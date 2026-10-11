@@ -986,7 +986,10 @@ that something happened.
     - Approval is refused until counts, elections, rates, amounts and the
       ledger opening tie.
     - Replacing a valuation reverses its journal.
-  - No screens yet.
+  - **Screens** under Accountant › Assets › Livestock: the head count,
+    movements, and the valuation with a step for each. Livestock's
+    settings (opening, elections, rates, accounts, locations) are under
+    Settings.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
