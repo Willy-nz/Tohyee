@@ -15818,7 +15818,7 @@ income year. Dairy cattle only. Proposed accounts (question 3):
 
 | Code | Name | Type |
 | --- | --- | --- |
-| 1500 | Livestock on hand | asset |
+| 1500 | Livestock on hand | non-current asset |
 | 4300 | Livestock sales | revenue |
 | 5200 | Livestock purchases | direct costs |
 | 5210 | Livestock: change in value | direct costs |
@@ -16037,15 +16037,18 @@ and forecasts (#221 stage 5).
 
    **Answered: each farm chooses** (LV12).
 3. **Accounts:** are the proposed codes and names right? Should livestock be
-   a current or non-current asset?
+   a current or non-current asset? **Answered: non-current asset** (1500
+   Livestock on hand is a non-current asset). Codes and names not
+   discussed; the draft stands.
 4. **Agent account sales (LV7):** one sales document with deductions (the
    draft), or an invoice to the agent plus a bill from them? **Answered:
    one document with deductions.**
 5. **NSC mature group:** averaging or FIFO, or let each farm choose?
-   **Answered: averaging.** Still open: is my reading of the grouping
-   (mature = rising two and older) right?
+   **Answered: averaging; and yes, the mature group is rising two and
+   older** (LV6, LV11).
 6. **Opening position:** a new farm in Tohyee brings last year's closing by
    class and value from its previous workpaper (LV4 and LV6 start this
    way). Is that enough, or do we need the NSC cost layers too?
 7. **Elections:** record each farm's method by class, with the year
    elected and the evidence (a file), without Tohyee filing anything. Agree?
+   **Answered: yes.**

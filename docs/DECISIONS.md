@@ -4302,9 +4302,10 @@ testing) and #154's code signing (later, Jess).
      - **NSC mature group:** averaging only (no FIFO yet).
      - **Agent account sales:** one sales document with its deductions
        (LV7).
+     - **Livestock on hand** is a non-current asset.
+     - **NSC mature group:** rising two-year and older.
+     - **Elections:** each farm's method by class, with the year elected and
+       evidence attached. Tohyee files nothing with IRD.
      - **Still open:**
-       - Account codes, and current or non-current.
-       - The NSC grouping.
        - Opening cost layers.
-       - Recording elections.
        - Anything in IRD OS 25/02, which hasn't been read.
