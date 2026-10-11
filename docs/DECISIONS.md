@@ -4322,3 +4322,18 @@ testing) and #154's code signing (later, Jess).
        date, ageing included. Stock held for others is kept apart.
      - **Locks:** movements respect the lock date. Stage 3 also locks years
        with an approved valuation.
+505. **Livestock year-end valuation** (#221 stage 3; built 11 Oct 2026 from
+     LV4-LV12).
+     - **Approval:** an admin approves, posting one journal at the year end.
+       Last year's valuation must be approved first. The livestock
+       account's balance must equal the opening value.
+     - **Locked once approved:** a year's movements, opening, rates and
+       elections can't change. Replacing reverses the journal.
+     - **Rates:** IRD's 2026 NAMV and NSC come with Tohyee, with their
+       source.
+     - **Income year:** taken from the balance date. April to September
+       belongs to the 31 March before; October to March to the next (to be
+       confirmed by Jess).
+     - **Elections:** by kind, not by class.
+     - **NSC:** mature stock that leaves comes out at the opening average,
+       before intake and purchases join, as LV6.

@@ -974,8 +974,22 @@ that something happened.
     Year-end counts show any difference as "not explained".
   - **Stock held for others** is shown but never counted.
   - **Never below zero:** no class is let go below zero on any date.
-  - Nothing posts yet. The valuation is stage 3, and there are no screens
-    yet.
+  - **Year-end valuation** (stage 3, decision 505, LV4-LV12):
+    - Herd scheme and national standard cost (mature group averaged). Each
+      farm's elections are kept with their evidence.
+    - IRD's 2026 rates come with Tohyee, and an admin can add other years
+      with their source.
+    - The workings and the trading statement show taxable profit, with the
+      non-taxable revaluation separate.
+    - One approved journal posts at the year end. The revaluation goes to
+      profit and loss or a reserve.
+    - Approval is refused until counts, elections, rates, amounts and the
+      ledger opening tie.
+    - Replacing a valuation reverses its journal.
+  - **Screens** under Accountant › Assets › Livestock: the head count,
+    movements, and the valuation with a step for each. Livestock's
+    settings (opening, elections, rates, accounts, locations) are under
+    Settings.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never

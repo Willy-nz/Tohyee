@@ -196,6 +196,8 @@ export const MENUS: Menu[] = [
         links: [
           { href: "/operations/fixed-assets", label: "Fixed assets" },
           { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },
+          { href: "/operations/livestock", label: "Livestock" },
+          { href: "/operations/livestock/valuation", label: "Livestock valuation" },
         ],
       },
       {
@@ -222,6 +224,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/sales-platforms", label: "Sales platforms" },
           { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
+          { href: "/operations/livestock/settings", label: "Livestock" },
           { href: "/operations/settings/bank-files", label: "Bank files", minRole: "bookkeeper" },
           { href: "/operations/settings/kilometre-rates", label: "Kilometre rates" },
           { href: "/operations/settings/online-payments", label: "Online payments" },
@@ -315,6 +318,7 @@ export const AREAS: Record<string, string[]> = {
     "/operations/ledger-journals",
     "/operations/inventory",
     "/operations/fixed-assets",
+    "/operations/livestock",
     "/operations/period-close",
     "/operations/bank-accounts",
     "/operations/gst-return",
