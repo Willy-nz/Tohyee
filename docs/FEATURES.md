@@ -988,6 +988,14 @@ that something happened.
     - Approval is refused until counts, elections, rates, amounts and the
       ledger opening tie.
     - Replacing a valuation reverses its journal.
+  - **Agent account sales** (LV13-LV16): stock lines, deductions and
+    the net the agent owes, entered once. They are kept as an invoice, a
+    bill and a contra, so GST, payments and receivables work as usual.
+  - **Beef males under NSC** (LV17) add a cost each year until rising
+    three, then join the mature group.
+  - **Monthly management values** (LV18-LV20): stock on hand at the
+    farm's own values per head, month by month, with head and price
+    changes. A report only.
   - **Screens** under Accountant › Assets › Livestock: the head count,
     movements, and the valuation with a step for each. Livestock's
     settings (opening, elections, rates, accounts, locations) are under

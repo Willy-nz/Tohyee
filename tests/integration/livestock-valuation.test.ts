@@ -198,6 +198,7 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     expect(preview.workings.kinds[0].nsc).toEqual({
       risingOneRate: "788.90",
       risingTwoRate: "535.50",
+      risingThreeRate: null,
       matureOpeningHead: 370,
       matureOpeningValue: "440300.00",
       matureOut: 65,
@@ -277,6 +278,34 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
       ["1500", "438.00", "0.00"],
       ["5210", "0.00", "438.00"],
     ]);
+  });
+
+  it("LV17: beef steers under NSC add a cost each year until rising three, then join the mature group", async () => {
+    const org = "livestock-beef-nsc";
+    await farm(
+      org,
+      6,
+      "2025-07-01",
+      [
+        ["beef_cattle", "r1_steers_bulls", 30, "13677.00"],
+        ["beef_cattle", "r2_steers_bulls", 20, "14000.00"],
+        ["beef_cattle", "ma_cows", 100, "150000.00"],
+      ],
+      "177677.00",
+    );
+    await run(org, (tx) => recordElection(tx, { kind: "beef_cattle", method: "nsc", fromIncomeYear: 2026 }));
+    const preview = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-06-30" }));
+    expect(preview.problems).toEqual([]);
+    const beef = preview.workings.kinds[0];
+    expect(beef.classes.map((entry) => [entry.classCode, entry.closingHead, entry.closingValue])).toEqual([
+      ["ma_cows", 100, "140850.00"],
+      ["r1_steers_bulls", 0, "0.00"],
+      ["r2_steers_bulls", 30, "21207.00"],
+      // The mature group (cows and the steers that turned rising three) is averaged: 169,020.00 shared by head.
+      ["r3_steers_bulls", 20, "28170.00"],
+    ]);
+    expect(beef.nsc).toMatchObject({ risingThreeRate: "251.00", intakeHead: 20, intakeValue: "19020.00", matureClosingHead: 120, matureClosingValue: "169020.00" });
+    expect(beef).toMatchObject({ openingValue: "177677.00", closingValue: "190227.00", valueChange: "12550.00", taxableProfit: "12550.00" });
   });
 
   it("refuses what isn't supported or doesn't tie: rates, breeding bulls, a wrong ledger opening, next year before this one", async () => {

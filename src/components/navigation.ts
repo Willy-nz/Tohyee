@@ -197,7 +197,9 @@ export const MENUS: Menu[] = [
           { href: "/operations/fixed-assets", label: "Fixed assets" },
           { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },
           { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+          { href: "/operations/livestock/account-sales", label: "Account sales", module: "livestock" },
           { href: "/operations/livestock/valuation", label: "Livestock valuation", module: "livestock" },
+          { href: "/operations/livestock/management", label: "Livestock management values", module: "livestock" },
         ],
       },
       {
