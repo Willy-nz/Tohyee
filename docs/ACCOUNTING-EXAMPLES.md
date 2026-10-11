@@ -15936,30 +15936,114 @@ The same year's movements are used in LV1, LV4 and LV6:
   valuation is marked out of date. A replacement is posted as a reversing
   journal and a new one, never by editing. A locked period refuses it.
 
+### Beef and sheep (added 11 Oct 2026, after question 1)
+
+Tussock Station Ltd (made up), sheep and beef, balance date 30 June, so
+1 Jul 2025 to 30 Jun 2026 is the 2025-26 income year. Same accounts as
+Kōwhai. Rates: 2026 NAMV and NSC (above), beef and sheep rows checked
+twice against IRD's pages on 11 Oct 2026. Breeding bulls and rams are left
+out: the male breeding stock rules aren't checked.
+
+- **LV10** Beef herd scheme. Last year's workpaper (made up):
+  - Mixed-age cows: 100 at 2,000.00 = 200,000.00.
+  - Rising one-year heifers: 30 at 1,100.00 = 33,000.00.
+  - Rising one-year steers: 30 at 1,300.00 = 39,000.00.
+  - Opening **272,000.00**, 160 head.
+
+  The year:
+  - 85 calves born. 42 heifers and 43 steers are rising one-year at 30 June.
+  - The 30 opening steers are sold, and so are 10 of the opening heifers
+    and 10 cull cows. Sales total **87,000.00** plus GST.
+  - 2 cows died.
+  - The 20 heifers left become rising two-year heifers.
+
+  Head count: 160 + 85 born - 50 sold - 2 died = **193** (88 cows, 20
+  rising two-year heifers, 42 rising one-year heifers, 43 rising one-year
+  steers).
+
+  Opening revalued: 100 x 2,376.00 + 30 x 1,319.00 + 30 x 1,619.00 =
+  **325,740.00**. Revaluation (non-taxable) **53,740.00**.
+
+  Closing: 88 x 2,376.00 + 20 x 1,959.00 + 42 x 1,319.00 + 43 x 1,619.00 =
+  209,088.00 + 39,180.00 + 55,398.00 + 69,617.00 = **373,283.00**.
+
+  Taxable livestock profit: 87,000.00 + 373,283.00 - 325,740.00 =
+  **134,543.00**.
+
+  Journal: Dr 1500 **101,283.00**, Cr 7060 (or the reserve, LV12) 53,740.00,
+  Cr 5210 47,543.00.
+- **LV11** Sheep NSC, averaging. Last year's workpaper (made up):
+  - Ewe hoggets: 300 at 43.30 (2025 rising 1 year NSC) = 12,990.00.
+  - Mature group: 1,000 ewes, 75,000.00 (75.00 average).
+  - Opening **87,990.00**, 1,300 head.
+
+  The year:
+  - 1,520 lambs born. 1,200 are sold as lambs for 180,000.00, and 320 are
+    kept as ewe hoggets.
+  - 250 cull ewes are sold for 30,000.00. Sales total **210,000.00**.
+  - 40 ewes died.
+
+  Head count: 1,300 + 1,520 - 1,450 - 40 = **1,330**.
+
+  Closing:
+  - Ewe hoggets: 320 x 41.40 = **13,248.00**.
+  - Mature group:
+    - Survivors: 710 x 75.00 = 53,250.00.
+    - Intake: 300 x (43.30 + 29.80) = 300 x 73.10 = 21,930.00.
+    - Total 1,010 head, **75,180.00** (average 74.44).
+  - Closing **88,428.00**.
+
+  Taxable livestock profit: 210,000.00 + 88,428.00 - 87,990.00 =
+  **210,438.00**.
+
+  Journal: Dr 1500 **438.00**, Cr 5210 **438.00**. Lambs born and sold in
+  the same year have no closing value. Their sale is income through LV7's
+  documents.
+
+### Where the herd scheme revaluation goes (question 2: each farm chooses)
+
+- **LV12** A setting per organisation, chosen when livestock is turned on:
+  - **Profit and loss:** LV4 as drafted. Cr 7060 Herd scheme revaluation
+    (non-taxable), shown below the livestock trading profit.
+  - **Equity reserve:** LV4's journal becomes Dr 1500 200,240.00, Cr 3300
+    Herd scheme revaluation reserve **138,260.00**, Cr 5210 61,980.00. The
+    statement of changes in equity shows the reserve: opening + 138,260.00
+    = closing. The trading statement still shows the 138,260.00 as a
+    separate non-taxable line, so the tax workpaper is the same either way.
+
+  Proposed (not decided): changing the setting applies from the next year
+  not yet approved. Approved years are never re-posted.
+
 ### Not supported in the first release (refused with a reason)
 
 High-priced livestock; self-assessed cost; market or replacement value;
 mixed methods within one class; male breeding stock rules; associated-person
 transfers; starting or leaving a scheme; Chatham Islands; species other than
-the first ones chosen (question 1); monthly management valuations; budgets
+dairy cattle, beef cattle and sheep (question 1); FIFO for NSC; monthly
+management valuations; budgets
 and forecasts (#221 stage 5).
 
 ### Questions for Jess
 
 1. **First release:** dairy cattle only (herd scheme and NSC), or dairy,
-   beef and sheep together?
+   beef and sheep together? **Answered: dairy, beef and sheep** (LV10,
+   LV11).
 2. **Herd scheme revaluation (LV4):** where should the non-taxable
    revaluation go? Either:
    - **(a)** profit and loss, as its own non-taxable line below trading
      (the draft), or
    - **(b)** an equity reserve. Does it depend on the reporting basis
      (special-purpose tax-basis statements vs. GAAP)?
+
+   **Answered: each farm chooses** (LV12).
 3. **Accounts:** are the proposed codes and names right? Should livestock be
    a current or non-current asset?
 4. **Agent account sales (LV7):** one sales document with deductions (the
-   draft), or an invoice to the agent plus a bill from them?
-5. **NSC mature group:** averaging or FIFO, or let each farm choose? Is my
-   reading of the grouping (mature = rising two and older) right?
+   draft), or an invoice to the agent plus a bill from them? **Answered:
+   one document with deductions.**
+5. **NSC mature group:** averaging or FIFO, or let each farm choose?
+   **Answered: averaging.** Still open: is my reading of the grouping
+   (mature = rising two and older) right?
 6. **Opening position:** a new farm in Tohyee brings last year's closing by
    class and value from its previous workpaper (LV4 and LV6 start this
    way). Is that enough, or do we need the NSC cost layers too?
