@@ -937,14 +937,26 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Card title="Livestock" description="Part of Accounting. Dairy cattle, beef cattle and sheep, by IRD's classes.">
         {current.enabled ? (
-          <p>
+          <>
+            <p>
             On, from the year starting {formatDate(current.firstYearStart)}.{" "}
             {isAdmin ? (
               <Button variant="secondary" size="small" onClick={() => void patch({ enabled: false }, "Livestock turned off. Its records are kept.")}>
                 Turn off
               </Button>
             ) : null}
-          </p>
+            </p>
+            {isAdmin ? (
+              <div className={ui.inlineForm}>
+                <Field label="First income year starts" hint="Can change until movements are recorded. The opening position is as at the day before.">
+                  <input type="date" value={firstYearStart || current.firstYearStart || ""} onChange={(event) => setFirstYearStart(event.target.value)} />
+                </Field>
+                <Button variant="secondary" disabled={!firstYearStart || firstYearStart === current.firstYearStart} onClick={() => void patch({ firstYearStart }, "The first year is changed.")}>
+                  Change
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : isAdmin ? (
           <div className={ui.inlineForm}>
             <Field label="First income year starts" hint="The first day of the financial year Tohyee's livestock records start in. Its opening comes from last year's workpaper.">

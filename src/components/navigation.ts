@@ -2,7 +2,7 @@ import type { Modules } from "@/components/modules";
 import type { Role } from "@/lib/auth/roles";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics" | "gst";
+export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock";
 export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 export type MenuGroup = { heading: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -196,8 +196,8 @@ export const MENUS: Menu[] = [
         links: [
           { href: "/operations/fixed-assets", label: "Fixed assets" },
           { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },
-          { href: "/operations/livestock", label: "Livestock" },
-          { href: "/operations/livestock/valuation", label: "Livestock valuation" },
+          { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+          { href: "/operations/livestock/valuation", label: "Livestock valuation", module: "livestock" },
         ],
       },
       {
@@ -224,7 +224,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/sales-platforms", label: "Sales platforms" },
           { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
-          { href: "/operations/livestock/settings", label: "Livestock" },
+          { href: "/operations/livestock/settings", label: "Livestock", module: "livestock" },
           { href: "/operations/settings/bank-files", label: "Bank files", minRole: "bookkeeper" },
           { href: "/operations/settings/kilometre-rates", label: "Kilometre rates" },
           { href: "/operations/settings/online-payments", label: "Online payments" },
