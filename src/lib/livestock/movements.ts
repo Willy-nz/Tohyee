@@ -1060,3 +1060,12 @@ export async function yearFacts(tx: OrgTx, yearEnd: string): Promise<YearFacts> 
 }
 
 export { requireYearEnd };
+
+/** The farm's own head by class at the end of each date (ageing included), for management valuations (LV18). */
+export async function herdBalancesAt(tx: OrgTx, dates: readonly string[]): Promise<Map<string, Map<string, number>>> {
+  const settings = await requireLivestock(tx);
+  const state = await loadHerd(tx, settings);
+  const result = new Map<string, Map<string, number>>();
+  for (const date of dates) result.set(date, date < settings.firstYearStart ? new Map(state.openings) : walk(state, date).balances);
+  return result;
+}

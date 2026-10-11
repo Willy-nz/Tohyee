@@ -37,6 +37,8 @@ export type ClassWorking = {
 export type NscWorking = {
   risingOneRate: string;
   risingTwoRate: string;
+  /** Beef males turning rising three (LV17), when there are any. */
+  risingThreeRate: string | null;
   matureOpeningHead: number;
   matureOpeningValue: string;
   matureOut: number;
@@ -131,7 +133,12 @@ export function incomeYearOf(yearEnd: string): number {
 
 export type Rate = { id: string; incomeYear: number; rateKind: "namv" | "nsc"; kind: LivestockKind; category: string; categoryName: string; amount: string; source: string; enteredByEmail: string };
 
-const NSC_CATEGORIES = { rising_1: "Rising 1 year", rising_2: "Rising 2 year", purchased_bobby_calves: "Purchased bobby calves" } as const;
+const NSC_CATEGORIES = {
+  rising_1: "Rising 1 year",
+  rising_2: "Rising 2 year",
+  rising_3_male: "Rising 3-year male non-breeding",
+  purchased_bobby_calves: "Purchased bobby calves",
+} as const;
 
 export async function listRates(tx: OrgTx, input: { incomeYear?: unknown } = {}): Promise<Rate[]> {
   const year = input.incomeYear === undefined || input.incomeYear === null || input.incomeYear === "" ? null : Number(parseDecimalInput(input.incomeYear, "incomeYear", { maxScale: 0 }));
@@ -166,7 +173,7 @@ export async function setRate(tx: OrgTx, input: { incomeYear: unknown; rateKind:
   const kind = requireOneOf(input.kind, "kind", LIVESTOCK_KINDS);
   const category = requireString(input.category, "category", { maxLength: 50 });
   if (rateKind === "namv" && !findClass(kind, category)) throw new ValidationError(`${KIND_NAMES[kind]} has no class "${category}".`);
-  if (rateKind === "nsc" && !(category in NSC_CATEGORIES)) throw new ValidationError("An NSC category is rising_1, rising_2 or purchased_bobby_calves.");
+  if (rateKind === "nsc" && !(category in NSC_CATEGORIES)) throw new ValidationError("An NSC category is rising_1, rising_2, rising_3_male or purchased_bobby_calves.");
   const amount = parseDecimalInput(input.amount, "Amount", { maxScale: 2, allowZero: true });
   const source = requireString(input.source, "Where the rate came from", { maxLength: 500 });
   const used = await tx.query("select 1 from livestock_valuations where income_year = $1 and status = 'approved'", [incomeYear]);
@@ -484,20 +491,23 @@ function nsc(
     }
   }
   let matureOut = 0;
+  const risingTwoOut = new Map<string, number>();
   let purchasedHead = 0;
   let purchasedCost = ZERO_DECIMAL;
   for (const movement of facts.movements.filter((entry) => entry.kind === kind)) {
     const group = groupOf(movement.classCode);
     const label = `${movement.head} ${className(kind, movement.classCode).toLowerCase()} on ${movement.movementDate}`;
     if (movement.movementType === "found") problems.push(`${kindName}: found stock (${label}) under national standard cost isn't supported yet.`);
-    if (movement.movementType === "purchase" && group === "rising_1") {
+    if (movement.movementType === "purchase" && (group === "rising_1" || group === "rising_2")) {
       problems.push(`${kindName}: bought young stock (${label}) under national standard cost isn't supported yet.`);
     }
     if (movement.movementType === "reclass" && groupOf(movement.toClassCode ?? "") !== group) {
       problems.push(`${kindName}: a class change between young and mature stock (${label}) isn't supported yet.`);
     }
+    const leaving = movement.movementType === "sale" || movement.movementType === "death" || movement.movementType === "missing";
+    if (group === "rising_2" && leaving) risingTwoOut.set(movement.classCode, (risingTwoOut.get(movement.classCode) ?? 0) + movement.head);
     if (group !== "mature") continue;
-    if (movement.movementType === "sale" || movement.movementType === "death" || movement.movementType === "missing") matureOut += movement.head;
+    if (leaving) matureOut += movement.head;
     if (movement.movementType === "purchase") {
       purchasedHead += movement.head;
       const amount = movementAmount(movement);
@@ -514,15 +524,36 @@ function nsc(
   }
   let intakeHead = 0;
   let intakeValue = ZERO_DECIMAL;
+  const risingThreeRate = rates.get(`nsc.${kind}.rising_3_male`) ?? null;
+  let usedRisingThree = false;
+  // Beef males that turned rising two this year: their value (last year's plus the rising two NSC) and head, by class (LV17).
+  const risingTwoIn = new Map<string, { head: number; value: Decimal }>();
   for (const step of facts.ageing.steps.filter((entry) => entry.kind === kind)) {
-    if (groupOf(step.classCode) !== "rising_1") continue;
-    if (groupOf(step.toClassCode) !== "mature") {
-      problems.push(`${kindName}: ${step.className.toLowerCase()} turn ${step.toClassName.toLowerCase()}, which national standard cost doesn't support yet.`);
-      continue;
-    }
+    const from = groupOf(step.classCode);
+    const to = groupOf(step.toClassCode);
     // Ageing moves every head on hand at the end of last year, so its value is the class's whole opening value.
-    intakeHead += step.head;
-    intakeValue = add(intakeValue, add(dec(openingOf(step.classCode)), mul(dec(String(step.head)), dec(risingTwoRate))));
+    if (from === "rising_1" && to === "mature") {
+      intakeHead += step.head;
+      intakeValue = add(intakeValue, add(dec(openingOf(step.classCode)), mul(dec(String(step.head)), dec(risingTwoRate))));
+    } else if (from === "rising_1" && to === "rising_2") {
+      risingTwoIn.set(step.toClassCode, { head: step.head, value: add(dec(openingOf(step.classCode)), mul(dec(String(step.head)), dec(risingTwoRate))) });
+    } else if (from === "rising_2" && to === "mature") {
+      if (risingThreeRate === null) {
+        problems.push(`${kindName}: there's no ${incomeYear} rising 3-year male non-breeding national standard cost. Add it from IRD's determination.`);
+        continue;
+      }
+      usedRisingThree = true;
+      intakeHead += step.head;
+      intakeValue = add(intakeValue, add(dec(openingOf(step.classCode)), mul(dec(String(step.head)), dec(risingThreeRate))));
+    } else if (from === "rising_1" || from === "rising_2") {
+      problems.push(`${kindName}: ${step.className.toLowerCase()} turn ${step.toClassName.toLowerCase()}, which national standard cost doesn't support yet.`);
+    }
+  }
+  for (const entry of classes.filter((item) => item.nsc === "rising_2")) {
+    const aged = risingTwoIn.get(entry.code)?.head ?? 0;
+    if ((risingTwoOut.get(entry.code) ?? 0) > aged) {
+      problems.push(`${kindName}: more ${entry.name.toLowerCase()} left than turned rising two this year, which isn't supported yet.`);
+    }
   }
   if (matureOut > matureOpeningHead) {
     problems.push(`${kindName}: more mature stock left (${matureOut}) than was on hand at the start of the year (${matureOpeningHead}), which isn't supported yet.`);
@@ -555,6 +586,21 @@ function nsc(
         closingHead,
         closingValue: money(mul(dec(String(closingHead)), dec(risingOneRate))),
       });
+    } else if (entry.nsc === "rising_2") {
+      const aged = risingTwoIn.get(entry.code);
+      if (openingHead === 0 && closingHead === 0 && isZero(openingValue) && !aged) continue;
+      // Those that turned rising two this year, less any that left at their average (LV17).
+      const closingValue = aged && aged.head > 0 ? mulDiv(aged.value, dec(String(closingHead)), dec(String(aged.head)), 2) : ZERO_DECIMAL;
+      working.push({
+        classCode: entry.code,
+        className: entry.name,
+        openingHead,
+        openingValue: money(openingValue),
+        rate: risingTwoRate,
+        openingRevalued: money(openingValue),
+        closingHead,
+        closingValue: money(closingValue),
+      });
     } else if (entry.nsc === "mature" && matureClasses.includes(entry)) {
       let closingValue = ZERO_DECIMAL;
       if (closingHead > 0) {
@@ -579,6 +625,7 @@ function nsc(
     nsc: {
       risingOneRate,
       risingTwoRate,
+      risingThreeRate: usedRisingThree ? risingThreeRate : null,
       matureOpeningHead,
       matureOpeningValue: money(matureOpeningValue),
       matureOut,

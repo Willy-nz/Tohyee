@@ -12,6 +12,8 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { classesOf, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "@/lib/livestock/classes";
 import type { AgeingPreview, HeadCount, LivestockLocation, LivestockOpening, LivestockSettings, Movement, MovementType } from "@/lib/livestock/movements";
+import type { AccountSale } from "@/lib/livestock/account-sales";
+import type { ManagementReport, ManagementValue } from "@/lib/livestock/management";
 import type { Election, Rate, ValuationPreview } from "@/lib/livestock/valuation";
 
 /*
@@ -96,11 +98,13 @@ function YearPicker({ years, value, onChange }: { years: string[]; value: string
   );
 }
 
-function Steps({ current }: { current: "movements" | "valuation" | "overview" }) {
+function Steps({ current }: { current: "movements" | "account-sales" | "valuation" | "overview" | "management" }) {
   const steps = [
     { key: "movements", href: "/operations/livestock/movements", label: "1. Movements", text: "Births, purchases, sales, deaths and moves" },
+    { key: "account-sales", href: "/operations/livestock/account-sales", label: "Account sales", text: "Stock agents' account sales, entered once" },
     { key: "overview", href: "/operations/livestock", label: "2. Head count", text: "Reconcile by class; enter the year-end count" },
     { key: "valuation", href: "/operations/livestock/valuation", label: "3. Value, review and post", text: "Workings, trading statement and the journal" },
+    { key: "management", href: "/operations/livestock/management", label: "Management values", text: "Monthly stock on hand at the farm's own values; posts nothing" },
   ];
   return (
     <nav className={ui.tabs} aria-label="Livestock steps">
@@ -1171,6 +1175,7 @@ function RatesCard({ organisationId, canEdit }: { organisationId: string; canEdi
       : ([
           ["rising_1", "Rising 1 year"],
           ["rising_2", "Rising 2 year"],
+          ["rising_3_male", "Rising 3-year male non-breeding"],
           ["purchased_bobby_calves", "Purchased bobby calves"],
         ] as const);
 
@@ -1306,5 +1311,360 @@ function LocationsCard({ organisationId, canEdit }: { organisationId: string; ca
         </div>
       ) : null}
     </Card>
+  );
+}
+
+// Account sales ------------------------------------------------------------------------
+
+type ContactOption = { id: string; name: string };
+
+export function LivestockAccountSales({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const confirm = useConfirm();
+  const settings = useLivestockSettings(organisationId);
+  const sales = useApiData<{ accountSales: AccountSale[] }>("/api/livestock/account-sales", { organisationId });
+  const contacts = useApiData<{ contacts: ContactOption[] }>("/api/contacts", { organisationId });
+  const [form, setForm] = useState({ contactId: "", reference: "", saleDate: todayInBrowser(), dueDate: "" });
+  const [lines, setLines] = useState([{ kind: "dairy_cattle" as LivestockKind, classCode: "ma_cows", head: "", amount: "" }]);
+  const [deductions, setDeductions] = useState([
+    { description: "Commission", accountCode: "", amount: "" },
+    { description: "Freight", accountCode: "", amount: "" },
+  ]);
+  const accounts = useAccounts(organisationId);
+  const [key, setKey] = useState(() => newIdempotencyKey("as"));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  if (settings.error) return <Notice tone="error">{settings.error}</Notice>;
+  if (!settings.data) return <p className={ui.muted}>Loading…</p>;
+  if (!settings.data.settings.enabled) return <NotOn canSetUp={can("admin")} />;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ accountSale: AccountSale }>("/api/livestock/account-sales", {
+        method: "POST",
+        body: {
+          organisationId,
+          source: "ui",
+          idempotencyKey: key,
+          contactId: form.contactId,
+          reference: form.reference,
+          saleDate: form.saleDate,
+          dueDate: form.dueDate || null,
+          lines: lines.filter((line) => line.head.trim() !== ""),
+          deductions: deductions.filter((line) => line.amount.trim() !== ""),
+        },
+      });
+      setMessage(`Account sale ${result.accountSale.reference} entered: ${result.accountSale.contactName} owes ${result.accountSale.net}.`);
+      setKey(newIdempotencyKey("as"));
+      setForm({ ...form, reference: "" });
+      setLines([{ kind: "dairy_cattle", classCode: "ma_cows", head: "", amount: "" }]);
+      sales.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function voidOne(sale: AccountSale) {
+    if (!(await confirm(`Void account sale ${sale.reference}? Its invoice, deductions bill, contra and movements are all reversed.`, { confirmLabel: "Void", danger: true }))) return;
+    try {
+      await api(`/api/livestock/account-sales/${sale.id}/void`, { method: "POST", body: { organisationId, reason: "Voided in Livestock › Account sales" } });
+      sales.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  return (
+    <>
+      <Steps current="account-sales" />
+      {message ? <Notice tone="success">{message}</Notice> : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {can("bookkeeper") ? (
+        <Card
+          title="Enter an account sale"
+          description="The agent's account sale is your tax invoice. Its stock lines become an invoice to the agent and sale movements; its deductions a bill from the agent, settled against the invoice. The agent then owes the net. Amounts exclude GST."
+        >
+          <div className={ui.grid}>
+            <Field label="Agent">
+              <select value={form.contactId} onChange={(event) => setForm({ ...form, contactId: event.target.value })}>
+                <option value="">Choose…</option>
+                {(contacts.data?.contacts ?? []).map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Account sale number">
+              <input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} />
+            </Field>
+            <Field label="Sale date">
+              <input type="date" value={form.saleDate} onChange={(event) => setForm({ ...form, saleDate: event.target.value })} />
+            </Field>
+            <Field label="Agent pays by" hint="Blank: the sale date">
+              <input type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} />
+            </Field>
+          </div>
+          <h3>Stock sold</h3>
+          {lines.map((line, index) => (
+            <div key={index} className={ui.inlineForm}>
+              <Field label="Livestock">
+                <select
+                  value={line.kind}
+                  onChange={(event) => {
+                    const kind = event.target.value as LivestockKind;
+                    setLines(lines.map((entry, at) => (at === index ? { ...entry, kind, classCode: classesOf(kind)[0].code } : entry)));
+                  }}
+                >
+                  {LIVESTOCK_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {KIND_NAMES[kind]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Class">
+                <select value={line.classCode} onChange={(event) => setLines(lines.map((entry, at) => (at === index ? { ...entry, classCode: event.target.value } : entry)))}>
+                  {classesOf(line.kind).map((entry) => (
+                    <option key={entry.code} value={entry.code}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Head">
+                <input inputMode="numeric" size={6} value={line.head} onChange={(event) => setLines(lines.map((entry, at) => (at === index ? { ...entry, head: event.target.value } : entry)))} />
+              </Field>
+              <Field label="Amount excl. GST">
+                <input inputMode="decimal" size={10} value={line.amount} onChange={(event) => setLines(lines.map((entry, at) => (at === index ? { ...entry, amount: event.target.value } : entry)))} />
+              </Field>
+            </div>
+          ))}
+          <Button variant="secondary" size="small" onClick={() => setLines([...lines, { kind: lines[lines.length - 1].kind, classCode: lines[lines.length - 1].classCode, head: "", amount: "" }])}>
+            Add a line
+          </Button>
+          <h3>Deductions</h3>
+          {deductions.map((line, index) => (
+            <div key={index} className={ui.inlineForm}>
+              <Field label="Description">
+                <input value={line.description} onChange={(event) => setDeductions(deductions.map((entry, at) => (at === index ? { ...entry, description: event.target.value } : entry)))} />
+              </Field>
+              <Field label="Account">
+                {accounts.data ? (
+                  <AccountSelect
+                    accounts={accounts.data.accounts}
+                    value={line.accountCode}
+                    filter={(account) => account.accountClass === "expense"}
+                    onChange={(code) => setDeductions(deductions.map((entry, at) => (at === index ? { ...entry, accountCode: code } : entry)))}
+                  />
+                ) : (
+                  <span />
+                )}
+              </Field>
+              <Field label="Amount excl. GST">
+                <input inputMode="decimal" size={10} value={line.amount} onChange={(event) => setDeductions(deductions.map((entry, at) => (at === index ? { ...entry, amount: event.target.value } : entry)))} />
+              </Field>
+            </div>
+          ))}
+          <Button variant="secondary" size="small" onClick={() => setDeductions([...deductions, { description: "", accountCode: "", amount: "" }])}>
+            Add a deduction
+          </Button>
+          <div className={ui.actions}>
+            <Button disabled={busy || !form.contactId || !form.reference.trim()} onClick={() => void save()}>
+              Enter account sale
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+      <Card title="Account sales" description="Each is entered once per agent and number. The net is on the agent's invoice until it pays.">
+        {sales.data && sales.data.accountSales.length === 0 ? <Empty>No account sales yet.</Empty> : null}
+        {sales.data && sales.data.accountSales.length > 0 ? (
+          <div className={ui.tableWrap}>
+            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Agent</th>
+                  <th>Number</th>
+                  <th className={ui.num}>Sales incl. GST</th>
+                  <th className={ui.num}>Deductions</th>
+                  <th className={ui.num}>Net</th>
+                  <th className={ui.num}>Still owed</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {sales.data.accountSales.map((sale) => (
+                  <tr key={sale.id}>
+                    <td data-label="Date">{formatDate(sale.saleDate)}</td>
+                    <td data-label="Agent">{sale.contactName}</td>
+                    <td data-label="Number">
+                      <Link href={`/operations/invoices/${sale.invoiceId}`}>{sale.reference}</Link> {sale.status === "voided" ? <Badge tone="red">Voided</Badge> : null}
+                    </td>
+                    <td data-label="Sales" className={ui.num}>
+                      <Money value={sale.gross} />
+                    </td>
+                    <td data-label="Deductions" className={ui.num}>
+                      <Money value={sale.deductions} />
+                    </td>
+                    <td data-label="Net" className={ui.num}>
+                      <Money value={sale.net} />
+                    </td>
+                    <td data-label="Still owed" className={ui.num}>
+                      <Money value={sale.status === "voided" ? "0" : sale.amountDue} />
+                    </td>
+                    <td>
+                      {can("bookkeeper") && sale.status === "active" ? (
+                        <Button variant="secondary" size="small" onClick={() => void voidOne(sale)}>
+                          Void
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Card>
+    </>
+  );
+}
+
+// Management values ---------------------------------------------------------------------
+
+export function LivestockManagement({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const settings = useLivestockSettings(organisationId);
+  const [chosen, setChosen] = useState<string | null>(null);
+  if (settings.error) return <Notice tone="error">{settings.error}</Notice>;
+  if (!settings.data) return <p className={ui.muted}>Loading…</p>;
+  if (!settings.data.settings.enabled) return <NotOn canSetUp={can("admin")} />;
+  const years = yearEnds(settings.data.settings);
+  const yearEnd = chosen ?? defaultYear(years);
+  return (
+    <>
+      <Steps current="management" />
+      <div className={ui.toolbar}>
+        <YearPicker years={years} value={yearEnd} onChange={setChosen} />
+      </div>
+      <ManagementView key={yearEnd} organisationId={organisationId} yearEnd={yearEnd} />
+    </>
+  );
+}
+
+function ManagementView({ organisationId, yearEnd }: { organisationId: string; yearEnd: string }) {
+  const { can } = useWorkspace();
+  const report = useApiData<{ report: ManagementReport }>("/api/livestock/management", { organisationId, yearEnd });
+  const values = useApiData<{ values: ManagementValue[] }>("/api/livestock/management/values", { organisationId });
+  const [month, setMonth] = useState("");
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  if (report.error) return <Notice tone="error">{report.error}</Notice>;
+  if (!report.data) return <p className={ui.muted}>Loading…</p>;
+  const data = report.data.report;
+  const effective = month || data.yearStart;
+
+  async function save() {
+    setError(null);
+    try {
+      const lines = Object.entries(draft).map(([key, amount]) => {
+        const [kind, classCode] = key.split(".");
+        return { kind, classCode, amount: amount.trim() === "" ? null : amount };
+      });
+      await api("/api/livestock/management/values", { method: "PUT", body: { organisationId, effectiveMonth: effective, lines } });
+      setDraft({});
+      report.reload();
+      values.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  const kinds = LIVESTOCK_KINDS.filter((kind) => data.months.some((entry) => entry.classes.some((row) => row.kind === kind)) || values.data?.values.some((value) => value.kind === kind));
+  return (
+    <>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Notice tone="info">The farm&apos;s own values per head, for monthly reporting. They never change tax values, elections or an approved valuation, and post nothing.</Notice>
+      {data.missingValues.length > 0 ? (
+        <Notice tone="warning">No value per head yet for {data.missingValues.map((entry) => entry.className.toLowerCase()).join(", ")}; they count as 0.00 until one is set.</Notice>
+      ) : null}
+      <Card title="Stock on hand by month" description={`At the farm's values. Opening (${formatDate(data.opening.monthEnd)}): ${data.opening.head} head, ${data.opening.value}. Each month's change is split into head (at last month's values) and price.`}>
+        <div className={ui.tableWrap}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <thead>
+              <tr>
+                <th>Month end</th>
+                <th className={ui.num}>Head</th>
+                <th className={ui.num}>Value</th>
+                <th className={ui.num}>Change</th>
+                <th className={ui.num}>From head</th>
+                <th className={ui.num}>From price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.months.map((entry) => (
+                <tr key={entry.monthEnd}>
+                  <td data-label="Month end">{formatDate(entry.monthEnd)}</td>
+                  <td data-label="Head" className={ui.num}>
+                    {entry.head}
+                  </td>
+                  <td data-label="Value" className={ui.num}>
+                    <Money value={entry.value} />
+                  </td>
+                  <td data-label="Change" className={ui.num}>
+                    <Money value={entry.change} blankZero />
+                  </td>
+                  <td data-label="From head" className={ui.num}>
+                    <Money value={entry.quantityChange} blankZero />
+                  </td>
+                  <td data-label="From price" className={ui.num}>
+                    <Money value={entry.priceChange} blankZero />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card title="Values per head" description="One value for the whole year is one value from its first month. A later month's value applies from then on.">
+        {values.data && values.data.values.length > 0 ? (
+          <ul>
+            {values.data.values.map((value) => (
+              <li key={`${value.kind}.${value.classCode}.${value.effectiveMonth}`}>
+                From {formatDate(value.effectiveMonth)}: {KIND_NAMES[value.kind]}, {value.className.toLowerCase()} <Money value={value.amount} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {can("bookkeeper") ? (
+          <>
+            <Field label="From month">
+              <input type="date" value={effective} onChange={(event) => setMonth(event.target.value)} />
+            </Field>
+            {(kinds.length ? kinds : LIVESTOCK_KINDS).map((kind) => (
+              <div key={kind} className={ui.grid}>
+                {classesOf(kind).map((entry) => {
+                  const key = `${kind}.${entry.code}`;
+                  return (
+                    <Field key={key} label={`${KIND_NAMES[kind]}: ${entry.name}`}>
+                      <input inputMode="decimal" value={draft[key] ?? ""} placeholder="Per head" onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+                    </Field>
+                  );
+                })}
+              </div>
+            ))}
+            <Button disabled={Object.keys(draft).length === 0} onClick={() => void save()}>
+              Save values
+            </Button>
+          </>
+        ) : null}
+      </Card>
+    </>
   );
 }

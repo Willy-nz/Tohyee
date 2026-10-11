@@ -19,7 +19,8 @@ export const KIND_NAMES: Readonly<Record<LivestockKind, string>> = {
 };
 
 /** How the national standard cost scheme groups a class (LV6, LV11; decision 503: mature = rising two and older). */
-export type NscGroup = "rising_1" | "mature" | "unsupported";
+/** rising_2: beef males between rising one and rising three, adding NSC each year (LV17, decision 506). */
+export type NscGroup = "rising_1" | "rising_2" | "mature" | "unsupported";
 
 export type LivestockClass = {
   kind: LivestockKind;
@@ -41,9 +42,9 @@ const cattle = (kind: LivestockKind): LivestockClass[] => [
   { kind, code: "r2_heifers", name: "Rising two-year heifers", birth: false, agesTo: "ma_cows", nsc: "mature" },
   { kind, code: "ma_cows", name: "Mixed-age cows", birth: false, agesTo: null, nsc: "mature" },
   { kind, code: "r1_steers_bulls", name: "Rising one-year steers and bulls", birth: true, agesTo: "r2_steers_bulls", nsc: "rising_1" },
-  // Rising three-year male non-breeding cattle have an NSC of their own, not built yet.
-  { kind, code: "r2_steers_bulls", name: "Rising two-year steers and bulls", birth: false, agesTo: "r3_steers_bulls", nsc: "unsupported" },
-  { kind, code: "r3_steers_bulls", name: "Rising three-year and older steers and bulls", birth: false, agesTo: null, nsc: "unsupported" },
+  // Beef males add NSC until rising three, then join the mature group (LV17); dairy has no rising three NSC, so not under NSC.
+  { kind, code: "r2_steers_bulls", name: "Rising two-year steers and bulls", birth: false, agesTo: "r3_steers_bulls", nsc: kind === "beef_cattle" ? "rising_2" : "unsupported" },
+  { kind, code: "r3_steers_bulls", name: "Rising three-year and older steers and bulls", birth: false, agesTo: null, nsc: kind === "beef_cattle" ? "mature" : "unsupported" },
   { kind, code: "breeding_bulls", name: "Breeding bulls", birth: false, agesTo: null, nsc: "unsupported", maleBreeding: true },
 ];
 
