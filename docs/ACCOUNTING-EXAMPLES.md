@@ -15772,7 +15772,7 @@ Answered (8 Oct 2026, the suggestion): no new platform yet; first check the
 Shopify connection against Glimmers' real store, the one thing the audit
 found never checked.
 
-## Livestock (#221), stage 1: rules and first examples (examples not yet approved by Jess)
+## Livestock (#221), stage 1: rules and first examples (LV1-LV12 approved by Jess, 11 Oct 2026)
 
 Drafted 11 Oct 2026. Nothing here is built. These are the examples #221 asks
 for before any livestock code, with real 2025-26 IRD rates, for Jess to check,
@@ -16049,6 +16049,8 @@ and forecasts (#221 stage 5).
 6. **Opening position:** a new farm in Tohyee brings last year's closing by
    class and value from its previous workpaper (LV4 and LV6 start this
    way). Is that enough, or do we need the NSC cost layers too?
+   **Answered: class, head and value from last year's workpaper** (no
+   older NSC cost layers, since the mature group is averaged).
 7. **Elections:** record each farm's method by class, with the year
    elected and the evidence (a file), without Tohyee filing anything. Agree?
    **Answered: yes.**
