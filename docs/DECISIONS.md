@@ -4309,3 +4309,16 @@ testing) and #154's code signing (later, Jess).
        workpaper.
      - **Still open:** anything in IRD OS 25/02, which hasn't been read.
        Those cases are refused.
+504. **Livestock ageing happens at the start of each year, worked out**
+     (#221 stage 2; built 11 Oct 2026 from LV1).
+     - **When:** at the start of each income year, every class's closing
+       head moves to the next class. During the year, classes say what each
+       animal will be at balance date. Births go into the rising one-year
+       classes.
+     - **Worked out, not stored:** a late entry flows through, and ageing
+       can't run twice. LV1's figures are unchanged.
+     - **Mixed-age ewes:** how many turn rising five is entered per year.
+     - **Head counts:** a movement can't take a class below zero on any
+       date, ageing included. Stock held for others is kept apart.
+     - **Locks:** movements respect the lock date. Stage 3 also locks years
+       with an approved valuation.

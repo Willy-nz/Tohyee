@@ -960,6 +960,22 @@ that something happened.
   Make quote turns them into a draft quote, New revision replaces the open
   one, and accepting the quote wins the deal and links its invoice or
   sales order.
+- **Livestock: movements and head counts** (#221 stage 2, decision 504,
+  LV1-LV3): dairy cattle, beef cattle and sheep by IRD's NAMV classes.
+  - **Starting:** livestock is turned on per organisation from a first
+    income year. That year's opening (head and value by class) comes from
+    last year's workpaper.
+  - **Movements:** births, purchases, sales, deaths, missing and found
+    stock, class changes and moves between locations. A sale or purchase
+    can link an approved invoice or bill line, once per class.
+  - **Ageing:** worked out at the start of each year. How many mixed-age
+    ewes turn rising five is said per year.
+  - **Head count reconciliation:** by class, with ageing netting to zero.
+    Year-end counts show any difference as "not explained".
+  - **Stock held for others** is shown but never counted.
+  - **Never below zero:** no class is let go below zero on any date.
+  - Nothing posts yet. The valuation is stage 3, and there are no screens
+    yet.
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
