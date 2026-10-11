@@ -14585,8 +14585,9 @@ create table livestock_movements (
   amount numeric(18, 2) check (amount is null or amount >= 0),
   location_id bigint references livestock_locations(id),
   to_location_id bigint references livestock_locations(id),
-  sales_invoice_line_id bigint references sales_invoice_lines(id),
-  bill_line_id bigint references bill_lines(id),
+  -- No foreign keys to document lines: those tables guard against truncation (append-only), and a key would block it differently.
+  sales_invoice_line_id bigint,
+  bill_line_id bigint,
   note text check (note is null or length(note) <= 1000),
   created_by_user_id uuid,
   created_by_email text not null,
