@@ -4345,3 +4345,9 @@ testing) and #154's code signing (later, Jess).
      - **Beef males under NSC:** non-breeding beef males add NSC until
        rising three, then join the mature group.
      - **Management valuations:** monthly, report only to start with.
+507. **How account sales are kept** (built 11 Oct 2026 from LV13-LV16).
+     - **Documents:** an invoice to the agent, a bill from the agent, and
+       a contra through 1090 Stock agent contra. Together they give LV13's
+       net, so GST returns, payments and receivables work as they do.
+     - **Numbering:** the invoice takes Tohyee's invoice number, with the
+       agent's number as its reference. Jess to confirm.

@@ -16231,3 +16231,48 @@ Answered (11 Oct 2026):
 3. Yes, the beef rule is right as drafted.
 4. Report only to start with.
 
+### Built: how LV13-LV20 came out
+
+Tests: `tests/integration/livestock-account-sales.test.ts`,
+`livestock-valuation.test.ts` (LV17) and `livestock-management.test.ts`.
+Decision 507.
+
+- **LV13:** the account sale is kept as four linked documents rather than
+  one journal, so Tohyee's existing GST return, payments and aged
+  receivables work with it unchanged:
+  - an approved invoice to the agent for the stock (account 4300, its
+    reference "Account sale AS-48213");
+  - an approved bill from the agent for the deductions (its number is the
+    account sale's);
+  - a contra through a clearing account, 1090 Stock agent contra, which is
+    always back to zero: a payment of the bill's total on the invoice, and
+    the same on the bill.
+
+  The net is the same as LV13's journal: Dr 1100 71,415.00, 6230
+  3,300.00, 6060 600.00, 2100 585.00; Cr 4300 66,000.00, 2100 9,900.00.
+  The agent then owes 71,415.00 on the invoice. The agent is marked as a
+  customer and a supplier.
+  - **Numbering:** the invoice takes Tohyee's next invoice number, as
+    every invoice does. The agent's account sale number is in its
+    reference. **Jess to say** whether buyer-created invoices should skip
+    Tohyee's numbering.
+- **LV14:** in March 2026, Box 5 includes 75,900.00 and Box 11 includes
+  4,485.00, as tested.
+- **LV15:** the same agent and number (ignoring case) is refused while
+  the first is active.
+- **LV16:** voiding is refused while the agent has paid any of the net.
+  Otherwise the movements, the contra, the bill and the invoice are each
+  voided (reversed), and the number can be entered again.
+- **LV17** comes out as drafted (21,207.00 and 19,020.00). Rising
+  three-year beef males are in the mature group, which is averaged, so
+  the next year shares the group's value by head. IRD's 2026 rising 3-year
+  male cost (251.00) is seeded. Dairy steers and bulls under NSC are still
+  refused (IRD has no dairy rising 3-year cost).
+- **LV18-LV19** come out as drafted:
+  - Values per head are set by class from a month.
+  - The report gives each month end's head and value, with the change split
+    into head (at last month's values) and price.
+  - Ageing in June shows as head.
+  - The opening is valued at the year's first values.
+- **LV20:** the valuation ignores management values; nothing posts.
+
