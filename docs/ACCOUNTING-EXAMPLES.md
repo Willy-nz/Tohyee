@@ -16141,3 +16141,86 @@ and forecasts (#221 stage 5).
 7. **Elections:** record each farm's method by class, with the year
    elected and the evidence (a file), without Tohyee filing anything. Agree?
    **Answered: yes.**
+
+## Livestock (#221), next: account sales, beef steers under NSC, management valuations (examples not yet approved by Jess)
+
+Drafted 11 Oct 2026, after LV1-LV12 were built (decisions 503-505). These
+are the next pieces Jess asked to keep building. Nothing here is built.
+
+### Agent account sales (LV7, built as its own document)
+
+Kōwhai sells 60 cull stock through PGG Wrightson on 10 Mar 2026. The
+account sale reads:
+
+| Line | Head | Amount | GST |
+| --- | ---: | ---: | ---: |
+| Mixed-age cows at 1,100.00 | 50 | 55,000.00 | 8,250.00 |
+| Rising two-year heifers at 1,100.00 | 10 | 11,000.00 | 1,650.00 |
+| less commission | | (3,300.00) | (495.00) |
+| less freight | | (600.00) | (90.00) |
+| **Net** | | **62,100.00** | **9,315.00** |
+
+Net to the farmer: 62,100.00 + 9,315.00 = **71,415.00** (as LV7).
+
+- **LV13** Entering it posts one journal, dated 10 Mar 2026:
+  - Debits: 1100 (owed by PGG Wrightson) **71,415.00**; 6230 Stock agent
+    commission **3,300.00**; 6060 Freight **600.00**; 2100 GST **585.00**.
+  - Credits: 4300 Livestock sales **66,000.00**; 2100 GST **9,900.00**.
+
+  It also makes two sale movements: 50 mixed-age cows (55,000.00) and 10
+  rising two-year heifers (11,000.00). The agent's payment of 71,415.00
+  is then matched to it like an invoice payment.
+- **LV14** GST return for March 2026 (invoice basis): Box 5 includes
+  **75,900.00** of sales (incl. GST) and Box 11 includes **4,485.00** of
+  purchases (3,795.00 + 690.00), as two documents would.
+- **LV15** The same account sale (same agent and reference) entered or
+  imported again is refused, so the head and GST aren't counted twice.
+- **LV16** Voiding it reverses the journal and voids its movements, unless
+  the year's valuation is approved (LV9).
+
+### Beef steers and bulls under NSC
+
+IRD's NSC 2026 has a **rising 3-year male non-breeding** cost (251.00) as
+well as rising 1 (443.40) and rising 2 (251.00). The built rule (mature =
+rising two and older) doesn't fit beef males, so they're refused today.
+
+- **LV17** Draft rule: non-breeding beef males add NSC each year until
+  rising three, then join the mature group. Tussock under NSC, 2025-26:
+  - Opening rising one-year steers: 30 at 455.90 (2025 NSC) = 13,677.00.
+    At the start of the year they become rising two-year steers, valued
+    at 30 x (455.90 + 251.00) = **21,207.00** at 30 June 2026.
+  - Opening rising two-year steers: 20, last year's value 14,000.00. They
+    become rising three-year steers, valued at 14,000.00 + 20 x 251.00 =
+    **19,020.00**. Next year they join the mature group at that value.
+
+### Monthly management valuations (stage 5)
+
+Management values per head are the farm's own assumptions, separate from
+tax values. Kōwhai uses one value per class for the whole year: mixed-age
+cows 2,700.00, rising two-year heifers 2,400.00, rising one-year heifers
+1,200.00.
+
+- **LV18** Stock on hand at 31 Aug 2025:
+  - 370 cows (300 + 70 aged in) x 2,700.00 = 999,000.00.
+  - 75 rising two-year heifers x 2,400.00 = 180,000.00.
+  - 80 calves born 15 Aug x 1,200.00 = 96,000.00.
+  - Total **1,275,000.00**.
+- **LV19** At 30 Nov 2025, after buying 10 cows on 1 Nov: **1,302,000.00**.
+  The change of 27,000.00 is all quantity (10 x 2,700.00). The report
+  splits each month's change into quantity and price.
+- **LV20** Management values never change tax values, elections or an
+  approved valuation. Whether they post anything is question 4.
+
+### Questions for Jess
+
+1. **LV13:** does the agent owe the net (1100 receivable, then the
+   payment), or does it go straight to the bank when it arrives?
+2. **LV13-LV14:** is the agent's account sale the farmer's tax invoice
+   for GST (a buyer-created tax invoice), so Tohyee issues no invoice of
+   its own?
+3. **LV17:** is the draft rule for beef steers and bulls right? Do they
+   join the mature group after rising three?
+4. **LV18-LV20:** should monthly management valuations be a report only
+   to start with, or post an interim journal each month (reversed the next
+   month and at year end) so the monthly profit and loss includes them?
+
