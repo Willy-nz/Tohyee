@@ -6,8 +6,8 @@
 
 <p align="center">
   <strong>Your business. Your books. Your server.</strong><br />
-  Open-source business software made for New Zealand: accounting, CRM,
-  payroll, analytics and livestock, on a server you control.
+  Free, open-source accounting made in New Zealand: invoices, GST, payroll,
+  jobs, rosters, CRM, analytics and livestock, on a server you control.
 </p>
 
 <p align="center">
@@ -28,16 +28,24 @@ home, with no monthly fee. One Tohyee server can hold many organisations, and
 **each organisation gets its own PostgreSQL database**, so each can be backed
 up, restored or moved on its own.
 
+**Accounting you can check.** Bank matches, bank rules, bills read from your
+inbox and AI drafts are suggestions until someone says OK. PostgreSQL itself
+refuses unbalanced journals and edits to posted history. Every accounting rule
+starts as a worked example with real numbers
+([more than a thousand](docs/ACCOUNTING-EXAMPLES.md)), and more than 2,000
+automated tests run them against a real database before any change is
+accepted.
+
 > **Status: early development.** This README describes the current `main`
 > branch, including features ahead of packaged releases. Try a test
 > organisation first and review returns and reports before relying on them.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability — checked 12 October 2026:** the latest packaged
+**Release availability, checked 13 October 2026:** the latest packaged
 release is [v0.7.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.7.0).
-The expanded CRM and livestock features below are built on `main` for the next
-release; they are not included in the v0.7.0 installer. Check the
+The expanded CRM, livestock, jobs, rosters and clocking in below are built on
+`main` for the next release; they are not in the v0.7.0 installer. Check the
 [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
 
@@ -65,7 +73,9 @@ what you can use; developer and server setup instructions follow it.
 | --- | --- |
 | **CRM** | Leads and intake forms, sales roles and teams, duplicate handling, follow-up tasks, email templates and sequences, campaigns, team forecasts and a sales dashboard. |
 | **Deals and quotes** | Product lines and discounts, draft quotes and revisions, and an accepted quote linked to an invoice or sales order. |
-| **Livestock** | Dairy, beef and sheep movements, head count reconciliation, supported herd scheme and NSC valuations, agent account sales and monthly management values. |
+| **Livestock** | Cattle, sheep, deer and goats: movements, head count reconciliation, herd scheme and NSC valuations, high-priced animals, agent account sales and monthly management values. |
+| **Jobs and visits** | A job is a project with a site: visits on a calendar, Start and Finish on a phone, checklists, photos and a signature, materials on the invoice, service reminders and a calendar file. |
+| **Rosters and clocking in** | Weekly rosters costed against a budget, unavailability and leave warnings, publishing, staff clocking in with a PIN on a shared device, and clocked hours onto timesheets. |
 
 These are development-branch features, not a claim that every planned workflow
 or tax treatment is supported. See the scope below and the
@@ -129,10 +139,32 @@ or tax treatment is supported. See the scope below and the
 - Departments, classes and locations on every line, custom fields and custom
   segments, and projects with time tracking.
 
+**Projects and jobs**
+- Projects with tasks, time at each person's cost rate, linked expenses,
+  invoicing what's unbilled, and profitability and time reports.
+- A **job** is a project with a site address, a contact on site, a checklist
+  and an optional service interval. Visits are booked on a calendar for a
+  member (overlaps are flagged). On a phone, Start and Finish fill in the
+  hours, which the person confirms into project time; checklist ticks record
+  who and when, and photos and a signature are kept with the visit.
+- Materials used on a job go on the project invoice as item lines, so their
+  stock and cost of sales move when it's approved. Services due show on the
+  Jobs page. Visits download as a calendar file for Google or Microsoft
+  calendar (one way).
+
 **Payroll**
 - NZ payroll: employees, pay runs with PAYE, ACC, student loan, KiwiSaver
   and ESCT, Holidays Act leave, timesheets, payslips, bank files for paying
   wages, payday filing files for IRD, and payroll reports.
+- **Rosters** by area and week, costed as wages plus employer KiwiSaver
+  against a weekly budget. Rostering someone on a day they're unavailable
+  needs a reason; shifts in booked leave are flagged and not counted.
+  Publishing shows employees their shifts under My shifts.
+- **Clocking in** on a shared device at the shop, with a PIN, for staff with
+  or without a login. The device never signs in to the books. Clocked time
+  goes onto the timesheet marked "from clock-in" for approval; a missed
+  clock-out waits for a manager. The roster shows rostered against clocked
+  hours.
 
 **CRM**
 - Companies, people, leads and opportunities with shared history, tasks,
@@ -163,8 +195,9 @@ or tax treatment is supported. See the scope below and the
   or label. This is data ingestion, not a promise of scheduled outbound
   dashboard emails or direct Looker/Google Ads connectors.
 
-**Livestock — new on main**
-- An optional Accounting module for dairy cattle, beef cattle and sheep.
+**Livestock (new on main)**
+- An optional Accounting module for dairy and beef cattle, sheep, deer and
+  goats.
   Opening head counts and values, births, purchases, sales, deaths, ageing,
   class changes and location transfers, with head count reconciliation.
 - Supported **herd scheme** and **national standard cost** valuations,
@@ -176,11 +209,13 @@ or tax treatment is supported. See the scope below and the
 - Monthly management values show quantity and price changes using the farm's
   values per head. They are **reports only**: they do not post journals or
   alter tax valuations.
-- **Scope limits:** this is not a complete implementation of every NZ livestock
-  tax rule. High-priced livestock, other valuation methods, scheme transitions,
-  associated-person transfers and some NSC movements remain unsupported.
-  Farm budgets, forecasts and industry benchmarking are still planned.
-  See [issue #221](https://github.com/Willy-nz/Tohyee/issues/221) and the
+- High-priced animals (valued apart from their class at IRD's rate) and the
+  Chatham Islands herd value ratio.
+- **Scope limits:** this is not every NZ livestock tax rule. Pigs,
+  associated-person transfers, long-term bailments, purchased bobby calves
+  and a few other cases are refused rather than guessed. Farm budgets,
+  forecasts and industry benchmarking are still planned. See
+  [issue #243](https://github.com/Willy-nz/Tohyee/issues/243) and the
   [worked examples and limitations](docs/ACCOUNTING-EXAMPLES.md).
 
 **Everything else**
