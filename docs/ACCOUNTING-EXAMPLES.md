@@ -15734,6 +15734,39 @@ Answered (12 Oct 2026): 3-4 **no preference**, so the drafts stand:
 4. Employees clock in with a PIN on the shop's shared device, login or
    not.
 
+#### Built: how RS1-RS4 came out
+
+Tests: `tests/integration/payroll-rosters.test.ts`. Decision 511. Payroll >
+Rosters needs payroll access, because it shows pay; Payroll > My shifts is
+for anyone whose login is linked to their employee record.
+
+- **The weekly budget (interpreted, please check):** RS1 says the shop has
+  "800.00 a week (WB)", but workforce budgets (WB1-WB7) are monthly, by
+  account and Department. Rather than guess a monthly-to-weekly split, an
+  **area** (such as "Shop") has its own weekly roster budget, typed on the
+  area. If it should come from the workforce budget instead, say how a
+  month becomes a week.
+- **RS1:** Aroha, Sat 24 Oct 9:00-17:00 with a 30-minute unpaid break:
+  7.50 h x 25.00 = **187.50**, KiwiSaver 3% = **5.63** (rounded half up,
+  as RS1 shows; a pay run works the real contribution out by IRD's rules),
+  **193.13**, with **606.87** of the 800.00 left. Employer KiwiSaver counts
+  only while the employee is enrolled. Salaried employees' shifts show hours
+  but aren't costed (their pay doesn't change with the roster). Nothing is
+  posted.
+- **RS2:** unavailability is a weekday every week or a date range, added by
+  the employee (My shifts) or someone with payroll access. Rostering Tama
+  on a Saturday is refused with "Tama is unavailable. Give a reason to
+  roster them anyway."; with a reason it's saved and the warning shows the
+  reason.
+- **RS3:** a shift in booked leave (approved requests and leave recorded
+  directly) shows "Aroha is on leave" and isn't counted in the hours or
+  cost. The kind of leave isn't shown.
+- **RS4:** publishing keeps a copy of the week's shifts; that's what
+  employees see under My shifts. Later changes are listed ("Changed since
+  published") and employees keep seeing the published times until
+  **Publish changes**. Not done: telling employees by email or
+  notification when a roster is published.
+
 ### Direct debit with GoCardless (stage 10, BECS NZ)
 
 What GoCardless says (checked 8 Oct 2026, [BECS NZ payment

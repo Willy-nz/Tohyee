@@ -4386,3 +4386,17 @@ testing) and #154's code signing (later, Jess).
      - **Calendar is a file, one way.** The CRM calendar connection only
        reads today, so visits are offered as an .ics download instead.
      - **Reminders stay in Tohyee.** No text or email to the customer.
+
+511. **Rosters are planned cost, not pay** (built 12 Oct 2026 from RS1-RS4,
+     #196 stage 9).
+     - **Areas carry a weekly budget.** Workforce budgets are monthly, so a
+       roster's weekly budget is typed on its area until Jess says how the
+       two should connect.
+     - **Cost is wages plus employer KiwiSaver** (Jess, 12 Oct 2026), at the
+       pay rate on the shift's date. It's an estimate; pay runs still work
+       out what's paid.
+     - **Unavailability needs a reason; leave only warns.** Leave comes from
+       leave bookings, and its kind is never shown on a roster.
+     - **Employees see what was published.** Changes wait for "Publish
+       changes".
+
