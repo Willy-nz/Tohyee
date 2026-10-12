@@ -4400,3 +4400,18 @@ testing) and #154's code signing (later, Jess).
      - **Employees see what was published.** Changes wait for "Publish
        changes".
 
+512. **Clocking in uses a device key and PINs** (built 12 Oct 2026 from
+     RS5-RS8).
+     - **No one signs in on the shop device.** A device key in a cookie
+       lets it clock people in and out only. Leaving a manager signed in on
+       a shared tablet would expose the books.
+     - **PINs are hashed and lock after five wrong tries,** because a
+       4-digit PIN is easy to guess.
+     - **Clocked time is timesheet input, not pay.** It goes onto the
+       timesheet as other work, marked from clock-in, and is approved like
+       any timesheet. A submitted or approved week is never changed by a
+       clock-out.
+     - **A missed clock-out blocks the next clock-in** until a manager
+       enters the out time with a reason. This stops a 30-hour shift
+       reaching a timesheet.
+

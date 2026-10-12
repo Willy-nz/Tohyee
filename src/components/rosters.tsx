@@ -286,6 +286,7 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
           );
         })}
       </Card>
+      {roster.actuals.some((actual) => actual.clockedHours !== "0.00" || actual.stillOpen > 0) ? <ActualsCard roster={roster} /> : null}
       <AddShiftCard organisationId={organisationId} areaId={areaId} days={roster.days} employees={(employees.data?.employees ?? []).filter((employee) => !employee.isArchived)} onAdded={setUpdated} />
     </>
   );
@@ -527,5 +528,48 @@ export function MyShifts({ organisationId }: { organisationId: string }) {
         {own.data?.linked ? <UnavailabilityEditor organisationId={organisationId} employeeId={null} /> : null}
       </Card>
     </>
+  );
+}
+
+/** Rostered against clocked time for the week (RS7). */
+function ActualsCard({ roster }: { roster: RosterWeek }) {
+  return (
+    <Card title="Rostered and clocked" description="Clocked time from Payroll > Clock-ins, for each person on this roster (in any area). The difference is costed at their hourly rate.">
+      <div className={ui.tableWrap}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <thead>
+            <tr>
+              <th>Who</th>
+              <th className={ui.num}>Rostered</th>
+              <th className={ui.num}>Clocked</th>
+              <th className={ui.num}>Difference</th>
+              <th className={ui.num}>At their rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roster.actuals.map((actual) => (
+              <tr key={actual.employeeId}>
+                <td data-label="Who">
+                  {actual.employeeName}
+                  {actual.stillOpen > 0 ? <span className={ui.muted}> · {actual.stillOpen} not clocked out</span> : null}
+                </td>
+                <td data-label="Rostered" className={ui.num}>
+                  {actual.rosteredHours}
+                </td>
+                <td data-label="Clocked" className={ui.num}>
+                  {actual.clockedHours}
+                </td>
+                <td data-label="Difference" className={ui.num}>
+                  {actual.differenceHours}
+                </td>
+                <td data-label="At their rate" className={ui.num}>
+                  {actual.differenceCost === null ? <span className={ui.muted}>Not costed</span> : <Money value={actual.differenceCost} />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
