@@ -3,7 +3,7 @@ import { invoiceProject } from "@/lib/projects/service";
 
 type Context = { params: Promise<{ projectId: string }> };
 
-/** Makes a draft invoice from chosen unbilled time, fixed prices and expenses (PJ6). */
+/** Makes a draft invoice from chosen unbilled time, fixed prices, expenses and job materials (PJ6, JV7). */
 export const POST = route<Context>(async (request, context) => {
   const { projectId } = await context.params;
   const body = await readJson(request);
@@ -18,6 +18,7 @@ export const POST = route<Context>(async (request, context) => {
       timeEntryIds: body.timeEntryIds,
       taskIds: body.taskIds,
       expenseIds: body.expenseIds,
+      materialIds: body.materialIds,
       exchangeRate: body.exchangeRate,
     }),
   );

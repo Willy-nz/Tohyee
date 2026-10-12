@@ -30,6 +30,8 @@ import { codesForSide } from "@/lib/tax/available-on";
 import { useExportSettings } from "@/components/exports";
 import { contactSalesTaxCode } from "@/lib/tax/exports";
 import { useConfirm } from "@/components/confirm-dialog";
+import { JobSection } from "@/components/jobs";
+import type { Material } from "@/lib/projects/jobs";
 
 /**
  * Projects and time tracking (examples PJ1-PJ13): projects for a customer,
@@ -708,7 +710,17 @@ function ExpensesCard({ organisationId, project, onChanged }: { organisationId: 
 }
 
 /** Choose unbilled items and make a draft invoice from them (PJ6). */
-function InvoiceCard({ organisationId, project, onChanged }: { organisationId: string; project: Project; onChanged: (project: Project, message: string) => void }) {
+function InvoiceCard({
+  organisationId,
+  project,
+  materials: allMaterials,
+  onChanged,
+}: {
+  organisationId: string;
+  project: Project;
+  materials: Material[];
+  onChanged: (project: Project, message: string) => void;
+}) {
   const { can } = useWorkspace();
   const accounts = useAccounts(organisationId);
   const taxCodes = useDocumentTaxCodes(organisationId);
@@ -716,7 +728,13 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
   const time = project.timeEntries.filter((entry) => entry.status === "active" && entry.chargeType === "hourly" && !entry.billedOn && !entry.writtenOffAt);
   const fixed = project.tasks.filter((task) => task.chargeType === "fixed" && task.status === "active" && !task.billedOn && !task.writtenOffAt);
   const expenses = project.expenses.filter((expense) => expense.status === "active" && expense.chargeable && !expense.billedOn && !expense.writtenOffAt);
-  const all = [...time.map((entry) => `time:${entry.id}`), ...fixed.map((task) => `task:${task.id}`), ...expenses.map((expense) => `expense:${expense.id}`)];
+  const materials = allMaterials.filter((material) => material.status === "active" && !material.invoiceNumber);
+  const all = [
+    ...time.map((entry) => `time:${entry.id}`),
+    ...fixed.map((task) => `task:${task.id}`),
+    ...expenses.map((expense) => `expense:${expense.id}`),
+    ...materials.map((material) => `material:${material.id}`),
+  ];
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   const [invoiceDate, setInvoiceDate] = useState(todayInBrowser());
   const [dueDate, setDueDate] = useState("");
@@ -767,6 +785,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
             timeEntryIds: time.filter((entry) => ticked(`time:${entry.id}`)).map((entry) => entry.id),
             taskIds: fixed.filter((task) => ticked(`task:${task.id}`)).map((task) => task.id),
             expenseIds: expenses.filter((expense) => ticked(`expense:${expense.id}`)).map((expense) => expense.id),
+            ...(materials.length > 0 ? { materialIds: materials.filter((material) => ticked(`material:${material.id}`)).map((material) => material.id) } : {}),
             ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
           },
         }),
@@ -790,7 +809,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
     </tr>
   );
   return (
-    <Card title="Invoice" description="Makes a draft invoice for the ticked items: time grouped per task at its rate, fixed prices, and chargeable expenses with their markup.">
+    <Card title="Invoice" description="Makes a draft invoice for the ticked items: time grouped per task at its rate, fixed prices, chargeable expenses with their markup, and a job's materials (their stock goes out when the invoice is approved).">
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
@@ -806,6 +825,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
             })}
             {fixed.map((task) => row(`task:${task.id}`, task.name, "Fixed price", task.rate ?? "0"))}
             {expenses.map((expense) => row(`expense:${expense.id}`, expense.description, `${expense.documentLabel}${expense.markupPercent !== "0" ? ` +${expense.markupPercent}%` : ""}`, expense.charge))}
+            {materials.map((material) => row(`material:${material.id}`, material.itemName, `Materials · ${material.quantity} at ${material.unitPrice}`, material.amount))}
           </tbody>
         </table>
       </div>
@@ -879,7 +899,17 @@ function InvoicesCard({ project }: { project: Project }) {
   );
 }
 
-function StatusActions({ organisationId, project, onChanged }: { organisationId: string; project: Project; onChanged: (project: Project, message: string) => void }) {
+function StatusActions({
+  organisationId,
+  project,
+  materialsUnbilled,
+  onChanged,
+}: {
+  organisationId: string;
+  project: Project;
+  materialsUnbilled: boolean;
+  onChanged: (project: Project, message: string) => void;
+}) {
   const confirm = useConfirm();
   const { can } = useWorkspace();
   const [editing, setEditing] = useState(false);
@@ -887,7 +917,7 @@ function StatusActions({ organisationId, project, onChanged }: { organisationId:
   if (!can("bookkeeper")) return null;
   const post = (path: string, body: Record<string, unknown>, message: string) =>
     void run(() => api<{ project: Project }>(`/api/projects/${project.id}/${path}`, { method: "POST", body: { organisationId, ...body } }), (result) => onChanged(result.project, message));
-  const unbilled = project.figures.unbilled !== "0.00";
+  const unbilled = project.figures.unbilled !== "0.00" || materialsUnbilled;
   return (
     <Card title="Project">
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -916,7 +946,8 @@ function StatusActions({ organisationId, project, onChanged }: { organisationId:
                   variant="danger"
                   disabled={busy}
                   onClick={async () => {
-                    if (!(await confirm(`Write off ${project.figures.unbilled} unbilled and close? Written-off items are never invoiced.`))) return;
+                    const what = materialsUnbilled ? `${project.figures.unbilled} unbilled, and take the materials not yet invoiced off the job,` : `${project.figures.unbilled} unbilled`;
+                    if (!(await confirm(`Write off ${what} and close? Written-off items are never invoiced.`))) return;
                     post("close", { writeOff: true }, "Closed, with the unbilled items written off.");
                   }}
                 >
@@ -937,6 +968,7 @@ function StatusActions({ organisationId, project, onChanged }: { organisationId:
 
 export function ProjectView({ organisationId, projectId }: { organisationId: string; projectId: string }) {
   const loaded = useApiData<{ project: Project }>(`/api/projects/${encodeURIComponent(projectId)}`, { organisationId });
+  const materials = useApiData<{ materials: Material[] }>(`/api/projects/${encodeURIComponent(projectId)}/materials`, { organisationId });
   const [updated, setUpdated] = useState<Project | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
@@ -950,17 +982,25 @@ export function ProjectView({ organisationId, projectId }: { organisationId: str
     setUpdated(null);
     setMessage(null);
     loaded.reload();
+    materials.reload();
   };
-  const version = `${project.updatedAt}-${project.timeEntries.length}-${project.expenses.length}-${project.invoices.length}-${project.status}`;
+  const changedAndMaterials = (next: Project, text: string | null = null) => {
+    changed(next, text);
+    materials.reload();
+  };
+  const materialList = materials.data?.materials ?? [];
+  const materialsUnbilled = materialList.some((material) => material.status === "active" && !material.invoiceNumber);
+  const version = `${project.updatedAt}-${project.timeEntries.length}-${project.expenses.length}-${project.invoices.length}-${project.status}-${materialList.map((m) => `${m.id}${m.status}${m.invoiceNumber ?? ""}`).join(",")}`;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
       <FiguresCard project={project} />
-      <StatusActions key={`status-${version}`} organisationId={organisationId} project={project} onChanged={changed} />
+      <StatusActions key={`status-${version}`} organisationId={organisationId} project={project} materialsUnbilled={materialsUnbilled} onChanged={changedAndMaterials} />
+      <JobSection organisationId={organisationId} project={project} materials={materialList} onMaterialsChanged={() => materials.reload()} />
       <TasksCard key={`tasks-${version}`} organisationId={organisationId} project={project} onChanged={changed} />
       <TimeCard key={`time-${version}`} organisationId={organisationId} project={project} onChanged={reload} />
       <ExpensesCard key={`expenses-${version}`} organisationId={organisationId} project={project} onChanged={changed} />
-      <InvoiceCard key={`invoice-${version}`} organisationId={organisationId} project={project} onChanged={changed} />
+      <InvoiceCard key={`invoice-${version}`} organisationId={organisationId} project={project} materials={materialList} onChanged={changedAndMaterials} />
       <InvoicesCard project={project} />
       <p>
         <Link href="/operations/projects">Back to projects</Link>

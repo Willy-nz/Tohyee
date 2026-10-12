@@ -15630,6 +15630,62 @@ Answered (8 Oct 2026, the suggestions): 1, Start/Finish fill in the hours
 and the staff member confirms them before they count; 2-5 not discussed
 yet, so the draft stands until they are.
 
+Answered (12 Oct 2026):
+2. **Materials:** do what the add-ons do. ServiceM8's help says stock
+   levels change after the accounting package processes the synced invoice
+   ([ServiceM8: stock levels](https://support.servicem8.com/questions/general/servicem8-track-stock-levels-offer-inventory-management)),
+   so stock goes out when the job is invoiced (JV4 as drafted).
+3-5. **No preference**, so the suggestions stand:
+   3. Service reminders are in Tohyee only.
+   4. Calendar sync is one way.
+   5. Everyone on the calendar is a Tohyee user, because project time is
+      kept per user (PJ).
+
+#### Built: how JV1-JV9 came out
+
+Tests: `tests/integration/jobs-visits.test.ts`. Decision 510.
+
+- **JV1:** "This is a job" with a site address (required) and a contact
+  on site, on the project's page. Sales > Jobs lists only jobs, with the
+  next and last visit. Nothing is posted.
+- **JV2:** visits are booked on a job's page for a member and a task
+  (hourly or non-chargeable). Sales > Job calendar shows a week by day,
+  for everyone or one person. Overlaps are saved and flagged on both
+  visits, "Will is booked twice 10:00-11:30" (the person's name, or their
+  email without one).
+- **JV3:** "My visits" lists today's, coming-up and finished-but-not-
+  confirmed visits. Start 9:04 and Finish 11:20 fill in 136 minutes;
+  Confirm hours makes the time entry for Will on Labour, dated the start
+  day: cost **90.67**, unbilled **204.00**. The minutes can be changed
+  when confirming. Only the visit's own person or an admin works it.
+- **JV4:** materials are items on the job (any item but a service),
+  priced at the item's sale price unless another is typed. Nothing moves
+  until invoiced. One not yet invoiced can be taken off; an invoiced one
+  can't until its invoice is voided or deleted.
+- **JV5:** checklist items are set on the job; each tick records who and
+  when. Finishing with unticked items asks "Finish anyway?" and the visit
+  records that it finished with open items.
+- **JV6:** photos and the signature image are files on the visit (the
+  usual notes, files and history panel); "Signed by" records the name and
+  time. Not done: adding them to the invoice email from the visit; they
+  can still be attached to the invoice by hand.
+- **JV7:** the project invoice lists the job's materials beside time,
+  fixed prices and expenses. Each is an item line (the item's income
+  account), so approving posts Dr 5000 24.00, Cr 1400 24.00 as ST1:
+  252.00 + 37.80 GST = **289.80**.
+- **JV8:** "Services due" on the Jobs page, from the day the interval
+  after the last finished visit is reached, until another visit is
+  booked: "Kobe Cafe: annual service due" on 13 Oct 2027, with "Book a
+  visit". In Tohyee only.
+- **JV9 (differs from the draft):** a calendar file (.ics) download of the
+  next 90 days' visits, for everyone or one person, to add to Google or
+  Microsoft calendar. One way, as drafted. It isn't sent through the
+  CRM's calendar connection, because that connection only reads calendars
+  today; pushing visits through it would need write access added first.
+- **Closing a job:** materials not yet invoiced stop it closing, like
+  other unbilled items. "Write off unbilled and close" takes them off the
+  job (their stock never went out).
+
 ### Rosters and clocking in inside Payroll (stage 9, Deputy)
 
 Setup: Glimmers' shop, Saturdays 9:00-17:00. Employees Aroha (hourly,
@@ -15672,6 +15728,11 @@ Answered (8 Oct 2026, the suggestions): 1, no location recorded (a shared
 device at the shop); 2, no rounding: exact minutes, with paid hours settled
 at timesheet approval (rounding that cuts paid time may breach employment
 law; not checked, so not offered); 3-4 not discussed yet.
+
+Answered (12 Oct 2026): 3-4 **no preference**, so the drafts stand:
+3. Roster costs are wages and the employer's KiwiSaver.
+4. Employees clock in with a PIN on the shop's shared device, login or
+   not.
 
 ### Direct debit with GoCardless (stage 10, BECS NZ)
 
