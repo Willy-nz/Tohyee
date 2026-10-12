@@ -10,9 +10,10 @@ import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/component
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, todayInBrowser } from "@/lib/format";
-import { classesOf, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "@/lib/livestock/classes";
+import { CHATHAM_KINDS, classesOf, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind, NSC_KIND_NAMES } from "@/lib/livestock/classes";
 import type { AgeingPreview, HeadCount, LivestockLocation, LivestockOpening, LivestockSettings, Movement, MovementType } from "@/lib/livestock/movements";
 import type { AccountSale } from "@/lib/livestock/account-sales";
+import type { HighPricedAnimal } from "@/lib/livestock/high-priced";
 import type { ManagementReport, ManagementValue } from "@/lib/livestock/management";
 import type { Election, Rate, ValuationPreview } from "@/lib/livestock/valuation";
 
@@ -775,7 +776,10 @@ function ValuationView({ organisationId, yearEnd }: { organisationId: string; ye
       </Card>
 
       {workings.kinds.map((kind) => (
-        <Card key={kind.kind} title={`${kind.kindName}: ${kind.method === "herd_scheme" ? "herd scheme" : "national standard cost"}`}>
+        <Card
+          key={kind.kind}
+          title={`${kind.kindName}: ${kind.method === "herd_scheme" ? "herd scheme" : "national standard cost"}${kind.herdValueRatio ? ` at ${kind.herdValueRatio} x NAMV` : ""}${kind.maleBreedingHerdScheme ? ", male breeding stock in the herd scheme" : ""}`}
+        >
           <div className={ui.tableWrap}>
             <table className={`${ui.table} ${ui.stackOnPhone}`}>
               <thead>
@@ -818,6 +822,16 @@ function ValuationView({ organisationId, yearEnd }: { organisationId: string; ye
               </tbody>
             </table>
           </div>
+          {kind.highPriced.length > 0 ? (
+            <ul>
+              {kind.highPriced.map((animal) => (
+                <li key={animal.id}>
+                  High-priced: {animal.description} ({animal.ratePercent}% a year): opening <Money value={animal.openingValue} />, closing <Money value={animal.closingValue} />
+                  {animal.status === "reverted" ? " (reverted to its class at NAMV)" : animal.status === "left" ? " (sold or died)" : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {kind.nsc ? (
             <details>
               <summary>Mature group workings (averaged)</summary>
@@ -1010,6 +1024,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
           <OpeningsCard organisationId={organisationId} canEdit={isAdmin} />
           <ElectionsCard organisationId={organisationId} canEdit={isAdmin} />
           <RatesCard organisationId={organisationId} canEdit={isAdmin} />
+          <HighPricedCard organisationId={organisationId} canEdit={isAdmin} />
           <LocationsCard organisationId={organisationId} canEdit={can("bookkeeper")} />
         </>
       ) : null}
@@ -1021,7 +1036,11 @@ function OpeningsCard({ organisationId, canEdit }: { organisationId: string; can
   const openings = useApiData<{ openings: LivestockOpening[] }>("/api/livestock/openings", { organisationId });
   const [draft, setDraft] = useState<Record<string, { head: string; value: string }> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState<LivestockKind[]>([]);
   if (!openings.data) return null;
+  // Only the kinds the farm has (or has just added), so the card stays short.
+  const shown = LIVESTOCK_KINDS.filter((kind) => added.includes(kind) || openings.data!.openings.some((entry) => entry.kind === kind));
+  const addable = LIVESTOCK_KINDS.filter((kind) => !shown.includes(kind));
   const rows = draft ?? Object.fromEntries(openings.data.openings.map((entry) => [`${entry.kind}.${entry.classCode}`, { head: String(entry.head), value: entry.value }]));
 
   async function save() {
@@ -1044,7 +1063,20 @@ function OpeningsCard({ organisationId, canEdit }: { organisationId: string; can
   return (
     <Card title="Opening position" description="The first year's opening by class: head and value from last year's workpaper, as at last year's balance date (before ageing). Later years open with the last approved valuation.">
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {LIVESTOCK_KINDS.map((kind) => (
+      {shown.length === 0 ? <Empty>No opening position yet. Add the kinds of livestock the farm had at the start.</Empty> : null}
+      {canEdit && addable.length > 0 ? (
+        <Field label="Add a kind of livestock">
+          <select value="" onChange={(event) => event.target.value && setAdded([...added, event.target.value as LivestockKind])}>
+            <option value="">Choose…</option>
+            {addable.map((kind) => (
+              <option key={kind} value={kind}>
+                {KIND_NAMES[kind]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      {shown.map((kind) => (
         <div key={kind} className={ui.tableWrap}>
           <table className={`${ui.table} ${ui.stackOnPhone}`}>
             <caption>{KIND_NAMES[kind]}</caption>
@@ -1090,14 +1122,22 @@ function OpeningsCard({ organisationId, canEdit }: { organisationId: string; can
 
 function ElectionsCard({ organisationId, canEdit }: { organisationId: string; canEdit: boolean }) {
   const elections = useApiData<{ elections: Election[] }>("/api/livestock/elections", { organisationId });
-  const [form, setForm] = useState({ kind: "dairy_cattle", method: "herd_scheme", fromIncomeYear: "", note: "" });
+  const [form, setForm] = useState({ kind: "dairy_cattle", method: "herd_scheme", fromIncomeYear: "", note: "", herdValueRatio: "", maleBreedingHerdScheme: false });
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
     setError(null);
     try {
-      await api("/api/livestock/elections", { method: "POST", body: { organisationId, ...form } });
+      await api("/api/livestock/elections", {
+        method: "POST",
+        body: {
+          organisationId,
+          ...form,
+          herdValueRatio: form.method === "herd_scheme" ? form.herdValueRatio || null : null,
+          maleBreedingHerdScheme: form.method === "nsc" && form.maleBreedingHerdScheme,
+        },
+      });
       setForm({ ...form, fromIncomeYear: "", note: "" });
       elections.reload();
     } catch (caught) {
@@ -1112,7 +1152,10 @@ function ElectionsCard({ organisationId, canEdit }: { organisationId: string; ca
       <ul>
         {elections.data?.elections.map((election) => (
           <li key={election.id}>
-            {election.kindName}: {election.methodName} from the {election.fromIncomeYear} income year{election.note ? ` (${election.note})` : ""}.{" "}
+            {election.kindName}: {election.methodName}
+            {election.herdValueRatio ? ` at ${election.herdValueRatio} x NAMV` : ""}
+            {election.maleBreedingHerdScheme ? ", male breeding stock in the herd scheme" : ""} from the {election.fromIncomeYear} income year
+            {election.note ? ` (${election.note})` : ""}.{" "}
             <button type="button" className={ui.linkButton} onClick={() => setOpen(open === election.id ? null : election.id)}>
               {open === election.id ? "Hide evidence" : "Evidence"}
             </button>
@@ -1137,6 +1180,26 @@ function ElectionsCard({ organisationId, canEdit }: { organisationId: string; ca
               <option value="nsc">National standard cost</option>
             </select>
           </Field>
+          {form.method === "herd_scheme" ? (
+            <Field label="Herd value ratio" hint="Needs IRD notice and a valuation at 30 April">
+              <select value={form.herdValueRatio} onChange={(event) => setForm({ ...form, herdValueRatio: event.target.value })}>
+                <option value="">None (NAMV)</option>
+                {["0.9", "1.0", "1.1", "1.2", "1.3"].map((ratio) => (
+                  <option key={ratio} value={ratio}>
+                    {ratio}
+                  </option>
+                ))}
+                {CHATHAM_KINDS.includes(form.kind as LivestockKind) ? <option value="0.3">0.3 (Chatham Islands)</option> : null}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Male breeding stock">
+              <label>
+                <input type="checkbox" checked={form.maleBreedingHerdScheme} onChange={(event) => setForm({ ...form, maleBreedingHerdScheme: event.target.checked })} /> In the herd
+                scheme
+              </label>
+            </Field>
+          )}
           <Field label="From income year" hint="2026 = the 2025-26 income year">
             <input inputMode="numeric" size={6} value={form.fromIncomeYear} onChange={(event) => setForm({ ...form, fromIncomeYear: event.target.value })} />
           </Field>
@@ -1203,7 +1266,7 @@ function RatesCard({ organisationId, canEdit }: { organisationId: string; canEdi
                   .map((rate) => (
                     <tr key={rate.id} title={rate.source}>
                       <td data-label="Rate">{rate.rateKind === "namv" ? "NAMV" : "NSC"}</td>
-                      <td data-label="Livestock">{KIND_NAMES[rate.kind]}</td>
+                      <td data-label="Livestock">{rate.kindName}</td>
                       <td data-label="Class">{rate.categoryName}</td>
                       <td data-label="Per head" className={ui.num}>
                         <Money value={rate.amount} />
@@ -1222,18 +1285,34 @@ function RatesCard({ organisationId, canEdit }: { organisationId: string; canEdi
             <input inputMode="numeric" size={6} value={form.incomeYear} onChange={(event) => setForm({ ...form, incomeYear: event.target.value })} />
           </Field>
           <Field label="Rate">
-            <select value={form.rateKind} onChange={(event) => setForm({ ...form, rateKind: event.target.value, category: event.target.value === "namv" ? classesOf(form.kind as LivestockKind)[0].code : "rising_1" })}>
+            <select
+              value={form.rateKind}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  rateKind: event.target.value,
+                  kind: event.target.value === "namv" ? "dairy_cattle" : "dairy_cattle",
+                  category: event.target.value === "namv" ? "ma_cows" : "rising_1",
+                })
+              }
+            >
               <option value="namv">NAMV</option>
               <option value="nsc">NSC</option>
             </select>
           </Field>
           <Field label="Livestock">
             <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value, category: form.rateKind === "namv" ? classesOf(event.target.value as LivestockKind)[0].code : form.category })}>
-              {LIVESTOCK_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {KIND_NAMES[kind]}
-                </option>
-              ))}
+              {form.rateKind === "namv"
+                ? LIVESTOCK_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {KIND_NAMES[kind]}
+                    </option>
+                  ))
+                : Object.entries(NSC_KIND_NAMES).map(([kind, name]) => (
+                    <option key={kind} value={kind}>
+                      {name}
+                    </option>
+                  ))}
             </select>
           </Field>
           <Field label="Class">
@@ -1666,5 +1745,113 @@ function ManagementView({ organisationId, yearEnd }: { organisationId: string; y
         ) : null}
       </Card>
     </>
+  );
+}
+
+function HighPricedCard({ organisationId, canEdit }: { organisationId: string; canEdit: boolean }) {
+  const animals = useApiData<{ animals: HighPricedAnimal[] }>("/api/livestock/high-priced", { organisationId });
+  const [form, setForm] = useState({ kind: "beef_cattle" as LivestockKind, classCode: "breeding_bulls", description: "", boughtOn: "", cost: "", ratePercent: "", rateSource: "", priorYearNamv: "" });
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setError(null);
+    try {
+      await api("/api/livestock/high-priced", { method: "POST", body: { organisationId, ...form, priorYearNamv: form.priorYearNamv || null } });
+      setForm({ ...form, description: "", cost: "" });
+      animals.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  const [leftOn, setLeftOn] = useState("");
+
+  async function left(animal: HighPricedAnimal, how: "sold_or_died" | "stopped_breeding") {
+    if (!leftOn) {
+      setError("Choose the date it left or stopped breeding first.");
+      return;
+    }
+    try {
+      await api(`/api/livestock/high-priced/${animal.id}/left`, { method: "POST", body: { organisationId, leftOn, how } });
+      animals.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  return (
+    <Card
+      title="High-priced livestock"
+      description="An animal that cost at least 500.00 and five times its class's NAMV is valued on its own: at cost in the year bought, then less IRD's depreciation rate each year, until it's at or below its class's NAMV. Record its purchase as a movement too."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {animals.data && animals.data.animals.length === 0 ? <Empty>None recorded.</Empty> : null}
+      {canEdit && animals.data?.animals.some((animal) => !animal.leftOn) ? (
+        <Field label="Date it was sold, died or stopped breeding">
+          <input type="date" value={leftOn} onChange={(event) => setLeftOn(event.target.value)} />
+        </Field>
+      ) : null}
+      <ul>
+        {animals.data?.animals.map((animal) => (
+          <li key={animal.id}>
+            {animal.description}: {animal.kindName}, {animal.className.toLowerCase()}, bought {formatDate(animal.boughtOn)} for <Money value={animal.cost} />, {animal.ratePercent}% a year (
+            {animal.rateSource}){animal.leftOn ? `; ${animal.leftHow === "sold_or_died" ? "sold or died" : "stopped breeding"} ${formatDate(animal.leftOn)}` : ""}.{" "}
+            {canEdit && !animal.leftOn ? (
+              <>
+                <button type="button" className={ui.linkButton} onClick={() => void left(animal, "sold_or_died")}>
+                  Sold or died
+                </button>{" "}
+                <button type="button" className={ui.linkButton} onClick={() => void left(animal, "stopped_breeding")}>
+                  Stopped breeding
+                </button>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {canEdit ? (
+        <div className={ui.grid}>
+          <Field label="Livestock">
+            <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as LivestockKind, classCode: classesOf(event.target.value as LivestockKind)[0].code })}>
+              {LIVESTOCK_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {KIND_NAMES[kind]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Class">
+            <select value={form.classCode} onChange={(event) => setForm({ ...form, classCode: event.target.value })}>
+              {classesOf(form.kind).map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Tag or name">
+            <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          </Field>
+          <Field label="Bought on">
+            <input type="date" value={form.boughtOn} onChange={(event) => setForm({ ...form, boughtOn: event.target.value })} />
+          </Field>
+          <Field label="Cost excl. GST">
+            <input inputMode="decimal" value={form.cost} onChange={(event) => setForm({ ...form, cost: event.target.value })} />
+          </Field>
+          <Field label="IRD depreciation rate (%)">
+            <input inputMode="decimal" value={form.ratePercent} onChange={(event) => setForm({ ...form, ratePercent: event.target.value })} />
+          </Field>
+          <Field label="Where the rate came from">
+            <input value={form.rateSource} onChange={(event) => setForm({ ...form, rateSource: event.target.value })} />
+          </Field>
+          <Field label="Last year's NAMV" hint="Only if Tohyee doesn't have it">
+            <input inputMode="decimal" value={form.priorYearNamv} onChange={(event) => setForm({ ...form, priorYearNamv: event.target.value })} />
+          </Field>
+          <Button disabled={!form.description || !form.boughtOn || !form.cost || !form.ratePercent || !form.rateSource} onClick={() => void save()}>
+            Record
+          </Button>
+        </div>
+      ) : null}
+    </Card>
   );
 }

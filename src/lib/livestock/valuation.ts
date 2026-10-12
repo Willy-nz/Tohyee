@@ -7,7 +7,8 @@ import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/jour
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { add, cmp, dec, type Decimal, isNegative, isZero, mul, mulDiv, neg, parseDecimalInput, sub, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
-import { classesOf, classKey, className, findClass, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "./classes";
+import { CHATHAM_KINDS, classesOf, classKey, className, findClass, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind, NSC_KIND_NAMES, NSC_RATE_KIND } from "./classes";
+import { type HighPricedAnimal, highPricedValueAt, listHighPriced } from "./high-priced";
 import { getLivestockSettings, requireLivestock, requireYearEnd, yearFacts, type YearFacts } from "./movements";
 
 /*
@@ -52,11 +53,28 @@ export type NscWorking = {
   matureAverage: string;
 };
 
+/** A high-priced animal (LV25): at cost in the year bought, then less IRD's rate a year, apart from its class until it reverts. */
+export type HighPricedWorking = {
+  id: string;
+  description: string;
+  classCode: string;
+  ratePercent: string;
+  openingValue: string;
+  closingValue: string;
+  /** "reverted": at or below its class's NAMV, so in its class at NAMV from this year end; "left": sold or died in the year. */
+  status: "high_priced" | "reverted" | "left";
+};
+
 export type KindWorking = {
   kind: LivestockKind;
   kindName: string;
   method: Method;
+  /** The herd value ratio applied to NAMV (LV24), when the election has one. */
+  herdValueRatio: string | null;
+  /** Under NSC, with male breeding stock in the herd scheme (LV26). */
+  maleBreedingHerdScheme: boolean;
   classes: ClassWorking[];
+  highPriced: HighPricedWorking[];
   nsc: NscWorking | null;
   openingValue: string;
   revaluation: string;
@@ -131,7 +149,9 @@ export function incomeYearOf(yearEnd: string): number {
 
 // Rates -----------------------------------------------------------------------
 
-export type Rate = { id: string; incomeYear: number; rateKind: "namv" | "nsc"; kind: LivestockKind; category: string; categoryName: string; amount: string; source: string; enteredByEmail: string };
+export type Rate = { id: string; incomeYear: number; rateKind: "namv" | "nsc"; kind: string; kindName: string; category: string; categoryName: string; amount: string; source: string; enteredByEmail: string };
+
+
 
 const NSC_CATEGORIES = {
   rising_1: "Rising 1 year",
@@ -152,6 +172,7 @@ export async function listRates(tx: OrgTx, input: { incomeYear?: unknown } = {})
     incomeYear: row.income_year,
     rateKind: row.rate_kind,
     kind: row.kind,
+    kindName: row.rate_kind === "namv" ? (KIND_NAMES[row.kind as LivestockKind] ?? row.kind) : (NSC_KIND_NAMES[row.kind] ?? row.kind),
     category: row.category,
     categoryName: row.rate_kind === "namv" ? className(row.kind, row.category) : (NSC_CATEGORIES[row.category as keyof typeof NSC_CATEGORIES] ?? row.category),
     amount: row.amount,
@@ -170,9 +191,9 @@ export async function setRate(tx: OrgTx, input: { incomeYear: unknown; rateKind:
   const incomeYear = Number(parseDecimalInput(input.incomeYear, "Income year", { maxScale: 0 }));
   if (incomeYear < 2000 || incomeYear > 2100) throw new ValidationError("The income year must be between 2000 and 2100.");
   const rateKind = requireOneOf(input.rateKind, "rateKind", ["namv", "nsc"] as const);
-  const kind = requireOneOf(input.kind, "kind", LIVESTOCK_KINDS);
+  const kind = rateKind === "namv" ? requireOneOf(input.kind, "kind", LIVESTOCK_KINDS) : requireOneOf(input.kind, "kind", Object.keys(NSC_KIND_NAMES) as [string, ...string[]]);
   const category = requireString(input.category, "category", { maxLength: 50 });
-  if (rateKind === "namv" && !findClass(kind, category)) throw new ValidationError(`${KIND_NAMES[kind]} has no class "${category}".`);
+  if (rateKind === "namv" && !findClass(kind, category)) throw new ValidationError(`${KIND_NAMES[kind as LivestockKind]} has no class "${category}".`);
   if (rateKind === "nsc" && !(category in NSC_CATEGORIES)) throw new ValidationError("An NSC category is rising_1, rising_2, rising_3_male or purchased_bobby_calves.");
   const amount = parseDecimalInput(input.amount, "Amount", { maxScale: 2, allowZero: true });
   const source = requireString(input.source, "Where the rate came from", { maxLength: 500 });
@@ -191,11 +212,38 @@ export async function setRate(tx: OrgTx, input: { incomeYear: unknown; rateKind:
 
 // Elections -------------------------------------------------------------------
 
-export type Election = { id: string; kind: LivestockKind; kindName: string; method: Method; methodName: string; fromIncomeYear: number; note: string | null; createdByEmail: string; createdAt: string };
+export type Election = {
+  id: string;
+  kind: LivestockKind;
+  kindName: string;
+  method: Method;
+  methodName: string;
+  fromIncomeYear: number;
+  /** Herd scheme only: 0.9-1.3 times NAMV, or 0.3 for Chatham Islands sheep and beef (LV24). */
+  herdValueRatio: string | null;
+  /** NSC only: male breeding stock in the herd scheme (LV26). */
+  maleBreedingHerdScheme: boolean;
+  note: string | null;
+  createdByEmail: string;
+  createdAt: string;
+};
+
+const HERD_VALUE_RATIOS = ["0.3", "0.9", "1.0", "1.1", "1.2", "1.3"] as const;
 
 export async function listElections(tx: OrgTx): Promise<Election[]> {
-  const rows = await tx.query<{ id: string; kind: LivestockKind; method: Method; from_income_year: number; note: string | null; created_by_email: string; created_at: string }>(
-    "select id::text, kind, method, from_income_year, note, created_by_email, created_at::text from livestock_elections order by kind, from_income_year desc",
+  const rows = await tx.query<{
+    id: string;
+    kind: LivestockKind;
+    method: Method;
+    from_income_year: number;
+    herd_value_ratio: string | null;
+    male_breeding_herd_scheme: boolean;
+    note: string | null;
+    created_by_email: string;
+    created_at: string;
+  }>(
+    `select id::text, kind, method, from_income_year, herd_value_ratio::text, male_breeding_herd_scheme, note, created_by_email, created_at::text
+       from livestock_elections order by kind, from_income_year desc`,
   );
   return rows.rows.map((row) => ({
     id: row.id,
@@ -204,6 +252,8 @@ export async function listElections(tx: OrgTx): Promise<Election[]> {
     method: row.method,
     methodName: METHOD_NAMES[row.method],
     fromIncomeYear: row.from_income_year,
+    herdValueRatio: row.herd_value_ratio,
+    maleBreedingHerdScheme: row.male_breeding_herd_scheme,
     note: row.note,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
@@ -215,21 +265,37 @@ export async function listElections(tx: OrgTx): Promise<Election[]> {
  * (decision 503). Attach the evidence as files on the election. Recording
  * it files nothing with IRD.
  */
-export async function recordElection(tx: OrgTx, input: { kind: unknown; method: unknown; fromIncomeYear: unknown; note?: unknown }): Promise<Election> {
+export async function recordElection(
+  tx: OrgTx,
+  input: { kind: unknown; method: unknown; fromIncomeYear: unknown; note?: unknown; herdValueRatio?: unknown; maleBreedingHerdScheme?: unknown },
+): Promise<Election> {
   await requireLivestock(tx);
   const kind = requireOneOf(input.kind, "kind", LIVESTOCK_KINDS);
   const method = requireOneOf(input.method, "method", ["herd_scheme", "nsc"] as const);
   const fromIncomeYear = Number(parseDecimalInput(input.fromIncomeYear, "From income year", { maxScale: 0 }));
   if (fromIncomeYear < 2000 || fromIncomeYear > 2100) throw new ValidationError("The income year must be between 2000 and 2100.");
   const note = optionalString(input.note, "note", { maxLength: 1000 });
+  const ratioInput = input.herdValueRatio === undefined || input.herdValueRatio === null || input.herdValueRatio === "" ? null : String(input.herdValueRatio);
+  const herdValueRatio = ratioInput === null ? null : requireOneOf(Number(ratioInput).toFixed(1), "The herd value ratio", HERD_VALUE_RATIOS);
+  if (herdValueRatio !== null && method !== "herd_scheme") throw new ValidationError("A herd value ratio is for the herd scheme.");
+  if (herdValueRatio === "0.3" && !CHATHAM_KINDS.includes(kind)) throw new ValidationError("The Chatham Islands ratio (0.3) is for sheep and beef cattle only.");
+  if (input.maleBreedingHerdScheme !== undefined && typeof input.maleBreedingHerdScheme !== "boolean") throw new ValidationError("maleBreedingHerdScheme must be true or false.");
+  const maleBreedingHerdScheme = input.maleBreedingHerdScheme === true;
+  if (maleBreedingHerdScheme && method !== "nsc") throw new ValidationError("Male breeding stock in the herd scheme goes with an NSC election; under the herd scheme they're in it already.");
   const later = await tx.query("select 1 from livestock_valuations where income_year >= $1 and status = 'approved'", [fromIncomeYear]);
   if (later.rowCount) throw new ConflictError(`A valuation for the ${fromIncomeYear} income year or later is approved. Replace it before changing elections.`);
   try {
     const row = await tx.query<{ id: string }>(
-      "insert into livestock_elections (kind, method, from_income_year, note, created_by_user_id, created_by_email) values ($1, $2, $3, $4, $5, $6) returning id::text",
-      [kind, method, fromIncomeYear, note, tx.actor.userId, tx.actor.email],
+      `insert into livestock_elections (kind, method, from_income_year, herd_value_ratio, male_breeding_herd_scheme, note, created_by_user_id, created_by_email)
+       values ($1, $2, $3, $4::numeric, $5, $6, $7, $8) returning id::text`,
+      [kind, method, fromIncomeYear, herdValueRatio, maleBreedingHerdScheme, note, tx.actor.userId, tx.actor.email],
     );
-    await writeAuditEvent(tx, { eventType: "livestock.election_recorded", entityType: "livestock_election", entityId: row.rows[0].id, details: { kind, method, fromIncomeYear } });
+    await writeAuditEvent(tx, {
+      eventType: "livestock.election_recorded",
+      entityType: "livestock_election",
+      entityId: row.rows[0].id,
+      details: { kind, method, fromIncomeYear, herdValueRatio, maleBreedingHerdScheme },
+    });
     return (await listElections(tx)).find((entry) => entry.id === row.rows[0].id)!;
   } catch (error) {
     if ((error as { code?: string }).code === "23505") throw new ConflictError(`${KIND_NAMES[kind]} already has an election from ${fromIncomeYear}.`);
@@ -247,12 +313,16 @@ async function ratesFor(tx: OrgTx, incomeYear: number): Promise<Map<string, stri
   return new Map(rows.rows.map((row) => [`${row.rate_kind}.${row.kind}.${row.category}`, row.amount]));
 }
 
-async function electionFor(tx: OrgTx, kind: string, incomeYear: number): Promise<Method | null> {
-  const row = await tx.query<{ method: Method }>(
-    "select method from livestock_elections where kind = $1 and from_income_year <= $2 order by from_income_year desc limit 1",
+type ElectionFor = { method: Method; herdValueRatio: string | null; maleBreedingHerdScheme: boolean };
+
+async function electionFor(tx: OrgTx, kind: string, incomeYear: number): Promise<ElectionFor | null> {
+  const row = await tx.query<{ method: Method; herd_value_ratio: string | null; male_breeding_herd_scheme: boolean }>(
+    `select method, herd_value_ratio::text, male_breeding_herd_scheme from livestock_elections
+      where kind = $1 and from_income_year <= $2 order by from_income_year desc limit 1`,
     [kind, incomeYear],
   );
-  return row.rows[0]?.method ?? null;
+  const found = row.rows[0];
+  return found ? { method: found.method, herdValueRatio: found.herd_value_ratio, maleBreedingHerdScheme: found.male_breeding_herd_scheme } : null;
 }
 
 async function valuationRow(tx: OrgTx, where: string, params: unknown[]): Promise<Valuation | null> {
@@ -284,7 +354,11 @@ async function valuationRow(tx: OrgTx, where: string, params: unknown[]): Promis
     incomeYear: row.income_year,
     status: row.status,
     revaluationTarget: row.revaluation_target,
-    workings: row.workings,
+    // Valuations approved before stage 4 have no ratio, male breeding or high-priced fields.
+    workings: {
+      ...row.workings,
+      kinds: row.workings.kinds.map((kind) => ({ ...kind, herdValueRatio: kind.herdValueRatio ?? null, maleBreedingHerdScheme: kind.maleBreedingHerdScheme ?? false, highPriced: kind.highPriced ?? [] })),
+    },
     journalId: row.journal_id,
     approvedByEmail: row.approved_by_email,
     approvedAt: row.approved_at,
@@ -296,24 +370,32 @@ async function valuationRow(tx: OrgTx, where: string, params: unknown[]): Promis
 }
 
 /** Opening values by class: the first year's from the workpaper, later years' from last year's approved valuation. */
-async function openingValues(tx: OrgTx, firstYearStart: string, yearStart: string, problems: string[]): Promise<{ values: Map<string, string>; previousMethods: Map<string, Method> }> {
+async function openingValues(
+  tx: OrgTx,
+  firstYearStart: string,
+  yearStart: string,
+  problems: string[],
+): Promise<{ values: Map<string, string>; previousMethods: Map<string, Method>; highPriced: Map<string, string> }> {
   const values = new Map<string, string>();
   const previousMethods = new Map<string, Method>();
+  // High-priced animals still apart at last year end, with their values (LV25).
+  const highPriced = new Map<string, string>();
   if (yearStart === firstYearStart) {
     const rows = await tx.query<{ kind: string; class_code: string; value: string }>("select kind, class_code, value::text from livestock_openings");
     for (const row of rows.rows) values.set(classKey(row.kind, row.class_code), row.value);
-    return { values, previousMethods };
+    return { values, previousMethods, highPriced };
   }
   const previous = await valuationRow(tx, "year_end = $1 and status = 'approved'", [addDays(yearStart, -1)]);
   if (!previous) {
     problems.push(`Approve the valuation for the year to ${addDays(yearStart, -1)} first: this year opens with its closing values.`);
-    return { values, previousMethods };
+    return { values, previousMethods, highPriced };
   }
   for (const kind of previous.workings.kinds) {
     previousMethods.set(kind.kind, kind.method);
     for (const entry of kind.classes) values.set(classKey(kind.kind, entry.classCode), entry.closingValue);
+    for (const animal of kind.highPriced ?? []) if (animal.status === "high_priced") highPriced.set(animal.id, animal.closingValue);
   }
-  return { values, previousMethods };
+  return { values, previousMethods, highPriced };
 }
 
 function movementAmount(movement: YearFacts["movements"][number]): string | null {
@@ -328,7 +410,8 @@ export async function workOut(tx: OrgTx, yearEnd: string): Promise<{ workings: W
   const problems: string[] = [];
   const rates = await ratesFor(tx, incomeYear);
   const before = problems.length;
-  const { values: opening, previousMethods } = await openingValues(tx, settings.firstYearStart, facts.yearStart, problems);
+  const { values: opening, previousMethods, highPriced: highPricedOpening } = await openingValues(tx, settings.firstYearStart, facts.yearStart, problems);
+  const animals = await listHighPriced(tx);
   const missingPrevious = problems.length > before;
 
   for (const step of facts.ageing.needsSplit) {
@@ -346,19 +429,24 @@ export async function workOut(tx: OrgTx, yearEnd: string): Promise<{ workings: W
     const hasStock = classes.some((entry) => headOf(facts.opening, entry.code) !== 0 || headOf(facts.closing, entry.code) !== 0) || kindMovements.length > 0;
     if (!hasStock) continue;
     const kindName = KIND_NAMES[kind];
-    const method = await electionFor(tx, kind, incomeYear);
-    if (!method) {
+    const election = await electionFor(tx, kind, incomeYear);
+    if (!election) {
       problems.push(`${kindName}: record which valuation method the farm uses (its election) for the ${incomeYear} income year.`);
       continue;
     }
+    const { method } = election;
     const previousMethod = previousMethods.get(kind);
     if (previousMethod && previousMethod !== method) {
       problems.push(`${kindName}: changing from ${METHOD_NAMES[previousMethod]} to ${METHOD_NAMES[method]} isn't supported yet.`);
       continue;
     }
-    for (const entry of classes) {
-      if (entry.maleBreeding && (headOf(facts.opening, entry.code) > 0 || headOf(facts.closing, entry.code) > 0)) {
-        problems.push(`${kindName}: ${entry.name.toLowerCase()} have their own rules, which aren't supported yet.`);
+    // Male breeding stock: in the herd scheme with the rest, or alongside NSC when elected (OS 25/02 para 40, LV26).
+    const maleInHerd = method === "nsc" && election.maleBreedingHerdScheme;
+    if (method === "nsc" && !maleInHerd) {
+      for (const entry of classes) {
+        if (entry.maleBreeding && (headOf(facts.opening, entry.code) > 0 || headOf(facts.closing, entry.code) > 0)) {
+          problems.push(`${kindName}: ${entry.name.toLowerCase()} under national standard cost aren't supported. Elect them into the herd scheme (with the NSC election) instead.`);
+        }
       }
     }
     let sales = ZERO_DECIMAL;
@@ -374,17 +462,43 @@ export async function workOut(tx: OrgTx, yearEnd: string): Promise<{ workings: W
       else purchases = add(purchases, dec(amount));
     }
     const openingOf = (code: string) => opening.get(classKey(kind, code)) ?? "0.00";
-    const working = method === "herd_scheme" ? herdScheme(kind, facts, rates, incomeYear, openingOf, problems) : nsc(kind, facts, rates, incomeYear, openingOf, problems);
+    const inHerd = (code: string) => method === "herd_scheme" || (maleInHerd && Boolean(findClass(kind, code)?.maleBreeding));
+    const ratio = method === "herd_scheme" ? election.herdValueRatio : null;
+    const highPriced = highPricedFor(
+      kind,
+      animals.filter((animal) => animal.kind === kind),
+      highPricedOpening,
+      facts,
+      rates,
+      ratio,
+      settings.financialYearEndMonth,
+      inHerd,
+      problems,
+    );
+    const working =
+      method === "herd_scheme"
+        ? herdScheme(kind, facts, rates, incomeYear, openingOf, problems, { ratio, apart: highPriced.apart })
+        : nsc(kind, facts, rates, incomeYear, openingOf, problems);
     if (!working) continue;
-    const openingValue = sum(working.classes.map((entry) => dec(entry.openingValue)));
-    const openingRevalued = sum(working.classes.map((entry) => dec(entry.openingRevalued)));
-    const closingValue = sum(working.classes.map((entry) => dec(entry.closingValue)));
+    if (maleInHerd) {
+      const males = herdScheme(kind, facts, rates, incomeYear, openingOf, problems, { ratio: null, only: (code) => Boolean(findClass(kind, code)?.maleBreeding), apart: highPriced.apart });
+      if (!males) continue;
+      working.classes.push(...males.classes);
+    }
+    const apartOpening = sum(highPriced.rows.map((row) => dec(row.openingValue)));
+    const apartClosing = sum(highPriced.rows.map((row) => dec(row.closingValue)));
+    const openingValue = add(sum(working.classes.map((entry) => dec(entry.openingValue))), apartOpening);
+    const openingRevalued = add(sum(working.classes.map((entry) => dec(entry.openingRevalued))), apartOpening);
+    const closingValue = add(sum(working.classes.map((entry) => dec(entry.closingValue))), apartClosing);
     const valueChange = sub(closingValue, openingRevalued);
     kinds.push({
       kind,
       kindName,
       method,
+      herdValueRatio: ratio,
+      maleBreedingHerdScheme: maleInHerd,
       classes: working.classes,
+      highPriced: highPriced.rows,
       nsc: working.nsc,
       openingValue: money(openingValue),
       revaluation: money(sub(openingRevalued, openingValue)),
@@ -416,12 +530,76 @@ export async function workOut(tx: OrgTx, yearEnd: string): Promise<{ workings: W
     },
     problems,
     // Every class's opening value, whether or not its kind could be worked out, for the ledger check.
-    openingTotal: money(sum([...opening.values()].map((value) => dec(value)))),
+    openingTotal: money(add(sum([...opening.values()].map((value) => dec(value))), sum([...highPricedOpening.values()].map((value) => dec(value))))),
     openingKnown: !missingPrevious,
   };
 }
 
 type KindResult = { classes: ClassWorking[]; nsc: NscWorking | null } | null;
+
+/**
+ * High-priced animals of a kind for the year (LV25): each one's opening
+ * (last year's value, when it was apart then) and closing value, and how
+ * many of each class's head are valued apart. An animal at or below its
+ * class's NAMV (with any herd value ratio) at the year end, or that stopped
+ * breeding, reverts to its class.
+ */
+function highPricedFor(
+  kind: LivestockKind,
+  animals: HighPricedAnimal[],
+  openingValues: Map<string, string>,
+  facts: YearFacts,
+  rates: Map<string, string>,
+  ratio: string | null,
+  yearEndMonth: number,
+  inHerd: (code: string) => boolean,
+  problems: string[],
+): { rows: HighPricedWorking[]; apart: Map<string, { opening: number; closing: number }> } {
+  const rows: HighPricedWorking[] = [];
+  const apart = new Map<string, { opening: number; closing: number }>();
+  const count = (code: string) => {
+    const entry = apart.get(code) ?? { opening: 0, closing: 0 };
+    apart.set(code, entry);
+    return entry;
+  };
+  for (const animal of animals) {
+    const boughtThisYear = animal.boughtOn >= facts.yearStart && animal.boughtOn <= facts.yearEnd;
+    const apartAtOpening = openingValues.has(animal.id);
+    if (!boughtThisYear && !apartAtOpening) continue;
+    if (!inHerd(animal.classCode)) {
+      problems.push(`${KIND_NAMES[kind]}: high-priced ${animal.className.toLowerCase()} (${animal.description}) are only supported where the class is in the herd scheme.`);
+      continue;
+    }
+    if (apartAtOpening) count(animal.classCode).opening += 1;
+    const openingValue = apartAtOpening ? openingValues.get(animal.id)! : "0.00";
+    const leftInYear = animal.leftOn !== null && animal.leftOn <= facts.yearEnd;
+    let status: HighPricedWorking["status"] = "high_priced";
+    let closingValue = ZERO_DECIMAL;
+    if (leftInYear && animal.leftHow === "sold_or_died") {
+      status = "left";
+    } else {
+      const value = highPricedValueAt(animal, facts.yearEnd, yearEndMonth);
+      const namv = rates.get(`namv.${kind}.${animal.classCode}`);
+      const classRate = namv === undefined ? null : ratio ? mul(dec(namv), dec(ratio)) : dec(namv);
+      if (leftInYear || (classRate !== null && cmp(value, classRate) <= 0)) {
+        status = "reverted";
+      } else {
+        closingValue = value;
+        count(animal.classCode).closing += 1;
+      }
+    }
+    rows.push({
+      id: animal.id,
+      description: animal.description,
+      classCode: animal.classCode,
+      ratePercent: animal.ratePercent,
+      openingValue: money(dec(openingValue)),
+      closingValue: money(closingValue),
+      status,
+    });
+  }
+  return { rows, apart };
+}
 
 /** Herd scheme (LV4, LV5, LV10): opening head revalued at this year's NAMV, closing head at NAMV, by class. */
 function herdScheme(
@@ -431,15 +609,21 @@ function herdScheme(
   incomeYear: number,
   openingOf: (code: string) => string,
   problems: string[],
+  options: { ratio: string | null; only?: (code: string) => boolean; apart: Map<string, { opening: number; closing: number }> },
 ): KindResult {
   const classes: ClassWorking[] = [];
   let missing = false;
   for (const entry of classesOf(kind)) {
-    const openingHead = facts.opening.get(classKey(kind, entry.code)) ?? 0;
-    const closingHead = facts.closing.get(classKey(kind, entry.code)) ?? 0;
+    if (options.only && !options.only(entry.code)) continue;
+    // High-priced animals are valued on their own (LV25), so they're left out of their class's head here.
+    const apart = options.apart.get(entry.code) ?? { opening: 0, closing: 0 };
+    const openingHead = (facts.opening.get(classKey(kind, entry.code)) ?? 0) - apart.opening;
+    const closingHead = (facts.closing.get(classKey(kind, entry.code)) ?? 0) - apart.closing;
     const openingValue = openingOf(entry.code);
     if (openingHead === 0 && closingHead === 0 && isZero(dec(openingValue))) continue;
-    const rate = rates.get(`namv.${kind}.${entry.code}`);
+    const namv = rates.get(`namv.${kind}.${entry.code}`);
+    // A herd value ratio scales NAMV per head, to the cent (LV24).
+    const rate = namv === undefined ? undefined : options.ratio ? money(mul(dec(namv), dec(options.ratio))) : namv;
     if (rate === undefined) {
       problems.push(`${KIND_NAMES[kind]}: there's no ${incomeYear} national average market value for ${entry.name.toLowerCase()}. Add it from IRD's determination.`);
       missing = true;
@@ -476,8 +660,9 @@ function nsc(
 ): KindResult {
   const kindName = KIND_NAMES[kind];
   const before = problems.length;
-  const risingOneRate = rates.get(`nsc.${kind}.rising_1`);
-  const risingTwoRate = rates.get(`nsc.${kind}.rising_2`);
+  const rateKind = NSC_RATE_KIND[kind];
+  const risingOneRate = rates.get(`nsc.${rateKind}.rising_1`);
+  const risingTwoRate = rates.get(`nsc.${rateKind}.rising_2`);
   if (risingOneRate === undefined || risingTwoRate === undefined) {
     problems.push(`${kindName}: there are no ${incomeYear} national standard costs (rising 1 and rising 2 year). Add them from IRD's determination.`);
     return null;
@@ -492,13 +677,28 @@ function nsc(
   }
   let matureOut = 0;
   const risingTwoOut = new Map<string, number>();
+  // This year's rising one-year stock by class: born, bought and what the bought cost (LV23).
+  const risingOneIn = new Map<string, { born: number; bought: number; cost: Decimal }>();
   let purchasedHead = 0;
   let purchasedCost = ZERO_DECIMAL;
   for (const movement of facts.movements.filter((entry) => entry.kind === kind)) {
     const group = groupOf(movement.classCode);
     const label = `${movement.head} ${className(kind, movement.classCode).toLowerCase()} on ${movement.movementDate}`;
     if (movement.movementType === "found") problems.push(`${kindName}: found stock (${label}) under national standard cost isn't supported yet.`);
-    if (movement.movementType === "purchase" && (group === "rising_1" || group === "rising_2")) {
+    if (movement.movementType === "birth" && group === "rising_1") {
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL };
+      entry.born += movement.head;
+      risingOneIn.set(movement.classCode, entry);
+    }
+    if (movement.movementType === "purchase" && group === "rising_1") {
+      // Bought young stock is at its cost, blended with the farm-bred (OS 25/02 paras 26-27, LV23).
+      const entry = risingOneIn.get(movement.classCode) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL };
+      entry.bought += movement.head;
+      const amount = movementAmount(movement);
+      if (amount !== null) entry.cost = add(entry.cost, dec(amount));
+      risingOneIn.set(movement.classCode, entry);
+    }
+    if (movement.movementType === "purchase" && group === "rising_2") {
       problems.push(`${kindName}: bought young stock (${label}) under national standard cost isn't supported yet.`);
     }
     if (movement.movementType === "reclass" && groupOf(movement.toClassCode ?? "") !== group) {
@@ -524,7 +724,7 @@ function nsc(
   }
   let intakeHead = 0;
   let intakeValue = ZERO_DECIMAL;
-  const risingThreeRate = rates.get(`nsc.${kind}.rising_3_male`) ?? null;
+  const risingThreeRate = rates.get(`nsc.${rateKind}.rising_3_male`) ?? null;
   let usedRisingThree = false;
   // Beef males that turned rising two this year: their value (last year's plus the rising two NSC) and head, by class (LV17).
   const risingTwoIn = new Map<string, { head: number; value: Decimal }>();
@@ -576,6 +776,15 @@ function nsc(
     const openingValue = dec(openingOf(entry.code));
     if (entry.nsc === "rising_1") {
       if (openingHead === 0 && closingHead === 0 && isZero(openingValue)) continue;
+      // Farm-bred at this year's NSC plus bought at cost; any that left come out at the average (LV23).
+      const arrived = risingOneIn.get(entry.code) ?? { born: 0, bought: 0, cost: ZERO_DECIMAL };
+      const base = add(mul(dec(String(arrived.born)), dec(risingOneRate)), arrived.cost);
+      const total = arrived.born + arrived.bought;
+      if (closingHead > total) {
+        problems.push(`${kindName}: more ${entry.name.toLowerCase()} on hand (${closingHead}) than were born or bought this year (${total}).`);
+        return null;
+      }
+      const closingValue = closingHead === 0 ? ZERO_DECIMAL : closingHead === total ? base : mulDiv(base, dec(String(closingHead)), dec(String(total)), 2);
       working.push({
         classCode: entry.code,
         className: entry.name,
@@ -584,7 +793,7 @@ function nsc(
         rate: risingOneRate,
         openingRevalued: money(openingValue),
         closingHead,
-        closingValue: money(mul(dec(String(closingHead)), dec(risingOneRate))),
+        closingValue: money(closingValue),
       });
     } else if (entry.nsc === "rising_2") {
       const aged = risingTwoIn.get(entry.code);

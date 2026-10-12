@@ -314,13 +314,14 @@ describeWithDatabase("livestock year-end valuation (LV4-LV12)", () => {
     await run(org, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "herd_scheme", fromIncomeYear: 2026 }));
     await run(org, (tx) => recordElection(tx, { kind: "dairy_cattle", method: "nsc", fromIncomeYear: 2027 }));
     const preview = await run(org, (tx) => previewValuation(tx, { yearEnd: "2026-05-31" }));
+    // Breeding bulls under the herd scheme are valued at NAMV (OS 25/02 para 40, decision 508); under NSC they need the herd scheme part of the election.
     expect(preview.problems).toEqual([
-      "Dairy cattle: breeding bulls have their own rules, which aren't supported yet.",
       "Account 1500 Livestock on hand shows 27000.00 at 2026-05-31, but the livestock opening value is 28000.00. Post the opening balance (or correct it) first, so the closing value ties to the balance sheet.",
     ]);
     await expect(run(org, (tx) => approveValuation(tx, { yearEnd: "2026-05-31", idempotencyKey: key("v") }))).rejects.toThrow(/can't be approved yet/);
     const next = await run(org, (tx) => previewValuation(tx, { yearEnd: "2027-05-31" }));
     expect(next.problems[0]).toBe("Approve the valuation for the year to 2026-05-31 first: this year opens with its closing values.");
+    expect(next.problems).toContain("Dairy cattle: breeding bulls under national standard cost aren't supported. Elect them into the herd scheme (with the NSC election) instead.");
     expect(next.problems).toContain("Dairy cattle: there are no 2027 national standard costs (rising 1 and rising 2 year). Add them from IRD's determination.");
   });
 });
