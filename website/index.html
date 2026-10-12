@@ -3,713 +3,502 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tohyee — Your business. Your books. Your server.</title>
+    <title>Tohyee: your business, your books, your server</title>
     <meta
       name="description"
-      content="Open-source business software made for New Zealand. Bring accounting, CRM, payroll, analytics and livestock together on a server you control."
+      content="Free, open-source accounting made in New Zealand. Invoicing, GST, payroll, jobs, rosters, CRM, analytics and livestock, on a computer you control."
     />
-    <meta name="theme-color" content="#102b28" />
-    <meta
-      property="og:title"
-      content="Tohyee — Your business. Your books. Your server."
-    />
+    <meta name="theme-color" content="#1f5fae" />
+    <meta property="og:title" content="Tohyee: your business, your books, your server" />
     <meta
       property="og:description"
-      content="Accounting, CRM, payroll, analytics and livestock. Open source, made for New Zealand, hosted by you. Explore the current development features and latest release."
+      content="Free, open-source accounting made in New Zealand, on a computer you control. Every accounting rule is written down as a worked example and tested."
     />
-    <meta
-      property="og:image"
-      content="https://willy-nz.github.io/Tohyee/img/og-home.png"
-    />
+    <meta property="og:image" content="https://willy-nz.github.io/Tohyee/img/og-home.png" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://willy-nz.github.io/Tohyee/" />
     <link rel="canonical" href="https://willy-nz.github.io/Tohyee/" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <link
-      rel="preload"
-      href="fonts/inter-latin-wght-normal.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
+    <link rel="preload" href="fonts/zilla-slab-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
     <script src="site.js" defer></script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="wrap nav-row">
-        <a class="brand" href="./" aria-label="Tohyee home"
-          ><img src="logo.svg" width="32" height="32" alt="" />Tohyee</a
-        >
-        <button
-          class="menu-toggle"
-          type="button"
-          aria-expanded="false"
-          aria-controls="site-nav"
-        >
-          Menu
-        </button>
+        <a class="brand" href="./" aria-label="Tohyee home"><img src="logo.svg" width="36" height="36" alt="" />Tohyee</a>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu</button>
         <nav class="site-nav" id="site-nav" aria-label="Main navigation">
-          <a href="#features">Explore</a><a href="#livestock">For farms</a
-          ><a href="#why">Why Tohyee</a><a href="#new">What's new</a
-          ><a href="https://github.com/Willy-nz/Tohyee">GitHub ↗</a>
+          <a href="#who">Who it's for</a>
+          <a href="#check">Why trust it</a>
+          <a href="#everything">Features</a>
+          <a href="#new">What's new</a>
+          <a href="https://github.com/Willy-nz/Tohyee">GitHub</a>
         </nav>
-        <a class="button primary header-download" href="#install"
-          >Get Tohyee <span aria-hidden="true">↗</span></a
-        >
+        <a class="button primary small" href="#install">Get Tohyee</a>
       </div>
     </header>
+
     <main id="main">
       <section class="hero" aria-labelledby="hero-title">
-        <div class="wrap">
-          <div class="hero-layout">
-            <div>
-              <p class="eyebrow">
-                <span class="dot" aria-hidden="true"></span> Open source · Made
-                for Aotearoa
-              </p>
-              <h1 id="hero-title">
-                Your business.<br />Your books.<br /><span>Your server.</span>
-              </h1>
-            </div>
-            <div class="hero-copy">
-              <p>
-                From the first sale to the year-end accounts. Bring your
-                accounting, customer relationships and reporting together, on a
-                computer you control.
-              </p>
-              <div class="actions">
-                <a class="button primary" href="#install"
-                  >Get started <span aria-hidden="true">↗</span></a
-                ><a class="button outline" href="#features"
-                  >Explore the features</a
-                >
-              </div>
-              <p class="hero-note">
-                Free software. No Tohyee subscription. Your choice of hosting.
-              </p>
-            </div>
-          </div>
-          <div class="preview">
-            <div class="preview-toolbar">
-              <span class="preview-label">A closer look at Tohyee</span>
-              <div
-                class="preview-tabs"
-                role="tablist"
-                aria-label="Product screenshots"
-              >
-                <button
-                  id="tab-home"
-                  type="button"
-                  role="tab"
-                  aria-selected="true"
-                  aria-controls="panel-home"
-                >
-                  Overview</button
-                ><button
-                  id="tab-bank"
-                  type="button"
-                  role="tab"
-                  aria-selected="false"
-                  aria-controls="panel-bank"
-                  tabindex="-1"
-                >
-                  Reconciliation</button
-                ><button
-                  id="tab-data"
-                  type="button"
-                  role="tab"
-                  aria-selected="false"
-                  aria-controls="panel-data"
-                  tabindex="-1"
-                >
-                  Analytics
-                </button>
-              </div>
-            </div>
-            <figure
-              id="panel-home"
-              role="tabpanel"
-              aria-labelledby="tab-home"
-              tabindex="0"
-            >
-              <img
-                class="preview-image"
-                src="img/home-light.webp"
-                width="2880"
-                height="1800"
-                fetchpriority="high"
-                alt="Tohyee home showing cash, invoices, bills and the GST position for Kōwhai Coffee Roasters"
-              />
-              <figcaption>
-                Product screenshot · Fictional demo organisation · Screens may
-                vary by version.
-              </figcaption>
-            </figure>
-            <figure
-              id="panel-bank"
-              role="tabpanel"
-              aria-labelledby="tab-bank"
-              tabindex="0"
-              hidden
-            >
-              <img
-                class="preview-image"
-                src="img/reconcile-light.webp"
-                width="2880"
-                height="1800"
-                loading="lazy"
-                alt="Bank statement lines alongside suggested reconciliation matches"
-              />
-              <figcaption>
-                Bank reconciliation · Review a suggested match and follow it
-                through to the books.
-              </figcaption>
-            </figure>
-            <figure
-              id="panel-data"
-              role="tabpanel"
-              aria-labelledby="tab-data"
-              tabindex="0"
-              hidden
-            >
-              <img
-                class="preview-image"
-                src="img/analytics-pivot.webp"
-                width="998"
-                height="900"
-                loading="lazy"
-                alt="Analytics pivot report with grouped results, subtotals and filters"
-              />
-              <figcaption>
-                Analytics · Pivot tables with totals, filters and drill-down.
-              </figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-      <div class="principles">
-        <div class="wrap">
-          <p><span aria-hidden="true">↗</span> Open source · AGPL v3</p>
-          <p><span aria-hidden="true">↗</span> A database per organisation</p>
-          <p><span aria-hidden="true">↗</span> Encrypted nightly backups</p>
-          <p><span aria-hidden="true">↗</span> Windows, Docker &amp; Linux</p>
-        </div>
-      </div>
-      <section class="section" id="features">
-        <div class="wrap">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">One place to work</p>
-              <h2>More of your business.<br />Less jumping between apps.</h2>
-            </div>
-            <p>
-              Start with the modules your organisation needs. Keep the customer,
-              the transaction and the story behind the numbers connected.
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <h1 id="hero-title">Your business.<br />Your books.<br />Your server.</h1>
+            <p class="lede">
+              Free, open-source accounting made in New Zealand. Invoices, GST, payroll, jobs, rosters and livestock, kept
+              on a computer you control and open in everyone's browser.
             </p>
-          </div>
-          <p class="release-note">
-            This overview includes features built on <strong>main</strong>. New
-            CRM and livestock tools are ahead of the latest packaged release.
-            <a href="#new">Check what's new and available ↓</a>
-          </p>
-          <div class="module-grid">
-            <article class="module-card">
-              <div class="module-number">01 / ACCOUNTING</div>
-              <h3>From invoice to insight.</h3>
-              <p>
-                Quotes, invoices, bills, approval workflows, bank reconciliation
-                and GST. Add stock, fixed assets, budgets and financial reports
-                as you grow.
-              </p>
-              <a
-                class="text-link"
-                href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
-                >Explore accounting ↗</a
-              >
-            </article>
-            <article class="module-card featured">
-              <div class="module-number">
-                02 / CRM <span class="tag">EXPANDED ON MAIN</span>
-              </div>
-              <h3>Keep the next sale moving.</h3>
-              <p>
-                Capture leads, manage your pipeline and follow up with purpose.
-                Sales teams, campaigns, email templates, deal products and
-                quotes connect the work.
-              </p>
-              <a class="text-link" href="#crm">Meet the CRM ↓</a>
-            </article>
-            <article class="module-card">
-              <div class="module-number">03 / ANALYTICS</div>
-              <h3>Give your data a home.</h3>
-              <p>
-                Bring together Excel, CSV, your books and CRM. Shape your data,
-                build dashboards and pivots, and share selected reports with
-                clients.
-              </p>
-              <a class="text-link" href="#analytics">See analytics ↓</a>
-            </article>
-            <article class="module-card">
-              <div class="module-number">04 / PAYROLL</div>
-              <h3>Look after your people.</h3>
-              <p>
-                NZ pay runs, PAYE, KiwiSaver, leave, timesheets and payslips.
-                Prepare wage bank files and payday filing files for upload to
-                IRD.
-              </p>
-              <a
-                class="text-link"
-                href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
-                >Explore payroll ↗</a
-              >
-            </article>
-            <article class="module-card">
-              <div class="module-number">
-                05 / LIVESTOCK <span class="tag">NEW ON MAIN</span>
-              </div>
-              <h3>Make the stock numbers add up.</h3>
-              <p>
-                Dairy cattle, beef cattle and sheep. Reconcile head counts, work
-                through supported herd scheme and NSC valuations, and record
-                agent account sales.
-              </p>
-              <a class="text-link" href="#livestock">Built for the farm ↓</a>
-            </article>
-            <article class="module-card">
-              <div class="module-number">06 / CONNECTED WORK</div>
-              <h3>Bring the details together.</h3>
-              <p>
-                Projects and time, expense claims, Shopify and WooCommerce
-                sales, and consolidation reports across organisations. Work from
-                a browser, including your phone.
-              </p>
-              <a class="text-link" href="#connections">Explore connections ↓</a>
-            </article>
-          </div>
-        </div>
-      </section>
-      <section class="section feature-section" id="crm">
-        <div class="wrap feature-row">
-          <div class="feature-copy">
-            <p class="eyebrow">CRM / Expanded on main</p>
-            <h2>Keep every<br />relationship moving.</h2>
-            <p>
-              Keep companies, people and opportunities together with the calls,
-              tasks and conversations that move them forward.
-            </p>
-            <ul>
-              <li>Leads from imports, web forms and mailbox intake</li>
-              <li>Sales rep and manager roles, teams and forecasts</li>
-              <li>Follow-up tasks, sequences and campaign results</li>
-              <li>Deal products, discounts and quote revisions</li>
-            </ul>
-            <a
-              class="text-link"
-              href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
-              >Read the CRM feature details ↗</a
-            >
-          </div>
-          <div class="steps" aria-label="CRM workflow">
-            <div class="step">
-              <span>01</span>
-              <div>
-                <h3>Capture the enquiry</h3>
-                <p>
-                  Review incoming leads, spot duplicates and keep the original
-                  conversation.
-                </p>
-              </div>
+            <div class="actions">
+              <a class="button primary" href="#install">Get Tohyee</a>
+              <a class="button quiet" href="#who">See who it's for</a>
             </div>
-            <div class="step">
-              <span>02</span>
-              <div>
-                <h3>Build the relationship</h3>
-                <p>
-                  Convert a lead into a company, person and opportunity. Track
-                  the next action and the expected close.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span>03</span>
-              <div>
-                <h3>Connect it to the sale</h3>
-                <p>
-                  Use deal products to prepare a quote, then link the accepted
-                  sale to an invoice or sales order.
-                </p>
-              </div>
-            </div>
+            <p class="small-print">No subscription and no per-user fees. Licensed under the GNU AGPL v3.</p>
           </div>
-        </div>
-      </section>
-      <section class="section" id="analytics">
-        <div class="wrap feature-row">
-          <div class="feature-copy">
-            <p class="eyebrow">Analytics / Your data, in context</p>
-            <h2>Spreadsheets in.<br />Answers out.</h2>
-            <p>
-              Start with the files you already use. Load Excel sheets and CSVs
-              alongside your accounting and CRM data, then turn them into a view
-              your team can use.
-            </p>
-            <ul>
-              <li>Reusable data sources and scheduled reloads</li>
-              <li>Join, append, filter and reshape your tables</li>
-              <li>Charts, pivots, date filters and drill-down</li>
-              <li>Report viewers see only dashboards shared with them</li>
-            </ul>
-            <a
-              class="text-link"
-              href="https://github.com/Willy-nz/Tohyee/blob/main/docs/ANALYTICS-STUDIO.md"
-              >Explore the analytics workspace ↗</a
-            >
-          </div>
-          <figure class="feature-shot">
-            <img
-              src="img/analytics-pivot.webp"
-              width="998"
-              height="900"
-              loading="lazy"
-              alt="A Tohyee analytics pivot table with grouped values and totals"
-            />
-            <figcaption>
-              Actual product screenshot using demonstration data.
+
+          <figure class="paper" aria-labelledby="paper-caption">
+            <div class="paper-sheet">
+              <p class="paper-title">
+                <span>Worked example JV7</span>
+                <span>Invoice from a job</span>
+              </p>
+              <table class="paper-lines">
+                <caption class="visually-hidden">Kobe Cafe's invoice for installing a display cabinet</caption>
+                <tbody>
+                  <tr>
+                    <th scope="row">Labour, 2 h 16 min at 90.00</th>
+                    <td>204.00</td>
+                    <td class="tick" aria-label="checked"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13 L9.5 18 L20 5" /></svg></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Cabinet hinges, 4 at 12.00</th>
+                    <td>48.00</td>
+                    <td class="tick" aria-label="checked"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13 L9.5 18 L20 5" /></svg></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">GST at 15%</th>
+                    <td>37.80</td>
+                    <td class="tick" aria-label="checked"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13 L9.5 18 L20 5" /></svg></td>
+                  </tr>
+                  <tr class="total">
+                    <th scope="row">Total to Kobe Cafe</th>
+                    <td>289.80</td>
+                    <td class="tick" aria-label="checked"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13 L9.5 18 L20 5" /><path d="M8 13 L13.5 18 L24 5" /></svg></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="paper-sub">When it's approved, the hinges leave stock at their cost</p>
+              <table class="paper-journal">
+                <caption class="visually-hidden">The stock journal on approval</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Account</th>
+                    <th scope="col">Debit</th>
+                    <th scope="col">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">5000 Cost of sales</th>
+                    <td>24.00</td>
+                    <td></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">1400 Stock</th>
+                    <td></td>
+                    <td>24.00</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <figcaption id="paper-caption">
+              One of more than a thousand worked examples. Each is agreed before it's built and checked by automated tests
+              on every change.
+              <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/ACCOUNTING-EXAMPLES.md">Read them all</a>
             </figcaption>
           </figure>
         </div>
       </section>
-      <section class="section farm" id="livestock">
-        <div class="wrap feature-row">
-          <div class="feature-copy">
-            <p class="eyebrow">For New Zealand farms / New on main</p>
-            <h2>From the paddock<br />to the year end.</h2>
-            <p>
-              Livestock has its own workflow. Follow movements and head counts
-              through to valuation workings, the trading statement and the
-              year-end journal.
-            </p>
-            <ul>
-              <li>Births, purchases, sales, deaths, ageing and transfers</li>
-              <li>
-                Supported herd scheme and national standard cost valuations
-              </li>
-              <li>Agent sales, deductions and the net amount receivable</li>
-              <li>Monthly management values, separate from tax valuations</li>
-            </ul>
-            <p class="availability">
-              Initial scope: dairy cattle, beef cattle and sheep. Some tax
-              treatments remain unsupported. Farm budgets, forecasts and
-              industry benchmarking are planned, not available features.
-            </p>
-            <a
-              class="text-link"
-              href="https://github.com/Willy-nz/Tohyee/issues/221"
-              >Follow the livestock roadmap ↗</a
-            >
+
+      <section class="showcase" aria-label="Screenshots">
+        <div class="wrap">
+          <div class="showcase-tabs" role="tablist" aria-label="Screens in Tohyee">
+            <button id="tab-home" type="button" role="tab" aria-selected="true" aria-controls="panel-home">Home</button>
+            <button id="tab-bank" type="button" role="tab" aria-selected="false" aria-controls="panel-bank" tabindex="-1">Reconciling the bank</button>
+            <button id="tab-gst" type="button" role="tab" aria-selected="false" aria-controls="panel-gst" tabindex="-1">GST return</button>
+            <button id="tab-data" type="button" role="tab" aria-selected="false" aria-controls="panel-data" tabindex="-1">Analytics</button>
           </div>
-          <div class="steps" aria-label="Livestock workflow">
-            <div class="step">
-              <span>01</span>
-              <div>
-                <h3>Reconcile the head count</h3>
-                <p>
-                  Start with last year's closing position. Explain movements and
-                  investigate any difference in the count.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span>02</span>
-              <div>
-                <h3>See the workings</h3>
-                <p>
-                  Keep scheme elections and rate sources with the valuation.
-                  Show taxable movement and non-taxable revaluation separately.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span>03</span>
-              <div>
-                <h3>Review, then approve</h3>
-                <p>
-                  Resolve missing information and reconcile the ledger opening
-                  before approving the year-end journal.
-                </p>
-              </div>
-            </div>
+          <figure id="panel-home" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
+            <img src="img/home-light.webp" width="2880" height="1800" fetchpriority="high" alt="Tohyee's Home page: cash in the bank, money owed, bills to pay and the next GST return for a demo coffee roaster" />
+          </figure>
+          <figure id="panel-bank" role="tabpanel" aria-labelledby="tab-bank" tabindex="0" hidden>
+            <img src="img/reconcile-light.webp" width="2880" height="1800" loading="lazy" alt="Bank statement lines beside the suggested matches, each waiting for a person to OK it" />
+          </figure>
+          <figure id="panel-gst" role="tabpanel" aria-labelledby="tab-gst" tabindex="0" hidden>
+            <img src="img/gst-light.webp" width="2880" height="1800" loading="lazy" alt="The GST101A return worked out box by box, with the documents behind each figure" />
+          </figure>
+          <figure id="panel-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
+            <img src="img/analytics-pivot.webp" width="998" height="900" loading="lazy" alt="An analytics pivot table with grouped results and totals" />
+          </figure>
+          <p class="showcase-note">Real screens with a made-up business, Kōwhai Coffee Roasters.</p>
+        </div>
+      </section>
+
+      <section class="section" id="who" aria-labelledby="who-title">
+        <div class="wrap">
+          <h2 id="who-title">Made for the way New&nbsp;Zealand works</h2>
+          <p class="section-lede">Turn on the parts your organisation needs. Everything shares one set of books.</p>
+          <div class="audiences">
+            <article class="audience">
+              <h3>Shops and makers</h3>
+              <p>Sell in person and online, keep stock right, and roster the shop.</p>
+              <ul>
+                <li>Shopify and WooCommerce sales, refunds and payouts</li>
+                <li>Stock at average cost, with stocktakes and transfers</li>
+                <li>Rosters costed against a weekly budget</li>
+                <li>Staff clock in with a PIN on the shop's tablet</li>
+              </ul>
+            </article>
+            <article class="audience">
+              <h3>Trades and services</h3>
+              <p>Book the visit, do the work on your phone, invoice it the same day.</p>
+              <ul>
+                <li>Jobs with a site, a calendar and each person's visits</li>
+                <li>Start and Finish fill in the hours; checklists, photos and a signature</li>
+                <li>Materials onto the invoice, out of stock when it's approved</li>
+                <li>Service reminders when the next visit is due</li>
+              </ul>
+            </article>
+            <article class="audience">
+              <h3>Farms</h3>
+              <p>Head counts that reconcile, and year-end livestock values with their workings.</p>
+              <ul>
+                <li>Dairy and beef cattle, sheep, deer and goats</li>
+                <li>Herd scheme and national standard cost, with IRD's 2026 rates</li>
+                <li>High-priced animals and the Chatham Islands ratio</li>
+                <li>Agent account sales with their deductions</li>
+              </ul>
+            </article>
+            <article class="audience">
+              <h3>Accountants and bookkeepers</h3>
+              <p>Many organisations on one server, each in its own database.</p>
+              <ul>
+                <li>GST returns with the documents behind every box</li>
+                <li>Month-end and year-end close with a checklist</li>
+                <li>Payroll with PAYE, KiwiSaver, leave and payday filing files</li>
+                <li>Consolidation across organisations and currencies</li>
+              </ul>
+            </article>
           </div>
         </div>
       </section>
-      <section class="section ownership" id="why">
-        <div class="wrap">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Built around ownership</p>
-              <h2>Your records deserve<br />a place of their own.</h2>
-            </div>
+
+      <section class="section pocket" aria-labelledby="pocket-title">
+        <div class="wrap pocket-grid">
+          <div class="pocket-copy">
+            <h2 id="pocket-title">On the job and at the counter</h2>
             <p>
-              Install Tohyee on your own computer or server. Invite your team
-              and accountant to work in their browsers.
+              Tohyee works in a phone's browser, so there's nothing to install for your team. A visit shows the site, the
+              notes and the checklist. The shop tablet clocks people in with a PIN, and their hours land on their
+              timesheet for approval.
+            </p>
+            <p>
+              The tablet never signs in to your books. It holds its own key, and that key can only clock people in and
+              out.
             </p>
           </div>
-          <div class="ownership-grid">
-            <article>
-              <h3>Separate by design.</h3>
-              <p>
-                Each organisation has its own PostgreSQL database. Back up,
-                restore as a copy or move an organisation independently.
-              </p>
-            </article>
-            <article>
-              <h3>Access with purpose.</h3>
-              <p>
-                Accounting roles, CRM sales roles and shared-report access help
-                people get to the work they need. Two-step sign-in is included
-                in installer setups.
-              </p>
-            </article>
-            <article>
-              <h3>Open for the long run.</h3>
-              <p>
-                Read the source, contribute improvements and choose your
-                hosting. There is no Tohyee subscription; hosting and connected
-                services may cost extra.
-              </p>
-            </article>
-          </div>
-          <div class="connect" id="connections">
-            <p class="eyebrow">Connect the services you already use</p>
-            <div class="connections">
-              <span>Shopify</span><span>WooCommerce</span><span>Akahu</span
-              ><span>Stripe</span><span>PayPal</span><span>Wise</span
-              ><span>Microsoft 365</span><span>Gmail</span>
-            </div>
-            <p>
-              Connections have different capabilities and setup requirements.
-              Shopify sync is implemented but has not yet been verified against
-              a live store.
-              <a
-                href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
-                >See scope and limitations ↗</a
-              >
-            </p>
-          </div>
+          <figure class="phone">
+            <img src="img/phone-visit.webp" width="780" height="1470" loading="lazy" alt="A job visit on a phone: Kobe Cafe, 12 Princes Street, started at 09:04, with a Finish button and the checklist" />
+            <figcaption>A visit, part-way through</figcaption>
+          </figure>
+          <figure class="phone">
+            <img src="img/phone-clock.webp" width="780" height="1140" loading="lazy" alt="The clock-in screen: Tama Rewi typing a four-digit PIN, with a Clock in button" />
+            <figcaption>Clocking in at the shop</figcaption>
+          </figure>
         </div>
       </section>
-      <section class="section" id="install">
+
+      <section class="section check" id="check" aria-labelledby="check-title">
         <div class="wrap">
-          <div class="section-head">
+          <h2 id="check-title">Accounting you can check</h2>
+          <p class="section-lede">
+            New accounting apps are racing to do the books for you. Tohyee helps too, and it shows its working, so a person
+            stays in charge of what goes into the books.
+          </p>
+          <div class="checks">
             <div>
-              <p class="eyebrow">Make it yours</p>
-              <h2>One server.<br />Everyone's browser.</h2>
+              <h3>Suggestions wait for you</h3>
+              <p>
+                Bank matches, bank rules, bills read from your inbox and drafts from an AI assistant are suggestions. They
+                reach the books when someone says OK.
+              </p>
             </div>
-            <p>
-              Choose how you want to run Tohyee. Start with a test organisation
-              and keep a separate copy of your backup key.
-            </p>
-          </div>
-          <div class="release-note" id="new">
-            <strong>Release and development status</strong><br />Latest packaged
-            release checked 12 October 2026:
-            <a href="https://github.com/Willy-nz/Tohyee/releases/tag/v0.7.0"
-              >v0.7.0</a
-            >. Expanded CRM and livestock features are built on main for the
-            next release. Download links always open the latest release; check
-            its notes for what's included.
-          </div>
-          <div class="install-grid">
-            <article class="install-card">
-              <p class="eyebrow">01 / Windows</p>
-              <h3>The installer route.</h3>
-              <ol>
-                <li>Download and run TohyeeSetup.</li>
-                <li>Use the setup token to create your first login.</li>
-                <li>Create an organisation in server settings.</li>
-                <li>Save your backup key separately.</li>
-              </ol>
-              <a
-                class="button ink"
-                href="https://github.com/Willy-nz/Tohyee/releases/latest"
-                >Get the Windows installer ↗</a
-              >
-            </article>
-            <article class="install-card">
-              <p class="eyebrow">02 / Docker</p>
-              <h3>On your infrastructure.</h3>
-              <p>
-                Use the release's Docker bundle and compose configuration. Keep
-                your data and backups in persistent storage, and configure your
-                secrets before starting.
-              </p>
-              <a
-                class="button paper"
-                href="https://github.com/Willy-nz/Tohyee#running-on-a-server"
-                >Read the Docker guide ↗</a
-              >
-            </article>
-            <article class="install-card">
-              <p class="eyebrow">03 / Linux &amp; source</p>
-              <h3>Set it up your way.</h3>
-              <p>
-                Run a Linux release bundle or build the current source with
-                Node.js 22 or 24 and PostgreSQL. The source includes development
-                features ahead of packaged releases.
-              </p>
-              <a
-                class="button paper"
-                href="https://github.com/Willy-nz/Tohyee#run-it-locally"
-                >Build from source ↗</a
-              >
-            </article>
-          </div>
-          <div class="updates">
-            <p>Latest on main<br /><strong>October 2026</strong></p>
             <div>
+              <h3>The database says no</h3>
               <p>
-                <strong>CRM:</strong> leads, sales teams, follow-ups, campaigns,
-                team forecasts and deal quotes.
+                PostgreSQL itself refuses a journal that doesn't balance and any edit to posted history. Mistakes are
+                voided or reversed, so the trail stays complete.
               </p>
+            </div>
+            <div>
+              <h3>Written down before it's built</h3>
               <p>
-                <strong>Livestock:</strong> head counts, supported tax
-                valuations, agent account sales and monthly management values.
+                Every accounting rule starts as a worked example with real numbers. More than 2,000 automated tests run
+                them against a real database before any change is accepted.
               </p>
+            </div>
+            <div>
+              <h3>AI on a short lead</h3>
               <p>
-                <a href="https://github.com/Willy-nz/Tohyee/commits/main/"
-                  >Follow development ↗</a
-                >
-                &nbsp;
-                <a href="https://github.com/Willy-nz/Tohyee/releases"
-                  >Browse release notes ↗</a
-                >
+                AI is optional and uses a key you make. Keys can only look until you allow more, and no AI tool can delete,
+                void or reopen anything.
               </p>
             </div>
           </div>
         </div>
       </section>
-      <section class="section feature-section" id="faq">
+
+      <section class="section" id="everything" aria-labelledby="everything-title">
         <div class="wrap">
-          <div class="faq-layout">
-            <div>
-              <p class="eyebrow">A few useful answers</p>
-              <h2>Before you<br />make the move.</h2>
-            </div>
-            <div class="faq">
-              <details>
-                <summary>Is Tohyee really free?</summary>
-                <p>
-                  Yes. Tohyee is open source under the GNU AGPL v3, with no
-                  Tohyee subscription or per-user fee. Your hosting, payment
-                  provider, bank feed or other connected services may have their
-                  own charges.
-                </p>
-              </details>
-              <details>
-                <summary>Where does my data live?</summary>
-                <p>
-                  Your books live on the computer or server you choose. Each
-                  organisation has its own database. Connecting external
-                  services, remote access or AI involves those providers; review
-                  the settings for the services you enable.
-                </p>
-              </details>
-              <details>
-                <summary>Can my team and accountant use it remotely?</summary>
-                <p>
-                  Yes. Configure remote access using your own Cloudflare domain
-                  or Tailscale Funnel, then give each person their own login and
-                  role. Server administration stays local to the server.
-                  Provider setup and terms apply.
-                </p>
-              </details>
-              <details>
-                <summary>Does it file directly with Inland Revenue?</summary>
-                <p>
-                  No. Tohyee prepares GST return figures and the supporting
-                  audit report, and produces payroll payday filing files. You
-                  review and submit them to IRD. Direct IRD account access and a
-                  wider tax module remain planned work.
-                </p>
-              </details>
-              <details>
-                <summary>Does livestock cover every NZ tax situation?</summary>
-                <p>
-                  No. The initial module supports dairy cattle, beef cattle and
-                  sheep with supported herd scheme and NSC calculations. Special
-                  cases, other valuation methods and some movements are not
-                  supported. Review the scope with your accountant before
-                  relying on a valuation. Monthly management values are reports
-                  only and do not change the tax valuation or post journals.
-                </p>
-              </details>
-              <details>
-                <summary>Are industry benchmarks included?</summary>
-                <p>
-                  Not yet. B+LNZ and DairyNZ datasets are being considered for
-                  future farm comparisons. Data access and permission to
-                  redistribute it must be confirmed before benchmarks are
-                  included.
-                </p>
-              </details>
-              <details>
-                <summary>What if I need to restore my books?</summary>
-                <p>
-                  Tohyee makes encrypted nightly backups and can restore an
-                  organisation as a new copy. Keep backups off the server and
-                  keep the encryption key somewhere separate. Without the
-                  original key, encrypted backups cannot be opened.
-                </p>
-              </details>
-            </div>
+          <h2 id="everything-title">Everything in it</h2>
+          <p class="section-lede">
+            What's on the main branch today. Some of it is newer than the last installer; see
+            <a href="#new">what's new</a>.
+          </p>
+          <div class="inventory">
+            <dl>
+              <dt>Sales</dt>
+              <dd>Quotes, invoices, credit notes, repeating invoices, Pay now links, statements, sales orders</dd>
+              <dt>Purchases</dt>
+              <dd>Bills, a bills inbox, approval rules, purchase orders, expense claims with mileage</dd>
+              <dt>Bank and GST</dt>
+              <dd>Bank feeds and statement files, bank rules, the GST101A return with an audit report</dd>
+              <dt>Reports</dt>
+              <dd>Profit and loss, balance sheet, budgets, cash flow forecast, custom reports, consolidation</dd>
+            </dl>
+            <dl>
+              <dt>Payroll</dt>
+              <dd>Pay runs with PAYE, ACC, KiwiSaver and ESCT, Holidays Act leave, timesheets, payday filing files</dd>
+              <dt>Rosters</dt>
+              <dd>Shifts, unavailability, leave warnings, publishing, clocking in, rostered against clocked hours</dd>
+              <dt>Projects and jobs</dt>
+              <dd>Time and expenses, profitability, visits, checklists, materials, service reminders</dd>
+              <dt>Stock and assets</dt>
+              <dd>Average-cost stock by location, landed cost, a fixed asset register with depreciation</dd>
+            </dl>
+            <dl>
+              <dt>CRM</dt>
+              <dd>Leads, pipeline, sales teams, follow-ups, campaigns, forecasts, deal quotes, email and calendar sync</dd>
+              <dt>Analytics</dt>
+              <dd>Excel and CSV sources, shaping, dashboards and pivots, shared with report viewers</dd>
+              <dt>Livestock</dt>
+              <dd>Movements, head counts, herd scheme and NSC values, account sales, monthly management values</dd>
+              <dt>R&amp;D tax incentive</dt>
+              <dd>Activities, approvals, tagged costs and the claim workings</dd>
+            </dl>
           </div>
-          <p class="start-note">
-            <strong>Still early, and built in the open.</strong> Try a test
-            organisation first. Review reports and returns before relying on
-            them, and keep independent backups. Tohyee is provided without
-            warranty under its
-            <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE"
-              >licence</a
-            >
-            and is not endorsed by Inland Revenue. Report security concerns
-            through the
-            <a href="https://github.com/Willy-nz/Tohyee/blob/main/SECURITY.md"
-              >security policy</a
-            >.
+          <p class="more-link">
+            <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">The full feature list, with what isn't built yet</a>
           </p>
         </div>
       </section>
-      <section class="closing">
-        <div class="wrap">
+
+      <section class="section own" aria-labelledby="own-title">
+        <div class="wrap own-grid">
           <div>
-            <h2>Make room for better work.</h2>
-            <p>Open source. Made for New Zealand. Hosted by you.</p>
+            <h2 id="own-title">A place of their own for your records</h2>
+            <p>
+              Tohyee runs on your own computer or server, like a media server at home. Your team and your accountant
+              open it in their browsers, each with their own login and role.
+            </p>
+            <ul class="facts">
+              <li>Each organisation has its own PostgreSQL database, so it can be backed up, restored or moved on its own.</li>
+              <li>Backups run every night, encrypted with a key you keep somewhere else.</li>
+              <li>Remote access through your own Cloudflare domain or Tailscale, with two-step sign-in.</li>
+            </ul>
           </div>
-          <a class="button ink" href="#install">Get started with Tohyee ↗</a>
+          <div class="connections" aria-labelledby="connections-title">
+            <h3 id="connections-title">Works with</h3>
+            <dl>
+              <dt>Banks and payments</dt>
+              <dd>Akahu, SimpleFIN, Stripe, PayPal, Wise, GoCardless</dd>
+              <dt>Selling online</dt>
+              <dd>Shopify, WooCommerce</dd>
+              <dt>Email and calendar</dt>
+              <dd>Microsoft 365, Outlook, Gmail, Google Workspace</dd>
+              <dt>AI assistants</dt>
+              <dd>Any assistant that connects through MCP, such as Claude</dd>
+            </dl>
+            <p class="small-print">
+              Shopify and GoCardless are built and tested against simulated services, but not yet against live accounts.
+            </p>
+          </div>
         </div>
       </section>
+
+      <section class="section" id="install" aria-labelledby="install-title">
+        <div class="wrap">
+          <h2 id="install-title">Get Tohyee</h2>
+          <p class="section-lede">Start with a test organisation, and keep a copy of your backup key away from the server.</p>
+          <div class="install">
+            <article>
+              <h3>Windows</h3>
+              <ol>
+                <li>Download and run TohyeeSetup.</li>
+                <li>Use the setup token it shows to make your first login.</li>
+                <li>Create an organisation in the server settings.</li>
+                <li>Save your backup key somewhere else.</li>
+              </ol>
+              <a class="button primary" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows</a>
+            </article>
+            <article>
+              <h3>Docker</h3>
+              <p>
+                Use the release's Docker bundle on your own machine or server. Keep the data and backups on persistent
+                storage, and set your secrets before the first start.
+              </p>
+              <a class="button quiet" href="https://github.com/Willy-nz/Tohyee#running-on-a-server">Read the Docker guide</a>
+            </article>
+            <article>
+              <h3>Linux or from source</h3>
+              <p>
+                Run a Linux release bundle, or build the main branch with Node.js 22 or 24 and PostgreSQL to get the
+                newest features first.
+              </p>
+              <a class="button quiet" href="https://github.com/Willy-nz/Tohyee#run-it-locally">Build from source</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section news" id="new" aria-labelledby="new-title">
+        <div class="wrap news-grid">
+          <div>
+            <h2 id="new-title">What's new</h2>
+            <p>
+              The latest installer is
+              <a href="https://github.com/Willy-nz/Tohyee/releases/tag/v0.7.0">version 0.7.0</a>. Everything since then
+              is on the main branch and will be in the next release.
+            </p>
+            <p class="small-print">Checked 13 October 2026.</p>
+          </div>
+          <ol class="timeline">
+            <li>
+              <time datetime="2026-10-12">12 Oct</time>
+              <div>
+                <h3>Jobs, rosters and clocking in</h3>
+                <p>
+                  Jobs with visits, checklists and materials; rosters costed against a budget; staff clocking in on a
+                  shared tablet, straight onto their timesheets.
+                </p>
+              </div>
+            </li>
+            <li>
+              <time datetime="2026-10-11">11 Oct</time>
+              <div>
+                <h3>Livestock</h3>
+                <p>
+                  Head counts, herd scheme and NSC values, agent account sales and management values for cattle, sheep,
+                  deer and goats.
+                </p>
+              </div>
+            </li>
+            <li>
+              <time datetime="2026-10-10">10 Oct</time>
+              <div>
+                <h3>A bigger CRM</h3>
+                <p>Leads and web forms, sales teams, follow-ups, campaigns, team forecasts and quotes from deals.</p>
+              </div>
+            </li>
+            <li>
+              <time datetime="2026-10-06">6 Oct</time>
+              <div>
+                <h3>Version 0.7.0</h3>
+                <p>
+                  Bank feeds from SimpleFIN, Stripe, PayPal and Wise, bank rules with splits, a bills inbox, cash flow
+                  forecasts and Ctrl K search.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="faq" aria-labelledby="faq-title">
+        <div class="wrap faq-grid">
+          <h2 id="faq-title">Questions people ask</h2>
+          <div class="faq">
+            <details>
+              <summary>Is it really free?</summary>
+              <p>
+                Yes. Tohyee is open source under the GNU AGPL v3, with no subscription or per-user fee. Your hosting, bank
+                feed, payment provider or other connected services may charge for their own part.
+              </p>
+            </details>
+            <details>
+              <summary>Where does my data live?</summary>
+              <p>
+                On the computer or server you choose, with a separate database for each organisation. If you connect a
+                bank feed, payment provider, remote access or AI assistant, that provider sees what it needs to do its
+                job.
+              </p>
+            </details>
+            <details>
+              <summary>Can my team and accountant use it from elsewhere?</summary>
+              <p>
+                Yes. Set up remote access with your own Cloudflare domain or Tailscale Funnel, then give each person their
+                own login and role. Server settings only open on the server itself.
+              </p>
+            </details>
+            <details>
+              <summary>Does it file with Inland Revenue?</summary>
+              <p>
+                Not directly. Tohyee works out the GST return with an audit report and makes payroll payday filing files.
+                You check them and submit them to IRD yourself.
+              </p>
+            </details>
+            <details>
+              <summary>Does livestock cover every NZ tax situation?</summary>
+              <p>
+                No. Pigs, associated-person transfers, long-term bailments and a few other cases aren't supported yet, and
+                Tohyee refuses them rather than guessing. Check the scope with your accountant before relying on a
+                valuation.
+              </p>
+            </details>
+            <details>
+              <summary>What if I need to restore my books?</summary>
+              <p>
+                Restore an organisation from a nightly backup as a new copy, then check it before switching over. Keep
+                backups off the server, and keep the encryption key separately: without it the backups can't be opened.
+              </p>
+            </details>
+          </div>
+        </div>
+        <p class="wrap disclaimer">
+          Tohyee is early and built in the open. Try a test organisation first, check reports and returns before relying
+          on them, and keep your own backups. It comes without warranty under its
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">licence</a> and isn't endorsed by Inland
+          Revenue. Report security concerns through the
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/SECURITY.md">security policy</a>.
+        </p>
+      </section>
     </main>
-    <footer>
-      <div class="wrap">
-        <div>
-          <a class="brand" href="./"
-            ><img src="logo.svg" width="28" height="28" alt="" />Tohyee</a
-          >
-          <p>Made in Aotearoa New Zealand · GNU AGPL v3</p>
+
+    <footer class="site-footer">
+      <div class="wrap footer-row">
+        <div class="footer-brand">
+          <img src="logo.svg" width="56" height="56" alt="" />
+          <p><strong>Tohyee</strong><br />Made in Ōtepoti Dunedin.</p>
         </div>
         <nav aria-label="Footer">
-          <a href="https://github.com/Willy-nz/Tohyee">Source</a
-          ><a
-            href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
-            >Documentation</a
-          ><a href="https://github.com/Willy-nz/Tohyee/releases">Releases</a
-          ><a href="https://github.com/Willy-nz/Tohyee/issues">Issues</a
-          ><a href="https://github.com/Willy-nz/Tohyee/blob/main/SECURITY.md"
-            >Security</a
-          >
+          <a href="https://github.com/Willy-nz/Tohyee">Source code</a>
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">Features</a>
+          <a href="https://github.com/Willy-nz/Tohyee/releases">Releases</a>
+          <a href="https://github.com/Willy-nz/Tohyee/issues">Report a problem</a>
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/SECURITY.md">Security</a>
         </nav>
       </div>
     </footer>

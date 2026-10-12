@@ -26,3 +26,6 @@ installer/windows/tray/obj/
 
 # Analytics data files made when running locally (decision 354).
 /analytics/
+
+# Local backups written by a development server
+/backups/

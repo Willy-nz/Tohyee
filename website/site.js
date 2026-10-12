@@ -1,5 +1,5 @@
 /* Progressive enhancement: all navigation, downloads and FAQs work without JS. */
-document.documentElement.classList.remove("no-js");
+document.documentElement.classList.replace("no-js", "js");
 const menu = document.querySelector(".menu-toggle");
 const navigation = document.querySelector(".site-nav");
 function closeMenu() {

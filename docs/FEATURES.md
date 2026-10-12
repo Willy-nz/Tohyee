@@ -418,6 +418,21 @@ that something happened.
   MC61-MC70 not yet approved by Jess): for a USD customer its rates, prices,
   estimate and invoices are in USD (at a rate for the invoice's date), while
   staff and expense costs and profit stay NZD; its expenses are costs only.
+- **Jobs and visits** (Sales, Jobs; JV1-JV9 approved by Jess, decision 510,
+  tenant migration 0129), like ServiceM8 and Tradify: a **job** is a project
+  with a site address, a contact on site, a checklist and an optional
+  service interval. **Visits** are booked for a member on a task and shown
+  on the **job calendar** (by week, everyone or one person); overlaps are
+  flagged. **My visits** on a phone: Start and Finish fill in the hours,
+  which the person confirms into project time; checklist ticks record who
+  and when, finishing with open items asks first; photos and the signature
+  image are files on the visit, with who signed. **Materials** (items) go on
+  the project invoice as item lines, so stock and cost of sales move when
+  it's approved (as ServiceM8 does with Xero); unbilled materials stop a job
+  closing unless written off. **Services due** show on the Jobs page. Visits
+  download as an .ics calendar file (one way); the CRM's calendar connection
+  is read-only, so they aren't pushed to it. Not built: adding visit photos
+  to the invoice email straight from the visit.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -1360,6 +1375,30 @@ that something happened.
   lump sum indicator, the finish date of a final pay and redundancy (not
   liable for the ACC earners' levy) are filled in. No file has been
   through myIR's checker yet.
+- **Rosters** (Payroll, Rosters; RS1-RS4 approved by Jess, decision 511,
+  tenant migration 0130), like Deputy: **areas** (such as the shop) each with
+  a weekly budget, and each week's **shifts** with an unpaid break, costed as
+  hours at the employee's hourly rate plus employer KiwiSaver (salaried
+  shifts show hours, not cost). **Unavailability** (a weekday every week, or
+  dates) is added by the employee under My shifts or by payroll; rostering
+  someone then needs a reason. Shifts in booked leave are flagged "on leave"
+  and not counted. **Publishing** keeps a copy that employees with a linked
+  login see under **My shifts**; later changes are listed until published
+  again. Needs payroll access. Posts nothing. Not built: telling staff when a
+  roster is published; the weekly budget isn't drawn from the workforce
+  budget (monthly) yet.
+- **Clocking in** (Payroll, Clock-ins; RS5-RS8 approved by Jess, decision
+  512, tenant migration 0131): a **shared device** at the shop is set up by
+  someone with payroll access and keeps a key in a cookie; `/clock` on it
+  lets staff (login or not) tap their name, type a **PIN** (4-8 digits,
+  hashed; five wrong tries lock that person for 15 minutes) and clock in or
+  out or start and end a break. Exact minutes, no location. Clocking out puts
+  the time on the person's **timesheet** as other work, marked "from
+  clock-in"; a submitted or approved week is left alone and the time waits
+  under **Needs attention**. A shift not clocked out by midnight needs a
+  manager to enter the out time, with a reason, before it reaches the
+  timesheet or the person can clock in again. The roster week shows rostered
+  against clocked hours and the difference at their rate.
 - **Timesheets** (payroll stage P9, TS1-TS11, not yet approved by Jess;
   decisions 91-101; tenant migration 0067). Payroll › Timesheets: one
   timesheet per employee per week (Monday to Sunday unless the organisation
