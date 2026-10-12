@@ -5,9 +5,9 @@
 <h1 align="center">Tohyee</h1>
 
 <p align="center">
-  <strong>Accounting that's yours.</strong><br />
-  Free, open-source accounting for New Zealand: invoices, bank feeds, GST
-  returns, payroll and reports, on your own computer with no monthly fee.
+  <strong>Your business. Your books. Your server.</strong><br />
+  Open-source business software made for New Zealand: accounting, CRM,
+  payroll, analytics and livestock, on a server you control.
 </p>
 
 <p align="center">
@@ -28,16 +28,23 @@ home, with no monthly fee. One Tohyee server can hold many organisations, and
 **each organisation gets its own PostgreSQL database**, so each can be backed
 up, restored or moved on its own.
 
-> **Status: early.** Everything listed below works and is covered by tests,
-> but Tohyee is new. Try it on a test organisation before you put real books
-> in it, and check your GST returns and reports before you rely on them.
+> **Status: early development.** This README describes the current `main`
+> branch, including features ahead of packaged releases. Try a test
+> organisation first and review returns and reports before relying on them.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
+**Release availability — checked 12 October 2026:** the latest packaged
+release is [v0.7.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.7.0).
+The expanded CRM and livestock features below are built on `main` for the next
+release; they are not included in the v0.7.0 installer. Check the
+[latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
+for the contents of newer downloads, or [run from source](#run-it-locally).
+
 **Just want to use it?** Download `TohyeeSetup` from the
 [latest release](https://github.com/Willy-nz/Tohyee/releases/latest) and see
-[Running on a server](#running-on-a-server). Everything else here is for
-people working on the code.
+[Running on a server](#running-on-a-server). The feature overview below covers
+what you can use; developer and server setup instructions follow it.
 
 <p align="center">
   <img src="website/img/home-light.webp" alt="Tohyee's Home page for a demo coffee roaster: cash in the bank, money owed, bills to pay, the next GST return and a to-do list" width="860" />
@@ -51,6 +58,18 @@ people working on the code.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New on main
+
+| Area | Recent additions |
+| --- | --- |
+| **CRM** | Leads and intake forms, sales roles and teams, duplicate handling, follow-up tasks, email templates and sequences, campaigns, team forecasts and a sales dashboard. |
+| **Deals and quotes** | Product lines and discounts, draft quotes and revisions, and an accepted quote linked to an invoice or sales order. |
+| **Livestock** | Dairy, beef and sheep movements, head count reconciliation, supported herd scheme and NSC valuations, agent account sales and monthly management values. |
+
+These are development-branch features, not a claim that every planned workflow
+or tax treatment is supported. See the scope below and the
+[feature register](docs/FEATURES.md).
 
 ## What it does
 
@@ -67,8 +86,10 @@ people working on the code.
   once), or any other email account.
 - **Pay now** links on invoices through the organisation's own Stripe or
   PayPal account, with the payments recorded for you.
-- Shopify and WooCommerce orders and refunds brought in as sales (and
-  Shopify payouts, with their fees).
+- Shopify customers, products, orders, refunds and payouts; WooCommerce
+  orders and refunds. Shopify sync is implemented and tested with simulated
+  provider responses, but has not yet been verified against a live store.
+  Connections are inbound; stock and other changes are not written back.
 
 **Purchases**
 - Bills (due dates from each supplier's payment terms), repeating bills,
@@ -113,17 +134,59 @@ people working on the code.
   and ESCT, Holidays Act leave, timesheets, payslips, bank files for paying
   wages, payday filing files for IRD, and payroll reports.
 
+**CRM**
+- Companies, people, leads and opportunities with shared history, tasks,
+  calls, meetings, custom fields, record types and page layouts.
+- Leads entered or imported from CSV/Excel, captured from web forms or a
+  mailbox, then converted into a company, person and optional opportunity.
+- Configurable pipeline stages, deal products, discounts and quote revisions;
+  forecasts by owner or team, quotas and sales dashboards.
+- Sales rep and sales manager roles with scoped deals and tasks. Sales users
+  share the address book but do not get access to accounting or payroll.
+- Duplicate suggestions and controlled merges, follow-up rules, campaigns and
+  task-based sequences. Sequences create tasks; they do **not** send email
+  automatically.
+- Gmail and Microsoft 365 email/calendar sync; optional sending from the
+  connected mailbox with templates and a human checking before Send.
+
 **Analytics**
-- Data from CSV and Excel files, the books and CRM, shaped and shown
-  in dashboards and pivots, pinned to pages, shared with clients, or emailed
-  as reports.
+- Reusable CSV and Excel (`.xlsx`) sources, with one sheet per Excel source,
+  previews, confirmed column types and manual or scheduled reloads.
+- Copy the organisation's books and CRM into analytics. Filter, join, append,
+  unpivot and calculate fields using repeatable shaping steps.
+- Dashboards with charts, key figures, date ranges and slicers; pivot tables
+  with subtotals, drill-down and CSV/Excel exports. Pin tiles onto supported
+  dashboard pages.
+- Share selected dashboards with **report viewers**, who cannot browse the
+  underlying books or source tables.
+- Bring report attachments **into** analytics from a selected mailbox folder
+  or label. This is data ingestion, not a promise of scheduled outbound
+  dashboard emails or direct Looker/Google Ads connectors.
+
+**Livestock — new on main**
+- An optional Accounting module for dairy cattle, beef cattle and sheep.
+  Opening head counts and values, births, purchases, sales, deaths, ageing,
+  class changes and location transfers, with head count reconciliation.
+- Supported **herd scheme** and **national standard cost** valuations,
+  election evidence, sourced annual rates, trading statements and review
+  before a year-end journal is approved. IRD 2026 rates are included; other
+  years require sourced rates entered by an admin.
+- Agent account sales record stock, deductions and the net receivable through
+  linked invoices, bills and clearing payments.
+- Monthly management values show quantity and price changes using the farm's
+  values per head. They are **reports only**: they do not post journals or
+  alter tax valuations.
+- **Scope limits:** this is not a complete implementation of every NZ livestock
+  tax rule. High-priced livestock, other valuation methods, scheme transitions,
+  associated-person transfers and some NSC movements remain unsupported.
+  Farm budgets, forecasts and industry benchmarking are still planned.
+  See [issue #221](https://github.com/Willy-nz/Tohyee/issues/221) and the
+  [worked examples and limitations](docs/ACCOUNTING-EXAMPLES.md).
 
 **Everything else**
-- A built-in CRM (companies, people, a pipeline, tasks) with Gmail and
-  Microsoft 365 email and calendar sync.
 - Notes, files and history on transactions and contacts.
-- Logins with roles (owner, admin, bookkeeper, viewer) and two-step sign-in
-  for everyone.
+- Organisation roles for accounting, CRM sales and shared analytics;
+  two-step sign-in in installer setups.
 - Nightly encrypted backups, restore as a copy, and remote access.
 - Works on phones: a ☰ menu and line editors that stack.
 
@@ -288,6 +351,8 @@ under **Updates**.
 
 ## Documentation
 
+- [SECURITY.md](SECURITY.md): how to report a vulnerability privately
+- [docs/ANALYTICS-STUDIO.md](docs/ANALYTICS-STUDIO.md): analytics workspace
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): tenancy, logins and roles,
   migrations, financial integrity rules
 - [docs/ACCOUNTING-EXAMPLES.md](docs/ACCOUNTING-EXAMPLES.md): worked examples
