@@ -216,7 +216,7 @@ export async function listStaffRates(tx: OrgTx): Promise<StaffRate[]> {
     });
 }
 
-async function requireMember(tx: OrgTx, userId: unknown, what = "userId"): Promise<{ userId: string; email: string }> {
+export async function requireMember(tx: OrgTx, userId: unknown, what = "userId"): Promise<{ userId: string; email: string }> {
   if (typeof userId !== "string" || !userId.trim()) throw new ValidationError(`${what} must be a member of the organisation.`);
   const members = await listMembers(tx.organisationId);
   const member = members.find((entry) => entry.userId === userId.trim());
@@ -1266,6 +1266,8 @@ export async function invoiceProject(
     timeEntryIds?: unknown;
     taskIds?: unknown;
     expenseIds?: unknown;
+    /** Materials used on a job (JV4, JV7): item lines, so stock goes out when the invoice is approved. */
+    materialIds?: unknown;
     /** For a project in another currency: base currency per 1 unit. Left out, the invoice's usual starting rate (MC65). */
     exchangeRate?: unknown;
   },
@@ -1281,6 +1283,7 @@ export async function invoiceProject(
   const timeEntryIds = parseIds(input.timeEntryIds, "timeEntryIds");
   const taskIds = parseIds(input.taskIds, "taskIds");
   const expenseIds = parseIds(input.expenseIds, "expenseIds");
+  const materialIds = parseIds(input.materialIds, "materialIds");
   const typedRate = parseRateInput(input.exchangeRate);
   const hash = requestHash("project_invoice", {
     projectId,
@@ -1292,6 +1295,7 @@ export async function invoiceProject(
     taskIds,
     expenseIds,
     // Only when sent, so earlier requests hash the same.
+    ...(materialIds.length > 0 ? { materialIds } : {}),
     ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   });
   const replay = async () => {
@@ -1311,7 +1315,9 @@ export async function invoiceProject(
   const meanwhile = await replay();
   if (meanwhile) return meanwhile;
   assertOpen(locked);
-  if (timeEntryIds.length + taskIds.length + expenseIds.length === 0) throw new ValidationError("Choose the time, fixed prices or expenses to invoice.");
+  if (timeEntryIds.length + taskIds.length + expenseIds.length + materialIds.length === 0) {
+    throw new ValidationError("Choose the time, fixed prices, expenses or materials to invoice.");
+  }
 
   const project = await getProject(tx, projectId);
   const already = (billed: BilledOn | null, what: string) => {
@@ -1344,7 +1350,32 @@ export async function invoiceProject(
     return expense;
   });
 
-  type Line = { description: string; quantity: string; unitPrice: string; items: Array<{ kind: "time" | "fixed_task" | "expense"; id: string }> };
+  const materials = (
+    await tx.query<{ id: string; project_id: string; status: string; item_id: string; name: string; quantity: string; unit_price: string; has_account: boolean }>(
+      `select m.id::text, m.project_id::text, m.status, m.item_id::text, i.name, m.quantity::text, m.unit_price::text, i.income_account_id is not null as has_account
+         from project_materials m join items i on i.id = m.item_id where m.id = any($1::bigint[]) order by m.id`,
+      [materialIds],
+    )
+  ).rows;
+  for (const id of materialIds) {
+    const material = materials.find((row) => row.id === id);
+    if (!material || material.project_id !== projectId || material.status !== "active") throw new ValidationError(`Material #${id} isn't on this project.`);
+    const billed = (await tx.query<{ invoice_number: string | null }>(
+      "select s.invoice_number from sales_invoices s where s.id = tohyee_project_item_invoice('material', $1)",
+      [id],
+    )).rows[0];
+    if (billed) throw new ConflictError(`${material.name} is already on ${billed.invoice_number ?? "a draft invoice"}.`);
+  }
+
+  type Line = {
+    description: string;
+    quantity: string;
+    unitPrice: string;
+    itemId?: string;
+    /** Blank: the item's income account. */
+    itemAccount?: boolean;
+    items: Array<{ kind: "time" | "fixed_task" | "expense" | "material"; id: string }>;
+  };
   const lines: Line[] = [];
   for (const task of project.tasks) {
     const onTask = entries.filter((entry) => entry.taskId === task.id);
@@ -1358,6 +1389,16 @@ export async function invoiceProject(
   }
   for (const expense of expenses) {
     lines.push({ description: expense.description, quantity: "1", unitPrice: expense.charge, items: [{ kind: "expense", id: expense.id }] });
+  }
+  for (const material of materials) {
+    lines.push({
+      description: material.name,
+      quantity: material.quantity,
+      unitPrice: material.unit_price,
+      itemId: material.item_id,
+      itemAccount: material.has_account,
+      items: [{ kind: "material", id: material.id }],
+    });
   }
 
   const dueDate = sentDue ?? (await dueDateFromTerms(tx, project.contactId, invoiceDate));
@@ -1373,7 +1414,14 @@ export async function invoiceProject(
       dueDate,
       reference: project.name.slice(0, 100),
       amountsMode: taxCode ? "exclusive" : "no_tax",
-      lines: lines.map((line) => ({ description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, accountCode, taxCode })),
+      lines: lines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        accountCode: line.itemAccount ? "" : accountCode,
+        taxCode,
+        ...(line.itemId ? { itemId: line.itemId } : {}),
+      })),
       ...(typedRate != null ? { exchangeRate: typedRate } : {}),
     },
     { foreignCurrency: true, feature: "Project invoices" },
@@ -1390,20 +1438,29 @@ export async function invoiceProject(
   const tuples: string[] = [];
   lines.forEach((line, index) => {
     for (const item of line.items) {
-      values.push(projectInvoice.rows[0].id, projectId, item.kind, item.kind === "time" ? item.id : null, item.kind === "fixed_task" ? item.id : null, item.kind === "expense" ? item.id : null, index + 1);
-      const base = values.length - 7;
-      tuples.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`);
+      values.push(
+        projectInvoice.rows[0].id,
+        projectId,
+        item.kind,
+        item.kind === "time" ? item.id : null,
+        item.kind === "fixed_task" ? item.id : null,
+        item.kind === "expense" ? item.id : null,
+        item.kind === "material" ? item.id : null,
+        index + 1,
+      );
+      const base = values.length - 8;
+      tuples.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`);
     }
   });
   await tx.query(
-    `insert into project_invoice_items (project_invoice_id, project_id, kind, time_entry_id, task_id, expense_id, line_order) values ${tuples.join(", ")}`,
+    `insert into project_invoice_items (project_invoice_id, project_id, kind, time_entry_id, task_id, expense_id, material_id, line_order) values ${tuples.join(", ")}`,
     values,
   );
   await writeAuditEvent(tx, {
     eventType: "project.invoiced",
     entityType: "project",
     entityId: projectId,
-    details: { invoiceId: invoice.id, subtotal: invoice.subtotal, timeEntryIds, taskIds, expenseIds },
+    details: { invoiceId: invoice.id, subtotal: invoice.subtotal, timeEntryIds, taskIds, expenseIds, ...(materialIds.length > 0 ? { materialIds } : {}) },
   });
   await writeAuditEvent(tx, { eventType: "invoice.created_from_project", entityType: "sales_invoice", entityId: invoice.id, details: { projectId, projectName: project.name } });
   return { created: true, invoice: await getInvoice(tx, invoice.id), project: await getProject(tx, projectId) };
@@ -1430,7 +1487,18 @@ export async function closeProject(tx: OrgTx, idInput: unknown, input: { writeOf
   if (cmp(unbilled, ZERO_DECIMAL) !== 0 && !writeOff) {
     throw new ConflictError(`Project ${project.name} has ${project.figures.unbilled} unbilled. Invoice it, or close the project with write-off.`);
   }
-  const writtenOff = { timeEntryIds: [] as string[], taskIds: [] as string[], expenseIds: [] as string[] };
+  // Materials on a job not yet invoiced (JV4): taken off the job when written off, as their stock never went out.
+  const materials = await tx.query<{ id: string }>(
+    "select m.id::text from project_materials m where m.project_id = $1 and m.status = 'active' and tohyee_project_item_invoice('material', m.id) is null order by m.id",
+    [id],
+  );
+  if (materials.rows.length > 0 && !writeOff) {
+    throw new ConflictError(`Project ${project.name} has materials not yet invoiced. Invoice them, or close the project with write-off.`);
+  }
+  const writtenOff = { timeEntryIds: [] as string[], taskIds: [] as string[], expenseIds: [] as string[], materialIds: materials.rows.map((row) => row.id) };
+  if (writeOff && writtenOff.materialIds.length > 0) {
+    await tx.query("update project_materials set status = 'removed' where id = any($1::bigint[])", [writtenOff.materialIds]);
+  }
   if (writeOff) {
     for (const entry of project.timeEntries) {
       if (entry.status === "active" && entry.chargeType === "hourly" && !entry.billedOn && !entry.writtenOffAt) writtenOff.timeEntryIds.push(entry.id);

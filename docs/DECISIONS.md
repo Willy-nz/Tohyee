@@ -4371,3 +4371,18 @@ testing) and #154's code signing (later, Jess).
        cost from the year after it's bought, until it reverts.
      - **NSC rates:** stored by IRD's kinds (deer, goats meat and fibre,
        goats dairy).
+
+510. **Jobs and visits are part of Projects** (built 12 Oct 2026 from
+     JV1-JV9, #196 stage 8).
+     - **A job is a project with a site.** There's no separate jobs
+       ledger: visits put time on the project's tasks and materials go on
+       its invoice, so profitability and invoicing work as for any
+       project.
+     - **Visits are for members.** Hours count only once the person
+       confirms them (Jess, 8 Oct 2026).
+     - **Materials leave stock on the invoice,** as ServiceM8 does with
+       Xero (Jess, 12 Oct 2026). They're item lines, so the existing
+       stock rules (ST1) post the cost.
+     - **Calendar is a file, one way.** The CRM calendar connection only
+       reads today, so visits are offered as an .ics download instead.
+     - **Reminders stay in Tohyee.** No text or email to the customer.
