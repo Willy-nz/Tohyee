@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { createEmployee } from "@/lib/payroll/employees";
+import { addClockDevice, clockBoard, clockPunch, deviceActor, enterClockOut, listClockRecords, setClockPin } from "@/lib/payroll/clock";
 import { createPayGroup } from "@/lib/payroll/groups";
 import {
   addShift,
@@ -15,7 +16,7 @@ import {
   saveRosterArea,
   updateShift,
 } from "@/lib/payroll/rosters";
-import { setTimesheetPeople } from "@/lib/payroll/timesheets";
+import { approveTimesheet, getTimesheet, listTimesheetWeek, submitTimesheet, setTimesheetPeople } from "@/lib/payroll/timesheets";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
 
 /**
@@ -24,7 +25,7 @@ import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganis
  * 25.00, KiwiSaver 3% employer) and Tama (hourly 24.00); a weekly roster
  * budget of 800.00. Each test gets its own organisation.
  */
-describeWithDatabase("rosters (RS1-RS4)", () => {
+describeWithDatabase("rosters and clocking in (RS1-RS8)", () => {
   let server: TestServer;
   let jess: SessionUser;
   let aroha: SessionUser;
@@ -86,7 +87,18 @@ describeWithDatabase("rosters (RS1-RS4)", () => {
       as((tx) => addShift(tx, { areaId: shop, employeeId, startsAt: `${date}T09:00:00+13:00`, endsAt: `${date}T17:00:00+13:00`, breakMinutes: 30, ...extra }));
     const week = () => as((tx) => getRosterWeek(tx, { areaId: shop, weekStart: "2026-10-19" }));
     const journals = async () => Number((await as((tx) => tx.query<{ n: string }>("select count(*)::text as n from ledger_journals"))).rows[0].n);
-    return { org, as, asAroha: asUser(aroha), asNoah: asUser(noah), arohaId, tamaId, shop, shift, week, journals };
+    // The shop's device (RS5), and PINs for both.
+    const { device } = await as((tx) => addClockDevice(tx, { name: "Shop iPad" }));
+    await as((tx) => setClockPin(tx, { employeeId: arohaId, pin: "1234" }));
+    await as((tx) => setClockPin(tx, { employeeId: tamaId, pin: "5678" }));
+    const onDevice = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, deviceActor(device.name), work);
+    const punch = (employeeId: string, pin: string, action: string, at: string) => onDevice((tx) => clockPunch(tx, device, { employeeId, pin, action, at }));
+    const sheetFor = async (employeeId: string, weekStart: string) => {
+      const week = await as((tx) => listTimesheetWeek(tx, "owner", weekStart));
+      const summary = week.employees.find((entry) => entry.employeeId === employeeId)?.timesheet;
+      return summary ? as((tx) => getTimesheet(tx, "owner", summary.id)) : null;
+    };
+    return { org, as, asAroha: asUser(aroha), asNoah: asUser(noah), arohaId, tamaId, shop, shift, week, journals, onDevice, punch, sheetFor, device };
   }
 
   it("RS1: Aroha's Saturday shift costs 187.50 + 5.63 KiwiSaver = 193.13 against the 800.00 budget; nothing is posted", async () => {
@@ -163,5 +175,82 @@ describeWithDatabase("rosters (RS1-RS4)", () => {
     await expect(
       w.as((tx) => updateShift(tx, first.shifts[0].id, { employeeId: w.arohaId, startsAt: "2026-10-31T10:00:00+13:00", endsAt: "2026-10-31T17:00:00+13:00" })),
     ).rejects.toThrow("removing it and adding it there");
+  });
+
+  it("RS5, RS6: Aroha clocks 8:57-17:06 with a 30-minute break: 7.65 hours on her timesheet, from clock-in", async () => {
+    const w = await setup();
+    const before = await w.journals();
+    expect(await w.punch(w.arohaId, "1234", "in", "2026-10-24T08:57:00+13:00")).toEqual({ ok: true, status: "in", message: "Aroha clocked in at 08:57." });
+    expect((await w.onDevice((tx) => clockBoard(tx, { now: new Date("2026-10-24T09:00:00+13:00") }))).map((each) => [each.name, each.status])).toEqual([
+      ["Aroha Shop", "in"],
+      ["Tama Shop", "out"],
+    ]);
+    await w.punch(w.arohaId, "1234", "break_start", "2026-10-24T12:00:00+13:00");
+    expect((await w.punch(w.arohaId, "1234", "break_end", "2026-10-24T12:30:00+13:00")).message).toBe("Aroha's break ended at 12:30 (30 min).");
+    expect((await w.punch(w.arohaId, "1234", "out", "2026-10-24T17:06:00+13:00")).message).toBe("Aroha clocked out at 17:06: 7.65 hours.");
+    const { records } = await w.as((tx) => listClockRecords(tx, { from: "2026-10-24", to: "2026-10-24", now: new Date("2026-10-24T18:00:00+13:00") }));
+    expect(records[0]).toMatchObject({ employeeName: "Aroha Shop", breakMinutes: 30, minutes: 459, hours: "7.65", status: "closed", onTimesheet: true, deviceName: "Shop iPad" });
+    const sheet = (await w.sheetFor(w.arohaId, "2026-10-19"))!;
+    expect(sheet.status).toBe("draft");
+    expect(sheet.rows).toHaveLength(1);
+    expect(sheet.rows[0].hours).toEqual({ "2026-10-24": "7.65" });
+    expect(sheet.rows[0].entries["2026-10-24"]).toMatchObject({ fromClockIn: true, enteredByEmail: 'Clock device "Shop iPad"' });
+    // Her approver approves it as any timesheet.
+    await w.as((tx) => submitTimesheet(tx, "owner", sheet.id));
+    expect((await w.as((tx) => approveTimesheet(tx, "owner", sheet.id))).timesheet.status).toBe("approved");
+    // A second shift that week can't change an approved timesheet: it waits, saying why.
+    await w.punch(w.arohaId, "1234", "in", "2026-10-25T09:00:00+13:00");
+    await w.punch(w.arohaId, "1234", "out", "2026-10-25T12:00:00+13:00");
+    const later = await w.as((tx) => listClockRecords(tx, { from: "2026-10-25", to: "2026-10-25", now: new Date("2026-10-25T18:00:00+13:00") }));
+    expect(later.records[0].timesheetProblem).toBe("The timesheet for the week starting 2026-10-19 is approved: add 3.00 hours on 2026-10-25 once it's back to draft.");
+    expect(later.needsAttention.map((record) => record.id)).toEqual([later.records[0].id]);
+    expect(await w.journals()).toBe(before);
+  });
+
+  it("RS5: a wrong PIN is refused, and five lock clocking in for 15 minutes", async () => {
+    const w = await setup();
+    expect(await w.punch(w.arohaId, "0000", "in", "2026-10-24T08:57:00+13:00")).toEqual({ ok: false, message: "That PIN isn't right." });
+    for (let attempt = 2; attempt <= 4; attempt += 1) await w.punch(w.arohaId, "0000", "in", "2026-10-24T08:57:00+13:00");
+    expect(await w.punch(w.arohaId, "0000", "in", "2026-10-24T08:57:00+13:00")).toEqual({ ok: false, message: "Too many wrong PINs. Aroha can try again in 15 minutes." });
+    await expect(w.punch(w.arohaId, "1234", "in", "2026-10-24T08:58:00+13:00")).rejects.toThrow("Too many wrong PINs");
+    // Resetting her PIN unlocks it.
+    await w.as((tx) => setClockPin(tx, { employeeId: w.arohaId, pin: "4321" }));
+    expect((await w.punch(w.arohaId, "4321", "in", "2026-10-24T08:59:00+13:00")).ok).toBe(true);
+    // A stopped device can't be used.
+    await expect(w.onDevice((tx) => import("@/lib/payroll/clock").then((clock) => clock.deviceFromToken(tx, { deviceId: w.device.id, secret: "x".repeat(43) })))).rejects.toThrow(
+      "isn't set up for clocking in",
+    );
+  });
+
+  it("RS7: the week shows rostered 7.50 h, clocked 7.65 h, a difference of 0.15 h (3.75)", async () => {
+    const w = await setup();
+    await w.shift(w.arohaId, "2026-10-24");
+    await w.punch(w.arohaId, "1234", "in", "2026-10-24T08:57:00+13:00");
+    await w.punch(w.arohaId, "1234", "break_start", "2026-10-24T12:00:00+13:00");
+    await w.punch(w.arohaId, "1234", "break_end", "2026-10-24T12:30:00+13:00");
+    await w.punch(w.arohaId, "1234", "out", "2026-10-24T17:06:00+13:00");
+    const roster = await w.week();
+    expect(roster.actuals).toEqual([
+      { employeeId: w.arohaId, employeeName: "Aroha Shop", rosteredHours: "7.50", clockedHours: "7.65", differenceHours: "0.15", differenceCost: "3.75", stillOpen: 0 },
+    ]);
+  });
+
+  it("RS8: Tama never clocks out: it needs attention, and nothing reaches his timesheet until a manager enters the out time", async () => {
+    const w = await setup();
+    // A Saturday already past, so the out time isn't in the future.
+    await w.punch(w.tamaId, "5678", "in", "2026-10-03T09:00:00+13:00");
+    const nextDay = new Date("2026-10-04T08:00:00+13:00");
+    const { needsAttention } = await w.as((tx) => listClockRecords(tx, { from: "2026-10-03", to: "2026-10-03", now: nextDay }));
+    expect(needsAttention).toHaveLength(1);
+    expect(needsAttention[0]).toMatchObject({ employeeName: "Tama Shop", status: "needs_attention", clockOutAt: null, onTimesheet: false });
+    expect(await w.sheetFor(w.tamaId, "2026-09-28")).toBeNull();
+    // On the device he shows as out; clocking in again is refused until it's sorted.
+    expect((await w.onDevice((tx) => clockBoard(tx, { now: nextDay }))).find((each) => each.name === "Tama Shop")!.status).toBe("out");
+    await expect(w.punch(w.tamaId, "5678", "in", "2026-10-04T09:00:00+13:00")).rejects.toThrow("A manager needs to enter the out time first.");
+    await expect(w.as((tx) => enterClockOut(tx, needsAttention[0].id, { clockOutAt: "2026-10-03T17:00:00+13:00" }))).rejects.toThrow("Reason");
+    const fixed = await w.as((tx) => enterClockOut(tx, needsAttention[0].id, { clockOutAt: "2026-10-03T17:00:00+13:00", breakMinutes: 30, reason: "Forgot to clock out; left at 5" }));
+    expect(fixed).toMatchObject({ status: "closed", hours: "7.50", outEnteredByEmail: "rs-jess@example.com", outReason: "Forgot to clock out; left at 5", onTimesheet: true });
+    expect((await w.sheetFor(w.tamaId, "2026-09-28"))!.rows[0].hours).toEqual({ "2026-10-03": "7.50" });
+    expect((await w.punch(w.tamaId, "5678", "in", "2026-10-04T09:00:00+13:00")).ok).toBe(true);
   });
 });

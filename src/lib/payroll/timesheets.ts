@@ -37,6 +37,8 @@ export type TimesheetEntry = {
   enteredAt: string;
   enteredByEmail: string;
   enteredOn: string;
+  /** Put there by clocking in and out (RS6). */
+  fromClockIn: boolean;
   daysAfterWork: number;
   enteredLate: boolean;
   timelinessText: string;
@@ -153,6 +155,7 @@ type EntryRow = {
   entered_at: string;
   entered_by_email: string;
   entered_on: string;
+  from_clock_in: boolean;
   ended_at: string | null;
   ended_by_email: string | null;
 };
@@ -253,7 +256,8 @@ async function loadEntries(tx: OrgTx, sheetIds: readonly string[]): Promise<Arra
     `select en.id, en.timesheet_id, en.work_date::text, en.department_id::text, d.name as department_name, en.project_id::text,
             p.name as project_name, en.rd_activity_id::text, r.code as rd_activity_code, r.name as rd_activity_name,
             en.hours::text, en.description, en.status, en.replaces_id::text, en.entered_at::text, en.entered_by_email,
-            to_char((en.entered_at at time zone $2)::date, 'YYYY-MM-DD') as entered_on, en.ended_at::text, en.ended_by_email
+            to_char((en.entered_at at time zone $2)::date, 'YYYY-MM-DD') as entered_on, en.ended_at::text, en.ended_by_email,
+            en.from_clock_in
        from payroll_timesheet_entries en
        left join tracking_values d on d.id = en.department_id
        left join projects p on p.id = en.project_id
@@ -300,6 +304,7 @@ function toEntry(entry: EntryRow): TimesheetEntry {
     enteredAt: entry.entered_at,
     enteredByEmail: entry.entered_by_email,
     enteredOn: entry.entered_on,
+    fromClockIn: entry.from_clock_in,
     daysAfterWork: lateness.days,
     enteredLate: lateness.late,
     timelinessText: lateness.text,

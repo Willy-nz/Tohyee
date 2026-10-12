@@ -363,6 +363,11 @@ function TimesheetEditor({ organisationId, timesheetId, onChanged }: { organisat
                           {entry?.enteredLate ? (
                             <div title={`${entry.timelinessText}, by ${entry.enteredByEmail}`}><Badge tone="amber">Late</Badge></div>
                           ) : null}
+                          {entry?.fromClockIn ? (
+                            <div title="From clocking in and out">
+                              <Badge tone="blue">From clock-in</Badge>
+                            </div>
+                          ) : null}
                         </td>
                       );
                     })}

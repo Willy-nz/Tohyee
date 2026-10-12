@@ -64,6 +64,21 @@ export type RosterWeek = {
   /** Shifts that aren't costed: salaried or without a pay rate. */
   notCosted: number;
   changes: RosterChange[];
+  /** Rostered against clocked time (RS7), for each person on the roster; clocked time counts every area. */
+  actuals: RosterActual[];
+};
+
+export type RosterActual = {
+  employeeId: string;
+  employeeName: string;
+  rosteredHours: string;
+  clockedHours: string;
+  /** Clocked less rostered. */
+  differenceHours: string;
+  /** The difference at the hourly rate; null when not costed. */
+  differenceCost: string | null;
+  /** Shifts clocked in but not out yet. */
+  stillOpen: number;
 };
 
 export type Unavailability = {
@@ -385,6 +400,35 @@ export async function getRosterWeek(tx: OrgTx, input: { areaId: unknown; weekSta
     });
   }
   const cost = add(wages, kiwiSaver);
+  const actuals: RosterActual[] = [];
+  const clocked = employeeIds.length
+    ? (
+        await tx.query<{ employee_id: string; clock_in_at: string; clock_out_at: string | null; break_minutes: number }>(
+          `select employee_id::text, clock_in_at::text, clock_out_at::text, break_minutes from payroll_clock_records
+            where employee_id = any($1::uuid[]) and clock_in_at >= $2::timestamp at time zone 'Pacific/Auckland'
+              and clock_in_at < ($3::date + 1)::timestamp at time zone 'Pacific/Auckland'`,
+          [employeeIds, days[0], days[6]],
+        )
+      ).rows
+    : [];
+  for (const employeeId of employeeIds) {
+    const mine = shifts.filter((shift) => shift.employeeId === employeeId && !shift.onLeave);
+    const rostered = mine.reduce((total, shift) => total + shift.minutes, 0);
+    const records = clocked.filter((row) => row.employee_id === employeeId);
+    const done = records.filter((row) => row.clock_out_at !== null);
+    const clockedMinutes = done.reduce((total, row) => total + Math.floor((Date.parse(row.clock_out_at!) - Date.parse(row.clock_in_at)) / 60_000) - row.break_minutes, 0);
+    const difference = divide(dec(String(clockedMinutes - rostered)), dec("60"), 2);
+    const rate = mine.find((shift) => shift.hourlyRate !== null)?.hourlyRate ?? null;
+    actuals.push({
+      employeeId,
+      employeeName: shifts.find((shift) => shift.employeeId === employeeId)!.employeeName,
+      rosteredHours: hoursText(rostered),
+      clockedHours: hoursText(clockedMinutes),
+      differenceHours: money(difference),
+      differenceCost: rate === null ? null : money(divide(mul(dec(String(clockedMinutes - rostered)), dec(rate)), dec("60"), 2)),
+      stillOpen: records.length - done.length,
+    });
+  }
   return {
     area,
     weekStart,
@@ -397,6 +441,7 @@ export async function getRosterWeek(tx: OrgTx, input: { areaId: unknown; weekSta
     budget: area.weeklyBudget,
     remaining: area.weeklyBudget === null ? null : money(sub(dec(area.weeklyBudget), cost)),
     notCosted,
+    actuals,
     changes: roster?.published_shifts ? changesSince(roster.published_shifts, shifts, await employeeNames(tx, roster.published_shifts)) : [],
   };
 }

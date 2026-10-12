@@ -184,7 +184,7 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
-function isSecureRequest(request: Request): boolean {
+export function isSecureRequest(request: Request): boolean {
   const override = process.env.TOHYEE_COOKIE_SECURE?.trim().toLowerCase();
   if (override === "true") return true;
   if (override === "false") return false;

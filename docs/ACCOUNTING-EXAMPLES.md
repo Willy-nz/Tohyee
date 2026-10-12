@@ -15767,6 +15767,37 @@ for anyone whose login is linked to their employee record.
   **Publish changes**. Not done: telling employees by email or
   notification when a roster is published.
 
+#### Built: how RS5-RS8 came out
+
+Tests: the same file, `tests/integration/payroll-rosters.test.ts`. Decision
+512. Payroll > Clock-ins needs payroll access; the device page is `/clock`.
+
+- **RS5:** someone with payroll access sets up the shop's device under
+  Payroll > Clock-ins ("Set up this device", on the device itself). It keeps
+  a secret in a cookie that only the clock-in page reads; no one is signed
+  in on it, and it can only show who's in and clock people in and out.
+  Each employee gets a 4-8 digit PIN (kept as a hash). Aroha taps her name,
+  types her PIN, clocks in at 8:57, takes a 30-minute break (Start break /
+  End break) and clocks out at 17:06: **7 h 39 m**. No location is
+  recorded. Five wrong PINs lock that employee for 15 minutes; setting a new
+  PIN unlocks it. A device can be stopped.
+- **RS6:** clocking out puts **7.65** hours on Aroha's timesheet for Sat 24
+  Oct as "other work", marked **From clock-in**, entered by the device.
+  Exact minutes, no rounding (459 min = 7.65 h; other totals are rounded
+  half up to 2 places). A second shift that day adds to that cell. If the
+  week's timesheet is already submitted or approved, the time waits under
+  "Needs attention" with the reason, and "Try the timesheet again" works
+  once it's back to draft.
+- **RS7:** the roster week shows **rostered 7.50, clocked 7.65,
+  difference 0.15 h (3.75 at 25.00)** for each person on it. Clocked time
+  counts every area. **Not done:** cost against the workforce budget once
+  the pay run is approved. That's the existing budget vs actual report
+  (WB5), which isn't joined to rosters yet.
+- **RS8:** Tama clocks in at 9:00 and doesn't clock out. After midnight
+  it's under "Needs attention"; the device shows him as out and won't clock
+  him in again until a manager enters the out time, with a reason (and the
+  break). Only then does the time go to his timesheet.
+
 ### Direct debit with GoCardless (stage 10, BECS NZ)
 
 What GoCardless says (checked 8 Oct 2026, [BECS NZ payment
