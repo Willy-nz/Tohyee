@@ -20,11 +20,27 @@ describe("R&D income years", () => {
     expect(incomeYearDates(2027, 3)).toEqual({ start: "2026-04-01", end: "2027-03-31" });
   });
 
-  it("uses the organisation's own balance date", () => {
-    expect(incomeYearDates(2026, 12)).toEqual({ start: "2026-01-01", end: "2026-12-31" });
-    expect(incomeYearLabel(2026, 12)).toBe("2026");
+  it("uses the organisation's own balance date: a late one counts toward the tax year before it", () => {
     expect(incomeYearDates(2026, 6)).toEqual({ start: "2025-07-01", end: "2026-06-30" });
     expect(incomeYearOf("2025-07-01", 6)).toBe(2026);
+    expect(incomeYearLabel(2026, 6)).toBe("2025-26");
+    expect(incomeYearOf("2026-09-30", 9)).toBe(2026);
+  });
+
+  it("an early balance date (October to March) counts toward the tax year after it (IRD SPS 08/04)", () => {
+    // The year to 30 Nov 2006 is the 2006-07 income year.
+    expect(incomeYearOf("2006-11-30", 11)).toBe(2007);
+    expect(incomeYearOf("2005-12-01", 11)).toBe(2007);
+    expect(incomeYearLabel(2007, 11)).toBe("2006-07");
+    expect(incomeYearDates(2007, 11)).toEqual({ start: "2005-12-01", end: "2006-11-30" });
+    // 30 Nov 2025, as #243 asked: 2026, agreeing with livestock.
+    expect(incomeYearOf("2025-11-30", 11)).toBe(2026);
+    // A calendar year: 2026 counts toward 2026-27.
+    expect(incomeYearOf("2026-06-15", 12)).toBe(2027);
+    expect(incomeYearDates(2027, 12)).toEqual({ start: "2026-01-01", end: "2026-12-31" });
+    expect(incomeYearLabel(2027, 12)).toBe("2026-27");
+    // The year to 31 Jan 2008 is 2007-08 (no change for January to March).
+    expect(incomeYearOf("2008-01-31", 1)).toBe(2008);
   });
 });
 
