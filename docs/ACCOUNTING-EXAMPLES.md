@@ -16276,7 +16276,7 @@ Decision 507.
   - The opening is valued at the year's first values.
 - **LV20:** the valuation ignores management values; nothing posts.
 
-## Livestock (#221) stage 4: deer, goats, pigs and the remaining herd scheme rules (examples not yet approved by Jess)
+## Livestock (#221) stage 4: deer, goats, pigs and the remaining herd scheme rules (LV21-LV24 approved by Jess 12 Oct 2026; LV25-LV26 drafted after)
 
 Drafted 12 Oct 2026. IRD **OS 25/02** (31 March 2025, the 47-page PDF) was
 read this time, through a summarising tool rather than line by line. The
@@ -16397,4 +16397,45 @@ were read from IRD's determinations on 11 Oct 2026).
    rates are found?
 4. **Herd value ratio:** include the Chatham Islands 0.3 ratio, or leave
    it out?
+
+Answered (12 Oct 2026):
+1. Yes, allow a kind under NSC with its male breeding stock in the herd
+   scheme (LV26).
+2. Leave pigs out for now.
+3. High-priced livestock: the accountant types IRD's depreciation rate
+   and its source on each animal (LV25).
+4. Include the Chatham Islands 0.3 ratio, for sheep and beef only.
+
+LV21-LV24 are approved as written, with pigs left out of LV21.
+
+### Drafted after the answers (not yet approved)
+
+- **LV25** High-priced livestock. Tussock buys a beef breeding bull on 1
+  Aug 2025 for **30,000.00**.
+  - **Qualifies:** at least 500.00, and at least five times the breeding
+    bull NAMV. The 2026 NAMV is 5,008.00, so the threshold is 25,040.00.
+    The 2025 NAMV isn't in Tohyee: the accountant confirms it, or types
+    it in.
+  - **Rate:** the accountant records the animal with IRD's depreciation
+    rate (say **25%** straight line) and its source.
+  - **Values:** at cost in the year bought, then less 25% of cost each
+    year after, as OS 25/02 example 6 (2,200.00 → 1,650.00 → 1,100.00 →
+    550.00):
+    - 30 June 2026: **30,000.00**
+    - 30 June 2027: **22,500.00**
+    - 30 June 2028: **15,000.00**
+  - **Reverting:** once its value is at or below its class's NAMV, or it
+    stops breeding, it reverts to the herd scheme at NAMV.
+  - **Head counts and journal:** it's counted in breeding bulls, but kept
+    out of their herd scheme value. Its fall in value is part of the
+    taxable change in value: 2026-27's journal includes Cr 1500 7,500.00
+    and Dr 5210 7,500.00.
+- **LV26** Mixed methods. Tussock's sheep are under NSC (LV11), with its
+  10 breeding rams in the herd scheme (elected with the NSC election).
+  - Last year's value: 4,000.00.
+  - Opening revalued: 10 x 431.00 = **4,310.00**, a revaluation of
+    **310.00** (non-taxable). Closing is the same, 4,310.00.
+  - Journal adds: Dr 1500 310.00, Cr 7060 310.00.
+  - Without that part of the election, rams under NSC are refused, as
+    now.
 
