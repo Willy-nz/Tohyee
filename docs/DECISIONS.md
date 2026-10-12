@@ -4351,3 +4351,15 @@ testing) and #154's code signing (later, Jess).
        net, so GST returns, payments and receivables work as they do.
      - **Numbering:** the invoice takes Tohyee's invoice number, with the
        agent's number as its reference. Jess to confirm.
+508. **Livestock stage 4** (#221; Jess 12 Oct 2026, LV21-LV24 approved).
+     - **Rules:** from IRD OS 25/02 (31 Mar 2025).
+     - **Kinds:** deer (red/wapiti/elk and other breeds) and goats
+       (Angora, cashmere/cashgora, dairy) added. Pigs left out.
+     - **Herd scheme:** male breeding stock valued at NAMV. A herd value
+       ratio (0.9-1.3, or 0.3 for Chatham Islands sheep and beef) is
+       recorded with the election.
+     - **NSC:** bought young stock at cost, blended.
+     - **Mixed methods:** a kind can be under NSC with its male breeding
+       stock in the herd scheme (LV26, approved).
+     - **High-priced livestock:** each animal carries IRD's depreciation
+       rate and its source, typed by the accountant (LV25, approved).

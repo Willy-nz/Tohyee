@@ -16276,3 +16276,166 @@ Decision 507.
   - The opening is valued at the year's first values.
 - **LV20:** the valuation ignores management values; nothing posts.
 
+## Livestock (#221) stage 4: deer, goats, pigs and the remaining herd scheme rules (LV21-LV26 approved by Jess 12 Oct 2026)
+
+Drafted 12 Oct 2026. IRD **OS 25/02** (31 March 2025, the 47-page PDF) was
+read this time, through a summarising tool rather than line by line. The
+paragraph numbers below are from that summary. The points that change what
+Tohyee does:
+
+- **Male breeding stock (para 40):** where any livestock of a type are in
+  the herd scheme, all its male breeding stock must be in it too. Tohyee
+  refuses breeding bulls, rams and stags today; under the herd scheme they
+  are simply valued at their NAMV.
+- **Purchased young stock under NSC (paras 26-27):** these are at their
+  cost. The young stock's closing value blends the farm-bred cost with
+  the purchases. Tohyee refuses them today.
+- **Herd value ratio (paras 45-52):** a farm may value a whole type at
+  0.9, 1.0, 1.1, 1.2 or 1.3 times NAMV. A ratio of 0.3 is available to
+  Chatham Islands sheep and beef farmers only. Notice is needed: in the
+  first year of the herd scheme, or two years ahead after that.
+- **Mixed methods within a type (paras 30 and 40):** a type can be partly
+  NSC with its male breeding stock in the herd scheme. An increase in a
+  class can use another method (paras 42-44). Tohyee elects one method per
+  kind.
+- **High-priced livestock (paras 68-71):** an animal that cost at least
+  500.00 and at least five times its class's NAMV (in the year bought or
+  the year before) is at cost, less a depreciation rate the Commissioner
+  sets. It reverts at NAMV once written down or no longer breeding.
+- **Pigs (paras 20, 25, 27):** pigs mature at the first balance date after
+  birth. NSC has weaner (to 10 weeks) and growing (10-17 weeks) costs, and
+  suckling pigs are nil.
+
+Rates used: the 2026 NAMV and NSC already in Tohyee (deer, goats and pigs
+were read from IRD's determinations on 11 Oct 2026).
+
+### New kinds
+
+- **LV21** Tohyee adds deer (red, wapiti and elk), deer (other breeds),
+  goats (Angora), goats (cashmere or cashgora), goats (dairy) and pigs,
+  each with IRD's NAMV classes. Deer and goats age once a year like
+  cattle and sheep:
+  - rising one-year hinds → rising two-year hinds → mixed-age hinds;
+  - rising one-year stags → rising two-year and older stags;
+  - rising one-year does → mixed-age does (does over one year for dairy
+    goats).
+
+  Pigs don't age once a year: their classes are by age in weeks, so they
+  move class by class changes. Suckling pigs aren't counted.
+
+### Deer under the herd scheme, with breeding stags
+
+- **LV22** Tussock's red deer, year to 30 June 2026. Last year's workpaper
+  (made up): 200 mixed-age hinds 110,000.00, 60 rising one-year hinds
+  16,800.00, 60 rising one-year stags 21,000.00, 4 breeding stags 12,000.00.
+  Opening **159,800.00**.
+  - At the start of the year, the 60 hinds become rising two-year and the
+    60 stags rising two-year and older.
+  - 85 hind fawns and 85 stag fawns are born.
+  - The 60 older stags are sold for 42,000.00, and 20 cull hinds for
+    8,000.00. 5 hinds die.
+
+  Closing at 2026 NAMV:
+  - 175 mixed-age hinds x 612.00 = 107,100.00
+  - 60 rising two-year hinds x 525.00 = 31,500.00
+  - 85 rising one-year hinds x 295.00 = 25,075.00
+  - 85 rising one-year stags x 383.00 = 32,555.00
+  - 4 breeding stags x 3,370.00 = 13,480.00
+  - Total **209,710.00**
+
+  Opening revalued: 200 x 612.00 + 60 x 295.00 + 60 x 383.00 + 4 x
+  3,370.00 = **176,560.00**. Revaluation (non-taxable) **16,760.00**.
+  Taxable livestock profit: 50,000.00 + 209,710.00 - 176,560.00 =
+  **83,150.00**. Journal: Dr 1500 **49,910.00**, Cr 7060 **16,760.00**,
+  Cr 5210 **33,150.00**.
+
+### Purchased young stock under NSC
+
+- **LV23** Tussock's sheep under NSC (as OS 25/02 example 1, with 2026
+  rates): 1,250 farm-bred ewe lambs kept, plus 500 ewe hoggets bought for
+  **30,000.00**. Closing ewe hoggets: 1,250 x 41.40 + 30,000.00 =
+  **81,750.00** for 1,750 head (46.71 average). Next year they join the
+  mature group at that value plus the rising two-year NSC. A bought young
+  animal sold in the year comes out at the average.
+
+### Herd value ratio
+
+- **LV24** Kōwhai (LV4's year), with a herd value ratio of **1.1** for
+  dairy cattle from 2026, elected with notice. Values per head: mixed-age
+  cows 2,824.00 x 1.1 = 3,106.40; rising two-year heifers 2,857.80; rising
+  one-year heifers 1,458.60.
+  - Opening revalued: **1,241,361.00**, so the revaluation is
+    **251,111.00**.
+  - Closing: **1,309,539.00**; change in value **68,178.00**.
+  - Taxable livestock profit: 66,000.00 - 24,000.00 + 68,178.00 =
+    **110,178.00**.
+  - Journal: Dr 1500 **319,289.00**, Cr 7060 **251,111.00**, Cr 5210
+    **68,178.00**.
+
+  The ratio is recorded with the election and its evidence (the valuer's
+  valuation at 30 April).
+
+### Still refused after stage 4 (with a reason)
+
+- An increase in a class valued by another method (paras 42-44).
+- Associated-person transfers and the base number (OS example 2).
+- Long-term bailments.
+- Pigs under NSC.
+- Dairy steers and bulls under NSC.
+- Purchased bobby calves.
+
+### Questions for Jess
+
+1. **Mixed methods:** should a kind be allowed to be NSC with its male
+   breeding stock in the herd scheme (as OS 25/02 allows), or stay one
+   method per kind for now?
+2. **Pigs:** herd scheme only for now, with class changes by age entered
+   by hand?
+3. **High-priced livestock:** IRD sets the depreciation rate, and Tohyee
+   doesn't have IRD's rates. Should the accountant type the rate and its
+   source on each animal, or leave high-priced livestock out until the
+   rates are found?
+4. **Herd value ratio:** include the Chatham Islands 0.3 ratio, or leave
+   it out?
+
+Answered (12 Oct 2026):
+1. Yes, allow a kind under NSC with its male breeding stock in the herd
+   scheme (LV26).
+2. Leave pigs out for now.
+3. High-priced livestock: the accountant types IRD's depreciation rate
+   and its source on each animal (LV25).
+4. Include the Chatham Islands 0.3 ratio, for sheep and beef only.
+
+LV21-LV24 are approved as written, with pigs left out of LV21.
+
+### Drafted after the answers (approved by Jess 12 Oct 2026)
+
+- **LV25** High-priced livestock. Tussock buys a beef breeding bull on 1
+  Aug 2025 for **30,000.00**.
+  - **Qualifies:** at least 500.00, and at least five times the breeding
+    bull NAMV. The 2026 NAMV is 5,008.00, so the threshold is 25,040.00.
+    The 2025 NAMV isn't in Tohyee: the accountant confirms it, or types
+    it in.
+  - **Rate:** the accountant records the animal with IRD's depreciation
+    rate (say **25%** straight line) and its source.
+  - **Values:** at cost in the year bought, then less 25% of cost each
+    year after, as OS 25/02 example 6 (2,200.00 → 1,650.00 → 1,100.00 →
+    550.00):
+    - 30 June 2026: **30,000.00**
+    - 30 June 2027: **22,500.00**
+    - 30 June 2028: **15,000.00**
+  - **Reverting:** once its value is at or below its class's NAMV, or it
+    stops breeding, it reverts to the herd scheme at NAMV.
+  - **Head counts and journal:** it's counted in breeding bulls, but kept
+    out of their herd scheme value. Its fall in value is part of the
+    taxable change in value: 2026-27's journal includes Cr 1500 7,500.00
+    and Dr 5210 7,500.00.
+- **LV26** Mixed methods. Tussock's sheep are under NSC (LV11), with its
+  10 breeding rams in the herd scheme (elected with the NSC election).
+  - Last year's value: 4,000.00.
+  - Opening revalued: 10 x 431.00 = **4,310.00**, a revaluation of
+    **310.00** (non-taxable). Closing is the same, 4,310.00.
+  - Journal adds: Dr 1500 310.00, Cr 7060 310.00.
+  - Without that part of the election, rams under NSC are refused, as
+    now.
+
