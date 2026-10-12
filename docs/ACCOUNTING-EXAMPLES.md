@@ -16188,7 +16188,10 @@ out: the male breeding stock rules aren't checked.
   balance date) belongs to the income year ending the 31 March before;
   October to March belongs to the next. So Kōwhai's 31 May 2026 and
   Tussock's 30 June 2026 are both 2026, as the examples assume.
-  **Jess to confirm the rule.**
+  Confirmed against IRD's examples in SPS 08/04 (the year to 30 November
+  2006 is the 2006-07 income year; the year to 31 January 2008 is
+  2007-08), and Jess said to go with it (13 Oct 2026, #243). R&D now
+  numbers years the same way (decision 513).
 - **Elections:** recorded per kind from an income year, with a note and
   files attached (decision 503).
   - Mixing methods within a kind isn't possible. Changing method from one
@@ -16209,7 +16212,9 @@ out: the male breeding stock rules aren't checked.
   - Approving twice posts once.
   - Once a year is approved, its movements, opening, rates and elections
     can't change. They are refused, rather than marking the valuation out
-    of date as LV9 says.
+    of date as LV9 says. Kept as built (Jess, 13 Oct 2026): an approved
+    year has posted its journal, so a change must go through **Replace**,
+    which reverses it with a reason.
   - **Replace** reverses the journal, with a reason. The year can then
     change and be approved again.
 - **LV6 and LV11 (NSC):**
@@ -16379,8 +16384,9 @@ Decision 507.
   customer and a supplier.
   - **Numbering:** the invoice takes Tohyee's next invoice number, as
     every invoice does. The agent's account sale number is in its
-    reference. **Jess to say** whether buyer-created invoices should skip
-    Tohyee's numbering.
+    reference. Kept as built (Jess, 13 Oct 2026: "go with what you
+    think"): Tohyee's number keeps the invoice list unbroken, and the
+    agent's number in the reference is what matches their document.
 - **LV14:** in March 2026, Box 5 includes 75,900.00 and Box 11 includes
   4,485.00, as tested.
 - **LV15:** the same agent and number (ignoring case) is refused while

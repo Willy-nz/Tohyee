@@ -4415,3 +4415,20 @@ testing) and #154's code signing (later, Jess).
        enters the out time with a reason. This stops a 30-hour shift
        reaching a timesheet.
 
+513. **Income years follow IRD's numbering for every balance date**
+     (13 Oct 2026, #243; Jess: "go with what you think").
+     - **The rule:** an early balance date (October to March) counts toward
+       the tax year ending the following 31 March, and a late one (April to
+       September) toward the one before. IRD's examples in SPS 08/04
+       confirm it: the year to 30 November 2006 is 2006-07.
+     - **What changed:** livestock already did this. R&D numbered by the
+       calendar year of the balance date, so for October to December year
+       ends it was a year behind. It now matches.
+     - **Saved data:** migration 0132 moves those organisations' saved R&D
+       years (activities, approvals, tax depreciation) forward one. Labels
+       are always "2025-26" style, a calendar year end included.
+     - **Two livestock answers kept as built:**
+       - Agent account sales take Tohyee's invoice numbers, with the
+         agent's number as the reference.
+       - Changes to an approved year are refused until it's replaced.
+

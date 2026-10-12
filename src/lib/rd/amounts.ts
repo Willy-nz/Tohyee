@@ -98,25 +98,36 @@ export const RD_PLACE_LABELS: Record<RdPlace, string> = { nz: "New Zealand", ove
 const HUNDRED = dec("100");
 
 /**
- * An income year is the organisation's financial year, numbered by the
- * calendar year it ends in: with a 31 March balance date, 1 Apr 2026 - 31 Mar
- * 2027 is 2027, shown as "2026-27".
+ * An income year is the organisation's financial year, numbered as IRD
+ * numbers it: by the tax year ending 31 March that it counts toward. A late
+ * balance date (April to September) counts toward the tax year ending the 31
+ * March before it, and an early one (October to March) toward the one after
+ * it. So with a 31 March balance date, 1 Apr 2026 - 31 Mar 2027 is 2027,
+ * shown as "2026-27"; with 30 November, 1 Dec 2024 - 30 Nov 2025 is 2026,
+ * also shown as "2025-26" (IRD SPS 08/04 examples: the year to 30 Nov 2006
+ * is the 2006-07 income year; decided 13 Oct 2026, #243).
  */
+function earlyBalanceDate(yearEndMonth: number): boolean {
+  return yearEndMonth >= 10;
+}
+
 export function incomeYearOf(date: string, yearEndMonth: number): number {
-  return Number(financialYearEnd(date, yearEndMonth).slice(0, 4));
+  const endYear = Number(financialYearEnd(date, yearEndMonth).slice(0, 4));
+  return earlyBalanceDate(yearEndMonth) ? endYear + 1 : endYear;
 }
 
 /** First and last day of an income year. */
 export function incomeYearDates(year: number, yearEndMonth: number): { start: string; end: string } {
   if (!Number.isInteger(year) || year < 2000 || year > 2999) throw new ValidationError("An income year must be a year like 2027.");
   if (!isFinancialYearEndMonth(yearEndMonth)) throw new Error(`Invalid financial year end month: ${yearEndMonth}`);
-  const end = financialYearEnd(`${year}-${String(yearEndMonth).padStart(2, "0")}-01`, yearEndMonth);
+  const endYear = earlyBalanceDate(yearEndMonth) ? year - 1 : year;
+  const end = financialYearEnd(`${endYear}-${String(yearEndMonth).padStart(2, "0")}-01`, yearEndMonth);
   return { start: financialYearStart(end, yearEndMonth), end };
 }
 
-/** "2026-27" for a year spanning two calendar years, "2026" for a calendar year. */
+/** "2026-27": the tax year (to 31 March) an income year counts toward, whatever the balance date. */
 export function incomeYearLabel(year: number, yearEndMonth: number): string {
-  if (yearEndMonth === 12) return String(year);
+  void yearEndMonth;
   return `${year - 1}-${String(year % 100).padStart(2, "0")}`;
 }
 

@@ -286,7 +286,7 @@ function ActivityForm({
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<ActivityDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const cores = activities.filter((activity) => activity.kind === "core" && activity.id !== initial?.id && (activity.status === "active" || draft.supports.includes(activity.id)));
-  const yearHint = (value: string) => (/^\d{4}$/.test(value) ? `${incomeYearLabel(Number(value), yearEndMonth)} income year` : "The year the income year ends, like 2027.");
+  const yearHint = (value: string) => (/^\d{4}$/.test(value) ? `${incomeYearLabel(Number(value), yearEndMonth)} income year` : "The tax year (to 31 March) it counts toward, like 2027 for 2026-27.");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
