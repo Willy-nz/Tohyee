@@ -106,6 +106,8 @@ export const MENUS: Menu[] = [
         heading: "Pay",
         links: [
           { href: "/operations/payroll/pay-runs", label: "Pay runs", minRole: "bookkeeper" },
+          { href: "/operations/payroll/rosters", label: "Rosters", minRole: "bookkeeper" },
+          { href: "/operations/payroll/my-shifts", label: "My shifts", minRole: "viewer" },
           { href: "/operations/payroll/timesheets", label: "Timesheets", minRole: "viewer" },
           { href: "/operations/payroll/leave-requests", label: "Leave requests", minRole: "viewer" },
           { href: "/operations/payroll/leave", label: "Leave", minRole: "bookkeeper" },

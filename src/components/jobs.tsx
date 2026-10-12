@@ -6,7 +6,7 @@ import { Money } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
-import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, ui, WarningNote } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, personName, todayInBrowser } from "@/lib/format";
@@ -32,8 +32,8 @@ const VISIT_STATUS: Record<VisitStatus, { label: string; tone: "blue" | "amber" 
 /** Two visits for one person overlap (JV2): allowed, but shown on its own line so it wraps on a phone. */
 function ClashNote({ text }: { text: string }) {
   return (
-    <div style={{ marginTop: 4, whiteSpace: "normal" }}>
-      <Badge tone="amber">{text}</Badge>
+    <div>
+      <WarningNote text={text} />
     </div>
   );
 }

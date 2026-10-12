@@ -154,6 +154,29 @@ export function Badge({
   return <span className={`${styles.badge} ${toneClass}`}>{children}</span>;
 }
 
+/** A warning that wraps on a phone (a badge never wraps). */
+export function WarningNote({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        display: "inline-block",
+        maxWidth: "100%",
+        borderRadius: 4,
+        padding: "1px 8px",
+        background: "var(--warning-bg)",
+        color: "var(--warning-text)",
+        fontSize: "var(--text-xs)",
+        fontWeight: 600,
+        lineHeight: 1.6,
+        overflowWrap: "anywhere",
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <div className={styles.empty}>{children}</div>;
 }
