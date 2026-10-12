@@ -4360,6 +4360,6 @@ testing) and #154's code signing (later, Jess).
        recorded with the election.
      - **NSC:** bought young stock at cost, blended.
      - **Mixed methods:** a kind can be under NSC with its male breeding
-       stock in the herd scheme (LV26, to approve).
+       stock in the herd scheme (LV26, approved).
      - **High-priced livestock:** each animal carries IRD's depreciation
-       rate and its source, typed by the accountant (LV25, to approve).
+       rate and its source, typed by the accountant (LV25, approved).

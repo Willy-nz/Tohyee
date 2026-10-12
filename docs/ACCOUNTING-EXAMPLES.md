@@ -16276,7 +16276,7 @@ Decision 507.
   - The opening is valued at the year's first values.
 - **LV20:** the valuation ignores management values; nothing posts.
 
-## Livestock (#221) stage 4: deer, goats, pigs and the remaining herd scheme rules (LV21-LV24 approved by Jess 12 Oct 2026; LV25-LV26 drafted after)
+## Livestock (#221) stage 4: deer, goats, pigs and the remaining herd scheme rules (LV21-LV26 approved by Jess 12 Oct 2026)
 
 Drafted 12 Oct 2026. IRD **OS 25/02** (31 March 2025, the 47-page PDF) was
 read this time, through a summarising tool rather than line by line. The
@@ -16408,7 +16408,7 @@ Answered (12 Oct 2026):
 
 LV21-LV24 are approved as written, with pigs left out of LV21.
 
-### Drafted after the answers (not yet approved)
+### Drafted after the answers (approved by Jess 12 Oct 2026)
 
 - **LV25** High-priced livestock. Tussock buys a beef breeding bull on 1
   Aug 2025 for **30,000.00**.
