@@ -996,6 +996,12 @@ that something happened.
   - **Monthly management values** (LV18-LV20): stock on hand at the
     farm's own values per head, month by month, with head and price
     changes. A report only.
+  - **Stage 4** (LV21-LV26, from IRD OS 25/02):
+    - Deer and goats.
+    - Male breeding stock under the herd scheme, or alongside NSC.
+    - Herd value ratios, including Chatham Islands.
+    - Bought young stock under NSC at cost.
+    - High-priced livestock, with IRD's rate typed by the accountant.
   - **Screens** under Accountant › Assets › Livestock: the head count,
     movements, and the valuation with a step for each. Livestock's
     settings (opening, elections, rates, accounts, locations) are under

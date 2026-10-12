@@ -12,7 +12,14 @@ export const GET = route(async (request) => {
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const election = await withOrganisation(request, body.organisationId, "admin", (tx) =>
-    recordElection(tx, { kind: body.kind, method: body.method, fromIncomeYear: body.fromIncomeYear, note: body.note }),
+    recordElection(tx, {
+      kind: body.kind,
+      method: body.method,
+      fromIncomeYear: body.fromIncomeYear,
+      note: body.note,
+      herdValueRatio: body.herdValueRatio,
+      maleBreedingHerdScheme: body.maleBreedingHerdScheme,
+    }),
   );
   return json({ election }, { status: 201 });
 });

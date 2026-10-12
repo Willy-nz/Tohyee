@@ -4363,3 +4363,11 @@ testing) and #154's code signing (later, Jess).
        stock in the herd scheme (LV26, approved).
      - **High-priced livestock:** each animal carries IRD's depreciation
        rate and its source, typed by the accountant (LV25, approved).
+509. **How stage 4 is kept** (built 12 Oct 2026 from LV21-LV26).
+     - **Elections:** a herd value ratio and "male breeding stock in the
+       herd scheme" are part of the election.
+     - **High-priced animals:** each has its own record, with IRD's rate
+       and its source. It's valued apart from its class, straight line on
+       cost from the year after it's bought, until it reverts.
+     - **NSC rates:** stored by IRD's kinds (deer, goats meat and fibre,
+       goats dairy).

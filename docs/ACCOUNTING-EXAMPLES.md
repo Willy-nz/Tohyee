@@ -16439,3 +16439,45 @@ LV21-LV24 are approved as written, with pigs left out of LV21.
   - Without that part of the election, rams under NSC are refused, as
     now.
 
+### Built: how LV21-LV26 came out
+
+Tests: `tests/integration/livestock-stage-4.test.ts`, plus the updated
+refusal test in `livestock-valuation.test.ts`. Decision 509.
+
+- **LV21:**
+  - Deer (red/wapiti/elk and other breeds) and goats (Angora,
+    cashmere/cashgora and dairy) are added with IRD's NAMV classes. Their
+    2026 NAMV and NSC are seeded (checked twice).
+  - NSC rates are by IRD's kinds: both deer kinds use deer's, and Angora
+    and cashmere goats use meat and fibre's.
+  - Pigs are left out.
+- **LV22** comes out as drafted (closing 209,710.00, revaluation
+  16,760.00, taxable 83,150.00, journal 49,910.00 / 16,760.00 / 33,150.00).
+  Breeding stags, bulls, rams and bucks under the herd scheme are at NAMV.
+- **LV23:**
+  - Farm-bred rising one-year stock is at NSC, and bought stock at cost:
+    1,250 x 41.40 + 30,000.00 = 81,750.00.
+  - Any that left in the year come out at the average.
+  - The bought stock needs its amount.
+- **LV24** comes out as drafted. The NAMV is multiplied by the ratio and
+  rounded to the cent per head (3,106.40, 2,857.80, 1,458.60).
+  - The ratio is part of the election: 0.9-1.3, or 0.3 for sheep and beef
+    only.
+  - A ratio is refused on an NSC election.
+- **LV25:**
+  - **Recording:** cost, IRD's rate and its source, and last year's NAMV
+    when Tohyee doesn't have it. The high-priced test is checked when it's
+    recorded.
+  - **Values:** the bull is at cost (30,000.00) at 30 June 2026, apart
+    from its class, then 22,500.00 at 30 June 2027 (Cr 1500 7,500.00, Dr
+    5210 7,500.00).
+  - **Leaving:** sold or died (with the movement), or stopped breeding
+    (it reverts to its class at NAMV).
+  - **Reverting:** an animal at or below its class's NAMV (with any
+    ratio) at a year end reverts.
+  - **Not supported:** high-priced animals bought before livestock's first
+    year, and those in classes not in the herd scheme.
+- **LV26** comes out as drafted. With the NSC election's "male breeding
+  stock in the herd scheme", the rams are revalued from 4,000.00 to
+  4,310.00 (310.00 non-taxable). Without it, they're refused.
+
