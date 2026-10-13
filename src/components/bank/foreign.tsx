@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { Money } from "@/components/books";
 import { Button, Field, Notice, ui } from "@/components/ui";
@@ -143,7 +144,7 @@ export function OpeningBalancePanel({
         {canEnter ? (
           <form onSubmit={(event) => void submit(event)} className={ui.grid3} autoComplete="off">
             <Field label="As at">
-              <input type="date" value={asAtDate} onChange={(event) => setAsAtDate(event.target.value)} required />
+              <DateInput value={asAtDate} onChange={(event) => setAsAtDate(event.target.value)} required />
             </Field>
             <Field label={`${currency} balance`} hint="Money in the account is positive; owed (an overdrawn account or a card) is negative.">
               <input inputMode="decimal" value={foreignBalance} onChange={(event) => setForeignBalance(event.target.value)} required />

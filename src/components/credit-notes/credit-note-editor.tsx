@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
@@ -350,7 +351,7 @@ function CreditNoteForm({
           <ExportBadge contact={chosenCustomer} />
         </Field>
         <Field label="Credit note date" hint="Approving posts the credit note on this date.">
-          <input type="date" value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
+          <DateInput value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
         <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />

@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
@@ -293,7 +294,7 @@ function SupplierCreditNoteForm({
           />
         </Field>
         <Field label="Credit note date" hint="The date on the supplier's credit note. Approving posts it on this date.">
-          <input type="date" value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
+          <DateInput value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
         <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <Field label="Reference" hint="Optional, like the bill it credits.">

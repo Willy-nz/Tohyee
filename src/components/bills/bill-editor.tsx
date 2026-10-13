@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
@@ -304,8 +305,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
           </select>
         </Field>
         <Field label="Bill date" hint="The date on the supplier's invoice. Approving posts the bill on this date.">
-          <input
-            type="date"
+          <DateInput
             value={billDate}
             onChange={(event) => {
               setBillDate(event.target.value);
@@ -322,9 +322,9 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
               : "From the supplier's payment terms, or the organisation's default terms. You can change it."
           }
         >
-          <input
-            type="date"
+          <DateInput
             value={dueDate}
+            base={billDate}
             min={billDate || undefined}
             onChange={(event) => {
               setDueDate(event.target.value);
