@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { ensureFertiliserAccounts } from "@/lib/farming/fertiliser";
-import { areaHectares,GeometryError, hectaresText, type PaddockGeometry, parseGeometry } from "@/lib/farming/geometry";
+import { readShapeFile, type ShapeFile } from "@/lib/farming/formats";
+import { areaHectares, GeometryError, hectaresText, type PaddockGeometry, parseGeometry } from "@/lib/farming/geometry";
 import { parseDecimalInput } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { optionalString, requireArray, requireId, requireString } from "@/lib/validation";
@@ -57,6 +57,9 @@ export type ImportPreviewRow = {
 
 export type ImportPreview = {
   fileName: string;
+  format: ShapeFile["format"];
+  /** Anything done to the file on the way in, such as converting from NZTM2000. */
+  note: string | null;
   sha256: string;
   alreadyImportedOn: string | null;
   nameProperty: string | null;
@@ -66,7 +69,6 @@ export type ImportPreview = {
   counts: { new: number; newBoundary: number; unchanged: number; errors: number };
 };
 
-const MAX_FILE_CHARS = 20 * 1024 * 1024;
 
 function geometryError(error: unknown): never {
   if (error instanceof GeometryError) throw new ValidationError(error.message);
@@ -235,7 +237,7 @@ export async function getPaddock(tx: OrgTx, idInput: unknown): Promise<Paddock &
   if (!rows.rows[0]) throw new NotFoundError("Paddock not found.");
   const [paddock] = await toPaddocks(tx, rows.rows);
   const boundaries = await tx.query<{ id: string; mapped_ha: string; source: string; created_by_email: string; created_at: string; geometry: PaddockGeometry }>(
-    "select id::text, mapped_ha::text, source, created_by_email, created_at::text, geometry from paddock_boundaries where paddock_id = $1 order by paddock_boundaries.id desc",
+    `select id::text, mapped_ha::text, source, created_by_email, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at, geometry from paddock_boundaries where paddock_id = $1 order by paddock_boundaries.id desc`,
     [id],
   );
   return {
@@ -391,31 +393,23 @@ export async function mergePaddocks(tx: OrgTx, input: { paddockIds: unknown; onD
 
 // Importing boundaries ---------------------------------------------------------------------
 
+/** A GeoJSON or KML file as text (`content`), or a KMZ or zipped shapefile as base64 (`contentBase64`). */
+type BoundaryImportInput = { fileName: unknown; content?: unknown; contentBase64?: unknown; nameProperty?: unknown; effectiveProperty?: unknown };
+
 type ParsedFeature = { index: number; properties: Record<string, unknown>; geometry: PaddockGeometry | null; error: string | null };
 
-function readFeatures(content: unknown): ParsedFeature[] {
-  if (typeof content !== "string" || content.length === 0) throw new ValidationError("Choose a GeoJSON file.");
-  if (content.length > MAX_FILE_CHARS) throw new ValidationError("The file is larger than 20 MB. Split it or simplify the shapes first.");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new ValidationError("That isn't a GeoJSON file (it isn't valid JSON). KML and shapefiles aren't read yet: export them as GeoJSON first.");
-  }
-  const collection = parsed as { type?: unknown; features?: unknown };
-  const features = collection.type === "FeatureCollection" && Array.isArray(collection.features) ? collection.features : collection.type === "Feature" ? [parsed] : null;
-  if (!features) throw new ValidationError("The file should be a GeoJSON FeatureCollection of paddock shapes.");
-  if (features.length === 0) throw new ValidationError("The file has no shapes in it.");
-  if (features.length > 2000) throw new ValidationError("The file has more than 2,000 shapes.");
-  return features.map((feature, index) => {
-    const properties = (feature && typeof feature === "object" ? ((feature as { properties?: unknown }).properties as Record<string, unknown> | null) : null) ?? {};
+async function readFeatures(fileName: string, input: { content?: unknown; contentBase64?: unknown }): Promise<{ features: ParsedFeature[]; file: ShapeFile }> {
+  const file = await readShapeFile(fileName, input);
+  if (file.features.length === 0) throw new ValidationError("The file has no paddock shapes in it.");
+  const features = file.features.map((feature, index) => {
     try {
-      return { index, properties, geometry: parseGeometry(feature), error: null };
+      return { index, properties: feature.properties, geometry: parseGeometry(feature.geometry), error: null };
     } catch (error) {
-      if (error instanceof GeometryError) return { index, properties, geometry: null, error: error.message };
+      if (error instanceof GeometryError) return { index, properties: feature.properties, geometry: null, error: error.message };
       throw error;
     }
   });
+  return { features, file };
 }
 
 const NAME_GUESSES = ["name", "paddock", "paddock_name", "paddockname", "label", "id", "number"];
@@ -442,11 +436,11 @@ function sameGeometry(a: PaddockGeometry | null, b: PaddockGeometry): boolean {
 async function buildPreview(
   tx: OrgTx,
   farmId: string,
-  input: { fileName: unknown; content: unknown; nameProperty?: unknown; effectiveProperty?: unknown },
+  input: BoundaryImportInput,
 ): Promise<{ preview: ImportPreview; features: ParsedFeature[] }> {
   const fileName = requireString(input.fileName, "File name", { maxLength: 200 });
-  const features = readFeatures(input.content);
-  const sha256 = createHash("sha256").update(String(input.content)).digest("hex");
+  const { features, file } = await readFeatures(fileName, input);
+  const sha256 = file.sha256;
   const earlier = await tx.query<{ created_at: string }>("select created_at::text from farm_imports where farm_id = $1 and kind = 'paddock_boundaries' and sha256 = $2", [farmId, sha256]);
   const properties = [...new Set(features.flatMap((feature) => Object.keys(feature.properties)))].sort();
   const nameProperty = typeof input.nameProperty === "string" && input.nameProperty ? input.nameProperty : guessProperty(properties, NAME_GUESSES);
@@ -481,6 +475,8 @@ async function buildPreview(
     features,
     preview: {
       fileName,
+      format: file.format,
+      note: file.note,
       sha256,
       alreadyImportedOn: earlier.rows[0]?.created_at ?? null,
       nameProperty,
@@ -501,7 +497,7 @@ async function buildPreview(
 export async function previewBoundaryImport(
   tx: OrgTx,
   farmIdInput: unknown,
-  input: { fileName: unknown; content: unknown; nameProperty?: unknown; effectiveProperty?: unknown },
+  input: BoundaryImportInput,
 ): Promise<ImportPreview> {
   const farm = await requireFarm(tx, farmIdInput);
   return (await buildPreview(tx, farm.id, input)).preview;
@@ -515,7 +511,7 @@ export async function previewBoundaryImport(
 export async function importBoundaries(
   tx: OrgTx,
   farmIdInput: unknown,
-  input: { fileName: unknown; content: unknown; nameProperty?: unknown; effectiveProperty?: unknown; onDate?: unknown },
+  input: BoundaryImportInput & { onDate?: unknown },
 ): Promise<{ preview: ImportPreview; paddocks: Paddock[] }> {
   const farm = await requireFarm(tx, farmIdInput);
   await tx.query("select 1 from farms where id = $1 for update", [farm.id]);

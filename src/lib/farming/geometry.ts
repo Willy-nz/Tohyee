@@ -151,35 +151,48 @@ export type MapTile = { z: number; x: number; y: number; left: number; top: numb
 export type MapView = {
   /** The zoom the shapes are drawn at (it can be fractional). */
   zoom: number;
+  /** The centre of the drawing. */
+  centre: Position;
   /** A point's position in the drawing, in pixels. */
   project: (position: Position) => [number, number];
+  /** The longitude and latitude at a position in the drawing. */
+  unproject: (pixel: [number, number]) => Position;
   /** The tiles that cover the drawing, at a whole-number zoom, scaled to fit. */
   tiles: MapTile[];
 };
 
-/**
- * Fits [west, south, east, north] into a width × height drawing (less `pad`
- * on each side) in Web Mercator, north up, and lists the 256-pixel tiles
- * (XYZ numbering) that cover it. Tiles are fetched at no more than `maxTileZoom`.
- */
-export function mapView(box: [number, number, number, number], width: number, height: number, options: { pad?: number; maxZoom?: number; maxTileZoom?: number } = {}): MapView {
+/** World coordinates back to longitude and latitude. */
+export function fromWorld([x, y]: [number, number]): Position {
+  return [x * 360 - 180, (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI];
+}
+
+/** The centre and zoom that fit [west, south, east, north] into a width × height drawing, less `pad` on each side. */
+export function fitBox(box: [number, number, number, number], width: number, height: number, options: { pad?: number; maxZoom?: number } = {}): { centre: Position; zoom: number } {
   const pad = options.pad ?? 24;
   const maxZoom = options.maxZoom ?? 19;
-  const maxTileZoom = options.maxTileZoom ?? 19;
   const [west, south, east, north] = box;
   const [left, top] = toWorld([west, north]);
   const [right, bottom] = toWorld([east, south]);
   const across = right - left;
   const down = bottom - top;
   const fits = [across > 0 ? Math.log2((width - pad * 2) / (across * TILE)) : maxZoom, down > 0 ? Math.log2((height - pad * 2) / (down * TILE)) : maxZoom];
-  const zoom = Math.max(0, Math.min(maxZoom, ...fits));
+  return { centre: fromWorld([(left + right) / 2, (top + bottom) / 2]), zoom: Math.max(0, Math.min(maxZoom, ...fits)) };
+}
+
+/**
+ * A width × height drawing centred on `centre` at `zoom`, north up, in Web
+ * Mercator, with the 256-pixel tiles (XYZ numbering) that cover it, fetched
+ * at no more than `maxTileZoom`.
+ */
+export function mapViewAt(centre: Position, zoom: number, width: number, height: number, options: { maxTileZoom?: number } = {}): MapView {
+  const maxTileZoom = options.maxTileZoom ?? 19;
   const worldPixels = TILE * 2 ** zoom;
-  const centreX = (left + right) / 2;
-  const centreY = (top + bottom) / 2;
+  const [centreX, centreY] = toWorld(centre);
   const project = (position: Position): [number, number] => {
     const [x, y] = toWorld(position);
     return [(x - centreX) * worldPixels + width / 2, (y - centreY) * worldPixels + height / 2];
   };
+  const unproject = ([px, py]: [number, number]): Position => fromWorld([(px - width / 2) / worldPixels + centreX, (py - height / 2) / worldPixels + centreY]);
   const tileZoom = Math.max(0, Math.min(maxTileZoom, Math.ceil(zoom)));
   const count = 2 ** tileZoom;
   const size = worldPixels / count;
@@ -196,10 +209,72 @@ export function mapView(box: [number, number, number, number], width: number, he
       tiles.push({ z: tileZoom, x: ((x % count) + count) % count, y, left: (x / count - centreX) * worldPixels + width / 2, top: (y / count - centreY) * worldPixels + height / 2, size });
     }
   }
-  return { zoom, project, tiles };
+  return { zoom, centre, project, unproject, tiles };
+}
+
+/**
+ * Fits [west, south, east, north] into a width × height drawing (less `pad`
+ * on each side) in Web Mercator, north up, and lists the 256-pixel tiles
+ * (XYZ numbering) that cover it. Tiles are fetched at no more than `maxTileZoom`.
+ */
+export function mapView(box: [number, number, number, number], width: number, height: number, options: { pad?: number; maxZoom?: number; maxTileZoom?: number } = {}): MapView {
+  const { centre, zoom } = fitBox(box, width, height, options);
+  return mapViewAt(centre, zoom, width, height, options);
 }
 
 /** A LINZ Basemaps aerial imagery tile (Web Mercator, EPSG:3857), as LINZ documents it. */
 export function linzAerialTileUrl(tile: { z: number; x: number; y: number }, apiKey: string): string {
   return `https://basemaps.linz.govt.nz/v1/tiles/aerial/3857/${tile.z}/${tile.x}/${tile.y}.webp?api=${encodeURIComponent(apiKey)}`;
+}
+
+function pointInRing([x, y]: Position, ring: Position[]): boolean {
+  let result = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) result = !result;
+  }
+  return result;
+}
+
+/** A point inside a ring: its area centroid when that falls inside (any convex ring), otherwise null. */
+function interiorPoint(ring: Position[]): Position | null {
+  let area = 0;
+  let x = 0;
+  let y = 0;
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    const cross = ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+    area += cross;
+    x += (ring[i][0] + ring[i + 1][0]) * cross;
+    y += (ring[i][1] + ring[i + 1][1]) * cross;
+  }
+  if (area === 0) return null;
+  const centre: Position = [x / (3 * area), y / (3 * area)];
+  return pointInRing(centre, ring) ? centre : null;
+}
+
+/**
+ * Whether two shapes' outlines overlap: an edge of one crosses an edge of
+ * the other, or one lies inside the other. Shapes that only touch along a
+ * shared fence line don't count. Used to warn, never to refuse.
+ */
+export function outlinesOverlap(a: PaddockGeometry, b: PaddockGeometry): boolean {
+  const rings = (geometry: PaddockGeometry) => (geometry.type === "Polygon" ? [geometry.coordinates[0]] : geometry.coordinates.map((polygon) => polygon[0]));
+  for (const first of rings(a)) {
+    for (const second of rings(b)) {
+      for (let i = 0; i < first.length - 1; i += 1) {
+        for (let j = 0; j < second.length - 1; j += 1) {
+          if (segmentsCross(first[i], first[i + 1], second[j], second[j + 1])) return true;
+        }
+      }
+      // No edges cross: one may still sit wholly inside the other. A middle point of an edge avoids shared corners.
+      const middle = (ring: Position[]): Position => [(ring[0][0] + ring[1][0]) / 2, (ring[0][1] + ring[1][1]) / 2];
+      const inside = (ring: Position[], other: Position[]) => ring.slice(0, -1).some((point) => pointInRing(point, other) && !other.some((corner) => samePoint(corner, point))) || pointInRing(middle(ring), other);
+      if (inside(first, second) || inside(second, first)) return true;
+      // Identical or nearly identical outlines share every corner and edge: test a point inside each.
+      const centre = interiorPoint(first);
+      if (centre && pointInRing(centre, second)) return true;
+    }
+  }
+  return false;
 }
