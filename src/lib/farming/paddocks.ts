@@ -3,7 +3,8 @@ import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { areaHectares, GeometryError, hectaresText, type PaddockGeometry, parseGeometry } from "@/lib/farming/geometry";
+import { ensureFertiliserAccounts } from "@/lib/farming/fertiliser";
+import { areaHectares,GeometryError, hectaresText, type PaddockGeometry, parseGeometry } from "@/lib/farming/geometry";
 import { parseDecimalInput } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { optionalString, requireArray, requireId, requireString } from "@/lib/validation";
@@ -88,6 +89,7 @@ export async function setFarmingEnabled(tx: OrgTx, input: { enabled: unknown }):
   if (typeof input.enabled !== "boolean") throw new ValidationError("enabled must be true or false.");
   if (input.enabled && !(await getOrganisationSettings(tx)).accountingEnabled) throw new ValidationError("Farming is part of Accounting. Turn Accounting on first.");
   await tx.query("update farming_settings set enabled = $1, updated_by_email = $2, updated_at = now() where id = true", [input.enabled, tx.actor.email]);
+  if (input.enabled) await ensureFertiliserAccounts(tx);
   await writeAuditEvent(tx, { eventType: input.enabled ? "farming.turned_on" : "farming.turned_off", entityType: "organisation", entityId: tx.organisationId, details: {} });
   return getFarmingSettings(tx);
 }

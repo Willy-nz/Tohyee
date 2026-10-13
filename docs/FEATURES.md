@@ -1390,8 +1390,31 @@ that something happened.
   are in NZTM metres are skipped with the reason. The same file can't be
   imported twice. The **map** draws the paddock outlines to scale, north
   up. Not built yet: background imagery (LINZ), drawing shapes in Tohyee,
-  KML and shapefile import, the fertiliser planner (FB1-FB8), and the
-  analytics datasets.
+  KML and shapefile import, and the analytics datasets.
+- **Fertiliser plans** (Farm, Fertiliser plans; #249 stage 2, FB1-FB8
+  approved by Jess, tenant migration 0134). Turning Farming on adds **6310
+  Fertiliser and lime** and **6320 Fertiliser spreading**, unless those
+  codes are already used.
+  - **Products** record N, P, K and S as percentages by weight.
+  - **Plans** are budgets and post nothing. A plan lists paddock, product,
+    kg/ha, treated hectares (starting as the effective area) and quoted
+    price a tonne, plus a spreading quote a hectare. Each change is saved as
+    a new **version**, and earlier versions are kept.
+  - **Bought:** fertiliser is expensed when its bill is approved. Approved
+    6310 bill lines are linked to the plan, which posts nothing.
+  - **Applied:** applications are entered or **imported** from a CSV
+    (Paddock, Product, Date, Tonnes, optionally Treated ha). The import shows
+    a preview first, and the same file can't be imported twice. Each
+    application is costed at the linked bills' average price. Anything beyond
+    what they bought uses the quoted price, marked "quoted", with a warning.
+    An application can't be removed while a spreading bill is linked to it.
+  - **Spreading:** a 6320 bill line is linked to the applications it
+    covered and shared by hectares, for paddock costs only.
+  - **Planned against actual** compares, for each product, tonnes planned,
+    bought and applied, with cost expensed, applied and not yet applied. For
+    each paddock it shows kg N/ha and cost (and cost a hectare).
+  - No rates are recommended, and nutrient loss isn't worked out. Tax
+    spreading (s EJ 3) is left to the tax return.
 - **Rosters** (Payroll, Rosters; RS1-RS4 approved by Jess, decision 511,
   tenant migration 0130), like Deputy: **areas** (such as the shop) each with
   a weekly budget, and each week's **shifts** with an unpaid break, costed as
