@@ -34,6 +34,7 @@ import {
 import { ThemeSwitch } from "@/components/theme";
 import { Page, PageHeader } from "@/components/ui";
 import { ROLE_LABELS } from "@/lib/auth/roles";
+import { handleFormKeys } from "@/lib/form-keys";
 import styles from "./app-shell.module.css";
 import {
   useWorkspace,
@@ -730,7 +731,12 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       }
     }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    // Ctrl/Cmd+Enter saves the form you're in; Enter moves along a line table (#258).
+    document.addEventListener("keydown", handleFormKeys);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", handleFormKeys);
+    };
   }, []);
 
   async function signOut() {

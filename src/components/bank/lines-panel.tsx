@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { InOutCells, journalHref, LineDetails, LineStatusBadge, originLabel } from "@/components/bank/common";
@@ -248,7 +249,7 @@ function VoidButton({ path, label, onVoided, organisationId }: { path: string; l
     <div style={{ display: "grid", gap: 6 }}>
       <label className={ui.muted}>
         Void date{" "}
-        <input type="date" aria-label={`Void date for ${label}`} value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
+        <DateInput aria-label={`Void date for ${label}`} value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
       </label>
       <span style={{ display: "flex", gap: 6 }}>
         <Button variant="danger" size="small" disabled={busy} onClick={() => void run()}>

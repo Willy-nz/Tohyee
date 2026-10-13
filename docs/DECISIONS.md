@@ -4525,6 +4525,19 @@ testing) and #154's code signing (later, Jess).
      - **Weekly budget:** typed on the roster area, not taken from the
        monthly workforce budget.
 
+519. **Dates are typed day first, with shorthand; Ctrl/Cmd+Enter saves**
+     (14 Oct 2026, #258).
+     - **Where:** transaction-entry date fields (45 of them) use
+       `DateInput` (`src/lib/date-entry.ts`) instead of the browser's date
+       field. Other date fields keep the browser's own.
+     - **What's accepted:** dates day first, digits only, today, +N days,
+       +Nw weeks, and +Nm for the Nth of the following month (NZ trade
+       terms, the last day if shorter). Impossible dates are refused, not
+       rolled over.
+     - **Keys:** Ctrl/Cmd+Enter clicks the form's first enabled submit
+       button. Enter in a line table moves to the next field. A field that
+       handles Enter itself is left alone.
+
 520. **A feed with no sync tried for 2 days is "not syncing"** (14 Oct 2026,
      #258).
      - **Why attempts, not successes:** every provider records each attempt

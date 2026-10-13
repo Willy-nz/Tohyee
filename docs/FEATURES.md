@@ -1833,6 +1833,17 @@ that something happened.
   viewers can only pin dashboards shared with them, and a pin from a deleted
   or unshared dashboard or tile drops off, as all pins do while Analytics is
   off.
+- **Keyboard entry** (#258, decision 519). Date fields in invoices, bills,
+  journals, quotes, orders, credit notes, payments, expense claims and bank
+  pages take dates typed day first or in shorthand:
+  - 14/10/2026, 14/10, 1410, 141026
+  - "t" for today
+  - +14 or -3 days, +2w
+  - +20m for the 20th of the following month
+  A due date counts from its document's date. The calendar button still
+  opens the browser's date picker. **Ctrl/Cmd+Enter** clicks the form's
+  main button (Save, or Post on a journal). **Enter** in a line table moves
+  to the next field instead of saving the form.
 - **Search everything** (decision 373). Ctrl K finds records as well as
   pages: contacts, invoices, bills, credit notes, quotes and orders, payments,
   bank lines, journals, items, accounts, fixed assets and CRM records. Search
