@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -207,7 +208,7 @@ export function ExpenseClaimEditor({
             {rows.map((row, index) => (
               <tr key={index}>
                 <td data-label="Date">
-                  <input type="date" aria-label={`Receipt ${index + 1} date`} value={row.receiptDate} onChange={(event) => set(index, { receiptDate: event.target.value })} required />
+                  <DateInput aria-label={`Receipt ${index + 1} date`} value={row.receiptDate} onChange={(event) => set(index, { receiptDate: event.target.value })} required />
                 </td>
                 <td data-label="Supplier">
                   <input aria-label={`Receipt ${index + 1} supplier`} value={row.supplierName} maxLength={200} onChange={(event) => set(index, { supplierName: event.target.value })} required />
@@ -277,7 +278,7 @@ export function ExpenseClaimEditor({
               {mileage.map((row, index) => (
                 <tr key={index}>
                   <td data-label="Date">
-                    <input type="date" aria-label={`Mileage ${index + 1} date`} value={row.receiptDate} onChange={(event) => setTrip(index, { receiptDate: event.target.value })} required />
+                    <DateInput aria-label={`Mileage ${index + 1} date`} value={row.receiptDate} onChange={(event) => setTrip(index, { receiptDate: event.target.value })} required />
                   </td>
                   <td data-label="From">
                     <input aria-label={`Mileage ${index + 1} from`} value={row.fromPlace} maxLength={200} onChange={(event) => setTrip(index, { fromPlace: event.target.value })} required />
@@ -532,7 +533,7 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
           {canApprove ? (
             <div className={ui.inlineForm}>
               <Field label="Claim date" hint="The journal's date: on or after the latest receipt.">
-                <input type="date" value={claimDate} min={latest} onChange={(event) => setClaimDate(event.target.value)} />
+                <DateInput value={claimDate} min={latest} onChange={(event) => setClaimDate(event.target.value)} />
               </Field>
               <Button onClick={() => void run(() => post("/approve", { idempotencyKey: approveKey, claimDate }), "Approved and posted.")} disabled={busy}>
                 Approve
@@ -554,7 +555,7 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
       {claim.status === "approved" && can("bookkeeper") && claim.amountDue !== "0.00" ? (
         <div className={ui.inlineForm}>
           <Field label="Paid on">
-            <input type="date" value={paymentDate} min={claim.claimDate ?? undefined} onChange={(event) => setPaymentDate(event.target.value)} />
+            <DateInput value={paymentDate} min={claim.claimDate ?? undefined} onChange={(event) => setPaymentDate(event.target.value)} />
           </Field>
           <Field label={`Amount (${current?.baseCurrency ?? ""})`}>
             <input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
@@ -579,7 +580,7 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
       {claim.status === "approved" && can("bookkeeper") && claim.amountPaid === "0.00" ? (
         <div className={ui.inlineForm}>
           <Field label="Void on">
-            <input type="date" value={voidDate} min={claim.claimDate ?? undefined} onChange={(event) => setVoidDate(event.target.value)} />
+            <DateInput value={voidDate} min={claim.claimDate ?? undefined} onChange={(event) => setVoidDate(event.target.value)} />
           </Field>
           <Button
             variant="danger"

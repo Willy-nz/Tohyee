@@ -28,10 +28,16 @@ export type BankFeedStatus = {
   lastSyncedAt: string | null;
   lastSyncStatus: "never" | "ok" | "failed";
   lastSyncError: string | null;
+  /** No sync tried for more than STALE_FEED_HOURS (#258): the feed has stopped, not failed. */
+  stale: boolean;
 };
 
 /** The account's SimpleFIN feed (decision 388), when it has one. */
-export type SimpleFinFeedStatus = { active: true; lastSyncedAt: string | null; lastSyncStatus: "never" | "ok" | "failed" };
+export type SimpleFinFeedStatus = { active: true; lastSyncedAt: string | null; lastSyncStatus: "never" | "ok" | "failed"; stale: boolean };
+
+/** A feed with no sync tried for this long has stopped (#258): the server was off, or its sync job isn't running. */
+export const STALE_FEED_HOURS = 48;
+const staleSql = (column: string) => `(${column} is not null and ${column} < now() - make_interval(hours => ${STALE_FEED_HOURS}))`;
 
 export type BankAccount = {
   id: string;
@@ -101,6 +107,11 @@ type BankAccountRow = {
   wise_active: boolean | null;
   wise_synced_at: string | null;
   wise_status: "never" | "ok" | "failed" | null;
+  feed_stale: boolean;
+  simplefin_stale: boolean;
+  stripe_stale: boolean;
+  paypal_stale: boolean;
+  wise_stale: boolean;
 };
 
 const BANK_ACCOUNT_SELECT = `
@@ -118,7 +129,10 @@ const BANK_ACCOUNT_SELECT = `
          sf.active as simplefin_active, sf.last_synced_at as simplefin_synced_at, sf.last_sync_status as simplefin_status,
          st.active as stripe_active, st.last_synced_at as stripe_synced_at, st.last_sync_status as stripe_status,
          pp.active as paypal_active, pp.last_synced_at as paypal_synced_at, pp.last_sync_status as paypal_status,
-         wi.active as wise_active, wi.last_synced_at as wise_synced_at, wi.last_sync_status as wise_status
+         wi.active as wise_active, wi.last_synced_at as wise_synced_at, wi.last_sync_status as wise_status,
+         coalesce(${staleSql("s.last_synced_at")}, false) as feed_stale, coalesce(${staleSql("sf.last_synced_at")}, false) as simplefin_stale,
+         coalesce(${staleSql("st.last_synced_at")}, false) as stripe_stale, coalesce(${staleSql("pp.last_synced_at")}, false) as paypal_stale,
+         coalesce(${staleSql("wi.last_synced_at")}, false) as wise_stale
     from accounts a
     left join bank_account_settings s on s.account_id = a.id
     left join akahu_connections ac on ac.id = s.akahu_connection_id and ac.status = 'active'
@@ -160,13 +174,14 @@ function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string)
       lastSyncedAt: row.last_synced_at,
       lastSyncStatus: row.last_sync_status ?? "never",
       lastSyncError: row.last_sync_error,
+      stale: row.feed_active === true && row.feed_stale,
     },
     simplefin: row.simplefin_active
-      ? { active: true, lastSyncedAt: row.simplefin_synced_at, lastSyncStatus: row.simplefin_status ?? "never" }
+      ? { active: true, lastSyncedAt: row.simplefin_synced_at, lastSyncStatus: row.simplefin_status ?? "never", stale: row.simplefin_stale }
       : null,
-    stripe: row.stripe_active ? { active: true, lastSyncedAt: row.stripe_synced_at, lastSyncStatus: row.stripe_status ?? "never" } : null,
-    paypal: row.paypal_active ? { active: true, lastSyncedAt: row.paypal_synced_at, lastSyncStatus: row.paypal_status ?? "never" } : null,
-    wise: row.wise_active ? { active: true, lastSyncedAt: row.wise_synced_at, lastSyncStatus: row.wise_status ?? "never" } : null,
+    stripe: row.stripe_active ? { active: true, lastSyncedAt: row.stripe_synced_at, lastSyncStatus: row.stripe_status ?? "never", stale: row.stripe_stale } : null,
+    paypal: row.paypal_active ? { active: true, lastSyncedAt: row.paypal_synced_at, lastSyncStatus: row.paypal_status ?? "never", stale: row.paypal_stale } : null,
+    wise: row.wise_active ? { active: true, lastSyncedAt: row.wise_synced_at, lastSyncStatus: row.wise_status ?? "never", stale: row.wise_stale } : null,
   };
 }
 

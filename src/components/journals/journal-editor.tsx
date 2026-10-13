@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useRef, useState } from "react";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -223,7 +224,7 @@ export function JournalEditor({ organisationId, accounts, mode, original: origin
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>
         <Field label="Date">
-          <input type="date" value={postingDate} onChange={(event) => setPostingDate(event.target.value)} required />
+          <DateInput value={postingDate} onChange={(event) => setPostingDate(event.target.value)} required />
         </Field>
         <Field label="Reference">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} required />

@@ -4525,6 +4525,31 @@ testing) and #154's code signing (later, Jess).
      - **Weekly budget:** typed on the roster area, not taken from the
        monthly workforce budget.
 
+519. **Dates are typed day first, with shorthand; Ctrl/Cmd+Enter saves**
+     (14 Oct 2026, #258).
+     - **Where:** transaction-entry date fields (45 of them) use
+       `DateInput` (`src/lib/date-entry.ts`) instead of the browser's date
+       field. Other date fields keep the browser's own.
+     - **What's accepted:** dates day first, digits only, today, +N days,
+       +Nw weeks, and +Nm for the Nth of the following month (NZ trade
+       terms, the last day if shorter). Impossible dates are refused, not
+       rolled over.
+     - **Keys:** Ctrl/Cmd+Enter clicks the form's first enabled submit
+       button. Enter in a line table moves to the next field. A field that
+       handles Enter itself is left alone.
+
+520. **A feed with no sync tried for 2 days is "not syncing"** (14 Oct 2026,
+     #258).
+     - **Why attempts, not successes:** every provider records each attempt
+       time (successful or not), so no attempt for 48 hours means syncing
+       has stopped, not failed. That's shown on the account's feed badge
+       and counted in the top bar.
+     - **Failed feeds:** these already have their own notice, which now
+       counts all five providers.
+     - **Not built:** a re-authorisation email to the login's owner. Akahu
+       personal-app tokens are pasted in by an admin, and logins have no
+       owner field.
+
 521. **Transfers between your own accounts are suggested, and both sides can
      be reconciled at once** (14 Oct 2026, #258).
      - **What's suggested:** for a statement line, unreconciled lines on the

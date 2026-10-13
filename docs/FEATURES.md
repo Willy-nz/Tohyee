@@ -520,6 +520,14 @@ that something happened.
   login whose tokens are refused says so without affecting the others, new
   tokens carry its accounts on, and removing a login stops only its feeds.
   Stripe, PayPal and Wise allow one link per currency per login.
+- **Feed health** (#258, decision 520):
+  - A feed that hasn't tried to sync for 2 days shows "not syncing" on its
+    account, and the top bar says how many have stopped. That usually
+    means the server was off or its sync job isn't running.
+  - "Needs reconnecting" now counts failed SimpleFIN, Stripe, PayPal and
+    Wise feeds as well as Akahu's.
+  - There's no re-authorisation link: Akahu feeds use tokens an admin
+    pastes in.
 - **Accounting as a module** (#181, MOD2-MOD7 approved by Jess 8 Oct 2026,
   decision 480, tenant migration 0111): a server admin chooses an
   organisation's modules when creating it (Accounting, Tax = registered for
@@ -1828,6 +1836,17 @@ that something happened.
   viewers can only pin dashboards shared with them, and a pin from a deleted
   or unshared dashboard or tile drops off, as all pins do while Analytics is
   off.
+- **Keyboard entry** (#258, decision 519). Date fields in invoices, bills,
+  journals, quotes, orders, credit notes, payments, expense claims and bank
+  pages take dates typed day first or in shorthand:
+  - 14/10/2026, 14/10, 1410, 141026
+  - "t" for today
+  - +14 or -3 days, +2w
+  - +20m for the 20th of the following month
+  A due date counts from its document's date. The calendar button still
+  opens the browser's date picker. **Ctrl/Cmd+Enter** clicks the form's
+  main button (Save, or Post on a journal). **Enter** in a line table moves
+  to the next field instead of saving the form.
 - **Search everything** (decision 373). Ctrl K finds records as well as
   pages: contacts, invoices, bills, credit notes, quotes and orders, payments,
   bank lines, journals, items, accounts, fixed assets and CRM records. Search

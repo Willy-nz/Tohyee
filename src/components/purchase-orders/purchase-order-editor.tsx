@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -195,10 +196,11 @@ function PurchaseOrderForm({
           </select>
         </Field>
         <Field label="Order date">
-          <input type="date" value={orderDate} onChange={(event) => setOrderDate(event.target.value)} required />
+          <DateInput value={orderDate} onChange={(event) => setOrderDate(event.target.value)} required />
         </Field>
         <Field label="Delivery date" hint="Optional.">
-          <input type="date" value={deliveryDate} min={orderDate || undefined} onChange={(event) => setDeliveryDate(event.target.value)} />
+          <DateInput value={deliveryDate}
+            base={orderDate} min={orderDate || undefined} onChange={(event) => setDeliveryDate(event.target.value)} />
         </Field>
         <Field label="Reference" hint="Optional.">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
