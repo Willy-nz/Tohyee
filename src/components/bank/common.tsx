@@ -50,6 +50,15 @@ export function isStatementAccount(account: Account): boolean {
   return account.accountType === "bank" || account.accountType === "credit_card";
 }
 
+/** A feed that hasn't tried to sync for 2 days (#258): stopped rather than failed. */
+function StaleBadge({ name, at }: { name: string; at: string | null }) {
+  return (
+    <span title={at ? `No sync since ${formatDateTime(at)}. Check that Tohyee's server is running.` : undefined}>
+      <Badge tone="amber">{name} not syncing</Badge>
+    </span>
+  );
+}
+
 export function FeedBadge({
   feed,
   simplefin = null,
@@ -77,6 +86,7 @@ export function FeedBadge({
   if (other) {
     if (other.status.lastSyncStatus === "failed") return <Badge tone="red">{other.name} failed</Badge>;
     if (other.status.lastSyncStatus === "never") return <Badge tone="amber">{other.name} waiting</Badge>;
+    if (other.status.stale) return <StaleBadge name={other.name} at={other.status.lastSyncedAt} />;
     return (
       <span title={other.status.lastSyncedAt ? `Last synced ${formatDateTime(other.status.lastSyncedAt)}` : undefined}>
         <Badge tone="green">{other.name} on</Badge>
@@ -86,6 +96,7 @@ export function FeedBadge({
   if (!feed.active) return <Badge>No feed</Badge>;
   if (feed.lastSyncStatus === "failed") return <Badge tone="red">Feed failed</Badge>;
   if (feed.lastSyncStatus === "never") return <Badge tone="amber">Feed waiting</Badge>;
+  if (feed.stale) return <StaleBadge name="Feed" at={feed.lastSyncedAt} />;
   return (
     <span title={feed.lastSyncedAt ? `Last synced ${formatDateTime(feed.lastSyncedAt)}` : undefined}>
       <Badge tone="green">Feed on</Badge>

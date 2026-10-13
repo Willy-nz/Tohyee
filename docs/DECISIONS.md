@@ -4537,3 +4537,15 @@ testing) and #154's code signing (later, Jess).
      - **Keys:** Ctrl/Cmd+Enter clicks the form's first enabled submit
        button. Enter in a line table moves to the next field. A field that
        handles Enter itself is left alone.
+
+520. **A feed with no sync tried for 2 days is "not syncing"** (14 Oct 2026,
+     #258).
+     - **Why attempts, not successes:** every provider records each attempt
+       time (successful or not), so no attempt for 48 hours means syncing
+       has stopped, not failed. That's shown on the account's feed badge
+       and counted in the top bar.
+     - **Failed feeds:** these already have their own notice, which now
+       counts all five providers.
+     - **Not built:** a re-authorisation email to the login's owner. Akahu
+       personal-app tokens are pasted in by an admin, and logins have no
+       owner field.
