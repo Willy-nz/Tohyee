@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -137,8 +138,7 @@ function RecordPaymentForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid4}>
         <Field label="Payment date">
-          <input
-            type="date"
+          <DateInput
             value={fields.paymentDate}
             min={invoice.invoiceDate}
             onChange={(event) => set("paymentDate", event.target.value)}
@@ -244,8 +244,7 @@ function VoidPaymentForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.inlineForm}>
         <Field label="Void date" hint="Must be in an open period.">
-          <input
-            type="date"
+          <DateInput
             value={voidDate}
             min={payment.paymentDate}
             onChange={(event) => setVoidDate(event.target.value)}

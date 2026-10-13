@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -155,10 +156,11 @@ function QuoteForm({
           <ExportBadge contact={data.customers.find((contact) => contact.id === contactId)} />
         </Field>
         <Field label="Quote date">
-          <input type="date" value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} required />
+          <DateInput value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} required />
         </Field>
         <Field label="Expiry date" hint="Optional. After it, the quote shows as expired.">
-          <input type="date" value={expiryDate} min={quoteDate || undefined} onChange={(event) => setExpiryDate(event.target.value)} />
+          <DateInput value={expiryDate}
+            base={quoteDate} min={quoteDate || undefined} onChange={(event) => setExpiryDate(event.target.value)} />
         </Field>
         <SalespersonField setup={data.salespeople} value={salespersonId} onChange={setSalespersonId} />
         <Field label="Reference" hint="Optional. Carried to the invoice when it's accepted.">

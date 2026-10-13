@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { CustomFieldInputs, startingValues } from "@/components/custom-fields";
@@ -173,10 +174,11 @@ function SalesOrderForm({
           <ExportBadge contact={chosen} />
         </Field>
         <Field label="Order date">
-          <input type="date" value={orderDate} onChange={(event) => setOrderDate(event.target.value)} required />
+          <DateInput value={orderDate} onChange={(event) => setOrderDate(event.target.value)} required />
         </Field>
         <Field label="Expected date" hint="Optional. When the customer expects it.">
-          <input type="date" value={expectedDate} min={orderDate || undefined} onChange={(event) => setExpectedDate(event.target.value)} />
+          <DateInput value={expectedDate}
+            base={orderDate} min={orderDate || undefined} onChange={(event) => setExpectedDate(event.target.value)} />
         </Field>
         <SalespersonField setup={data.salespeople} value={salespersonId} onChange={setSalespersonId} />
         <Field label="Reference" hint="Optional, such as the customer's order number. Carried to its invoices.">

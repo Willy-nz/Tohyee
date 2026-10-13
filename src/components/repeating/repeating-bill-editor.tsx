@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -235,10 +236,10 @@ function RepeatingBillForm({
           </span>
         </Field>
         <Field label="First bill date">
-          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+          <DateInput value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
         <Field label="End date" hint="Optional. Blank repeats until you end it.">
-          <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} />
+          <DateInput value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} />
         </Field>
         <Field label="Due">
           <select value={dueRule} onChange={(event) => setDueRule(event.target.value as BillDueRule)} aria-label="Due date rule">

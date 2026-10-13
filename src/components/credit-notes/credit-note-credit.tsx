@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -157,8 +158,7 @@ function ApplyCreditForm({
       </div>
       <div className={ui.inlineForm}>
         <Field label="Date applied" hint="On or after the credit note date and each invoice date.">
-          <input
-            type="date"
+          <DateInput
             value={applicationDate}
             min={creditNote.creditNoteDate}
             onChange={(event) => setApplicationDate(event.target.value)}
@@ -228,8 +228,7 @@ function RemoveApplicationForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.inlineForm}>
         <Field label="Removal date" hint="Must be in an open period.">
-          <input
-            type="date"
+          <DateInput
             value={removalDate}
             min={application.applicationDate}
             onChange={(event) => setRemovalDate(event.target.value)}
@@ -326,8 +325,7 @@ function RefundForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid4}>
         <Field label="Refund date">
-          <input
-            type="date"
+          <DateInput
             value={fields.refundDate}
             min={creditNote.creditNoteDate}
             onChange={(event) => set("refundDate", event.target.value)}
@@ -420,8 +418,7 @@ function VoidRefundForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.inlineForm}>
         <Field label="Void date" hint="Must be in an open period.">
-          <input
-            type="date"
+          <DateInput
             value={voidDate}
             min={refund.refundDate}
             onChange={(event) => setVoidDate(event.target.value)}

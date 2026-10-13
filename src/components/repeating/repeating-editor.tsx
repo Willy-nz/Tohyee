@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -195,10 +196,10 @@ function RepeatingForm({
           </span>
         </Field>
         <Field label="First invoice date">
-          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+          <DateInput value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
         <Field label="End date" hint="Optional. Blank repeats until you end it.">
-          <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} />
+          <DateInput value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} />
         </Field>
         <Field label="Due date">
           <select value={dueRule} onChange={(event) => setDueRule(event.target.value as DueRule)}>

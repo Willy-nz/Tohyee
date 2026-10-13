@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
@@ -339,8 +340,7 @@ function InvoiceForm({
           </div>
         ) : null}
         <Field label="Invoice date" hint="Approving posts the invoice on this date.">
-          <input
-            type="date"
+          <DateInput
             value={invoiceDate}
             onChange={(event) => {
               setInvoiceDate(event.target.value);
@@ -359,9 +359,9 @@ function InvoiceForm({
                 : "From the customer's payment terms, or the organisation's default terms."
           }
         >
-          <input
-            type="date"
+          <DateInput
             value={dueDate}
+            base={invoiceDate}
             min={invoiceDate || undefined}
             onChange={(event) => {
               setDueDate(event.target.value);
