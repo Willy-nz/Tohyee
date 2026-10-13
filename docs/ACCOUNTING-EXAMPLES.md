@@ -15235,6 +15235,14 @@ without employee names.
 - With the CRM on: **`tohyee_crm_companies`**, **`tohyee_crm_opportunities`**
   (stage, amount, expected close, owner, won/lost) and
   **`tohyee_crm_activities`**.
+- With Farming on (#249, decision 515): **`tohyee_farm_paddocks`**,
+  **`tohyee_farm_fertiliser_products`**,
+  **`tohyee_farm_fertiliser_plan_lines`**,
+  **`tohyee_farm_fertiliser_applications`** and
+  **`tohyee_farm_fertiliser_bill_links`**. They hold the rows as recorded,
+  with nothing worked out. A query over them gives FB4's 46.0 and 42.9 kg
+  N/ha, and joined to `tohyee_bill_lines` gives FB3's 2,730.00 and FB5's
+  875.00 (`tests/integration/farming-fertiliser.test.ts`).
 - A dashboard value can be shown **the other way round** (each amount
   negated), so credits such as sales can show as positive.
 

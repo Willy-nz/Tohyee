@@ -4,6 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { areaHectares, hectaresText, parseGeometry } from "@/lib/farming/geometry";
 import {
   addPaddock,
+  getFarmingSettings,
   getPaddock,
   importBoundaries,
   listFarms,
@@ -13,6 +14,7 @@ import {
   saveFarm,
   setBoundary,
   setFarmingEnabled,
+  setImageryKey,
   splitPaddock,
   updatePaddock,
 } from "@/lib/farming/paddocks";
@@ -172,5 +174,16 @@ describeWithDatabase("farms and paddocks", () => {
     expect(twelve.effectiveHa).toBe("21.00");
     // Files that aren't GeoJSON polygons are refused plainly.
     await expect(w.as((tx) => previewBoundaryImport(tx, w.farm.id, { fileName: "x.kml", content: "<kml></kml>" }))).rejects.toThrow("export them as GeoJSON first");
+  });
+
+  it("keeps the organisation's own LINZ Basemaps key for aerial imagery, checked and removable", async () => {
+    const w = await setup();
+    expect(await w.as((tx) => getFarmingSettings(tx))).toEqual({ enabled: true, imageryKey: null });
+    await expect(w.as((tx) => setImageryKey(tx, { imageryKey: "has spaces in it" }))).rejects.toThrow("doesn't look like a LINZ Basemaps API key");
+    await expect(w.as((tx) => setImageryKey(tx, { imageryKey: "short" }))).rejects.toThrow("doesn't look like");
+    expect(await w.as((tx) => setImageryKey(tx, { imageryKey: "  c01abcdEFG_123-xyz  " }))).toEqual({ enabled: true, imageryKey: "c01abcdEFG_123-xyz" });
+    expect(await w.as((tx) => setImageryKey(tx, { imageryKey: "" }))).toEqual({ enabled: true, imageryKey: null });
+    await w.as((tx) => setFarmingEnabled(tx, { enabled: false }));
+    await expect(w.as((tx) => setImageryKey(tx, { imageryKey: "c01abcdEFG_123-xyz" }))).rejects.toThrow("Farming is off");
   });
 });

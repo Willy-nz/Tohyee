@@ -1,4 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { readBooks } from "@/lib/analytics/books";
+import { closeAnalytics, queryAnalytics, replaceTohyeeTables } from "@/lib/analytics/engine";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { approveBill, createBill } from "@/lib/bills/service";
 import { createContact } from "@/lib/contacts/service";
@@ -27,14 +32,20 @@ describeWithDatabase("fertiliser planner", () => {
   let server: TestServer;
   let owner: SessionUser;
   let organisations = 0;
+  let root: string;
+  const analysed: string[] = [];
 
   beforeAll(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-farm-"));
+    process.env.TOHYEE_ANALYTICS_DIR = path.join(root, "data");
     server = await startTestServer();
     owner = await createTestUser("fertiliser-owner@example.com", { serverAdmin: true });
   });
 
   afterAll(async () => {
+    for (const org of analysed) await closeAnalytics(org);
     await server?.teardown();
+    fs.rmSync(root, { recursive: true, force: true });
   });
 
   async function setup() {
@@ -63,7 +74,7 @@ describeWithDatabase("fertiliser planner", () => {
         return (await approveBill(tx, drafted.bill.id, { idempotencyKey: key("approve") })).bill;
       });
     const lineFor = async (description: string) => (await as((tx) => linkableBillLines(tx))).find((line) => line.description === description)!;
-    return { as, farm, twelve, fourteen, urea, journals, bill, lineFor };
+    return { org, as, farm, twelve, fourteen, urea, journals, bill, lineFor };
   }
 
   it("turning Farming on adds 6310 Fertiliser and lime and 6320 Fertiliser spreading", async () => {
@@ -233,5 +244,76 @@ describeWithDatabase("fertiliser planner", () => {
         return linkPurchase(tx, plan.id, { billLineId: row.rows[0].id, productId: w.urea.id });
       }),
     ).rejects.toThrow("Only lines of approved bills");
+  });
+
+  it("copies the farm data into the analytics file as tohyee_farm_* tables, row for row (#249)", async () => {
+    const w = await setup();
+    const plan = await w.as((tx) => createPlan(tx, { farmId: w.farm.id, name: "Spring urea 2026" }));
+    await w.as((tx) =>
+      savePlanVersion(tx, plan.id, {
+        spreadingPerHa: "25.00",
+        lines: [
+          { paddockId: w.twelve.id, productId: w.urea.id, rateKgHa: "100", pricePerTonne: "780.00" },
+          { paddockId: w.fourteen.id, productId: w.urea.id, rateKgHa: "80", pricePerTonne: "780.00" },
+        ],
+      }),
+    );
+    await w.as((tx) =>
+      savePlanVersion(tx, plan.id, {
+        spreadingPerHa: "25.00",
+        lines: [
+          { paddockId: w.twelve.id, productId: w.urea.id, rateKgHa: "100", pricePerTonne: "780.00" },
+          { paddockId: w.fourteen.id, productId: w.urea.id, rateKgHa: "100", pricePerTonne: "780.00" },
+        ],
+      }),
+    );
+    await w.bill("Southern Fertiliser Ltd", "Urea", "3.5", "780.00", "6310");
+    const ureaLine = await w.lineFor("Urea");
+    await w.as((tx) => linkPurchase(tx, plan.id, { billLineId: ureaLine.id, productId: w.urea.id }));
+    await w.as((tx) => recordApplication(tx, plan.id, { paddockId: w.twelve.id, productId: w.urea.id, appliedOn: "2026-09-12", tonnes: "2.0" }));
+    const applied = await w.as((tx) => recordApplication(tx, plan.id, { paddockId: w.fourteen.id, productId: w.urea.id, appliedOn: "2026-09-15", tonnes: "1.4" }));
+    await w.bill("Clutha Spreading Ltd", "Spreading 35 ha", "35", "25.00", "6320");
+    const spreadLine = await w.lineFor("Spreading 35 ha");
+    await w.as((tx) => linkSpreading(tx, plan.id, { billLineId: spreadLine.id, applicationIds: applied.applications.map((app) => app.id) }));
+    await w.as((tx) => splitPaddock(tx, w.fourteen.id, { onDate: "2026-11-01", parts: [{ name: "14A", effectiveHa: "9.0" }, { name: "14B", effectiveHa: "6.0" }] }));
+
+    analysed.push(w.org);
+    await w.as(async (tx) => replaceTohyeeTables(w.org, await readBooks(tx)));
+    const q = (sql: string) => queryAnalytics(w.org, sql);
+    expect(await q("select paddock, status, effective_ha::varchar as ha, came_from from tohyee_farm_paddocks order by paddock")).toEqual([
+      { paddock: "12", status: "active", ha: "20.00", came_from: null },
+      { paddock: "14", status: "retired", ha: "15.00", came_from: null },
+      { paddock: "14A", status: "active", ha: "9.00", came_from: "14 (split)" },
+      { paddock: "14B", status: "active", ha: "6.00", came_from: "14 (split)" },
+    ]);
+    expect(await q("select version, count(*)::integer as lines, bool_and(latest) as latest from tohyee_farm_fertiliser_plan_lines group by version order by version")).toEqual([
+      { version: 1, lines: 2, latest: false },
+      { version: 2, lines: 2, latest: true },
+    ]);
+    // kg N/ha from the applications and the product's N%, worked out in the analytics file: FB4's 46.0 and 42.9.
+    expect(
+      await q(`select a.paddock, round(sum(a.tonnes * 1000 * p.n_pct / 100) / max(a.treated_ha), 1)::varchar as n_kg_ha
+                 from tohyee_farm_fertiliser_applications a join tohyee_farm_fertiliser_products p using (product_id)
+                group by a.paddock order by a.paddock`),
+    ).toEqual([
+      { paddock: "12", n_kg_ha: "46.0" },
+      { paddock: "14", n_kg_ha: "42.9" },
+    ]);
+    // The links join to the bills: 2,730.00 of urea and 875.00 of spreading (FB3, FB5).
+    expect(
+      await q(`select k.kind, sum(distinct b.net)::varchar as net, count(*)::integer as links
+                 from tohyee_farm_fertiliser_bill_links k join tohyee_bill_lines b on b.bill_id = k.bill_id and b.line = k.line
+                group by k.kind order by k.kind`),
+    ).toEqual([
+      { kind: "product", net: "2730.00", links: 1 },
+      { kind: "spreading", net: "875.00", links: 2 },
+    ]);
+    const shape = await q("select boundary_geojson from tohyee_farm_paddocks where paddock = '12'");
+    expect(shape[0].boundary_geojson).toBeNull();
+
+    // Turned off, the farm tables aren't copied.
+    await w.as((tx) => setFarmingEnabled(tx, { enabled: false }));
+    const names = await w.as(async (tx) => (await readBooks(tx)).map((table) => table.name));
+    expect(names.some((name) => name.startsWith("tohyee_farm_"))).toBe(false);
   });
 });

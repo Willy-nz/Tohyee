@@ -15371,4 +15371,13 @@ alter table farm_imports drop constraint farm_imports_kind_check;
 alter table farm_imports add constraint farm_imports_kind_check check (kind in ('paddock_boundaries', 'fertiliser_applications'));
 `,
   },
+  {
+    version: "0135",
+    name: "farm_imagery",
+    sql: `
+-- The organisation's own LINZ Basemaps API key, for aerial imagery behind the
+-- paddock map (#249). Not a secret: browsers load the tiles with it.
+alter table farming_settings add column linz_basemaps_key text check (linz_basemaps_key ~ '^[A-Za-z0-9_-]{8,128}$');
+`,
+  },
 ];
