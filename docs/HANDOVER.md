@@ -153,15 +153,17 @@ PREP8, WB7, XP14 and the HL section.
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
-- **0.8.0 is ready to publish** (10 Oct 2026): `package.json` says 0.8.0.
-  It carries everything merged since v0.7.0 (#180-#230): CRM stages 1-3
-  (#216), line discounts (DS1-DS6), not registered for GST, exchange rate
-  sources, accounting as a module, several feed logins, GoCardless direct
-  debit, AI full access keys, the blue theme and Analytics studio, the
-  Windows service account change (#185, #213) and the security work
-  (#212, #214, #219, #220). The release notes are in the GitHub draft
-  release "Tohyee 0.8.0"; Jess to review and publish it on main (publishing
-  creates the `v0.8.0` tag, which starts the release workflows).
+- **0.8.0 is ready to publish** (notes updated 14 Oct 2026): `package.json`
+  says 0.8.0. It carries everything merged since v0.7.0 (#180-#256): the
+  CRM stages, line discounts, GST registration, exchange rate sources,
+  accounting as a module, feed logins, GoCardless, AI full access keys, the
+  blue theme and Analytics studio, the security work, livestock for tax,
+  jobs, rosters and clocking in, and farming (paddocks, LINZ imagery,
+  fertiliser plans, soil tests). The release notes are in
+  `docs/releases/0.8.0.md`. Claude's sessions can't create GitHub releases,
+  so the earlier mention of a draft release was wrong: Jess creates the
+  release "Tohyee 0.8.0" on main with tag `v0.8.0` and pastes the notes in
+  (publishing creates the tag, which starts the release workflows).
 - Visual check before 0.6.0 (4 Oct 2026, built app in Chromium, light and
   dark, desktop and phone width): Home with two pinned tiles, the dashboard
   with a pivot and its drill-down, Customise, and an Excel source's sheet
