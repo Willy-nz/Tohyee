@@ -4432,3 +4432,20 @@ testing) and #154's code signing (later, Jess).
          agent's number as the reference.
        - Changes to an approved year are refused until it's replaced.
 
+514. **Farming starts from files, private email and plain shapes** (13 Oct
+     2026, #249 stage 0; Jess).
+     - **Storage:** each organisation's own PostgreSQL and DuckDB, with no
+       new server.
+     - **Email is its own feature for everyone** (#250). It's private to the
+       owner who connects it, and is shared only when the owner files an
+       item or approves a rule.
+     - **Fertiliser is expensed when bought.** Applying it posts nothing and
+       records quantity, nutrients and the paddock's cost share (FB1-FB8).
+       Spreading bills are shared by hectares for reports. Accounts 6310
+       Fertiliser and lime and 6320 Fertiliser spreading. Tax spreading
+       (s EJ 3) is left to the tax return.
+     - **No PostGIS in stage 1.** Paddock boundaries are versioned GeoJSON
+       in PostgreSQL, with area and validity worked out in TypeScript. The
+       Windows installer's EDB binaries and the Docker `postgres:17` image
+       have no PostGIS; adding it is later packaging work.
+
