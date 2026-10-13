@@ -4524,3 +4524,15 @@ testing) and #154's code signing (later, Jess).
        email isn't set up, is listed. Publishing still goes ahead.
      - **Weekly budget:** typed on the roster area, not taken from the
        monthly workforce budget.
+
+520. **A feed with no sync tried for 2 days is "not syncing"** (14 Oct 2026,
+     #258).
+     - **Why attempts, not successes:** every provider records each attempt
+       time (successful or not), so no attempt for 48 hours means syncing
+       has stopped, not failed. That's shown on the account's feed badge
+       and counted in the top bar.
+     - **Failed feeds:** these already have their own notice, which now
+       counts all five providers.
+     - **Not built:** a re-authorisation email to the login's owner. Akahu
+       personal-app tokens are pasted in by an admin, and logins have no
+       owner field.

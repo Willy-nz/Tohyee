@@ -520,6 +520,14 @@ that something happened.
   login whose tokens are refused says so without affecting the others, new
   tokens carry its accounts on, and removing a login stops only its feeds.
   Stripe, PayPal and Wise allow one link per currency per login.
+- **Feed health** (#258, decision 520):
+  - A feed that hasn't tried to sync for 2 days shows "not syncing" on its
+    account, and the top bar says how many have stopped. That usually
+    means the server was off or its sync job isn't running.
+  - "Needs reconnecting" now counts failed SimpleFIN, Stripe, PayPal and
+    Wise feeds as well as Akahu's.
+  - There's no re-authorisation link: Akahu feeds use tokens an admin
+    pastes in.
 - **Accounting as a module** (#181, MOD2-MOD7 approved by Jess 8 Oct 2026,
   decision 480, tenant migration 0111): a server admin chooses an
   organisation's modules when creating it (Accounting, Tax = registered for
