@@ -1457,9 +1457,14 @@ that something happened.
   someone then needs a reason. Shifts in booked leave are flagged "on leave"
   and not counted. **Publishing** keeps a copy that employees with a linked
   login see under **My shifts**; later changes are listed until published
-  again. Needs payroll access. Posts nothing. Not built: telling staff when a
-  roster is published; the weekly budget isn't drawn from the workforce
-  budget (monthly) yet.
+  again. **Emailing staff** (decision 518): publishing can email each
+  employee their own shifts for the week, and a later publish emails only
+  those whose shifts changed, including anyone taken off. Emails are plain
+  text, have no pay figures, and go out through the organisation's own
+  email. Anyone not emailed (no address, or email not set up) is listed.
+  The weekly budget is typed on the area, not taken from the monthly
+  workforce budget (Jess, 14 Oct 2026). Needs payroll access. Posts
+  nothing.
 - **Clocking in** (Payroll, Clock-ins; RS5-RS8 approved by Jess, decision
   512, tenant migration 0131): a **shared device** at the shop is set up by
   someone with payroll access and keeps a key in a cookie; `/clock` on it

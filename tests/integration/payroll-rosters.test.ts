@@ -1,3 +1,6 @@
+import type { AddressInfo } from "node:net";
+import { simpleParser, type ParsedMail } from "mailparser";
+import { SMTPServer } from "smtp-server";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -16,6 +19,12 @@ import {
   saveRosterArea,
   updateShift,
 } from "@/lib/payroll/rosters";
+import { COMMAND_LINE_ADMIN } from "@/lib/audit";
+import { updateLocalMailRelay } from "@/lib/email/local-relay";
+import { processOrganisationOutbox } from "@/lib/email/outbox";
+import { prepareSmtpServer, updateOrganisationEmailSettings } from "@/lib/email/settings";
+import { setSmtpPortForTests } from "@/lib/email/smtp";
+import { getOrganisation } from "@/lib/organisations/registry";
 import { approveTimesheet, getTimesheet, listTimesheetWeek, submitTimesheet, setTimesheetPeople } from "@/lib/payroll/timesheets";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
 
@@ -32,17 +41,51 @@ describeWithDatabase("rosters and clocking in (RS1-RS8)", () => {
   let noah: SessionUser;
   let organisations = 0;
   const previousSecret = process.env.TOHYEE_SECRET_KEY;
+  const previousOutbox = process.env.TOHYEE_EMAIL_OUTBOX;
+  let smtp: SMTPServer;
+  const received: Array<{ recipients: string[]; mail: ParsedMail }> = [];
 
   beforeAll(async () => {
     process.env.TOHYEE_SECRET_KEY = "payroll-integration-test-secret-key-32-characters";
+    process.env.TOHYEE_EMAIL_OUTBOX = "off";
     server = await startTestServer();
+    smtp = new SMTPServer({
+      secure: false,
+      allowInsecureAuth: true,
+      disabledCommands: ["STARTTLS"],
+      logger: false,
+      onAuth(auth, _session, callback) {
+        if (auth.username === "shop@glimmers.test" && auth.password === "app-password") return callback(null, { user: auth.username });
+        return callback(Object.assign(new Error("Invalid username or password"), { responseCode: 535 }));
+      },
+      onData(stream, session, callback) {
+        const chunks: Buffer[] = [];
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", () => {
+          simpleParser(Buffer.concat(chunks)).then(
+            (mail) => {
+              received.push({ recipients: session.envelope.rcptTo.map((rcpt) => rcpt.address), mail });
+              callback(null, "Queued as ROSTER1");
+            },
+            (error: Error) => callback(error),
+          );
+        });
+      },
+    });
+    await new Promise<void>((resolve) => smtp.listen(0, "127.0.0.1", resolve));
+    setSmtpPortForTests((smtp.server.address() as AddressInfo).port);
+    await updateLocalMailRelay(COMMAND_LINE_ADMIN, { allowed: true });
     jess = await createTestUser("rs-jess@example.com");
     aroha = await createTestUser("rs-aroha@example.com");
     noah = await createTestUser("rs-noah@example.com");
   });
 
   afterAll(async () => {
+    setSmtpPortForTests(null);
+    await new Promise<void>((resolve) => smtp?.close(() => resolve()));
     await server?.teardown();
+    if (previousOutbox === undefined) delete process.env.TOHYEE_EMAIL_OUTBOX;
+    else process.env.TOHYEE_EMAIL_OUTBOX = previousOutbox;
     if (previousSecret === undefined) delete process.env.TOHYEE_SECRET_KEY;
     else process.env.TOHYEE_SECRET_KEY = previousSecret;
   });
@@ -175,6 +218,80 @@ describeWithDatabase("rosters and clocking in (RS1-RS8)", () => {
     await expect(
       w.as((tx) => updateShift(tx, first.shifts[0].id, { employeeId: w.arohaId, startsAt: "2026-10-31T10:00:00+13:00", endsAt: "2026-10-31T17:00:00+13:00" })),
     ).rejects.toThrow("removing it and adding it there");
+  });
+
+  it("RS4: publishing can email staff their own shifts; a later publish emails only those whose shifts changed", async () => {
+    const w = await setup();
+    await w.shift(w.arohaId, "2026-10-24");
+    await w.shift(w.tamaId, "2026-10-25");
+    // Without the organisation's email set up, nobody is emailed and the page says why.
+    const unset = await w.as((tx) => publishRoster(tx, { areaId: w.shop, weekStart: "2026-10-19", emailStaff: true }));
+    expect(unset.emails).toEqual({
+      emailed: [],
+      notEmailed: [
+        { name: "Aroha Shop", reason: "Email isn't set up for this organisation (Settings > Email)." },
+        { name: "Tama Shop", reason: "Email isn't set up for this organisation (Settings > Email)." },
+      ],
+    });
+
+    const smtpServer = await prepareSmtpServer({ host: "127.0.0.1", port: 2525, security: "none" });
+    await w.as((tx) => updateOrganisationEmailSettings(tx, { fromName: "Glimmers", fromAddress: "shop@glimmers.test", username: "shop@glimmers.test", password: "app-password" }, smtpServer));
+    await w.as((tx) => tx.query("update payroll_employees set email = 'aroha@glimmers.test' where id = $1", [w.arohaId]));
+    // Aroha's shift moves to 10:00: she's emailed; Tama has no email address, and his shift didn't change, so he isn't listed.
+    const first = (await w.week()).shifts.find((shift) => shift.employeeId === w.arohaId)!;
+    await w.as((tx) => updateShift(tx, first.id, { employeeId: w.arohaId, startsAt: "2026-10-24T10:00:00+13:00", endsAt: "2026-10-24T17:00:00+13:00", breakMinutes: 30 }));
+    const changed = await w.as((tx) => publishRoster(tx, { areaId: w.shop, weekStart: "2026-10-19", emailStaff: true }));
+    expect(changed.emails).toEqual({ emailed: ["Aroha Shop"], notEmailed: [] });
+    received.length = 0;
+    const organisation = (await getOrganisation(w.org))!;
+    expect(await processOrganisationOutbox(organisation)).toMatchObject({ waiting: 0 });
+    expect(received).toHaveLength(1);
+    expect(received[0].recipients).toEqual(["aroha@glimmers.test"]);
+    expect(received[0].mail.subject).toBe("Your shifts have changed: Shop, week starting Monday, 19 October 2026");
+    const orgName = (await w.as((tx) => tx.query<{ display_name: string }>("select display_name from organisation_settings where id = true"))).rows[0].display_name;
+    expect(received[0].mail.text?.trim()).toBe(
+      [
+        "Kia ora Aroha,",
+        "",
+        "Your shifts have changed. They are now at Shop for the week starting Monday, 19 October 2026:",
+        "",
+        "- Saturday, 24 October, 10:00am to 5:00pm (30 min unpaid break)",
+        "",
+        "You can also see them in Tohyee under Payroll > My shifts.",
+        "",
+        orgName,
+      ].join("\n"),
+    );
+    // No pay figures in the email.
+    expect(received[0].mail.text).not.toContain("25.00");
+
+    // Publishing without asking for emails queues none.
+    await w.as((tx) => removeShift(tx, first.id));
+    const quiet = await w.as((tx) => publishRoster(tx, { areaId: w.shop, weekStart: "2026-10-19" }));
+    expect(quiet.emails).toBeNull();
+    // Publishing again with nothing changed emails nobody.
+    expect((await w.as((tx) => publishRoster(tx, { areaId: w.shop, weekStart: "2026-10-19", emailStaff: true }))).emails).toEqual({ emailed: [], notEmailed: [] });
+  });
+
+  it("RS4: someone taken off a published roster is told they no longer have shifts that week", async () => {
+    const w = await setup();
+    const smtpServer = await prepareSmtpServer({ host: "127.0.0.1", port: 2525, security: "none" });
+    await w.as((tx) => updateOrganisationEmailSettings(tx, { fromName: "Glimmers", fromAddress: "shop@glimmers.test", username: "shop@glimmers.test", password: "app-password" }, smtpServer));
+    await w.as((tx) => tx.query("update payroll_employees set email = 'tama@glimmers.test' where id = $1", [w.tamaId]));
+    const roster = await w.shift(w.tamaId, "2026-10-25");
+    const published = await w.as((tx) => publishRoster(tx, { areaId: w.shop, weekStart: "2026-10-19", emailStaff: true }));
+    expect(published.emails).toEqual({ emailed: ["Tama Shop"], notEmailed: [] });
+    await w.as((tx) => removeShift(tx, roster.shifts[0].id));
+    expect((await w.as((tx) => publishRoster(tx, { areaId: w.shop, weekStart: "2026-10-19", emailStaff: true }))).emails).toEqual({ emailed: ["Tama Shop"], notEmailed: [] });
+    received.length = 0;
+    await processOrganisationOutbox((await getOrganisation(w.org))!);
+    expect(received.map((entry) => entry.mail.subject)).toEqual([
+      "Your shifts: Shop, week starting Monday, 19 October 2026",
+      "Your shifts have changed: Shop, week starting Monday, 19 October 2026",
+    ]);
+    expect(received[0].mail.text).toContain("- Sunday, 25 October, 9:00am to 5:00pm (30 min unpaid break)");
+    expect(received[0].mail.text).not.toContain("My shifts");
+    expect(received[1].mail.text).toContain("You no longer have any shifts at Shop in the week starting Monday, 19 October 2026.");
   });
 
   it("RS5, RS6: Aroha clocks 8:57-17:06 with a 30-minute break: 7.65 hours on her timesheet, from clock-in", async () => {
