@@ -3913,7 +3913,7 @@ period close", YE1-YE4).
   liability accounts are current; fixed asset, non-current asset and
   non-current liability accounts are non-current. Owner puts 5,000.00 into
   the bank (3000), buys a computer for 2,000.00 (1620), borrows 1,500.00 on a
-  term loan (2800), and pays 200.00 of general expenses (6010) on the credit
+  term loan (2800), and pays 200.00 of accounting fees (6010) on the credit
   card (2400). At the end of the month: current assets **4,500.00**,
   non-current assets **2,000.00**, total assets **6,500.00**; current
   liabilities **200.00**, non-current liabilities **1,500.00**, total
