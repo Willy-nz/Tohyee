@@ -133,3 +133,73 @@ export function bounds(geometries: PaddockGeometry[]): [number, number, number, 
   }
   return Number.isFinite(west) ? [west, south, east, north] : null;
 }
+
+// Web Mercator, for drawing paddocks over map tiles ---------------------------------------------
+
+const TILE = 256;
+const MAX_LATITUDE = 85.0511287798;
+
+/** Longitude and latitude to Web Mercator world coordinates, 0 to 1 across and down. */
+export function toWorld([lon, lat]: Position): [number, number] {
+  const clamped = Math.max(-MAX_LATITUDE, Math.min(MAX_LATITUDE, lat));
+  const sin = Math.sin((clamped * Math.PI) / 180);
+  return [(lon + 180) / 360, 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)];
+}
+
+export type MapTile = { z: number; x: number; y: number; left: number; top: number; size: number };
+
+export type MapView = {
+  /** The zoom the shapes are drawn at (it can be fractional). */
+  zoom: number;
+  /** A point's position in the drawing, in pixels. */
+  project: (position: Position) => [number, number];
+  /** The tiles that cover the drawing, at a whole-number zoom, scaled to fit. */
+  tiles: MapTile[];
+};
+
+/**
+ * Fits [west, south, east, north] into a width × height drawing (less `pad`
+ * on each side) in Web Mercator, north up, and lists the 256-pixel tiles
+ * (XYZ numbering) that cover it. Tiles are fetched at no more than `maxTileZoom`.
+ */
+export function mapView(box: [number, number, number, number], width: number, height: number, options: { pad?: number; maxZoom?: number; maxTileZoom?: number } = {}): MapView {
+  const pad = options.pad ?? 24;
+  const maxZoom = options.maxZoom ?? 19;
+  const maxTileZoom = options.maxTileZoom ?? 19;
+  const [west, south, east, north] = box;
+  const [left, top] = toWorld([west, north]);
+  const [right, bottom] = toWorld([east, south]);
+  const across = right - left;
+  const down = bottom - top;
+  const fits = [across > 0 ? Math.log2((width - pad * 2) / (across * TILE)) : maxZoom, down > 0 ? Math.log2((height - pad * 2) / (down * TILE)) : maxZoom];
+  const zoom = Math.max(0, Math.min(maxZoom, ...fits));
+  const worldPixels = TILE * 2 ** zoom;
+  const centreX = (left + right) / 2;
+  const centreY = (top + bottom) / 2;
+  const project = (position: Position): [number, number] => {
+    const [x, y] = toWorld(position);
+    return [(x - centreX) * worldPixels + width / 2, (y - centreY) * worldPixels + height / 2];
+  };
+  const tileZoom = Math.max(0, Math.min(maxTileZoom, Math.ceil(zoom)));
+  const count = 2 ** tileZoom;
+  const size = worldPixels / count;
+  // The drawing's edges in world coordinates.
+  const viewLeft = centreX - width / 2 / worldPixels;
+  const viewTop = centreY - height / 2 / worldPixels;
+  const viewRight = centreX + width / 2 / worldPixels;
+  const viewBottom = centreY + height / 2 / worldPixels;
+  const tiles: MapTile[] = [];
+  const firstY = Math.max(0, Math.floor(viewTop * count));
+  const lastY = Math.min(count - 1, Math.floor(viewBottom * count));
+  for (let y = firstY; y <= lastY; y += 1) {
+    for (let x = Math.floor(viewLeft * count); x <= Math.floor(viewRight * count); x += 1) {
+      tiles.push({ z: tileZoom, x: ((x % count) + count) % count, y, left: (x / count - centreX) * worldPixels + width / 2, top: (y / count - centreY) * worldPixels + height / 2, size });
+    }
+  }
+  return { zoom, project, tiles };
+}
+
+/** A LINZ Basemaps aerial imagery tile (Web Mercator, EPSG:3857), as LINZ documents it. */
+export function linzAerialTileUrl(tile: { z: number; x: number; y: number }, apiKey: string): string {
+  return `https://basemaps.linz.govt.nz/v1/tiles/aerial/3857/${tile.z}/${tile.x}/${tile.y}.webp?api=${encodeURIComponent(apiKey)}`;
+}

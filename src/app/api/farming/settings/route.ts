@@ -1,5 +1,5 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
-import { getFarmingSettings, setFarmingEnabled } from "@/lib/farming/paddocks";
+import { getFarmingSettings, setFarmingEnabled, setImageryKey } from "@/lib/farming/paddocks";
 
 /** GET: whether Farming is on (#249). */
 export const GET = route(async (request) => {
@@ -7,9 +7,14 @@ export const GET = route(async (request) => {
   return json({ settings });
 });
 
-/** Turns Farming on or off (`enabled`). Admins; it needs Accounting. */
+/**
+ * Turns Farming on or off (`enabled`; it needs Accounting), or sets or clears
+ * the LINZ Basemaps key for aerial imagery (`imageryKey`). Admins.
+ */
 export const PATCH = route(async (request) => {
   const body = await readJson(request);
-  const settings = await withOrganisation(request, body.organisationId, "admin", (tx) => setFarmingEnabled(tx, { enabled: body.enabled }));
+  const settings = await withOrganisation(request, body.organisationId, "admin", (tx) =>
+    "imageryKey" in body ? setImageryKey(tx, { imageryKey: body.imageryKey }) : setFarmingEnabled(tx, { enabled: body.enabled }),
+  );
   return json({ settings });
 });

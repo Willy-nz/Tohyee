@@ -1389,8 +1389,20 @@ that something happened.
   adds a boundary version; shapes that cross themselves, aren't closed or
   are in NZTM metres are skipped with the reason. The same file can't be
   imported twice. The **map** draws the paddock outlines to scale, north
-  up. Not built yet: background imagery (LINZ), drawing shapes in Tohyee,
-  KML and shapefile import, and the analytics datasets.
+  up. With an organisation's own **LINZ Basemaps key** (an admin adds it on
+  the Farms and paddocks page), **aerial imagery** shows under the outlines.
+  The browser loads it straight from LINZ, with LINZ's attribution, and it
+  can be switched off. In **Analytics**, while Farming is on, the books copy
+  also carries these tables, row for row as recorded:
+  - `tohyee_farm_paddocks` (with each one's current boundary as GeoJSON)
+  - `tohyee_farm_fertiliser_products`
+  - `tohyee_farm_fertiliser_plan_lines` (every version)
+  - `tohyee_farm_fertiliser_applications`
+  - `tohyee_farm_fertiliser_bill_links` (bill id and line, to join
+    `tohyee_bill_lines`)
+
+  Not built yet: drawing shapes in Tohyee, KML and shapefile import, and
+  soil tests.
 - **Fertiliser plans** (Farm, Fertiliser plans; #249 stage 2, FB1-FB8
   approved by Jess, tenant migration 0134). Turning Farming on adds **6310
   Fertiliser and lime** and **6320 Fertiliser spreading**, unless those

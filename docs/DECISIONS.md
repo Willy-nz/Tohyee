@@ -4449,3 +4449,23 @@ testing) and #154's code signing (later, Jess).
        Windows installer's EDB binaries and the Docker `postgres:17` image
        have no PostGIS; adding it is later packaging work.
 
+
+515. **Aerial imagery is the organisation's own LINZ key; farm data goes into
+     analytics as recorded** (13 Oct 2026, #249; Jess said to go ahead).
+     - **Imagery:** LINZ Basemaps aerial tiles, drawn under the paddock
+       outlines in Web Mercator. Each organisation's admin pastes its own
+       key from basemaps.linz.govt.nz; Tohyee doesn't ship one. The browser
+       loads the tiles straight from LINZ, and Tohyee stores and proxies
+       nothing, so no caching question arises.
+     - **Key exposure:** the key reaches every browser that shows the map.
+       It isn't treated as a secret.
+     - **LINZ's terms, checked 13 Oct 2026:** Basemaps is currently free.
+       A standard key needs no registration, expires after 90 days, and is
+       limited to 1,000 tiles a minute and 1,000,000 a month. Developer
+       keys are issued on request. The terms say nothing about caching.
+     - **Attribution:** shown whenever imagery is, worded as LINZ's own
+       example, with a note that imagery isn't proof of ownership.
+     - **Analytics:** while Farming is on, `tohyee_farm_*` tables are copied
+       with the books, row for row as recorded. Paddock costs stay with the
+       fertiliser planner; these tables carry bill ids and line numbers so
+       a report can join `tohyee_bill_lines`.

@@ -7,8 +7,8 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, todayInBrowser } from "@/lib/format";
-import { bounds, type PaddockGeometry, type Position } from "@/lib/farming/geometry";
-import type { BoundaryVersion, Farm, ImportPreview, Paddock } from "@/lib/farming/paddocks";
+import { bounds, linzAerialTileUrl, mapView, type PaddockGeometry, type Position } from "@/lib/farming/geometry";
+import type { BoundaryVersion, Farm, FarmingSettings, ImportPreview, Paddock } from "@/lib/farming/paddocks";
 
 /**
  * Farming, stage 1 (#249): farms, paddocks with their effective and mapped
@@ -46,43 +46,99 @@ function outlines(geometry: PaddockGeometry): Position[][] {
   return geometry.type === "Polygon" ? [geometry.coordinates[0]] : geometry.coordinates.map((polygon) => polygon[0]);
 }
 
-/** A simple drawing of the paddocks: their outlines, to scale, north up. No background imagery yet. */
-export function PaddockMap({ paddocks, selected, onSelect }: { paddocks: Paddock[]; selected: string | null; onSelect?: (id: string) => void }) {
+/** LINZ's attribution, as its Basemaps guide asks for (with links), shown whenever its imagery is. */
+export function LinzAttribution() {
+  return (
+    <p className={ui.muted}>
+      Imagery ©{" "}
+      <a href="https://www.linz.govt.nz/linz-copyright" target="_blank" rel="noreferrer">
+        LINZ CC BY 4.0
+      </a>{" "}
+      ©{" "}
+      <a href="https://www.linz.govt.nz/data/linz-data/linz-basemaps/data-attribution" target="_blank" rel="noreferrer">
+        Imagery Basemap contributors
+      </a>
+      . Imagery shows the ground, not ownership: paddock lines aren&apos;t legal boundaries.
+    </p>
+  );
+}
+
+/**
+ * The paddocks' outlines to scale, north up, in Web Mercator. With a LINZ
+ * Basemaps key, aerial imagery is drawn underneath, loaded by the browser
+ * straight from LINZ (nothing is stored by Tohyee).
+ */
+export function PaddockMap({ paddocks, selected, onSelect, imageryKey }: { paddocks: Paddock[]; selected: string | null; onSelect?: (id: string) => void; imageryKey?: string | null }) {
+  const [failed, setFailed] = useState(0);
   const shaped = paddocks.filter((paddock) => paddock.geometry);
   const box = bounds(shaped.map((paddock) => paddock.geometry!));
   if (!box) return <Empty>No paddock shapes yet. Import a GeoJSON file of your paddocks to see them here.</Empty>;
-  const [west, south, east, north] = box;
-  // Longitude shrinks with latitude: scale it so the shapes aren't stretched.
-  const lonScale = Math.cos((((south + north) / 2) * Math.PI) / 180);
-  const width = Math.max((east - west) * lonScale, 1e-9);
-  const height = Math.max(north - south, 1e-9);
-  const pad = 24;
-  const scale = Math.min((MAP_WIDTH - pad * 2) / width, (MAP_HEIGHT - pad * 2) / height);
-  const offsetX = (MAP_WIDTH - width * scale) / 2;
-  const offsetY = (MAP_HEIGHT - height * scale) / 2;
-  const project = ([lon, lat]: Position) => [offsetX + (lon - west) * lonScale * scale, offsetY + (north - lat) * scale] as const;
+  const view = mapView(box, MAP_WIDTH, MAP_HEIGHT);
+  const imagery = Boolean(imageryKey);
   return (
-    <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} role="img" aria-label="Map of the paddocks" style={{ width: "100%", height: "auto", background: "var(--surface-muted, #eef3ea)", borderRadius: 10 }}>
-      {shaped.map((paddock) => {
-        const rings = outlines(paddock.geometry!);
-        const path = rings.map((ring) => `M${ring.map((point) => project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`).join(" ");
-        const ring = rings[0];
-        const xs = ring.map((point) => project(point)[0]);
-        const ys = ring.map((point) => project(point)[1]);
-        const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-        const isSelected = paddock.id === selected;
-        return (
-          <g key={paddock.id} onClick={onSelect ? () => onSelect(paddock.id) : undefined} style={{ cursor: onSelect ? "pointer" : undefined }}>
-            <title>{`${paddock.name}: ${paddock.effectiveHa ?? "?"} ha effective, ${paddock.mappedHa} ha mapped`}</title>
-            <path d={path} fill={isSelected ? "#9ccf7a" : "#c9e3b4"} stroke={isSelected ? "#1f5fae" : "#4f7a3a"} strokeWidth={isSelected ? 3 : 1.5} fillRule="evenodd" />
-            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={14} fontWeight={600} fill="#203a18" style={{ pointerEvents: "none" }}>
-              {paddock.name}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <>
+      <svg
+        viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+        role="img"
+        aria-label={imagery ? "Map of the paddocks over aerial imagery" : "Map of the paddocks"}
+        style={{ width: "100%", height: "auto", background: imagery ? "#5b6b4e" : "var(--surface-muted, #eef3ea)", borderRadius: 10 }}
+      >
+        {imagery
+          ? view.tiles.map((tile) => (
+              <image
+                key={`${tile.z}/${tile.x}/${tile.y}`}
+                href={linzAerialTileUrl(tile, imageryKey!)}
+                x={tile.left}
+                y={tile.top}
+                // A hair larger, so no seams show between scaled tiles.
+                width={tile.size + 0.5}
+                height={tile.size + 0.5}
+                preserveAspectRatio="none"
+                onError={() => setFailed((count) => count + 1)}
+              />
+            ))
+          : null}
+        {shaped.map((paddock) => {
+          const rings = outlines(paddock.geometry!);
+          const path = rings.map((ring) => `M${ring.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`).join(" ");
+          const ring = rings[0];
+          const xs = ring.map((point) => view.project(point)[0]);
+          const ys = ring.map((point) => view.project(point)[1]);
+          const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+          const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+          const isSelected = paddock.id === selected;
+          const fill = imagery ? (isSelected ? "rgba(255, 214, 10, 0.35)" : "rgba(255, 255, 255, 0.08)") : isSelected ? "#9ccf7a" : "#c9e3b4";
+          const stroke = imagery ? (isSelected ? "#ffd60a" : "#ffffff") : isSelected ? "#1f5fae" : "#4f7a3a";
+          return (
+            <g key={paddock.id} onClick={onSelect ? () => onSelect(paddock.id) : undefined} style={{ cursor: onSelect ? "pointer" : undefined }}>
+              <title>{`${paddock.name}: ${paddock.effectiveHa ?? "?"} ha effective, ${paddock.mappedHa} ha mapped`}</title>
+              <path d={path} fill={fill} stroke={stroke} strokeWidth={isSelected ? 3 : 1.5} fillRule="evenodd" />
+              <text
+                x={cx}
+                y={cy}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={14}
+                fontWeight={600}
+                fill={imagery ? "#ffffff" : "#203a18"}
+                stroke={imagery ? "rgba(0, 0, 0, 0.7)" : "none"}
+                strokeWidth={imagery ? 3 : 0}
+                paintOrder="stroke"
+                style={{ pointerEvents: "none" }}
+              >
+                {paddock.name}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {imagery ? <LinzAttribution /> : null}
+      {imagery && failed > 0 ? (
+        <Notice tone="warning">
+          {failed === view.tiles.length ? "The aerial imagery didn't load." : "Some of the aerial imagery didn't load."} LINZ may be unavailable, or the key may have expired (standard LINZ keys last 90 days). An admin can change the key below.
+        </Notice>
+      ) : null}
+    </>
   );
 }
 
@@ -91,6 +147,7 @@ export function PaddockMap({ paddocks, selected, onSelect }: { paddocks: Paddock
 export function FarmingHome({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const farms = useFarms(organisationId);
+  const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
   const [farmId, setFarmId] = useState<string | null>(null);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
@@ -107,9 +164,51 @@ export function FarmingHome({ organisationId }: { organisationId: string }) {
           ))}
         </div>
       ) : null}
-      {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} onChanged={() => farms.reload()} /> : null}
+      {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} onChanged={() => farms.reload()} /> : null}
       {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} onSaved={() => farms.reload()} /> : null}
+      {can("admin") && settings.data ? <ImagerySettings organisationId={organisationId} imageryKey={settings.data.settings.imageryKey} onSaved={() => settings.reload()} /> : null}
     </>
+  );
+}
+
+/** An admin adds the organisation's own LINZ Basemaps key; Tohyee doesn't ship one. */
+function ImagerySettings({ organisationId, imageryKey, onSaved }: { organisationId: string; imageryKey: string | null; onSaved: () => void }) {
+  const [key, setKey] = useState("");
+  const { busy, error, run } = useRun();
+  const save = (value: string | null) =>
+    void run(
+      () => api("/api/farming/settings", { method: "PATCH", body: { organisationId, imageryKey: value } }),
+      () => {
+        setKey("");
+        onSaved();
+      },
+    );
+  return (
+    <Card
+      title="Aerial imagery"
+      description="Aerial photos from LINZ Basemaps, currently free under LINZ's terms of use. Get an API key at basemaps.linz.govt.nz (a standard key lasts 90 days; LINZ issues longer-lasting developer keys on request) and paste it here. The tiles load in each person's browser straight from LINZ, so everyone who can see the map can see the key."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {imageryKey ? <p>A key ending {imageryKey.slice(-4)} is set.</p> : null}
+      <div className={ui.inlineForm}>
+        <Field label={imageryKey ? "New key" : "LINZ Basemaps API key"}>
+          <input value={key} autoComplete="off" spellCheck={false} maxLength={128} onChange={(event) => setKey(event.target.value)} />
+        </Field>
+        <Button disabled={busy || !key.trim()} onClick={() => save(key.trim())}>
+          Save key
+        </Button>
+        {imageryKey ? (
+          <Button variant="secondary" disabled={busy} onClick={() => save(null)}>
+            Remove key
+          </Button>
+        ) : null}
+      </div>
+      <p className={ui.muted}>
+        <a href="https://www.linz.govt.nz/guidance/data-service/linz-basemaps-guide/linz-basemaps-terms-use" target="_blank" rel="noreferrer">
+          LINZ Basemaps terms of use
+        </a>
+      </p>
+    </Card>
   );
 }
 
@@ -142,9 +241,10 @@ function AddFarm({ organisationId, first, onSaved }: { organisationId: string; f
   );
 }
 
-function FarmView({ organisationId, farm, onChanged }: { organisationId: string; farm: Farm; onChanged: () => void }) {
+function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisationId: string; farm: Farm; imageryKey: string | null; onChanged: () => void }) {
   const { can } = useWorkspace();
   const [showRetired, setShowRetired] = useState(false);
+  const [showImagery, setShowImagery] = useState(true);
   const paddocks = useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farm.id}/paddocks`, { organisationId, includeRetired: showRetired ? "true" : null });
   const [selected, setSelected] = useState<string | null>(null);
   const list = paddocks.data?.paddocks ?? [];
@@ -159,17 +259,25 @@ function FarmView({ organisationId, farm, onChanged }: { organisationId: string;
         title={farm.name}
         description={`${farm.activePaddocks} paddock${farm.activePaddocks === 1 ? "" : "s"}, ${farm.effectiveHa} ha effective, ${farm.mappedHa} ha mapped.`}
         actions={
-          can("bookkeeper") ? (
-            <Link className={`${ui.button} ${ui.secondary}`} href={`/operations/farming/import?farm=${farm.id}`}>
-              Import paddock shapes
-            </Link>
-          ) : null
+          <>
+            {imageryKey ? (
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={showImagery} onChange={(event) => setShowImagery(event.target.checked)} /> Aerial imagery
+              </label>
+            ) : null}
+            {can("bookkeeper") ? (
+              <Link className={`${ui.button} ${ui.secondary}`} href={`/operations/farming/import?farm=${farm.id}`}>
+                Import paddock shapes
+              </Link>
+            ) : null}
+          </>
         }
       >
         {paddocks.error ? <Notice tone="error">{paddocks.error}</Notice> : null}
-        <PaddockMap paddocks={active} selected={selected} onSelect={setSelected} />
+        <PaddockMap paddocks={active} selected={selected} onSelect={setSelected} imageryKey={showImagery ? imageryKey : null} />
         <p className={ui.muted}>
-          Paddock outlines to scale, north up. Tap one for its details. Background imagery from LINZ comes in a later step.
+          Paddock outlines to scale, north up. Tap one for its details.
+          {imageryKey ? null : " An admin can add a LINZ Basemaps key below to show aerial imagery behind them."}
         </p>
       </Card>
       {selected ? <PaddockPanel key={selected} organisationId={organisationId} paddockId={selected} onChanged={reload} onClose={() => setSelected(null)} /> : null}

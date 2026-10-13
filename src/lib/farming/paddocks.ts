@@ -18,7 +18,11 @@ import { optionalString, requireArray, requireId, requireString } from "@/lib/va
  * farmer enters, not the mapped area (FB1). Nothing here posts.
  */
 
-export type FarmingSettings = { enabled: boolean };
+export type FarmingSettings = {
+  enabled: boolean;
+  /** The organisation's LINZ Basemaps API key for aerial imagery, or null. Browsers load the tiles with it, so it isn't secret. */
+  imageryKey: string | null;
+};
 
 export type Farm = { id: string; name: string; notes: string | null; isActive: boolean; activePaddocks: number; effectiveHa: string; mappedHa: string };
 
@@ -81,8 +85,26 @@ function parseName(input: unknown): string {
 // Settings ------------------------------------------------------------------------------
 
 export async function getFarmingSettings(tx: OrgTx): Promise<FarmingSettings> {
-  const row = await tx.query<{ enabled: boolean }>("select enabled from farming_settings where id = true");
-  return { enabled: row.rows[0]?.enabled === true };
+  const row = await tx.query<{ enabled: boolean; linz_basemaps_key: string | null }>("select enabled, linz_basemaps_key from farming_settings where id = true");
+  return { enabled: row.rows[0]?.enabled === true, imageryKey: row.rows[0]?.linz_basemaps_key ?? null };
+}
+
+/**
+ * Sets or clears (null or "") the LINZ Basemaps API key used for aerial
+ * imagery on the paddock map. Each organisation brings its own key from
+ * basemaps.linz.govt.nz and agrees to LINZ's terms; Tohyee doesn't ship one.
+ */
+export async function setImageryKey(tx: OrgTx, input: { imageryKey: unknown }): Promise<FarmingSettings> {
+  await requireFarming(tx);
+  let key: string | null = null;
+  if (input.imageryKey !== null && input.imageryKey !== undefined && input.imageryKey !== "") {
+    if (typeof input.imageryKey !== "string") throw new ValidationError("The LINZ Basemaps key must be text.");
+    key = input.imageryKey.trim();
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(key)) throw new ValidationError("That doesn't look like a LINZ Basemaps API key: it should be letters, numbers, - and _ only.");
+  }
+  await tx.query("update farming_settings set linz_basemaps_key = $1, updated_by_email = $2, updated_at = now() where id = true", [key, tx.actor.email]);
+  await writeAuditEvent(tx, { eventType: key ? "farming.imagery_key_set" : "farming.imagery_key_removed", entityType: "organisation", entityId: tx.organisationId, details: {} });
+  return getFarmingSettings(tx);
 }
 
 export async function setFarmingEnabled(tx: OrgTx, input: { enabled: unknown }): Promise<FarmingSettings> {
