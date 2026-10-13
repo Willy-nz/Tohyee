@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
+import { PaddockRecords } from "@/components/soil";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
@@ -436,6 +437,7 @@ function PaddockPanel({ organisationId, paddockId, onChanged, onClose }: { organ
           </ul>
         </>
       ) : null}
+      <PaddockRecords organisationId={organisationId} paddockId={paddock.id} />
       {editable ? (
         <div className={ui.actions}>
           <Button variant="secondary" onClick={() => (setEditing(!editing), setSplitting(false))}>

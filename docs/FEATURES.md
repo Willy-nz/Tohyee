@@ -1400,9 +1400,25 @@ that something happened.
   - `tohyee_farm_fertiliser_applications`
   - `tohyee_farm_fertiliser_bill_links` (bill id and line, to join
     `tohyee_bill_lines`)
+  - `tohyee_farm_soil_results`
 
-  Not built yet: drawing shapes in Tohyee, KML and shapefile import, and
-  soil tests.
+  Tapping a paddock shows its soil tests and fertiliser applications.
+  Not built yet: drawing shapes in Tohyee, and KML and shapefile import.
+- **Soil tests** (Farm, Soil tests; #249 stage 2, decision 516, tenant
+  migration 0136).
+  - **What's kept:** each test is a sample on a paddock and date, with
+    the lab, lab reference and depth. Results are kept as the lab
+    reported them, units included and "<0.5" kept as written, with no
+    conversions and no judgement of high or low.
+  - **Importing:** a lab's CSV or Excel (.xlsx) file. The preview shows
+    how each column was matched (paddock or sample name, date, lab
+    reference, depth, or a result with its unit), and any of it can be
+    changed before importing. The same file can't be imported twice.
+  - **Entering by hand:** a test can be typed in instead.
+  - **Lab reports:** the report is attached to the test as a file.
+  - **Summary:** each current paddock's latest results and how long ago
+    they were taken, with paddocks never tested flagged.
+  - **Analytics:** results are copied as `tohyee_farm_soil_results`.
 - **Fertiliser plans** (Farm, Fertiliser plans; #249 stage 2, FB1-FB8
   approved by Jess, tenant migration 0134). Turning Farming on adds **6310
   Fertiliser and lime** and **6320 Fertiliser spreading**, unless those

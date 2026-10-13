@@ -18,7 +18,9 @@ const RATE = "DECIMAL(18,2)";
 const MONEY = "DECIMAL(18,2)";
 
 export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
-  const enabled = await tx.query<{ enabled: boolean }>("select enabled from farming_settings where id = true");
+  const enabled = await tx.query<{ enabled: boolean }>(
+    "select enabled from farming_settings where id = true",
+  );
   if (enabled.rows[0]?.enabled !== true) return [];
   const tables: TableCopy[] = [];
 
@@ -74,7 +76,15 @@ export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
       { name: "s_pct", type: PERCENT },
       { name: "active", type: "BOOLEAN" },
     ],
-    rows: products.rows.map((row) => [row.id, row.name, row.n_pct, row.p_pct, row.k_pct, row.s_pct, row.is_active]),
+    rows: products.rows.map((row) => [
+      row.id,
+      row.name,
+      row.n_pct,
+      row.p_pct,
+      row.k_pct,
+      row.s_pct,
+      row.is_active,
+    ]),
   });
 
   const planLines = await tx.query<Record<string, string | null>>(
@@ -191,7 +201,57 @@ export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
       { name: "tonnes", type: TONNES },
       { name: "application_id", type: "BIGINT" },
     ],
-    rows: links.rows.map((row) => [row.kind, row.plan_id, row.bill_id, row.line, row.product_id, row.tonnes, row.application_id]),
+    rows: links.rows.map((row) => [
+      row.kind,
+      row.plan_id,
+      row.bill_id,
+      row.line,
+      row.product_id,
+      row.tonnes,
+      row.application_id,
+    ]),
+  });
+
+  // Soil test results, one row per result, as the lab reported them (value is null for results like "<0.5").
+  const soil = await tx.query<Record<string, string | null>>(
+    `select t.id::text, f.name as farm, t.paddock_id::text, p.name as paddock, t.sampled_on::text, t.sample_name, t.lab, t.lab_reference, t.depth,
+            r.measure, r.value::text, r.value_text, r.unit
+       from soil_tests t join soil_test_results r on r.soil_test_id = t.id join paddocks p on p.id = t.paddock_id join farms f on f.id = t.farm_id
+      where t.status = 'active'
+      order by t.sampled_on, t.id, r.line_order`,
+  );
+  tables.push({
+    name: "tohyee_farm_soil_results",
+    columns: [
+      { name: "soil_test_id", type: "BIGINT" },
+      { name: "farm", type: "VARCHAR" },
+      { name: "paddock_id", type: "BIGINT" },
+      { name: "paddock", type: "VARCHAR" },
+      { name: "sampled_on", type: "DATE" },
+      { name: "sample_name", type: "VARCHAR" },
+      { name: "lab", type: "VARCHAR" },
+      { name: "lab_reference", type: "VARCHAR" },
+      { name: "depth", type: "VARCHAR" },
+      { name: "measure", type: "VARCHAR" },
+      { name: "value", type: "DECIMAL(18,4)" },
+      { name: "value_as_reported", type: "VARCHAR" },
+      { name: "unit", type: "VARCHAR" },
+    ],
+    rows: soil.rows.map((row) => [
+      row.id,
+      row.farm,
+      row.paddock_id,
+      row.paddock,
+      row.sampled_on,
+      row.sample_name,
+      row.lab,
+      row.lab_reference,
+      row.depth,
+      row.measure,
+      row.value,
+      row.value_text,
+      row.unit,
+    ]),
   });
 
   return tables;

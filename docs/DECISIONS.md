@@ -4469,3 +4469,26 @@ testing) and #154's code signing (later, Jess).
        with the books, row for row as recorded. Paddock costs stay with the
        fertiliser planner; these tables carry bill ids and line numbers so
        a report can join `tohyee_bill_lines`.
+
+516. **Soil tests are kept as the lab reported them** (13 Oct 2026, #249
+     stage 2; Jess said to keep going).
+     - **What a test is:** one sample on one paddock on a date. Each result
+       keeps the lab's text (so "<0.5" isn't lost), a number when it is
+       one (up to 4 decimal places), and the lab's unit. Units are never
+       converted.
+     - **No advice:** Tohyee doesn't judge whether a level is high or low,
+       or whether a test is too old. The summary shows the latest test and
+       how long ago it was, and flags paddocks never tested.
+     - **Importing:** CSV or .xlsx, one row per sample. Columns are matched
+       by heading, with any unit in brackets after the heading kept. The
+       person checks and can change the matching before anything is saved.
+       With no paddock column, the sample name is matched to a paddock.
+       The same file can't be imported twice.
+     - **Not yet checked against a real lab file:** the matching was built
+       without a real NZ lab export, so a real Hill Labs or ARL file needs
+       checking.
+     - **Lab reports:** attached to the test through the existing notes and
+       files (record type `soil_test`).
+     - **History:** a split leaves tests on the old paddock, as fertiliser
+       applications are (FB7).
+     - **Analytics:** results are copied as `tohyee_farm_soil_results`.
