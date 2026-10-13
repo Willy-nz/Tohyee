@@ -1403,7 +1403,12 @@ that something happened.
   - `tohyee_farm_soil_results`
 
   Tapping a paddock shows its soil tests and fertiliser applications.
-  Not built yet: drawing shapes in Tohyee, and KML and shapefile import.
+  **Drawing** (decision 517): a paddock is drawn on the map by tapping its
+  corners, or redrawn from its panel, with pan, zoom and "My location".
+  Outlines that cross themselves are refused, and overlaps with other
+  paddocks are warned about. **Importing** also reads KML and KMZ (Google
+  Earth) and zipped shapefiles. Shapes in NZTM2000 are converted, and
+  other projections are refused with a plain message.
 - **Soil tests** (Farm, Soil tests; #249 stage 2, decision 516, tenant
   migration 0136).
   - **What's kept:** each test is a sample on a paddock and date, with

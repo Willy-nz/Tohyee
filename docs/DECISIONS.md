@@ -4492,3 +4492,21 @@ testing) and #154's code signing (later, Jess).
      - **History:** a split leaves tests on the old paddock, as fertiliser
        applications are (FB7).
      - **Analytics:** results are copied as `tohyee_farm_soil_results`.
+
+517. **Paddock shapes come in from any common file, or are drawn in Tohyee**
+     (14 Oct 2026, #249; Jess said to keep going).
+     - **Files read:** GeoJSON, KML and KMZ (Google Earth and most farm
+       mapping apps) and zipped shapefiles. They're read in Tohyee's own
+       code: `saxes` for KML, already installed with ExcelJS and now a
+       direct dependency, and `yauzl` for zips. No GIS library is added.
+     - **Projections:** NZTM2000 shapes are converted with Krüger's series
+       to n⁴. The tests compare it with PROJ to within a millimetre.
+       NZGD2000 is treated as WGS84 (about a metre's difference). Other
+       projections, such as the old NZ Map Grid, are refused with a plain
+       message, not guessed. A shapefile must come with its .prj file.
+     - **Drawing:** paddocks are drawn on the map by tapping corners, with
+       pan, zoom and "My location" (the browser's own location, only when
+       asked). An outline that crosses itself can't be saved. An overlap
+       with another paddock is a warning, not a refusal, since real
+       boundaries are sometimes drawn that way. Redrawing adds a boundary
+       version and keeps the old one.

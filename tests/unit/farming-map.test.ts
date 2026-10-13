@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linzAerialTileUrl, mapView, toWorld } from "@/lib/farming/geometry";
+import { fromWorld, linzAerialTileUrl, mapView, mapViewAt, outlinesOverlap, parseGeometry, toWorld } from "@/lib/farming/geometry";
 
 /** The usual "slippy map" tile numbers, written independently of mapView (OpenStreetMap wiki formula). */
 function slippy(lon: number, lat: number, z: number) {
@@ -59,5 +59,29 @@ describe("paddock map over aerial tiles (#249)", () => {
 
   it("builds LINZ's documented aerial tile address", () => {
     expect(linzAerialTileUrl({ z: 9, x: 502, y: 321 }, "abc_DEF-123")).toBe("https://basemaps.linz.govt.nz/v1/tiles/aerial/3857/9/502/321.webp?api=abc_DEF-123");
+  });
+
+  it("turns a tap on the drawing back into longitude and latitude (for drawing paddocks)", () => {
+    expect(fromWorld(toWorld([170.5, -45.87]))[0]).toBeCloseTo(170.5, 10);
+    expect(fromWorld(toWorld([170.5, -45.87]))[1]).toBeCloseTo(-45.87, 10);
+    const view = mapViewAt([170.5, -45.87], 16.3, 800, 520);
+    expect(view.project([170.5, -45.87])).toEqual([400, 260]);
+    for (const point of [[170.501, -45.871], [170.4995, -45.8693]] as Array<[number, number]>) {
+      const [lon, lat] = view.unproject(view.project(point));
+      expect(lon).toBeCloseTo(point[0], 10);
+      expect(lat).toBeCloseTo(point[1], 10);
+    }
+  });
+
+  it("spots a drawn paddock overlapping another, but not one sharing a fence line", () => {
+    const box = (west: number, south: number, size: number) =>
+      parseGeometry({ type: "Polygon", coordinates: [[[west, south], [west + size, south], [west + size, south + size], [west, south + size], [west, south]]] });
+    const twelve = box(170.5, -45.87, 0.004);
+    expect(outlinesOverlap(twelve, box(170.502, -45.868, 0.004))).toBe(true); // edges cross
+    expect(outlinesOverlap(twelve, box(170.501, -45.869, 0.001))).toBe(true); // wholly inside
+    expect(outlinesOverlap(box(170.501, -45.869, 0.001), twelve)).toBe(true);
+    expect(outlinesOverlap(twelve, box(170.5, -45.87, 0.004))).toBe(true); // drawn again on top
+    expect(outlinesOverlap(twelve, box(170.504, -45.87, 0.004))).toBe(false); // shares the east fence
+    expect(outlinesOverlap(twelve, box(170.51, -45.87, 0.004))).toBe(false); // apart
   });
 });

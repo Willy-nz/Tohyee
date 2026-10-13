@@ -173,7 +173,14 @@ describeWithDatabase("farms and paddocks", () => {
     expect(twelve.boundaries.map((version) => version.source)).toEqual(["Imported from survey.geojson", "Drawn or entered in Tohyee"]);
     expect(twelve.effectiveHa).toBe("21.00");
     // Files that aren't GeoJSON polygons are refused plainly.
-    await expect(w.as((tx) => previewBoundaryImport(tx, w.farm.id, { fileName: "x.kml", content: "<kml></kml>" }))).rejects.toThrow("export them as GeoJSON first");
+    await expect(w.as((tx) => previewBoundaryImport(tx, w.farm.id, { fileName: "x.kml", content: "<kml></kml>" }))).rejects.toThrow("The file has no paddock shapes in it.");
+    await expect(w.as((tx) => previewBoundaryImport(tx, w.farm.id, { fileName: "x.dwg", contentBase64: "AAAA" }))).rejects.toThrow("Choose a GeoJSON, KML, KMZ or zipped shapefile.");
+
+    // A Google Earth KML of paddock 13's new survey: matched by name, a new boundary version.
+    const kml = `<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>13</name><Polygon><outerBoundaryIs><LinearRing><coordinates>
+      169.91,-46.2 169.918,-46.2 169.918,-46.196 169.91,-46.196 169.91,-46.2</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>`;
+    const fromKml = await w.as((tx) => previewBoundaryImport(tx, w.farm.id, { fileName: "survey.kml", content: kml }));
+    expect(fromKml).toMatchObject({ format: "KML", note: null, nameProperty: "name", counts: { new: 0, newBoundary: 1, unchanged: 0, errors: 0 } });
   });
 
   it("keeps the organisation's own LINZ Basemaps key for aerial imagery, checked and removable", async () => {
