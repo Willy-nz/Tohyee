@@ -17,7 +17,13 @@ describe("top bar menus", () => {
   });
 
   it("uses the simplified accounting menus", () => {
-    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Reports", "Accountant"]);
+    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Farm", "Reports", "Accountant"]);
+  });
+
+  it("shows the Farm menu only while Farming is on (#249)", () => {
+    const access = (farming: boolean) => ({ can: () => true, modules: { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, farming } });
+    expect(visibleMenus("accounting", access(false)).map((menu) => menu.label)).not.toContain("Farm");
+    expect(visibleMenus("accounting", access(true)).map((menu) => menu.label)).toContain("Farm");
   });
 
   it("keeps every menu to at most four labelled groups, none empty", () => {

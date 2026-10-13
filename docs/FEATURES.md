@@ -1375,6 +1375,23 @@ that something happened.
   lump sum indicator, the finish date of a final pay and redundancy (not
   liable for the ACC earners' levy) are filled in. No file has been
   through myIR's checker yet.
+- **Farms and paddocks** (Farm menu; #249 stage 1, decision 514, tenant
+  migration 0133): an optional module, part of Accounting, turned on in
+  Settings, Modules. **Farms** hold **paddocks**. A paddock's identity
+  doesn't depend on its name, and its **effective area** (what plans use,
+  FB1) sits beside its **mapped area**. The mapped area is worked out from
+  its boundary, geodesically on WGS84 with GeographicLib, with no PostGIS.
+  Boundaries are versioned GeoJSON; the newest is current and earlier ones
+  are kept. **Splits and merges** retire the old paddocks on a date and link
+  the new ones to them, so history keeps its own areas (FB7); a retired
+  name can be used again. **Importing** a GeoJSON file shows a preview first:
+  paddocks are matched by name; new names add paddocks; a changed shape
+  adds a boundary version; shapes that cross themselves, aren't closed or
+  are in NZTM metres are skipped with the reason. The same file can't be
+  imported twice. The **map** draws the paddock outlines to scale, north
+  up. Not built yet: background imagery (LINZ), drawing shapes in Tohyee,
+  KML and shapefile import, the fertiliser planner (FB1-FB8), and the
+  analytics datasets.
 - **Rosters** (Payroll, Rosters; RS1-RS4 approved by Jess, decision 511,
   tenant migration 0130), like Deputy: **areas** (such as the shop) each with
   a weekly budget, and each week's **shifts** with an unpaid break, costed as

@@ -2,7 +2,7 @@ import type { Modules } from "@/components/modules";
 import type { Role } from "@/lib/auth/roles";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock";
+export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock" | "farming";
 export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 export type MenuGroup = { heading: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -130,6 +130,20 @@ export const MENUS: Menu[] = [
           { href: "/operations/payroll/pay-items", label: "Pay items", minRole: "bookkeeper" },
           { href: "/operations/settings/bank-files", label: "Bank file settings", minRole: "bookkeeper" },
           { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Farm",
+    module: "farming",
+    groups: [
+      {
+        heading: "Farm",
+        links: [
+          { href: "/operations/farming", label: "Farms and paddocks" },
+          { href: "/operations/farming/import", label: "Import paddock shapes", minRole: "bookkeeper" },
+          { href: "/operations/livestock", label: "Livestock", module: "livestock" },
         ],
       },
     ],
@@ -320,6 +334,7 @@ export const AREAS: Record<string, string[]> = {
   ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/repeating-bills", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
   Payroll: ["/operations/payroll"],
+  Farm: ["/operations/farming"],
   Banking: ["/operations/bank-accounts", "/operations/bank-rules", "/operations/exchange-rates", "/operations/fx-revaluation"],
   Reports: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
   Accountant: [
