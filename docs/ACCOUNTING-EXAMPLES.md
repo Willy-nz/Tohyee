@@ -16613,7 +16613,7 @@ refusal test in `livestock-valuation.test.ts`. Decision 509.
   4,310.00 (310.00 non-taxable). Without it, they're refused.
 
 
-## Farming (#249) stage 2: fertiliser plans, applications and costs (answered by Jess 13 Oct 2026; FB3-FB8 revised to match, waiting for approval)
+## Farming (#249) stage 2: fertiliser plans, applications and costs (FB1-FB8 approved by Jess, 13 Oct 2026)
 
 Drafted 13 Oct 2026, before anything is built, as AGENTS.md asks. A
 fertiliser **plan** is a budget and posts nothing. **Buying** fertiliser is
@@ -16694,7 +16694,7 @@ lime, 6320 Fertiliser spreading; and 2100 GST, 2000 Accounts payable.
 
 Answered by Jess, 13 Oct 2026:
 1. **Expense when bought** (not stock until applied). FB3, FB4, FB6 and
-   FB8 were rewritten to match.
+   FB8 were rewritten to match, and Jess approved them as written.
 2. **Tax spreading:** left to the tax return for now.
 3. **Spreading:** shared by hectares across paddocks, for reports only.
 4. **Accounts:** two, 6310 Fertiliser and lime and 6320 Fertiliser
