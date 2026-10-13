@@ -227,7 +227,7 @@ export async function removeAkahuSettings(tx: OrgTx, connectionIdInput?: unknown
   const stopped = await tx.query(
     `update bank_account_settings
         set akahu_account_id = null, akahu_account_name = null, akahu_connection_name = null, akahu_connection_id = null,
-            feed_active = false, updated_at = now()
+            akahu_account_number = null, feed_active = false, updated_at = now()
       where akahu_connection_id = $1`,
     [row.id],
   );
@@ -308,11 +308,29 @@ export async function markAkahuTokenProblem(tx: OrgTx, connectionId: string): Pr
   return message;
 }
 
-/** Links an Akahu account to a bank or credit card account, with the first date to bring in. */
+/**
+ * A bank account number as Akahu formats it, as digits to compare; null when
+ * there isn't a usable one. NZ numbers (bank-branch-account-suffix) have a
+ * 2- or 3-digit suffix for the same account, so the suffix is made 3 digits:
+ * 03-0123-0456789-00 and 03-0123-0456789-000 are the same account.
+ */
+export function akahuAccountNumber(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const nz = /^\s*(\d{2})[\s-]?(\d{4})[\s-]?(\d{7})[\s-]?(\d{2,3})\s*$/.exec(input);
+  if (nz) return `${nz[1]}${nz[2]}${nz[3]}${nz[4].padStart(3, "0")}`;
+  const digits = input.replace(/\D/g, "");
+  return digits.length >= 6 && digits.length <= 34 ? digits : null;
+}
+
+/**
+ * Links an Akahu account to a bank or credit card account, with the first
+ * date to bring in. `accountNumber` is the number Akahu reports for it,
+ * so a joint account seen through two logins can't be linked twice (#257).
+ */
 export async function linkBankFeed(
   tx: OrgTx,
   accountIdInput: unknown,
-  input: { akahuAccountId: unknown; akahuAccountName?: unknown; connectionName?: unknown; startDate: unknown; connectionId?: unknown },
+  input: { akahuAccountId: unknown; akahuAccountName?: unknown; connectionName?: unknown; startDate: unknown; connectionId?: unknown; accountNumber?: unknown },
 ): Promise<void> {
   const accountId = requireId(accountIdInput, "accountId");
   const akahuAccountId = requireString(input.akahuAccountId, "akahuAccountId", { maxLength: 100 });
@@ -326,6 +344,22 @@ export async function linkBankFeed(
     [akahuAccountId, accountId],
   );
   if (taken.rows[0]) throw new ValidationError(`That Akahu account is already linked to ${taken.rows[0].code} ${taken.rows[0].name}.`);
+  // #257: the same bank account through another login, under a different Akahu id, by the account number Akahu reports.
+  const accountNumber = akahuAccountNumber(input.accountNumber);
+  if (accountNumber) {
+    const sameNumber = await tx.query<{ code: string; name: string; login: string | null }>(
+      `select a.code, a.name, c.name as login from bank_account_settings s join accounts a on a.id = s.account_id
+         left join akahu_connections c on c.id = s.akahu_connection_id
+        where s.akahu_account_number = $1 and s.account_id <> $2`,
+      [accountNumber, accountId],
+    );
+    if (sameNumber.rows[0]) {
+      const found = sameNumber.rows[0];
+      throw new ValidationError(
+        `Bank account ${String(input.accountNumber).trim()} is already linked to ${found.code} ${found.name}${found.login ? ` through ${found.login}` : ""}. A joint account only needs linking once.`,
+      );
+    }
+  }
   const other = await tx.query<{ feed: string }>(
     "select 'SimpleFIN' as feed from simplefin_links where account_id = $1 and active union all select 'Stripe' from stripe_links where account_id = $1 and active union all select 'PayPal' from paypal_links where account_id = $1 and active union all select 'Wise' from wise_links where account_id = $1 and active",
     [accountId],
@@ -336,7 +370,7 @@ export async function linkBankFeed(
   await tx.query(
     `update bank_account_settings
         set akahu_account_id = $2, akahu_account_name = $3, akahu_connection_name = $4, feed_start_date = $5,
-            feed_active = true, last_sync_status = 'never', last_sync_error = null, akahu_connection_id = $6, updated_at = now()
+            feed_active = true, last_sync_status = 'never', last_sync_error = null, akahu_connection_id = $6, akahu_account_number = $7, updated_at = now()
       where account_id = $1`,
     [
       accountId,
@@ -345,6 +379,7 @@ export async function linkBankFeed(
       optionalString(input.connectionName, "connectionName", { maxLength: 200 }),
       startDate,
       login.id,
+      accountNumber,
     ],
   );
   await writeAuditEvent(tx, {
@@ -361,7 +396,7 @@ export async function unlinkBankFeed(tx: OrgTx, accountIdInput: unknown): Promis
   const result = await tx.query(
     `update bank_account_settings
         set akahu_account_id = null, akahu_account_name = null, akahu_connection_name = null, akahu_connection_id = null,
-            feed_active = false, updated_at = now()
+            akahu_account_number = null, feed_active = false, updated_at = now()
       where account_id = $1`,
     [accountId],
   );

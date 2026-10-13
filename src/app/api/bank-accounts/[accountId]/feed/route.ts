@@ -31,6 +31,7 @@ export const POST = route<Context>(async (request, context) => {
       connectionName: akahuAccount.connection?.name ?? null,
       startDate: body.startDate,
       connectionId: credentials.connectionId,
+      accountNumber: akahuAccount.formatted_account ?? null,
     }),
   );
   return json({ linked: true }, { status: 201 });

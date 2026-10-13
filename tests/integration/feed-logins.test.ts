@@ -34,7 +34,7 @@ const akahu = {
   requests: [] as Array<{ url: string; app: string; user: string }>,
 };
 
-const ACCOUNTS: Record<string, Array<{ _id: string; name: string }>> = {
+const ACCOUNTS: Record<string, Array<{ _id: string; name: string; formatted_account?: string }>> = {
   jess: [
     { _id: "acc_anz", name: "ANZ Cheque" },
     { _id: "acc_joint", name: "Joint account" },
@@ -118,6 +118,8 @@ describeWithDatabase("several bank feed logins (#182, BK30-BK37)", () => {
       ["1010", "BNZ savings"],
       ["1020", "Joint account"],
       ["1030", "Joint account (Will)"],
+      ["1040", "Westpac joint"],
+      ["1041", "Westpac joint (Will)"],
       ["1050", "Stripe shop"],
       ["1051", "Stripe markets"],
     ]) {
@@ -214,6 +216,23 @@ describeWithDatabase("several bank feed logins (#182, BK30-BK37)", () => {
       status: 400,
       body: { error: "That Akahu account is already linked to 1020 Joint account." },
     });
+  });
+
+  it("#257: the same joint account under a different Akahu id for each login is caught by its bank account number", async () => {
+    // The same Westpac joint account, which each login reports under its own Akahu id.
+    ACCOUNTS.jess.push({ _id: "acc_westpacjess", name: "Westpac Joint", formatted_account: "03-0123-0456789-00" });
+    ACCOUNTS.will.push({ _id: "acc_westpacwill", name: "Westpac Joint", formatted_account: "03-0123-0456789-000" });
+    expect((await link("1040", { akahuAccountId: "acc_westpacjess", connectionId: jess })).status).toBe(201);
+    // Will's login writes the suffix with 3 digits (-000): still the same account.
+    expect(await link("1041", { akahuAccountId: "acc_westpacwill", connectionId: will })).toMatchObject({
+      status: 400,
+      body: { error: "Bank account 03-0123-0456789-000 is already linked to 1040 Westpac joint through Akahu. A joint account only needs linking once." },
+    });
+    // Unlinking 1040 frees the number.
+    expect((await json(await feedRoute.DELETE(apiRequest(`/api/bank-accounts/${ids["1040"]}/feed?organisationId=${org}`, { method: "DELETE", cookie }), params({ accountId: ids["1040"] })))).status).toBe(200);
+    expect((await link("1041", { akahuAccountId: "acc_westpacwill", connectionId: will })).status).toBe(201);
+    ACCOUNTS.jess.pop();
+    ACCOUNTS.will.pop();
   });
 
   it("BK35: removing Will's login stops its feeds and keeps their lines; Jess's login is untouched", async () => {
