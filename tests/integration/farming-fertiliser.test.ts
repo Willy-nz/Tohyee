@@ -25,6 +25,7 @@ import {
   unlinkSpreading,
 } from "@/lib/farming/fertiliser";
 import { addPaddock, saveFarm, setFarmingEnabled, splitPaddock } from "@/lib/farming/paddocks";
+import { addSoilTest } from "@/lib/farming/soil";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
 
 /** Farming stage 2: fertiliser plans, purchases, applications and spreading (#249, FB1-FB8). Each test gets its own organisation. */
@@ -277,6 +278,17 @@ describeWithDatabase("fertiliser planner", () => {
     await w.as((tx) => linkSpreading(tx, plan.id, { billLineId: spreadLine.id, applicationIds: applied.applications.map((app) => app.id) }));
     await w.as((tx) => splitPaddock(tx, w.fourteen.id, { onDate: "2026-11-01", parts: [{ name: "14A", effectiveHa: "9.0" }, { name: "14B", effectiveHa: "6.0" }] }));
 
+    await w.as((tx) =>
+      addSoilTest(tx, {
+        paddockId: w.twelve.id,
+        sampledOn: "2026-08-15",
+        lab: "Hill Labs",
+        results: [
+          { measure: "Olsen P", value: "28", unit: "mg/L" },
+          { measure: "Sulphate S", value: "<1", unit: "mg/kg" },
+        ],
+      }),
+    );
     analysed.push(w.org);
     await w.as(async (tx) => replaceTohyeeTables(w.org, await readBooks(tx)));
     const q = (sql: string) => queryAnalytics(w.org, sql);
@@ -307,6 +319,10 @@ describeWithDatabase("fertiliser planner", () => {
     ).toEqual([
       { kind: "product", net: "2730.00", links: 1 },
       { kind: "spreading", net: "875.00", links: 2 },
+    ]);
+    expect(await q("select paddock, measure, value::varchar as value, value_as_reported, unit from tohyee_farm_soil_results order by measure")).toEqual([
+      { paddock: "12", measure: "Olsen P", value: "28.0000", value_as_reported: "28", unit: "mg/L" },
+      { paddock: "12", measure: "Sulphate sulphur", value: null, value_as_reported: "<1", unit: "mg/kg" },
     ]);
     const shape = await q("select boundary_geojson from tohyee_farm_paddocks where paddock = '12'");
     expect(shape[0].boundary_geojson).toBeNull();

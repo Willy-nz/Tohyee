@@ -13,6 +13,7 @@ export const RECORD_TYPES = [
   "fixed_asset",
   "livestock_election",
   "project_visit",
+  "soil_test",
 ] as const;
 export type RecordType = (typeof RECORD_TYPES)[number];
 
@@ -27,6 +28,7 @@ export const RECORD_TYPE_SLUGS: Readonly<Record<RecordType, string>> = {
   fixed_asset: "fixed-asset",
   livestock_election: "livestock-election",
   project_visit: "visit",
+  soil_test: "soil-test",
 };
 
 export function recordTypeFromSlug(slug: string): RecordType | null {
