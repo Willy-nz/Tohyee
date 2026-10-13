@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useMemo, useState } from "react";
 import { daysBefore } from "@/components/bank/common";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -285,7 +286,7 @@ function LinkForm({
           </select>
         </Field>
         <Field label="Bring in transactions from" hint="The first sync goes back to this date, as far as the bank allows.">
-          <input type="date" value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
+          <DateInput value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
         <Field label="The bank's time zone" hint="SimpleFIN gives a time, not a date: this decides which day each line is on.">
           <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { todayInBrowser } from "@/lib/format";
@@ -28,7 +29,7 @@ function AccountantPack({ organisationId }: { organisationId: string }) {
     >
       <div className={ui.inlineForm}>
         <Field label="Financial year ending" hint="The last day of the year">
-          <input type="date" value={chosen} onChange={(event) => setYearEnd(event.target.value || null)} />
+          <DateInput value={chosen} onChange={(event) => setYearEnd(event.target.value || null)} />
         </Field>
         <a className={ui.button} href={href} download>
           Download ZIP

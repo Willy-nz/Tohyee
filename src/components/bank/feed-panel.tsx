@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { daysBefore, FeedBadge } from "@/components/bank/common";
@@ -101,7 +102,7 @@ function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: s
           label="Bring in transactions from"
           hint="The first sync goes back to this date, as far as Akahu and the bank allow. Akahu's default is up to 2 years, but some banks give less (Akahu lists ASB at 12 months, Kiwibank credit cards at 180 days, SBS at about 6 months). Lines already imported from files are skipped or flagged as possible duplicates."
         >
-          <input type="date" value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
+          <DateInput value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
       </div>
       <div className={ui.actions}>

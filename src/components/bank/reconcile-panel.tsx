@@ -26,7 +26,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
 import type { LineConfidence } from "@/lib/bank/confident";
-import type { LineSuggestions } from "@/lib/bank/reconcile";
+import type { LineSuggestions, TransferCandidate } from "@/lib/bank/reconcile";
 import type { BillSummary } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
@@ -953,6 +953,7 @@ function TransferForm({
   line,
   accounts,
   baseCurrency,
+  candidates,
   submit,
   busy,
 }: {
@@ -960,12 +961,15 @@ function TransferForm({
   line: StatementLine;
   accounts: Account[];
   baseCurrency: string;
+  /** Lines on the organisation's other accounts that look like the other side (#258). */
+  candidates: TransferCandidate[];
   submit: Submit;
   busy: boolean;
 }) {
   const moneyIn = !line.amount.startsWith("-");
   const unsigned = line.amount.replace(/^-/, "");
-  const [other, setOther] = useState("");
+  const [otherLineId, setOtherLineId] = useState(candidates[0]?.lineId ?? "");
+  const [other, setOther] = useState(candidates[0]?.accountCode ?? "");
   const [otherAmount, setOtherAmount] = useState("");
   const [reference, setReference] = useState(line.reference ?? "");
   const currencyOf = (candidate: Account) => candidate.currencyCode ?? baseCurrency;
@@ -977,10 +981,12 @@ function TransferForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        const chosen = candidates.find((candidate) => candidate.lineId === otherLineId && candidate.accountCode === other);
         void submit({
           kind: "transfer",
           otherAccountCode: other,
           ...(across ? { otherAmount: otherAmount.trim() } : {}),
+          ...(chosen ? { otherLineId: chosen.lineId } : {}),
           reference: reference || undefined,
         });
       }}
@@ -989,8 +995,31 @@ function TransferForm({
     >
       <p className={ui.muted}>
         Money moved {moneyIn ? "in from" : "out to"} another of your accounts, such as a credit card repayment or a move to savings.
-        When the other account&apos;s statement shows the same transfer, match it there.
+        {candidates.length > 0 ? null : " When the other account's statement shows the same transfer, match it there."}
       </p>
+      {candidates.length > 0 ? (
+        <fieldset style={{ display: "grid", gap: 6, border: 0, padding: 0, margin: 0 }}>
+          <legend style={{ fontWeight: 600, marginBottom: 4 }}>The other side, on your other accounts</legend>
+          {candidates.map((candidate) => (
+            <label key={candidate.lineId} className={ui.checkbox}>
+              <input
+                type="radio"
+                name={`transfer-${line.id}`}
+                checked={otherLineId === candidate.lineId}
+                onChange={() => {
+                  setOtherLineId(candidate.lineId);
+                  setOther(candidate.accountCode);
+                }}
+              />{" "}
+              {candidate.accountCode} {candidate.accountName}: {formatDate(candidate.date)}, {formatMoney(candidate.amount)}
+              {candidate.description ? ` · ${candidate.description}` : ""}
+            </label>
+          ))}
+          <label className={ui.checkbox}>
+            <input type="radio" name={`transfer-${line.id}`} checked={otherLineId === ""} onChange={() => setOtherLineId("")} /> None of these: choose the account
+          </label>
+        </fieldset>
+      ) : null}
       <div className={ui.grid2}>
         <Field label={moneyIn ? "From account" : "To account"}>
           <AccountSelect
@@ -1024,7 +1053,7 @@ function TransferForm({
       ) : null}
       <div className={ui.actions}>
         <Button type="submit" disabled={busy || !other || (across && !isDecimalString(otherAmount.trim()))}>
-          {busy ? "Reconciling…" : "Save transfer and reconcile"}
+          {busy ? "Reconciling…" : otherLineId && candidates.some((candidate) => candidate.lineId === otherLineId && candidate.accountCode === other) ? "Save transfer and reconcile both lines" : "Save transfer and reconcile"}
         </Button>
       </div>
     </form>
@@ -1071,7 +1100,9 @@ function LineReconciler({
       ? "match"
       : suggestions.documents.length > 0
         ? "payments"
-        : suggestions.rule
+        : suggestions.transfers.length > 0
+          ? "transfer"
+          : suggestions.rule
           ? "bank_transaction"
           : suggestions.matches.length > 0
             ? "match"
@@ -1081,7 +1112,7 @@ function LineReconciler({
     { mode: "split", label: "Part of one transaction" },
     { mode: "payments", label: moneyIn ? "Customer payment" : "Pay bills" },
     { mode: "bank_transaction", label: moneyIn ? "Receive money" : "Spend money" },
-    { mode: "transfer", label: "Transfer" },
+    { mode: "transfer", label: `Transfer${suggestions.transfers.length ? ` (${suggestions.transfers.length})` : ""}` },
   ];
 
   return (
@@ -1130,7 +1161,15 @@ function LineReconciler({
         />
       ) : null}
       {mode === "transfer" ? (
-        <TransferForm account={account} line={line} accounts={lookups.accounts} baseCurrency={lookups.baseCurrency} submit={submit} busy={busy} />
+        <TransferForm
+          account={account}
+          line={line}
+          accounts={lookups.accounts}
+          baseCurrency={lookups.baseCurrency}
+          candidates={suggestions.transfers}
+          submit={submit}
+          busy={busy}
+        />
       ) : null}
       <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
         <Button variant="secondary" size="small" onClick={() => void exclude()} disabled={busy}>

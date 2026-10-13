@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { daysBefore } from "@/components/bank/common";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -257,7 +258,7 @@ function LinkForm({
           </select>
         </Field>
         <Field label="Bring in transactions from" hint="The first sync goes back to this date.">
-          <input type="date" value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
+          <DateInput value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
       </div>
       <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
