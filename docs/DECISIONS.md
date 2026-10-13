@@ -4589,3 +4589,17 @@ testing) and #154's code signing (later, Jess).
        browser.
      - **Existing links:** these have no number until they're linked again,
        so they're only checked by Akahu id.
+
+524. **Balance sheet current and non-current subtotals** (14 October 2026,
+     #259).
+     - **What changed:** the balance sheet splits assets and liabilities
+       into current and non-current, each with a subtotal, and shows net
+       assets (total assets less total liabilities). The accountant pack's
+       balance sheet CSV does the same. Worked example P4, not yet approved.
+     - **How accounts are split:** by account type. Bank, current asset,
+       inventory, credit card and current liability are current. Fixed
+       asset, non-current asset and non-current liability are non-current.
+       To move an account, change its type.
+     - **Totals:** no total changes, only the layout.
+     - **Dates:** the report page's date boxes now use the keyboard date
+       field (decision 519), so they show dd/mm/yyyy.

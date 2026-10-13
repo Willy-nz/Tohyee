@@ -48,6 +48,21 @@ function sectionRows(heading: string, sections: Section[], total: string): Repor
   return rows;
 }
 
+/** Assets or liabilities with current and non-current subtotals (P4). */
+function termRows(heading: string, group: { total: string; current: { sections: Section[]; total: string }; nonCurrent: { sections: Section[]; total: string } }): ReportExportRow[] {
+  const noun = heading.toLowerCase();
+  const rows: ReportExportRow[] = [row([text(heading), text(""), text("")], "section")];
+  for (const [label, part] of [[`Current ${noun}`, group.current], [`Non-current ${noun}`, group.nonCurrent]] as const) {
+    if (part.sections.length === 0) continue;
+    for (const section of part.sections) {
+      for (const line of section.lines) rows.push(row([text(line.code), text(line.name), amount(line.amount)]));
+    }
+    rows.push(row([text(""), text(`Total ${label.toLowerCase()}`), amount(part.total)]));
+  }
+  rows.push(row([text(""), text(`Total ${noun}`), amount(group.total)], "total"));
+  return rows;
+}
+
 export type AccountantPack = { fileName: string; bytes: Buffer; files: string[] };
 
 /** Builds the pack for the financial year ending `yearEnd` (YYYY-MM-DD). */
@@ -115,8 +130,9 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
         {
           columns: ["Code", "Account", "Amount"],
           rows: [
-            ...sectionRows("Assets", bs.assets.sections, bs.assets.total),
-            ...sectionRows("Liabilities", bs.liabilities.sections, bs.liabilities.total),
+            ...termRows("Assets", bs.assets),
+            ...termRows("Liabilities", bs.liabilities),
+            row([text(""), text("Net assets"), amount(bs.netAssets)], "total"),
             row([text("Equity"), text(""), text("")], "section"),
             ...bs.equity.sections.flatMap((section) => section.lines.map((line) => row([text(line.code), text(line.name), amount(line.amount)]))),
             row([text(bs.equity.retainedEarnings.account?.code ?? ""), text("Retained earnings"), amount(bs.equity.retainedEarnings.total)]),

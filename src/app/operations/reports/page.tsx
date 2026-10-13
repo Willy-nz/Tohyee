@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useState } from "react";
@@ -21,6 +22,8 @@ import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/
 type Line = { accountId: string; code: string; name: string; amount: string };
 type Section = { key: string; label: string; lines: Line[]; total: string };
 type Group = { sections: Section[]; total: string };
+/** A balance sheet group, with current and non-current subtotals (P4). */
+type TermGroup = Group & { current: Group; nonCurrent: Group };
 type Drilldown = {
   from?: string | null;
   to: string;
@@ -62,8 +65,9 @@ type BalanceSheet = {
   asAt: string;
   financialYearStart: string;
   currencyCode: string;
-  assets: Group;
-  liabilities: Group;
+  assets: TermGroup;
+  liabilities: TermGroup;
+  netAssets: string;
   equity: Group & {
     retainedEarnings: { account: { id: string; code: string; name: string } | null; accountBalance: string; previousYearsEarnings: string; total: string };
     previousYearsEarnings: string;
@@ -89,6 +93,60 @@ type Valuation = {
   inventoryAccountCode: string | null;
   inventoryAccountBalance: string;
 };
+
+/** Assets or liabilities: current, then non-current, each with its subtotal, then the group total. */
+function TermGroupRows({ title, group, drilldown }: { title: string; group: TermGroup; drilldown: Drilldown }) {
+  const noun = title.toLowerCase();
+  const part = (label: string, part: Group) => (
+    <>
+      <tr>
+        <td className={ui.muted} colSpan={2}>
+          {label}
+        </td>
+      </tr>
+      {part.sections.flatMap((section) =>
+        section.lines.map((line) => (
+          <tr key={line.accountId} className={ui.reportSection}>
+            <td>
+              {line.code} · {line.name}
+            </td>
+            <td className={ui.num}>
+              <AccountAmount accountId={line.accountId} value={line.amount} drilldown={drilldown} />
+            </td>
+          </tr>
+        )),
+      )}
+      <tr>
+        <td>Total {label.toLowerCase()}</td>
+        <td className={ui.num}>
+          <Money value={part.total} />
+        </td>
+      </tr>
+    </>
+  );
+  return (
+    <>
+      <tr className={ui.reportHeading}>
+        <td colSpan={2}>{title}</td>
+      </tr>
+      {group.sections.length === 0 ? (
+        <tr>
+          <td className={ui.muted} colSpan={2}>
+            Nothing at this date.
+          </td>
+        </tr>
+      ) : null}
+      {group.current.sections.length > 0 ? part(`Current ${noun}`, group.current) : null}
+      {group.nonCurrent.sections.length > 0 ? part(`Non-current ${noun}`, group.nonCurrent) : null}
+      <tr className={ui.reportTotal}>
+        <td>Total {noun}</td>
+        <td className={ui.num}>
+          <Money value={group.total} />
+        </td>
+      </tr>
+    </>
+  );
+}
 
 function GroupRows({ title, group, totalLabel, drilldown }: { title: string; group: Group; totalLabel: string; drilldown?: Drilldown }) {
   return (
@@ -275,7 +333,7 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   const report = useApiData<TrialBalance>("/api/reports/trial-balance", { organisationId, asAt });
   const drilldown = report.data ? { from: report.data.financialYearStart, to: report.data.asAt } : null;
   return (
-    <Card title="Trial balance" actions={<Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>}>
+    <Card title="Trial balance" actions={<Field label="As at"><DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>}>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
@@ -383,14 +441,13 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
       actions={
         <div className={ui.inlineForm}>
           <Field label="From">
-            <input
-              type="date"
+            <DateInput
               value={from ?? shown.data?.from ?? ""}
               onChange={(event) => setFrom(event.target.value || null)}
             />
           </Field>
           <Field label="To">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
           {categories.length > 0 ? (
             <Field label="Split by">
@@ -454,7 +511,7 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
   const report = useApiData<BalanceSheet>("/api/reports/balance-sheet", { organisationId, asAt });
   const drilldown = report.data ? { from: report.data.financialYearStart, to: report.data.asAt } : null;
   return (
-    <Card title="Balance sheet" actions={<Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>}>
+    <Card title="Balance sheet" actions={<Field label="As at"><DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>}>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
@@ -469,18 +526,14 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
           <div className={ui.tableWrap}>
             <table id="balance-sheet-report" className={ui.table}>
             <tbody>
-              <GroupRows
-                title="Assets"
-                group={report.data.assets}
-                totalLabel="Total assets"
-                drilldown={drilldown!}
-              />
-              <GroupRows
-                title="Liabilities"
-                group={report.data.liabilities}
-                totalLabel="Total liabilities"
-                drilldown={drilldown!}
-              />
+              <TermGroupRows title="Assets" group={report.data.assets} drilldown={drilldown!} />
+              <TermGroupRows title="Liabilities" group={report.data.liabilities} drilldown={drilldown!} />
+              <tr className={ui.reportTotal}>
+                <td>Net assets</td>
+                <td className={ui.num}>
+                  <Money value={report.data.netAssets} />
+                </td>
+              </tr>
               <tr className={ui.reportHeading}>
                 <td colSpan={2}>Equity</td>
               </tr>
