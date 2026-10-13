@@ -23,6 +23,8 @@ export type Modules = {
   gst: boolean;
   /** Livestock (#221), part of Accounting. */
   livestock?: boolean;
+  /** Farming (#249): farms, paddocks and maps; needs Accounting. */
+  farming?: boolean;
   /** Accounting (#181, MOD2): false only when it's been turned off; left out means on. */
   accounting?: boolean;
 };
@@ -56,6 +58,7 @@ export function useModules(organisationId: string | null): Modules | null {
     gst: settings.data.settings.gstRegistered,
     accounting: settings.data.settings.accountingEnabled,
     livestock: settings.data.settings.accountingEnabled && settings.data.settings.livestockEnabled,
+    farming: settings.data.settings.accountingEnabled && settings.data.settings.farmingEnabled,
   };
 }
 
@@ -156,6 +159,20 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
   const current = settings.data?.settings;
   const accountingOn = current?.accountingEnabled !== false;
   const livestockOn = current?.livestockEnabled === true;
+  const farmingOn = current?.farmingEnabled === true;
+  async function toggleFarming(on: boolean) {
+    setBusy("farming");
+    setError(null);
+    try {
+      await api("/api/farming/settings", { method: "PATCH", body: { organisationId, enabled: !on } });
+      settings.reload();
+      window.dispatchEvent(new Event(CHANGED));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
   async function toggleLivestock(on: boolean) {
     setBusy("livestock");
     setError(null);
@@ -212,8 +229,8 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
               <td>
                 <strong>Livestock</strong>
                 <div className={ui.muted}>
-                  Part of Accounting, for farms: dairy cattle, beef cattle and sheep by IRD&apos;s classes, head counts, and the year-end valuation under the herd scheme or
-                  national standard cost, with its journal.
+                  Part of Accounting, for farms: dairy and beef cattle, sheep, deer and goats by IRD&apos;s classes, head counts, and the year-end valuation under the herd
+                  scheme or national standard cost, with its journal.
                 </div>
                 {livestockOn && accountingOn ? (
                   <div className={ui.actions}>
@@ -228,6 +245,26 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
               <td className={ui.num}>
                 <Button variant={livestockOn ? "secondary" : "primary"} size="small" disabled={!current || busy !== null || !accountingOn} onClick={() => void toggleLivestock(livestockOn)}>
                   {busy === "livestock" ? "Saving…" : livestockOn ? "Turn off Livestock" : "Turn on Livestock"}
+                </Button>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>Farming</strong>
+                <div className={ui.muted}>
+                  Part of Accounting, for farms: farms and paddocks with their boundaries and effective areas, imported from GeoJSON, on a map. Splits and merges keep
+                  each paddock&apos;s history.
+                </div>
+                {farmingOn && accountingOn ? (
+                  <div className={ui.actions}>
+                    <Link href="/operations/farming">Farms and paddocks</Link>
+                  </div>
+                ) : null}
+              </td>
+              <td>{!accountingOn ? <Badge>Needs Accounting</Badge> : farmingOn ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>}</td>
+              <td className={ui.num}>
+                <Button variant={farmingOn ? "secondary" : "primary"} size="small" disabled={!current || busy !== null || !accountingOn} onClick={() => void toggleFarming(farmingOn)}>
+                  {busy === "farming" ? "Saving…" : farmingOn ? "Turn off Farming" : "Turn on Farming"}
                 </Button>
               </td>
             </tr>

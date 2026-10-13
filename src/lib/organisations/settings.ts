@@ -47,6 +47,8 @@ export type OrganisationSettings = {
   notForProfitEnabled: boolean;
   /** Livestock (#221), part of Accounting; turned on in Modules or Livestock settings. */
   livestockEnabled: boolean;
+  /** Farming (#249): farms, paddocks and maps; turned on in Modules. */
+  farmingEnabled: boolean;
   /** Whether stock may go below zero (ST9-ST12); off by default. */
   allowNegativeStock: boolean;
   /** NetSuite's "Foreign Trade" (EX3, EX4): overseas customers' new sales lines start with the tax code for exports. Off by default. */
@@ -83,6 +85,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     analytics_enabled: boolean;
     not_for_profit_enabled: boolean;
     livestock_enabled: boolean;
+    farming_enabled: boolean;
     allow_negative_stock: boolean;
     foreign_trade: boolean;
     export_tax_code: string | null;
@@ -98,6 +101,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
             foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
             postal_address, gst_number, gst_registered, gst_registered_from::text, gst_registered_until::text, payment_details,
             coalesce((select enabled from livestock_settings where id = true), false) as livestock_enabled,
+            coalesce((select enabled from farming_settings where id = true), false) as farming_enabled,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
   );
@@ -118,6 +122,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     analyticsEnabled: row.analytics_enabled,
     notForProfitEnabled: row.not_for_profit_enabled,
     livestockEnabled: row.livestock_enabled,
+    farmingEnabled: row.farming_enabled,
     allowNegativeStock: row.allow_negative_stock,
     foreignTrade: row.foreign_trade,
     exportTaxCode: row.export_tax_code,
@@ -276,6 +281,8 @@ export async function updateOrganisationSettings(
     notForProfitEnabled = false;
     // Livestock is part of Accounting too; its records are kept.
     await tx.query("update livestock_settings set enabled = false where id = true and enabled");
+    // So is Farming; its farms and paddocks are kept.
+    await tx.query("update farming_settings set enabled = false where id = true and enabled");
   }
   if (input.allowNegativeStock !== undefined && typeof input.allowNegativeStock !== "boolean") {
     throw new ValidationError("allowNegativeStock must be true or false.");
