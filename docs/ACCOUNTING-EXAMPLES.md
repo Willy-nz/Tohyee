@@ -16699,3 +16699,13 @@ Answered by Jess, 13 Oct 2026:
 3. **Spreading:** shared by hectares across paddocks, for reports only.
 4. **Accounts:** two, 6310 Fertiliser and lime and 6320 Fertiliser
    spreading.
+
+**Built** (13 Oct 2026, tenant migration 0134): `src/lib/farming/fertiliser.ts`.
+`tests/integration/farming-fertiliser.test.ts` reproduces FB2-FB8 figure for
+figure, and checks that no journal is posted by plans, links, applications or
+spreading.
+
+One rule isn't covered by these examples. An application with a spreading
+bill linked to it can't be removed until the spreading is unlinked. Removing
+it would otherwise move its share onto the other paddocks without anyone
+choosing that.
