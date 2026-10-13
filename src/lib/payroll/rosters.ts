@@ -1,6 +1,9 @@
 import { writeAuditEvent } from "@/lib/audit";
-import { isoDateAt, parseIsoDate } from "@/lib/dates";
+import { businessTimeZone, isoDateAt, parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { splitAddresses } from "@/lib/email/addresses";
+import { readSendingAccount } from "@/lib/email/settings";
+import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays } from "@/lib/financial-year";
 import { add, dec, type Decimal, divide, mul, parseDecimalInput, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -94,7 +97,7 @@ export type Unavailability = {
 
 export type MyShift = { areaName: string; date: string; startsAt: string; endsAt: string; breakMinutes: number; hours: string; publishedAt: string };
 
-type PublishedShift = { id: string; employeeId: string; startsAt: string; endsAt: string; breakMinutes: number };
+export type PublishedShift = { id: string; employeeId: string; startsAt: string; endsAt: string; breakMinutes: number };
 
 const money = (value: Decimal) => toFixedString(value, 2);
 
@@ -347,7 +350,8 @@ export async function getRosterWeek(tx: OrgTx, input: { areaId: unknown; weekSta
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const roster = (
     await tx.query<{ id: string; published_at: string | null; published_by_email: string | null; published_shifts: PublishedShift[] | null }>(
-      "select id::text, published_at::text, published_by_email, published_shifts from payroll_rosters where area_id = $1 and week_start = $2",
+      `select id::text, to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at, published_by_email, published_shifts
+       from payroll_rosters where area_id = $1 and week_start = $2`,
       [area.id, weekStart],
     )
   ).rows[0];
@@ -559,12 +563,67 @@ export async function removeShift(tx: OrgTx, idInput: unknown): Promise<RosterWe
   return getRosterWeek(tx, { areaId: found.area_id, weekStart: found.week_start });
 }
 
-/** Publishes the week (RS4): employees see these shifts; later changes are listed until it's published again. */
-export async function publishRoster(tx: OrgTx, input: { areaId: unknown; weekStart: unknown }): Promise<RosterWeek> {
+export type RosterEmailResult = {
+  /** Who was emailed their shifts. */
+  emailed: string[];
+  /** Who wasn't, and why (no email address, or email isn't set up). */
+  notEmailed: Array<{ name: string; reason: string }>;
+};
+
+const SHIFT_DAY = new Intl.DateTimeFormat("en-NZ", { timeZone: businessTimeZone(), weekday: "long", day: "numeric", month: "long" });
+const SHIFT_TIME = new Intl.DateTimeFormat("en-NZ", { timeZone: businessTimeZone(), hour: "numeric", minute: "2-digit", hour12: true });
+
+function shiftLine(shift: PublishedShift): string {
+  const time = (iso: string) => SHIFT_TIME.format(new Date(iso)).replace(/\s/g, "").toLowerCase();
+  const breakText = shift.breakMinutes > 0 ? ` (${shift.breakMinutes} min unpaid break)` : "";
+  return `- ${SHIFT_DAY.format(new Date(shift.startsAt))}, ${time(shift.startsAt)} to ${time(shift.endsAt)}${breakText}`;
+}
+
+/**
+ * The email telling an employee their shifts for the week (RS4): their own
+ * shifts only, in the business time zone, and never any pay figures.
+ */
+export function rosterEmailText(input: {
+  firstName: string;
+  employer: string;
+  areaName: string;
+  weekStart: string;
+  shifts: PublishedShift[];
+  changed: boolean;
+  hasLogin: boolean;
+}): { subject: string; body: string } {
+  const week = new Intl.DateTimeFormat("en-NZ", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${input.weekStart}T00:00:00Z`));
+  const subject = `${input.changed ? "Your shifts have changed" : "Your shifts"}: ${input.areaName}, week starting ${week}`.slice(0, 250);
+  const lines = [`Kia ora ${input.firstName},`, ""];
+  if (input.shifts.length === 0) {
+    lines.push(`You no longer have any shifts at ${input.areaName} in the week starting ${week}.`);
+  } else {
+    lines.push(`${input.changed ? "Your shifts have changed. They are now" : "Your shifts"} at ${input.areaName} for the week starting ${week}:`, "", ...input.shifts.map(shiftLine));
+  }
+  if (input.hasLogin) lines.push("", "You can also see them in Tohyee under Payroll > My shifts.");
+  lines.push("", input.employer);
+  return { subject, body: lines.join("\n").slice(0, 5000) };
+}
+
+function sameShifts(a: PublishedShift[], b: PublishedShift[]): boolean {
+  const key = (list: PublishedShift[]) => JSON.stringify(list.map((shift) => [shift.startsAt, shift.endsAt, shift.breakMinutes]).sort());
+  return key(a) === key(b);
+}
+
+/**
+ * Publishes the week (RS4): employees see these shifts; later changes are
+ * listed until it's published again. With `emailStaff`, each employee whose
+ * shifts are new or changed by this publish is emailed them (the first
+ * publish emails everyone on it; a later one only those whose shifts
+ * changed, including anyone taken off). Sent by the email job.
+ */
+export async function publishRoster(tx: OrgTx, input: { areaId: unknown; weekStart: unknown; emailStaff?: unknown }): Promise<RosterWeek & { emails: RosterEmailResult | null }> {
   const area = await findArea(tx, input.areaId);
   const weekStart = await rosterWeekStart(tx, input.weekStart);
   const rosterId = await rosterFor(tx, area.id, weekStart);
-  await tx.query("select 1 from payroll_rosters where id = $1 for update", [rosterId]);
+  if (input.emailStaff !== undefined && typeof input.emailStaff !== "boolean") throw new ValidationError("emailStaff must be true or false.");
+  const before = await tx.query<{ published_shifts: PublishedShift[] | null }>("select published_shifts from payroll_rosters where id = $1 for update", [rosterId]);
+  const previous = before.rows[0].published_shifts;
   const shifts: PublishedShift[] = (await loadShifts(tx, rosterId)).map((row) => ({
     id: row.id,
     employeeId: row.employee_id,
@@ -572,17 +631,63 @@ export async function publishRoster(tx: OrgTx, input: { areaId: unknown; weekSta
     endsAt: new Date(row.ends_at).toISOString(),
     breakMinutes: row.break_minutes,
   }));
-  if (shifts.length === 0) {
-    const before = await tx.query<{ published_at: string | null }>("select published_at::text from payroll_rosters where id = $1", [rosterId]);
-    if (!before.rows[0].published_at) throw new ValidationError("Add shifts before publishing.");
+  if (shifts.length === 0 && !previous) throw new ValidationError("Add shifts before publishing.");
+  const published = await tx.query<{ published_at: string }>(
+    "update payroll_rosters set published_at = now(), published_by_email = $2, published_shifts = $3::jsonb where id = $1 returning published_at::text",
+    [rosterId, tx.actor.email, JSON.stringify(shifts)],
+  );
+  let emails: RosterEmailResult | null = null;
+  if (input.emailStaff === true) {
+    const ids = [...new Set([...shifts, ...(previous ?? [])].map((shift) => shift.employeeId))];
+    const mine = (list: PublishedShift[] | null, id: string) => (list ?? []).filter((shift) => shift.employeeId === id);
+    const changed = ids.filter((id) => !previous || !sameShifts(mine(previous, id), mine(shifts, id)));
+    emails = { emailed: [], notEmailed: [] };
+    if (changed.length > 0) {
+      const people = await tx.query<{ id: string; first_name: string; name: string; email: string | null; user_id: string | null }>(
+        "select id::text, first_name, first_name || ' ' || last_name as name, email, user_id::text from payroll_employees where id = any($1::uuid[]) order by first_name, last_name",
+        [changed],
+      );
+      let emailReady = true;
+      try {
+        await readSendingAccount(tx);
+      } catch {
+        emailReady = false;
+      }
+      const employer = (await getOrganisationSettings(tx)).displayName;
+      for (const person of people.rows) {
+        const to = splitAddresses([person.email ?? ""]).addresses[0];
+        if (!emailReady) {
+          emails.notEmailed.push({ name: person.name, reason: "Email isn't set up for this organisation (Settings > Email)." });
+          continue;
+        }
+        if (!to) {
+          emails.notEmailed.push({ name: person.name, reason: "No email address. Add it under Payroll > Employees." });
+          continue;
+        }
+        const text = rosterEmailText({
+          firstName: person.first_name,
+          employer,
+          areaName: area.name,
+          weekStart,
+          shifts: mine(shifts, person.id),
+          changed: Boolean(previous),
+          hasLogin: person.user_id !== null,
+        });
+        await tx.query(
+          "insert into roster_emails (roster_id, published_at, employee_id, to_email, subject, body) values ($1, $2, $3, $4, $5, $6) on conflict do nothing",
+          [rosterId, published.rows[0].published_at, person.id, to, text.subject, text.body],
+        );
+        emails.emailed.push(person.name);
+      }
+    }
   }
-  await tx.query("update payroll_rosters set published_at = now(), published_by_email = $2, published_shifts = $3::jsonb where id = $1", [
-    rosterId,
-    tx.actor.email,
-    JSON.stringify(shifts),
-  ]);
-  await writeAuditEvent(tx, { eventType: "payroll_roster.published", entityType: "payroll_roster", entityId: rosterId, details: { areaId: area.id, weekStart, shifts: shifts.length } });
-  return getRosterWeek(tx, { areaId: area.id, weekStart });
+  await writeAuditEvent(tx, {
+    eventType: "payroll_roster.published",
+    entityType: "payroll_roster",
+    entityId: rosterId,
+    details: { areaId: area.id, weekStart, shifts: shifts.length, emailed: emails?.emailed.length ?? 0 },
+  });
+  return { ...(await getRosterWeek(tx, { areaId: area.id, weekStart })), emails };
 }
 
 /** The signed-in person's published shifts (RS4), from the employee record linked to their login. No payroll access needed. */

@@ -15748,7 +15748,7 @@ Tests: `tests/integration/payroll-rosters.test.ts`. Decision 511. Payroll >
 Rosters needs payroll access, because it shows pay; Payroll > My shifts is
 for anyone whose login is linked to their employee record.
 
-- **The weekly budget (interpreted, please check):** RS1 says the shop has
+- **The weekly budget (Jess, 14 Oct 2026: keep typing it):** RS1 says the shop has
   "800.00 a week (WB)", but workforce budgets (WB1-WB7) are monthly, by
   account and Department. Rather than guess a monthly-to-weekly split, an
   **area** (such as "Shop") has its own weekly roster budget, typed on the
@@ -15772,8 +15772,19 @@ for anyone whose login is linked to their employee record.
 - **RS4:** publishing keeps a copy of the week's shifts; that's what
   employees see under My shifts. Later changes are listed ("Changed since
   published") and employees keep seeing the published times until
-  **Publish changes**. Not done: telling employees by email or
-  notification when a roster is published.
+  **Publish changes**.
+- **RS4, emailing staff** (added 14 Oct 2026, decision 518): with "Email
+  staff their shifts" ticked, publishing emails Aroha:
+  - Subject: "Your shifts: Shop, week starting Monday, 19 October 2026".
+  - Body: her own shifts in the business time zone, for example
+    "Saturday, 24 October, 9:00am to 5:00pm (30 min unpaid break)", and,
+    since she has a login, a pointer to My shifts. No pay figures.
+  - On "Publish changes", only people whose shifts changed are emailed
+    ("Your shifts have changed"). Someone taken off is told "You no longer
+    have any shifts at Shop in the week starting ...".
+  - Anyone with no email address, or with the organisation's email not set
+    up, is listed as not emailed. Sent by the email job, with retries, like
+    approval emails.
 
 #### Built: how RS5-RS8 came out
 

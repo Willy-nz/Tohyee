@@ -6,9 +6,9 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Field, Notice, Stat, ui, WarningNote } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import type { EmployeeSummary } from "@/lib/payroll/employees";
-import type { MyShift, RosterArea, RosterShift, RosterWeek, Unavailability } from "@/lib/payroll/rosters";
+import type { MyShift, RosterArea, RosterEmailResult, RosterShift, RosterWeek, Unavailability } from "@/lib/payroll/rosters";
 
 /**
  * Rosters inside Payroll (examples RS1-RS4): an area's week of shifts, their
@@ -165,6 +165,8 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
   const loaded = useApiData<{ roster: RosterWeek }>("/api/payroll/rosters", { organisationId, areaId, weekStart: weekOf });
   const employees = useApiData<{ employees: EmployeeSummary[] }>("/api/payroll/employees", { organisationId });
   const [updated, setUpdated] = useState<RosterWeek | null>(null);
+  const [emailStaff, setEmailStaff] = useState(true);
+  const [emailedFor, setEmailed] = useState<{ weekStart: string; result: RosterEmailResult } | null>(null);
   const roster = updated ?? loaded.data?.roster ?? null;
   const { busy, error, run } = useRun();
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
@@ -174,9 +176,14 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
     void run(() => api<{ roster: RosterWeek }>(`/api/payroll/rosters/shifts/${shift.id}`, { method: "DELETE", body: { organisationId } }), (result) => setUpdated(result.roster));
   };
   const publish = () =>
-    void run(() => api<{ roster: RosterWeek }>("/api/payroll/rosters/publish", { method: "POST", body: { organisationId, areaId, weekStart: roster.weekStart } }), (result) =>
-      setUpdated(result.roster),
+    void run(
+      () => api<{ roster: RosterWeek & { emails: RosterEmailResult | null } }>("/api/payroll/rosters/publish", { method: "POST", body: { organisationId, areaId, weekStart: roster.weekStart, emailStaff } }),
+      (result) => {
+        setUpdated(result.roster);
+        setEmailed(result.roster.emails ? { weekStart: result.roster.weekStart, result: result.roster.emails } : null);
+      },
     );
+  const emailed = emailedFor && emailedFor.weekStart === roster.weekStart ? emailedFor.result : null;
   const over = roster.remaining !== null && roster.remaining.startsWith("-");
   return (
     <>
@@ -184,7 +191,7 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
         title={`${roster.area.name}: week of ${formatDate(roster.weekStart)}`}
         description={
           roster.publishedAt
-            ? `Published ${formatDate(roster.publishedAt.slice(0, 10))} by ${roster.publishedByEmail}. Employees see the published shifts.`
+            ? `Published ${formatDateTime(roster.publishedAt)} by ${roster.publishedByEmail}. Employees see the published shifts.`
             : "Not published yet: employees don't see these shifts."
         }
         actions={
@@ -230,7 +237,25 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
           <Button onClick={publish} disabled={busy || (roster.publishedAt !== null && roster.changes.length === 0) || (roster.publishedAt === null && roster.shifts.length === 0)}>
             {roster.publishedAt ? "Publish changes" : "Publish"}
           </Button>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={emailStaff} onChange={(event) => setEmailStaff(event.target.checked)} />{" "}
+            {roster.publishedAt ? "Email staff whose shifts changed" : "Email staff their shifts"}
+          </label>
         </div>
+        {emailed ? (
+          <Notice tone={emailed.notEmailed.length > 0 ? "warning" : "success"}>
+            {emailed.emailed.length > 0 ? `Emailing ${emailed.emailed.join(", ")} their shifts.` : emailed.notEmailed.length === 0 ? "No one's shifts changed, so no emails were sent." : null}
+            {emailed.notEmailed.length > 0 ? (
+              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                {emailed.notEmailed.map((entry) => (
+                  <li key={entry.name}>
+                    Not emailed: {entry.name}. {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Notice>
+        ) : null}
         {roster.days.map((day) => {
           const onDay = roster.shifts.filter((shift) => shift.date === day);
           return (

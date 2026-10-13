@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { sendApprovalEmails } from "@/lib/approvals/emails";
+import { sendNotices } from "@/lib/email/notices";
 import { writeAuditEvent } from "@/lib/audit";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { EMAIL_HISTORY_ENTITY, loadEmailSubject, type StatementOptions } from "@/lib/email/documents";
@@ -286,6 +287,8 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
   const people = await loadMemberNames(organisation.id);
   // Emails asking approvers to approve (AW3) go first: they're short and someone's waiting on them.
   const approvals = await sendApprovalEmails(organisation, people, options.now);
+  // Then published rosters' shift emails (RS4), which are as short.
+  const rosters = await sendNotices("roster_emails", organisation, people, options.now);
   for (;;) {
     const now = options.now ?? new Date();
     const { rows, account, accountError } = await withOrganisationTransaction(
@@ -333,7 +336,7 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
     (tx) => tx.query<{ count: string }>("select count(*)::text as count from document_emails where status in ('queued', 'sending')"),
     { people },
   );
-  result.waiting = Number(waiting.rows[0].count) + approvals.waiting;
+  result.waiting = Number(waiting.rows[0].count) + approvals.waiting + rosters.waiting;
   return result;
 }
 
@@ -389,7 +392,8 @@ async function scanAll(): Promise<void> {
       const waiting = await withOrganisationTransaction(organisation, JOB_ACTOR, (tx) =>
         tx.query(
           `select 1 from document_emails where status in ('queued', 'sending')
-           union all select 1 from approval_emails where status in ('queued', 'sending') limit 1`,
+           union all select 1 from approval_emails where status in ('queued', 'sending')
+           union all select 1 from roster_emails where status in ('queued', 'sending') limit 1`,
         ),
       );
       if ((waiting.rowCount ?? 0) > 0) pending.add(organisation.id);

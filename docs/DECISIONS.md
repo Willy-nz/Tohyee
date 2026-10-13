@@ -4510,3 +4510,17 @@ testing) and #154's code signing (later, Jess).
        with another paddock is a warning, not a refusal, since real
        boundaries are sometimes drawn that way. Redrawing adds a boundary
        version and keeps the old one.
+
+518. **Published rosters can email staff their shifts; the weekly budget
+     stays typed** (14 Oct 2026, RS4 and #196; Jess chose "keep typing it").
+     - **What's sent:** when publishing, "Email staff their shifts" emails
+       each employee their own shifts for that week. A later publish
+       emails only those whose shifts changed, including anyone taken off.
+     - **Content:** plain text, the business time zone, and no pay figures.
+     - **How it's sent:** through the organisation's email, by the same
+       queue as approval emails. Approval and roster emails now share one
+       sender (`src/lib/email/notices.ts`). Tenant migration 0137.
+     - **Not emailed:** anyone without an email address, or everyone when
+       email isn't set up, is listed. Publishing still goes ahead.
+     - **Weekly budget:** typed on the roster area, not taken from the
+       monthly workforce budget.
