@@ -16613,23 +16613,23 @@ refusal test in `livestock-valuation.test.ts`. Decision 509.
   4,310.00 (310.00 non-taxable). Without it, they're refused.
 
 
-## Farming (#249) stage 2: fertiliser plans, applications and costs (examples not yet approved by Jess)
+## Farming (#249) stage 2: fertiliser plans, applications and costs (answered by Jess 13 Oct 2026; FB3-FB8 revised to match, waiting for approval)
 
 Drafted 13 Oct 2026, before anything is built, as AGENTS.md asks. A
 fertiliser **plan** is a budget and posts nothing. **Buying** fertiliser is
-a bill. **Applying** it is a record on the paddock, and (when the product is
-kept as stock) takes it out of stock at its average cost. The spreading
-contractor's bill posts once and is shared across the paddocks it covered
-for reporting only. Buying product doesn't mean it was applied, so the two
-are never counted twice.
+a bill, expensed when bought (Jess, 13 Oct 2026). **Applying** it is a
+record on the paddock: quantity, nutrients and the paddock's share of the
+cost for reports. It posts nothing, so the cost is never counted twice. The
+spreading contractor's bill also posts once and is shared across paddocks
+by hectares for reports only.
 
 Setup: Kōwhai Dairies Ltd (GST registered, invoice basis, balance date 31
 May). Paddock **12** has an effective area of **20.0 ha** (its mapped
 boundary measures 21.3 ha; the farmer's effective area is what plans use).
-Paddock **14** has **15.0 ha**. Product **Urea** (46% N) is a stock item
-counted in tonnes. Supplier Southern Fertiliser Ltd; contractor Clutha
-Spreading Ltd. Accounts: 1400 Inventory, 6310 Fertiliser and lime, 6320
-Fertiliser spreading, 2100 GST, 2000 Accounts payable.
+Paddock **14** has **15.0 ha**. Product **Urea** (46% N) is a non-stock
+item counted in tonnes. Supplier Southern Fertiliser Ltd; contractor Clutha
+Spreading Ltd. Accounts (added to a farm's chart): 6310 Fertiliser and
+lime, 6320 Fertiliser spreading; and 2100 GST, 2000 Accounts payable.
 
 - **FB1 Areas.** Plans use a paddock's treated area, which starts as its
   effective area (20.0 ha for paddock 12), not the mapped area (21.3 ha).
@@ -16646,15 +16646,16 @@ Fertiliser spreading, 2100 GST, 2000 Accounts payable.
     product 3.500 t = 2,730.00; total **3,605.00**. Version 1 is kept.
     Nothing is posted.
 - **FB3 Buying.** Bill from Southern Fertiliser, 1 Sep 2026: 3.5 t Urea at
-  780.00 = 2,730.00 + GST 409.50 = **3,139.50**. Dr 1400 2,730.00, Dr 2100
-  409.50, Cr 2000 3,139.50 (as a stock item, ST1). Urea on hand 3.5 t at
-  780.00 average. Nothing is marked as applied.
+  780.00 = 2,730.00 + GST 409.50 = **3,139.50**. Dr 6310 2,730.00, Dr 2100
+  409.50, Cr 2000 3,139.50: expensed when bought. The bill line is linked
+  to the plan, so the plan knows 3.5 t was bought at 780.00/t.
 - **FB4 Applying.** On 12 Sep, 2.0 t is applied to paddock 12 (100 kg/ha,
-  46 kg N/ha over 20.0 ha): stock out at average cost, Dr 6310 **1,560.00**,
-  Cr 1400 1,560.00. On 15 Sep, 1.4 t to paddock 14: **93.3 kg/ha**,
-  **42.9 kg N/ha** over 15.0 ha; Dr 6310 **1,092.00**, Cr 1400 1,092.00.
-  0.1 t is left in stock at 78.00. Each application is linked to its plan
-  line.
+  46 kg N/ha over 20.0 ha). On 15 Sep, 1.4 t goes to paddock 14
+  (**93.3 kg/ha**, **42.9 kg N/ha** over 15.0 ha). Nothing is posted. Each
+  application takes its cost for reports from the linked bills' average
+  price (780.00/t): paddock 12 **1,560.00**, paddock 14 **1,092.00**.
+  Without a linked bill, it uses the plan's quoted price, marked
+  "quoted". 0.1 t (78.00) shows as bought but not applied yet.
 - **FB5 Spreading.** Bill from Clutha Spreading: 35.0 ha × 25.00 = 875.00 +
   GST 131.25 = **1,006.25**; Dr 6320 875.00, Dr 2100 131.25, Cr 2000
   1,006.25. It's linked to both applications and shared by hectares for
@@ -16664,38 +16665,37 @@ Fertiliser spreading, 2100 GST, 2000 Accounts payable.
 
   | | Planned | Actual |
   | --- | ---: | ---: |
-  | Urea applied | 3.500 t | 3.400 t |
-  | Product cost | 2,730.00 | 2,652.00 |
+  | Urea | 3.500 t | 3.500 t bought, 3.400 t applied |
+  | Product cost | 2,730.00 | 2,730.00 expensed (2,652.00 applied, 78.00 not yet) |
   | Spreading | 875.00 | 875.00 |
   | Paddock 12 kg N/ha | 46.0 | 46.0 |
   | Paddock 14 kg N/ha | 46.0 | 42.9 |
   | Paddock 12 cost | 2,060.00 | 2,060.00 (103.00/ha) |
   | Paddock 14 cost | 1,545.00 | 1,467.00 (97.80/ha) |
 
-  The 0.1 t left (78.00) stays in stock, not in either paddock's cost.
+  The books show what was spent (6310 2,730.00, 6320 875.00). The paddock
+  costs show what was applied where; the 78.00 not yet applied is on no
+  paddock until it is.
 - **FB7 Splitting a paddock.** On 1 Nov, paddock 14 is split into 14A (9.0
   ha) and 14B (6.0 ha). The 15 Sep application stays on paddock 14 at 15.0
   ha with its 1,467.00. The new paddocks start with no history, marked "was
   part of 14". Totals don't change.
 - **FB8 What isn't done.**
-  - Applying more than is on hand is refused, unless the organisation
-    allows negative stock (as for any stock item).
+  - Applying more than the linked bills bought shows a warning (it may have
+    come from earlier purchases), and that extra is costed at the quoted
+    price, marked "quoted". Nothing posts either way.
   - Importing the same applications file twice adds nothing the second
     time.
-  - A product bought as an expense (not a stock item) posts nothing when
-    applied; the application records quantity and nutrients only.
   - No rates are recommended, and nothing about nutrient loss or
     compliance is calculated.
+  - Spreading fertiliser costs over later years for tax (s EJ 3, cited in
+    a 2015 article and not checked against current law) is left to the
+    tax return; Tohyee doesn't record that election (Jess, 13 Oct 2026).
 
-Questions for Jess:
-1. **Stock or expense:** keep fertiliser as stock until it's applied (as
-   drafted), or expense it when bought, as many farms do? Or let each
-   product choose?
-2. **Tax spreading:** a 2015 article says s EJ 3 of the Income Tax Act 2007
-   lets fertiliser costs be spread over up to four later income years,
-   with notice to IRD. Tohyee hasn't checked the current law. Should
-   Tohyee record that election (like livestock elections), or leave it to
-   the tax return for now?
-3. **Spreading:** share it by hectares across paddocks, as drafted?
-4. **Accounts:** add 6310 Fertiliser and lime and 6320 Fertiliser
-   spreading to farms' charts, or one fertiliser account?
+Answered by Jess, 13 Oct 2026:
+1. **Expense when bought** (not stock until applied). FB3, FB4, FB6 and
+   FB8 were rewritten to match.
+2. **Tax spreading:** left to the tax return for now.
+3. **Spreading:** shared by hectares across paddocks, for reports only.
+4. **Accounts:** two, 6310 Fertiliser and lime and 6320 Fertiliser
+   spreading.
