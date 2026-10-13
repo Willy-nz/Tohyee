@@ -208,6 +208,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/ledger-journals", label: "Journals" },
           { href: "/operations/accounts", label: "Chart of accounts" },
           { href: "/operations/period-close", label: "Period close" },
+          { href: "/operations/reports/accountant-pack", label: "Year-end pack" },
           // Also under Sales; Jess looked for items here (2 Oct 2026).
           { href: "/operations/items", label: "Products and services" },
           { href: "/operations/inventory", label: "Stock" },

@@ -4524,3 +4524,15 @@ testing) and #154's code signing (later, Jess).
        email isn't set up, is listed. Publishing still goes ahead.
      - **Weekly budget:** typed on the roster area, not taken from the
        monthly workforce budget.
+
+522. **The year-end accountant pack is a ZIP of the existing reports**
+     (14 Oct 2026, #258).
+     - **Built on the server:** the files come from `trialBalance`,
+       `profitAndLoss`, `balanceSheet`, `accountTransactions` and
+       `bankReconciliationReport`, written with the report export's own CSV
+       and PDF writers. Viewers and above can download it, like the reports
+       themselves.
+     - **ZIP writer:** a small one in Tohyee (`src/lib/zip/write.ts`) using
+       Node's own deflate and CRC-32. No library is added.
+     - **File name:** the organisation's name, in ASCII in the plain header
+       and exact (UTF-8) in `filename*`.
