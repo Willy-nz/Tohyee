@@ -1320,6 +1320,11 @@ B1 (total 230.00, 10 May 2026), contact Z Energy.
 - **BK8** From the -500.00 line, a transfer to 1010: Dr 1010 500.00 / Cr 1000
   500.00 on 22 May. A +500.00 line on 1010 matches the transfer's 1010
   journal line (BK4).
+  - **Suggested transfer** (added 14 Oct 2026, #258): when 1010 already has
+    the +500.00 line, within 2 days of the -500.00, the Transfer tab
+    suggests it. Choosing it posts the same transfer and matches that line
+    to the transfer's 1010 journal line in the same step (as AIB3 does for
+    the AI). Nothing else is posted.
 - **BK9** Credit card: a -86.25 line on 2400, spend money to 6130, GST,
   inclusive: Dr 6130 75.00 / Dr 2100 11.25 / Cr 2400 86.25. Paying the card,
   a -86.25 line on 1000 is a transfer to 2400: Dr 2400 86.25 / Cr 1000 86.25,

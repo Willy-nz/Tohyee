@@ -4549,3 +4549,17 @@ testing) and #154's code signing (later, Jess).
      - **Not built:** a re-authorisation email to the login's owner. Akahu
        personal-app tokens are pasted in by an admin, and logins have no
        owner field.
+
+521. **Transfers between your own accounts are suggested, and both sides can
+     be reconciled at once** (14 Oct 2026, #258).
+     - **What's suggested:** for a statement line, unreconciled lines on the
+       organisation's other active bank or card accounts, in the same
+       currency, for the opposite amount, within 2 days, are listed on the
+       Transfer tab. That tab opens first when there's no exact match or
+       invoice or bill.
+     - **Both at once:** choosing one sends `otherLineId` with the
+       transfer. The other line is matched to the transfer's journal line
+       in the same transaction, as the AI tool does (AIB3). If that match
+       fails, nothing is saved.
+     - **Not covered:** transfers between currencies still need both amounts
+       and are matched separately.

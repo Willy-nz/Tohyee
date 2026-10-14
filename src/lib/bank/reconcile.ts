@@ -166,7 +166,9 @@ async function loadJournalLines(tx: OrgTx, ids: string[]): Promise<CandidateRow[
  * - "match": `journalLineIds` already posted on the line's account (BK4);
  * - "payments": `allocations` of `{ invoiceId | billId, amount }` paid from the line (BK5);
  * - "bank_transaction": a spend or receive money for the line (BK6, BK7, BK9);
- * - "transfer": `otherAccountCode`, the other bank or credit card account (BK8, BK9);
+ * - "transfer": `otherAccountCode`, the other bank or credit card account (BK8, BK9),
+ *   and optionally `otherLineId`, that account's own statement line for it,
+ *   which is matched to the transfer at the same time (#258, as AIB3 does);
  * - "split": `journalLineId`, one posted journal line, and `otherLineIds`, the
  *   other unreconciled statement lines that together with this one make it up
  *   (BK26-BK28; see reconcileSplit).
@@ -222,6 +224,7 @@ export async function reconcileStatementLine(
   const subKey = (suffix: string) => `${idempotencyKey}:${suffix}`;
 
   let journalLineIds: string[];
+  let otherSide: { lineId: string; journalLineId: string } | null = null;
   if (kind === "match") {
     journalLineIds = [...new Set(requireArray(command.journalLineIds, "journalLineIds", 50).map((id, index) => requireId(id, `journalLineIds[${index}]`)))];
     if (journalLineIds.length === 0) throw new ValidationError("Choose at least one transaction to match.");
@@ -372,6 +375,13 @@ export async function reconcileStatementLine(
       reference: command.reference ?? line.reference ?? undefined,
     });
     journalLineIds = [await journalLineOn(tx, transfer.journalId, line.accountId)];
+    if (command.otherLineId !== undefined && command.otherLineId !== null && command.otherLineId !== "") {
+      if (across) throw new ValidationError("The other account's line can only be matched at the same time when both accounts are in the same currency.");
+      const otherLine = await getStatementLine(tx, command.otherLineId);
+      const otherAccount = (await tx.query<{ id: string }>("select id::text from accounts where lower(code) = lower($1)", [other])).rows[0];
+      if (!otherAccount || otherLine.accountId !== otherAccount.id) throw new ValidationError(`That line isn't on ${other}.`);
+      otherSide = { lineId: otherLine.id, journalLineId: await journalLineOn(tx, transfer.journalId, otherAccount.id) };
+    }
   }
 
   let inserted;
@@ -401,6 +411,10 @@ export async function reconcileStatementLine(
     entityId: lineId,
     details: { kind, reconciliationId, journalLineIds, amount: line.amount, date: line.date, adjusted: adjustment !== null },
   });
+  // The other account's own line for the transfer, matched to it in the same transaction (#258).
+  if (otherSide) {
+    await reconcileStatementLine(tx, otherSide.lineId, { source, idempotencyKey: `${idempotencyKey}:other`.slice(0, 200), kind: "match", journalLineIds: [otherSide.journalLineId] });
+  }
   return { created: true, line: await getStatementLine(tx, lineId) };
 }
 
@@ -662,8 +676,13 @@ export type MatchCandidate = {
   voided: boolean;
 };
 
+/** A line on another of the organisation's accounts that looks like the other side of a transfer (#258). */
+export type TransferCandidate = { lineId: string; accountId: string; accountCode: string; accountName: string; date: string; amount: string; description: string };
+
 export type LineSuggestions = {
   matches: MatchCandidate[];
+  /** Unreconciled lines for the opposite amount within 2 days on the organisation's other accounts, nearest date first. */
+  transfers: TransferCandidate[];
   documents: Array<{ kind: "invoice" | "bill"; id: string; number: string; contactName: string; amountDue: string; date: string }>;
   rule:
     | (BankRule & {
@@ -678,10 +697,14 @@ export type LineSuggestions = {
     | null;
 };
 
+/** How many days apart the two sides of a transfer between the organisation's accounts can be (#258). */
+export const TRANSFER_WINDOW_DAYS = 2;
+
 /**
  * What a line could be reconciled with: unreconciled journal lines on its
  * account within the match window (same amount first), open invoices or bills
- * for its exact amount, and the first bank rule that applies.
+ * for its exact amount, lines on the organisation's other accounts that look
+ * like the other side of a transfer, and the first bank rule that applies.
  */
 export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?: BankRule[]): Promise<LineSuggestions> {
   const line = await getStatementLine(tx, lineIdInput);
@@ -736,6 +759,17 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       amountDue: toFixedString(dec(row.amount_due), 2),
       date: row.date,
     }));
+  // The other side of a transfer between the organisation's own accounts (#258): same currency, opposite amount, within 2 days.
+  const transfers = await tx.query<{ id: string; account_id: string; code: string; name: string; line_date: string; amount: string; description: string | null; payee: string | null }>(
+    `select b.id::text, b.account_id::text, a.code, a.name, b.line_date::text, b.amount::text, b.description, b.payee
+       from bank_statement_lines b join accounts a on a.id = b.account_id
+      where b.account_id <> $1 and b.status = 'unreconciled' and a.is_active and a.account_type in ('bank', 'credit_card')
+        and coalesce(a.currency_code, $5) = $4 and b.amount = -($2::numeric)
+        and b.line_date between $3::date - ${TRANSFER_WINDOW_DAYS} and $3::date + ${TRANSFER_WINDOW_DAYS}
+      order by abs(b.line_date - $3::date), b.id
+      limit 5`,
+    [line.accountId, line.amount, line.date, line.currencyCode, tx.baseCurrency],
+  );
   const allRules = rules ?? (await listBankRules(tx, { activeOnly: true }));
   const fitting = firstFittingRule(allRules, line);
   const contact = fitting ? await ruleContact(tx, fitting.rule, line) : null;
@@ -752,6 +786,15 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       voided: row.voided === true,
     })),
     documents: exactDocuments,
+    transfers: transfers.rows.map((row) => ({
+      lineId: row.id,
+      accountId: row.account_id,
+      accountCode: row.code,
+      accountName: row.name,
+      date: row.line_date,
+      amount: toFixedString(dec(row.amount), 2),
+      description: [...new Set([row.payee, row.description].filter((part): part is string => Boolean(part?.trim())))].join(" · "),
+    })),
     rule: fitting
       ? {
           ...fitting.rule,

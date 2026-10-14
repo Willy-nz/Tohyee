@@ -741,7 +741,10 @@ that something happened.
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a
   transfer between accounts; lines can be excluded, unreconciled and imports
-  deleted. **Bank rules** fill in spend or receive money for lines that
+  deleted. A **transfer is suggested** when another of your accounts has an
+  unreconciled line for the opposite amount within 2 days, in the same
+  currency. Choosing it saves the transfer and reconciles both lines at once
+  (#258, decision 521). **Bank rules** fill in spend or receive money for lines that
   meet their conditions (all or any of: payee, description, reference and
   other text *contains*, *equals* or *starts with*; amount *equals*, *at
   least*, *at most* or *between*), with a chosen contact or the contact named
