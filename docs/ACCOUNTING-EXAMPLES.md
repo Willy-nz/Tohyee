@@ -14,7 +14,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/item-pricing.test.ts` (IT2, IT4-IT6, pure item price and
   unit maths)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
-  P1-P3), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  P1-P3), `tests/integration/balance-sheet-subtotals.test.ts` (P4, not yet
+  approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -3907,6 +3908,18 @@ period close", YE1-YE4).
 - **P3** Profit and loss: net profit = income - cost of sales + other
   income - expenses. Without a start date it covers the financial year to
   date, and then equals the balance sheet's current year earnings.
+- **P4** Balance sheet current and non-current subtotals (#259, not yet
+  approved). Bank, current asset, inventory, credit card and current
+  liability accounts are current; fixed asset, non-current asset and
+  non-current liability accounts are non-current. Owner puts 5,000.00 into
+  the bank (3000), buys a computer for 2,000.00 (1620), borrows 1,500.00 on a
+  term loan (2800), and pays 200.00 of accounting fees (6010) on the credit
+  card (2400). At the end of the month: current assets **4,500.00**,
+  non-current assets **2,000.00**, total assets **6,500.00**; current
+  liabilities **200.00**, non-current liabilities **1,500.00**, total
+  liabilities **1,700.00**; net assets **4,800.00**, equal to total equity
+  (5,000.00 introduced less the 200.00 loss). Only the layout changes: the
+  totals are the same as before.
 
 ### Custom reports
 

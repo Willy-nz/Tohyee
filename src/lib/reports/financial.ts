@@ -263,17 +263,33 @@ export function earningsOf(rows: AccountTotalsRow[]): Decimal {
  *   profit before this financial year (`previousYearsEarnings`), so a
  *   year's profit moves into it on the first day of the next year.
  */
+/** Balance sheet account types due within a year (#259): the rest are non-current. */
+export const CURRENT_BALANCE_SHEET_TYPES: readonly AccountType[] = ["bank", "current_asset", "inventory", "credit_card", "current_liability"];
+const ASSET_TYPES: readonly AccountType[] = ["bank", "current_asset", "inventory", "fixed_asset", "non_current_asset"];
+const LIABILITY_TYPES: readonly AccountType[] = ["credit_card", "current_liability", "non_current_liability"];
+
+/** A balance sheet group split into current and non-current subtotals (P4). */
+function termGroup(rows: AccountTotalsRow[], types: readonly AccountType[], money: Money) {
+  const current = buildSections(rows, types.filter((type) => CURRENT_BALANCE_SHEET_TYPES.includes(type)), money);
+  const nonCurrent = buildSections(rows, types.filter((type) => !CURRENT_BALANCE_SHEET_TYPES.includes(type)), money);
+  return {
+    total: add(current.total, nonCurrent.total),
+    group: {
+      sections: [...current.sections, ...nonCurrent.sections],
+      total: money(add(current.total, nonCurrent.total)),
+      current: { sections: current.sections, total: money(current.total) },
+      nonCurrent: { sections: nonCurrent.sections, total: money(nonCurrent.total) },
+    },
+  };
+}
+
 export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
   const money = moneyFormatter(tx);
   const yearStart = financialYearStart(asAt, await financialYearEndMonth(tx));
   const rows = await accountTotals(tx, null, asAt);
-  const assets = buildSections(
-    rows,
-    ["bank", "current_asset", "inventory", "fixed_asset", "non_current_asset"],
-    money,
-  );
-  const liabilities = buildSections(rows, ["credit_card", "current_liability", "non_current_liability"], money);
+  const assets = termGroup(rows, ASSET_TYPES, money);
+  const liabilities = termGroup(rows, LIABILITY_TYPES, money);
   const retainedAccount = (
     await tx.query<{ id: string; code: string; name: string }>(
       "select id::text, code, name from accounts where system_key = 'retained_earnings' and account_class = 'equity'",
@@ -297,8 +313,10 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
     asAt,
     financialYearStart: yearStart,
     currencyCode: tx.baseCurrency,
-    assets: { sections: assets.sections, total: money(assets.total) },
-    liabilities: { sections: liabilities.sections, total: money(liabilities.total) },
+    assets: assets.group,
+    liabilities: liabilities.group,
+    /** Total assets less total liabilities: equals total equity when the sheet balances. */
+    netAssets: money(sub(assets.total, liabilities.total)),
     equity: {
       /** Equity accounts other than retained earnings. */
       sections: equity.sections,
