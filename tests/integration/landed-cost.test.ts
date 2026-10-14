@@ -7,6 +7,7 @@ import { allocateLandedCost, splitByWeight } from "@/lib/inventory/landed-cost";
 import { approveInvoice, createInvoice } from "@/lib/invoices/service";
 import { createItem, type Item } from "@/lib/items/service";
 import { getJournal } from "@/lib/ledger/journals";
+import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { inventoryValuation, trialBalance } from "@/lib/reports/financial";
@@ -125,6 +126,24 @@ describeWithDatabase("landed cost across a bill", () => {
     const parts = splitByWeight(dec("100.00"), [dec("10"), dec("10"), dec("10")], 2).map((part) => toFixedString(part, 2));
     expect(parts).toEqual(["33.34", "33.33", "33.33"]);
     expect(splitByWeight(dec("0.05"), [dec("1"), dec("3")], 2).map((part) => toFixedString(part, 2))).toEqual(["0.01", "0.04"]);
+  });
+
+  it("LDC6: stock received in a locked period: the cost posts on an open date; the locked period isn't touched", async () => {
+    const w = await setup();
+    await w.sell((await w.as((tx) => tx.query<{ id: string }>("select id::text from items where code = 'BOLT'"))).rows[0].id, "12");
+    await w.as((tx) => updatePeriodControls(tx, { lockDate: "2026-06-30", reason: "June closed" }));
+    await expect(w.allocate({ amount: "50.00", allocationDate: "2026-06-20" })).rejects.toThrow(/lock/i);
+    const result = await w.allocate({ amount: "50.00", allocationDate: "2026-07-01" });
+    expect(result.allocation.lines.map((line) => [line.itemCode, line.toStock, line.toCostOfSales])).toEqual([
+      ["ANVIL", "20.00", "0.00"],
+      ["BOLT", "18.00", "12.00"],
+    ]);
+    const cogs = await w.as((tx) => getJournal(tx, result.allocation.costOfSalesJournalId!));
+    expect(cogs.postingDate).toBe("2026-07-01");
+    const dates = await w.as((tx) =>
+      tx.query<{ posting_date: string }>("select distinct posting_date::text from ledger_journals where posting_date <= '2026-06-30' and created_at > now() - interval '1 minute' and origin = 'inventory' and reference like 'Landed cost%'"),
+    );
+    expect(dates.rows).toEqual([]);
   });
 
   it("LDC5: refused for a draft bill, a bank or system account, or a backdated date", async () => {
