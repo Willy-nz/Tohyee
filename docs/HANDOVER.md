@@ -153,8 +153,11 @@ PREP8, WB7, XP14 and the HL section.
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
-- **0.8.0 tagged** (15 Oct 2026): the `v0.8.0` tag was pushed from main,
-  which starts the release workflows. The notes now cover #180-#278.
+- **0.8.0 ready to publish from main** (15 Oct 2026): the notes now cover
+  #180-#278 and the README and website point at v0.8.0. Claude's sessions
+  can't push tags or create releases (both refused), so Jess publishes the
+  release "Tohyee 0.8.0" on main with tag `v0.8.0` and pastes in
+  `docs/releases/0.8.0.md`.
 - **0.8.0 was ready to publish** (notes updated 14 Oct 2026): `package.json`
   says 0.8.0. It carries everything merged since v0.7.0 (#180-#256): the
   CRM stages, line discounts, GST registration, exchange rate sources,
