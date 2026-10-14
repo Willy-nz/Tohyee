@@ -34,6 +34,7 @@
         <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu</button>
         <nav class="site-nav" id="site-nav" aria-label="Main navigation">
           <a href="#who">Who it's for</a>
+          <a href="#farm">Farms</a>
           <a href="#check">Why trust it</a>
           <a href="#everything">Features</a>
           <a href="#new">What's new</a>
@@ -49,8 +50,8 @@
           <div class="hero-copy">
             <h1 id="hero-title">Your business.<br />Your books.<br />Your server.</h1>
             <p class="lede">
-              Free, open-source accounting made in New Zealand. Invoices, GST, payroll, jobs, rosters and livestock, kept
-              on a computer you control and open in everyone's browser.
+              Free, open-source accounting made in New Zealand. Invoices, GST, payroll, jobs, rosters, farms and livestock,
+              kept on a computer you control and open in everyone's browser.
             </p>
             <div class="actions">
               <a class="button primary" href="#install">Get Tohyee</a>
@@ -153,6 +154,7 @@
           <p class="section-lede">Turn on the parts your organisation needs. Everything shares one set of books.</p>
           <div class="audiences">
             <article class="audience">
+              <img class="audience-art" src="img/illo-shop.svg" width="240" height="140" alt="" loading="lazy" />
               <h3>Shops and makers</h3>
               <p>Sell in person and online, keep stock right, and roster the shop.</p>
               <ul>
@@ -163,6 +165,7 @@
               </ul>
             </article>
             <article class="audience">
+              <img class="audience-art" src="img/illo-trades.svg" width="240" height="140" alt="" loading="lazy" />
               <h3>Trades and services</h3>
               <p>Book the visit, do the work on your phone, invoice it the same day.</p>
               <ul>
@@ -173,16 +176,18 @@
               </ul>
             </article>
             <article class="audience">
+              <img class="audience-art" src="img/illo-farm.svg" width="240" height="140" alt="" loading="lazy" />
               <h3>Farms</h3>
-              <p>Head counts that reconcile, and year-end livestock values with their workings.</p>
+              <p>Paddocks, fertiliser and stock, in the same books as the milk cheque.</p>
               <ul>
-                <li>Dairy and beef cattle, sheep, deer and goats</li>
-                <li>Herd scheme and national standard cost, with IRD's 2026 rates</li>
-                <li>High-priced animals and the Chatham Islands ratio</li>
-                <li>Agent account sales with their deductions</li>
+                <li>Paddock maps from GeoJSON, Google Earth or a shapefile</li>
+                <li>Fertiliser plans against what was bought and spread</li>
+                <li>Herd scheme and NSC values for cattle, sheep, deer and goats</li>
+                <li>Benchmarks per kgMS, hectare, cow and stock unit</li>
               </ul>
             </article>
             <article class="audience">
+              <img class="audience-art" src="img/illo-books.svg" width="240" height="140" alt="" loading="lazy" />
               <h3>Accountants and bookkeepers</h3>
               <p>Many organisations on one server, each in its own database.</p>
               <ul>
@@ -192,6 +197,66 @@
                 <li>Consolidation across organisations and currencies</li>
               </ul>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section farm" id="farm" aria-labelledby="farm-title">
+        <img class="farm-hills" src="img/hills.svg" width="1440" height="120" alt="" />
+        <div class="wrap">
+          <div class="farm-head">
+            <div>
+              <p class="eyebrow">New in 0.8.0</p>
+              <h2 id="farm-title">From the paddock to the year-end</h2>
+            </div>
+            <p class="section-lede">
+              Draw or import your paddocks, plan the fertiliser, count the stock and value it for tax. Your own AI can read
+              the herd app's export and turn it into a dashboard, without touching the books.
+            </p>
+          </div>
+          <div class="showcase-tabs" role="tablist" aria-label="Farm screens in Tohyee">
+            <button id="tab-paddocks" type="button" role="tab" aria-selected="true" aria-controls="panel-paddocks">Paddock map</button>
+            <button id="tab-valuation" type="button" role="tab" aria-selected="false" aria-controls="panel-valuation" tabindex="-1">Livestock valuation</button>
+            <button id="tab-bench" type="button" role="tab" aria-selected="false" aria-controls="panel-bench" tabindex="-1">Farm benchmarks</button>
+            <button id="tab-calving" type="button" role="tab" aria-selected="false" aria-controls="panel-calving" tabindex="-1">Calving, by your AI</button>
+          </div>
+          <div class="frame">
+            <figure id="panel-paddocks" role="tabpanel" aria-labelledby="tab-paddocks" tabindex="0">
+              <img src="img/farm-map-wide.webp" width="2880" height="1800" loading="lazy" alt="Kōwhai Road farm: 38 numbered paddocks drawn to scale, 192.99 hectares effective" />
+            </figure>
+            <figure id="panel-valuation" role="tabpanel" aria-labelledby="tab-valuation" tabindex="0" hidden>
+              <img src="img/livestock-valuation.webp" width="2880" height="1800" loading="lazy" alt="The year-end livestock valuation: opening and closing values, taxable livestock profit and the livestock trading statement" />
+            </figure>
+            <figure id="panel-bench" role="tabpanel" aria-labelledby="tab-bench" tabindex="0" hidden>
+              <img src="img/farm-benchmarks.webp" width="2880" height="1800" loading="lazy" alt="Farm benchmarks for the year: gross farm revenue and each working expense per kg of milk solids, hectare, cow and stock unit" />
+            </figure>
+            <figure id="panel-calving" role="tabpanel" aria-labelledby="tab-calving" tabindex="0" hidden>
+              <img src="img/ai-calving.webp" width="2880" height="1800" loading="lazy" alt="A Spring calving 2026 dashboard the AI made from a herd app export: calves by day, heifers and bulls, and calves by breed" />
+            </figure>
+          </div>
+          <p class="showcase-note">Real screens with a made-up dairy farm, Kōwhai Dairies.</p>
+          <div class="farm-points">
+            <div>
+              <h3>Paddocks and fertiliser</h3>
+              <p>
+                Import paddock shapes or draw them, with LINZ aerial photos behind. Plan nitrogen by paddock, link the
+                bills, and see planned against applied in kg N/ha and dollars.
+              </p>
+            </div>
+            <div>
+              <h3>Livestock for tax</h3>
+              <p>
+                Movements and head counts that reconcile, herd scheme and national standard cost values, agent account
+                sales, and the year-end journal with its workings.
+              </p>
+            </div>
+            <div>
+              <h3>Your AI, on a short lead</h3>
+              <p>
+                Leave it the herd app's spreadsheet and it builds its own tables and dashboards. Movements it finds are
+                suggestions until you accept them.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -218,6 +283,26 @@
             <img src="img/phone-clock.webp" width="780" height="1140" loading="lazy" alt="The clock-in screen: Tama Rewi typing a four-digit PIN, with a Clock in button" />
             <figcaption>Clocking in at the shop</figcaption>
           </figure>
+        </div>
+      </section>
+
+      <section class="section yearend" aria-labelledby="yearend-title">
+        <div class="wrap yearend-grid">
+          <figure class="yearend-art">
+            <img src="img/financial-statements.webp" width="1600" height="1447" loading="lazy" alt="Year-end financial statements as one PDF: the cover, the statement of financial performance and the statement of financial position" />
+          </figure>
+          <div>
+            <h2 id="yearend-title">Year-end, in one go</h2>
+            <p class="section-lede">
+              Special purpose financial statements with last year beside them and your own notes, as one PDF. The
+              accountant pack puts the trial balance, ledger and bank reconciliations in a single ZIP.
+            </p>
+            <ul class="ticks">
+              <li>Statements of financial performance, position, changes in equity and cash flows</li>
+              <li>Draft notes to start from, marked as drafts until you save them</li>
+              <li>Recode a posted line with a reason instead of voiding the invoice</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -265,7 +350,7 @@
         <div class="wrap">
           <h2 id="everything-title">Everything in it</h2>
           <p class="section-lede">
-            What's on the main branch today. Some of it is newer than the last installer; see
+            All of this is in version 0.8.0. Anything newer is on the main branch; see
             <a href="#new">what's new</a>.
           </p>
           <div class="inventory">
@@ -296,6 +381,10 @@
               <dd>Excel and CSV sources, shaping, dashboards and pivots, shared with report viewers</dd>
               <dt>Livestock</dt>
               <dd>Movements, head counts, herd scheme and NSC values, account sales, monthly management values</dd>
+              <dt>Farming</dt>
+              <dd>Paddock maps, LINZ aerial imagery, fertiliser plans, soil tests, farm benchmarks</dd>
+              <dt>AI workspace</dt>
+              <dd>A farm notebook, files for your AI, tables and dashboards it builds, livestock suggestions</dd>
               <dt>R&amp;D tax incentive</dt>
               <dd>Activities, approvals, tagged costs and the claim workings</dd>
             </dl>

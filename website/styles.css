@@ -8,8 +8,8 @@
   font-weight: 100 900;
   font-display: swap;
   unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Inter";
@@ -17,8 +17,8 @@
   font-weight: 100 900;
   font-display: swap;
   unicode-range:
-    U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
-    U+2C60-2C7F, U+A720-A7FF;
+    U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
   font-family: "Zilla Slab";
@@ -26,15 +26,17 @@
   font-weight: 700;
   font-display: swap;
   unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Zilla Slab";
   src: url("fonts/zilla-slab-latin-ext-700-normal.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
-  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+20A0-20AB, U+20AD-20C0;
+  unicode-range:
+    U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+20A0-20AB,
+    U+20AD-20C0;
 }
 @font-face {
   font-family: "Zilla Slab";
@@ -42,15 +44,17 @@
   font-weight: 600;
   font-display: swap;
   unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Zilla Slab";
   src: url("fonts/zilla-slab-latin-ext-600-normal.woff2") format("woff2");
   font-weight: 600;
   font-display: swap;
-  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+20A0-20AB, U+20AD-20C0;
+  unicode-range:
+    U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+20A0-20AB,
+    U+20AD-20C0;
 }
 
 :root {
@@ -291,8 +295,18 @@ h3 {
   position: relative;
   padding: 36px 26px 36px 46px;
   background:
-    linear-gradient(90deg, transparent 30px, var(--tick) 30px, var(--tick) 31.5px, transparent 31.5px),
-    repeating-linear-gradient(180deg, var(--white) 0 35px, var(--rule) 35px 36px);
+    linear-gradient(
+      90deg,
+      transparent 30px,
+      var(--tick) 30px,
+      var(--tick) 31.5px,
+      transparent 31.5px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      var(--white) 0 35px,
+      var(--rule) 35px 36px
+    );
   border: 1px solid var(--line);
   border-radius: 6px;
   box-shadow:
@@ -510,6 +524,116 @@ h3 {
 .audience li {
   padding: 9px 0;
   border-top: 1px solid var(--line);
+}
+
+.audience-art {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  margin-bottom: 18px;
+}
+
+/* Farms: a second set of tabbed screens, under a band of hills. */
+.farm {
+  position: relative;
+  padding-top: clamp(96px, 11vw, 150px);
+  background: linear-gradient(
+    180deg,
+    var(--page) 0,
+    var(--page) clamp(60px, 8vw, 120px),
+    var(--tint) clamp(60px, 8vw, 120px),
+    var(--page) 520px
+  );
+  border-top: 0;
+  overflow: hidden;
+}
+.farm-hills {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: clamp(60px, 8vw, 120px);
+}
+.farm-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px 56px;
+  align-items: end;
+  margin-bottom: 36px;
+}
+.farm-head .section-lede {
+  margin-top: 0;
+}
+.eyebrow {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tick);
+}
+.frame figure {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--white);
+  box-shadow: 0 30px 60px -40px rgb(20 35 56 / 0.5);
+}
+.frame figure[hidden] {
+  display: none;
+}
+.farm-points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 40px;
+  margin-top: 44px;
+}
+.farm-points > div {
+  padding-top: 20px;
+  border-top: 3px solid var(--ink);
+}
+.farm-points h3 {
+  font-family: var(--slab);
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--blue);
+}
+.farm-points p {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+/* Year-end: the statements as paper. */
+.yearend-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: center;
+}
+.yearend-art img {
+  width: 100%;
+  height: auto;
+}
+.ticks {
+  margin-top: 26px;
+  padding: 0;
+  list-style: none;
+}
+.ticks li {
+  position: relative;
+  padding: 12px 0 12px 34px;
+  border-top: 1px solid var(--line);
+}
+.ticks li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15px;
+  width: 20px;
+  height: 20px;
+  background: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d9577a' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 13 L9.5 18 L20 5'/%3E%3C/svg%3E");
 }
 
 /* Phones. */
@@ -850,8 +974,13 @@ h3 {
   .inventory {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .farm-points {
+    gap: 0 24px;
+  }
 }
 @media (max-width: 860px) {
+  .farm-head,
+  .yearend-grid,
   .hero-grid,
   .own-grid,
   .news-grid,
@@ -909,6 +1038,12 @@ h3 {
   body {
     font-size: 16px;
   }
+  .farm-points {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .farm-points > div + div {
+    margin-top: 28px;
+  }
   .audiences,
   .inventory {
     grid-template-columns: minmax(0, 1fr);
@@ -930,8 +1065,18 @@ h3 {
   }
   .paper-sheet {
     background:
-      linear-gradient(90deg, transparent 24px, var(--tick) 24px, var(--tick) 25.5px, transparent 25.5px),
-      repeating-linear-gradient(180deg, var(--white) 0 35px, var(--rule) 35px 36px);
+      linear-gradient(
+        90deg,
+        transparent 24px,
+        var(--tick) 24px,
+        var(--tick) 25.5px,
+        transparent 25.5px
+      ),
+      repeating-linear-gradient(
+        180deg,
+        var(--white) 0 35px,
+        var(--rule) 35px 36px
+      );
   }
   .paper-lines th,
   .paper-lines td,
