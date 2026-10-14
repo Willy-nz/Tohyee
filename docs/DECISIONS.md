@@ -4750,3 +4750,23 @@ testing) and #154's code signing (later, Jess).
      - **Not built:** per-farm splits (the ledger is per organisation), a
        stock unit calculator, and comparison with industry averages.
 
+532. **Year-end financial statements with notes** (14 October 2026, #259).
+     - **Who decided:** Jess said to keep going. Examples FS1-FS3 aren't
+       reviewed yet.
+     - **What it is:** Accountant > Financial statements gives one PDF of
+       special purpose statements: a cover and contents, then the
+       statements of financial performance, financial position (current
+       and non-current, net assets), changes in equity and cash flows, each
+       with last year beside it, matched by account. Notes come last. It's
+       also in the year-end pack.
+     - **The notes:** the organisation's own, edited in Tohyee and kept in
+       `financial_statement_notes` (tenant migration 0143). Until they're
+       saved, drafts are offered to suit the organisation (GST registered
+       or not, stock, fixed assets, livestock), with [square brackets] where
+       the preparer must fill in or confirm. The PDF marks them "DRAFT".
+       The drafts are a starting point, not advice: they need checking by
+       the preparer.
+     - **Not built:** Tier 3 and Tier 4 public benefit entity formats (they
+       need a statement of service performance and their own layouts),
+       a directors' or trustees' approval page, and audit reports.
+

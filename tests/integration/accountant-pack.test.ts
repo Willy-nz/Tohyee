@@ -81,7 +81,7 @@ describeWithDatabase("year-end accountant pack", () => {
     expect(pack.fileName).toMatch(/year-end pack 2026-03-31\.zip$/);
     const files = await unzip(pack.bytes);
     expect([...files.keys()].sort()).toEqual(
-      ["Balance sheet.csv", "Cash flows.csv", "Changes in equity.csv", "Bank reconciliation 1000 Business bank account.pdf", "Bank reconciliation 2400 Credit card.pdf", "General ledger.csv", "Profit and loss.csv", "Read me.txt", "Trial balance.csv"].sort(),
+      ["Balance sheet.csv", "Cash flows.csv", "Financial statements.pdf", "Changes in equity.csv", "Bank reconciliation 1000 Business bank account.pdf", "Bank reconciliation 2400 Credit card.pdf", "General ledger.csv", "Profit and loss.csv", "Read me.txt", "Trial balance.csv"].sort(),
     );
     expect(pack.files).toContain("Bank reconciliation 1000 Business bank account.pdf");
 

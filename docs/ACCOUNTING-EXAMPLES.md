@@ -20,7 +20,8 @@ proves it". Test names start with the example IDs they cover:
   (RAT1-RAT4, not yet approved), `tests/integration/landed-cost.test.ts`
   (LDC1-LDC6, not yet approved), `tests/integration/recode.test.ts`
   (RCD1-RCD6, not yet approved), `tests/integration/farm-benchmarks.test.ts`
-  (FK1-FK4, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  (FK1-FK4, not yet approved), `tests/integration/financial-statements-pdf.test.ts`
+  (FS1, FS2, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -16965,3 +16966,28 @@ revenue) is 2,000,000.00. Expenses: Wages 6200 120,000.00, Animal health
 - **FK4** A figure that isn't entered gives no per-unit column (shown as a
   dash), never a guess. With no milk solids entered, every per kgMS figure
   is empty.
+
+## Year-end financial statements (#259; FS1-FS3 chosen by Claude on 14 Oct 2026 when Jess said to keep going, not yet reviewed)
+
+Tested in `tests/integration/financial-statements-pdf.test.ts` and
+`tests/unit/statement-amount.test.ts`. One PDF of special purpose
+statements, with figures from the same functions as the report screens
+(P1-P4, SCE1-SCF4). Nothing posts.
+
+- **FS1** Contents, in order: a cover with the contents; statement of
+  financial performance; statement of financial position (current and
+  non-current subtotals, net assets); statement of changes in equity;
+  statement of cash flows; notes. Every statement has this year and last
+  year side by side, matched by account. An account used in only one year
+  shows "-" in the other.
+- **FS2** Notes start from drafts suited to the organisation: reporting
+  entity, basis of preparation, changes in policies, GST (registered or
+  not), and inventory, property plant and equipment, and livestock when
+  they're used, then income tax. Parts the preparer must fill in or confirm
+  are in [square brackets]. Until notes are saved, the PDF marks them
+  "DRAFT". Saved notes replace the drafts, and saving an empty list goes
+  back to the drafts.
+- **FS3** Amounts print as in printed statements: 1,234.56; negatives in
+  brackets, (300.00); nothing as "-".
+
+Tier 3 and Tier 4 (public benefit entity) formats aren't built.

@@ -9,6 +9,7 @@ import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
 import { reportCsv, reportPdf } from "@/lib/reports/export-files";
 import type { ReportExportCell, ReportExportData, ReportExportName, ReportExportRow, ReportExportTable } from "@/lib/reports/export-types";
 import { balanceSheet, financialYearEndMonth, profitAndLoss, trialBalance } from "@/lib/reports/financial";
+import { financialStatementsPdf } from "@/lib/reports/financial-statements";
 import { cashFlowStatement, changesInEquity, type StatementRow } from "@/lib/reports/statements";
 import { createZip, type ZipEntry } from "@/lib/zip/write";
 
@@ -20,6 +21,7 @@ import { createZip, type ZipEntry } from "@/lib/zip/write";
  * - Profit and loss for the year (CSV)
  * - Balance sheet as at the year end (CSV)
  * - Statement of changes in equity and statement of cash flows for the year (CSV)
+ * - The financial statements with notes (PDF)
  * - General ledger: every account's transactions for the year (CSV)
  * - Bank reconciliation as at the year end, one PDF per bank and card account
  * - A read-me listing them
@@ -277,7 +279,8 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
     );
   }
 
-  const files = ["Trial balance.csv", "Profit and loss.csv", "Balance sheet.csv", "Changes in equity.csv", "Cash flows.csv", "General ledger.csv", ...bankFiles];
+  add("Financial statements.pdf", (await financialStatementsPdf(tx, { yearEnd }, now)).bytes);
+  const files = ["Financial statements.pdf", "Trial balance.csv", "Profit and loss.csv", "Balance sheet.csv", "Changes in equity.csv", "Cash flows.csv", "General ledger.csv", ...bankFiles];
   add(
     "Read me.txt",
     [
@@ -285,6 +288,7 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
       `Financial year ${period}. Made by Tohyee on ${now.toISOString().slice(0, 10)} (UTC).`,
       "",
       "Every figure comes from the same reports as Tohyee's screens:",
+      "- Financial statements.pdf: special purpose statements with last year's comparatives and the notes (marked as drafts until the notes are saved in Tohyee).",
       "- Trial balance.csv: as at the year end. Income and expense accounts show this year only; earlier years' profit is in retained earnings.",
       "- Profit and loss.csv: for the year.",
       "- Balance sheet.csv: as at the year end.",

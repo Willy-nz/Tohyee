@@ -31,7 +31,7 @@ function AccountantPack({ organisationId }: { organisationId: string }) {
         <Field label="Financial year ending" hint="The last day of the year">
           <DateInput value={chosen} onChange={(event) => setYearEnd(event.target.value || null)} />
         </Field>
-        <a className={ui.button} href={href} download>
+        <a className={`${ui.button} ${ui.primary}`} href={href} download style={{ alignSelf: "center" }}>
           Download ZIP
         </a>
       </div>
