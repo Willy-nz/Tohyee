@@ -4770,3 +4770,34 @@ testing) and #154's code signing (later, Jess).
        need a statement of service performance and their own layouts),
        a directors' or trustees' approval page, and audit reports.
 
+533. **The AI's farm workspace** (14 October 2026).
+     - **Bring your own AI:** Jess confirmed it. People chat with their own
+       AI in its own app (Claude, ChatGPT and others), connected by an AI key
+       as before (decision 339). Tohyee has no chat box and calls no AI
+       itself.
+     - **What it adds:** 13 read tools and 6 "Make drafts" tools, and
+       screens to see what the AI makes. The workspace is in tenant
+       migration 0144:
+       - the farm notebook (`farm_notebook`);
+       - files left for the AI (`ai_files`, up to 10 MB each);
+       - the AI's own tables (`ai_datasets`, `ai_dataset_rows`, values as
+         typed JSON with numbers as exact decimal text, totalled in
+         numeric);
+       - dashboards over them (`ai_dashboards`);
+       - suggested livestock movements (`livestock_suggestions`).
+     - **The AI organises messy data its own way:** it decides its tables
+       and columns, and Tohyee checks each row against them.
+     - **Livestock:** the AI only reads official records. Movements it finds
+       are suggestions a person accepts (recorded with every check) or
+       declines, because they feed the IRD livestock valuation.
+     - **Staff:** depends who's asking (Jess's choice). Names, jobs and
+       dates are given to everyone; pay only when the key's owner has
+       payroll access; IRD numbers, bank accounts and dates of birth never.
+       This narrows decision 342 ("no payroll") rather than reversing it.
+     - **Never deletes:** the AI can replace rows in its own tables and
+       replace its own dashboards, but only people archive notes, files,
+       tables and dashboards. Nothing in the books changes.
+     - **Not built:** reading PDFs or photos left for the AI (save them as
+       CSV, Excel or text), and dashboards straight over the books (the AI
+       copies what it needs into its tables).
+

@@ -21,7 +21,8 @@ proves it". Test names start with the example IDs they cover:
   (LDC1-LDC6, not yet approved), `tests/integration/recode.test.ts`
   (RCD1-RCD6, not yet approved), `tests/integration/farm-benchmarks.test.ts`
   (FK1-FK4, not yet approved), `tests/integration/financial-statements-pdf.test.ts`
-  (FS1, FS2, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  (FS1, FS2, not yet approved), `tests/integration/ai-farm-workspace.test.ts`
+  (AIW1-AIW9, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -16991,3 +16992,39 @@ statements, with figures from the same functions as the report screens
   brackets, (300.00); nothing as "-".
 
 Tier 3 and Tier 4 (public benefit entity) formats aren't built.
+
+## The AI's farm workspace (AIW1-AIW9; chosen with Jess on 14 Oct 2026, not yet reviewed)
+
+Tested in `tests/integration/ai-farm-workspace.test.ts`. Jess chose: people
+bring their own AI, chatting in its own app; the AI organises messy data its
+own way and suggests livestock movements for a person to accept; staff pay is
+shown only to someone with payroll access. Nothing here posts to the books.
+
+- **AIW1** The farm notebook keeps notes by category (history, goals,
+  people, how we farm, places and paddocks, other). People and the AI add
+  and edit them; notes the AI writes are marked "Written by AI". Only people
+  archive notes.
+- **AIW2** A look-only AI key reads the notebook but can't add to it; a
+  "Make drafts" key can.
+- **AIW3** People drop in files as they come (CSV, TSV, text, JSON, Excel;
+  up to 10 MB). Other kinds are refused with what to save them as.
+- **AIW4** The AI reads a file as text. An Excel workbook comes as
+  "## Sheet: name" then CSV, with dates as YYYY-MM-DD. Long files are read
+  in parts.
+- **AIW5** The AI makes its own tables with typed columns (text, number,
+  date, boolean) and fills them. A row that doesn't fit is refused (a date
+  "1 Aug", or a column that isn't there), so the table stays clean.
+- **AIW6** Queries total by up to three columns (dates by day, month or
+  year), with filters. Sums are exact: calves of 32.5, 35.25 and 30.1 kg
+  total **97.85**, not a floating-point near miss.
+- **AIW7** Dashboards have up to 12 tiles (column, bar, line, area, pie,
+  donut, number, table) over the AI's tables. Every tile is run when the
+  dashboard is saved, so a broken tile is refused.
+- **AIW8** Livestock movements the AI finds are suggestions, with the
+  evidence. Nothing is recorded until a person accepts one; accepting
+  records it like any movement, with the same checks, and it counts in the
+  head count and valuation. A suggestion is accepted or declined once.
+- **AIW9** Staff: every AI sees names, jobs, start and finish dates and who
+  people report to. Pay (basis, salary, hourly rate, hours) is included only
+  when the person whose AI key it is has payroll access in Tohyee. IRD
+  numbers, bank accounts and dates of birth are never given out.

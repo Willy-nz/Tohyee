@@ -6,6 +6,7 @@ import { useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
+import { LivestockSuggestions } from "@/components/livestock-suggestions";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -473,6 +474,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
   return (
     <>
       <Steps current="movements" />
+      <LivestockSuggestions organisationId={organisationId} onAccepted={movements.reload} />
       {message ? <Notice tone="success">{message}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {can("bookkeeper") ? (
