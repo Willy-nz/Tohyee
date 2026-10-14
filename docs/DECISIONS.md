@@ -4670,3 +4670,25 @@ testing) and #154's code signing (later, Jess).
        they're taken back out of operating, and the drawings aren't shown
        in financing.
 
+528. **Landed cost spread across a bill's stock** (14 October 2026, #259).
+     - **Who decided:** Jess said to go with Claude's judgement. Examples
+       LDC1-LDC5 aren't reviewed yet.
+     - **What it does:** on an approved bill that received stock, "Landed
+       cost" spreads freight, duty or insurance from another bill (excluding
+       GST) over that stock, by value (the default) or by quantity. Shares
+       are rounded to the cent and add up exactly; a leftover cent goes to
+       the largest line.
+     - **Stock already sold:** for each line, the share of what the bill
+       received that's still on hand goes onto the stock (a landed_cost
+       movement, Dr inventory). The rest goes to cost of sales. Both credit
+       the account the cost was coded to on its own bill (Freight inwards,
+       say), so nothing is counted twice.
+     - **GST:** import GST is claimed back, so it's never stock cost.
+       Customs duty, freight and insurance are.
+     - **Records:** allocations are kept, and can't be changed, in
+       `landed_cost_allocations` and its lines (tenant migration 0140).
+       After an allocation, the bill can't be voided without re-costing,
+       like any bill whose stock has moved since.
+     - **Not built:** undoing an allocation (post a stocktake adjustment or
+       journal instead), and allocating by weight (items have no weight).
+

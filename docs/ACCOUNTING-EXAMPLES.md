@@ -17,7 +17,8 @@ proves it". Test names start with the example IDs they cover:
   P1-P3), `tests/integration/balance-sheet-subtotals.test.ts` (P4, not yet
   approved), `tests/integration/financial-statements.test.ts` (SCE1, SCE2,
   SCF1-SCF4, not yet approved), `tests/integration/livestock-rations.test.ts`
-  (RAT1-RAT4, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  (RAT1-RAT4, not yet approved), `tests/integration/landed-cost.test.ts`
+  (LDC1-LDC5, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -332,8 +333,47 @@ Quantities allow up to 4 decimal places, unit costs up to 6.
   refused with a clear message. Supporting it means re-costing every later
   movement and adjusting their journals; that is designed but not built.
 - **Negative stock**: refused unless the organisation allows it (ST9-ST12).
-- **Late landed cost allocated partly to already-sold stock**: landed cost is
-  added to the stock currently on hand only.
+- **Late landed cost allocated partly to already-sold stock**: a manual
+  landed cost movement (W10) is added to the stock currently on hand only.
+  Spreading a cost over a bill's stock (LDC1-LDC5, below) sends the share
+  for stock already sold to cost of sales.
+
+## Landed cost across a bill (LDC1-LDC5)
+
+Chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement
+(#259); not yet reviewed. Tested in `tests/integration/landed-cost.test.ts`.
+
+**Setup.** A bill from Paw Supplies on 1 Jun 2026 receives 10 ANVIL at
+20.00 (200.00) and 30 BOLT at 10.00 (300.00), Dr 1400 Inventory 500.00.
+Then a freight bill of 50.00 + GST from the carrier is coded to 5100
+Freight inwards. The landed cost is spread over the first bill's stock,
+and 5100 is credited.
+
+- **LDC1** By value (the default): ANVIL **20.00**, BOLT **30.00**. All of
+  the stock is still on hand, so Dr 1400 50.00, Cr 5100 50.00 (one landed
+  cost movement each). ANVIL is now worth 220.00 (22.00 each) and BOLT
+  330.00 (11.00 each).
+- **LDC2** By quantity, the same 50.00: ANVIL 10/40 = **12.50**, BOLT 30/40
+  = **37.50**.
+- **LDC3** 12 BOLT were sold before the freight bill came, so 18 are left.
+  BOLT's 30.00 share splits 18/30 to stock (**18.00**) and 12/30 to cost of
+  sales (**12.00**). Posted: Dr 1400 38.00 (ANVIL 20.00, BOLT 18.00), Cr
+  5100 38.00; and Dr 5000 Cost of goods sold 12.00, Cr 5100 12.00. The 18
+  BOLT are worth 198.00, 11.00 each, the same as if the freight had come
+  first. Only stock this bill received counts: with more on hand than it
+  received, the whole share goes on the stock.
+- **LDC4** Shares are rounded to the cent and always add up to the cost:
+  100.00 over three lines of equal value is **33.34, 33.33, 33.33**. A
+  leftover cent goes to the largest line, or the first of equals.
+- **LDC5** What counts:
+  - The cost excludes GST. Import GST (GST paid to Customs) is claimed back
+    on the GST return, so it's never stock cost.
+  - Customs duty, freight and insurance are all stock cost, and are spread
+    the same way.
+  - Refused: a bill that isn't approved; a bill with no stock items; a bank,
+    card or system account as the account to credit; and a date before the
+    item's latest stock movement (backdating, as for other stock
+    movements).
 
 ## Stock tracking (items on documents)
 
