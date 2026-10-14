@@ -4855,3 +4855,22 @@ testing) and #154's code signing (later, Jess).
      - **Already in place:** the setup-link check (`GET
        /api/auth/setup-account`) has been rate-limited since it was built
        (decision 484).
+
+535. **Price changes on repeating invoices** (15 October 2026). Jess asked
+     for it after seeing a Xero add-on that bulk-changes repeating invoice
+     prices, and asked for the open questions to be answered for her.
+     Examples RP1-RP8 (not yet approved), tenant migration 0145.
+     - **Decided for Jess:** the change applies to the unit price as entered
+       (the GST-inclusive price on an inclusive template), and rounding
+       rounds that same price; a line's discount percent stays; the item's
+       price in Products and services isn't changed; repeating bills
+       aren't included.
+     - **From a date:** a template changes straight away when its next
+       invoice is dated on or after the change; otherwise the change waits
+       and is made by the job just before the first invoice dated on or
+       after it, so catching up earlier dates keeps the old price.
+     - **Safe to come back to:** each line remembers its old and new price.
+       A line edited since is left alone, with why. Undo cancels what's
+       waiting and puts back old prices only on lines still at the new one.
+     - Templates post nothing, so neither does a price change.
+

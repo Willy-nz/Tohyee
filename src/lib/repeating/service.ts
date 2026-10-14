@@ -39,6 +39,7 @@ import {
   setTemplateStatus,
   templateForDocument,
 } from "@/lib/repeating/runner";
+import { makeWaitingPriceChanges } from "@/lib/repeating/price-changes";
 import { nextDate, REPEAT_PERIODS, type RepeatPeriod } from "@/lib/repeating/schedule";
 import { parseSalespersonInput } from "@/lib/salespeople/service";
 import { keptValues } from "@/lib/tracking/service";
@@ -343,6 +344,20 @@ async function resolveFor(tx: OrgTx, draft: SalesDraft, current?: RepeatingInvoi
     : resolveSalesDraft(tx, draft, undefined, undefined, undefined, undefined, TEMPLATE_FOREIGN);
 }
 
+/**
+ * A template's totals if its lines were `lines` (in the shape a person sends
+ * them), worked out as saving it would, without saving (RP1's preview).
+ */
+export async function templateTotalsWith(
+  tx: OrgTx,
+  template: RepeatingInvoice,
+  lines: ReturnType<typeof linesAsSent>,
+): Promise<{ subtotal: string; taxTotal: string; total: string }> {
+  const parsed = parseTemplate({ ...asSent(template), lines });
+  const resolved = await resolveFor(tx, parsed.draft, template);
+  return { subtotal: resolved.subtotal, taxTotal: resolved.taxTotal, total: resolved.total };
+}
+
 /** Saves a new template (RI1). It starts active; nothing is made until the job runs. */
 export async function createRepeatingInvoice(
   tx: OrgTx,
@@ -492,7 +507,11 @@ const INVOICES: RepeatingKind<RepeatingInvoice> = {
   documentNoun: "invoice",
   actor: { userId: null, email: "repeating-invoices@tohyee" },
   get: (tx, id) => getRepeatingInvoice(tx, id),
-  async make(tx, template, date) {
+  async make(tx, waitingTemplate, date) {
+    // A price change waiting for this date is made on the template first (RP5).
+    // The template is read again each date: an earlier date in this run may have changed it.
+    await makeWaitingPriceChanges(tx, waitingTemplate.id, date);
+    const template = await getRepeatingInvoice(tx, waitingTemplate.id);
     const dueDate =
       template.dueRule === "terms"
         ? await dueDateFromTerms(tx, template.contactId, date)
