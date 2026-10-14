@@ -58,6 +58,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/quotes.test.ts` (QT1-QT8) and
   `tests/integration/sales-orders.test.ts` (SO1-SO12) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
+  `tests/integration/repeating-price-changes.test.ts` (RP1-RP8, not yet
+  approved) and
   `tests/integration/repeating-bills.test.ts` (RB1-RB12, SPT3) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
   `tests/integration/purchase-orders.test.ts` (PO1-PO9, SPT4) and
@@ -7636,6 +7638,85 @@ is **115.00**.
 - Placeholders in descriptions (Xero's [Month] [Year]).
 - Approving foreign-currency invoices automatically (they're saved as
   drafts, MC26).
+
+## Price changes on repeating invoices (examples not yet approved by Jess)
+
+Written from Xero users' yearly price rise (Xero can't change many
+repeating invoices at once; add-ons such as Invoice X do it from outside).
+Jess asked for the answers to be chosen for her (15 Oct 2026); these are
+them, not yet approved. A **price change** raises or lowers the unit prices
+on chosen repeating invoice templates in one go. It changes templates only:
+nothing posts, and invoices already made keep their prices.
+
+- **What changes:** the unit price as it's entered on the template line,
+  so on a template whose amounts include GST the GST-inclusive price goes
+  up, and on a tax-exclusive one the price before GST. The quantity, the
+  line's discount percent, the account and the tax code stay.
+- **How:** by a percentage (up or down, two decimals), or to a fixed price
+  for one item on every chosen template. Without rounding the new price is
+  rounded to the cent, halves up.
+- **Minimum increase** (percentage rises only): a line that would go up by
+  less is raised by the minimum instead.
+- **Rounding** to the nearest 50c, $1, $5 or $10, halves up, after the
+  minimum.
+- **From a date:** invoices dated on or after it use the new prices. If no
+  invoice before that date is still to be made, the templates change
+  straight away; otherwise the change waits and is made just before the
+  first invoice dated on or after it, so invoices still to be made for
+  earlier dates keep the old price.
+- **Preview first:** every line's old and new price, and each template's
+  invoice total before and after, before anything is saved.
+- **Changed since:** if a line's price was edited after the change was
+  saved, that line is left alone and the change records why.
+- **Undo:** a waiting change can be cancelled. A change already made can be
+  undone, putting back the old price on lines still at the new one;
+  invoices already made keep their prices.
+- **Not changed:** the item's price in Products and services, repeating
+  bills, ended templates. Paused templates are changed, as active ones.
+
+Setup (GST 15%), customer Kobe Cafe unless stated:
+
+- **Retainer**, tax exclusive: 1 x Monthly retainer (item RET) at
+  **100.00** to 4000. Invoice **115.00**. Monthly from 31 Jan 2026,
+  drafts; the job run on 5 Mar 2026 has made 31 Jan and 28 Feb (RI2).
+- **Walking** (Paw Walkers), tax inclusive: 1 x Dog walking at **115.00**.
+  Invoice **115.00**.
+- **Grooming**, tax exclusive: 2 x Shampoo at **45.00** with a **10%**
+  discount. Invoice 81.00 + GST 12.15 = **93.15**.
+
+- **RP1** Preview a **3%** rise on all three, from 5 Mar 2026: Retainer
+  100.00 -> **103.00** (invoice 115.00 -> **118.45**); Walking 115.00 ->
+  **118.45** including GST (invoice 115.00 -> **118.45**);
+  Grooming 45.00 -> **46.35**, still 10% off (2 x 46.35 = 92.70 less 9.27 =
+  83.43 + GST 12.51 = **95.94**). The preview saves nothing.
+- **RP2** **4.5%** rounded to the nearest **$1**: 100.00 -> 104.50 ->
+  **105.00**; 115.00 -> 120.175 -> **120.00**; 45.00 -> 47.025 -> **47.00**.
+- **RP3** **3%** with a **5.00** minimum: 100.00 -> **105.00** (3.00 is
+  under 5.00); 115.00 -> **120.00** (3.45 is under 5.00); 45.00 ->
+  **50.00**.
+- **RP4** Item RET to a fixed **110.00**: Retainer's line 100.00 ->
+  **110.00** (invoice **126.50**); Walking and Grooming have no RET line
+  and aren't changed.
+- **RP5** 3% on Retainer saved on 5 Mar 2026:
+  - From **31 Mar 2026** (the next invoice date): the template is 103.00
+    straight away, and the 31 Mar invoice is **118.45**.
+  - From **1 Apr 2026**: the template stays 100.00 and shows the change
+    waiting. The job on 31 Mar makes **115.00**; on 30 Apr it makes the
+    template 103.00 first, then **118.45**. Run only on 5 May, it makes 31
+    Mar at 115.00 and 30 Apr at 118.45.
+- **RP6** The 1 Apr change from RP5, after someone edits Retainer's price
+  to **101.00** on 10 Mar: on 30 Apr the line is left at 101.00 (invoice
+  **116.15**) and the change shows "changed to 101.00 after this price
+  change was saved".
+- **RP7** Undo:
+  - The waiting 1 Apr change from RP5, cancelled on 10 Mar: 30 Apr is
+    **115.00**.
+  - The RP1 change made from 5 Mar, undone on 20 Mar: the three templates
+    are back to 100.00, 115.00 and 45.00. With Retainer since edited to
+    **101.00**, that line is left at 101.00 and the undo says so.
+  - The 31 Mar invoice made at 118.45 before an undo stays **118.45**.
+- **RP8** Ended templates aren't offered. Nothing in RP1-RP7 posts a
+  journal; each change and undo is in the audit trail with who and when.
 
 ## Repeating bills (examples not yet approved by Jess)
 

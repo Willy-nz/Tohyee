@@ -318,6 +318,14 @@ that something happened.
   (locked period, credit limit, required field) leaves the draft with the
   reason in the template's history. Pause, resume (paused dates are
   skipped) and end.
+- **Price changes on repeating invoices** (Sales; RP1-RP8, not yet
+  approved, decision 535): a percentage up or down, or a fixed price for
+  one item, across chosen templates, with a minimum increase and rounding
+  to 50c, $1, $5 or $10, from a date. A preview shows every line and
+  invoice total first. Templates whose next invoice is on or after the date
+  change straight away; others change just before their first invoice on
+  or after it. Lines edited since are left alone, and undo puts back old
+  prices on lines still at the new ones. Nothing posts.
 - **Repeating bills** (Purchases; RB1-RB12, not yet approved by Jess), like
   Xero's repeating bills and made by the same scheduler as repeating
   invoices: a template with a supplier and bill lines (items fill the

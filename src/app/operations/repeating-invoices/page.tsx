@@ -86,7 +86,16 @@ function RepeatingInvoices({ organisationId }: { organisationId: string }) {
       title="Repeating invoices"
       description="Each template makes an invoice on every scheduled date, once, by the hourly job. Missed dates are caught up the next time it runs."
       actions={
-        can("bookkeeper") ? <Button onClick={() => router.push("/operations/repeating-invoices/new")}>New repeating invoice</Button> : null
+        can("bookkeeper") ? (
+          <>
+            <Button variant="secondary" onClick={() => router.push("/operations/repeating-invoices/price-changes")}>
+              Change prices
+            </Button>
+            <Button onClick={() => router.push("/operations/repeating-invoices/new")}>New repeating invoice</Button>
+          </>
+        ) : (
+          <Link href="/operations/repeating-invoices/price-changes">Price changes</Link>
+        )
       }
     >
       <div className={ui.tabs} role="tablist" aria-label="Repeating invoice status">
