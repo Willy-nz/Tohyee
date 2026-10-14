@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -352,6 +353,11 @@ export default function AiPage() {
         title="AI"
         description="Connect your own AI (Claude, ChatGPT and others) to these books. It can look things up and answer questions, and, if you let it, make drafts and post them. It never deletes anything."
       />
+      <Notice tone="info">
+        Chat with your AI in its own app (Claude, ChatGPT and others). What it makes here, its dashboards and tables, and the files you leave for
+        it, are in <Link href="/operations/ai/workspace">AI dashboards and data</Link>; what it knows about the farm is in the{" "}
+        <Link href="/operations/farming/notebook">farm notebook</Link>.
+      </Notice>
       <RequireOrganisation>{(organisationId) => <AiConnect key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );
