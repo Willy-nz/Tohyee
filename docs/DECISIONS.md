@@ -4537,6 +4537,8 @@ testing) and #154's code signing (later, Jess).
      - **Keys:** Ctrl/Cmd+Enter clicks the form's first enabled submit
        button. Enter in a line table moves to the next field. A field that
        handles Enter itself is left alone.
+     - **Later (14 Oct 2026):** every other date field uses `DateInput`
+       too (decision 525).
 
 520. **A feed with no sync tried for 2 days is "not syncing"** (14 Oct 2026,
      #258).
@@ -4603,3 +4605,16 @@ testing) and #154's code signing (later, Jess).
      - **Totals:** no total changes, only the layout.
      - **Dates:** the report page's date boxes now use the keyboard date
        field (decision 519), so they show dd/mm/yyyy.
+
+525. **Every date field is typed day first** (14 October 2026, #258).
+     - **What changed:** the 119 date fields that still used the browser's
+       own date field now use `DateInput`, as transaction entry did
+       (decision 519). The browser's field takes its format from the
+       computer's settings, so it could show US dates (10/14/2026).
+     - **min and max:** the browser's field refused a form with a date
+       outside min or max (a due date before its invoice date, a holiday
+       outside its pay period). `DateInput` keeps that rule with the
+       field's validity, and it also refuses a form while a typed date
+       can't be read.
+     - **Checked:** pressing Enter in a date field that saves its form
+       sends the newly typed date.

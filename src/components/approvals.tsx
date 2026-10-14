@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -647,7 +648,7 @@ export function ApprovalRequestView({ organisationId, requestId }: { organisatio
           <div className={ui.inlineForm}>
             {request.isFinalStep && request.documentType === "expense_claim" ? (
               <Field label="Claim date" hint="The claim posts on this date (EC3).">
-                <input type="date" value={claimDate} onChange={(event) => setClaimDate(event.target.value)} required />
+                <DateInput value={claimDate} onChange={(event) => setClaimDate(event.target.value)} required />
               </Field>
             ) : null}
             <Button onClick={approve} disabled={busy}>

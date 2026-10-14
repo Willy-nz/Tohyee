@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { useMemo, useState } from "react";
 import { readFileAsBase64 } from "@/components/bank/common";
 import { Money } from "@/components/books";
@@ -458,7 +459,7 @@ function ConversionStep({
             <div style={{ display: "grid", gap: 14 }}>
               <div className={ui.grid2}>
                 <Field label="Conversion date" hint="Everything is posted as at this date; nothing may be posted on or before it yet.">
-                  <input type="date" value={conversionDate} onChange={(event) => setConversionDate(event.target.value)} />
+                  <DateInput value={conversionDate} onChange={(event) => setConversionDate(event.target.value)} />
                 </Field>
                 <Field label="Dates in the files are written">
                   <select value={dateOrder} onChange={(event) => setDateOrder(event.target.value as typeof dateOrder)}>

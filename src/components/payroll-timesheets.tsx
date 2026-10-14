@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { useApiData, useHydrated } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -93,8 +94,7 @@ export function TimesheetsPage({ organisationId }: { organisationId: string }) {
       >
         <div className={ui.grid3}>
           <Field label="Go to the week of">
-            <input
-              type="date"
+            <DateInput
               value={week}
               onChange={(event) => {
                 if (event.target.value) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { EmailDocumentPanel, pdfHref, useEmailedStatus } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
@@ -160,10 +161,10 @@ function QuoteActions({
         <>
           <div className={ui.inlineForm}>
             <Field label="Invoice date">
-              <input type="date" value={invoiceDate} min={quote.quoteDate} onChange={(event) => setInvoiceDate(event.target.value)} required />
+              <DateInput value={invoiceDate} min={quote.quoteDate} onChange={(event) => setInvoiceDate(event.target.value)} required />
             </Field>
             <Field label="Due date" hint="Blank: the customer's payment terms.">
-              <input type="date" value={dueDate} min={invoiceDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
+              <DateInput value={dueDate} min={invoiceDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
             </Field>
             <ExchangeRateField currencyCode={quote.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
             <Button onClick={accept} disabled={busy || !invoiceDate}>
@@ -172,7 +173,7 @@ function QuoteActions({
           </div>
           <div className={ui.inlineForm}>
             <Field label="Order date" hint="Or make a sales order, to invoice it in parts.">
-              <input type="date" value={orderDate} min={quote.quoteDate} onChange={(event) => setOrderDate(event.target.value)} required />
+              <DateInput value={orderDate} min={quote.quoteDate} onChange={(event) => setOrderDate(event.target.value)} required />
             </Field>
             <Button variant="secondary" onClick={acceptAsSalesOrder} disabled={busy || !orderDate}>
               {busy ? "Working…" : "Accept as a sales order"}
@@ -187,7 +188,7 @@ function QuoteActions({
       ) : null}
       <div className={ui.inlineForm}>
         <Field label="Copy to a new draft dated">
-          <input type="date" value={copyDate} onChange={(event) => setCopyDate(event.target.value)} required />
+          <DateInput value={copyDate} onChange={(event) => setCopyDate(event.target.value)} required />
         </Field>
         <Button variant="secondary" onClick={copy} disabled={busy || !copyDate}>
           Copy

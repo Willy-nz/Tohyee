@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
@@ -150,7 +151,7 @@ function MovementForm({
           </select>
         </Field>
         <Field label="Date">
-          <input type="date" value={fields.movementDate} onChange={(event) => set("movementDate", event.target.value)} required />
+          <DateInput value={fields.movementDate} onChange={(event) => set("movementDate", event.target.value)} required />
         </Field>
         <Field label="Item code" hint="A stock item's code shares its stock with invoices and bills.">
           <input value={fields.itemCode} onChange={(event) => set("itemCode", event.target.value)} maxLength={50} required list="stock-item-codes" />
@@ -335,7 +336,7 @@ function TransferForm({
       </div>
       <div className={ui.grid4}>
         <Field label="Date" hint="Not before either location's latest movement.">
-          <input type="date" value={fields.transferDate} onChange={(event) => set("transferDate", event.target.value)} required />
+          <DateInput value={fields.transferDate} onChange={(event) => set("transferDate", event.target.value)} required />
         </Field>
         <Field label="Quantity">
           <input inputMode="decimal" value={fields.quantity} onChange={(event) => set("quantity", event.target.value)} required />

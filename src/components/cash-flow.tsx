@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -191,7 +192,7 @@ function ForecastItems({ organisationId, canEdit, onChanged }: { organisationId:
               <input value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} inputMode="decimal" required />
             </Field>
             <Field label="Date">
-              <input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
+              <DateInput value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
             </Field>
             <Field label="Repeats">
               <select value={form.repeat} onChange={(event) => setForm({ ...form, repeat: event.target.value as CashFlowItem["repeat"] })}>
@@ -202,7 +203,7 @@ function ForecastItems({ organisationId, canEdit, onChanged }: { organisationId:
             </Field>
             {form.repeat !== "none" ? (
               <Field label="Until" hint="Blank for no end.">
-                <input type="date" value={form.untilDate} onChange={(event) => setForm({ ...form, untilDate: event.target.value })} />
+                <DateInput value={form.untilDate} onChange={(event) => setForm({ ...form, untilDate: event.target.value })} />
               </Field>
             ) : null}
             <Button type="submit" disabled={busy}>

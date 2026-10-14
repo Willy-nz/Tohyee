@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { Money } from "@/components/books";
@@ -296,15 +297,15 @@ export function CustomerStatements({ organisationId, initialContactId }: { organ
           {kind === "activity" ? (
             <>
               <Field label="From">
-                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+                <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
               </Field>
               <Field label="To">
-                <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+                <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
               </Field>
             </>
           ) : (
             <Field label="As at">
-              <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
+              <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
             </Field>
           )}
           {hasSubs ? (

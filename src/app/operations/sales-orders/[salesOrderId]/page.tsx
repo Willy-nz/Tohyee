@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -92,10 +93,10 @@ function InvoiceForm({ organisationId, salesOrder, busy, run }: { organisationId
       </div>
       <div className={ui.inlineForm}>
         <Field label="Invoice date">
-          <input type="date" value={invoiceDate} min={salesOrder.orderDate} onChange={(event) => setInvoiceDate(event.target.value)} required />
+          <DateInput value={invoiceDate} min={salesOrder.orderDate} onChange={(event) => setInvoiceDate(event.target.value)} required />
         </Field>
         <Field label="Due date" hint="Blank: the customer's payment terms.">
-          <input type="date" value={dueDate} min={invoiceDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
+          <DateInput value={dueDate} min={invoiceDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
         </Field>
         <ExchangeRateField currencyCode={salesOrder.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <Button onClick={invoice} disabled={busy || !invoiceDate}>

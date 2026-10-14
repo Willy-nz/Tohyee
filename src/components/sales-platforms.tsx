@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -534,7 +535,7 @@ function PostingSettings({
           </label>
           <div className={ui.grid2}>
             <Field label="Start date" hint="Orders processed before it aren't brought in.">
-              <input type="date" value={form.startDate} onChange={(event) => set({ startDate: event.target.value })} />
+              <DateInput value={form.startDate} onChange={(event) => set({ startDate: event.target.value })} />
             </Field>
             {woo ? null : accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds until it pays out.")}
             {woo ? null : accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank")}

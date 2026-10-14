@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -426,8 +427,7 @@ function ImportSoil({
           />
         </Field>
         <Field label="Date sampled" hint="If the file has none">
-          <input
-            type="date"
+          <DateInput
             value={sampledOn}
             onChange={(event) => setSampledOn(event.target.value)}
           />
@@ -635,8 +635,7 @@ function AddSoilTest({
           </select>
         </Field>
         <Field label="Date sampled">
-          <input
-            type="date"
+          <DateInput
             value={form.sampledOn}
             onChange={set("sampledOn")}
           />

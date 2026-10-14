@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
@@ -107,10 +108,10 @@ export function PayRunList({ organisationId }: { organisationId: string }) {
               </select>
             </Field>
             <Field label="Period starts">
-              <input required type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
+              <DateInput required value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
             </Field>
             <Field label="Pay date" hint="IRD's rates are picked by this date.">
-              <input required type="date" value={payDate} onChange={(event) => setPayDate(event.target.value)} />
+              <DateInput required value={payDate} onChange={(event) => setPayDate(event.target.value)} />
             </Field>
           </div>
           <div className={ui.actions}>
@@ -504,7 +505,7 @@ function PublicHolidayDecision({
       </p>
       <div className={ui.grid4}>
         <Field label="Public holiday">
-          <input required type="date" min={run.periodStart} max={run.periodEnd} value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} />
+          <DateInput required min={run.periodStart} max={run.periodEnd} value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} />
         </Field>
         <Field label="Would otherwise be a working day">
           <select value={otherwiseWorking} onChange={(event) => setOtherwiseWorking(event.target.value)}>
@@ -756,7 +757,7 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
           <form className={styles.stack} onSubmit={voidRun}>
             <div className={ui.grid2}>
               <Field label="Void date" hint="The reversing journal's date. It can't be before the pay date or in a locked period. Void its wage and IRD payments first.">
-                <input min={run.payDate} required type="date" value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
+                <DateInput min={run.payDate} required value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
               </Field>
             </div>
             <div className={ui.actions}>

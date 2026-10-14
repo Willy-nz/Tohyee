@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -146,7 +147,7 @@ export function PayRunWagePayments({ organisationId, payRunId }: { organisationI
               </Field>
             ) : null}
             <Field label="Paid on" hint={`On or after the pay date (${formatDate(data.payDate)}).`}>
-              <input min={data.payDate} required type="date" value={date} onChange={(event) => setPaymentDate(event.target.value)} />
+              <DateInput min={data.payDate} required value={date} onChange={(event) => setPaymentDate(event.target.value)} />
             </Field>
             <Field label="Amount">
               <input inputMode="decimal" required value={amount ?? unpaidNow} onChange={(event) => setAmount(event.target.value)} />
@@ -287,7 +288,7 @@ function IrdPeriodPay({
       </div>
       <div className={ui.grid3}>
         <Field label="Paid on">
-          <input min={period.start} required type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
+          <DateInput min={period.start} required value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
         </Field>
         <Field label="From">
           <AccountSelect accounts={accounts.data?.accounts ?? []} value={bank} onChange={setBankCode} filter={isPaymentAccount} ariaLabel="Bank account" />

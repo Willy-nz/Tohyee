@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, Fragment, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -144,7 +145,7 @@ function RevaluationForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid4}>
         <Field label="Revaluation date" hint={`Reverses automatically on ${formatDate(nextDay(date))}.`}>
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+          <DateInput value={date} onChange={(event) => setDate(event.target.value)} required />
         </Field>
         <Field label="Reference">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} required />

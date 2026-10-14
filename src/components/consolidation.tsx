@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { Money } from "@/components/books";
@@ -241,11 +242,11 @@ function Reports({ group, kind, canEdit }: { group: ConsolidationGroup; kind: "p
           <div className={ui.inlineForm}>
             {kind === "profit_and_loss" ? (
               <Field label="From">
-                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+                <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
               </Field>
             ) : null}
             <Field label={kind === "balance_sheet" ? "As at" : "To"}>
-              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+              <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
             </Field>
             {group.members.some((member) => member.currencyCode !== group.currencyCode) ? (
               <label className={ui.checkbox}>
@@ -294,10 +295,10 @@ function BudgetVsActual({ group }: { group: ConsolidationGroup }) {
       actions={
         <div className={ui.inlineForm}>
           <Field label="From">
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
           </Field>
           <Field label="To">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
         </div>
       }
@@ -561,7 +562,7 @@ function Adjustments({ detail, canEdit, onChanged }: { detail: GroupDetail; canE
         >
           <div className={ui.inlineForm}>
             <Field label="Date">
-              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+              <DateInput value={date} onChange={(event) => setDate(event.target.value)} required />
             </Field>
             <Field label="Description">
               <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={200} required />

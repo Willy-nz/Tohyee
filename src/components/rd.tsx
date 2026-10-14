@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type ChangeEvent, type FormEvent, type ReactNode, useState } from "react";
 import { Money } from "@/components/books";
@@ -712,7 +713,7 @@ function ApprovalForm({
           <input value={reference} maxLength={100} required onChange={(event) => setReference(event.target.value)} />
         </Field>
         <Field label="Date of IRD's letter">
-          <input type="date" value={letterDate} required onChange={(event) => setLetterDate(event.target.value)} />
+          <DateInput value={letterDate} required onChange={(event) => setLetterDate(event.target.value)} />
         </Field>
         <Field label="First income year" hint={yearHint(firstYear)}>
           <input inputMode="numeric" pattern="\d{4}" value={firstYear} required onChange={(event) => setFirstYear(event.target.value)} />
@@ -1444,10 +1445,10 @@ function UntaggedLines({ organisationId, onChanged }: { organisationId: string; 
           <input value={filters.search} maxLength={100} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
         </Field>
         <Field label="From">
-          <input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} />
+          <DateInput value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} />
         </Field>
         <Field label="To">
-          <input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} />
+          <DateInput value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} />
         </Field>
         <Button type="submit" variant="secondary">
           Show
@@ -1759,7 +1760,7 @@ function UsageForm({
     <form onSubmit={(event) => void submit(event)} className={ui.inlineForm}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Field label="Date used">
-        <input type="date" value={workDate} max={todayInBrowser()} required onChange={(event) => setWorkDate(event.target.value)} />
+        <DateInput value={workDate} max={todayInBrowser()} required onChange={(event) => setWorkDate(event.target.value)} />
       </Field>
       <Field label="Used for">
         <select value={activityId} onChange={(event) => setActivityId(event.target.value)}>

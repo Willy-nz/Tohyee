@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -117,7 +118,7 @@ function Tax({ organisationId }: { organisationId: string }) {
               </Field>
             ) : null}
             <Field label="Effective from">
-              <input type="date" value={form.effectiveFrom} onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })} required />
+              <DateInput value={form.effectiveFrom} onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })} required />
             </Field>
             <Field label="Available on">
               <select value={form.availableOn} onChange={(event) => setForm({ ...form, availableOn: event.target.value as AvailableOn })}>

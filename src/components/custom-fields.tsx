@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -166,7 +167,7 @@ export function FieldInput({
         <textarea {...common} rows={3} value={text} maxLength={4000} onChange={(event) => set(event.target.value)} />
       );
     case "date":
-      return <input {...common} type="date" value={text} onChange={(event) => set(event.target.value)} />;
+      return <DateInput {...common} value={text} onChange={(event) => set(event.target.value)} />;
     case "integer":
     case "decimal":
     case "money":

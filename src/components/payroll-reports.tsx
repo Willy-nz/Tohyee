@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { Money } from "@/components/books";
@@ -609,7 +610,7 @@ export function PayrollReports({ organisationId }: { organisationId: string }) {
           {name === "headcount" ? (
             <>
               <Field label="At">
-                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                <DateInput value={date} onChange={(event) => setDate(event.target.value)} />
               </Field>
               <Field label="Standard week (hours)">
                 <input inputMode="decimal" value={standardWeek} onChange={(event) => setStandardWeek(event.target.value)} />
@@ -617,10 +618,10 @@ export function PayrollReports({ organisationId }: { organisationId: string }) {
             </>
           ) : null}
           <Field label={name === "headcount" ? "Months from" : "Pay dates from"}>
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
           </Field>
           <Field label="To">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
           {name === "labour-cost" ? (
             <Field label="Group by">

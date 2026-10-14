@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -150,8 +151,7 @@ function CreditNoteActions({
       ) : (
         <div className={ui.inlineForm}>
           <Field label="Void date">
-            <input
-              type="date"
+            <DateInput
               value={voidDate}
               min={creditNote.creditNoteDate}
               onChange={(event) => setVoidDate(event.target.value)}
