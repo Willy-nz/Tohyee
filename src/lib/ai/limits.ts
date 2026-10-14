@@ -5,6 +5,8 @@
 
 /** Requests per key per minute. An AI asking a question makes a handful. */
 export const MCP_REQUESTS_PER_MINUTE = 120;
+/** Wrong or revoked keys per address per minute before that address is told to wait. */
+export const MCP_FAILED_KEYS_PER_MINUTE = 30;
 /** A tool answer bigger than this (characters of JSON) is refused with a hint to narrow it. */
 export const MAX_TOOL_TEXT = 200_000;
 
@@ -30,6 +32,12 @@ export class RequestLimiter {
     if (window.count >= this.limit) return false;
     window.count += 1;
     return true;
+  }
+
+  /** Whether a key has used its requests for the current window, without counting one. */
+  spent(key: string, now = Date.now()): boolean {
+    const window = this.windows.get(key);
+    return Boolean(window && now - window.start < this.windowMs && window.count >= this.limit);
   }
 
   private prune(now: number): void {

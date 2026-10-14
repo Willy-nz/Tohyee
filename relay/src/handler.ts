@@ -5,6 +5,8 @@
  *
  * Public API (the Windows app depends on this exactly):
  *   POST   /v1/addresses             {port, installId, version} -> 201 {hostname, tunnelToken, releaseKey}
+ *                                     (Authorization: Bearer <releaseKey>, when the server has one, to move
+ *                                     an existing address to a different port)
  *   DELETE /v1/addresses/<hostname>  Authorization: Bearer <releaseKey> -> 204
  *   GET    /v1/health                -> 200 {ok: true, ...}
  * Errors are {"error": "..."} with 400, 401, 403, 404, 429 or 503.
@@ -117,7 +119,7 @@ async function createAddress(request: Request, env: Env, s: Settings, deps: Deps
   const installHash = await sha256Hex(`install:${input.installId}`);
   const cf = api(env, s, deps);
   const existing = await store.findByInstall(env.DB, installHash);
-  if (existing) return existingAddress(existing, input, env, s, cf, deps);
+  if (existing) return existingAddress(existing, input, bearer(request), env, s, cf, deps);
 
   if (!(await store.registrationsOpen(env.DB))) {
     throw new HttpError(503, "New Tohyee addresses are switched off for now. Please try again later." + contactLine(s));
@@ -171,11 +173,14 @@ async function createAddress(request: Request, env: Env, s: Settings, deps: Deps
 /**
  * The same install asked again. It gets the same address and a NEW release key
  * (the old key stops working), so a server that lost its key can still let the
- * address go. The port is updated if it changed.
+ * address go. Moving the address to a different port on that computer needs
+ * the current release key as well as the install id: the port decides which
+ * local service the public address reaches.
  */
 async function existingAddress(
   row: store.AddressRow,
   input: { port: number; version: string | null },
+  givenKey: string | null,
   env: Env,
   s: Settings,
   cf: CloudflareApi,
@@ -194,6 +199,9 @@ async function existingAddress(
   }
   if (row.status !== "active" || !row.tunnel_id) {
     throw new HttpError(503, "Your address is being removed. Please try again later.");
+  }
+  if (row.port !== input.port && !(givenKey && row.release_hash && (await matchesHash(`release:${givenKey}`, row.release_hash)))) {
+    throw new HttpError(403, "This address points at a different port. Changing it needs the address's release key; or release the address and ask for a new one.");
   }
   try {
     if (row.port !== input.port) await cf.setIngress(row.tunnel_id, row.hostname, input.port);

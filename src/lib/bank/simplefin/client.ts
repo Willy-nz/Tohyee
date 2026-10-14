@@ -1,5 +1,7 @@
 import { assertPublicMailHost } from "@/lib/analytics/mail-host";
 import { UnavailableError, ValidationError } from "@/lib/errors";
+import { readLimitedBytes } from "@/lib/net/limited-body";
+import { publicFetchLike } from "@/lib/net/public-fetch";
 
 /**
  * A small client for the SimpleFIN protocol (https://www.simplefin.org/protocol.html),
@@ -15,6 +17,8 @@ import { UnavailableError, ValidationError } from "@/lib/errors";
  * a timeout, and none is made inside a database transaction.
  */
 export const MAX_DAYS_PER_REQUEST = 90;
+/** The most one SimpleFIN answer may be: 90 days of several accounts' transactions is well under this. */
+export const MAX_ANSWER_BYTES = 10 * 1024 * 1024;
 
 export type SimpleFinTransaction = {
   id?: unknown;
@@ -48,9 +52,20 @@ export type SimpleFinAccountSet = {
 
 /** Lets tests swap the network for canned responses. */
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
-let fetcher: FetchLike = (input, init) => fetch(input, init);
+/** Public https addresses only, checked as each connection is made (decision 534). */
+const network: FetchLike = publicFetchLike(MAX_ANSWER_BYTES);
+let fetcher: FetchLike = network;
 export function setSimpleFinFetchForTests(replacement: FetchLike | null): void {
-  fetcher = replacement ?? ((input, init) => fetch(input, init));
+  fetcher = replacement ?? network;
+}
+
+/** An answer's text, refused once it's bigger than MAX_ANSWER_BYTES (a test's canned answer goes through this too). */
+async function answerText(response: Response): Promise<string> {
+  try {
+    return (await readLimitedBytes(response, MAX_ANSWER_BYTES, "SimpleFIN's answer")).toString("utf8");
+  } catch (error) {
+    throw new SimpleFinError(response.status, error instanceof Error ? error.message : "SimpleFIN's answer couldn't be read.");
+  }
 }
 
 export class SimpleFinError extends Error {
@@ -106,7 +121,7 @@ export async function claimSetupToken(token: unknown): Promise<string> {
   } catch (error) {
     throw new SimpleFinError(0, `SimpleFIN couldn't be reached (${error instanceof Error ? error.message : "network error"}).`);
   }
-  const text = (await response.text()).trim();
+  const text = (await answerText(response)).trim();
   if (response.status === 403) throw new ValidationError("This setup token has been used. Make a new one in SimpleFIN Bridge.");
   if (!response.ok) throw new SimpleFinError(response.status, `SimpleFIN answered ${response.status} when claiming the token.`);
   let access: URL;
@@ -171,8 +186,9 @@ export async function fetchAccounts(
   if (!response.ok) throw new SimpleFinError(response.status, `SimpleFIN answered ${response.status}.`);
   let data: Record<string, unknown>;
   try {
-    data = (await response.json()) as Record<string, unknown>;
-  } catch {
+    data = JSON.parse(await answerText(response)) as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof SimpleFinError) throw error;
     throw new SimpleFinError(response.status, "SimpleFIN sent something Tohyee couldn't read.");
   }
   const accounts = (Array.isArray(data.accounts) ? data.accounts : []).filter(

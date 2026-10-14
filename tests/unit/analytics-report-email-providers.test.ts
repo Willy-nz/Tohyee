@@ -1,11 +1,13 @@
 import { Readable } from "node:stream";
 import { ImapFlow } from "imapflow";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setMailHostResolverForTests } from "@/lib/analytics/mail-host";
 import { setMailFetchForTests } from "@/lib/crm/mail/providers";
 import { imapReportMessages, listImapFolders, listReportFolders, reportMessages, setImapFactoryForTests } from "@/lib/analytics/report-email-providers";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/analytics/report-email-files";
 
-afterEach(() => { setMailFetchForTests(null); setImapFactoryForTests(null); vi.useRealTimers(); });
+beforeEach(() => setMailHostResolverForTests(async () => ["203.0.113.20"]));
+afterEach(() => { setMailFetchForTests(null); setImapFactoryForTests(null); setMailHostResolverForTests(null); vi.useRealTimers(); });
 const json = (value: unknown) => new Response(JSON.stringify(value));
 const credentials = { host: "imap.example.com", port: 993, username: "owner@example.com", password: "private-password" };
 async function collect<T>(values: AsyncIterable<T>) {
@@ -158,7 +160,14 @@ describe("report email providers (decision 362)", () => {
     expect(lock).toHaveBeenCalledWith("Reports", expect.objectContaining({ readOnly: true }));
     expect(download).toHaveBeenCalledWith("12", "1", { uid: true, maxBytes: MAX_ATTACHMENT_BYTES + 1 });
     expect(options[0]).toMatchObject({ secure: true, port: 993, logger: false, tls: { rejectUnauthorized: true } });
+    // Decision 534: connects to the address it checked, with the name for TLS.
+    expect(options[0]).toMatchObject({ host: "203.0.113.20", servername: "imap.example.com", tls: { servername: "imap.example.com" } });
     expect(logout).toHaveBeenCalledTimes(3);
+    // Each attachment read checks the name again: one now pointing at the local network is refused.
+    setMailHostResolverForTests(async () => ["192.168.1.9"]);
+    await expect(messages[0].attachments[0].read()).rejects.toThrow("local network");
+    expect(options).toHaveLength(3);
+    setMailHostResolverForTests(async () => ["203.0.113.20"]);
     client.mailbox.uidValidity = BigInt(8);
     await expect(messages[0].attachments[0].read()).rejects.toThrow();
   });

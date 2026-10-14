@@ -96,7 +96,7 @@ export async function listLeadForms(tx: OrgTx): Promise<LeadForm[]> {
 function thankYou(input: unknown): string | null {
   const url = optionalString(input, "thank-you page", { maxLength: 500 });
   if (url === null) return null;
-  if (!/^https?:\/\/[^\s]+$/.test(url)) throw new ValidationError("The thank-you page must be a web address starting with https://.");
+  if (!/^https:\/\/[^\s]+$/.test(url)) throw new ValidationError("The thank-you page must be a web address starting with https://.");
   return url;
 }
 

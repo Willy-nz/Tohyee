@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { checkXlsxArchive, type XlsxLimits } from "@/lib/analytics/xlsx";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
@@ -17,7 +18,15 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const READ_CHUNK = 100_000;
 
 const TEXT_TYPES = /\.(csv|tsv|txt|json|md|xml|tab)$/i;
-const EXCEL_TYPES = /\.(xlsx|xlsm)$/i;
+const EXCEL_TYPES = /\.xlsx$/i;
+
+/**
+ * A workbook is checked before it's opened (decision 534), as everywhere else
+ * Tohyee reads Excel: no macros, encryption or unsafe parts, and it may unpack
+ * to at most 64 MB, because the whole workbook is opened in memory to read
+ * every sheet. Bigger workbooks can be saved as CSV instead.
+ */
+const AI_XLSX_LIMITS: XlsxLimits = { expandedBytes: 64 * 1024 * 1024, entries: 2000, ratio: 1000 };
 
 export type AiFile = { id: string; fileName: string; contentType: string; sizeBytes: number; note: string | null; uploadedByEmail: string; uploadedAt: string };
 
@@ -51,6 +60,7 @@ export async function addAiFile(tx: OrgTx, input: { fileName: unknown; contentBa
   const content = Buffer.from(input.contentBase64, "base64");
   if (content.length === 0) throw new ValidationError("The file is empty.");
   if (content.length > MAX_FILE_BYTES) throw new ValidationError("Files can be up to 10 MB.");
+  if (EXCEL_TYPES.test(fileName)) await checkXlsxArchive(content, AI_XLSX_LIMITS);
   const note = optionalString(input.note, "note", { maxLength: 1000 });
   const contentType = EXCEL_TYPES.test(fileName) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/plain";
   const row = await tx.query<Row>(
@@ -89,7 +99,9 @@ export async function aiFileText(tx: OrgTx, idInput: unknown): Promise<{ file: A
   const row = (await tx.query<Row & { content: Buffer }>(`select ${COLUMNS}, content from ai_files where id = $1 and archived_at is null`, [id])).rows[0];
   if (!row) throw new NotFoundError("File not found.");
   const file = toFile(row);
-  if (!EXCEL_TYPES.test(file.fileName)) return { file, text: row.content.toString("utf8") };
+  if (!/\.(xlsx|xlsm)$/i.test(file.fileName)) return { file, text: row.content.toString("utf8") };
+  // Checked again on reading: files added before the check (and any .xlsm) are refused here if unsafe.
+  await checkXlsxArchive(row.content, AI_XLSX_LIMITS);
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(row.content as unknown as ArrayBuffer);
   const parts: string[] = [];

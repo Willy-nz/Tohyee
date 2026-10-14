@@ -5,7 +5,9 @@ import * as loginRoute from "@/app/api/auth/login/route";
 import * as sessionRoute from "@/app/api/auth/session/route";
 import * as resetRoute from "@/app/api/auth/two-step/reset/route";
 import { SIGN_IN_TRIES_PER_MINUTE } from "@/lib/auth/rate-limit";
+import { publicOrigin } from "@/lib/auth/origin";
 import { cameThroughRemoteAccess } from "@/lib/auth/remote";
+import { requestOrigin } from "@/lib/crm/mail/origin";
 import { clientAddress } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import { apiRequest, createTestUser, describeWithDatabase, sessionCookieFor, startTestServer, TEST_PASSWORD, type TestServer } from "../helpers/test-server";
@@ -53,6 +55,24 @@ describeWithDatabase("remote access hardening (#208)", () => {
     expect(at("127.0.0.1")).toBe("127.0.0.1");
     expect(at(null, "198.51.100.7")).toBe("198.51.100.7");
     expect(at(null)).toBeNull();
+    // Decision 534: this computer written every way, ports and junk entries.
+    expect(at("203.0.113.9, 0:0:0:0:0:0:0:1")).toBe("203.0.113.9");
+    expect(at("203.0.113.9, ::ffff:127.0.0.1")).toBe("203.0.113.9");
+    expect(at("203.0.113.9:51234")).toBe("203.0.113.9");
+    expect(at("[2001:db8::7]:443")).toBe("2001:db8::7");
+    expect(at("203.0.113.9, unknown")).toBe("203.0.113.9");
+    expect(at("not-an-address", "also not")).toBeNull();
+    // A proxy of your own in Docker is skipped once it's named as trusted.
+    expect(at("203.0.113.9, 172.17.0.1")).toBe("172.17.0.1");
+    process.env.TOHYEE_TRUSTED_PROXIES = "172.16.0.0/12, 10.0.0.5";
+    try {
+      expect(at("203.0.113.9, 172.17.0.1")).toBe("203.0.113.9");
+      expect(at("203.0.113.9, 10.0.0.5, 172.18.0.1")).toBe("203.0.113.9");
+      // Only the hops listed: a visitor's own entry before them still can't be chosen.
+      expect(at("6.6.6.6, 203.0.113.9, 172.17.0.1")).toBe("203.0.113.9");
+    } finally {
+      delete process.env.TOHYEE_TRUSTED_PROXIES;
+    }
   });
 
   it("item 3: changing the first X-Forwarded-For entry on every try no longer gets past the per-address limit", async () => {
@@ -100,6 +120,18 @@ describeWithDatabase("remote access hardening (#208)", () => {
     expect(remote({ "x-forwarded-host": "TOHYEE-PC.tail1a2b3c.ts.net:443" })).toBe(true);
     expect(remote({ host: "192.168.1.20:3000" })).toBe(false);
     expect(remote({ host: "localhost:3000", "x-forwarded-for": "192.168.1.30" })).toBe(false);
+    // Decision 534: other ways in from the internet.
+    expect(remote({ host: "books.kowhai.nz" })).toBe(true); // your own proxy passing the name on
+    expect(remote({ host: "localhost:3000", "x-forwarded-host": "books.kowhai.nz" })).toBe(true);
+    expect(remote({ host: "203.0.113.40:3000" })).toBe(true); // a port opened on the router
+    expect(remote({ host: "localhost:3000", "x-forwarded-for": "203.0.113.9" })).toBe(true);
+    expect(remote({ host: "localhost:3000", "x-forwarded-for": "203.0.113.9, 127.0.0.1" })).toBe(true);
+    // Adding a local-looking header doesn't hide a public one.
+    expect(remote({ host: "books.kowhai.nz", "x-forwarded-host": "localhost" })).toBe(true);
+    // Local names and addresses stay local.
+    for (const host of ["farm-pc:3000", "tohyee.local", "tohyee.lan", "books.home.arpa", "tohyee.internal", "[::1]:3000", "10.0.0.8", "[fe80::1]:3000", "tohyee.test"]) {
+      expect(remote({ host, "x-forwarded-for": "192.168.1.30" })).toBe(false);
+    }
   });
 
   it("item 5: without the secret key (so no two-step), sign-ins and sessions through remote access are refused; on the local network they work", async () => {
@@ -126,5 +158,13 @@ describeWithDatabase("remote access hardening (#208)", () => {
     const remote = await login("no-key@example.com", { "cf-ray": "8c1f-AKL", "x-forwarded-for": "203.0.113.10" });
     expect(remote.status).toBe(403);
     expect((await body(remote)).error).toContain("hasn't been set up yet");
+  });
+
+  it("decision 534: without a public address set, links use the Host the request came to, never a forwarded host a visitor typed", async () => {
+    const lan = new Request("http://192.168.1.5:3000/x", { headers: { host: "192.168.1.5:3000", "x-forwarded-host": "evil.example", "x-forwarded-proto": "javascript" } });
+    expect(await publicOrigin(lan)).toBe("http://192.168.1.5:3000");
+    expect(await requestOrigin(lan)).toBe("http://192.168.1.5:3000");
+    const tunnel = new Request("http://127.0.0.1:3000/x", { headers: { host: "books.kowhai.nz", "x-forwarded-proto": "https", "x-forwarded-host": "evil.example" } });
+    expect(await publicOrigin(tunnel)).toBe("https://books.kowhai.nz");
   });
 });

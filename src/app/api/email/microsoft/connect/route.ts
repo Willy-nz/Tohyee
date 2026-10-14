@@ -7,6 +7,7 @@ import { startMicrosoftSending } from "@/lib/email/microsoft";
 export const POST = route(async (request) => {
   assertSameOrigin(request);
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "admin", (tx) => startMicrosoftSending(tx, requestOrigin(request)));
+  const origin = await requestOrigin(request);
+  const result = await withOrganisation(request, body.organisationId, "admin", (tx) => startMicrosoftSending(tx, origin));
   return json(result);
 });

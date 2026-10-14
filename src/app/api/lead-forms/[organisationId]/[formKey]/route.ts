@@ -1,4 +1,6 @@
+import { readLimitedBytes } from "@/lib/api/http";
 import { clientAddress } from "@/lib/auth/sessions";
+import { PayloadTooLargeError } from "@/lib/errors";
 import { receiveFormLead } from "@/lib/crm/lead-intake";
 
 type Context = { params: Promise<{ organisationId: string; formKey: string }> };
@@ -16,7 +18,7 @@ function answer(request: Request, status: number, message: string, thankYouUrl: 
   if ((request.headers.get("accept") ?? "").includes("application/json")) {
     return new Response(JSON.stringify(status < 300 ? { ok: true } : { error: message }), { status, headers: { ...headers, "content-type": "application/json" } });
   }
-  if (status < 300 && thankYouUrl) return new Response(null, { status: 303, headers: { ...headers, location: thankYouUrl } });
+  if (status < 300 && thankYouUrl && thankYouUrl.startsWith("https://")) return new Response(null, { status: 303, headers: { ...headers, location: thankYouUrl } });
   const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(
     status < 300 ? "Thank you" : "Not sent",
   )}</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem"><p>${escape(message)}</p></body></html>`;
@@ -24,10 +26,13 @@ function answer(request: Request, status: number, message: string, thankYouUrl: 
 }
 
 async function readFields(request: Request): Promise<Record<string, string> | null> {
-  const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > MAX_BODY_BYTES) return null;
-  const body = Buffer.from(await request.arrayBuffer());
-  if (body.length > MAX_BODY_BYTES) return null;
+  let body: Buffer;
+  try {
+    body = await readLimitedBytes(request, MAX_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof PayloadTooLargeError) return null;
+    throw error;
+  }
   const type = (request.headers.get("content-type") ?? "").toLowerCase();
   const fields: Record<string, string> = {};
   if (type.startsWith("application/json")) {
@@ -37,7 +42,7 @@ async function readFields(request: Request): Promise<Record<string, string> | nu
     return fields;
   }
   if (type.startsWith("multipart/form-data")) {
-    const form = await new Response(body, { headers: { "content-type": type } }).formData();
+    const form = await new Response(new Uint8Array(body), { headers: { "content-type": type } }).formData();
     for (const [name, value] of form.entries()) if (typeof value === "string") fields[name.slice(0, 100)] = value.slice(0, 5000);
     return fields;
   }

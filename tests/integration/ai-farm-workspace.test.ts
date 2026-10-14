@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
@@ -94,6 +95,13 @@ describeWithDatabase("the AI's farm workspace", () => {
     sheet.addRow(["103", new Date(Date.UTC(2025, 8, 2)), "F", 30.1]);
     const file = await asOwner(async (tx) => addAiFile(tx, { fileName: "calving.xlsx", contentBase64: Buffer.from(await workbook.xlsx.writeBuffer()).toString("base64"), note: "From the herd app" }));
     await expect(asOwner((tx) => addAiFile(tx, { fileName: "photo.jpg", contentBase64: "AAAA" }))).rejects.toThrow(/CSV, TSV, text, JSON and Excel/);
+    // Decision 534: no macro workbooks, and a workbook is checked before it's opened.
+    const plain = Buffer.from(await workbook.xlsx.writeBuffer());
+    await expect(asOwner((tx) => addAiFile(tx, { fileName: "calving.xlsm", contentBase64: plain.toString("base64") }))).rejects.toThrow(/CSV, TSV, text, JSON and Excel/);
+    const bomb = await JSZip.loadAsync(plain);
+    bomb.file("xl/media/zeros.bin", Buffer.alloc(20 * 1024 * 1024));
+    const bombBytes = await bomb.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 } });
+    await expect(asOwner((tx) => addAiFile(tx, { fileName: "bomb.xlsx", contentBase64: bombBytes.toString("base64") }))).rejects.toThrow(/unsafe|limit/);
     const listed = (await call(tokens["owner-read"], "list_ai_uploads")).files as Json[];
     expect(listed.map((entry) => entry.fileName)).toEqual(["calving.xlsx"]);
     const read = await call(tokens["owner-read"], "read_ai_upload", { fileId: file.id });

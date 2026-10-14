@@ -9,6 +9,12 @@ describe("WooCommerce connector (WC1, WC3, WC9)", () => {
     expect(normaliseStoreAddress("shop.glimmers.nz")).toBe("shop.glimmers.nz");
     expect(normaliseStoreAddress("https://example.nz/shop/")).toBe("example.nz/shop");
     expect(() => normaliseStoreAddress("http://shop.glimmers.nz")).toThrow("Use the store's https:// address");
+    // Decision 534: only stores on the internet, on the usual port.
+    for (const local of ["https://127.0.0.1:8443", "https://192.168.1.1", "10.0.0.1", "https://[::1]/shop", "shop.local", "intranet.internal", "https://169.254.169.254"]) {
+      expect(() => normaliseStoreAddress(local)).toThrow(/internet|address, like/);
+    }
+    expect(() => normaliseStoreAddress("https://shop.glimmers.nz:5432")).toThrow("without a port number");
+    expect(normaliseStoreAddress("https://shop.glimmers.nz:8443/")).toBe("shop.glimmers.nz:8443");
     expect(() => woocommerceConnector.parseConnectInput({ storeDomain: "shop.glimmers.nz", consumerKey: "abc", consumerSecret: "cs_x" })).toThrow("The consumer key starts with ck_");
   });
 

@@ -97,9 +97,13 @@ export async function checkAddressService(): Promise<AddressServiceHealth> {
 
 const HOSTNAME = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
-/** Asks for this server's address (the same installId always gets the same one back). */
-export async function requestAddress(input: { port: number; installId: string; version: string }): Promise<IssuedAddress> {
-  const { status, body } = await call("POST", "/v1/addresses", { body: input, timeoutMs: SLOW_MS });
+/**
+ * Asks for this server's address (the same installId always gets the same one
+ * back). The release key, when this server still has one, is sent too: the
+ * service needs it to move an existing address to a different port.
+ */
+export async function requestAddress(input: { port: number; installId: string; version: string }, releaseKey?: string | null): Promise<IssuedAddress> {
+  const { status, body } = await call("POST", "/v1/addresses", { body: input, timeoutMs: SLOW_MS, ...(releaseKey ? { bearer: releaseKey } : {}) });
   if (status !== 200 && status !== 201) throw refusal(status, body);
   const answer = (body ?? {}) as { hostname?: unknown; tunnelToken?: unknown; releaseKey?: unknown };
   const hostname = typeof answer.hostname === "string" ? answer.hostname.trim().toLowerCase().replace(/\.$/, "") : "";

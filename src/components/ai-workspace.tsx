@@ -101,7 +101,7 @@ function Files({ organisationId }: { organisationId: string }) {
             <input value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="e.g. Calving from the herd app, 2025" />
           </Field>
           <Field label="Files">
-            <input type="file" multiple accept=".csv,.tsv,.txt,.json,.md,.xml,.tab,.xlsx,.xlsm" disabled={busy} onChange={(event) => void upload(event.target.files)} />
+            <input type="file" multiple accept=".csv,.tsv,.txt,.json,.md,.xml,.tab,.xlsx" disabled={busy} onChange={(event) => void upload(event.target.files)} />
           </Field>
         </div>
       ) : null}
