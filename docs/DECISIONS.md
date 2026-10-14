@@ -4726,3 +4726,27 @@ testing) and #154's code signing (later, Jess).
        worked out now carry `lineGst` (the line's whole GST). Filed returns
        keep only the share, so their lines show the GST without the working.
 
+531. **Farm benchmarks** (14 October 2026, #259).
+     - **Who decided:** Jess said to keep going. Examples FK1-FK4 aren't
+       reviewed yet.
+     - **What it is:** Farm > Benchmarks shows the year's gross farm revenue
+       (its revenue accounts), farm working expenses by group, and the
+       operating surplus (revenue less working expenses). Each is shown in
+       total and per kg of milk solids, effective hectare, peak cow milked
+       and stock unit.
+     - **The groups:** 18 groups based on common NZ dairy farm working
+       expense categories (wages, animal health, breeding, farm dairy,
+       electricity, feed, grazing, fertiliser, irrigation, regrassing, weed
+       and pest, vehicles, repairs, freight, administration, insurance,
+       rates, other).
+     - **What counts:** only expense accounts someone puts in a group are
+       working expenses. Accounts left out are listed with their amounts, so
+       nothing is dropped silently. Depreciation, interest, rent and tax
+       should stay out.
+     - **The year's figures:** entered per financial year
+       (`farm_year_figures`, tenant migration 0142). Effective hectares
+       starts from the active paddocks. A figure that isn't entered gives no
+       per-unit column rather than a guess.
+     - **Not built:** per-farm splits (the ledger is per organisation), a
+       stock unit calculator, and comparison with industry averages.
+

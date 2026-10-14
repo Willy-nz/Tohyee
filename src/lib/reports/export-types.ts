@@ -12,6 +12,7 @@ export const REPORT_EXPORTS = [
   "consolidated-balance-sheet",
   "consolidated-profit-and-loss",
   "customer-statement",
+  "farm-benchmarks",
   "fixed-asset-register",
   "gst-audit",
   "gst-return",

@@ -118,7 +118,7 @@ export async function setFarmingEnabled(tx: OrgTx, input: { enabled: unknown }):
   return getFarmingSettings(tx);
 }
 
-async function requireFarming(tx: OrgTx): Promise<void> {
+export async function requireFarming(tx: OrgTx): Promise<void> {
   if (!(await getFarmingSettings(tx)).enabled) throw new ValidationError("Farming is off. An admin can turn it on under Settings, Modules.");
 }
 
