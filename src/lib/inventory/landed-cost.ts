@@ -133,7 +133,7 @@ async function getAllocation(tx: OrgTx, id: string): Promise<LandedCostAllocatio
 
 export async function listLandedCostAllocations(tx: OrgTx, billIdInput: unknown): Promise<LandedCostAllocation[]> {
   const billId = requireId(billIdInput, "billId");
-  const rows = await tx.query<{ id: string }>("select id::text from landed_cost_allocations where bill_id = $1 order by id", [billId]);
+  const rows = await tx.query<{ id: string }>("select id::text from landed_cost_allocations where bill_id = $1 order by landed_cost_allocations.id", [billId]);
   const result: LandedCostAllocation[] = [];
   for (const row of rows.rows) result.push(await getAllocation(tx, row.id));
   return result;
