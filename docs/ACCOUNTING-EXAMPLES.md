@@ -15451,6 +15451,13 @@ and 1010 to Will's BNZ savings.
 - **BK36** A joint account visible in both logins can still be linked to
   only one Tohyee account (decision 389). The second link is refused,
   naming the account it's already linked to.
+  - **Different ids** (added 14 Oct 2026, #257): if the two logins give the
+    joint account different Akahu ids, it's still recognised by the bank
+    account number Akahu reports. A 2- or 3-digit NZ suffix (…-00 or …-000)
+    counts as the same account. The second link is refused with "Bank
+    account 03-0123-0456789-000 is already linked to 1040 Westpac joint
+    through Akahu. A joint account only needs linking once." Unlinking the
+    first frees the number.
 - **BK37** Upgrading: the existing connection becomes a login called
   "Akahu", and every existing link points to it. Nothing needs to be
   entered again.

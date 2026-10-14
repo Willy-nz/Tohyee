@@ -4575,3 +4575,17 @@ testing) and #154's code signing (later, Jess).
        Node's own deflate and CRC-32. No library is added.
      - **File name:** the organisation's name, in ASCII in the plain header
        and exact (UTF-8) in `filename*`.
+
+523. **A joint account is recognised by its bank account number too** (14 Oct
+     2026, #257).
+     - **What's stored:** linking an Akahu account stores the account
+       number Akahu reports, as digits. NZ numbers get a 3-digit suffix, so
+       -00 and -000 match. A unique index stops the same number being
+       linked to two Tohyee accounts.
+     - **Why:** this backs up BK36 for logins that give a joint account
+       different Akahu ids.
+     - **Where the number comes from:** the server fetches it from Akahu
+       when linking (tenant migration 0138), so it isn't trusted from the
+       browser.
+     - **Existing links:** these have no number until they're linked again,
+       so they're only checked by Akahu id.
