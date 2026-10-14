@@ -2,13 +2,14 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { InOutCells, journalHref, LineDetails, LineStatusBadge, originLabel } from "@/components/bank/common";
 import { Pager } from "@/components/bank/reconcile-panel";
 import { Money } from "@/components/books";
 import { LineBaseValue } from "@/components/bank/foreign";
 import { useApiData } from "@/components/hooks";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
+import { RecodeForm } from "@/components/recode";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -275,9 +276,12 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
   const transfers = useApiData<{ transfers: BankTransfer[] }>("/api/bank-transfers", { organisationId, accountId: account.id, limit: 200 });
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
+  const [recoding, setRecoding] = useState<string | null>(null);
+  const [recoded, setRecoded] = useState<string | null>(null);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {recoded ? <Notice tone="success">{recoded}</Notice> : null}
       <p className={ui.muted}>
         Posted from reconciling. To undo one, unreconcile its line first (Statement lines tab), then void it here: voiding posts the exact
         reversal on the date you choose.
@@ -302,7 +306,8 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
             </thead>
             <tbody>
               {transactions.data.bankTransactions.map((transaction) => (
-                <tr key={transaction.id}>
+                <Fragment key={transaction.id}>
+                <tr>
                   <td style={{ whiteSpace: "nowrap" }}>{formatDate(transaction.date)}</td>
                   <td>
                     {transaction.contactName}
@@ -338,16 +343,39 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
                   {can("bookkeeper") ? (
                     <td>
                       {transaction.status === "posted" ? (
-                        <VoidButton
-                          organisationId={organisationId}
-                          path={`/api/bank-transactions/${transaction.id}/void`}
-                          label={`${transaction.contactName} ${transaction.date}`}
-                          onVoided={transactions.reload}
-                        />
+                        <span className={ui.rowButtons}>
+                          <Button variant="secondary" size="small" onClick={() => setRecoding(recoding === transaction.id ? null : transaction.id)}>
+                            Recode
+                          </Button>
+                          <VoidButton
+                            organisationId={organisationId}
+                            path={`/api/bank-transactions/${transaction.id}/void`}
+                            label={`${transaction.contactName} ${transaction.date}`}
+                            onVoided={transactions.reload}
+                          />
+                        </span>
                       ) : null}
                     </td>
                   ) : null}
                 </tr>
+                {recoding === transaction.id ? (
+                  <tr>
+                    <td colSpan={8}>
+                      <RecodeForm
+                        organisationId={organisationId}
+                        documentType="bank_transaction"
+                        documentId={transaction.id}
+                        lines={transaction.lines}
+                        onDone={(text) => {
+                          setRecoded(text);
+                          setRecoding(null);
+                          transactions.reload();
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>

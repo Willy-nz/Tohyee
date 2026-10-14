@@ -60,6 +60,7 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   payroll: "Pay run",
   livestock_valuation: "Livestock valuation",
   livestock_rations: "Livestock rations",
+  recode: "Recode",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {

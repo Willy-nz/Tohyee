@@ -25,6 +25,7 @@ import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { BillAssetPrompt } from "@/components/fixed-assets";
 import { LandedCostCard } from "@/components/bills/landed-cost";
+import { RecodeCard } from "@/components/recode";
 import { useConfirm } from "@/components/confirm-dialog";
 import { approvalBlocksApproving, DocumentApprovalPanel, useDocumentApproval, waitingForApproval } from "@/components/approvals";
 
@@ -458,6 +459,18 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
       ) : null}
       {bill.status === "approved" ? <BillAssetPrompt key={`assets-${message ?? ""}`} organisationId={organisationId} billId={bill.id} /> : null}
       {bill.status === "approved" ? <LandedCostCard organisationId={organisationId} billId={bill.id} /> : null}
+      {bill.status === "approved" ? (
+        <RecodeCard
+          organisationId={organisationId}
+          documentType="bill"
+          documentId={bill.id}
+          lines={bill.lines}
+          onRecoded={() => {
+            setUpdated(null);
+            details.reload();
+          }}
+        />
+      ) : null}
       {bill.status === "approved" || bill.status === "voided" ? (
         <RdLineTags key={`rd-${bill.status}`} organisationId={organisationId} documentType="bill" documentId={bill.id} />
       ) : null}
