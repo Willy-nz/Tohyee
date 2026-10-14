@@ -15,7 +15,8 @@ proves it". Test names start with the example IDs they cover:
   unit maths)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/balance-sheet-subtotals.test.ts` (P4, not yet
-  approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  approved), `tests/integration/financial-statements.test.ts` (SCE1, SCE2,
+  SCF1-SCF4, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -3920,6 +3921,69 @@ period close", YE1-YE4).
   liabilities **1,700.00**; net assets **4,800.00**, equal to total equity
   (5,000.00 introduced less the 200.00 loss). Only the layout changes: the
   totals are the same as before.
+
+### Statement of changes in equity and statement of cash flows
+
+Chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement
+(#259); not yet reviewed. Both use one set of books. The financial year runs
+1 Apr 2026 to 31 Mar 2027, starting from nothing, with no GST:
+
+| # | Date | What happened | Debit | Credit | Amount |
+|---|---|---|---|---|---|
+| 1 | 1 Apr | Owner puts money in | 1000 Bank | 3000 Owner funds introduced | 5,000.00 |
+| 2 | 5 Apr | Term loan drawn | 1000 Bank | 2800 Term loan | 1,500.00 |
+| 3 | 10 Apr | Computer bought | 1620 Computer equipment | 1000 Bank | 2,000.00 |
+| 4 | 1 Jun | Sales invoiced | 1100 Accounts receivable | 4000 Sales | 3,000.00 |
+| 5 | 1 Jul | Customers pay part | 1000 Bank | 1100 Accounts receivable | 2,200.00 |
+| 6 | 1 Aug | Expense bills | 6010 Accounting fees | 2000 Accounts payable | 1,350.00 |
+| 7 | 1 Sep | Bills paid in part | 2000 Accounts payable | 1000 Bank | 1,050.00 |
+| 8 | 31 Mar | Depreciation | 6300 Depreciation | 1630 Accumulated depreciation | 400.00 |
+| 9 | 1 Oct | Owner drawings | 3100 Owner drawings | 1000 Bank | 300.00 |
+
+Net profit is 3,000.00 - 1,350.00 - 400.00 = 1,250.00; the bank ends on
+5,350.00.
+
+- **SCE1** Statement of changes in equity, one column, for the year: equity
+  at 1 Apr 2026 **0.00**; net profit **1,250.00**; then each equity
+  account's movement under its own name: Owner funds introduced
+  **5,000.00**, Owner drawings **(300.00)**; equity at 31 Mar 2027
+  **5,950.00**, the balance sheet's total equity that day.
+- **SCE2** Opening equity is the balance sheet's total equity the day
+  before the period starts. For the year from 1 Apr 2027 with nothing more
+  posted: opening **5,950.00**, profit 0.00, closing **5,950.00**.
+- **SCF1** Statement of cash flows, indirect method. Cash is the bank
+  accounts (a term deposit set up as a bank account counts as cash).
+  Operating: net profit **1,250.00**, add back depreciation **400.00**,
+  Accounts receivable **(800.00)**, Accounts payable **300.00**; net cash
+  from operating **1,150.00**. Investing: Computer equipment
+  **(2,000.00)**. Financing: Term loan **1,500.00**, Owner funds introduced
+  **5,000.00**, Owner drawings **(300.00)**; net **6,200.00**. Net increase
+  **5,350.00**; cash at the start **0.00**, at the end **5,350.00**.
+  - Movements in current assets and liabilities are operating; this
+    includes GST, credit cards, payroll liabilities and stock.
+  - Interest paid and received stay in operating. NZ IFRS 18 moves interest
+    paid to financing for periods from 1 Jan 2027, but special purpose
+    reports for small businesses aren't bound by it.
+  - Fixed and non-current assets are investing. Non-current liabilities and
+    equity, including retained earnings posted to directly, are financing.
+    A loan's current portion kept in a current liability account counts as
+    operating.
+- **SCF2** Depreciation is added back however it was posted, whether by a
+  depreciation run or a hand journal with no bank line. Its accumulated
+  depreciation isn't shown as investing. SCF1's numbers are the same either
+  way.
+- **SCF3** Selling the computer on 31 Mar 2027 for 1,800.00 cash: Dr Bank
+  1,800.00, Dr 1630 400.00, Cr 1620 2,000.00, Cr 7030 gain 200.00. Net
+  profit **1,450.00**. Operating takes the gain back out, **(200.00)**, and
+  is still **1,150.00**. Investing: Computer equipment **(2,000.00)** and
+  proceeds from disposals **1,800.00**, net **(200.00)**. The bank ends on
+  **7,150.00**.
+- **SCF4** A livestock revaluation (Dr livestock on hand 1,000.00, Cr
+  change in livestock value 1,000.00) raises profit by 1,000.00 and is
+  taken back out as non-cash. No cash moves: operating, investing and
+  financing are as in SCF1. Unrealised exchange on foreign-currency bank
+  accounts shows as the effect of exchange rates on cash. Opening-balance
+  journals count as cash at the start.
 
 ### Custom reports
 

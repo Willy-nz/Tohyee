@@ -24,10 +24,10 @@ import {
   ZERO_DECIMAL,
 } from "@/lib/money/decimal";
 
-type Money = (value: Decimal) => string;
+export type Money = (value: Decimal) => string;
 
 /** Formats report amounts with the base currency's minor units, e.g. "1250.00". */
-function moneyFormatter(tx: OrgTx): Money {
+export function moneyFormatter(tx: OrgTx): Money {
   const scale = currencyMinorUnits(tx.baseCurrency);
   return (value) => toFixedString(value, scale);
 }

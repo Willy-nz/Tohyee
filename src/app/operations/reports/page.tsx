@@ -11,6 +11,7 @@ import { BankReconciliationReportView } from "@/components/reports/bank-reconcil
 import { AgedReceivablesReport } from "@/components/customers";
 import { AccountTransactionsReport, AgedPayablesReport, JournalReportView } from "@/components/reports/ledger-reports";
 import { ReportExport } from "@/components/reports/report-export";
+import { CashFlowStatementReport, ChangesInEquityReport } from "@/components/reports/statements";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
 import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
@@ -687,6 +688,8 @@ const TABS = [
   { key: "pnl", label: "Profit and loss" },
   { key: "bs", label: "Balance sheet" },
   { key: "tb", label: "Trial balance" },
+  { key: "equity", label: "Changes in equity" },
+  { key: "cashflow", label: "Cash flows" },
   { key: "stock", label: "Stock valuation" },
   { key: "aged", label: "Aged receivables" },
   { key: "payables", label: "Aged payables" },
@@ -724,6 +727,8 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "pnl" ? <ProfitAndLossReport organisationId={organisationId} /> : null}
       {tab === "bs" ? <BalanceSheetReport organisationId={organisationId} /> : null}
       {tab === "tb" ? <TrialBalanceReport organisationId={organisationId} /> : null}
+      {tab === "equity" ? <ChangesInEquityReport organisationId={organisationId} /> : null}
+      {tab === "cashflow" ? <CashFlowStatementReport organisationId={organisationId} /> : null}
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
       {tab === "aged" ? <AgedReceivablesReport organisationId={organisationId} /> : null}
       {tab === "payables" ? <AgedPayablesReport organisationId={organisationId} /> : null}

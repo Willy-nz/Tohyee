@@ -4618,3 +4618,35 @@ testing) and #154's code signing (later, Jess).
        can't be read.
      - **Checked:** pressing Enter in a date field that saves its form
        sends the newly typed date.
+
+526. **Statement of changes in equity and statement of cash flows** (14 October
+     2026, #259).
+     - **Who decided:** Jess said to go with Claude's judgement. Examples
+       SCE1, SCE2 and SCF1-SCF4 aren't reviewed yet.
+     - **Changes in equity:** one column. Opening equity (the balance sheet
+       the day before), the period's profit, each equity account's movement
+       by its name, then closing equity. It's checked against the balance
+       sheet.
+     - **Cash flows:** indirect method, built from journal lines in the
+       period. Cash is the bank accounts. Current assets and liabilities are
+       operating; that includes GST, credit cards and payroll liabilities.
+       Fixed and non-current assets are investing. Non-current liabilities
+       and equity are financing.
+     - **Non-cash items:** journals from depreciation runs, livestock
+       valuations and exchange revaluations are taken back out as non-cash.
+       A hand-entered journal with a depreciation account and no bank line
+       counts as depreciation. A fixed asset disposal's gain or loss moves
+       to investing as proceeds. Opening-balance journals count as cash at
+       the start.
+     - **Interest:** stays in operating. NZ IFRS 18 moves interest paid to
+       financing for periods from 1 Jan 2027, but special purpose reports
+       for small businesses aren't bound by it.
+     - **Known limits:**
+       - a loan's current portion in a current liability account counts as
+         operating;
+       - a term deposit only counts as cash if it's set up as a bank
+         account;
+       - disposal proceeds still owed count as investing straight away.
+     - **Where:** Reports > Changes in equity and Cash flows, and both are in
+       the year-end pack.
+
