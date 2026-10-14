@@ -4801,3 +4801,57 @@ testing) and #154's code signing (later, Jess).
        CSV, Excel or text), and dashboards straight over the books (the AI
        copies what it needs into its tables).
 
+534. **Remote access hardening** (15 October 2026). From an internal
+     security review; each change has a test.
+     - **Request bodies:** the public lead form and the MCP endpoint read
+       their bodies through `readLimitedBytes` (`src/lib/net/limited-body.ts`),
+       which stops at the limit however the body is sent (64 KB for a form,
+       2 MB for MCP). A lead form's thank-you page must be https, and a
+       saved http one is no longer redirected to.
+     - **AI keys:** 30 wrong keys a minute from one address and that address
+       waits a minute (429).
+     - **Visitor addresses:** `clientAddress` skips every way of writing
+       this computer (127.x, ::1, 0:0:0:0:0:0:0:1, ::ffff:127.x), entries
+       that aren't addresses, and proxies listed in
+       `TOHYEE_TRUSTED_PROXIES`.
+       - Not done: `next start` can't see the connection's own address, so
+         with Tohyee's port opened straight to the internet (no tunnel or
+         proxy) a visitor's own X-Forwarded-For is all there is. That
+         set-up isn't supported; the tunnels Tohyee offers are.
+       - Not done: preferring `cf-connecting-ip`. Cloudflare already adds
+         the visitor's address to the end of X-Forwarded-For, which is what
+         Tohyee reads; a direct visitor could send `cf-connecting-ip`
+         themselves.
+     - **What counts as remote access** (two-step needed without the secret
+       key): as well as Cloudflare and Tailscale, any request whose Host or
+       X-Forwarded-Host is a public name or address, or whose
+       X-Forwarded-For has a public address. Local means localhost,
+       private and link-local addresses, one-word names, and names ending
+       .local, .lan, .home, .home.arpa, .internal, .localdomain or .test.
+       A server reached on the local network by a public domain name (split
+       DNS) now counts as remote, so it needs `TOHYEE_SECRET_KEY`.
+     - **Tohyee address service:** moving an existing address to a different
+       port needs that address's release key; the Tohyee server sends it
+       when it has one. The same install asking again on the same port
+       still gets its address back without the key, so a server that lost
+       its key can recover (and the Windows app keeps working). Requiring
+       the key for every re-issue is a choice for Jess: it would stop that
+       recovery.
+     - **Outgoing calls to typed-in addresses:** WooCommerce stores and
+       SimpleFIN Bridges go through `publicFetch`, which checks the
+       addresses when each connection is made and connects to a checked
+       one; IMAP mailboxes connect to the address they were checked at,
+       with the name for TLS, on every connection including attachment
+       reads. Store addresses can't be local and can only use port 443 or
+       8443. SimpleFIN answers are capped at 10 MB, platform answers at
+       20 MB.
+     - **Workbooks left for the AI:** checked with `checkXlsxArchive`
+       before ExcelJS opens them (at most 64 MB unpacked), on upload and on
+       reading; .xlsm is no longer accepted. They're still read inside the
+       tool's read-only transaction; the check bounds the work.
+     - **Origins:** without a public address set, links and OAuth returns
+       use the Host the request came to, never X-Forwarded-Host. OAuth
+       returns through remote access use the public address.
+     - **Already in place:** the setup-link check (`GET
+       /api/auth/setup-account`) has been rate-limited since it was built
+       (decision 484).

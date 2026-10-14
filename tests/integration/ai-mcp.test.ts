@@ -420,6 +420,23 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     expect(after.rows[0].count).toBe(before.rows[0].count);
   });
 
+  it("makes an address wait after many wrong keys, and caps the body at 2 MB", async () => {
+    const from = { "x-forwarded-for": "198.51.100.23" };
+    const wrong = () => mcpRoute.POST(mcpRequest({ jsonrpc: "2.0", id: 1, method: "ping" }, { token: `tohyee_ai_${"B".repeat(43)}`, headers: from }), noContext);
+    for (let attempt = 0; attempt < 30; attempt += 1) expect((await wrong()).status).toBe(401);
+    expect((await wrong()).status).toBe(429);
+    // Another address isn't affected.
+    const other = await mcpRoute.POST(mcpRequest({ jsonrpc: "2.0", id: 1, method: "ping" }, { token: `tohyee_ai_${"B".repeat(43)}`, headers: { "x-forwarded-for": "198.51.100.24" } }), noContext);
+    expect(other.status).toBe(401);
+
+    const made = await makeKey(viewerCookie, "Big body");
+    const token = made.body.token as string;
+    const big = await mcpRoute.POST(mcpRequest(`{"jsonrpc":"2.0","id":1,"method":"ping","pad":"${"x".repeat(2 * 1024 * 1024)}"}`, { token }), noContext);
+    expect(big.status).toBe(413);
+    expect(((await big.json()) as Json).error).toMatchObject({ code: -32600 });
+    expect((await mcpRoute.POST(mcpRequest("{not json", { token }), noContext)).status).toBe(400);
+  });
+
   it("refuses missing, malformed, unknown and revoked keys with 401, and cookie sessions alone", async () => {
     for (const token of [null, "nonsense", `tohyee_ai_${"A".repeat(43)}`]) {
       const response = await mcpRoute.POST(mcpRequest({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { token }), noContext);

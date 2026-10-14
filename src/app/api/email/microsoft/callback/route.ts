@@ -11,7 +11,7 @@ import { claimSendingState, fetchSendingConnection, saveSendingConnection } from
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const origin = requestOrigin(request);
+  const origin = await requestOrigin(request);
   const back = (query: Record<string, string>) =>
     new Response(null, { status: 303, headers: { Location: `${origin}/operations/settings/email?${new URLSearchParams(query)}` } });
   try {

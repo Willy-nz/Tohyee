@@ -92,6 +92,30 @@ describeWithDatabase("CRM leads from a web form and from email (decision 493)", 
     // No remote access address on this test server: no snippet yet.
     expect(await asOwner.json()).toMatchObject({ publicAddress: null, forms: [{ name: "Contact page", snippet: null }] });
     await expect(as((tx) => createLeadForm(tx, { name: "Bad", thankYouUrl: "javascript:alert(1)" }))).rejects.toThrow(/https/);
+    await expect(as((tx) => createLeadForm(tx, { name: "Plain", thankYouUrl: "http://www.keapets.nz/thanks" }))).rejects.toThrow(/https/);
+  });
+
+  it("a body sent without a length is cut off at 64 KB rather than read in full", async () => {
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // Up to 1 MB in 16 KB pieces; the reader should stop long before the end.
+        if (sent >= 1024 * 1024) return controller.close();
+        sent += 16 * 1024;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(97));
+      },
+    });
+    const response = await publicFormRoute.POST(
+      new Request(`http://tohyee.test/api/lead-forms/${ORG}/${formKey}`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": "203.0.113.77" },
+        body: stream,
+        duplex: "half",
+      } as RequestInit),
+      params({ organisationId: ORG, formKey }),
+    );
+    expect(response.status).toBe(413);
+    expect(sent).toBeLessThan(1024 * 1024);
   });
 
   it("a form post makes an unassigned lead to review, with the other fields in its notes", async () => {

@@ -7,6 +7,7 @@ import { startGoogleSending } from "@/lib/email/google";
 export const POST = route(async (request) => {
   assertSameOrigin(request);
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "admin", (tx) => startGoogleSending(tx, requestOrigin(request)));
+  const origin = await requestOrigin(request);
+  const result = await withOrganisation(request, body.organisationId, "admin", (tx) => startGoogleSending(tx, origin));
   return json(result);
 });

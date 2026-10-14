@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { BlockList, isIP } from "node:net";
 import type { DbClient } from "@/lib/db/transactions";
 import { coreQuery } from "@/lib/db/transactions";
 import { secretsAvailable } from "@/lib/secrets";
@@ -230,23 +231,75 @@ export function sessionMetaFrom(request: Request): SessionMeta {
   };
 }
 
-const isLoopback = (address: string) => address === "::1" || address.startsWith("127.") || address.startsWith("::ffff:127.");
+/** This computer, in every way it can be written (127.x, ::1, 0:0:0:0:0:0:0:1, ::ffff:127.x). */
+const loopback = new BlockList();
+loopback.addSubnet("127.0.0.0", 8, "ipv4");
+loopback.addAddress("::1", "ipv6");
+
+let trusted: { setting: string; list: BlockList } | null = null;
 
 /**
- * The address a request came from (#208 item 3). Proxies add the address they
- * saw to the END of X-Forwarded-For (Cloudflare appends the visitor's address
- * to whatever the visitor sent; Next.js fills it in from the connection when
- * it's missing), so the last entry that isn't this computer is the one a proxy
- * wrote. The first entry is whatever the visitor typed, and taking it let the
- * per-address sign-in limit be dodged by changing it on every try.
+ * Proxies of your own between the internet and Tohyee (decision 534), from
+ * TOHYEE_TRUSTED_PROXIES: addresses or ranges, comma-separated, such as
+ * "172.17.0.1" or "10.0.0.0/8". Their entries in X-Forwarded-For are skipped
+ * like this computer's, so a proxy in Docker isn't taken for every visitor.
+ */
+function trustedProxies(): BlockList {
+  const setting = process.env.TOHYEE_TRUSTED_PROXIES?.trim() ?? "";
+  if (trusted?.setting === setting) return trusted.list;
+  const list = new BlockList();
+  for (const entry of setting.split(",").map((part) => part.trim()).filter(Boolean)) {
+    const [address, bits] = entry.split("/");
+    const type = isIP(address);
+    if (!type) continue;
+    const family = type === 4 ? "ipv4" : "ipv6";
+    if (bits === undefined) list.addAddress(address, family);
+    else if (/^\d+$/.test(bits) && Number(bits) <= (type === 4 ? 32 : 128)) list.addSubnet(address, Number(bits), family);
+  }
+  trusted = { setting, list };
+  return list;
+}
+
+/** An X-Forwarded-For entry as a bare address: no port, no brackets; null when it isn't one. */
+function bareAddress(entry: string): string | null {
+  let address = entry.trim();
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(address);
+  if (bracketed) address = bracketed[1];
+  else if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(address)) address = address.slice(0, address.lastIndexOf(":"));
+  return isIP(address) ? address : null;
+}
+
+function isProxyHop(address: string): boolean {
+  const family = isIP(address) === 4 ? "ipv4" : "ipv6";
+  return loopback.check(address, family) || trustedProxies().check(address, family);
+}
+
+/** The addresses in X-Forwarded-For, in order, leaving out entries that aren't addresses. */
+export function forwardedAddresses(headers: Headers): string[] {
+  return (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map(bareAddress)
+    .filter((entry): entry is string => entry !== null);
+}
+
+/**
+ * The address a request came from (#208 item 3, decision 534). Proxies add the
+ * address they saw to the END of X-Forwarded-For (Cloudflare appends the
+ * visitor's address to whatever the visitor sent; Next.js fills it in from the
+ * connection when it's missing), so the last entry that isn't this computer
+ * or a trusted proxy is the one a proxy wrote. The first entry is whatever the
+ * visitor typed, and taking it let the per-address sign-in limit be dodged by
+ * changing it on every try. Entries that aren't addresses are ignored.
+ *
+ * This relies on a proxy or tunnel in front: Tohyee can't see the connection's
+ * own address, so with the port opened straight to the internet a visitor's
+ * own X-Forwarded-For is all there is. That set-up isn't supported.
  */
 export function clientAddress(headers: Headers): string | null {
-  const forwarded = (headers.get("x-forwarded-for") ?? "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+  const forwarded = forwardedAddresses(headers);
   for (let index = forwarded.length - 1; index >= 0; index -= 1) {
-    if (!isLoopback(forwarded[index])) return forwarded[index];
+    if (!isProxyHop(forwarded[index])) return forwarded[index];
   }
-  return forwarded.at(-1) ?? headers.get("x-real-ip");
+  if (forwarded.length > 0) return forwarded.at(-1)!;
+  return bareAddress(headers.get("x-real-ip") ?? "");
 }

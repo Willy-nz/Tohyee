@@ -2,6 +2,7 @@ import { ImapFlow, type ImapFlowOptions, type FetchMessageObject, type MessageSt
 import type { Readable } from "node:stream";
 import { providerFetch, type MailProvider } from "@/lib/crm/mail/providers";
 import { UnavailableError, ValidationError } from "@/lib/errors";
+import { checkMailHost } from "./mail-host";
 import { MAX_ATTACHMENT_BYTES } from "./report-email-files";
 
 export type MailFolder = { id: string; name: string };
@@ -304,7 +305,13 @@ export function setImapFactoryForTests(factory: ImapFactory | null): void {
   imapFactory = factory ?? ((options) => new ImapFlow(options));
 }
 
-function imapClient(credentials: ImapCredentials): ImapClient {
+/**
+ * An IMAP client for a mailbox on the internet (decision 534): the host is
+ * looked up and checked here, and the client connects to that checked address
+ * (with the host name for TLS), so a name that answers differently a moment
+ * later can't send the connection to this server or its network.
+ */
+async function imapClient(credentials: ImapCredentials): Promise<ImapClient> {
   if (credentials.port !== 993 || !credentials.host || credentials.host.length > 253 ||
       !/^[a-zA-Z0-9.-]+$/.test(credentials.host) || credentials.host.startsWith(".") ||
       credentials.host.endsWith(".") || credentials.host.includes("..") ||
@@ -312,10 +319,16 @@ function imapClient(credentials: ImapCredentials): ImapClient {
       !credentials.password || credentials.password.length > 4096 || /[\r\n\u0000]/.test(credentials.password)) {
     throw new ValidationError("Use a valid IMAP host, username and app password with TLS on port 993.");
   }
+  const checked = await checkMailHost(credentials.host);
+  if (!checked.ok) {
+    throw new ValidationError(checked.reason === "local"
+      ? "The mail server must be on the internet, not this server or its local network."
+      : `Couldn't find the mail server ${credentials.host}. Check its name.`);
+  }
   const client = imapFactory({
-    host: credentials.host, port: 993, secure: true,
+    host: checked.addresses[0], servername: credentials.host, port: 993, secure: true,
     auth: { user: credentials.username, pass: credentials.password },
-    tls: { rejectUnauthorized: true }, logger: false, emitLogs: false,
+    tls: { rejectUnauthorized: true, servername: credentials.host }, logger: false, emitLogs: false,
     connectionTimeout: TIMEOUT_MS, greetingTimeout: TIMEOUT_MS, socketTimeout: IDLE_TIMEOUT_MS,
     maxLiteralSize: MAX_ENCODED_PART_BYTES + 1, maxResponseSize: MAX_ENCODED_PART_BYTES + MAX_JSON_BYTES,
     disableAutoIdle: true,
@@ -332,7 +345,7 @@ function imapError(error: unknown): Error {
     ? error : new UnavailableError("The IMAP report mailbox could not be read. Check the host and app password.");
 }
 export async function listImapFolders(credentials: ImapCredentials): Promise<MailFolder[]> {
-  const client = imapClient(credentials);
+  const client = await imapClient(credentials);
   try {
     await client.connect();
     return (await client.list()).filter((folder) => !folder.flags.has("\\Noselect")).map((folder) => ({ id: folder.path, name: folder.name }));
@@ -377,7 +390,7 @@ async function readImapAttachment(
     throw new ValidationError("The report attachment has an invalid declared size or encoding.");
   }
   sizeLimit(part.size);
-  const client = imapClient(credentials);
+  const client = await imapClient(credentials);
   let lock: { release: () => void } | undefined;
   let content: Readable | undefined;
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -409,7 +422,7 @@ async function readImapAttachment(
 
 export async function* imapReportMessages(credentials: ImapCredentials, folderId: string, skip: SkipMessage = () => false): AsyncGenerator<ReportMessage> {
   id(folderId);
-  const client = imapClient(credentials);
+  const client = await imapClient(credentials);
   let lock: { release: () => void } | undefined;
   try {
     await client.connect();

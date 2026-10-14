@@ -11,6 +11,7 @@ import { startConnect } from "@/lib/crm/mail/service";
 export const POST = route(async (request) => {
   assertSameOrigin(request);
   const body = await readJson(request);
-  const result = await withCrm(request, body.organisationId, "write", (tx) => startConnect(tx, body.provider, requestOrigin(request), { send: body.send }));
+  const origin = await requestOrigin(request);
+  const result = await withCrm(request, body.organisationId, "write", (tx) => startConnect(tx, body.provider, origin, { send: body.send }));
   return json(result);
 });

@@ -28,8 +28,8 @@ function call(method: string, path: string, options: { body?: unknown; auth?: st
   return handle(request, env, deps());
 }
 
-function register(installId = "install-aaaaaaaaaaaaaaaa", port = 3000, ip?: string) {
-  return call("POST", "/v1/addresses", { body: { port, installId, version: "0.2.2" }, ip });
+function register(installId = "install-aaaaaaaaaaaaaaaa", port = 3000, ip?: string, auth?: string) {
+  return call("POST", "/v1/addresses", { body: { port, installId, version: "0.2.2" }, ip, auth });
 }
 
 beforeEach(async () => {
@@ -112,9 +112,24 @@ describe("POST /v1/addresses", () => {
     expect(counters).not.toContain("203.0.113.5");
   });
 
+  it("changing an existing address's port needs its release key", async () => {
+    const first = (await (await register()).json()) as { hostname: string; releaseKey: string };
+    for (const auth of [undefined, "not-the-key"]) {
+      const moved = await register("install-aaaaaaaaaaaaaaaa", 5432, undefined, auth);
+      expect(moved.status).toBe(403);
+      expect(((await moved.json()) as { error: string }).error).toContain("release key");
+    }
+    const tunnel = [...cf.tunnels.values()][0];
+    expect((tunnel.config as { ingress: { service: string }[] }).ingress[0].service).toBe("http://localhost:3000");
+    // The same port without the key still gets the address back (a server that lost its key).
+    const same = await register();
+    expect(same.status).toBe(201);
+    expect(((await same.json()) as { hostname: string }).hostname).toBe(first.hostname);
+  });
+
   it("gives the same install the same address with a new release key, and updates the port", async () => {
     const first = (await (await register()).json()) as { hostname: string; releaseKey: string };
-    const again = await register("install-aaaaaaaaaaaaaaaa", 4000);
+    const again = await register("install-aaaaaaaaaaaaaaaa", 4000, undefined, first.releaseKey);
     expect(again.status).toBe(201);
     const second = (await again.json()) as { hostname: string; tunnelToken: string; releaseKey: string };
     expect(second.hostname).toBe(first.hostname);

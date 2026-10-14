@@ -257,7 +257,7 @@ export async function getTohyeeAddress(auth: ServerAdminAuth, options: { apply?:
   let secrets: Partial<RemoteSecrets> = { ...stored.secrets };
   const isNew = !hostname || !stored.secrets.addressToken;
   if (isNew) {
-    const issued = await requestAddress({ port: mainServerTarget().port, installId: await installId(auth.user.email), version: packageJson.version });
+    const issued = await requestAddress({ port: mainServerTarget().port, installId: await installId(auth.user.email), version: packageJson.version }, stored.secrets.releaseKey);
     try {
       parseTunnelToken(issued.tunnelToken);
     } catch {

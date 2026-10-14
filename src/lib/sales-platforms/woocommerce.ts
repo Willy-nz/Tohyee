@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ValidationError } from "@/lib/errors";
+import { localHostName } from "@/lib/net/local-names";
 import { dec, divide, sub, toFixedString, toPlainString } from "@/lib/money/decimal";
 import {
   type AccessToken,
@@ -85,6 +86,9 @@ export function normaliseStoreAddress(input: unknown): string {
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !url.hostname.includes(".")) {
     throw new ValidationError("Enter the store's address, like https://shop.example.nz.");
   }
+  // The store must be on the internet (decision 534); each connection checks the address again.
+  if (localHostName(url.host)) throw new ValidationError("The store must be on the internet, not this server or its local network.");
+  if (url.port && url.port !== "8443") throw new ValidationError("Use the store's usual https address, without a port number.");
   const path = url.pathname.replace(/\/+$/, "").replace(/\/wp-json.*$/i, "");
   return `${url.host.toLowerCase()}${path}`;
 }

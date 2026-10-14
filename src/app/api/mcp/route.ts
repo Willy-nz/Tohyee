@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { route } from "@/lib/api/http";
-import { MCP_REQUESTS_PER_MINUTE, RequestLimiter } from "@/lib/ai/limits";
+import { MAX_JSON_BYTES, readLimitedBytes, route } from "@/lib/api/http";
+import { MCP_FAILED_KEYS_PER_MINUTE, MCP_REQUESTS_PER_MINUTE, RequestLimiter } from "@/lib/ai/limits";
 import { handleMcpMessage, JSON_RPC, type JsonRpcResponse, protocolHeaderAccepted, rpcError } from "@/lib/ai/mcp-protocol";
 import { mcpServerFor } from "@/lib/ai/mcp-server";
 import { bearerAiToken } from "@/lib/ai/token-format";
 import { authenticateAiToken } from "@/lib/ai/tokens";
+import { sessionMetaFrom } from "@/lib/auth/sessions";
+import { PayloadTooLargeError } from "@/lib/errors";
 
 /**
  * The MCP endpoint people connect their own AI to (decisions 339-345).
@@ -21,6 +23,12 @@ import { authenticateAiToken } from "@/lib/ai/tokens";
  */
 
 const limiter = new RequestLimiter(MCP_REQUESTS_PER_MINUTE);
+/** Wrong keys from one address (like sign-in tries); with no address known, it doesn't apply. */
+const failedKeys = new RequestLimiter(MCP_FAILED_KEYS_PER_MINUTE);
+
+function tooManyFailures(): Response {
+  return reply(rpcError(null, JSON_RPC.UNAUTHORIZED, "Too many wrong AI keys from this address. Wait a minute and try again."), 429, { "retry-after": "60" });
+}
 
 function reply(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return NextResponse.json(body, { status, headers: { "cache-control": "no-store", ...headers } });
@@ -35,9 +43,14 @@ function unauthorized(): Response {
 }
 
 export const POST = route(async (request) => {
+  const address = sessionMetaFrom(request).ipAddress;
+  if (address && failedKeys.spent(address)) return tooManyFailures();
   const token = bearerAiToken(request.headers.get("authorization"));
   const identity = token ? await authenticateAiToken(token) : null;
-  if (!identity) return unauthorized();
+  if (!identity) {
+    if (address && !failedKeys.take(address)) return tooManyFailures();
+    return unauthorized();
+  }
 
   if (!limiter.take(identity.tokenId)) {
     return reply(rpcError(null, JSON_RPC.INTERNAL_ERROR, "Too many requests with this key. Wait a minute and try again."), 429, {
@@ -50,8 +63,9 @@ export const POST = route(async (request) => {
 
   let message: unknown;
   try {
-    message = await request.json();
-  } catch {
+    message = JSON.parse((await readLimitedBytes(request, MAX_JSON_BYTES)).toString("utf8"));
+  } catch (error) {
+    if (error instanceof PayloadTooLargeError) return reply(rpcError(null, JSON_RPC.INVALID_REQUEST, error.message), 413);
     return reply(rpcError(null, JSON_RPC.PARSE_ERROR, "The request body must be JSON."), 400);
   }
 
