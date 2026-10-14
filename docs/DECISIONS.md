@@ -4650,3 +4650,23 @@ testing) and #154's code signing (later, Jess).
      - **Where:** Reports > Changes in equity and Cash flows, and both are in
        the year-end pack.
 
+527. **Killed for rations** (14 October 2026, #259).
+     - **Who decided:** Jess said to go with Claude's judgement. Examples
+       RAT1-RAT4 aren't reviewed yet.
+     - **What it is:** a livestock movement, "Killed for rations", with its
+       own column in the head count (not a death). It's for the owner's
+       household or for staff.
+     - **The owner's rations:** income at market value (IR3F: private use
+       of produce at market value). This is the only movement that posts:
+       Dr Owner drawings, Cr Livestock rations (private use) 7070, on the
+       movement's date (origin `livestock_rations`, tenant migration 0139).
+       The accounts are made the first time and can be changed in
+       Livestock settings. Voiding reverses it on the same date.
+     - **Staff rations:** post nothing and take no value. The lower closing
+       stock is the cost, like stock used in the business.
+     - **GST:** not posted. Claude couldn't confirm the GST treatment, so a
+       rural accountant should check it before this is relied on.
+     - **Cash flows:** the owner's rations are income with no cash, so
+       they're taken back out of operating, and the drawings aren't shown
+       in financing.
+

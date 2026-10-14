@@ -58,7 +58,8 @@ export type JournalOrigin =
   | "fixed_asset_disposal"
   | "opening_balance"
   | "payroll"
-  | "livestock_valuation";
+  | "livestock_valuation"
+  | "livestock_rations";
 export type CorrectionKind = "reversal" | "replacement";
 
 /**
