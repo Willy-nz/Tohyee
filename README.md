@@ -66,19 +66,35 @@ what you can use; developer and server setup instructions follow it.
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
 
-## New on main
+## New in 0.8.0: farms
 
-| Area | Recent additions |
+<p align="center">
+  <img src="website/img/farm-map.webp" alt="Kōwhai Road farm in Tohyee: 38 numbered paddocks drawn to scale, 192.99 hectares effective" width="860" />
+</p>
+
+| | |
 | --- | --- |
+| **Livestock for tax**<br />Head counts that reconcile, herd scheme and national standard cost values, and the year-end journal with its workings. | **Farm benchmarks**<br />Farm working expenses and revenue per kg of milk solids, hectare, cow and stock unit. |
+| <img src="website/img/livestock-valuation.webp" alt="Livestock valuation and trading statement" width="420" /> | <img src="website/img/farm-benchmarks.webp" alt="Farm benchmarks per kgMS, hectare, cow and stock unit" width="420" /> |
+| **Your AI on the farm**<br />Leave it the herd app's export and it builds its own tables and dashboards; livestock it finds are suggestions you accept. | **Year-end statements**<br />Special purpose financial statements with comparatives and your own notes, as one PDF. |
+| <img src="website/img/ai-calving.webp" alt="A calving dashboard the AI made from a herd app export" width="420" /> | <img src="website/img/financial-statements.webp" alt="Year-end financial statements PDF" width="420" /> |
+
+<sub>Farm screenshots show a fictional dairy farm, Kōwhai Dairies Ltd.</sub>
+
+## Also new in 0.8.0
+
+| Area | What's new |
+| --- | --- |
+| **Farming** | Paddock maps from GeoJSON, KML/KMZ or shapefiles, LINZ aerial imagery, fertiliser plans against what was bought and applied, soil tests, a farm notebook and farm benchmarks. |
 | **CRM** | Leads and intake forms, sales roles and teams, duplicate handling, follow-up tasks, email templates and sequences, campaigns, team forecasts and a sales dashboard. |
 | **Deals and quotes** | Product lines and discounts, draft quotes and revisions, and an accepted quote linked to an invoice or sales order. |
 | **Livestock** | Cattle, sheep, deer and goats: movements, head count reconciliation, herd scheme and NSC valuations, high-priced animals, agent account sales and monthly management values. |
 | **Jobs and visits** | A job is a project with a site: visits on a calendar, Start and Finish on a phone, checklists, photos and a signature, materials on the invoice, service reminders and a calendar file. |
 | **Rosters and clocking in** | Weekly rosters costed against a budget, unavailability and leave warnings, publishing, staff clocking in with a PIN on a shared device, and clocked hours onto timesheets. |
+| **Year-end** | Financial statements with notes as one PDF, an accountant pack ZIP, statements of changes in equity and cash flows, and recoding a posted line. |
 
-These are development-branch features, not a claim that every planned workflow
-or tax treatment is supported. See the scope below and the
-[feature register](docs/FEATURES.md).
+These features don't cover every workflow or tax treatment. See the scope below
+and the [feature register](docs/FEATURES.md).
 
 ## What it does
 

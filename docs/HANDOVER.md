@@ -138,6 +138,12 @@ PREP8, WB7, XP14 and the HL section.
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
+- **Website and README farm pictures** (15 Oct 2026): a "From the paddock to
+  the year-end" section with tabbed farm screenshots, a year-end statements
+  picture, and drawn illustrations for each kind of user (`website/img/illo-*.svg`).
+  The farm screenshots are of a fictional dairy farm, Kōwhai Dairies, seeded
+  with the real services in a scratch file (not committed). Aerial imagery is
+  off in them because LINZ can't be reached from the build sessions.
 - **Website and README redesigned** (6 Oct 2026, for 0.7.0): `website/` is
   one static page in the app's colours, with Inter served from the site (no
   third-party requests), light and dark, and screenshots of a fictional demo
