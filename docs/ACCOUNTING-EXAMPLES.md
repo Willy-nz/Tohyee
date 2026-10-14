@@ -18,7 +18,7 @@ proves it". Test names start with the example IDs they cover:
   approved), `tests/integration/financial-statements.test.ts` (SCE1, SCE2,
   SCF1-SCF4, not yet approved), `tests/integration/livestock-rations.test.ts`
   (RAT1-RAT4, not yet approved), `tests/integration/landed-cost.test.ts`
-  (LDC1-LDC5, not yet approved), `tests/integration/recode.test.ts`
+  (LDC1-LDC6, not yet approved), `tests/integration/recode.test.ts`
   (RCD1-RCD6, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
@@ -375,6 +375,12 @@ and 5100 is credited.
     card or system account as the account to credit; and a date before the
     item's latest stock movement (backdating, as for other stock
     movements).
+- **LDC6** The stock was received, and partly sold, in a period now
+  locked (lock date 30 Jun 2026). The landed cost is allocated on an open
+  date, 1 Jul 2026: the share for stock on hand goes onto the stock and the
+  share for stock already sold goes to cost of sales, both dated 1 Jul. A
+  date on or before the lock date is refused, so a locked period is never
+  changed (#257).
 
 ## Stock tracking (items on documents)
 
