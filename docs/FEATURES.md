@@ -138,6 +138,15 @@ that something happened.
   goes) with a journal moving the value between the locations on the
   inventory account, whose total never changes; the negative stock
   setting, backdating and period locks are respected.
+- **Year-end pack** (Accountant, Year-end pack; #258, decision 522): one
+  ZIP for the accountant for a financial year. It holds:
+  - the trial balance, profit and loss, balance sheet and general ledger
+    (CSV)
+  - a bank reconciliation for each bank and credit card account as at the
+    year end (PDF)
+  - a read-me
+  The figures come from the same report functions as the screens. Nothing
+  is posted.
 - **Reports**: trial balance, profit and loss, balance sheet, stock valuation,
   aged receivables and payables, account transactions, the journal report,
   customer statements, the GST return and GST audit report (below).
