@@ -219,6 +219,11 @@ describeWithDatabase("GST return on the payments and hybrid bases", () => {
       ["Consulting", "57.50", "7.50", ["5"]],
       ["Export freight", "25.00", "0.00", ["5", "6"]],
     ]);
+    // The working for each share (#258): settled / total x the line's whole GST.
+    expect(aprMay.lines.map((line) => [line.settledAmount, line.documentTotal, line.lineGst])).toEqual([
+      ["82.50", "165.00", "15.00"],
+      ["82.50", "165.00", "0.00"],
+    ]);
     expect((await world.calculate(JUN_JUL)).boxes).toMatchObject({ box5: "82.50", box6: "25.00", box8: "7.50" });
   });
 
@@ -241,6 +246,8 @@ describeWithDatabase("GST return on the payments and hybrid bases", () => {
       ["B", "3.33", "0.43"],
       ["C", "3.33", "0.00"],
     ]);
+    // A's 10.00 / 30.00 x 1.30 is 0.43; it carries the leftover cent, so it counts 0.44 (the screen says so).
+    expect(aprMay.lines.map((line) => line.lineGst)).toEqual(["1.30", "1.30", "0.00"]);
     expect(aprMay.boxes).toMatchObject({ box5: "10.00", box6: "3.33", box7: "6.67", box8: "0.87" });
     expect(aprMay.gstOnTransactions.sales).toBe("0.87");
     const junJul = await world.calculate(JUN_JUL);
