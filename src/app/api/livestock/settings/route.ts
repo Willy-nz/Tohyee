@@ -20,6 +20,8 @@ export const PATCH = route(async (request) => {
       valueChangeAccount: body.valueChangeAccount,
       revaluationAccount: body.revaluationAccount,
       reserveAccount: body.reserveAccount,
+      rationsIncomeAccount: body.rationsIncomeAccount,
+      drawingsAccount: body.drawingsAccount,
     }),
   );
   return json({ settings });

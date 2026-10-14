@@ -16,7 +16,8 @@ proves it". Test names start with the example IDs they cover:
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/balance-sheet-subtotals.test.ts` (P4, not yet
   approved), `tests/integration/financial-statements.test.ts` (SCE1, SCE2,
-  SCF1-SCF4, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  SCF1-SCF4, not yet approved), `tests/integration/livestock-rations.test.ts`
+  (RAT1-RAT4, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -16086,6 +16087,31 @@ The same year's movements are used in LV1, LV4 and LV6:
   heifers owned by a neighbour) are recorded as "held for others". They're
   shown on the farm's head count but not counted in LV1 or valued. Kōwhai's
   own heifers grazing off the farm are counted and valued.
+
+### Killed for rations (#259; chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement, not yet reviewed)
+
+Inland Revenue's IR3F lists the market value of produce used for private or
+domestic purposes as income, and rations provided for employees as a
+deduction. These examples follow that. GST isn't posted, because Claude
+couldn't confirm the GST treatment; a rural accountant should check it.
+Tested in `tests/integration/livestock-rations.test.ts`.
+
+- **RAT1** On 10 Mar 2026 the owner kills 1 mixed-age cow for the house,
+  with a market value of 1,100.00 excluding GST. Tohyee posts Dr 3100
+  Owner drawings **1,100.00**, Cr 7070 Livestock rations (private use)
+  **1,100.00** on 10 Mar 2026. The value has to be entered, and the
+  accounts are made the first time if they aren't set.
+- **RAT2** On 12 Mar 2026, 2 mixed-age cows are killed for staff rations.
+  Nothing is posted and no value is entered: the lower closing stock is the
+  cost, the same as stock used in the business.
+- **RAT3** Voiding RAT1 posts the reverse (Dr 7070, Cr 3100, 1,100.00) on
+  10 Mar 2026, and the cow is back in the head count. A rations movement
+  can't take a class below zero.
+- **RAT4** Rations have their own column in the LV1 head count: mixed-age
+  cows, 300 opening less 3 rations, close at **297**. Closing = opening +
+  born + bought - sold - died - rations - missing + found ± class changes ±
+  ageing. In the statement of cash flows, the owner's rations are income
+  with no cash, so they're taken back out (SCF4).
 
 ### Herd scheme
 

@@ -30,6 +30,7 @@ export function deltas(movement: HerdMovement): Array<[string, number]> {
       return [[key, movement.head]];
     case "sale":
     case "death":
+    case "rations":
     case "missing":
       return [[key, -movement.head]];
     case "reclass":

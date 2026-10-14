@@ -35,9 +35,10 @@ const MOVEMENT_LABELS: Record<MovementType, string> = {
   transfer: "Moved",
   arrival: "Arrived (someone else's)",
   departure: "Left (someone else's)",
+  rations: "Killed for rations",
 };
 
-const MOVEMENT_ORDER: MovementType[] = ["birth", "purchase", "sale", "death", "missing", "found", "reclass", "transfer", "arrival", "departure"];
+const MOVEMENT_ORDER: MovementType[] = ["birth", "purchase", "sale", "death", "missing", "found", "reclass", "transfer", "arrival", "departure", "rations"];
 
 /** Year ends from the first year to the one containing today. */
 function yearEnds(settings: LivestockSettings): string[] {
@@ -207,7 +208,7 @@ function HeadCountView({ organisationId, yearEnd }: { organisationId: string; ye
       </div>
       <Card
         title={`Head count, ${formatDate(data.yearStart)} to ${formatDate(data.yearEnd)}`}
-        description="Opening + born + bought − sold − died − missing + found ± class changes ± ageing = closing. Ageing happens at the start of the year and nets to zero across the herd."
+        description="Opening + born + bought − sold − died − rations − missing + found ± class changes ± ageing = closing. Ageing happens at the start of the year and nets to zero across the herd."
       >
         {data.rows.length === 0 ? (
           <Empty>No stock yet. Set the opening position in Livestock settings, then record movements.</Empty>
@@ -225,6 +226,7 @@ function HeadCountView({ organisationId, yearEnd }: { organisationId: string; ye
                     <th className={ui.num}>Bought</th>
                     <th className={ui.num}>Sold</th>
                     <th className={ui.num}>Died</th>
+                    <th className={ui.num}>Rations</th>
                     <th className={ui.num}>Missing / found</th>
                     <th className={ui.num}>Class changes</th>
                     <th className={ui.num}>Closing</th>
@@ -257,6 +259,9 @@ function HeadCountView({ organisationId, yearEnd }: { organisationId: string; ye
                           </td>
                           <td data-label="Died" className={ui.num}>
                             {row.died ? `(${row.died})` : ""}
+                          </td>
+                          <td data-label="Rations" className={ui.num}>
+                            {row.rations ? `(${row.rations})` : ""}
                           </td>
                           <td data-label="Missing / found" className={ui.num}>
                             {signed(row.found - row.missing)}
@@ -400,6 +405,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
     head: "",
     amount: "",
     heldFor: "",
+    rationsFor: "owner" as "owner" | "staff",
     locationId: "",
     toLocationId: "",
     note: "",
@@ -434,6 +440,10 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       if (form.movementType === "transfer") body.toLocationId = form.toLocationId;
       if (form.movementType === "purchase" || form.movementType === "sale") body.amount = form.amount || null;
       if (form.movementType === "arrival" || form.movementType === "departure") body.heldFor = form.heldFor;
+      if (form.movementType === "rations") {
+        body.rationsFor = form.rationsFor;
+        if (form.rationsFor === "owner") body.amount = form.amount || null;
+      }
       await api("/api/livestock/movements", { method: "POST", body });
       setMessage(`Recorded: ${MOVEMENT_LABELS[form.movementType].toLowerCase()}, ${form.head} ${classes.find((entry) => entry.code === form.classCode)?.name.toLowerCase()}.`);
       setKey(newIdempotencyKey("lv"));
@@ -466,7 +476,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       {message ? <Notice tone="success">{message}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {can("bookkeeper") ? (
-        <Card title="Record a movement" description="Births go into the rising one-year classes. Classes are what each animal will be at balance date. Nothing posts: values come from the year-end valuation.">
+        <Card title="Record a movement" description="Births go into the rising one-year classes. Classes are what each animal will be at balance date. Nothing posts except the owner's rations (at market value): values come from the year-end valuation.">
           <div className={ui.grid}>
             <Field label="What happened">
               <select value={form.movementType} onChange={(event) => setForm({ ...form, movementType: event.target.value as MovementType })}>
@@ -527,6 +537,25 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
               <Field label="Amount excl. GST" hint="Needed for the trading statement, unless the invoice or bill line is linked.">
                 <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
               </Field>
+            ) : null}
+            {form.movementType === "rations" ? (
+              <Field label="Whose rations">
+                <select value={form.rationsFor} onChange={(event) => setForm({ ...form, rationsFor: event.target.value as "owner" | "staff" })}>
+                  <option value="owner">The owner&apos;s household</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </Field>
+            ) : null}
+            {form.movementType === "rations" && form.rationsFor === "owner" ? (
+              <Field
+                label="Market value excl. GST"
+                hint="Income at market value, posted Dr owner drawings, Cr rations income. No GST is posted: check that with your accountant."
+              >
+                <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+              </Field>
+            ) : null}
+            {form.movementType === "rations" && form.rationsFor === "staff" ? (
+              <p className={ui.muted}>Nothing is posted for staff rations: the lower closing stock is the cost.</p>
             ) : null}
             {form.movementType === "arrival" || form.movementType === "departure" ? (
               <Field label="Whose stock">
@@ -604,6 +633,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                     <td data-label="Details">
                       {[
                         movement.heldFor ? `For ${movement.heldFor}` : null,
+                        movement.rationsFor ? (movement.rationsFor === "owner" ? "Owner's rations, posted at market value" : "Staff rations") : null,
                         movement.locationName,
                         movement.toLocationName ? `to ${movement.toLocationName}` : null,
                         movement.invoiceNumber ? `Invoice ${movement.invoiceNumber}` : null,
@@ -1010,6 +1040,8 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
                   ["valueChange", "valueChangeAccount", "Change in value"],
                   ["revaluation", "revaluationAccount", "Herd scheme revaluation (profit and loss)"],
                   ["reserve", "reserveAccount", "Revaluation reserve (equity)"],
+                  ["rationsIncome", "rationsIncomeAccount", "Owner's rations (income)"],
+                  ["drawings", "drawingsAccount", "Owner drawings (equity)"],
                 ] as const
               ).map(([role, field, label]) => (
                 <Field key={role} label={label}>

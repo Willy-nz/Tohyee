@@ -4,6 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays, financialYearEnd, financialYearStart } from "@/lib/financial-year";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
+import { parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { dec, isZero, parseDecimalInput } from "@/lib/money/decimal";
 import { createAccount } from "@/lib/accounts/service";
@@ -14,12 +15,13 @@ import { type AgeingStep, ageingSteps, type HerdMovement, lastDate, walkHerd } f
 
 /*
  * Livestock movements and head counts (#221 stage 2; examples LV1-LV3,
- * decision 503). Nothing here posts: births, deaths and ageing change head
- * counts only (LV8), and the year-end valuation (stage 3) turns them into
- * values.
+ * decision 503). Births, deaths and ageing change head counts only (LV8),
+ * and the year-end valuation (stage 3) turns them into values. The one
+ * posting here is the owner's rations (RAT1): income at market value,
+ * Dr drawings, Cr rations income.
  */
 
-export const MOVEMENT_TYPES = ["birth", "purchase", "sale", "death", "missing", "found", "reclass", "transfer", "arrival", "departure"] as const;
+export const MOVEMENT_TYPES = ["birth", "purchase", "sale", "death", "missing", "found", "reclass", "transfer", "arrival", "departure", "rations"] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const MOVEMENT_LABELS: Readonly<Record<MovementType, string>> = {
@@ -33,7 +35,12 @@ export const MOVEMENT_LABELS: Readonly<Record<MovementType, string>> = {
   transfer: "Moved",
   arrival: "Arrived (held for others)",
   departure: "Left (held for others)",
+  rations: "Killed for rations",
 };
+
+/** Whose rations (RAT1, RAT2): the owner's are income at market value; staff rations post nothing. */
+export const RATIONS_FOR = ["owner", "staff"] as const;
+export type RationsFor = (typeof RATIONS_FOR)[number];
 
 export type LivestockAccount = { code: string; name: string } | null;
 
@@ -43,7 +50,15 @@ export type LivestockSettings = {
   financialYearEndMonth: number;
   /** Where the herd scheme revaluation goes (LV12, decision 503): profit and loss, or an equity reserve. */
   revaluationTarget: "profit_and_loss" | "reserve";
-  accounts: { asset: LivestockAccount; valueChange: LivestockAccount; revaluation: LivestockAccount; reserve: LivestockAccount };
+  accounts: {
+    asset: LivestockAccount;
+    valueChange: LivestockAccount;
+    revaluation: LivestockAccount;
+    reserve: LivestockAccount;
+    /** The owner's rations (RAT1): Cr this income account, Dr the drawings account. */
+    rationsIncome: LivestockAccount;
+    drawings: LivestockAccount;
+  };
 };
 
 /** The accounts LV4 and LV12 post to, made when livestock is first turned on unless the code is already used. */
@@ -52,8 +67,18 @@ const DEFAULT_ACCOUNTS = {
   valueChange: { column: "value_change_account_id", code: "5210", name: "Livestock: change in value", type: "direct_costs", accountClass: "expense" },
   revaluation: { column: "revaluation_account_id", code: "7060", name: "Herd scheme revaluation (non-taxable)", type: "other_income", accountClass: "revenue" },
   reserve: { column: "reserve_account_id", code: "3300", name: "Herd scheme revaluation reserve", type: "equity", accountClass: "equity" },
+  rationsIncome: { column: "rations_income_account_id", code: "7070", name: "Livestock rations (private use)", type: "other_income", accountClass: "revenue" },
+  drawings: { column: "drawings_account_id", code: "3100", name: "Owner drawings", type: "equity", accountClass: "equity" },
 } as const;
 type AccountRole = keyof typeof DEFAULT_ACCOUNTS;
+const ROLE_NAMES: Record<AccountRole, string> = {
+  asset: "livestock on hand",
+  valueChange: "change in value",
+  revaluation: "herd scheme revaluation",
+  reserve: "revaluation reserve",
+  rationsIncome: "rations income",
+  drawings: "drawings",
+};
 
 export type LivestockOpening = { kind: LivestockKind; classCode: string; className: string; head: number; value: string };
 
@@ -79,6 +104,10 @@ export type Movement = {
   invoiceNumber: string | null;
   billLineId: string | null;
   billReference: string | null;
+  /** Rations only: whose. */
+  rationsFor: RationsFor | null;
+  /** The owner's rations journal (RAT1). */
+  journalId: string | null;
   note: string | null;
   createdByEmail: string;
   createdAt: string;
@@ -106,15 +135,22 @@ export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings
       revaluation_name: string | null;
       reserve_code: string | null;
       reserve_name: string | null;
+      rations_code: string | null;
+      rations_name: string | null;
+      drawings_code: string | null;
+      drawings_name: string | null;
     }>(
       `select s.enabled, s.first_year_start::text, s.revaluation_target,
               a.code as asset_code, a.name as asset_name, v.code as value_change_code, v.name as value_change_name,
-              r.code as revaluation_code, r.name as revaluation_name, e.code as reserve_code, e.name as reserve_name
+              r.code as revaluation_code, r.name as revaluation_name, e.code as reserve_code, e.name as reserve_name,
+              ra.code as rations_code, ra.name as rations_name, d.code as drawings_code, d.name as drawings_name
          from livestock_settings s
          left join accounts a on a.id = s.asset_account_id
          left join accounts v on v.id = s.value_change_account_id
          left join accounts r on r.id = s.revaluation_account_id
          left join accounts e on e.id = s.reserve_account_id
+         left join accounts ra on ra.id = s.rations_income_account_id
+         left join accounts d on d.id = s.drawings_account_id
         where s.id = true`,
     )
   ).rows[0];
@@ -130,6 +166,8 @@ export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings
       valueChange: account(row?.value_change_code, row?.value_change_name),
       revaluation: account(row?.revaluation_code, row?.revaluation_name),
       reserve: account(row?.reserve_code, row?.reserve_name),
+      rationsIncome: account(row?.rations_code, row?.rations_name),
+      drawings: account(row?.drawings_code, row?.drawings_name),
     },
   };
 }
@@ -156,7 +194,7 @@ async function ensureAccounts(tx: OrgTx): Promise<void> {
 
 async function chooseAccount(tx: OrgTx, role: AccountRole, input: unknown): Promise<void> {
   const spec = DEFAULT_ACCOUNTS[role];
-  const code = requireString(input, `The ${role} account`, { maxLength: 20 });
+  const code = requireString(input, `The ${ROLE_NAMES[role]} account`, { maxLength: 20 });
   const row = await tx.query<{ id: string; account_class: string; is_active: boolean; currency_code: string | null; system_key: string | null }>(
     "select id::text, account_class, is_active, currency_code, system_key from accounts where lower(code) = lower($1)",
     [code],
@@ -202,6 +240,8 @@ export async function updateLivestockSettings(
     valueChangeAccount?: unknown;
     revaluationAccount?: unknown;
     reserveAccount?: unknown;
+    rationsIncomeAccount?: unknown;
+    drawingsAccount?: unknown;
   },
 ): Promise<LivestockSettings> {
   const current = await getLivestockSettings(tx);
@@ -235,6 +275,8 @@ export async function updateLivestockSettings(
     ["valueChange", input.valueChangeAccount],
     ["revaluation", input.revaluationAccount],
     ["reserve", input.reserveAccount],
+    ["rationsIncome", input.rationsIncomeAccount],
+    ["drawings", input.drawingsAccount],
   ];
   for (const [role, value] of choices) if (value !== undefined) await chooseAccount(tx, role, value);
   const updated = await getLivestockSettings(tx);
@@ -345,7 +387,7 @@ export async function archiveLocation(tx: OrgTx, idInput: unknown, archived = tr
 
 const MOVEMENT_COLUMNS = `m.id::text, m.movement_date::text, m.movement_type, m.ownership, m.held_for, m.kind, m.class_code, m.to_class_code, m.head,
   m.amount::text, m.location_id::text, l.name as location_name, m.to_location_id::text, tl.name as to_location_name,
-  m.sales_invoice_line_id::text, i.invoice_number, m.bill_line_id::text, b.supplier_invoice_number as bill_reference, m.note,
+  m.sales_invoice_line_id::text, i.invoice_number, m.bill_line_id::text, b.supplier_invoice_number as bill_reference, m.rations_for, m.journal_id::text, m.note,
   m.created_by_email, m.created_at::text, m.voided_at is not null as voided, m.void_reason`;
 const MOVEMENT_JOINS = `from livestock_movements m
   left join livestock_locations l on l.id = m.location_id
@@ -374,6 +416,8 @@ type MovementRow = {
   invoice_number: string | null;
   bill_line_id: string | null;
   bill_reference: string | null;
+  rations_for: RationsFor | null;
+  journal_id: string | null;
   note: string | null;
   created_by_email: string;
   created_at: string;
@@ -402,6 +446,8 @@ function toMovement(row: MovementRow): Movement {
     invoiceNumber: row.invoice_number,
     billLineId: row.bill_line_id,
     billReference: row.bill_reference,
+    rationsFor: row.rations_for,
+    journalId: row.journal_id,
     note: row.note,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
@@ -482,12 +528,18 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     if (!toLocationId) throw new ValidationError("Say where the stock moved to.");
     if (toLocationId === locationId) throw new ValidationError("The stock is moving to the same location.");
   }
-  const amount =
-    (movementType === "purchase" || movementType === "sale") && input.amount !== undefined && input.amount !== null && input.amount !== ""
-      ? parseDecimalInput(input.amount, "Amount", { maxScale: 2, allowZero: true })
-      : null;
-  if (amount === null && input.amount !== undefined && input.amount !== null && input.amount !== "") {
-    throw new ValidationError("Only purchases and sales have an amount.");
+  const rationsFor = movementType === "rations" ? requireOneOf(input.rationsFor, "Whose rations", RATIONS_FOR) : null;
+  if (movementType !== "rations" && input.rationsFor) throw new ValidationError("Only rations are for the owner or staff.");
+  const amountGiven = input.amount !== undefined && input.amount !== null && input.amount !== "";
+  let amount: string | null = null;
+  if (movementType === "purchase" || movementType === "sale") {
+    amount = amountGiven ? parseDecimalInput(input.amount, "Amount", { maxScale: 2, allowZero: true }) : null;
+  } else if (rationsFor === "owner") {
+    // Income at market value (RAT1), so the value is needed.
+    if (!amountGiven) throw new ValidationError("Enter the market value of the owner's rations (excluding GST). It's income at market value.");
+    amount = parseDecimalInput(input.amount, "Market value", { maxScale: 2 });
+  } else if (amountGiven) {
+    throw new ValidationError(rationsFor === "staff" ? "Staff rations have no value to enter: nothing is posted, and the lower closing stock is the cost." : "Only purchases, sales and the owner's rations have an amount.");
   }
   const salesInvoiceLineId = optionalId(input.salesInvoiceLineId, "salesInvoiceLineId");
   const billLineId = optionalId(input.billLineId, "billLineId");
@@ -508,6 +560,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     toLocationId,
     salesInvoiceLineId,
     billLineId,
+    rationsFor,
     note,
   });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
@@ -521,6 +574,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   await assertYearOpen(tx, settings, movementDate);
   if (salesInvoiceLineId) await assertDocumentLine(tx, "invoice", salesInvoiceLineId);
   if (billLineId) await assertDocumentLine(tx, "bill", billLineId);
+  const rationsAccounts = rationsFor === "owner" ? await requireRationsAccounts(tx) : null;
 
   await lockLivestock(tx);
   let id: string;
@@ -528,8 +582,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     const row = await tx.query<{ id: string }>(
       `insert into livestock_movements (command_source, idempotency_key, request_hash, movement_date, movement_type, ownership, held_for, kind,
          class_code, to_class_code, head, amount, location_id, to_location_id, sales_invoice_line_id, bill_line_id, note,
-         created_by_user_id, created_by_email)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19) returning id::text`,
+         created_by_user_id, created_by_email, rations_for)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20) returning id::text`,
       [
         source,
         idempotencyKey,
@@ -550,6 +604,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
         note,
         tx.actor.userId,
         tx.actor.email,
+        rationsFor,
       ],
     );
     id = row.rows[0].id;
@@ -562,13 +617,41 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     throw error;
   }
   await assertNoNegative(tx);
+  if (rationsAccounts && amount) {
+    const journal = await postJournalBody(
+      tx,
+      "livestock_rations",
+      id,
+      parseJournalBody(tx, {
+        postingDate: movementDate,
+        reference: `RATIONS-${id}`,
+        description: `${head} ${definition.name.toLowerCase()} killed for the owner's rations, at market value`,
+        lines: [
+          { accountCode: rationsAccounts.drawings, debitAmount: amount, creditAmount: "0" },
+          { accountCode: rationsAccounts.income, debitAmount: "0", creditAmount: amount },
+        ],
+      }),
+      { origin: "livestock_rations" },
+    );
+    await tx.query("update livestock_movements set journal_id = $2 where id = $1", [id, journal.journal.id]);
+  }
   await writeAuditEvent(tx, {
     eventType: "livestock.movement_recorded",
     entityType: "livestock_movement",
     entityId: id,
-    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount },
+    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor },
   });
   return { created: true, movement: await getMovement(tx, id) };
+}
+
+/** The owner's rations accounts, made if they aren't set yet (RAT1). */
+async function requireRationsAccounts(tx: OrgTx): Promise<{ income: string; drawings: string }> {
+  await ensureAccounts(tx);
+  const { accounts } = await getLivestockSettings(tx);
+  if (!accounts.rationsIncome || !accounts.drawings) {
+    throw new ValidationError("Choose the rations income and drawings accounts in Livestock › Settings first.");
+  }
+  return { income: accounts.rationsIncome.code, drawings: accounts.drawings.code };
 }
 
 async function assertDocumentLine(tx: OrgTx, kind: "invoice" | "bill", lineId: string): Promise<void> {
@@ -588,7 +671,34 @@ export async function voidMovement(tx: OrgTx, idInput: unknown, input: { reason:
   if (movement.voided) return movement;
   await assertYearOpen(tx, settings, movement.movementDate);
   await lockLivestock(tx);
-  await tx.query("update livestock_movements set voided_at = now(), voided_by_email = $2, void_reason = $3 where id = $1", [movement.id, tx.actor.email, reason]);
+  let voidJournalId: string | null = null;
+  if (movement.journalId) {
+    // The owner's rations journal is reversed on the movement's date (RAT3).
+    const original = await tx.query<{ account_code: string; debit: string; credit: string }>(
+      `select a.code as account_code, l.debit_amount::text as debit, l.credit_amount::text as credit
+         from ledger_journal_lines l join accounts a on a.id = l.account_id where l.journal_id = $1 order by l.id`,
+      [movement.journalId],
+    );
+    const reversal = await postJournalBody(
+      tx,
+      "livestock_rations:void",
+      movement.id,
+      parseJournalBody(tx, {
+        postingDate: movement.movementDate,
+        reference: `RATIONS-${movement.id}`,
+        description: `Voided: ${reason}`,
+        lines: original.rows.map((line) => ({ accountCode: line.account_code, debitAmount: line.credit, creditAmount: line.debit })),
+      }),
+      { origin: "livestock_rations", relatedJournalId: movement.journalId, correctionKind: "reversal" },
+    );
+    voidJournalId = reversal.journal.id;
+  }
+  await tx.query("update livestock_movements set voided_at = now(), voided_by_email = $2, void_reason = $3, void_journal_id = $4 where id = $1", [
+    movement.id,
+    tx.actor.email,
+    reason,
+    voidJournalId,
+  ]);
   await assertNoNegative(tx);
   await writeAuditEvent(tx, { eventType: "livestock.movement_voided", entityType: "livestock_movement", entityId: movement.id, details: { reason } });
   return getMovement(tx, movement.id);
@@ -757,6 +867,8 @@ export type HeadCountRow = {
   bought: number;
   sold: number;
   died: number;
+  /** Killed for the owner's or staff rations (RAT4): its own line, not a death. */
+  rations: number;
   missing: number;
   found: number;
   reclassIn: number;
@@ -810,6 +922,7 @@ export async function headCount(tx: OrgTx, input: { yearEnd: unknown }): Promise
         bought: 0,
         sold: 0,
         died: 0,
+        rations: 0,
         missing: 0,
         found: 0,
         reclassIn: 0,
@@ -850,6 +963,9 @@ export async function headCount(tx: OrgTx, input: { yearEnd: unknown }): Promise
       case "death":
         row.died += head;
         break;
+      case "rations":
+        row.rations += head;
+        break;
       case "missing":
         row.missing += head;
         break;
@@ -874,7 +990,7 @@ export async function headCount(tx: OrgTx, input: { yearEnd: unknown }): Promise
   const unexplained: HeadCount["unexplained"] = [];
   for (const row of list) {
     row.closing =
-      row.opening + row.births + row.bought - row.sold - row.died - row.missing + row.found + row.reclassIn - row.reclassOut + row.ageingIn - row.ageingOut;
+      row.opening + row.births + row.bought - row.sold - row.died - row.rations - row.missing + row.found + row.reclassIn - row.reclassOut + row.ageingIn - row.ageingOut;
     const count = counts.rows.find((entry) => entry.kind === row.kind && entry.class_code === row.classCode);
     if (count) {
       row.counted = count.head;
@@ -891,6 +1007,7 @@ export async function headCount(tx: OrgTx, input: { yearEnd: unknown }): Promise
     bought: total("bought"),
     sold: total("sold"),
     died: total("died"),
+    rations: total("rations"),
     missing: total("missing"),
     found: total("found"),
     reclassIn: total("reclassIn"),
@@ -952,7 +1069,7 @@ async function locationBalances(tx: OrgTx, asAt: string): Promise<HeadCount["byL
        union all
        select location_id, kind,
               case movement_type when 'birth' then head when 'purchase' then head when 'found' then head
-                                 when 'sale' then -head when 'death' then -head when 'missing' then -head
+                                 when 'sale' then -head when 'death' then -head when 'rations' then -head when 'missing' then -head
                                  when 'transfer' then -head else 0 end
          from livestock_movements where voided_at is null and ownership = 'owned' and movement_date <= $1
        union all

@@ -704,7 +704,7 @@ function nsc(
     if (movement.movementType === "reclass" && groupOf(movement.toClassCode ?? "") !== group) {
       problems.push(`${kindName}: a class change between young and mature stock (${label}) isn't supported yet.`);
     }
-    const leaving = movement.movementType === "sale" || movement.movementType === "death" || movement.movementType === "missing";
+    const leaving = movement.movementType === "sale" || movement.movementType === "death" || movement.movementType === "rations" || movement.movementType === "missing";
     if (group === "rising_2" && leaving) risingTwoOut.set(movement.classCode, (risingTwoOut.get(movement.classCode) ?? 0) + movement.head);
     if (group !== "mature") continue;
     if (leaving) matureOut += movement.head;

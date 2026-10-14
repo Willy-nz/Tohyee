@@ -62,10 +62,11 @@ const FINANCING: readonly AccountType[] = ["non_current_liability", "equity"];
 const PROFIT_OR_LOSS_CLASSES = new Set(["revenue", "expense"]);
 
 /** How a journal's lines are treated (SCF2-SCF4). */
-type Bucket = "normal" | "depreciation" | "livestock" | "fx" | "disposal" | "opening";
+type Bucket = "normal" | "depreciation" | "livestock" | "rations" | "fx" | "disposal" | "opening";
 const NON_CASH_LABELS: Record<Exclude<Bucket, "normal">, string> = {
   depreciation: "Depreciation",
   livestock: "Change in livestock value",
+  rations: "Owner's rations (no cash)",
   fx: "Unrealised exchange gains and losses",
   disposal: "Gain or loss on disposal of fixed assets",
   opening: "Profit in opening balances",
@@ -99,6 +100,7 @@ export async function cashFlowStatement(tx: OrgTx, input: { from?: unknown; to?:
                   when j.origin = 'fixed_asset_disposal' then 'disposal'
                   when j.origin = 'fixed_asset_depreciation' then 'depreciation'
                   when j.origin = 'livestock_valuation' then 'livestock'
+                  when j.origin = 'livestock_rations' then 'rations'
                   when j.origin = 'fx_revaluation' then 'fx'
                   -- A depreciation journal entered by hand: depreciation and no bank.
                   when exists (select 1 from ledger_journal_lines l join accounts a on a.id = l.account_id
@@ -150,10 +152,10 @@ export async function cashFlowStatement(tx: OrgTx, input: { from?: unknown; to?:
     }
     if (isBank) {
       if (group.bucket === "opening") openingBalanceCash = add(openingBalanceCash, dec(group.net_debit));
-      else if (group.bucket === "fx" || group.bucket === "depreciation" || group.bucket === "livestock") exchangeOnCash = add(exchangeOnCash, dec(group.net_debit));
+      else if (group.bucket === "fx" || group.bucket === "depreciation" || group.bucket === "livestock" || group.bucket === "rations") exchangeOnCash = add(exchangeOnCash, dec(group.net_debit));
       continue;
     }
-    if (group.bucket === "opening" || group.bucket === "fx" || group.bucket === "depreciation" || group.bucket === "livestock") continue;
+    if (group.bucket === "opening" || group.bucket === "fx" || group.bucket === "depreciation" || group.bucket === "livestock" || group.bucket === "rations") continue;
     if (group.bucket === "disposal" && INVESTING.includes(group.account_type)) {
       disposalProceeds = add(disposalProceeds, amount);
       continue;
@@ -169,7 +171,7 @@ export async function cashFlowStatement(tx: OrgTx, input: { from?: unknown; to?:
   const show = (items: Array<{ group: LineGroup; amount: Decimal }>): StatementRow[] =>
     items.map(({ group, amount }) => ({ accountId: group.account_id, code: group.code, label: group.name, amount: money(amount) }));
 
-  const adjustments = (["depreciation", "livestock", "fx", "disposal", "opening"] as const)
+  const adjustments = (["depreciation", "livestock", "rations", "fx", "disposal", "opening"] as const)
     .map((bucket) => ({ bucket, amount: nonCash.get(bucket) ?? ZERO_DECIMAL }))
     .filter(({ amount }) => !isZero(amount));
   const wc = rows(workingCapital);
