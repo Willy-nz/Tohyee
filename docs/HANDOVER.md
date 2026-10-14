@@ -153,7 +153,9 @@ PREP8, WB7, XP14 and the HL section.
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
-- **0.8.0 is ready to publish** (notes updated 14 Oct 2026): `package.json`
+- **0.8.0 tagged** (15 Oct 2026): the `v0.8.0` tag was pushed from main,
+  which starts the release workflows. The notes now cover #180-#278.
+- **0.8.0 was ready to publish** (notes updated 14 Oct 2026): `package.json`
   says 0.8.0. It carries everything merged since v0.7.0 (#180-#256): the
   CRM stages, line discounts, GST registration, exchange rate sources,
   accounting as a module, feed logins, GoCardless, AI full access keys, the

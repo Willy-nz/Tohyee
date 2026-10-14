@@ -42,11 +42,10 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 13 October 2026:** the latest packaged
-release is [v0.7.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.7.0).
-The expanded CRM, livestock, jobs, rosters and clocking in below are built on
-`main` for the next release; they are not in the v0.7.0 installer. Check the
-[latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
+**Release availability, checked 15 October 2026:** the latest packaged
+release is [v0.8.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.8.0),
+with the CRM, livestock, farming, jobs, rosters and clocking in below. Check
+the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
 
 **Just want to use it?** Download `TohyeeSetup` from the
