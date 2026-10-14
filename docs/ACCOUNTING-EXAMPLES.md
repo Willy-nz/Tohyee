@@ -19,7 +19,8 @@ proves it". Test names start with the example IDs they cover:
   SCF1-SCF4, not yet approved), `tests/integration/livestock-rations.test.ts`
   (RAT1-RAT4, not yet approved), `tests/integration/landed-cost.test.ts`
   (LDC1-LDC5, not yet approved), `tests/integration/recode.test.ts`
-  (RCD1-RCD6, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  (RCD1-RCD6, not yet approved), `tests/integration/farm-benchmarks.test.ts`
+  (FK1-FK4, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -16923,3 +16924,38 @@ One rule isn't covered by these examples. An application with a spreading
 bill linked to it can't be removed until the spreading is unlinked. Removing
 it would otherwise move its share onto the other paddocks without anyone
 choosing that.
+
+## Farm benchmarks (#259; FK1-FK4 chosen by Claude on 14 Oct 2026 when Jess said to keep going, not yet reviewed)
+
+Tested in `tests/integration/farm-benchmarks.test.ts`. Nothing posts: this
+reads the ledger for a financial year and divides by the year's physical
+figures, as farm benchmarking does.
+
+**Setup.** The year runs 1 Jun 2025 to 31 May 2026. Milk income (4000,
+revenue) is 2,000,000.00. Expenses: Wages 6200 120,000.00, Animal health
+6400 36,000.00, Depreciation 6300 50,000.00, Interest 6090 30,000.00.
+
+- **FK1** Expense accounts are put in farm working expense (FWE) groups:
+  6200 in Wages and 6400 in Animal health. Only grouped accounts are
+  working expenses. Depreciation and interest aren't working expenses, so
+  they're left out, and are listed as "not in a group" with their amounts
+  so nothing is missed silently. Only expense accounts can be grouped.
+- **FK2** The year's figures are entered: effective area 200 ha, peak cows
+  milked 600, stock units 4,800, milk solids 240,000 kg. Any of them can be
+  left blank. The active paddocks' effective area is offered as a starting
+  point.
+- **FK3** Per unit, rounded to the cent:
+
+  | | Total | per kgMS | per ha | per cow | per su |
+  |---|---:|---:|---:|---:|---:|
+  | Gross farm revenue | 2,000,000.00 | 8.33 | 10,000.00 | 3,333.33 | 416.67 |
+  | Wages | 120,000.00 | 0.50 | 600.00 | 200.00 | 25.00 |
+  | Animal health | 36,000.00 | 0.15 | 180.00 | 60.00 | 7.50 |
+  | Farm working expenses | 156,000.00 | 0.65 | 780.00 | 260.00 | 32.50 |
+  | Operating surplus | 1,844,000.00 | 7.68 | 9,220.00 | 3,073.33 | 384.17 |
+
+  Gross farm revenue is the year's revenue accounts. Operating surplus is
+  gross farm revenue less farm working expenses.
+- **FK4** A figure that isn't entered gives no per-unit column (shown as a
+  dash), never a guess. With no milk solids entered, every per kgMS figure
+  is empty.
