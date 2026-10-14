@@ -2,15 +2,21 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-10-15",
+      "title": "Tohyee 0.8.0",
+      "body": "New: farming (paddocks, aerial imagery, fertiliser plans, soil tests, benchmarks); livestock for tax; jobs, rosters and clocking in; a bigger CRM; year-end financial statements and an accountant pack; your AI on the farm. Before you update, read the notes on two-step sign-in and remote access.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.8.0"
+    },
+    {
       "date": "2026-10-13",
       "title": "On main: jobs, rosters and clocking in",
-      "body": "Development update: jobs with visits, checklists, photos and materials on the invoice; rosters costed against a weekly budget; staff clocking in with a PIN on a shared device, straight onto their timesheets; and livestock now covers deer and goats. These are on main for the next release and are not in the v0.7.0 installer.",
+      "body": "Development update: jobs with visits, checklists, photos and materials on the invoice; rosters costed against a weekly budget; staff clocking in with a PIN on a shared device, straight onto their timesheets; and livestock now covers deer and goats. These are in 0.8.0.",
       "link": "https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
     },
     {
       "date": "2026-10-12",
       "title": "On main: expanded CRM and new livestock tools",
-      "body": "Development update: leads, sales teams, follow-ups, campaigns, team forecasts and deal quotes; livestock movements, supported herd scheme and NSC valuations, agent account sales and monthly management values. These additions are on main for the next release and are not included in the v0.7.0 installer. Farm budgeting and industry benchmarking remain planned.",
+      "body": "Development update: leads, sales teams, follow-ups, campaigns, team forecasts and deal quotes; livestock movements, supported herd scheme and NSC valuations, agent account sales and monthly management values. These are in 0.8.0. Farm budgeting and industry benchmarking remain planned.",
       "link": "https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md"
     },
     {
