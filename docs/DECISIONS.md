@@ -4692,3 +4692,26 @@ testing) and #154's code signing (later, Jess).
      - **Not built:** undoing an allocation (post a stocktake adjustment or
        journal instead), and allocating by weight (items have no weight).
 
+529. **Recoding a posted line** (14 October 2026, #258, #259).
+     - **Who decided:** Jess said to go with Claude's judgement. Examples
+       RCD1-RCD6 aren't reviewed yet.
+     - **What changes:** only a line's account and tracking, on an approved
+       invoice or bill or a posted bank transaction, with a reason. Its
+       amount, GST code, contact and control accounts never change, so a
+       filed GST return isn't affected.
+     - **The journal:** a correcting journal (origin `recode`) on the
+       document's own date moves the line's base-currency net amount from
+       the old account and tracking to the new. The document line is then
+       updated so the document matches the ledger.
+     - **The database:** the line guards allow this one change only while
+       the recode sets `tohyee.recoding` for its transaction; any other
+       change to a posted line is still refused. Recodes are kept, and can't
+       be changed, in `document_recodes` (tenant migration 0141).
+     - **Why the original date:** the profit and loss for that period ends
+       up right. Because the journal is dated then, the period must be after
+       the lock date; for a locked period, use a journal in an open period.
+     - **Refused:** stock lines (they moved stock); fixed asset accounts
+       (use the register); control accounts (bank, card, receivables,
+       payables, GST, stock); drafts and voided documents.
+     - **Not built:** credit notes, which are voided and re-entered.
+

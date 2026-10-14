@@ -26,6 +26,7 @@ import type { Invoice } from "@/lib/invoices/service";
 import { InvoiceDirectDebitCard } from "@/components/direct-debit";
 import { InvoicePayNowCard } from "@/components/online-payments";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { RecodeCard } from "@/components/recode";
 import { useConfirm } from "@/components/confirm-dialog";
 
 function journalHref(journalId: string): string {
@@ -484,6 +485,18 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
             setUpdated(next);
             setMessage(text);
             setWarning(creditWarning ?? null);
+          }}
+        />
+      ) : null}
+      {invoice.status === "approved" ? (
+        <RecodeCard
+          organisationId={organisationId}
+          documentType="invoice"
+          documentId={invoice.id}
+          lines={invoice.lines}
+          onRecoded={() => {
+            setUpdated(null);
+            details.reload();
           }}
         />
       ) : null}

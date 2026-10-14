@@ -18,7 +18,8 @@ proves it". Test names start with the example IDs they cover:
   approved), `tests/integration/financial-statements.test.ts` (SCE1, SCE2,
   SCF1-SCF4, not yet approved), `tests/integration/livestock-rations.test.ts`
   (RAT1-RAT4, not yet approved), `tests/integration/landed-cost.test.ts`
-  (LDC1-LDC5, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  (LDC1-LDC5, not yet approved), `tests/integration/recode.test.ts`
+  (RCD1-RCD6, not yet approved), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
   approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
@@ -484,6 +485,45 @@ With a lock date of 31 Mar 2026:
 - **C6** Journals created by stock movements or FX revaluations can't be
   corrected in the ledger; correct them with a stock adjustment/return.
 - **C7** The correction date must be in an open period (see L1-L3).
+
+### Recoding a posted line (RCD1-RCD6)
+
+Chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement
+(#258, #259); not yet reviewed. Tested in `tests/integration/recode.test.ts`.
+Only a line's account and tracking change, with a reason. Its amount, GST
+code, contact and control accounts never change, so a filed GST return isn't
+affected. A correcting journal (origin "recode") on the document's own date
+moves the line's amount, and the document line is updated to match.
+
+- **RCD1** A bill dated 10 May 2026 has a line of 500.00 + GST on 6010
+  Accounting fees. Recoding line 1 to 6100 Legal fees ("It was the
+  lawyer's invoice") posts Dr 6100 **500.00**, Cr 6010 **500.00** on 10 May
+  2026. The bill's line now shows 6100, and May's profit and loss has 6100
+  500.00 and 6010 0.00. Accounts payable and GST don't move.
+- **RCD2** An invoice line of 1,000.00 on 4000 Sales, recoded to 4100
+  Other revenue, posts Dr 4000 1,000.00, Cr 4100 1,000.00 on the invoice
+  date.
+- **RCD3** With the lock date at 31 May 2026, RCD1's bill can't be recoded
+  (its journal would be dated 10 May). Use a journal in an open period.
+- **RCD4** Bank transactions:
+  - Spend money of 80.00 + GST on 6020 Bank fees, recoded to 6130 Office
+    expenses: Dr 6130 80.00, Cr 6020 80.00.
+  - Receive money on 4100 Other revenue, recoded to 4200 Interest income:
+    Dr 4100, Cr 4200.
+  - The bank line and its reconciliation don't change.
+- **RCD5** Tracking only: a line on 6010 tagged Department Retail, retagged
+  Wholesale, posts Dr 6010 (Wholesale), Cr 6010 (Retail) for the line's
+  amount. A required category can't be left off.
+- **RCD6** Refused:
+  - a draft (edit it instead), or a voided document;
+  - a stock item's line (it moved stock);
+  - a line on a fixed asset account, or a recode to one (use the fixed asset
+    register);
+  - a recode to a control account (bank, card, receivables, payables, GST,
+    stock and the like);
+  - a recode that changes nothing, or has no reason.
+
+  Credit notes aren't recoded yet; void and re-enter them.
 
 ## Draft manual journals (examples not yet approved by Jess)
 

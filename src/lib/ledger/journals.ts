@@ -59,7 +59,8 @@ export type JournalOrigin =
   | "opening_balance"
   | "payroll"
   | "livestock_valuation"
-  | "livestock_rations";
+  | "livestock_rations"
+  | "recode";
 export type CorrectionKind = "reversal" | "replacement";
 
 /**
