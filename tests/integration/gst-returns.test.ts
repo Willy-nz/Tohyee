@@ -322,6 +322,7 @@ describeWithDatabase("GST return", () => {
         boxes: ["5"],
         settledAmount: null,
         documentTotal: null,
+        lineGst: null,
       },
       {
         side: "purchases",
@@ -343,6 +344,7 @@ describeWithDatabase("GST return", () => {
         boxes: ["11"],
         settledAmount: null,
         documentTotal: null,
+        lineGst: null,
       },
     ]);
   });

@@ -4715,3 +4715,14 @@ testing) and #154's code signing (later, Jess).
        payables, GST, stock); drafts and voided documents.
      - **Not built:** credit notes, which are voided and re-entered.
 
+530. **The GST return shows how a part payment's GST was worked out** (14
+     October 2026, #258).
+     - **What's shown:** on the payments and hybrid bases, a line counted
+       because of a settlement has its GST as an expandable cell: amount paid
+       ÷ document total = share; share × the line's GST = the working. When
+       the counted GST differs by the leftover cent (G12), the cell says the
+       cent went on the largest line so the lines add up.
+     - **The figures:** nothing changes in how they're worked out. Lines
+       worked out now carry `lineGst` (the line's whole GST). Filed returns
+       keep only the share, so their lines show the GST without the working.
+

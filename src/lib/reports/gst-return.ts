@@ -100,6 +100,13 @@ export type GstReturnLine = {
   /** For a settlement (payments and hybrid bases): the amount settled and the document's total. */
   settledAmount: string | null;
   documentTotal: string | null;
+  /**
+   * For a settlement worked out now: the document line's whole GST, so the
+   * share can be checked (#258): GST counted = settled / total x this, with
+   * any leftover cent on the largest line. Null otherwise, and on filed
+   * returns (they keep only the share).
+   */
+  lineGst: string | null;
   /** Set on a late claim: the filed return whose period the line is dated in (LG1-LG7). */
   lateFrom?: { gstReturnId: string; periodStart: string; periodEnd: string } | null;
 };
@@ -384,7 +391,7 @@ const DOCUMENT_LABELS: Record<GstDocumentType, string> = {
 
 function toLine(
   row: Omit<StoredLineRow, "amount" | "gst" | "settled_amount" | "document_total">,
-  counted: { amount: string; gst: string; settledAmount: string | null; documentTotal: string | null },
+  counted: { amount: string; gst: string; settledAmount: string | null; documentTotal: string | null; lineGst?: string | null },
 ): GstReturnLine {
   return {
     side: row.side,
@@ -406,6 +413,7 @@ function toLine(
     boxes: boxesFor(row.side, row.category),
     settledAmount: counted.settledAmount === null ? null : money(counted.settledAmount),
     documentTotal: counted.documentTotal === null ? null : money(counted.documentTotal),
+    lineGst: counted.lineGst == null ? null : money(counted.lineGst),
   };
 }
 
@@ -619,6 +627,7 @@ function eventLines(rows: readonly RawEventRow[]): GstReturnLine[] {
             gst: signed(shares[position].gst),
             settledAmount: first.settled,
             documentTotal: first.document_total,
+            lineGst: signed(row.line_gst),
           }),
         );
       });

@@ -8,6 +8,7 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { cmp, dec, divide, mulDiv, toFixedString } from "@/lib/money/decimal";
 import {
   GST_BOX_KEYS,
   GST_BOX_LABELS,
@@ -318,7 +319,11 @@ function LinesTable({ lines, id }: { lines: GstReturnLine[]; id?: string }) {
                 <Money value={line.amount} />
               </td>
               <td className={ui.num}>
-                <Money value={line.gst} />
+                {line.settledAmount && line.documentTotal && line.lineGst ? (
+                  <GstShare line={{ ...line, settledAmount: line.settledAmount, documentTotal: line.documentTotal, lineGst: line.lineGst }} />
+                ) : (
+                  <Money value={line.gst} />
+                )}
               </td>
             </tr>
           ))}
@@ -936,3 +941,39 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     </>
   );
 }
+
+/**
+ * A part-paid line's GST, with the working behind it (#258): the amount
+ * settled over the document's total, times the line's GST. When the shares
+ * of a document's lines are rounded, any leftover cent goes on its largest
+ * line so they add up (G11, G12).
+ */
+function GstShare({ line }: { line: { gst: string; settledAmount: string; documentTotal: string; lineGst: string } }) {
+  const settled = dec(line.settledAmount);
+  const total = dec(line.documentTotal);
+  if (cmp(total, dec("0")) === 0) return <Money value={line.gst} />;
+  const worked = toFixedString(mulDiv(settled, dec(line.lineGst), total, 2), 2);
+  const percent = toFixedString(divide(settled, total, 6), 6);
+  const shown = toFixedString(mulDiv(dec(percent), dec("100"), dec("1"), 2), 2);
+  const rounded = worked !== toFixedString(dec(line.gst), 2);
+  return (
+    <details>
+      <summary style={{ cursor: "pointer" }}>
+        <Money value={line.gst} />
+      </summary>
+      <div className={ui.muted} style={{ textAlign: "right", whiteSpace: "normal", minWidth: 220 }}>
+        <Money value={line.settledAmount} /> paid ÷ <Money value={line.documentTotal} /> total = {shown}%
+        <br />
+        {shown}% × line GST <Money value={line.lineGst} /> = <Money value={worked} />
+        {rounded ? (
+          <>
+            <br />
+            Counted as <Money value={line.gst} />: the leftover cent from rounding the lines goes on the largest line, so the lines add up to the
+            document&apos;s GST × the share paid.
+          </>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
