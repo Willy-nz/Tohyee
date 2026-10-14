@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -777,7 +778,7 @@ function Applications({ organisationId, report, paddocks, products, onReport, ed
               </select>
             </Field>
             <Field label="Date">
-              <input type="date" value={form.appliedOn} onChange={set("appliedOn")} />
+              <DateInput value={form.appliedOn} onChange={set("appliedOn")} />
             </Field>
             <Field label="Tonnes">
               <input inputMode="decimal" size={7} value={form.tonnes} onChange={set("tonnes")} />

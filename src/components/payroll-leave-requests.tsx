@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -174,8 +175,8 @@ function AskForLeave({ organisationId, me, onAsked }: { organisationId: string; 
             {LEAVE_TYPES.map((type) => <option key={type} value={type}>{LEAVE_TYPE_LABELS[type]}</option>)}
           </select>
         </Field>
-        <Field label="From"><input required type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field>
-        <Field label="To"><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field>
+        <Field label="From"><DateInput required value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field>
+        <Field label="To"><DateInput value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field>
         {leaveType === "bereavement" ? (
           <Field label="Bereavement">
             <select value={bereavementKind} onChange={(event) => setBereavementKind(event.target.value as BereavementKind)}>

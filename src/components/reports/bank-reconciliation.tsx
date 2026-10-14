@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { journalHref, originLabel } from "@/components/bank/common";
@@ -62,7 +63,7 @@ export function BankReconciliationReportView({
             </select>
           </Field>
           <Field label="As at">
-            <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
+            <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
           </Field>
           <PrintButton />
         </div>

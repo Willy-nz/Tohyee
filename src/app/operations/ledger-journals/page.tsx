@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -488,10 +489,10 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
           }}
         >
           <Field label="From">
-            <input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} />
+            <DateInput value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} />
           </Field>
           <Field label="To">
-            <input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} />
+            <DateInput value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} />
           </Field>
           <Field label="Reference contains">
             <input value={filters.reference} onChange={(event) => setFilters({ ...filters, reference: event.target.value })} />

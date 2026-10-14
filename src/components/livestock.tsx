@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -477,7 +478,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
               </select>
             </Field>
             <Field label="Date">
-              <input type="date" value={form.movementDate} onChange={(event) => setForm({ ...form, movementDate: event.target.value })} />
+              <DateInput value={form.movementDate} onChange={(event) => setForm({ ...form, movementDate: event.target.value })} />
             </Field>
             <Field label="Livestock">
               <select
@@ -967,7 +968,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
             {isAdmin ? (
               <div className={ui.inlineForm}>
                 <Field label="First income year starts" hint="Can change until movements are recorded. The opening position is as at the day before.">
-                  <input type="date" value={firstYearStart || current.firstYearStart || ""} onChange={(event) => setFirstYearStart(event.target.value)} />
+                  <DateInput value={firstYearStart || current.firstYearStart || ""} onChange={(event) => setFirstYearStart(event.target.value)} />
                 </Field>
                 <Button variant="secondary" disabled={!firstYearStart || firstYearStart === current.firstYearStart} onClick={() => void patch({ firstYearStart }, "The first year is changed.")}>
                   Change
@@ -978,7 +979,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
         ) : isAdmin ? (
           <div className={ui.inlineForm}>
             <Field label="First income year starts" hint="The first day of the financial year Tohyee's livestock records start in. Its opening comes from last year's workpaper.">
-              <input type="date" value={firstYearStart || current.firstYearStart || ""} onChange={(event) => setFirstYearStart(event.target.value)} />
+              <DateInput value={firstYearStart || current.firstYearStart || ""} onChange={(event) => setFirstYearStart(event.target.value)} />
             </Field>
             <Button onClick={() => void patch({ enabled: true, firstYearStart: firstYearStart || current.firstYearStart }, "Livestock is on.")}>Turn on</Button>
           </div>
@@ -1483,10 +1484,10 @@ export function LivestockAccountSales({ organisationId }: { organisationId: stri
               <input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} />
             </Field>
             <Field label="Sale date">
-              <input type="date" value={form.saleDate} onChange={(event) => setForm({ ...form, saleDate: event.target.value })} />
+              <DateInput value={form.saleDate} onChange={(event) => setForm({ ...form, saleDate: event.target.value })} />
             </Field>
             <Field label="Agent pays by" hint="Blank: the sale date">
-              <input type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} />
+              <DateInput value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} />
             </Field>
           </div>
           <h3>Stock sold</h3>
@@ -1724,7 +1725,7 @@ function ManagementView({ organisationId, yearEnd }: { organisationId: string; y
         {can("bookkeeper") ? (
           <>
             <Field label="From month">
-              <input type="date" value={effective} onChange={(event) => setMonth(event.target.value)} />
+              <DateInput value={effective} onChange={(event) => setMonth(event.target.value)} />
             </Field>
             {(kinds.length ? kinds : LIVESTOCK_KINDS).map((kind) => (
               <div key={kind} className={ui.grid}>
@@ -1788,7 +1789,7 @@ function HighPricedCard({ organisationId, canEdit }: { organisationId: string; c
       {animals.data && animals.data.animals.length === 0 ? <Empty>None recorded.</Empty> : null}
       {canEdit && animals.data?.animals.some((animal) => !animal.leftOn) ? (
         <Field label="Date it was sold, died or stopped breeding">
-          <input type="date" value={leftOn} onChange={(event) => setLeftOn(event.target.value)} />
+          <DateInput value={leftOn} onChange={(event) => setLeftOn(event.target.value)} />
         </Field>
       ) : null}
       <ul>
@@ -1833,7 +1834,7 @@ function HighPricedCard({ organisationId, canEdit }: { organisationId: string; c
             <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
           </Field>
           <Field label="Bought on">
-            <input type="date" value={form.boughtOn} onChange={(event) => setForm({ ...form, boughtOn: event.target.value })} />
+            <DateInput value={form.boughtOn} onChange={(event) => setForm({ ...form, boughtOn: event.target.value })} />
           </Field>
           <Field label="Cost excl. GST">
             <input inputMode="decimal" value={form.cost} onChange={(event) => setForm({ ...form, cost: event.target.value })} />

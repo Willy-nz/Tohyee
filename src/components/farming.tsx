@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -759,7 +760,7 @@ function SplitPaddock({ organisationId, paddock, onSplit }: { organisationId: st
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.inlineForm}>
         <Field label="Split on">
-          <input type="date" value={onDate} onChange={(event) => setOnDate(event.target.value)} />
+          <DateInput value={onDate} onChange={(event) => setOnDate(event.target.value)} />
         </Field>
         {parts.map((part, index) => (
           <div key={index} style={{ display: "contents" }}>

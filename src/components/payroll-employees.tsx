@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { describePay, EmployeeAllocation, EmployeePayRates } from "@/components/payroll-employee-pay";
@@ -243,7 +244,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
               <textarea autoComplete="street-address" maxLength={1000} value={draft.postalAddress ?? ""} onChange={(event) => change("postalAddress", event.target.value)} />
             </Field>
             <Field label="Date of birth">
-              <input autoComplete="bday" type="date" value={draft.dateOfBirth ?? ""} onChange={(event) => change("dateOfBirth", event.target.value)} />
+              <DateInput autoComplete="bday" value={draft.dateOfBirth ?? ""} onChange={(event) => change("dateOfBirth", event.target.value)} />
             </Field>
             <Field label="IRD number" hint="Encrypted when saved. Only people with payroll access can see it.">
               <input autoComplete="off" inputMode="numeric" required value={draft.irdNumber} onChange={(event) => change("irdNumber", event.target.value)} />
@@ -270,10 +271,10 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
               </select>
             </Field>
             <Field label="Temporary rate reduction from" hint="Only if IRD has approved a temporary rate reduction: the dates on IRD's approval.">
-              <input type="date" value={draft.kiwiSaverReductionFrom ?? ""} onChange={(event) => change("kiwiSaverReductionFrom", event.target.value)} />
+              <DateInput value={draft.kiwiSaverReductionFrom ?? ""} onChange={(event) => change("kiwiSaverReductionFrom", event.target.value)} />
             </Field>
             <Field label="Temporary rate reduction to">
-              <input type="date" value={draft.kiwiSaverReductionTo ?? ""} onChange={(event) => change("kiwiSaverReductionTo", event.target.value)} />
+              <DateInput value={draft.kiwiSaverReductionTo ?? ""} onChange={(event) => change("kiwiSaverReductionTo", event.target.value)} />
             </Field>
             <Field label="Pay frequency">
               <select required value={draft.payFrequency} onChange={(event) => change("payFrequency", event.target.value as Draft["payFrequency"])}>
@@ -311,10 +312,10 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
               </>
             )}
             <Field label="Start date">
-              <input required type="date" value={draft.startDate} onChange={(event) => change("startDate", event.target.value)} />
+              <DateInput required value={draft.startDate} onChange={(event) => change("startDate", event.target.value)} />
             </Field>
             <Field label="Finish date">
-              <input type="date" value={draft.finishDate ?? ""} onChange={(event) => change("finishDate", event.target.value)} />
+              <DateInput value={draft.finishDate ?? ""} onChange={(event) => change("finishDate", event.target.value)} />
             </Field>
             <Field label="Bank account" hint="Encrypted when saved. Leave blank if no account has been supplied.">
               <input autoComplete="off" value={draft.bankAccount ?? ""} onChange={(event) => change("bankAccount", event.target.value)} />

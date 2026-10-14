@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, Fragment, useState } from "react";
 import { Money } from "@/components/books";
@@ -249,10 +250,10 @@ export function SalesBySalespersonReport({ organisationId }: { organisationId: s
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="From">
-            <input type="date" value={from ?? report.data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
+            <DateInput value={from ?? report.data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
           </Field>
           <Field label="To">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
           <SaveAsCustomReportButton organisationId={organisationId} base="sales_by_salesperson" filters={{ from, to }} />
         </div>

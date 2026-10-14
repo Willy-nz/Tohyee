@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, Fragment, type ReactNode, useState } from "react";
 import { Money } from "@/components/books";
@@ -729,7 +730,7 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">
-            <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
+            <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
           </Field>
           <label className={ui.checkbox}>
             <input type="checkbox" checked={rollUp} onChange={(event) => setRollUp(event.target.checked)} />

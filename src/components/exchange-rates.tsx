@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { EcbRatesCard } from "@/components/consolidation";
 import { RateSetsCard, RateSourceCard } from "@/components/exchange-rate-sources";
 import { type FormEvent, useState } from "react";
@@ -244,7 +245,7 @@ function AddRate({ organisationId, data, onAdded }: { organisationId: string; da
             </select>
           </Field>
           <Field label="Effective from">
-            <input type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} required />
+            <DateInput value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} required />
           </Field>
           <Field label={`Rate (${data.baseCurrency} per 1 ${currencyCode})`} hint="Up to 8 decimal places.">
             <input inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value)} required aria-invalid={rate !== "" && !isRateText(rate)} />

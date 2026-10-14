@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -93,7 +94,7 @@ export function PayRunBankFileCard({ organisationId, payRunId, payDate }: { orga
               </select>
             </Field>
             <Field label="Due date" hint="The day the bank pays it.">
-              <input required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+              <DateInput required value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
             </Field>
             {chosen.format === "bnz_ib4b" ? (
               <Field label="On your statement">

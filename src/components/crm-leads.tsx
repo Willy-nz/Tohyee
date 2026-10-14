@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { CampaignPanel, CampaignSelect } from "@/components/crm-campaigns";
@@ -325,7 +326,7 @@ function ConvertLead({ organisationId, lead, onDone }: { organisationId: string;
             <input value={amount} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} />
           </Field>
           <Field label="Expected close">
-            <input type="date" value={closeDate} onChange={(event) => setCloseDate(event.target.value)} />
+            <DateInput value={closeDate} onChange={(event) => setCloseDate(event.target.value)} />
           </Field>
         </div>
       ) : null}

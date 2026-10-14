@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -260,7 +261,7 @@ export function ProjectEditor({
           <input inputMode="decimal" value={estimate} onChange={(event) => setEstimate(event.target.value)} />
         </Field>
         <Field label="Deadline (optional)">
-          <input type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+          <DateInput value={deadline} onChange={(event) => setDeadline(event.target.value)} />
         </Field>
       </div>
       <div className={ui.actions}>
@@ -476,7 +477,7 @@ function TimeCard({ organisationId, project, onChanged }: { organisationId: stri
             </select>
           </Field>
           <Field label="Date">
-            <input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required />
+            <DateInput value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required />
           </Field>
           <Field label="Hours">
             <input inputMode="numeric" size={3} value={hours} onChange={(event) => setHours(event.target.value)} />
@@ -831,10 +832,10 @@ function InvoiceCard({
       </div>
       <div className={ui.inlineForm}>
         <Field label="Invoice date">
-          <input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+          <DateInput value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
         </Field>
         <Field label="Due date" hint="Blank: the customer's payment terms.">
-          <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+          <DateInput value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
         </Field>
         <Field label="Account">
           <AccountSelect accounts={accounts.data?.accounts ?? []} value={account} onChange={setAccountCode} filter={(entry) => entry.accountClass === "revenue"} ariaLabel="Income account" />
@@ -1287,10 +1288,10 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
     >
       <div className={ui.inlineForm} data-print="hide">
         <Field label="From">
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
         </Field>
         <Field label="To">
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
         </Field>
         <Field label="Person">
           <select value={userId} onChange={(event) => setUserId(event.target.value)}>

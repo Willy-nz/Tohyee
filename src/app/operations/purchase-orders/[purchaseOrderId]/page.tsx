@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { approvalBlocksApproving, DocumentApprovalPanel, useDocumentApproval, waitingForApproval } from "@/components/approvals";
 import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
@@ -176,10 +177,10 @@ function PurchaseOrderActions({
             <input value={supplierInvoiceNumber} onChange={(event) => setSupplierInvoiceNumber(event.target.value)} maxLength={100} required />
           </Field>
           <Field label="Bill date">
-            <input type="date" value={billDate} onChange={(event) => setBillDate(event.target.value)} required />
+            <DateInput value={billDate} onChange={(event) => setBillDate(event.target.value)} required />
           </Field>
           <Field label="Due date" hint="Leave blank to use the supplier's payment terms.">
-            <input type="date" value={dueDate} min={billDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
+            <DateInput value={dueDate} min={billDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
           </Field>
           <ExchangeRateField currencyCode={purchaseOrder.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
           <Button onClick={copyToBill} disabled={busy || !supplierInvoiceNumber.trim() || !billDate}>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { dateProblem } from "@/components/date-input";
 import { isIsoDate, parseDateEntry, showDateEntry } from "@/lib/date-entry";
 
 const TODAY = "2026-10-14";
@@ -51,5 +52,13 @@ describe("typed dates, day first (#258)", () => {
     expect(showDateEntry("")).toBe("");
     expect(isIsoDate("2026-02-29")).toBe(false);
     expect(isIsoDate("2028-02-29")).toBe(true);
+  });
+
+  it("refuses a form with an unreadable date, or one outside min and max, as the browser's date field did", () => {
+    expect(dateProblem(true, "", undefined, undefined)).toMatch(/^That isn't a date\./);
+    expect(dateProblem(false, "2026-10-13", "2026-10-14", undefined)).toBe("The date can't be before 14/10/2026.");
+    expect(dateProblem(false, "2026-10-14", "2026-10-14", "2026-10-31")).toBe("");
+    expect(dateProblem(false, "2026-11-01", undefined, "2026-10-31")).toBe("The date can't be after 31/10/2026.");
+    expect(dateProblem(false, "", "2026-10-14", undefined)).toBe("");
   });
 });

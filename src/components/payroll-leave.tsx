@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -71,7 +72,7 @@ function Balances({ organisationId }: { organisationId: string }) {
       description="Annual holidays in weeks with their hours (decision 8), sick and family violence leave in days, alternative holidays, and the running 8% since the last anniversary (HL42). Counted from approved pay runs."
       actions={
         <Field label="As at">
-          <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
+          <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
         </Field>
       }
     >
@@ -218,10 +219,10 @@ function Bookings({ organisationId }: { organisationId: string }) {
                 </select>
               </Field>
               <Field label="From">
-                <input required type="date" value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} />
+                <DateInput required value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} />
               </Field>
               <Field label="To">
-                <input type="date" value={draft.endDate} onChange={(event) => set("endDate", event.target.value)} />
+                <DateInput value={draft.endDate} onChange={(event) => set("endDate", event.target.value)} />
               </Field>
               {draft.leaveType === "bereavement" ? (
                 <Field label="Bereavement">
@@ -401,8 +402,8 @@ function CashUps({ organisationId }: { organisationId: string }) {
                 ))}
               </select>
             </Field>
-            <Field label="Asked on"><input required type="date" value={requestedOn} onChange={(event) => setRequestedOn(event.target.value)} /></Field>
-            <Field label="Agreed on"><input type="date" value={agreedOn} onChange={(event) => setAgreedOn(event.target.value)} /></Field>
+            <Field label="Asked on"><DateInput required value={requestedOn} onChange={(event) => setRequestedOn(event.target.value)} /></Field>
+            <Field label="Agreed on"><DateInput value={agreedOn} onChange={(event) => setAgreedOn(event.target.value)} /></Field>
             <Field label="Weeks" hint="Up to 1 (0.6 is 3 days of a 5-day week)."><input inputMode="decimal" required value={weeks} onChange={(event) => setWeeks(event.target.value)} /></Field>
           </div>
           <div className={ui.grid2}>
@@ -473,7 +474,7 @@ function Liability({ organisationId }: { organisationId: string }) {
       description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays; and, for anyone who has finished but whose final pay isn't paid yet, the holiday pay on finishing on it. Employer KiwiSaver on it is shown for enrolled employees (gross, before ESCT). Sick, bereavement and family violence leave aren't in it: if your agreements let unused sick leave be taken as annual leave, journal your own estimate (decision 188). Post it to the ledger below (decisions 177, 189, 190)."
       actions={
         <div className={ui.actions}>
-          <Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>
+          <Field label="As at"><DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>
           <Button size="small" variant="secondary" onClick={() => void download()}>CSV</Button>
         </div>
       }
@@ -613,7 +614,7 @@ function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organis
           </div>
           {last ? (
             <Field label="Void date" hint="Only the latest posting can be voided; the next posting then measures from the one before it.">
-              <input type="date" value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
+              <DateInput value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
             </Field>
           ) : null}
         </>
@@ -779,7 +780,7 @@ export function EmployeeLeave({ organisationId, employeeId }: { organisationId: 
             </select>
           </Field>
           <Field label="From" hint="Blank: from the start date (first time) or today's settings change.">
-            <input type="date" value={String(values.effectiveFrom)} onChange={(event) => setValue("effectiveFrom", event.target.value)} />
+            <DateInput value={String(values.effectiveFrom)} onChange={(event) => setValue("effectiveFrom", event.target.value)} />
           </Field>
         </div>
         {patternKind === "fixed" ? (
@@ -972,13 +973,13 @@ function OpeningBalancesForm({ organisationId, employeeId, onSaved }: { organisa
         <form className={styles.stack} onSubmit={save}>
           <div className={ui.grid4}>
             <Field label="As at the end of" hint="The last day of a pay period, before Tohyee's first for them.">
-              <input required type="date" value={values.asAt} onChange={(event) => set("asAt", event.target.value)} />
+              <DateInput required value={values.asAt} onChange={(event) => set("asAt", event.target.value)} />
             </Field>
             <Field label="Annual holidays (weeks)" hint="Negative if taken in advance.">
               <input inputMode="decimal" required value={values.annualWeeks} onChange={(event) => set("annualWeeks", event.target.value)} />
             </Field>
             <Field label="Last entitled to annual holidays" hint="Blank if not yet 12 months.">
-              <input type="date" value={values.annualLastEntitled} onChange={(event) => set("annualLastEntitled", event.target.value)} />
+              <DateInput value={values.annualLastEntitled} onChange={(event) => set("annualLastEntitled", event.target.value)} />
             </Field>
             <Field label="Weeks cashed up that entitlement year" hint="s 28A(2)(b)">
               <input inputMode="decimal" value={values.annualCashedUpWeeks} onChange={(event) => set("annualCashedUpWeeks", event.target.value)} />
@@ -1055,8 +1056,8 @@ function UnpaidLeave({ organisationId, employeeId, records, onSaved }: { organis
         </ul>
       ) : null}
       <form className={ui.grid4} onSubmit={add}>
-        <Field label="From"><input required type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field>
-        <Field label="To"><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field>
+        <Field label="From"><DateInput required value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field>
+        <Field label="To"><DateInput value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field>
         <Field label="Reason">
           <select value={reason} onChange={(event) => setReason(event.target.value)}>
             <option value="other">Other</option>

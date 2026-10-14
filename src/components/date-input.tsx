@@ -1,6 +1,6 @@
 "use client";
 
-import { type InputHTMLAttributes, useRef, useState } from "react";
+import { type InputHTMLAttributes, useEffect, useRef, useState } from "react";
 import { isIsoDate, parseDateEntry, showDateEntry } from "@/lib/date-entry";
 import { todayInBrowser } from "@/lib/format";
 
@@ -23,8 +23,15 @@ const HELP = "Type a date like 14/10/2026, 1410, +14 (days) or +20m (20th of nex
 export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, className, disabled, required, min, max, ...rest }: DateInputProps) {
   const [text, setText] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
+  const field = useRef<HTMLInputElement | null>(null);
   const shown = text ?? showDateEntry(value);
-  const invalid = text !== null && text.trim() !== "" && parseDateEntry(text, todayInBrowser(), base) === null;
+  const unreadable = text !== null && text.trim() !== "" && parseDateEntry(text, todayInBrowser(), base) === null;
+  const problem = dateProblem(unreadable, value, min, max);
+  const invalid = problem !== "";
+  // The browser's date field refused a form with a date outside min/max; this keeps that.
+  useEffect(() => {
+    field.current?.setCustomValidity(problem);
+  }, [problem]);
   const commit = () => {
     if (text === null) return;
     if (text.trim() === "") {
@@ -41,12 +48,13 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
     <span style={{ display: "inline-flex", alignItems: "stretch", gap: 4, maxWidth: "100%", ...style }} className={className}>
       <input
         {...rest}
+        ref={field}
         type="text"
         inputMode="text"
         autoComplete="off"
         spellCheck={false}
         placeholder={rest.placeholder ?? "dd/mm/yyyy"}
-        title={HELP}
+        title={problem || HELP}
         aria-invalid={invalid || undefined}
         disabled={disabled}
         required={required}
@@ -102,4 +110,13 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
       </button>
     </span>
   );
+}
+
+/** Why a date field can't be submitted, or "" when it can (min and max are ISO dates). */
+export function dateProblem(unreadable: boolean, value: string, min: unknown, max: unknown): string {
+  if (unreadable) return "That isn't a date. " + HELP + ".";
+  if (!isIsoDate(value)) return "";
+  if (typeof min === "string" && isIsoDate(min) && value < min) return `The date can't be before ${showDateEntry(min)}.`;
+  if (typeof max === "string" && isIsoDate(max) && value > max) return `The date can't be after ${showDateEntry(max)}.`;
+  return "";
 }

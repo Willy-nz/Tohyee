@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import {
@@ -254,7 +255,7 @@ function StandardEditor({
     case "money":
       return <input {...common} inputMode="decimal" className={ui.num} onChange={(event) => onChange(event.target.value)} />;
     case "date":
-      return <input {...common} type="date" onChange={(event) => onChange(event.target.value)} />;
+      return <DateInput {...common} onChange={(event) => onChange(event.target.value)} />;
     case "member":
       return (
         <select {...common} onChange={(event) => onChange(event.target.value)}>

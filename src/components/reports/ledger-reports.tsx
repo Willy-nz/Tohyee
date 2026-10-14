@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { Money, useAccounts } from "@/components/books";
@@ -83,7 +84,7 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">
-            <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
+            <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
           </Field>
           <PrintButton />
           <SaveAsCustomReportButton organisationId={organisationId} base="aged_payables" filters={{ asAt }} />
@@ -261,10 +262,10 @@ export function AccountTransactionsReport({
             </select>
           </Field>
           <Field label="From">
-            <input type="date" value={from ?? data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
+            <DateInput value={from ?? data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
           </Field>
           <Field label="To">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
           {categories.length > 0 ? (
             <Field label="Only lines tagged">
@@ -425,10 +426,10 @@ export function JournalReportView({ organisationId }: { organisationId: string }
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="From">
-            <input type="date" value={from ?? data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
+            <DateInput value={from ?? data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
           </Field>
           <Field label="To">
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
           <PrintButton />
           <SaveAsCustomReportButton organisationId={organisationId} base="journal_report" filters={{ from, to }} />

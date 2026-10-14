@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -339,7 +340,7 @@ export function FixedAssetForm({
       ) : null}
       <div className={ui.grid3}>
         <Field label="Purchase date">
-          <input type="date" value={draft.purchaseDate} disabled={locked} onChange={(event) => set({ purchaseDate: event.target.value })} required={!draft.billLineId} />
+          <DateInput value={draft.purchaseDate} disabled={locked} onChange={(event) => set({ purchaseDate: event.target.value })} required={!draft.billLineId} />
         </Field>
         <Field label="Cost excluding GST">
           <input inputMode="decimal" value={draft.cost} disabled={locked} onChange={(event) => set({ cost: event.target.value })} required={!draft.billLineId} />
@@ -367,7 +368,7 @@ export function FixedAssetForm({
         <summary>Bringing in an existing register (opening balance)</summary>
         <div className={ui.grid2}>
           <Field label="Opening balance date" hint="A month end: depreciation starts the month after.">
-            <input type="date" value={draft.openingDate} disabled={locked} onChange={(event) => set({ openingDate: event.target.value })} />
+            <DateInput value={draft.openingDate} disabled={locked} onChange={(event) => set({ openingDate: event.target.value })} />
           </Field>
           <Field label="Accumulated depreciation at that date">
             <input inputMode="decimal" value={draft.openingAccumulatedDepreciation} disabled={locked} onChange={(event) => set({ openingAccumulatedDepreciation: event.target.value })} />
@@ -446,7 +447,7 @@ function DisposeForm({ organisationId, asset, onDone }: { organisationId: string
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>
         <Field label="Disposal date">
-          <input type="date" value={disposalDate} onChange={(event) => setDisposalDate(event.target.value)} />
+          <DateInput value={disposalDate} onChange={(event) => setDisposalDate(event.target.value)} />
         </Field>
         <Field label="Proceeds excluding GST" hint="Blank for a write-off.">
           <input inputMode="decimal" value={proceeds} onChange={(event) => setProceeds(event.target.value)} />
@@ -696,7 +697,7 @@ export function DepreciationRuns({ organisationId }: { organisationId: string })
       >
         <div className={ui.inlineForm}>
           <Field label="To month end" hint={latest ? `Last run to ${formatDate(latest.periodEnd)}.` : "No runs yet."}>
-            <input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
+            <DateInput value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
           </Field>
           {can("bookkeeper") ? (
             <Button
@@ -1100,7 +1101,7 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">
-            <input type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
+            <DateInput value={asOf} onChange={(event) => setAsOf(event.target.value)} />
           </Field>
           <PrintButton />
         </div>

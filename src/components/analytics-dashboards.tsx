@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -491,10 +492,10 @@ function FilterBar({
   return (
     <div className={styles.filterBar}>
       <Field label="From">
-        <input type="date" value={filters.from} onChange={(event) => onChange({ ...filters, from: event.target.value })} />
+        <DateInput value={filters.from} onChange={(event) => onChange({ ...filters, from: event.target.value })} />
       </Field>
       <Field label="To">
-        <input type="date" value={filters.to} onChange={(event) => onChange({ ...filters, to: event.target.value })} />
+        <DateInput value={filters.to} onChange={(event) => onChange({ ...filters, to: event.target.value })} />
       </Field>
       {settings.slicers.map((slicer) => (
         <SlicerControl

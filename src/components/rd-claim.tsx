@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
@@ -613,11 +614,11 @@ function RuleForm({
           <input value={draft.basisDetail} maxLength={500} required onChange={(event) => set({ basisDetail: event.target.value })} />
         </Field>
         <Field label={rule ? "Change from" : "From"}>
-          <input type="date" value={draft.effectiveFrom} required onChange={(event) => set({ effectiveFrom: event.target.value })} />
+          <DateInput value={draft.effectiveFrom} required onChange={(event) => set({ effectiveFrom: event.target.value })} />
         </Field>
         {rule ? null : (
           <Field label="To (optional)">
-            <input type="date" value={draft.effectiveTo} onChange={(event) => set({ effectiveTo: event.target.value })} />
+            <DateInput value={draft.effectiveTo} onChange={(event) => set({ effectiveTo: event.target.value })} />
           </Field>
         )}
         <Field label="Workings" hint="Required: the calculation, e.g. a floor plan. Up to 10 MB.">
@@ -664,7 +665,7 @@ function EndRuleForm({ organisationId, rule, onSaved, onCancel }: { organisation
     <form onSubmit={(event) => void submit(event)} className={ui.inlineForm}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Field label="Last day">
-        <input type="date" value={effectiveTo} required onChange={(event) => setEffectiveTo(event.target.value)} />
+        <DateInput value={effectiveTo} required onChange={(event) => setEffectiveTo(event.target.value)} />
       </Field>
       <Button type="submit" disabled={busy}>
         End the rule

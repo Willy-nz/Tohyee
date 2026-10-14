@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { readFileAsBase64 } from "@/components/bank/common";
 import { useApiData } from "@/components/hooks";
@@ -181,10 +182,10 @@ export function RateSetsCard({ organisationId, baseCurrency, canEdit, onChanged 
               <input value={name} maxLength={100} required onChange={(event) => (setName(event.target.value), reset())} />
             </Field>
             <Field label="Period from">
-              <input type="date" value={periodStart} required onChange={(event) => (setPeriodStart(event.target.value), reset())} />
+              <DateInput value={periodStart} required onChange={(event) => (setPeriodStart(event.target.value), reset())} />
             </Field>
             <Field label="Period to">
-              <input type="date" value={periodEnd} required onChange={(event) => (setPeriodEnd(event.target.value), reset())} />
+              <DateInput value={periodEnd} required onChange={(event) => (setPeriodEnd(event.target.value), reset())} />
             </Field>
             <Field label="Rates are quoted as">
               <select value={quoted} onChange={(event) => (setQuoted(event.target.value as RateQuote), reset())}>

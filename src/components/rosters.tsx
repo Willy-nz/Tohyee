@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { useState } from "react";
 import { Money } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -464,10 +465,10 @@ function UnavailabilityEditor({ organisationId, employeeId }: { organisationId: 
         ) : (
           <>
             <Field label="From">
-              <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+              <DateInput value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
             </Field>
             <Field label="To">
-              <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+              <DateInput value={toDate} onChange={(event) => setToDate(event.target.value)} />
             </Field>
           </>
         )}

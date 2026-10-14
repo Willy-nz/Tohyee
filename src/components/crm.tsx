@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -684,7 +685,7 @@ export function OpportunityForm({
           <input inputMode="decimal" className={ui.num} value={draft.amount} onChange={(event) => set({ amount: event.target.value })} />
         </Field>
         <Field label="Expected close date">
-          <input type="date" value={draft.closeDate} onChange={(event) => set({ closeDate: event.target.value })} />
+          <DateInput value={draft.closeDate} onChange={(event) => set({ closeDate: event.target.value })} />
         </Field>
         <Field label="Owner">
           <select value={draft.ownerUserId} onChange={(event) => set({ ownerUserId: event.target.value })}>
@@ -1075,7 +1076,7 @@ export function TaskForm({
           <input value={draft.title} maxLength={200} onChange={(event) => set({ title: event.target.value })} required />
         </Field>
         <Field label="Due">
-          <input type="date" value={draft.dueDate} onChange={(event) => set({ dueDate: event.target.value })} />
+          <DateInput value={draft.dueDate} onChange={(event) => set({ dueDate: event.target.value })} />
         </Field>
         <Field label="Assigned to">
           <select value={draft.assigneeUserId} onChange={(event) => set({ assigneeUserId: event.target.value })}>

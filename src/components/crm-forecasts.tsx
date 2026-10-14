@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
 import { amountIn, StageBadge, useBaseCurrency, useBusy, useTeam } from "@/components/crm";
@@ -245,7 +246,7 @@ export function ForecastsPage({ organisationId }: { organisationId: string }) {
             </select>
           </Field>
           <Field label="From">
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
           </Field>
           <Field label="Periods">
             <input inputMode="numeric" className={ui.num} value={periods} onChange={(event) => setPeriods(event.target.value)} />

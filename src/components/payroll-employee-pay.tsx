@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -90,7 +91,7 @@ export function EmployeePayRates({ organisationId, employeeId, onSaved }: { orga
       <form className={styles.stack} onSubmit={save}>
         <div className={ui.grid2}>
           <Field label="New rate from">
-            <input required type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
+            <DateInput required value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
           </Field>
           <Field label="Ordinary pay">
             <select required value={payBasis} onChange={(event) => setPayBasis(event.target.value as PayRate["payBasis"] | "")}>
@@ -255,7 +256,7 @@ export function EmployeeAllocation({ organisationId, employeeId, onSaved }: { or
 
       <form className={styles.stack} onSubmit={save}>
         <Field label="New allocation from">
-          <input required type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
+          <DateInput required value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} />
         </Field>
         {lines.map((line, index) => (
           <fieldset className={styles.stack} key={index}>

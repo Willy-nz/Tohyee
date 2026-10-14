@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
@@ -138,8 +139,7 @@ function InvoiceActions({
       ) : (
         <div className={ui.inlineForm}>
           <Field label="Void date">
-            <input
-              type="date"
+            <DateInput
               value={voidDate}
               min={invoice.invoiceDate}
               onChange={(event) => setVoidDate(event.target.value)}

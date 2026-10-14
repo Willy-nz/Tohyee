@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -142,10 +143,10 @@ function SettingsForm({
             <input value={gstNumber} onChange={(event) => setGstNumber(event.target.value)} maxLength={20} placeholder="123-456-789" />
           </Field>
           <Field label="Registered from" hint="Blank if registered from the start. Documents dated before it can't have GST.">
-            <input type="date" value={gstRegisteredFrom} onChange={(event) => setGstRegisteredFrom(event.target.value)} />
+            <DateInput value={gstRegisteredFrom} onChange={(event) => setGstRegisteredFrom(event.target.value)} />
           </Field>
           <Field label="Registration ended" hint="Blank while still registered. Documents dated after it can't have GST; the last GST return covers up to it.">
-            <input type="date" value={gstRegisteredUntil} onChange={(event) => setGstRegisteredUntil(event.target.value)} />
+            <DateInput value={gstRegisteredUntil} onChange={(event) => setGstRegisteredUntil(event.target.value)} />
           </Field>
           <Field label="GST basis" hint="How GST returns are worked out. The payments basis is for sales of $2 million or less in the last 12 months (Tohyee doesn't check this). After a change, the next GST return suggests the adjustment IRD asks for.">
             <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>

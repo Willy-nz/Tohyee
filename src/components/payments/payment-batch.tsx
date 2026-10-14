@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
@@ -293,7 +294,7 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
         <Card title="The payment">
           <div className={ui.grid4}>
             <Field label="Date">
-              <input type="date" value={fields.paymentDate} onChange={(event) => setFields((f) => ({ ...f, paymentDate: event.target.value }))} required />
+              <DateInput value={fields.paymentDate} onChange={(event) => setFields((f) => ({ ...f, paymentDate: event.target.value }))} required />
             </Field>
             <Field
               label={`Amount ${words.money} (${currency})`}
@@ -460,7 +461,7 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
             <form onSubmit={(event) => void voidIt(event)} style={{ display: "grid", gap: 12 }}>
               {error ? <Notice tone="error">{error}</Notice> : null}
               <Field label="Void date" hint="Must be in an open period, on or after the payment date.">
-                <input type="date" value={voidDate} min={batch.paymentDate} onChange={(event) => setVoidDate(event.target.value)} required />
+                <DateInput value={voidDate} min={batch.paymentDate} onChange={(event) => setVoidDate(event.target.value)} required />
               </Field>
               <div className={ui.actions}>
                 <Button type="submit" variant="danger" disabled={busy}>
