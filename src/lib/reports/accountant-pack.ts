@@ -9,6 +9,7 @@ import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
 import { reportCsv, reportPdf } from "@/lib/reports/export-files";
 import type { ReportExportCell, ReportExportData, ReportExportName, ReportExportRow, ReportExportTable } from "@/lib/reports/export-types";
 import { balanceSheet, financialYearEndMonth, profitAndLoss, trialBalance } from "@/lib/reports/financial";
+import { cashFlowStatement, changesInEquity, type StatementRow } from "@/lib/reports/statements";
 import { createZip, type ZipEntry } from "@/lib/zip/write";
 
 /*
@@ -18,6 +19,7 @@ import { createZip, type ZipEntry } from "@/lib/zip/write";
  * - Trial balance as at the year end (CSV)
  * - Profit and loss for the year (CSV)
  * - Balance sheet as at the year end (CSV)
+ * - Statement of changes in equity and statement of cash flows for the year (CSV)
  * - General ledger: every account's transactions for the year (CSV)
  * - Bank reconciliation as at the year end, one PDF per bank and card account
  * - A read-me listing them
@@ -145,6 +147,56 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
     ),
   );
 
+  const statementRows = (rows: StatementRow[]) => rows.map((line) => row([text(line.code ? `${line.code} ${line.label}` : line.label), amount(line.amount)]));
+  const sce = await changesInEquity(tx, { from: yearStart, to: yearEnd });
+  add(
+    "Changes in equity.csv",
+    reportCsv(
+      data("changes-in-equity", "Statement of changes in equity", period, [
+        {
+          columns: ["Item", "Amount"],
+          rows: [
+            row([text(`Equity at ${nzDate(sce.from)}`), amount(sce.openingEquity)], "total"),
+            row([text("Net profit for the period"), amount(sce.profit)]),
+            ...statementRows(sce.movements),
+            row([text(`Equity at ${nzDate(sce.to)}`), amount(sce.closingEquity)], "total"),
+          ],
+        },
+      ]),
+    ),
+  );
+
+  const cf = await cashFlowStatement(tx, { from: yearStart, to: yearEnd });
+  const zero = (value: string) => /^-?0(\.0+)?$/.test(value);
+  add(
+    "Cash flows.csv",
+    reportCsv(
+      data("cash-flow-statement", "Statement of cash flows", period, [
+        {
+          columns: ["Item", "Amount"],
+          rows: [
+            row([text("Operating activities"), text("")], "section"),
+            row([text("Net profit"), amount(cf.operating.profit)]),
+            ...statementRows(cf.operating.adjustments),
+            ...statementRows(cf.operating.workingCapital),
+            row([text("Net cash from operating activities"), amount(cf.operating.total)], "total"),
+            row([text("Investing activities"), text("")], "section"),
+            ...statementRows(cf.investing.lines),
+            ...(zero(cf.investing.disposalProceeds) ? [] : [row([text("Proceeds from disposals of fixed assets"), amount(cf.investing.disposalProceeds)])]),
+            row([text("Net cash from investing activities"), amount(cf.investing.total)], "total"),
+            row([text("Financing activities"), text("")], "section"),
+            ...statementRows(cf.financing.lines),
+            row([text("Net cash from financing activities"), amount(cf.financing.total)], "total"),
+            row([text("Net increase (decrease) in cash"), amount(cf.netChange)], "total"),
+            ...(zero(cf.exchangeOnCash) ? [] : [row([text("Effect of exchange rates on cash"), amount(cf.exchangeOnCash)])]),
+            row([text(`Cash at ${nzDate(cf.from)}`), amount(cf.openingCash)]),
+            row([text(`Cash at ${nzDate(cf.to)}`), amount(cf.closingCash)], "total"),
+          ],
+        },
+      ]),
+    ),
+  );
+
   const gl = await accountTransactions(tx, { from: yearStart, to: yearEnd });
   const glRows: ReportExportRow[] = [];
   for (const account of gl.accounts) {
@@ -225,7 +277,7 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
     );
   }
 
-  const files = ["Trial balance.csv", "Profit and loss.csv", "Balance sheet.csv", "General ledger.csv", ...bankFiles];
+  const files = ["Trial balance.csv", "Profit and loss.csv", "Balance sheet.csv", "Changes in equity.csv", "Cash flows.csv", "General ledger.csv", ...bankFiles];
   add(
     "Read me.txt",
     [
@@ -236,6 +288,8 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
       "- Trial balance.csv: as at the year end. Income and expense accounts show this year only; earlier years' profit is in retained earnings.",
       "- Profit and loss.csv: for the year.",
       "- Balance sheet.csv: as at the year end.",
+      "- Changes in equity.csv: opening equity, the year's profit, each equity account's movement, and closing equity.",
+      "- Cash flows.csv: statement of cash flows for the year, indirect method. Cash is the bank accounts.",
       "- General ledger.csv: every account's transactions for the year, with opening and closing balances.",
       ...(bankFiles.length > 0
         ? ["- Bank reconciliation PDFs: for each bank and credit card account as at the year end."]

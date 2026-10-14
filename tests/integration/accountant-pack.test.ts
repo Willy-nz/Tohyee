@@ -81,7 +81,7 @@ describeWithDatabase("year-end accountant pack", () => {
     expect(pack.fileName).toMatch(/year-end pack 2026-03-31\.zip$/);
     const files = await unzip(pack.bytes);
     expect([...files.keys()].sort()).toEqual(
-      ["Balance sheet.csv", "Bank reconciliation 1000 Business bank account.pdf", "Bank reconciliation 2400 Credit card.pdf", "General ledger.csv", "Profit and loss.csv", "Read me.txt", "Trial balance.csv"].sort(),
+      ["Balance sheet.csv", "Cash flows.csv", "Changes in equity.csv", "Bank reconciliation 1000 Business bank account.pdf", "Bank reconciliation 2400 Credit card.pdf", "General ledger.csv", "Profit and loss.csv", "Read me.txt", "Trial balance.csv"].sort(),
     );
     expect(pack.files).toContain("Bank reconciliation 1000 Business bank account.pdf");
 
@@ -98,6 +98,11 @@ describeWithDatabase("year-end accountant pack", () => {
 
     const bs = files.get("Balance sheet.csv")!.toString("utf8");
     expect(bs).toContain(",Total liabilities and equity,6250.00");
+
+    expect(files.get("Changes in equity.csv")!.toString("utf8")).toContain("Equity at 31/03/2026,6250.00");
+    const cf = files.get("Cash flows.csv")!.toString("utf8");
+    expect(cf).toContain("Net cash from operating activities,1250.00");
+    expect(cf).toContain("Cash at 31/03/2026,6250.00");
 
     const gl = files.get("General ledger.csv")!.toString("utf8");
     expect(gl.split("\r\n").filter((line) => line.startsWith("1000,") && /\d{2}\/\d{2}\/2026|\d{2}\/\d{2}\/2025/.test(line))).toHaveLength(3);
