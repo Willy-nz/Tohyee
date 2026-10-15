@@ -4983,3 +4983,23 @@ testing) and #154's code signing (later, Jess).
      - Not changed: how the visitor's address is read (decision 534 still
        stands), and the address service's recovery without the release key
        (decision 534; Jess chose to keep it on 15 October 2026).
+
+542. **Remote access pauses itself when someone is guessing** (15 October
+     2026). Jess wants to use Tailscale Funnel to show Tohyee and try it at
+     work, and chose "auto pause on attack" from the options offered.
+     - 20 failed (or locked) sign-ins through remote access within 10
+       minutes, counting every login and address together, pause remote
+       access for an hour; again within a day doubles it (2, 4… up to 24
+       hours). The per-address limit and per-login lockout catch one
+       guesser; this catches many addresses guessing at once.
+     - While paused, signing in and anything needing a session through
+       remote access are refused with a message saying until when; the
+       local network is unaffected, and so are public links that need no
+       sign-in (Pay now, lead forms, webhooks).
+     - Refusals while paused don't count, so a pause can't extend itself;
+       after it ends (or is resumed), it takes a fresh 20 failures to pause
+       again.
+     - Server admins are emailed; the pause and any resume are in the admin
+       audit log. Resuming early is on the server computer only.
+     - Tohyee can't switch Funnel or the Cloudflare tunnel off (they run
+       outside it); it refuses what comes through them.

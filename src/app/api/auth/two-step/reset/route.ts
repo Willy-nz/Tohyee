@@ -16,7 +16,7 @@ export const POST = route(async (request) => {
     { email: null },
     "reset_link",
     async () => {
-      assertRemoteAllowed(request.headers);
+      await assertRemoteAllowed(request.headers);
       return completeTwoStepReset({ token: body.token, password: body.password }, sessionMetaFrom(request));
     },
     (signed) => ({ outcome: "password_ok", userId: signed.user.id }),

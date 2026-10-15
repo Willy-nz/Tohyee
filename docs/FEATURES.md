@@ -1297,6 +1297,13 @@ that something happened.
     arriving through Funnel; the Tailscale steps themselves still need trying
     on a real Windows computer.
   Each shows the address with a QR code, Copy address, Open and Turn off.
+  **Paused when someone is guessing** (decision 542): 20 failed sign-ins
+  through remote access within 10 minutes, from any logins and addresses,
+  pause signing in and signed-in use through remote access for an hour
+  (doubling if it happens again the same day, up to a day) and email the
+  server admins. The local network, and customers' payment and form links,
+  carry on. A server admin can resume it on the server computer (Remote
+  access).
   The Remote access pages say plainly who can see the traffic (#208): with a
   Tohyee address or your own domain, Cloudflare decrypts it on its network;
   with Funnel it stays encrypted to this computer. Through remote access,

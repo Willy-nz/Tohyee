@@ -17,7 +17,7 @@ const NOT_SET_UP = "This device isn't set up for clocking in. Someone with payro
 
 /** Runs `work` as the device the request's cookie belongs to. */
 async function onDevice<T>(request: Request, work: (tx: OrgTx, device: { id: string; name: string }) => Promise<T>): Promise<T> {
-  assertRemoteAllowed(request.headers);
+  await assertRemoteAllowed(request.headers);
   const token = parseDeviceToken(readClockCookie(request));
   if (!token) throw new UnauthorizedError(NOT_SET_UP);
   const organisation = await getOrganisation(token.organisationId);

@@ -22,7 +22,7 @@ export const POST = route(async (request) => {
     { email: null },
     "setup_link",
     async () => {
-      assertRemoteAllowed(request.headers);
+      await assertRemoteAllowed(request.headers);
       return completeAccountSetup({ token: body.token, password: body.password }, sessionMetaFrom(request));
     },
     (signed) => ({ outcome: "password_ok", userId: signed.user.id }),

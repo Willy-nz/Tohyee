@@ -5,6 +5,7 @@ import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/comp
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
+import type { RemotePause } from "@/lib/auth/remote-pause";
 import type { RemoteAccess } from "@/lib/remote/settings";
 import type { TunnelStatus } from "@/lib/remote/tunnel";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -184,6 +185,57 @@ function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChan
   );
 }
 
+/** Remote access paused after many failed sign-ins (decision 542), with Resume. */
+function PauseCard() {
+  const [pause, setPause] = useState<RemotePause | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      api<{ pause: RemotePause }>("/api/admin/remote-access/pause").then(
+        (result) => {
+          if (!cancelled) setPause(result.pause);
+        },
+        () => undefined,
+      );
+    void load();
+    const timer = setInterval(() => void load(), 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+  async function resume() {
+    setBusy(true);
+    setError(null);
+    try {
+      setPause((await api<{ pause: RemotePause }>("/api/admin/remote-access/pause", { method: "POST" })).pause);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!pause) return null;
+  const rule = `${pause.threshold.failures} failed sign-ins through remote access within ${pause.threshold.minutes} minutes pause it for an hour (longer if it happens again the same day); server admins are emailed.`;
+  if (!pause.paused) {
+    return <p className={ui.muted}>Protection: {rule}</p>;
+  }
+  return (
+    <Notice tone="error">
+      <strong>Remote access is paused until {formatDateTime(pause.until)}</strong> after {pause.failures} failed sign-ins through remote access. Signing in
+      and using Tohyee through remote access are refused until then; the local network works as usual, and customers&apos; payment and
+      form links still work. Check Sign-ins for who was trying.{" "}
+      <Button variant="secondary" size="small" disabled={busy} onClick={() => void resume()}>
+        Resume now
+      </Button>
+      {error ? <div>{error}</div> : null}
+      <div className={ui.muted}>{rule}</div>
+    </Notice>
+  );
+}
+
 export default function RemoteAccessPage() {
   const confirm = useConfirm();
   const { user } = useWorkspace();
@@ -272,6 +324,7 @@ export default function RemoteAccessPage() {
             Tailscale Funnel it stays encrypted until it reaches this computer: Tailscale&apos;s relay passes it on without decrypting it. Either
             way your books stay on this computer, and two-step sign-in is required for every login through remote access.
           </Notice>
+          <PauseCard />
           <TohyeeAddressCard remote={remote} onChanged={setRemote} />
           {!remote.twoStepRequired ? (
             <Notice tone="error">
