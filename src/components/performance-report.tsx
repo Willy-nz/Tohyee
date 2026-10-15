@@ -229,7 +229,11 @@ export function CategoriesCard({ organisationId, tier }: { organisationId: strin
   const [accounts, setAccounts] = useState<AccountCategory[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onlySuggested, setOnlySuggested] = useState(false);
-  const list = accounts ?? data.data?.accounts ?? [];
+  const [showUnused, setShowUnused] = useState(false);
+  const all = accounts ?? data.data?.accounts ?? [];
+  // Accounts nothing has been posted to and nobody has chosen for are just the default chart; hide them unless asked.
+  const unused = all.filter((account) => !account.used && account.suggested).length;
+  const list = showUnused ? all : all.filter((account) => account.used || !account.suggested);
 
   async function choose(account: AccountCategory, category: string, cashCategory: string | null) {
     setError(null);
@@ -256,6 +260,11 @@ export function CategoriesCard({ organisationId, tier }: { organisationId: strin
       <label className={ui.checkbox}>
         <input type="checkbox" checked={onlySuggested} onChange={(event) => setOnlySuggested(event.target.checked)} /> Only accounts still on a suggestion
       </label>
+      {unused > 0 ? (
+        <label className={ui.checkbox}>
+          <input type="checkbox" checked={showUnused} onChange={(event) => setShowUnused(event.target.checked)} /> Show {unused} account{unused === 1 ? "" : "s"} with nothing posted yet
+        </label>
+      ) : null}
       {groups.map((group) => {
         const rows = list.filter((account) => account.accountClass === group && (!onlySuggested || account.suggested));
         if (rows.length === 0) return null;

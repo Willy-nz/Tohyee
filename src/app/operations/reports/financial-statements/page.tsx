@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
@@ -124,6 +124,16 @@ function Notes({ organisationId }: { organisationId: string }) {
   return <NotesEditor organisationId={organisationId} loaded={notes.data} />;
 }
 
+/** The long cards fold away so the download stays near the top; they open when needed. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className={ui.collapsible}>
+      <summary>{title}</summary>
+      {children}
+    </details>
+  );
+}
+
 function YearEndReports({ organisationId }: { organisationId: string }) {
   const settings = useApiData<{ settings: { financialYearEndMonth: number } }>(`/api/organisations/${organisationId}/settings`, {});
   const performance = useApiData<{ settings: { format: ReportFormat } }>("/api/reports/performance/settings", { organisationId });
@@ -137,9 +147,19 @@ function YearEndReports({ organisationId }: { organisationId: string }) {
     <div style={{ display: "grid", gap: 16 }}>
       <ReportFormatCard organisationId={organisationId} onChanged={setFormat} />
       <Download organisationId={organisationId} format={current} chosen={chosen} setYearEnd={setYearEnd} />
-      {current !== "special_purpose" ? <ServicePerformanceCard organisationId={organisationId} yearEnd={chosen} /> : null}
-      <Notes key={current} organisationId={organisationId} />
-      {current !== "special_purpose" ? <CategoriesCard organisationId={organisationId} tier={current} /> : null}
+      {current !== "special_purpose" ? (
+        <Section title="Statement of service performance">
+          <ServicePerformanceCard organisationId={organisationId} yearEnd={chosen} />
+        </Section>
+      ) : null}
+      <Section title="Notes">
+        <Notes key={current} organisationId={organisationId} />
+      </Section>
+      {current !== "special_purpose" ? (
+        <Section title="Categories">
+          <CategoriesCard organisationId={organisationId} tier={current} />
+        </Section>
+      ) : null}
     </div>
   );
 }

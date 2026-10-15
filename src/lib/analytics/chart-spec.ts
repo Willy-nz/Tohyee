@@ -82,7 +82,7 @@ function makeFormatter(spec: ChartSpec, compact: boolean) {
         ? { style: "percent", maximumFractionDigits: compact ? 1 : 2 }
         : compact
           ? { notation: "compact", maximumFractionDigits: 1 }
-          : { maximumFractionDigits: 20 };
+          : { maximumFractionDigits: 2 };
   const formatter = new Intl.NumberFormat("en-NZ", options);
   return (value: number | string) => {
     const number = displayNumber(value);
@@ -159,7 +159,10 @@ export function toEChartsOption(spec: ChartSpec, rows: ChartRow[], theme: ChartT
         const value = displayNumber(row[item.field]);
         return value === null ? [] : [{ name: categories[rowIndex], value }];
       }),
-      label: { color: theme.text },
+      avoidLabelOverlap: true,
+      // Long names wrap rather than being cut off; the percentage shows the share.
+      label: { color: theme.text, formatter: "{b}\n{d}%", width: 110, overflow: "break" as const, lineHeight: 15 },
+      labelLine: { length: 8, length2: 8 },
     }));
     return { ...common, series };
   }

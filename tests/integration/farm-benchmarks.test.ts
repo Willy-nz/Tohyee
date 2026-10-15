@@ -61,6 +61,9 @@ describeWithDatabase("farm benchmarks", () => {
       { code: "6300", name: "Depreciation", amount: "50000.00" },
     ]);
     await expect(run((tx) => farmBenchmarks(tx, { yearEnd: "2026-05-30" }))).rejects.toThrow(/financial year end/);
+    // With no year chosen it opens on the last finished year, not the one still running.
+    const opening = await run((tx) => farmBenchmarks(tx, { yearEnd: null }));
+    expect(opening.yearEnd).toBe(opening.yearEnds[1]);
   });
 
   it("FK2, FK3: per kgMS, hectare, cow and stock unit", async () => {

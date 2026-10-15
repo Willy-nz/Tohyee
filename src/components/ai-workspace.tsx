@@ -191,16 +191,29 @@ function Dashboard({ organisationId, id }: { organisationId: string; id: string 
   if (dashboard.error) return <Notice tone="error">{dashboard.error}</Notice>;
   if (!dashboard.data) return <p className={ui.muted}>Loading…</p>;
   const data = dashboard.data.dashboard;
+  const placed = data.tiles.map((tile, index) => ({ tile, index }));
+  const kpis = placed.filter(({ tile }) => tile.kind === "kpi");
+  const others = placed.filter(({ tile }) => tile.kind !== "kpi");
   return (
     <>
       {data.description ? <p className={ui.muted}>{data.description}</p> : null}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 16 }}>
-        {data.tiles.map((tile, index) => (
-          <Card key={index} title={tile.kind === "table" ? tile.title : undefined} description={tile.note}>
-            <div style={tile.width === 2 ? { gridColumn: "1 / -1" } : undefined}>
+      {/* Single numbers sit together in a compact row; charts and tables get the wider grid. */}
+      {kpis.length ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 16, marginBottom: 16 }}>
+          {kpis.map(({ tile, index }) => (
+            <Card key={index} description={tile.note}>
               <Tile tile={tile} result={data.results[index]} />
-            </div>
-          </Card>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 16 }}>
+        {others.map(({ tile, index }) => (
+          <div key={index} style={tile.width === 2 ? { gridColumn: "1 / -1" } : undefined}>
+            <Card title={tile.kind === "table" ? tile.title : undefined} description={tile.note}>
+              <Tile tile={tile} result={data.results[index]} />
+            </Card>
+          </div>
         ))}
       </div>
     </>

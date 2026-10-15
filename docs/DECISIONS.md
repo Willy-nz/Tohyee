@@ -4895,9 +4895,45 @@ testing) and #154's code signing (later, Jess).
        not-for-profit, has its own Tier 4 "other activities" lines as the
        template has none; inventory bought counts as commercial payments;
        opening balance journals count as cash movements in the year they're
-       dated.
+       dated (changed by decision 538: now their own line, NPR11).
      - **Not built:** grant registers and deferral of conditional grants
        (the report shows what the books say), consolidated or group
        reports, audit or review reports, and filing with Charities
        Services.
 
+537. **Follow Xero or NetSuite until a real person says otherwise** (15
+     October 2026). Jess: "The questions are a lot and i would rather just
+     go with what xero/netsuite do until a real person says otherwise."
+     - Where an accounting or behaviour question would otherwise wait for
+       Jess, Tohyee does what Xero does (or NetSuite, where Xero has no
+       equivalent, such as multi-entity), writes the worked example and
+       test first as before, and marks the example "as Xero does, not yet
+       reviewed" with the date.
+     - It doesn't apply where the law decides (tax, payroll, employment),
+       where the change can't be undone, or where Xero and NetSuite differ
+       in a way that matters; those still go to Jess.
+     - When Jess, her accountant or a real user disagrees, their answer
+       wins and the example is updated.
+
+538. **Rough edges from using Tohyee as a bookkeeper would** (issue #284,
+     15 October 2026). Under decision 537:
+     - **Free and negative sales lines** (ZN1-ZN4, tenant migration 0147):
+       invoices, quotes, sales orders and repeating invoices accept a 0.00
+       line (shown, posts nothing) and negative lines, as Xero does. The
+       document total must still be above zero; a negative total is a
+       credit note. A negative line on its own account is a debit there.
+       Bills are unchanged for now.
+     - **Opening balances in performance reports** (NPR11): a journal
+       entered as opening balances, or with a line on retained earnings or
+       conversion clearing, shows its cash on its own line rather than as
+       operating receipts or a purchase of equipment, as Xero keeps
+       conversion balances out of cash flows.
+     - **Copy last week on rosters** (RS9), as Deputy and Xero do.
+     - **Screens:** AI dashboard numbers show at most two decimal places,
+       pie and donut labels wrap instead of being cut off, single-number
+       tiles sit in a compact row, and wide tiles span the row; farm
+       benchmarks open on the last finished year; the aerial imagery
+       warning shows above the map; form fields that were meant to sit side
+       by side (price changes, livestock) now do; the financial statements
+       page folds its long sections; the categories list hides accounts
+       nothing has been posted to until asked.

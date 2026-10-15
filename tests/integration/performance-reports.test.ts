@@ -27,7 +27,7 @@ import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabas
 
 const noContext = undefined as unknown;
 
-/** Examples NPR1-NPR10 in docs/ACCOUNTING-EXAMPLES.md ("Tier 3 and Tier 4 performance reports"). */
+/** Examples NPR1-NPR11 in docs/ACCOUNTING-EXAMPLES.md ("Tier 3 and Tier 4 performance reports"). */
 describeWithDatabase("Tier 3 and Tier 4 performance reports", () => {
   let server: TestServer;
   let owner: SessionUser;
@@ -211,8 +211,9 @@ describeWithDatabase("Tier 3 and Tier 4 performance reports", () => {
     expect(current.cash.payments.map((row) => row.amount)).toEqual(["6000.00", "3900.00", "3800.00", "1450.00"]);
     expect(current.cash.closing).toBe("15870.00");
     expect(current.cash.accounts).toEqual([{ code: "1000", name: "Business bank account", amount: "15870.00" }]);
-    // Last year's column: the opening balances only.
-    expect(prior.cash).toMatchObject({ opening: "0.00", closing: "12000.00" });
+    // Last year's column: the opening balances only, on their own line (NPR11), not as receipts or a purchase of equipment.
+    expect(prior.cash).toMatchObject({ opening: "0.00", broughtIn: "12000.00", closing: "12000.00", receipts: [], payments: [], otherPayments: [] });
+    expect(current.cash.broughtIn).toBe("0.00");
     expect(prior.surplus).toBe("0.00");
     // NPR5: significant assets and liabilities for the Tier 4 notes.
     expect(current.significantAssets.map((row) => [row.code, row.amount])).toEqual([
@@ -315,8 +316,9 @@ describeWithDatabase("Tier 3 and Tier 4 performance reports", () => {
     const listed = await categoriesRoute.GET(apiRequest(`/api/reports/performance/categories?organisationId=${w.org}`, { cookie }), noContext);
     const { accounts } = (await listed.json()) as { accounts: Awaited<ReturnType<typeof listAccountCategories>> };
     expect(accounts.find((a) => a.code === "4010")).toMatchObject({ category: "rev_membership", suggested: false });
-    expect(accounts.find((a) => a.code === "6110")).toMatchObject({ category: "exp_other", suggested: true });
-    expect(accounts.find((a) => a.code === "2400")).toMatchObject({ category: "li_overdraft", suggested: true });
+    expect(accounts.find((a) => a.code === "6110")).toMatchObject({ category: "exp_other", suggested: true, used: true });
+    // Nothing posted to the credit card: the screen hides it until asked.
+    expect(accounts.find((a) => a.code === "2400")).toMatchObject({ category: "li_overdraft", suggested: true, used: false });
     expect(accounts.find((a) => a.code === "2240")).toMatchObject({ category: "li_employee", suggested: true });
     const cleared = await w.as((tx) => setAccountCategory(tx, { accountCode: "4010", category: null }));
     expect(cleared.find((a) => a.code === "4010")).toMatchObject({ category: "rev_other", suggested: true });

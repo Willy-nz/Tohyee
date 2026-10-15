@@ -59,7 +59,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/sales-orders.test.ts` (SO1-SO12) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
   `tests/integration/repeating-price-changes.test.ts` (RP1-RP8, not yet
-  approved) and `tests/integration/performance-reports.test.ts` (NPR1-NPR10,
+  approved) and `tests/integration/performance-reports.test.ts` (NPR1-NPR11,
   not yet approved) and
   `tests/integration/repeating-bills.test.ts` (RB1-RB12, SPT3) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
@@ -5321,7 +5321,7 @@ the recognition policy for a grant.
   IRD number. Confirm any other particulars and layout against the current
   IRD guidance before generating a receipt that donors could rely on.
 - **Tier 3 and Tier 4 performance reports**: built; see "Tier 3 and Tier 4
-  performance reports" below (NPR1-NPR10).
+  performance reports" below (NPR1-NPR11).
 - **Incorporated societies**: no society-specific financial statements,
   filing dates or audit checks are implemented. Ask Jess which clients are
   societies, whether they are registered charities, and which reporting
@@ -7208,6 +7208,29 @@ on 25 Jun (**10.00** of it an overpayment); **11.50** of CN-0001 refunded on
 - Foreign-currency statements (invoices are in the base currency).
 - Showing credit and overpayments applied to invoices as lines (they don't
   change the balance, so they're left out, as in Xero's activity statement).
+
+## Free and negative lines (ZN1-ZN4; as Xero does, chosen 15 Oct 2026 under Jess's "do what Xero or NetSuite do", not yet reviewed)
+
+Tested in `tests/integration/zero-negative-lines.test.ts`. Xero lets a
+sales line have a $0 price (something given free) or a negative one (a
+discount or credit line), as long as the invoice doesn't come to less than
+zero. Tohyee now does the same on invoices, quotes, sales orders and
+repeating invoices. A negative total is refused: that's a credit note.
+Setup: GST 15%, tax exclusive, customer Kobe Cafe.
+
+- **ZN1** 1 x Grooming at **100.00** and 1 x Dog bowl at **0.00**: the
+  invoice is **115.00** and shows the bowl at 0.00. The bowl adds nothing
+  to the journal: Dr 1100 **115.00** / Cr 4000 **100.00** / Cr 2100
+  **15.00**.
+- **ZN2** 1 x Grooming at **100.00** and 1 x Loyalty discount at
+  **-10.00**, both to 4000: subtotal **90.00**, GST **13.50**, total
+  **103.50**; Dr 1100 **103.50** / Cr 4000 **90.00** / Cr 2100 **13.50**.
+  With the discount coded to 4050 Discounts given instead: Dr 1100
+  **103.50** / Dr 4050 **10.00** / Cr 4000 **100.00** / Cr 2100 **13.50**.
+- **ZN3** A lone line at **-50.00** is refused ("The total can't be
+  negative: for a refund or credit, use a credit note"), and so are lines
+  that come to **0.00** in all.
+- **ZN4** A quote with the ZN1 lines turns into an invoice with them.
 
 ## Line discounts and deal products (approved by Jess, 10 Oct 2026)
 
@@ -15979,6 +16002,16 @@ Setup: Glimmers' shop, Saturdays 9:00-17:00. Employees Aroha (hourly,
 - **RS8** A missed clock-out: Tama clocks in at 9:00 and never clocks out.
   At midnight the shift is "Needs attention"; nothing goes to his timesheet
   until a manager enters the out time.
+- **RS9** (added 15 Oct 2026; as Deputy and Xero's "copy last week" do,
+  not yet reviewed) Copy last week: the week of 19 Oct has Aroha Sat 24
+  and Sun 25 Oct 9:00-17:00 and Tama Sat 24 Oct (rostered anyway). Next
+  week Aroha already works Sun 1 Nov 10:00-14:00. Copying into the week of
+  26 Oct adds Aroha's Sat 31 Oct shift only, and lists Tama ("unavailable
+  that day": an unavailable day needs a fresh reason) and Aroha's Sunday
+  ("already has a shift then"). Copying again adds nothing. Times stay the
+  same on the clock across daylight saving: 9:00 Sat 3 Apr 2027 (+13:00)
+  copies to 9:00 Sat 10 Apr 2027 (+12:00). Shifts in leave are copied and
+  warned about as in RS3. Nothing posts.
 
 Questions for Jess:
 1. Location when clocking in: none, the device's location recorded, or
@@ -17179,6 +17212,16 @@ expenses. 1 Apr 2025 to 31 Mar 2026:
 - **NPR10** Choosing Tier 3 or Tier 4 changes only what the PDF shows: the
   same books give the special purpose statements (FS1-FS3) when that's
   chosen. The report format and categories are recorded in the history.
+- **NPR11** (added 15 Oct 2026, as Xero keeps conversion balances out of
+  the cash flows; not yet reviewed) Opening balances aren't cash received
+  or paid. A journal entered as opening balances, or with a line on
+  retained earnings or the opening balance (conversion clearing) account,
+  isn't split into receipts and payments: the cash it moves shows on its
+  own line, "Opening balances entered during the year". In the club's
+  setup the 31 Mar 2025 journal (bank **12,000.00**, equipment
+  **8,000.00**, retained earnings **20,000.00**) gives the 2025 column
+  **12,000.00** on that line and no receipts, payments or equipment
+  purchase; 2026 has none.
 
 ## Year-end financial statements (#259; FS1-FS3 chosen by Claude on 14 Oct 2026 when Jess said to keep going, not yet reviewed)
 
@@ -17203,7 +17246,7 @@ statements, with figures from the same functions as the report screens
 - **FS3** Amounts print as in printed statements: 1,234.56; negatives in
   brackets, (300.00); nothing as "-".
 
-Tier 3 and Tier 4 not-for-profit formats: see NPR1-NPR10.
+Tier 3 and Tier 4 not-for-profit formats: see NPR1-NPR11.
 
 ## The AI's farm workspace (AIW1-AIW9; chosen with Jess on 14 Oct 2026, not yet reviewed)
 

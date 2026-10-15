@@ -147,6 +147,14 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
+/* A form's fields side by side, wrapping on narrow screens. */
+.grid {
+  display: grid;
+  gap: 12px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  align-items: start;
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -1141,4 +1149,19 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* A folded section of a page: the summary is a header bar, the content a card inside it. */
+.collapsible > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.collapsible[open] > summary {
+  margin-bottom: 12px;
 }
