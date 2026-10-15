@@ -5003,3 +5003,17 @@ testing) and #154's code signing (later, Jess).
        audit log. Resuming early is on the server computer only.
      - Tohyee can't switch Funnel or the Cloudflare tunnel off (they run
        outside it); it refuses what comes through them.
+
+543. **An unreadable authenticator key no longer resets with the password**
+     (16 October 2026). From a review Jess passed on: "A password alone
+     should not authorise replacing it." Before, if the server's
+     TOHYEE_SECRET_KEY changed so a login's authenticator key couldn't be
+     read, the right password started two-step set-up again, so for that
+     moment the password alone was enough to sign in.
+     - Now the key is kept and an authenticator code is refused with a
+       message saying what to do. A backup code still signs in; otherwise
+       it's the existing recovery for a lost phone: the emailed reset link,
+       or a server admin on the server computer (Users, or the admin CLI's
+       `users reset-two-step`).
+     - Each refusal is in the admin audit log and the sign-in monitor.
+     - Putting the right key back makes the same authenticator work again.

@@ -359,31 +359,33 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
     );
   });
 
-  it("if the server's secret key is changed, the password leads to setting two-step up again", async () => {
+  it("if the server's secret key is changed, the password alone doesn't replace the authenticator: a backup code or a reset does (decision 543)", async () => {
+    // Fresh backup codes, from a full sign-in.
+    later();
+    const full = cookieFrom(await post(verifyRoute, "/api/auth/two-step/verify", cookieFrom(await login("jess@example.com")), { code: totpCode(secret, currentStep()) }));
+    later();
+    const codes = (await body(await post(backupCodesRoute, "/api/auth/two-step/backup-codes", full, { code: totpCode(secret, currentStep()) }))).backupCodes as string[];
     later();
     const pending = cookieFrom(await login("jess@example.com"));
     process.env.TOHYEE_SECRET_KEY = "a-different-key-0123456789abcdefghijklm";
     try {
       const refused = await post(verifyRoute, "/api/auth/two-step/verify", pending, { code: totpCode(secret, currentStep()) });
-      expect(refused.status).toBe(409);
-      expect((await body(refused)).error).toMatch(/Set up your authenticator app again/);
-      expect(await body(await twoStepRoute.GET(apiRequest("/api/auth/two-step", { cookie: pending }), noContext))).toMatchObject({
-        stage: "enrol",
-      });
-      const fresh = (await body(await enrolRoute.GET(apiRequest("/api/auth/two-step/enrol", { cookie: pending }), noContext))).secret as string;
-      const confirmed = await post(enrolRoute, "/api/auth/two-step/enrol", pending, { code: totpCode(fresh, currentStep()) });
-      expect(confirmed.status).toBe(200);
-      secret = fresh;
+      expect(refused.status).toBe(403);
+      expect((await body(refused)).error).toMatch(/can't read your two-step key/);
+      // Still asking for a code: nothing was reset, so it can't be set up again with the password alone.
+      expect(await body(await twoStepRoute.GET(apiRequest("/api/auth/two-step", { cookie: pending }), noContext))).toMatchObject({ stage: "verify" });
+      expect((await enrolRoute.GET(apiRequest("/api/auth/two-step/enrol", { cookie: pending }), noContext)).status).not.toBe(200);
+      // A backup code still signs in.
+      expect((await post(verifyRoute, "/api/auth/two-step/verify", pending, { code: codes[0] })).status).toBe(200);
+      const audit = await coreQuery<{ event_type: string }>("select event_type from admin_audit_events where event_type = 'user.two_step_key_unreadable'");
+      expect(audit.rows.length).toBeGreaterThan(0);
     } finally {
       process.env.TOHYEE_SECRET_KEY = "two-step-test-key-0123456789abcdefghij";
     }
-    // Back on the original key, the new authenticator key (saved with the other key) can't be read either, so it resets again.
+    // Back on the right key, the same authenticator works again.
     later();
     const again = cookieFrom(await login("jess@example.com"));
-    expect((await post(verifyRoute, "/api/auth/two-step/verify", again, { code: totpCode(secret, currentStep()) })).status).toBe(409);
-    const re = (await body(await enrolRoute.GET(apiRequest("/api/auth/two-step/enrol", { cookie: again }), noContext))).secret as string;
-    expect((await post(enrolRoute, "/api/auth/two-step/enrol", again, { code: totpCode(re, currentStep()) })).status).toBe(200);
-    secret = re;
+    expect((await post(verifyRoute, "/api/auth/two-step/verify", again, { code: totpCode(secret, currentStep()) })).status).toBe(200);
   });
 
   it("signing out ends a pending sign-in too", async () => {
