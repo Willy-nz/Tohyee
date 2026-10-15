@@ -7209,6 +7209,29 @@ on 25 Jun (**10.00** of it an overpayment); **11.50** of CN-0001 refunded on
 - Showing credit and overpayments applied to invoices as lines (they don't
   change the balance, so they're left out, as in Xero's activity statement).
 
+## Free and negative lines (ZN1-ZN4; as Xero does, chosen 15 Oct 2026 under Jess's "do what Xero or NetSuite do", not yet reviewed)
+
+Tested in `tests/integration/zero-negative-lines.test.ts`. Xero lets a
+sales line have a $0 price (something given free) or a negative one (a
+discount or credit line), as long as the invoice doesn't come to less than
+zero. Tohyee now does the same on invoices, quotes, sales orders and
+repeating invoices. A negative total is refused: that's a credit note.
+Setup: GST 15%, tax exclusive, customer Kobe Cafe.
+
+- **ZN1** 1 x Grooming at **100.00** and 1 x Dog bowl at **0.00**: the
+  invoice is **115.00** and shows the bowl at 0.00. The bowl adds nothing
+  to the journal: Dr 1100 **115.00** / Cr 4000 **100.00** / Cr 2100
+  **15.00**.
+- **ZN2** 1 x Grooming at **100.00** and 1 x Loyalty discount at
+  **-10.00**, both to 4000: subtotal **90.00**, GST **13.50**, total
+  **103.50**; Dr 1100 **103.50** / Cr 4000 **90.00** / Cr 2100 **13.50**.
+  With the discount coded to 4050 Discounts given instead: Dr 1100
+  **103.50** / Dr 4050 **10.00** / Cr 4000 **100.00** / Cr 2100 **13.50**.
+- **ZN3** A lone line at **-50.00** is refused ("The total can't be
+  negative: for a refund or credit, use a credit note"), and so are lines
+  that come to **0.00** in all.
+- **ZN4** A quote with the ZN1 lines turns into an invoice with them.
+
 ## Line discounts and deal products (approved by Jess, 10 Oct 2026)
 
 Asked for on 10 Oct 2026 (#216 stage 3: "add discounts to invoices too");

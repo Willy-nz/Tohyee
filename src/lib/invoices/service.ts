@@ -39,7 +39,10 @@ import {
   add,
   cmp,
   dec,
+  isNegative,
+  isPositive,
   isZero,
+  neg,
   sub,
   parseDecimalInput,
   toFixedString,
@@ -458,7 +461,11 @@ export function parseSalesLines(
     return {
       description: fillable && isBlank(line.description) ? "" : requireString(line.description, `${label} description`, { maxLength: 500 }),
       quantity: parseDecimalInput(line.quantity, `${label} quantity`, { maxScale: LINE_INPUT_SCALE }),
-      unitPrice: fillable && isBlank(line.unitPrice) ? "" : parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE }),
+      // Zero (something given free) and negative (a discount or credit line) prices are allowed, as in Xero (ZN1-ZN4).
+      unitPrice:
+        fillable && isBlank(line.unitPrice)
+          ? ""
+          : parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE, allowZero: true, allowNegative: true }),
       accountCode: fillable && isBlank(line.accountCode) ? "" : parseAccountCodeInput(line.accountCode, `${label} account`),
       ...item,
       taxCode,
@@ -482,6 +489,11 @@ export function parseDiscountPercent(input: unknown, label: string): string | nu
   }
   const value = toFixedString(dec(text), 2);
   return value === "0.00" ? null : value;
+}
+
+/** A credit for a positive amount, a debit for a negative one (ZN2). */
+function creditSide(amount: Decimal, scale: number): { debitAmount: string; creditAmount: string } {
+  return isNegative(amount) ? { debitAmount: toFixedString(neg(amount), scale), creditAmount: "0" } : { debitAmount: "0", creditAmount: toFixedString(amount, scale) };
 }
 
 /** Lines for an idempotency fingerprint, normalised the way invoices hash them. */
@@ -665,14 +677,20 @@ async function resolveDraft(
   const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
-    // Only a discounted line can come to 0.00 (DS4: 100% off).
-    if (isZero(dec(line.lineAmount)) && !draft.lines[index].discountPercent) {
+    // Only a free line (ZN1) or a discounted one (DS4: 100% off) can come to 0.00.
+    if (isZero(dec(line.lineAmount)) && !draft.lines[index].discountPercent && !isZero(dec(draft.lines[index].unitPrice || "0"))) {
       throw new ValidationError(
         `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
-  if (isZero(dec(amounts.total))) throw new ValidationError(`This comes to ${amounts.total} ${currencyCode} in all. A document needs something to charge.`);
+  if (!isPositive(dec(amounts.total))) {
+    throw new ValidationError(
+      isZero(dec(amounts.total))
+        ? `This comes to ${amounts.total} ${currencyCode} in all. A document needs something to charge.`
+        : `This comes to ${amounts.total} ${currencyCode} in all. The total can't be negative: for a refund or credit, use a credit note.`,
+    );
+  }
   // A foreign-currency invoice (MC2, MC71): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
   let exchangeRateSource: string | null = null;
@@ -1480,16 +1498,16 @@ export async function approveInvoice(
         ? { foreign: { currencyCode: resolved.currencyCode, amount: resolved.total, rate: resolved.exchangeRate!, kind: "document" as const } }
         : {}),
     },
+    // A negative line (a discount or credit, ZN2) that leaves an account below zero debits it.
     ...[...revenue.values()]
       .filter((entry) => !isZero(entry.amount))
       .map((entry) => ({
         accountCode: entry.code,
-        debitAmount: "0",
-        creditAmount: toFixedString(entry.amount, scale),
+        ...creditSide(entry.amount, scale),
         description: customer,
         tracking: entry.tracking,
       })),
-    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: taxTotal, description: "GST" }]),
+    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, ...creditSide(dec(taxTotal), scale), description: "GST" }]),
   ];
   // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
   const stock = await planDocumentStock(
