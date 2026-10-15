@@ -1,3 +1,4 @@
+import { pauseEndText, remotePausedUntil } from "@/lib/auth/remote-pause";
 import { privateAddress } from "@/lib/analytics/mail-host";
 import { forwardedAddresses, twoStepRequired } from "@/lib/auth/sessions";
 import { localHostName } from "@/lib/net/local-names";
@@ -35,6 +36,20 @@ export function remoteWithoutTwoStep(headers: Headers): boolean {
   return !twoStepRequired() && cameThroughRemoteAccess(headers);
 }
 
-export function assertRemoteAllowed(headers: Headers): void {
+export function remotePausedText(until: string): string {
+  return `Remote access to Tohyee is paused until ${pauseEndText(until)} because of many failed sign-ins from the internet. It works as usual on the local network, and a server admin can resume it on the server computer.`;
+}
+
+/** Refuses requests through remote access while it's without two-step sign-in (#208) or paused after many failed sign-ins (decision 542). */
+export async function assertRemoteAllowed(headers: Headers): Promise<void> {
   if (remoteWithoutTwoStep(headers)) throw new ForbiddenError(REMOTE_NEEDS_TWO_STEP);
+  if (!cameThroughRemoteAccess(headers)) return;
+  const until = await remotePausedUntil();
+  if (until) throw new ForbiddenError(remotePausedText(until));
+}
+
+/** For pages: whether a request through remote access is refused (no session shown). */
+export async function remoteRefused(headers: Headers): Promise<boolean> {
+  if (remoteWithoutTwoStep(headers)) return true;
+  return cameThroughRemoteAccess(headers) && (await remotePausedUntil()) !== null;
 }

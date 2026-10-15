@@ -18,7 +18,7 @@ export type AuthContext = {
 };
 
 export async function authenticate(request: Request): Promise<AuthContext> {
-  assertRemoteAllowed(request.headers);
+  await assertRemoteAllowed(request.headers);
   const session = await getSessionUser(readCookie(request, SESSION_COOKIE));
   if (!session) {
     throw new UnauthorizedError();
@@ -31,7 +31,7 @@ export async function authenticate(request: Request): Promise<AuthContext> {
  * two-step routes (and sign-out) use this; everything else uses authenticate.
  */
 export async function authenticateAnyStage(request: Request): Promise<SessionState> {
-  assertRemoteAllowed(request.headers);
+  await assertRemoteAllowed(request.headers);
   const state = await getSessionState(readCookie(request, SESSION_COOKIE));
   if (!state) {
     throw new UnauthorizedError();

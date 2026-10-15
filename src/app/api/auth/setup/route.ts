@@ -21,7 +21,7 @@ export const POST = route(async (request) => {
     { email: typeof body.email === "string" ? body.email : null },
     "first_admin",
     async () => {
-      assertRemoteAllowed(request.headers);
+      await assertRemoteAllowed(request.headers);
       return completeSetup(
         {
           setupToken: body.setupToken,

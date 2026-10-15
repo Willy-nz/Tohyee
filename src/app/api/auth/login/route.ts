@@ -16,7 +16,7 @@ export const POST = route(async (request) => {
     { email: typeof body.email === "string" ? body.email : null },
     "password",
     async () => {
-      assertRemoteAllowed(request.headers);
+      await assertRemoteAllowed(request.headers);
       return signIn({ email: body.email, password: body.password }, sessionMetaFrom(request));
     },
     (signed) => ({ outcome: signed.stage === "full" ? "signed_in" : "password_ok", userId: signed.user.id }),

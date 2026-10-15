@@ -7,6 +7,7 @@ import * as resetRoute from "@/app/api/auth/two-step/reset/route";
 import { SIGN_IN_TRIES_PER_MINUTE } from "@/lib/auth/rate-limit";
 import { publicOrigin } from "@/lib/auth/origin";
 import { cameThroughRemoteAccess } from "@/lib/auth/remote";
+import { forgetRemotePauseCache } from "@/lib/auth/remote-pause";
 import { requestOrigin } from "@/lib/crm/mail/origin";
 import { clientAddress } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
@@ -31,7 +32,11 @@ describeWithDatabase("remote access hardening (#208)", () => {
     server = await startTestServer();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Some tests here fail sign-ins through remote access over and over, which pauses it (decision 542); start each test unpaused.
+    await coreQuery("delete from server_settings where key = 'remote_pause'");
+    await coreQuery("delete from sign_in_events where remote");
+    forgetRemotePauseCache();
     process.env.TOHYEE_SECRET_KEY = KEY;
   });
 

@@ -1,5 +1,6 @@
 import { writeAdminAuditEvent, type AdminActor } from "@/lib/audit";
 import { cameThroughRemoteAccess } from "@/lib/auth/remote";
+import { noteRemoteFailure } from "@/lib/auth/remote-pause";
 import { clientAddress } from "@/lib/auth/sessions";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { sendSecurityAlert } from "@/lib/email/mailer";
@@ -147,6 +148,8 @@ async function record(request: Request, entry: Entry): Promise<void> {
   await coreQuery("delete from sign_in_events where at < now() - ($1::int * interval '1 day')", [KEEP_DAYS]);
 
   if (flag) await report(email, user ? email : null, tellPerson, flag, { address, userAgent, remote });
+  // Many failures through remote access pause it (decision 542).
+  if (remote && (entry.outcome === "failed" || entry.outcome === "locked")) await noteRemoteFailure();
 }
 
 async function report(email: string, person: string | null, tellPerson: boolean, flag: string, where: { address: string | null; userAgent: string | null; remote: boolean }) {
