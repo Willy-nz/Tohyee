@@ -4922,7 +4922,7 @@ testing) and #154's code signing (later, Jess).
        line (shown, posts nothing) and negative lines, as Xero does. The
        document total must still be above zero; a negative total is a
        credit note. A negative line on its own account is a debit there.
-       Bills are unchanged for now.
+       Bills followed in decision 539.
      - **Opening balances in performance reports** (NPR11): a journal
        entered as opening balances, or with a line on retained earnings or
        conversion clearing, shows its cash on its own line rather than as
@@ -4937,3 +4937,15 @@ testing) and #154's code signing (later, Jess).
        by side (price changes, livestock) now do; the financial statements
        page folds its long sections; the categories list hides accounts
        nothing has been posted to until asked.
+
+539. **Free and negative lines on bills** (15 October 2026, Jess: "Yes add
+     that"). Examples ZN5-ZN8 (as Xero does, not yet reviewed), tenant
+     migration 0148.
+     - Bills, purchase orders and repeating bills accept 0.00 and negative
+       lines; the total must be above zero, otherwise it's a supplier
+       credit note. A negative line on its own account credits it.
+     - Stock items on bills can't be free or negative: the line sets the
+       stock's cost. Bill lines still can't go to revenue accounts.
+     - A document's GST total can now be below zero (a negative line with
+       GST and the rest exempt), on sales documents as well; it posts to
+       the other side of the GST account. The database had refused it.

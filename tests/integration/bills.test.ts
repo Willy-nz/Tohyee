@@ -816,7 +816,7 @@ describeWithDatabase("bills", () => {
       [{ lines: [line("1.00001", "10")] }, "Line 1 quantity can have at most 4 decimal places."],
       [{ lines: [line("1", "10.12345")] }, "Line 1 unit price can have at most 4 decimal places."],
       [{ lines: [line("0", "10")] }, "Line 1 quantity must not be zero."],
-      [{ lines: [line("1", "-10")] }, "Line 1 unit price can't be negative."],
+      [{ lines: [line("1", "-10")] }, "The total can't be negative: for a refund or credit, use a supplier credit note."],
       [{ lines: [line("0.001", "1")] }, /Line 1 comes to 0.00 once rounded/],
       [{ lines: [{ ...line("1", "10"), description: " " }] }, /Line 1 description/],
     ];

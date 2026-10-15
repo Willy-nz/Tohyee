@@ -279,7 +279,8 @@ that something happened.
   voiding are idempotent. See examples I1-I9. A line can be free (price
   0.00, shown on the invoice) or negative (a discount or trade-in) as long
   as the total is above zero; for less, use a credit note (ZN1-ZN4, as
-  Xero does, not yet reviewed).
+  Xero does, not yet reviewed). Bills, purchase orders and repeating bills
+  take free and negative lines too, except for stock items (ZN5-ZN8).
 - **Quotes** (Sales; QT1-QT8, not yet approved by Jess): drafts with the
   same lines as an invoice and an optional expiry date and terms; finalising
   numbers them (`QU-0001`, no gaps) and locks them (the database refuses
