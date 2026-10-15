@@ -43,8 +43,8 @@ accepted.
 > [licence](LICENSE)).
 
 **Release availability, checked 15 October 2026:** the latest packaged
-release is [v0.8.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.8.0),
-with the CRM, livestock, farming, jobs, rosters and clocking in below. Check
+release is [v0.9.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.9.0),
+with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
 
@@ -65,6 +65,16 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.9.0
+
+| Area | What's new |
+| --- | --- |
+| **Not-for-profits** | Tier 3 and Tier 4 performance reports in XRB's categories, with a statement of service performance. |
+| **Repeating invoices** | Price changes across many templates at once, with a preview and undo. |
+| **Moving from MYOB and others** | Bring in a year's general ledger as history, one journal per transaction, to check reports against the old system. |
+| **Invoices and bills** | Free and negative lines, as Xero allows. |
+| **Rosters** | Copy last week. |
 
 ## New in 0.8.0: farms
 
