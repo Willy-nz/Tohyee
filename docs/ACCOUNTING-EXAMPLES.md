@@ -59,7 +59,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/sales-orders.test.ts` (SO1-SO12) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
   `tests/integration/repeating-price-changes.test.ts` (RP1-RP8, not yet
-  approved) and
+  approved) and `tests/integration/performance-reports.test.ts` (NPR1-NPR10,
+  not yet approved) and
   `tests/integration/repeating-bills.test.ts` (RB1-RB12, SPT3) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
   `tests/integration/purchase-orders.test.ts` (PO1-PO9, SPT4) and
@@ -5319,12 +5320,8 @@ the recognition policy for a grant.
   that the payment is a donation, and the receiving organisation's name and
   IRD number. Confirm any other particulars and layout against the current
   IRD guidance before generating a receipt that donors could rely on.
-- **Tier 3 and Tier 4 performance reports**: the standard P&L and balance sheet
-  are not PBE SFR-A (NFP) or PBE SFR-C (NFP) performance reports. Service
-  performance measures, required statement layouts, accounting policies and
-  disclosures are not implemented. Confirm the reporting tier and required
-  measures with Jess against the [XRB Tier 3](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-3-not-for-profit-entities/)
-  and [Tier 4](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-4-not-for-profit-entities/) requirements.
+- **Tier 3 and Tier 4 performance reports**: built; see "Tier 3 and Tier 4
+  performance reports" below (NPR1-NPR10).
 - **Incorporated societies**: no society-specific financial statements,
   filing dates or audit checks are implemented. Ask Jess which clients are
   societies, whether they are registered charities, and which reporting
@@ -17049,6 +17046,140 @@ revenue) is 2,000,000.00. Expenses: Wages 6200 120,000.00, Animal health
   dash), never a guess. With no milk solids entered, every per kgMS figure
   is empty.
 
+## Tier 3 and Tier 4 performance reports (#259; NPR1-NPR10 chosen by Claude on 15 Oct 2026 when Jess said to use judgement, not yet reviewed)
+
+Tested in `tests/integration/performance-reports.test.ts`. From XRB's
+*Reporting Requirements for Tier 3 Not-for-Profit Entities* and *Tier 4
+Not-for-Profit Entities* (periods beginning on or after 1 April 2024) and
+Charities Services' Tier 4 (NFP) template, read 15 Oct 2026. Tohyee doesn't
+decide an entity's tier (XRB's thresholds and rules decide that); the
+organisation chooses its format, and the report says which standard it
+follows. Nothing posts.
+
+- **What's in each report:**
+  - Tier 3 (accrual): entity information; statement of service
+    performance; statements of financial performance, financial position
+    and cash flows; accounting policies and notes.
+  - Tier 4 (cash): entity information; statement of service performance;
+    statement of cash received and cash paid; basis of preparation and GST;
+    notes, including significant assets and liabilities.
+  - Every statement has last year beside this year.
+- **Categories:** each account is put in one of XRB's minimum categories
+  (Tier 3 paragraphs A60, A89, A108, A154, A175). Tier 4 uses the same
+  choices with the template's wording. Until someone chooses, Tohyee
+  suggests one from the account type (revenue: Other revenue; expenses:
+  Other expenses; bank and credit cards: Cash; accounts receivable and other
+  current assets: Debtors and prepayments; inventory: Inventory; fixed
+  assets: Property, plant and equipment; other non-current assets: Other
+  assets; payroll payables: Employee costs payable; other current
+  liabilities: Creditors and accrued expenses; non-current liabilities:
+  Loans; equity: Accumulated surpluses or deficits), and the screen counts
+  the accounts still on a suggestion.
+- **Cash:** cash is the accounts in Cash or Bank overdraft, so a credit card
+  counts as cash and spending on it is shown by what it was spent on. Each
+  movement in cash is put in the category of what it was for:
+  - the other side of the entry (a grant received straight into the bank
+    is General grants);
+  - for a customer or supplier payment, the lines of the invoice or bill it
+    paid, in proportion;
+  - for a payroll payable, employee costs;
+  - for property, plant and equipment, investments, loans and capital, the
+    "other activities" lines;
+  - a balance sheet account can be given an operating category for its
+    cash (subscriptions received in advance, to Membership fees);
+  - anything else, Other cash received or Other payments.
+- **GST:** amounts exclude GST. When the organisation is registered, GST
+  collected and paid and GST paid to or refunded by IRD are one line, Net
+  GST received or (paid).
+- **Service performance:** entity information (legal name, type, registration
+  number, purpose, structure, main sources of cash and resources, reliance
+  on volunteers) and, for each year, the key activities with their
+  measures, this year and last.
+
+Setup: Harbourview Bowling Club Incorporated, a registered charity, not
+registered for GST, year ending 31 March. Categories chosen: 4010
+Subscriptions (Membership fees and subscriptions), 4020 Bar sales (Revenue
+from commercial activities), 4030 Gaming trust grants (General grants),
+4040 Donations (Donations, koha, bequests and other general fundraising
+activities), 4200 Interest (Interest, dividends and other investment
+revenue), 5200 Bar purchases (Expenses related to commercial activities),
+6200 Greenkeeper wages (Employee remuneration and other related expenses),
+6400 Green maintenance (Other expenses related to service delivery), 2450
+Subscriptions in advance (Deferred revenue, its cash as Membership fees).
+6110 Power and 6300 Depreciation are left on the suggestion, Other
+expenses. 1 Apr 2025 to 31 Mar 2026:
+
+- Opening balances: bank **12,000.00**, mower (1700) **8,000.00**,
+  accumulated surpluses (3200) **20,000.00**.
+- Subscriptions invoiced 1 Apr: **6,000.00**; **5,700.00** received in the
+  year. Bar sales banked **9,500.00**. Gaming trust grant **5,000.00**.
+  Donations **750.00**. Interest **120.00**. Next year's subscriptions
+  received early **450.00** (to 2450).
+- Bar purchases billed **4,200.00**, **3,900.00** paid. Wages paid
+  **6,000.00**. Green maintenance paid **3,800.00**. Power paid
+  **1,450.00**. Depreciation **1,000.00**. A roller bought for **2,500.00**
+  (1700).
+
+- **NPR1** Tier 3 statement of financial performance: revenue Donations
+  **750.00**, General grants **5,000.00**, Membership fees and subscriptions
+  **6,000.00**, Revenue from commercial activities **9,500.00**, Interest
+  **120.00**, total **21,370.00**; expenses Employee remuneration
+  **6,000.00**, Expenses related to commercial activities **4,200.00**, Other
+  expenses related to service delivery **3,800.00**, Other expenses
+  **2,450.00**, total **16,450.00**; surplus **4,920.00**. Categories with
+  nothing in either year aren't shown.
+- **NPR2** Tier 3 statement of financial position at 31 Mar 2026: Cash and
+  short-term deposits **15,870.00**, Debtors and prepayments **300.00**
+  (current); Property, plant and equipment **9,500.00** (non-current);
+  total assets **25,670.00**. Creditors and accrued expenses **300.00**,
+  Deferred revenue **450.00**; total liabilities **750.00**. Net assets
+  **24,920.00** = Accumulated surpluses **24,920.00**.
+- **NPR3** Tier 3 statement of cash flows: received Donations **750.00**,
+  General grants **5,000.00**, Membership fees **6,150.00** (5,700.00 +
+  450.00), Gross sales from commercial activities **9,500.00**, Interest
+  **120.00**; paid Employee remuneration **6,000.00**, Payments related to
+  commercial activities **3,900.00**, Other payments related to service
+  delivery **3,800.00**, Other payments **1,450.00**; net cash from
+  operating activities **6,370.00**. Payments to acquire property, plant
+  and equipment **(2,500.00)**. Net increase **3,870.00**; opening cash
+  **12,000.00**; closing **15,870.00**, the same as cash in NPR2.
+- **NPR4** Tier 4 statement of cash received and cash paid, the same year:
+  opening balance **12,000.00**; cash received from operating activities
+  Donations, koha, bequests and other fundraising **750.00**, General
+  grants received **5,000.00**, Membership fees and subscriptions
+  **6,150.00**, Sale of goods or services **9,500.00**, Interest or
+  dividends received **120.00**, total **21,520.00**; cash paid Employee
+  remuneration **6,000.00**, Costs related to sale of goods or services
+  **3,900.00**, Other costs related to delivery of entity objectives
+  **3,800.00**, Other cash paid **1,450.00**, total **15,150.00**; surplus
+  from operating activities **6,370.00**; Purchase of other assets
+  **2,500.00**; increase in cash **3,870.00**; closing balance
+  **15,870.00**, represented by 1000 Bank **15,870.00**.
+- **NPR5** Tier 4 notes list significant assets and liabilities from the
+  books as drafts to check: accounts receivable **300.00** and 1700
+  Equipment **9,500.00**; accounts payable **300.00** and subscriptions in
+  advance **450.00**.
+- **NPR6** A customer payment is put in the categories of the invoice it
+  paid: a 1,000.00 payment on an invoice of 600.00 subscriptions and
+  400.00 bar sales is **600.00** Membership fees and **400.00** commercial
+  sales. A payment of half that invoice is **300.00** and **200.00**.
+- **NPR7** A credit card counts as cash: 200.00 of green maintenance put on
+  the card is **200.00** Other payments related to service delivery, and
+  paying the card from the bank moves nothing between categories.
+- **NPR8** Registered for GST: a grant of 1,000.00 plus GST 150.00, green
+  maintenance of 200.00 plus GST 30.00, and 50.00 paid to IRD show General
+  grants **1,000.00**, Other payments related to service delivery
+  **200.00** and Net GST received or (paid) **70.00**.
+- **NPR9** The service performance statement shows the entity information
+  and each activity's measures for both years: "Club days held" **52**
+  (2025: **50**), "Members" **40** (2025: **37**), "Community open days"
+  **4** (2025: **3**). Without any activities for the year, the PDF says
+  the statement hasn't been written yet, so a draft can't pass for a
+  finished report.
+- **NPR10** Choosing Tier 3 or Tier 4 changes only what the PDF shows: the
+  same books give the special purpose statements (FS1-FS3) when that's
+  chosen. The report format and categories are recorded in the history.
+
 ## Year-end financial statements (#259; FS1-FS3 chosen by Claude on 14 Oct 2026 when Jess said to keep going, not yet reviewed)
 
 Tested in `tests/integration/financial-statements-pdf.test.ts` and
@@ -17072,7 +17203,7 @@ statements, with figures from the same functions as the report screens
 - **FS3** Amounts print as in printed statements: 1,234.56; negatives in
   brackets, (300.00); nothing as "-".
 
-Tier 3 and Tier 4 (public benefit entity) formats aren't built.
+Tier 3 and Tier 4 not-for-profit formats: see NPR1-NPR10.
 
 ## The AI's farm workspace (AIW1-AIW9; chosen with Jess on 14 Oct 2026, not yet reviewed)
 

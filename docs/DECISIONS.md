@@ -4874,3 +4874,30 @@ testing) and #154's code signing (later, Jess).
        waiting and puts back old prices only on lines still at the new one.
      - Templates post nothing, so neither does a price change.
 
+536. **Tier 3 and Tier 4 not-for-profit performance reports** (15 October
+     2026). Jess said to use judgement on what's next; her bookkeeping
+     clients are clubs and charities. Examples NPR1-NPR10 (not yet
+     reviewed), tenant migration 0146, from XRB's Tier 3 and Tier 4 (NFP)
+     standards for periods from 1 April 2024 and Charities Services' Tier 4
+     template.
+     - **Format per organisation:** special purpose (as before), Tier 3 or
+       Tier 4. The year-end PDF, on screen and in the accountant pack,
+       follows the choice. Tohyee doesn't work out the tier.
+     - **Categories:** every account in one of XRB's minimum categories,
+       chosen or suggested from its type. The screen counts suggestions.
+     - **Cash by what it was for:** each cash movement takes the category
+       of the other side of the entry; customer and supplier payments take
+       the categories of the invoice or bill lines they paid, in
+       proportion. Credit cards count as cash. GST is one net line.
+     - **Choices made for Jess, to check:** capital grants show under
+       "General grants received" in Tier 4 (the template has no capital
+       grants line); capital received from or paid to owners, rare for a
+       not-for-profit, has its own Tier 4 "other activities" lines as the
+       template has none; inventory bought counts as commercial payments;
+       opening balance journals count as cash movements in the year they're
+       dated.
+     - **Not built:** grant registers and deferral of conditional grants
+       (the report shows what the books say), consolidated or group
+       reports, audit or review reports, and filing with Charities
+       Services.
+
