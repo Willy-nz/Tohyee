@@ -23,6 +23,7 @@ import {
 } from "@/lib/import/fields";
 import type { ConversionGst, ConversionResult, ConversionStatus } from "@/lib/import/conversion";
 import { GST_BASIS_LABELS } from "@/lib/tax/categories";
+import type { HistoryResult } from "@/lib/import/history";
 import type { ImportFile } from "@/lib/import/read";
 import type { ImportResult, RowProblem } from "@/lib/import/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -45,6 +46,7 @@ const STEPS = [
   { key: "balances", label: "4 Opening balances" },
   { key: "documents", label: "5 Open invoices and bills" },
   { key: "check", label: "6 Final check" },
+  { key: "history", label: "7 History (general ledger)" },
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
@@ -756,6 +758,8 @@ export function ImportWizard({ organisationId }: { organisationId: string }) {
       {status.error ? <Notice tone="error">{status.error}</Notice> : null}
       {step === "accounts" || step === "contacts" || step === "items" ? (
         <MasterStep key={step} organisationId={organisationId} kind={step} />
+      ) : step === "history" ? (
+        <HistoryStep organisationId={organisationId} />
       ) : step === "check" ? (
         <FinalCheck organisationId={organisationId} status={status.data?.status ?? null} reload={status.reload} />
       ) : (
@@ -771,5 +775,152 @@ export function ImportWizard({ organisationId }: { organisationId: string }) {
         />
       )}
     </div>
+  );
+}
+
+type HistoryImport = { id: string; fileName: string; from: string; to: string; journals: number; lines: number; total: string; createdByEmail: string | null; createdAt: string };
+
+/**
+ * Step 7: a general ledger from the old system as history (IM22-IM28). One
+ * journal per date and ID#, kept out of the journal list; reports include it.
+ */
+function HistoryStep({ organisationId }: { organisationId: string }) {
+  const earlier = useApiData<{ imports: HistoryImport[] }>("/api/import/history", { organisationId });
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [dateOrder, setDateOrder] = useState<NonNullable<ImportOptions["dateOrder"]>>("dmy");
+  const [result, setResult] = useState<HistoryResult | null>(null);
+  const [checkedKey, setCheckedKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const records = useMemo(() => recordsOf(loaded), [loaded]);
+  const options: ImportOptions = { dateOrder };
+  const requestKey = JSON.stringify({ records, options });
+
+  async function run(commit: boolean) {
+    if (!loaded) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await api<{ result: HistoryResult }>("/api/import/history", {
+        method: "POST",
+        body: {
+          organisationId,
+          fileName: loaded.file.fileName,
+          records,
+          options,
+          idempotencyKey: newIdempotencyKey("history"),
+          commit,
+          mapping: mappingOf(loaded, options),
+        },
+      });
+      setResult(response.result);
+      setCheckedKey(commit ? null : requestKey);
+      if (response.result.committed) earlier.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const checkedClean = result !== null && !result.committed && result.problems.length === 0 && checkedKey === requestKey;
+  const summary = result?.summary ?? null;
+  return (
+    <Card
+      title="History: a general ledger"
+      description="Every transaction line from the old system after the opening balances, such as a year's general ledger from MYOB, so this year's reports can be checked against its accounts. Rows with the same date and ID# become one journal. Account headings with the lines under them (MYOB's layout) work, and rows without a date (beginning balances, totals) are skipped. Imported journals stay out of the journal list unless you choose Imported history there; reports include them. There are no GST codes on them, so GST returns don't count them."
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        <FilePicker
+          organisationId={organisationId}
+          kind="general_ledger"
+          loaded={loaded}
+          onLoaded={(next) => {
+            setLoaded(next);
+            setResult(null);
+          }}
+        />
+        {loaded ? (
+          <div className={ui.grid2}>
+            <Field label="Dates are written">
+              <select value={dateOrder} onChange={(event) => setDateOrder(event.target.value as typeof dateOrder)}>
+                <option value="dmy">Day first (31/03/2026)</option>
+                <option value="mdy">Month first (03/31/2026)</option>
+                <option value="ymd">Year first (2026-03-31)</option>
+              </select>
+            </Field>
+          </div>
+        ) : null}
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {loaded ? (
+          <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+            <Button variant="secondary" disabled={busy || records.length === 0 || missingRequired("general_ledger", loaded.columns).length > 0} onClick={() => void run(false)}>
+              {busy ? "Working…" : `Check ${records.length} ${records.length === 1 ? "row" : "rows"}`}
+            </Button>
+            <Button disabled={busy || !checkedClean} onClick={() => void run(true)}>
+              Import
+            </Button>
+          </div>
+        ) : null}
+        {result && summary ? (
+          <>
+            {result.committed ? (
+              <Notice tone="success">
+                Imported {summary.journals} journals ({summary.lines} lines) from {formatDate(summary.from)} to {formatDate(summary.to)}.
+              </Notice>
+            ) : result.problems.length === 0 ? (
+              <Notice tone="info">Every journal balances. Nothing is posted until you import.</Notice>
+            ) : null}
+            <div className={ui.statRow}>
+              <Stat label="Journals" value={summary.journals} />
+              <Stat label="Lines" value={summary.lines} />
+              <Stat label="From" value={summary.from ? formatDate(summary.from) : "—"} />
+              <Stat label="To" value={summary.to ? formatDate(summary.to) : "—"} />
+              <Stat label="Debits" value={<Money value={summary.debits} />} />
+              <Stat label="Credits" value={<Money value={summary.credits} />} />
+              <Stat label="Rows skipped" value={summary.skipped} />
+            </div>
+            <Problems problems={result.problems} title="These need fixing first, so nothing can be posted:" />
+          </>
+        ) : null}
+        {earlier.data && earlier.data.imports.length > 0 ? (
+          <section className={ui.reportSection}>
+            <h3 className={ui.reportHeading}>Imported so far</h3>
+            <div className={ui.tableWrap}>
+              <table className={`${ui.table} ${ui.stackOnPhone}`}>
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Dates</th>
+                    <th className={ui.num}>Journals</th>
+                    <th className={ui.num}>Lines</th>
+                    <th>By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {earlier.data.imports.map((entry) => (
+                    <tr key={entry.id}>
+                      <td data-label="File">{entry.fileName}</td>
+                      <td data-label="Dates">
+                        {formatDate(entry.from)} to {formatDate(entry.to)}
+                      </td>
+                      <td data-label="Journals" className={ui.num}>
+                        {entry.journals}
+                      </td>
+                      <td data-label="Lines" className={ui.num}>
+                        {entry.lines}
+                      </td>
+                      <td data-label="By">{entry.createdByEmail ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <Empty>No general ledger brought in yet.</Empty>
+        )}
+      </div>
+    </Card>
   );
 }

@@ -60,7 +60,8 @@ export type JournalOrigin =
   | "payroll"
   | "livestock_valuation"
   | "livestock_rations"
-  | "recode";
+  | "recode"
+  | "history";
 export type CorrectionKind = "reversal" | "replacement";
 
 /**
@@ -741,6 +742,7 @@ export async function listJournals(
     "bank_transaction",
     "bank_transfer",
     "payroll",
+    "history",
   ];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
@@ -766,6 +768,8 @@ export async function listJournals(
   if (kind && origins.includes(kind)) {
     conditions.push(`origin = ${param(kind)}`);
   }
+  // History brought in from another system (IM23) is left out unless asked for: there can be thousands.
+  if (kind !== "history") conditions.push("origin <> 'history'");
   if (beforeId) conditions.push(`id < ${param(beforeId)}`);
 
   const result = await tx.query<JournalRow>(

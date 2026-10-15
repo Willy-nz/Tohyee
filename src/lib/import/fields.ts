@@ -10,7 +10,7 @@
  * (Xero-style headings such as `*ContactName` or `InvoiceAmountDue`).
  */
 
-export const IMPORT_KINDS = ["accounts", "contacts", "items", "trial_balance", "stock", "open_invoices", "open_bills"] as const;
+export const IMPORT_KINDS = ["accounts", "contacts", "items", "trial_balance", "stock", "open_invoices", "open_bills", "general_ledger"] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
 export const IMPORT_KIND_LABELS: Readonly<Record<ImportKind, string>> = {
@@ -21,6 +21,7 @@ export const IMPORT_KIND_LABELS: Readonly<Record<ImportKind, string>> = {
   stock: "Stock on hand",
   open_invoices: "Open invoices",
   open_bills: "Open bills",
+  general_ledger: "General ledger (history)",
 };
 
 export const IMPORT_PRESETS = ["tohyee", "other_system"] as const;
@@ -127,6 +128,30 @@ export const IMPORT_FIELDS: Readonly<Record<ImportKind, readonly ImportField[]>>
     { key: "debit", label: "Debit", aliases: ["debit", "dr", "debit ytd", "ytd debit", "debit - year to date"], otherSystem: ["Debit - Year to date"] },
     { key: "credit", label: "Credit", aliases: ["credit", "cr", "credit ytd", "ytd credit", "credit - year to date"], otherSystem: ["Credit - Year to date"] },
     { key: "balance", label: "Balance (debits positive)", hint: "Instead of Debit and Credit.", aliases: ["balance", "net", "amount"] },
+  ],
+  general_ledger: [
+    { key: "date", label: "Date", required: true, aliases: ["date", "transaction date", "posting date", "journal date"], otherSystem: ["Date"] },
+    {
+      key: "reference",
+      label: "ID# or reference",
+      required: true,
+      multi: true,
+      hint: "Rows with the same date and ID# are one transaction. Tick MYOB's Src column too if its ID#s repeat across types.",
+      aliases: ["id#", "id", "id no", "reference", "ref", "journal number", "transaction id", "source"],
+      otherSystem: ["ID#", "Reference"],
+    },
+    { key: "accountCode", label: "Account code", aliases: ["account code", "account no", "account number", "code"], otherSystem: ["Account Code"] },
+    {
+      key: "account",
+      label: "Account",
+      hint: "\"6400 Feed\" or \"Feed (6400)\". A row with only an account is a heading: the rows under it take it.",
+      aliases: ["account", "account name"],
+      otherSystem: ["Account"],
+    },
+    { key: "memo", label: "Memo", aliases: ["memo", "description", "narration", "details"], otherSystem: ["Memo", "Description"] },
+    { key: "debit", label: "Debit", aliases: ["debit", "dr", "debit amount"], otherSystem: ["Debit"] },
+    { key: "credit", label: "Credit", aliases: ["credit", "cr", "credit amount"], otherSystem: ["Credit"] },
+    { key: "amount", label: "Amount (debits positive)", hint: "Instead of Debit and Credit.", aliases: ["amount", "net", "net amount", "value"] },
   ],
   stock: [
     { key: "itemCode", label: "Item code", required: true, aliases: ["item code", "code", "item"], otherSystem: ["*ItemCode", "Item Code"] },
