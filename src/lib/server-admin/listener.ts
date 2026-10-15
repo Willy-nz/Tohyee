@@ -42,6 +42,18 @@ export function notFromThisComputer(headers: Record<string, string | string[] | 
   const host = typeof headers.host === "string" ? headers.host.toLowerCase() : "";
   const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
   if (!LOCAL_HOSTS.has(name)) return `it was addressed to ${host || "no host"}, not to this computer`;
+  // A website open in a browser on this computer can still send requests here; the browser says where they came from.
+  const fetchSite = typeof headers["sec-fetch-site"] === "string" ? headers["sec-fetch-site"] : null;
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") return "it came from another website";
+  if (typeof headers.origin === "string") {
+    let originHost = "";
+    try {
+      originHost = new URL(headers.origin).hostname.toLowerCase();
+    } catch {
+      originHost = "";
+    }
+    if (!LOCAL_HOSTS.has(originHost)) return "it came from another website";
+  }
   return null;
 }
 

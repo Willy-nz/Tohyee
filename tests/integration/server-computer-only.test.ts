@@ -133,6 +133,10 @@ describeWithDatabase("server settings: the server computer only", () => {
         { "x-forwarded-host": "books.example.nz" },
         { host: "k7m2q9.tohyee.example" },
         { host: "tohyee-pc.tail1a2b3c.ts.net" },
+        // A website open in a browser on this computer.
+        { "sec-fetch-site": "cross-site" },
+        { origin: "https://evil.example" },
+        { origin: "null" },
       ];
       for (const headers of tunnelled) {
         const refused = await get(adminPort, "/server/users", headers);
@@ -141,6 +145,8 @@ describeWithDatabase("server settings: the server computer only", () => {
       }
       expect(seen).toHaveLength(1);
       expect((await get(adminPort, "/server", { host: `localhost:${adminPort}` })).status).toBe(200);
+      // The server settings pages themselves, and the Windows app.
+      expect((await get(adminPort, "/server", { origin: `http://127.0.0.1:${adminPort}`, "sec-fetch-site": "same-origin" })).status).toBe(200);
     } finally {
       await new Promise<void>((resolve) => main.close(() => resolve()));
     }

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from "node:crypto";
 import { UnavailableError } from "@/lib/errors";
 
 /**
@@ -8,17 +8,31 @@ import { UnavailableError } from "@/lib/errors";
  * server's environment (tohyee.env on Windows), never in a database, so a
  * copy of a database alone doesn't reveal the secrets. Changing the key makes
  * stored secrets unreadable; they then have to be entered again.
+ *
+ * Secrets are encrypted with a key of their own, derived with HKDF ("v2",
+ * as backups are), so it's never the key used for keyed digests. Secrets
+ * stored before (v1, encrypted with the digest key) still open.
  */
-const VERSION = "v1";
+const VERSION = "v2";
 
-function key(): Buffer {
+function rawKey(): string {
   const raw = process.env.TOHYEE_SECRET_KEY?.trim();
   if (!raw || raw.length < 32) {
     throw new UnavailableError(
       "The server has no TOHYEE_SECRET_KEY (at least 32 characters), so it can't store secrets such as two-step sign-in keys. A server admin needs to set it in the server's environment and restart Tohyee.",
     );
   }
-  return createHash("sha256").update(raw, "utf8").digest();
+  return raw;
+}
+
+/** The key keyed digests use (and v1 secrets were encrypted with). Unchanged, so digests already stored still match. */
+function key(): Buffer {
+  return createHash("sha256").update(rawKey(), "utf8").digest();
+}
+
+/** The encryption key for v2 secrets. */
+function encryptionKey(): Buffer {
+  return Buffer.from(hkdfSync("sha256", Buffer.from(rawKey(), "utf8"), Buffer.alloc(0), "tohyee secrets v2", 32));
 }
 
 /** Whether TOHYEE_SECRET_KEY is set, so secrets can be stored. */
@@ -29,7 +43,7 @@ export function secretsAvailable(): boolean {
 
 export function encryptSecret(plaintext: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [VERSION, iv.toString("base64"), tag.toString("base64"), ciphertext.toString("base64")].join(":");
@@ -37,11 +51,11 @@ export function encryptSecret(plaintext: string): string {
 
 export function decryptSecret(stored: string): string {
   const [version, iv, tag, ciphertext] = stored.split(":");
-  if (version !== VERSION || !iv || !tag || ciphertext === undefined) {
+  if ((version !== "v1" && version !== "v2") || !iv || !tag || ciphertext === undefined) {
     throw new UnavailableError("A stored secret is in an unknown format.");
   }
   try {
-    const decipher = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64"));
+    const decipher = createDecipheriv("aes-256-gcm", version === "v1" ? key() : encryptionKey(), Buffer.from(iv, "base64"));
     decipher.setAuthTag(Buffer.from(tag, "base64"));
     return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64")), decipher.final()]).toString("utf8");
   } catch {

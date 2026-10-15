@@ -56,7 +56,13 @@ export function assertSameOrigin(request: Request): void {
   }
   const origin = request.headers.get("origin");
   if (!origin) {
-    // Non-browser clients (scripts, curl) don't send Origin.
+    // Non-browser clients (scripts, curl) don't send Origin. A browser with a
+    // session sends Origin or Sec-Fetch-Site on every write; one sending
+    // neither (an old webview, a privacy add-on) can't be told apart from a
+    // cross-site form, so it's refused while signed in.
+    if (!fetchSite && readCookie(request, SESSION_COOKIE)) {
+      throw new ForbiddenError("Cross-site request blocked.");
+    }
     return;
   }
   let originHost: string;

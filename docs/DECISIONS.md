@@ -4966,3 +4966,20 @@ testing) and #154's code signing (later, Jess).
      - Not built: undo, foreign currency, tracking and contacts on lines.
      - Real data stays in Jess's own organisation; nothing from it goes
        into the repository or its tests.
+
+541. **Hardening after an outside review** (15 October 2026). Jess passed
+     on a review of six points; Claude checked each against the code. Done:
+     - Outgoing connections: the check that an address is on the internet
+       now reads every way an IPv6 address can be written, including IPv4
+       carried inside IPv6, and refuses more special-purpose ranges. The
+       documentation ranges still count as public (they stand in for
+       public addresses in examples and tests).
+     - Writes with a session cookie but neither Origin nor Sec-Fetch-Site
+       are refused (scripts without a session are unaffected).
+     - The server settings address refuses requests a browser marks as
+       coming from another website.
+     - Stored secrets are encrypted with their own HKDF-derived key (v2);
+       v1 secrets still open, and keyed digests are unchanged.
+     - Not changed: how the visitor's address is read (decision 534 still
+       stands), and the address service's recovery without the release key
+       (decision 534; Jess chose to keep it on 15 October 2026).
