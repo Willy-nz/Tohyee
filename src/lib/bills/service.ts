@@ -34,7 +34,10 @@ import {
   add,
   cmp,
   dec,
+  isNegative,
+  isPositive,
   isZero,
+  neg,
   parseDecimalInput,
   toFixedString,
   sub,
@@ -460,7 +463,11 @@ export function parsePurchaseLines(
     return {
       description: fillable && isBlank(line.description) ? "" : requireString(line.description, `${label} description`, { maxLength: 500 }),
       quantity: parseDecimalInput(line.quantity, `${label} quantity`, { maxScale: LINE_INPUT_SCALE }),
-      unitPrice: fillable && isBlank(line.unitPrice) ? "" : parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE }),
+      // Free and negative (a trade-in or rebate) prices are allowed, as in Xero (ZN5-ZN8).
+      unitPrice:
+        fillable && isBlank(line.unitPrice)
+          ? ""
+          : parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE, allowZero: true, allowNegative: true }),
       accountCode: fillable && isBlank(line.accountCode) ? "" : parseAccountCodeInput(line.accountCode, `${label} account`),
       ...item,
       taxCode,
@@ -628,12 +635,24 @@ export async function resolveDraft(
   const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
-    if (isZero(dec(line.lineAmount))) {
+    // A stock line sets the stock's cost, so it can't be free or negative (ZN7).
+    if (lineItems[index].itemType === "stock" && !isPositive(dec(line.lineAmount))) {
+      throw new ValidationError(`Line ${index + 1}: ${lineItems[index].itemCode} is a stock item, so its price can't be free or negative. For a return, use a supplier credit note.`);
+    }
+    // Only a free line (ZN5) can come to 0.00.
+    if (isZero(dec(line.lineAmount)) && !isZero(dec(lines[index].unitPrice || "0"))) {
       throw new ValidationError(
         `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
+  if (!isPositive(dec(amounts.total))) {
+    throw new ValidationError(
+      isZero(dec(amounts.total))
+        ? `This comes to ${amounts.total} ${currencyCode} in all. A document needs something to charge.`
+        : `This comes to ${amounts.total} ${currencyCode} in all. The total can't be negative: for a refund or credit, use a supplier credit note.`,
+    );
+  }
   // A foreign-currency bill (MC10, MC75): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
   let exchangeRateSource: string | null = null;
@@ -947,6 +966,11 @@ function isUniqueViolation(error: unknown, constraint?: string): boolean {
 
 function billLabel(bill: BillSummary): string {
   return bill.supplierInvoiceNumber === null ? `The draft bill from ${bill.contactName}` : `Bill ${bill.supplierInvoiceNumber} from ${bill.contactName}`;
+}
+
+/** A debit for a positive amount, a credit for a negative one (ZN6, ZN8). */
+function debitSide(amount: Decimal, scale: number): { debitAmount: string; creditAmount: string } {
+  return isNegative(amount) ? { debitAmount: "0", creditAmount: toFixedString(neg(amount), scale) } : { debitAmount: toFixedString(amount, scale), creditAmount: "0" };
 }
 
 export async function getBill(tx: OrgTx, billIdInput: unknown): Promise<Bill> {
@@ -1389,14 +1413,14 @@ export async function approveBill(
   const journalLines = [
     ...[...costs.values()]
       .filter((entry) => !isZero(entry.amount))
+      // A negative line (a trade-in or rebate, ZN6) that leaves an account below zero credits it.
       .map((entry) => ({
         accountCode: entry.code,
-        debitAmount: toFixedString(entry.amount, scale),
-        creditAmount: "0",
+        ...debitSide(entry.amount, scale),
         description: supplier,
         tracking: entry.tracking,
       })),
-    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, debitAmount: taxTotal, creditAmount: "0", description: "GST" }]),
+    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, ...debitSide(dec(taxTotal), scale), description: "GST" }]),
     {
       accountCode: accounts.payable,
       debitAmount: "0",

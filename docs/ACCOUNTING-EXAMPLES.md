@@ -7209,7 +7209,7 @@ on 25 Jun (**10.00** of it an overpayment); **11.50** of CN-0001 refunded on
 - Showing credit and overpayments applied to invoices as lines (they don't
   change the balance, so they're left out, as in Xero's activity statement).
 
-## Free and negative lines (ZN1-ZN4; as Xero does, chosen 15 Oct 2026 under Jess's "do what Xero or NetSuite do", not yet reviewed)
+## Free and negative lines (ZN1-ZN8; as Xero does, chosen 15 Oct 2026 under Jess's "do what Xero or NetSuite do", not yet reviewed)
 
 Tested in `tests/integration/zero-negative-lines.test.ts`. Xero lets a
 sales line have a $0 price (something given free) or a negative one (a
@@ -7231,6 +7231,34 @@ Setup: GST 15%, tax exclusive, customer Kobe Cafe.
   negative: for a refund or credit, use a credit note"), and so are lines
   that come to **0.00** in all.
 - **ZN4** A quote with the ZN1 lines turns into an invoice with them.
+
+Bills and purchase orders (ZN5-ZN8, added 15 Oct 2026 when Jess said "Yes
+add that"; as Xero does, not yet reviewed). The same rules on the purchase
+side: bills, purchase orders and repeating bills. Supplier Clutha Rural.
+
+- **ZN5** 1 x Fencing wire at **500.00** (6160 Repairs and maintenance)
+  and 1 x Delivery at **0.00**: the bill is **575.00** and shows the
+  delivery at 0.00; Dr 6160 **500.00** / Dr 2100 **75.00** / Cr 2000
+  **575.00**.
+- **ZN6** 1 x Fencing wire at **500.00** and 1 x Trade-in of old wire at
+  **-50.00**, both to 6160: subtotal **450.00**, GST **67.50**, total
+  **517.50**; Dr 6160 **450.00** / Dr 2100 **67.50** / Cr 2000 **517.50**.
+  With the trade-in coded to 6165 Rebates received (an expense account;
+  bill lines can't go to revenue accounts) instead: Dr 6160 **500.00** /
+  Dr 2100 **67.50** / Cr 6165 **50.00** / Cr 2000 **517.50** (a negative
+  line on its own account is a credit there).
+- **ZN7** A bill that comes to less than zero, or to **0.00**, is refused,
+  as for invoices: a negative total is a supplier credit note. A stock
+  item's line on a bill can't be free or negative either ("use a supplier
+  credit note"), because it sets the stock's cost; a free stock item on a
+  sale is fine (ZN1), since stock leaves at its cost.
+- **ZN8** GST below zero. An invoice with 1 x Grooming at **100.00**
+  (EXEMPT) and 1 x Discount at **-10.00** (GST): GST **-1.50**, total
+  **88.50**; Dr 1100 **88.50** / Dr 4000 **10.00** / Dr 2100 **1.50** /
+  Cr 4000 **100.00**, netted to Dr 1100 **88.50** / Dr 2100 **1.50** / Cr
+  4000 **90.00**. The same lines on a bill to 6160: Dr 6160 **90.00** / Cr
+  2100 **1.50** / Cr 2000 **88.50**. Before this, the negative GST total was
+  refused by the database.
 
 ## Line discounts and deal products (approved by Jess, 10 Oct 2026)
 
