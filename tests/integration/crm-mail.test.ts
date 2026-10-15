@@ -178,7 +178,7 @@ describeWithDatabase("CRM email and calendar sync", () => {
     expect(settings.redirectPath).toBe("/api/crm/mail/callback");
     expect(JSON.stringify(settings)).not.toContain("google-secret");
     const stored = await w.as((tx) => tx.query<{ s: string }>("select google_client_secret_ciphertext as s from crm_mail_settings"));
-    expect(stored.rows[0].s.startsWith("v1:")).toBe(true);
+    expect(stored.rows[0].s.startsWith("v2:")).toBe(true);
     // A blank secret keeps the saved one.
     expect((await w.as((tx) => saveMailSettings(tx, { googleClientId: "google-client-2", googleClientSecret: "" }))).google.secretSaved).toBe(true);
     const viewerRead = await settingsRoute.GET(apiRequest(`/api/crm/mail/settings?organisationId=${w.org}`, { cookie: await sessionCookieFor(viewer) }), noContext);
@@ -211,7 +211,7 @@ describeWithDatabase("CRM email and calendar sync", () => {
     const account = await w.as((tx) => saveConnection(tx, "google", connection));
     expect([account.email, account.provider, account.isMine, account.status]).toEqual(["jess@glimmers.nz", "google", true, "active"]);
     const tokens = await w.as((tx) => tx.query<{ r: string }>("select refresh_token_ciphertext as r from crm_connected_accounts"));
-    expect(tokens.rows[0].r.startsWith("v1:")).toBe(true);
+    expect(tokens.rows[0].r.startsWith("v2:")).toBe(true);
   });
 
   it("MAIL3 and MAIL4: only emails with known people are kept, once", async () => {

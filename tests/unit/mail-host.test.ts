@@ -7,8 +7,35 @@ describe("report mailbox hosts must be on the internet", () => {
       expect(privateAddress(address), address).toBe(true);
     }
   });
+  it("sees through IPv4 written as IPv6, however it's written", () => {
+    for (const address of [
+      "::ffff:7f00:1",
+      "::ffff:a9fe:a9fe",
+      "0:0:0:0:0:ffff:7f00:0001",
+      "0:0:0:0:0:ffff:127.0.0.1",
+      "::ffff:0:7f00:1",
+      "::7f00:1",
+      "64:ff9b::7f00:1",
+      "64:ff9b::a9fe:a9fe",
+      "64:ff9b:1::1",
+      "2002:7f00:1::1",
+      "2002:c0a8:101::1",
+      "[::ffff:7f00:1]",
+      "fe80::1%eth0",
+    ]) {
+      expect(privateAddress(address), address).toBe(true);
+    }
+  });
+  it("treats benchmarking, tunnel and discard ranges as private", () => {
+    for (const address of ["2001:2::1", "2001:0:4136:e378::1", "100::1", "fec0::1", "ff02::1", "198.18.0.1", "255.255.255.255"]) {
+      expect(privateAddress(address), address).toBe(true);
+    }
+  });
+  it("refuses anything it can't read as an address", () => {
+    for (const address of ["1:2:3:4:5:6:7:8:9", "1::2::3", "gggg::1", ""]) expect(privateAddress(address), address).toBe(true);
+  });
   it("allows public addresses", () => {
-    for (const address of ["142.250.72.109", "40.97.120.242", "172.32.0.1", "2607:f8b0:4004:c1b::6c", "::ffff:142.250.72.109"]) {
+    for (const address of ["142.250.72.109", "40.97.120.242", "172.32.0.1", "2607:f8b0:4004:c1b::6c", "::ffff:142.250.72.109", "::ffff:8efa:486d", "64:ff9b::8efa:486d", "2002:8efa:486d::1", "2404:6800:4006:80a::200e"]) {
       expect(privateAddress(address), address).toBe(false);
     }
   });

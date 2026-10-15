@@ -33,7 +33,7 @@ describe("public-only outgoing calls (decision 534)", () => {
   });
 
   it("refuses local addresses and http before connecting", async () => {
-    for (const url of ["https://127.0.0.1/", "https://[::1]/", "https://10.1.2.3/", "https://localhost/", "https://admin.localhost/"]) {
+    for (const url of ["https://127.0.0.1/", "https://[::1]/", "https://10.1.2.3/", "https://localhost/", "https://admin.localhost/", "https://[::ffff:127.0.0.1]/", "https://[::ffff:169.254.169.254]/", "https://[0:0:0:0:0:ffff:a9fe:a9fe]/", "https://[64:ff9b::7f00:1]/"]) {
       await expect(publicFetch(url, { maxBytes: 1024 })).rejects.toThrow(/this server/);
     }
     await expect(publicFetch("http://shop.example.nz/", { maxBytes: 1024 })).rejects.toThrow("https");

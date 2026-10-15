@@ -322,7 +322,7 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(JSON.stringify(connection)).not.toContain(TOKEN);
     expect(JSON.stringify(connection)).not.toContain(SECRET);
     const stored = await w.as((tx) => tx.query<{ c: string }>("select credentials_ciphertext as c from sales_platform_connections"));
-    expect(stored.rows[0].c.startsWith("v1:")).toBe(true);
+    expect(stored.rows[0].c.startsWith("v2:")).toBe(true);
     expect(stored.rows[0].c).not.toContain(TOKEN);
     expect((await w.as((tx) => listConnections(tx)))[0].webhooksNote).toContain("https");
 
