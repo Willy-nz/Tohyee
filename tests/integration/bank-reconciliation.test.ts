@@ -699,7 +699,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
 
   it("secrets are encrypted with TOHYEE_SECRET_KEY and can't be read with another key", () => {
     const stored = encryptSecret("user_token_abc");
-    expect(stored).toMatch(/^v1:/);
+    expect(stored).toMatch(/^v2:/);
     expect(stored).not.toContain("user_token_abc");
     expect(decryptSecret(stored)).toBe("user_token_abc");
     const original = process.env.TOHYEE_SECRET_KEY;

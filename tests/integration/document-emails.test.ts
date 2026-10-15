@@ -243,7 +243,7 @@ describeWithDatabase("emailing documents", () => {
     expect(read.text).not.toContain(SMTP_PASSWORD);
     expect(read.json.settings).toMatchObject({ configured: true, hasPassword: true, fromAddress: SMTP_USER, replyTo: "jess@glimmers.test", host: "127.0.0.1", security: "none" });
     const stored = await w.as((tx) => tx.query<{ smtp_password_ciphertext: string }>("select smtp_password_ciphertext from organisation_email_settings"));
-    expect(stored.rows[0].smtp_password_ciphertext).toMatch(/^v1:/);
+    expect(stored.rows[0].smtp_password_ciphertext).toMatch(/^v2:/);
     expect(stored.rows[0].smtp_password_ciphertext).not.toContain(SMTP_PASSWORD);
     expect((await call(settingsRoute.GET, `/api/email/settings?organisationId=${w.org}`, { cookie: bookkeeperCookie })).status).toBe(403);
     const plainToGmail = await call(settingsRoute.PUT, "/api/email/settings", {
@@ -866,7 +866,7 @@ describeWithDatabase("emailing documents", () => {
       expect(read.text).not.toContain("refresh-1");
       expect(read.text).not.toContain("access-1");
       const stored = await w.as((tx) => tx.query<{ microsoft_refresh_token_ciphertext: string }>("select microsoft_refresh_token_ciphertext from organisation_email_settings"));
-      expect(stored.rows[0].microsoft_refresh_token_ciphertext).toMatch(/^v1:/);
+      expect(stored.rows[0].microsoft_refresh_token_ciphertext).toMatch(/^v2:/);
 
       // Sending an invoice: HTML with the logo inline, the PDF attached, replies to the mailbox.
       const invoice = await w.invoice();
@@ -1053,7 +1053,7 @@ describeWithDatabase("emailing documents", () => {
       expect(read.text).not.toContain("g-access-1");
       expect(read.text).not.toContain("g-secret");
       const stored = await w.as((tx) => tx.query<{ google_refresh_token_ciphertext: string }>("select google_refresh_token_ciphertext from organisation_email_settings"));
-      expect(stored.rows[0].google_refresh_token_ciphertext).toMatch(/^v1:/);
+      expect(stored.rows[0].google_refresh_token_ciphertext).toMatch(/^v2:/);
 
       // Sending an invoice: Gmail gets the whole message nodemailer wrote, the same as SMTP's.
       const invoice = await w.invoice();
