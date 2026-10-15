@@ -15,7 +15,7 @@ import {
 } from "@/lib/auth/totp";
 import { coreQuery, type DbClient, withCoreTransaction } from "@/lib/db/transactions";
 import { sendEmail, sendSecurityAlert } from "@/lib/email/mailer";
-import { ConflictError, TooManyRequestsError, UnauthorizedError, UnavailableError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, TooManyRequestsError, UnauthorizedError, UnavailableError, ValidationError } from "@/lib/errors";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 
 /**
@@ -240,6 +240,9 @@ export async function completeEnrolment(
   return result;
 }
 
+export const UNREADABLE_KEY =
+  "This server can't read your two-step key (its secret key has changed), so authenticator codes can't be checked. Sign in with a backup code, use Lost your phone? for an emailed reset link, or ask a server admin to reset two-step sign-in for you on the server computer.";
+
 /** Finishes signing in with an authenticator code or a backup code. */
 export async function verifySecondStep(
   state: SessionState,
@@ -257,33 +260,25 @@ export async function verifySecondStep(
   const user = found.rows[0];
   if (!user) throw new UnauthorizedError();
 
-  let secret: string;
+  // When the server's TOHYEE_SECRET_KEY has changed, the authenticator key can't be read. The password alone
+  // doesn't replace it (decision 543): a backup code still works, and otherwise it's the emailed reset link or
+  // a server admin on the server computer, as for a lost phone.
+  let secret: string | null;
   try {
     secret = decryptSecret(user.totp_secret_ciphertext);
   } catch {
-    // The server's TOHYEE_SECRET_KEY was changed, so the key can't be read.
-    // The password was right: start setting two-step sign-in up again.
-    await withCoreTransaction(async (client) => {
-      await client.query(
-        `update users set totp_secret_ciphertext = null, totp_enabled_at = null, totp_last_step = null, updated_at = now()
-          where id = $1`,
-        [state.user.id],
-      );
-      await client.query("delete from user_backup_codes where user_id = $1", [state.user.id]);
-      await writeAdminAuditEvent(client, { userId: state.user.id, email: state.user.email }, {
-        eventType: "user.two_step_key_unreadable",
-        entityType: "user",
-        entityId: state.user.id,
-      });
-    });
-    throw new ConflictError(
-      "Your two-step key can't be read because the server's secret key changed. Set up your authenticator app again (delete the old Tohyee entry in the app).",
-    );
+    secret = null;
   }
 
   // Counted before it's checked, so parallel guesses can't get past the limits (#130).
   await claimAttempt(state);
   if (normaliseTotpInput(code)) {
+    if (secret === null) {
+      await withCoreTransaction((client) =>
+        writeAdminAuditEvent(client, { userId: state.user.id, email: state.user.email }, { eventType: "user.two_step_key_unreadable", entityType: "user", entityId: state.user.id }),
+      );
+      throw new ForbiddenError(UNREADABLE_KEY);
+    }
     const step = matchTotp(secret, code, {
       lastUsedStep: user.totp_last_step === null ? null : Number(user.totp_last_step),
     });
