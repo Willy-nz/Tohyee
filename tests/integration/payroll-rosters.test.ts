@@ -11,6 +11,7 @@ import { createPayGroup } from "@/lib/payroll/groups";
 import {
   addShift,
   addUnavailability,
+  copyPreviousWeek,
   getRosterWeek,
   listRosterAreas,
   myShifts,
@@ -186,6 +187,35 @@ describeWithDatabase("rosters and clocking in (RS1-RS8)", () => {
     const roster = await w.shift(w.arohaId, "2026-10-24");
     expect(roster.shifts[0]).toMatchObject({ onLeave: true, warnings: ["Aroha is on leave"] });
     expect(roster.totals).toEqual({ hours: "0.00", wages: "0.00", kiwiSaver: "0.00", cost: "0.00" });
+  });
+
+  it("RS9: copying last week skips anyone unavailable or already rostered, and keeps local times over daylight saving", async () => {
+    const w = await setup();
+    await w.as((tx) => addUnavailability(tx, { employeeId: w.tamaId, weekday: 6, note: "Sport" }));
+    await w.shift(w.arohaId, "2026-10-24");
+    await w.shift(w.arohaId, "2026-10-25");
+    await w.shift(w.tamaId, "2026-10-24", { unavailableReason: "Agreed to swap this week" });
+    // Aroha already works part of next Sunday.
+    await w.as((tx) => addShift(tx, { areaId: w.shop, employeeId: w.arohaId, startsAt: "2026-11-01T10:00:00+13:00", endsAt: "2026-11-01T14:00:00+13:00" }));
+    const copy = (weekStart: string) => w.as((tx) => copyPreviousWeek(tx, { areaId: w.shop, weekStart }));
+    const next = await copy("2026-10-26");
+    expect(next.copied).toBe(1);
+    expect(next.skipped.map((skip) => [skip.employeeName, skip.reason])).toEqual([
+      ["Tama Shop", "unavailable that day"],
+      ["Aroha Shop", "already has a shift then"],
+    ]);
+    expect(next.shifts.map((shift) => [shift.employeeName, shift.date, shift.breakMinutes])).toEqual([
+      ["Aroha Shop", "2026-10-31", 30],
+      ["Aroha Shop", "2026-11-01", 0],
+    ]);
+    // Copying again adds nothing twice.
+    expect((await copy("2026-10-26")).copied).toBe(0);
+    await expect(copy("2026-12-07")).rejects.toThrow("There are no shifts in the week before to copy.");
+    // Daylight saving ends on Sun 4 Apr 2027: 9:00 on Sat 3 Apr (+13:00) copies to 9:00 on Sat 10 Apr (+12:00).
+    await w.shift(w.arohaId, "2027-04-03");
+    const after = await copy("2027-04-05");
+    expect(Date.parse(after.shifts[0].startsAt)).toBe(Date.parse("2027-04-10T09:00:00+12:00"));
+    expect(Date.parse(after.shifts[0].endsAt)).toBe(Date.parse("2027-04-10T17:00:00+12:00"));
   });
 
   it("RS4: published shifts are what Aroha sees; later changes are listed until published again", async () => {

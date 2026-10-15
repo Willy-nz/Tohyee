@@ -29,8 +29,12 @@ If these conflict with each other or with a request, say so instead of picking o
 ## How to work
 
 - Before implementing accounting behaviour, find its worked example in
-  `docs/ACCOUNTING-EXAMPLES.md`. If there isn't one, stop and ask. Don't mark
-  examples as approved yourself; examples need real numbers and a test.
+  `docs/ACCOUNTING-EXAMPLES.md`. If there isn't one, write one from what Xero
+  does (NetSuite where Xero has nothing), marked "as Xero does, not yet
+  reviewed" (decision 537); stop and ask only where the law decides, the
+  change can't be undone, or Xero and NetSuite differ in a way that matters.
+  Don't mark examples as approved yourself; examples need real numbers and a
+  test.
 - Write the failing test first, then the code. `npm test` must pass, along
   with `npm run lint`, `npm run typecheck` and `npm run build`.
 - Money and quantities use `src/lib/money/decimal.ts`. Never floats.

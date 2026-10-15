@@ -9,7 +9,7 @@ import { Button, Card, Empty, Field, Notice, Stat, ui, WarningNote } from "@/com
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import type { EmployeeSummary } from "@/lib/payroll/employees";
-import type { MyShift, RosterArea, RosterEmailResult, RosterShift, RosterWeek, Unavailability } from "@/lib/payroll/rosters";
+import type { CopyWeekResult, MyShift, RosterArea, RosterEmailResult, RosterShift, RosterWeek, Unavailability } from "@/lib/payroll/rosters";
 
 /**
  * Rosters inside Payroll (examples RS1-RS4): an area's week of shifts, their
@@ -168,6 +168,7 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
   const [updated, setUpdated] = useState<RosterWeek | null>(null);
   const [emailStaff, setEmailStaff] = useState(true);
   const [emailedFor, setEmailed] = useState<{ weekStart: string; result: RosterEmailResult } | null>(null);
+  const [copiedFor, setCopiedFor] = useState<{ weekStart: string; copied: number; skipped: CopyWeekResult["skipped"] } | null>(null);
   const roster = updated ?? loaded.data?.roster ?? null;
   const { busy, error, run } = useRun();
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
@@ -184,6 +185,15 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
         setEmailed(result.roster.emails ? { weekStart: result.roster.weekStart, result: result.roster.emails } : null);
       },
     );
+  const copy = () =>
+    void run(
+      () => api<{ roster: CopyWeekResult }>("/api/payroll/rosters/copy", { method: "POST", body: { organisationId, areaId, weekStart: roster.weekStart } }),
+      (result) => {
+        setUpdated(result.roster);
+        setCopiedFor({ weekStart: result.roster.weekStart, copied: result.roster.copied, skipped: result.roster.skipped });
+      },
+    );
+  const copied = copiedFor && copiedFor.weekStart === roster.weekStart ? copiedFor : null;
   const emailed = emailedFor && emailedFor.weekStart === roster.weekStart ? emailedFor.result : null;
   const over = roster.remaining !== null && roster.remaining.startsWith("-");
   return (
@@ -222,6 +232,23 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
           {roster.notCosted > 0 ? ` ${roster.notCosted} shift${roster.notCosted === 1 ? " isn't" : "s aren't"} costed: salaried, or no pay rate yet.` : ""}
           {roster.budget !== null ? ` Budget ${roster.budget} a week.` : ""} Nothing is posted.
         </p>
+        {copied ? (
+          <Notice tone={copied.skipped.length > 0 ? "warning" : "success"}>
+            Copied {copied.copied} shift{copied.copied === 1 ? "" : "s"} from the week before.
+            {copied.skipped.length > 0 ? (
+              <>
+                {" "}Left out:
+                <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                  {copied.skipped.map((skip, index) => (
+                    <li key={index}>
+                      {skip.employeeName}, {skip.shift}: {skip.reason}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </Notice>
+        ) : null}
         {roster.changes.length > 0 ? (
           <Notice tone="warning">
             <strong>Changed since published:</strong>
@@ -237,6 +264,9 @@ function RosterWeekView({ organisationId, areaId, weekOf, onWeek }: { organisati
         <div className={ui.actions}>
           <Button onClick={publish} disabled={busy || (roster.publishedAt !== null && roster.changes.length === 0) || (roster.publishedAt === null && roster.shifts.length === 0)}>
             {roster.publishedAt ? "Publish changes" : "Publish"}
+          </Button>
+          <Button variant="secondary" onClick={copy} disabled={busy}>
+            Copy last week
           </Button>
           <label className={ui.checkbox}>
             <input type="checkbox" checked={emailStaff} onChange={(event) => setEmailStaff(event.target.checked)} />{" "}

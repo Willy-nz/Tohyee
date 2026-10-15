@@ -15,7 +15,12 @@ and the docs it lists, before changing anything. The short version:
 
 - One PostgreSQL database per organisation. Don't change the tenancy model.
 - Accounting behaviour needs a worked example in `docs/ACCOUNTING-EXAMPLES.md`
-  and a test before it's built. If there's no example, stop and ask.
+  and a test before it's built. If there's no example, see the Xero rule below.
+- When a behaviour question has no answer from Jess, do what Xero does (or
+  NetSuite where Xero has nothing), and mark the worked example "as Xero
+  does, not yet reviewed" rather than stopping to ask (decision 537). Law,
+  irreversible changes and real disagreements between the two still go to
+  Jess.
 - Money and quantities use `src/lib/money/decimal.ts`, never floats.
 - Don't add screens or APIs that only record a status someone types in.
 - `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` must all

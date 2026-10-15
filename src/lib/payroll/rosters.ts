@@ -528,6 +528,75 @@ export async function addShift(tx: OrgTx, input: ShiftInput & { areaId: unknown 
   return getRosterWeek(tx, { areaId: area.id, weekStart });
 }
 
+export type CopyWeekResult = RosterWeek & { copied: number; skipped: Array<{ employeeName: string; shift: string; reason: string }> };
+
+/**
+ * Copies the week before's shifts into this week, a week later at the same
+ * local times (RS9; as Deputy and Xero do, not yet reviewed). A shift is
+ * left out, and listed, when the employee has finished or been archived,
+ * is unavailable that day, or already has a shift then. Shifts in approved
+ * leave are copied and warned about, as when added by hand (RS3).
+ */
+export async function copyPreviousWeek(tx: OrgTx, input: { areaId: unknown; weekStart: unknown }): Promise<CopyWeekResult> {
+  await requirePayrollAccess(tx);
+  const area = await findArea(tx, input.areaId);
+  if (!area.isActive) throw new ValidationError(`${area.name} isn't in use.`);
+  const weekStart = await rosterWeekStart(tx, input.weekStart);
+  const previous = await tx.query<{ id: string }>("select id::text from payroll_rosters where area_id = $1 and week_start = $2", [area.id, addDays(weekStart, -7)]);
+  if (!previous.rows[0]) throw new ValidationError("There are no shifts in the week before to copy.");
+  const zone = businessTimeZone();
+  // A week later at the same local time, so a daylight saving change doesn't move shifts by an hour.
+  const shifts = (
+    await tx.query<{ employee_id: string; employee_name: string; starts_at: string; ends_at: string; break_minutes: number }>(
+      `select s.employee_id::text, e.first_name || ' ' || e.last_name as employee_name,
+              to_char(((s.starts_at at time zone $2::text) + interval '7 days') at time zone $2::text at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+              to_char(((s.ends_at at time zone $2::text) + interval '7 days') at time zone $2::text at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+              s.break_minutes
+         from payroll_roster_shifts s join payroll_employees e on e.id = s.employee_id
+        where s.roster_id = $1 and s.status = 'active' order by s.starts_at, employee_name, s.id`,
+      [previous.rows[0].id, zone],
+    )
+  ).rows;
+  if (shifts.length === 0) throw new ValidationError("There are no shifts in the week before to copy.");
+  const rosterId = await rosterFor(tx, area.id, weekStart);
+  const skipped: CopyWeekResult["skipped"] = [];
+  let copied = 0;
+  for (const shift of shifts) {
+    const text = shiftText({ startsAt: shift.starts_at, endsAt: shift.ends_at, breakMinutes: shift.break_minutes });
+    const skip = (reason: string) => skipped.push({ employeeName: shift.employee_name, shift: text, reason });
+    const overlap = await tx.query(
+      `select 1 from payroll_roster_shifts where employee_id = $1 and status = 'active' and starts_at < $3 and ends_at > $2 limit 1`,
+      [shift.employee_id, shift.starts_at, shift.ends_at],
+    );
+    if (overlap.rows[0]) {
+      skip("already has a shift then");
+      continue;
+    }
+    let checked;
+    try {
+      checked = await checkShift(tx, { employeeId: shift.employee_id, startsAt: shift.starts_at, endsAt: shift.ends_at, breakMinutes: shift.break_minutes });
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        skip("unavailable that day");
+        continue;
+      }
+      if (error instanceof ValidationError) {
+        skip(error.message);
+        continue;
+      }
+      throw error;
+    }
+    await tx.query(
+      `insert into payroll_roster_shifts (roster_id, employee_id, starts_at, ends_at, break_minutes, unavailable_reason, created_by_email)
+       values ($1, $2, $3, $4, $5, null, $6)`,
+      [rosterId, checked.employee.id, checked.startsAt, checked.endsAt, checked.breakMinutes, tx.actor.email],
+    );
+    copied += 1;
+  }
+  await writeAuditEvent(tx, { eventType: "payroll_roster.week_copied", entityType: "payroll_roster", entityId: rosterId, details: { from: addDays(weekStart, -7), copied, skipped: skipped.length } });
+  return { ...(await getRosterWeek(tx, { areaId: area.id, weekStart })), copied, skipped };
+}
+
 async function findShift(tx: OrgTx, idInput: unknown) {
   const id = requireId(idInput, "shiftId");
   const row = await tx.query<{ roster_id: string; area_id: string; week_start: string }>(

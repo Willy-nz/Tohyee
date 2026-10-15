@@ -128,6 +128,12 @@ export function PaddockMap({
   const control: React.CSSProperties = { minWidth: 32, height: 32, padding: "0 8px", borderRadius: 8, border: "1px solid #c4ccd8", background: "#ffffff", color: "#1d2733", fontSize: 13, fontWeight: 600, cursor: "pointer", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.15)" };
   return (
     <>
+      {/* Above the map, where it's seen, rather than under a tall map. */}
+      {imagery && failedHere > 0 ? (
+        <Notice tone="warning">
+          {failedHere === view.tiles.length ? "The aerial imagery didn't load." : "Some of the aerial imagery didn't load."} LINZ may be unavailable, there may be no imagery this close, or the key may have expired (standard LINZ keys last 90 days). An admin can change the key below.
+        </Notice>
+      ) : null}
       <div style={{ position: "relative" }}>
         <svg
           ref={svg}
@@ -254,11 +260,6 @@ export function PaddockMap({
       </div>
       {locating ? <p className={ui.muted}>{locating}</p> : null}
       {imagery ? <LinzAttribution /> : null}
-      {imagery && failedHere > 0 ? (
-        <Notice tone="warning">
-          {failedHere === view.tiles.length ? "The aerial imagery didn't load." : "Some of the aerial imagery didn't load."} LINZ may be unavailable, there may be no imagery this close, or the key may have expired (standard LINZ keys last 90 days). An admin can change the key below.
-        </Notice>
-      ) : null}
     </>
   );
 }

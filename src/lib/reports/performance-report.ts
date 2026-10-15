@@ -112,6 +112,8 @@ export type AccountCategory = {
   suggested: boolean;
   /** Balance sheet accounts: the operating category their cash goes to, or null. */
   cashCategory: string | null;
+  /** Whether anything has been posted to it; the screen hides unused accounts still on a suggestion. */
+  used: boolean;
 };
 
 async function accountsWithCategories(tx: OrgTx): Promise<Array<AccountRow & { category: string; suggested: boolean; cash_category: string | null }>> {
@@ -129,6 +131,8 @@ async function accountsWithCategories(tx: OrgTx): Promise<Array<AccountRow & { c
 
 export async function listAccountCategories(tx: OrgTx): Promise<AccountCategory[]> {
   const rows = await accountsWithCategories(tx);
+  const posted = await tx.query<{ account_id: string }>("select distinct account_id::text from ledger_journal_lines");
+  const usedIds = new Set(posted.rows.map((row) => row.account_id));
   return rows
     .filter((row) => row.is_active || !row.suggested)
     .map((row) => ({
@@ -140,6 +144,7 @@ export async function listAccountCategories(tx: OrgTx): Promise<AccountCategory[
       category: row.category,
       suggested: row.suggested,
       cashCategory: row.cash_category,
+      used: usedIds.has(row.id),
     }));
 }
 
@@ -240,6 +245,8 @@ export type CashFigures = {
   payments: CategoryAmount[];
   /** Net GST received, or paid when negative; zero when not registered. */
   gst: string;
+  /** Cash put in as opening balances during the year (NPR11): not a receipt or payment, so shown on its own line. */
+  broughtIn: string;
   /** Other activities: receipts positive, payments positive under their own keys. */
   otherReceipts: CategoryAmount[];
   otherPayments: CategoryAmount[];
@@ -390,6 +397,20 @@ async function cashFigures(tx: OrgTx, accounts: Awaited<ReturnType<typeof accoun
       order by l.journal_id, l.line_order`,
     [from, to, cashIds],
   );
+  // Opening balance journals (NPR11): entered as opening balances, or against retained earnings or the opening balance account.
+  const broughtForwardJournals = new Set(
+    (
+      await tx.query<{ id: string }>(
+        `select j.id::text from ledger_journals j
+          where j.posting_date between $1 and $2
+            and (j.origin = 'opening_balance'
+                 or exists (select 1 from ledger_journal_lines x join accounts a on a.id = x.account_id
+                             where x.journal_id = j.id and a.system_key in ('retained_earnings', 'conversion_clearing')))`,
+        [from, to],
+      )
+    ).rows.map((row) => row.id),
+  );
+  let broughtIn = ZERO;
   const journals = new Map<string, Line[]>();
   for (const row of lines.rows) {
     const list = journals.get(row.journal_id) ?? [];
@@ -473,6 +494,10 @@ async function cashFigures(tx: OrgTx, accounts: Awaited<ReturnType<typeof accoun
   for (const [journalId, journalLines] of journals) {
     const cashMove = journalLines.filter((line) => isCashAccount(line.accountId)).reduce((total, line) => add(total, line.amount), ZERO);
     if (isZero(cashMove)) continue;
+    if (broughtForwardJournals.has(journalId)) {
+      broughtIn = add(broughtIn, cashMove);
+      continue;
+    }
     // The lines that explain the cash, as debit-positive amounts summing to -cashMove.
     let explaining: Line[] = [];
     for (const line of journalLines.filter((entry) => !isCashAccount(entry.accountId))) {
@@ -525,6 +550,7 @@ async function cashFigures(tx: OrgTx, accounts: Awaited<ReturnType<typeof accoun
     receipts: ordered(receipts, REVENUE_CATEGORIES),
     payments: ordered(payments, EXPENSE_CATEGORIES),
     gst: cents(gst),
+    broughtIn: cents(broughtIn),
     otherReceipts: ordered(otherIn, OTHER_RECEIPTS_ORDER),
     otherPayments: ordered(otherOut, OTHER_PAYMENTS_ORDER),
     accounts: accountsOut,

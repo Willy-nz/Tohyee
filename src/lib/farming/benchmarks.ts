@@ -182,10 +182,11 @@ export async function farmBenchmarks(tx: OrgTx, input: { yearEnd: unknown }): Pr
   await requireFarming(tx);
   const yearEndMonth = await financialYearEndMonth(tx);
   const current = financialYearEnd(todayIsoDate(), yearEndMonth);
-  const yearEnd = input.yearEnd === undefined || input.yearEnd === null || input.yearEnd === "" ? current : yearEndOf(input.yearEnd, yearEndMonth);
-  const yearStart = financialYearStart(yearEnd, yearEndMonth);
   const yearEnds = [current];
   while (yearEnds.length < 5) yearEnds.push(financialYearEnd(addDays(financialYearStart(yearEnds[yearEnds.length - 1], yearEndMonth), -1), yearEndMonth));
+  // Benchmarks compare whole seasons (as DairyBase does), so open on the last finished year; the current one is still in the list.
+  const yearEnd = input.yearEnd === undefined || input.yearEnd === null || input.yearEnd === "" ? yearEnds[1] : yearEndOf(input.yearEnd, yearEndMonth);
+  const yearStart = financialYearStart(yearEnd, yearEndMonth);
   const figures = await getYearFigures(tx, yearEnd);
   const rows = await accountTotals(tx, yearStart, yearEnd);
   const grouping = new Map(

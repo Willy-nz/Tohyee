@@ -276,7 +276,10 @@ that something happened.
   rounded per line, approval that numbers the invoice (`INV-0001`, with no
   gaps) and posts its journal on the invoice date, and voiding that posts the
   exact reversal on the void date. Period locks apply to both; approving and
-  voiding are idempotent. See examples I1-I9.
+  voiding are idempotent. See examples I1-I9. A line can be free (price
+  0.00, shown on the invoice) or negative (a discount or trade-in) as long
+  as the total is above zero; for less, use a credit note (ZN1-ZN4, as
+  Xero does, not yet reviewed).
 - **Quotes** (Sales; QT1-QT8, not yet approved by Jess): drafts with the
   same lines as an invoice and an optional expiry date and terms; finalising
   numbers them (`QU-0001`, no gaps) and locks them (the database refuses
@@ -828,7 +831,10 @@ that something happened.
   years, statements in XRB's minimum categories (each account's category
   suggested from its type until chosen), cash by what it was for (payments
   split by the invoices and bills they paid, credit cards as cash, GST as one
-  line), and draft notes for each tier, as one PDF.
+  line), and draft notes for each tier, as one PDF. Opening balances
+  entered during a year show on their own cash line, not as receipts or
+  payments (NPR11). Accounts nothing has been posted to are hidden on the
+  categories list until asked for.
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
   its **own app** at `/crm`, with its own top bar and tabs (Home, Companies,
   People, Pipeline, Tasks, Email and calendar; a ☰ menu on phones), the same
@@ -1499,7 +1505,10 @@ that something happened.
   email. Anyone not emailed (no address, or email not set up) is listed.
   The weekly budget is typed on the area, not taken from the monthly
   workforce budget (Jess, 14 Oct 2026). Needs payroll access. Posts
-  nothing.
+  nothing. **Copy last week** (RS9, as Deputy and Xero do, not yet
+  reviewed) copies the week before's shifts a week on at the same local
+  times, leaving out and listing anyone unavailable, finished or already
+  rostered then.
 - **Clocking in** (Payroll, Clock-ins; RS5-RS8 approved by Jess, decision
   512, tenant migration 0131): a **shared device** at the shop is set up by
   someone with payroll access and keeps a key in a cookie; `/clock` on it

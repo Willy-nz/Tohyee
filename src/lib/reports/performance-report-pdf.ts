@@ -215,9 +215,12 @@ function cashRows(current: YearFigures, prior: YearFigures, tier: "tier3" | "tie
           ...both(negated(a.otherPayments), negated(b.otherPayments), label),
           sum(tier === "tier4" ? "Cash surplus or (deficit) from other activities" : "Net cash flows from other activities", other, otherPrior),
         ];
+  const broughtIn: Row[] =
+    isZero(a.broughtIn) && isZero(b.broughtIn) ? [] : [{ label: "Opening balances entered during the year", current: a.broughtIn, prior: b.broughtIn }];
   if (tier === "tier4") {
     return [
       sum("Opening balance in bank account(s) at the start of the year", a.opening, b.opening),
+      ...broughtIn,
       heading("Cash received from operating activities"),
       ...both(a.receipts, b.receipts, label),
       sum("Total", receipts, receiptsPrior),
@@ -249,6 +252,7 @@ function cashRows(current: YearFigures, prior: YearFigures, tier: "tier3" | "tie
     ...otherSection,
     sum("Net increase or (decrease) in cash", change, changePrior),
     sum("Opening cash", a.opening, b.opening),
+    ...broughtIn,
     sum("Closing cash", a.closing, b.closing, "total"),
   ];
 }
