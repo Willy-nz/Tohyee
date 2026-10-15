@@ -159,6 +159,11 @@ PREP8, WB7, XP14 and the HL section.
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.9.0 ready to publish from main** (15 Oct 2026): `package.json` says
+  0.9.0 and the notes cover #282-#288 (NFP performance reports, repeating
+  invoice price changes, general ledger history import, free and negative
+  lines, roster copy, hardening). Jess publishes the release "Tohyee 0.9.0"
+  on main with tag `v0.9.0` and pastes in `docs/releases/0.9.0.md`.
 - **0.8.0 ready to publish from main** (15 Oct 2026): the notes now cover
   #180-#278 and the README and website point at v0.8.0. Claude's sessions
   can't push tags or create releases (both refused), so Jess publishes the
