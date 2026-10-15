@@ -818,10 +818,17 @@ that something happened.
   reporting** and **Not-for-profit** modules are switched on per organisation
   in Settings. Their module-specific menus show only while on (MOD1, NFP1).
   Not-for-profit reuses tracking categories, budgets and custom reports for
-  fund activity. Fund equity carryforward, conditional grant accounting,
-  donation tax-credit receipts and compliant Tier 3/4 PBE reports are not
-  supported; see the NFP examples and questions in
-  `docs/ACCOUNTING-EXAMPLES.md`.
+  fund activity. Fund equity carryforward, conditional grant accounting and
+  donation tax-credit receipts are not supported; see the NFP examples and
+  questions in `docs/ACCOUNTING-EXAMPLES.md`.
+- **Tier 3 and Tier 4 performance reports** (Reports › Financial statements;
+  NPR1-NPR10, not yet reviewed, decision 536): the organisation chooses
+  special purpose statements, Tier 3 (accrual) or Tier 4 (cash). Entity
+  information, a statement of service performance with measures for both
+  years, statements in XRB's minimum categories (each account's category
+  suggested from its type until chosen), cash by what it was for (payments
+  split by the invoices and bills they paid, credit cards as cash, GST as one
+  line), and draft notes for each tier, as one PDF.
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
   its **own app** at `/crm`, with its own top bar and tabs (Home, Companies,
   People, Pipeline, Tasks, Email and calendar; a ☰ menu on phones), the same

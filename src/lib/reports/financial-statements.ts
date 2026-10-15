@@ -7,6 +7,7 @@ import { getLivestockSettings } from "@/lib/livestock/movements";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { type Column, CONTENT_WIDTH, PdfWriter } from "@/lib/pdf/writer";
 import { balanceSheet, financialYearEndMonth, profitAndLoss } from "@/lib/reports/financial";
+import { getPerformanceSettings } from "@/lib/reports/performance-report";
 import { cashFlowStatement, changesInEquity, type StatementRow } from "@/lib/reports/statements";
 import { requireArray, requireString } from "@/lib/validation";
 
@@ -27,6 +28,8 @@ export type StatementNotes = { saved: boolean; notes: StatementNote[] };
 
 /** Draft notes for a special purpose report (FS2): placeholders in [square brackets] are for the preparer to fill in or confirm. */
 export async function draftNotes(tx: OrgTx): Promise<StatementNote[]> {
+  const format = (await getPerformanceSettings(tx)).format;
+  if (format !== "special_purpose") return performanceDraftNotes(tx, format);
   const organisation = await getOrganisationSettings(tx);
   const livestock = await getLivestockSettings(tx).catch(() => null);
   const stock = await tx.query("select 1 from inventory_item_balances where on_hand_quantity <> 0 limit 1").catch(() => ({ rowCount: 0 }));
@@ -73,6 +76,52 @@ export async function draftNotes(tx: OrgTx): Promise<StatementNote[]> {
     title: "Income tax",
     body: "[Say how income tax is accounted for: for example, income tax expense is the tax payable on the year's taxable income.]",
   });
+  return notes;
+}
+
+/** Draft notes for a Tier 3 or Tier 4 performance report (NPR, decision 536). */
+async function performanceDraftNotes(tx: OrgTx, format: "tier3" | "tier4"): Promise<StatementNote[]> {
+  const organisation = await getOrganisationSettings(tx);
+  const name = organisation.displayName;
+  const gst: StatementNote = {
+    title: "Goods and services tax (GST)",
+    body: organisation.gstRegistered
+      ? format === "tier4"
+        ? "The entity is registered for GST. Cash received and paid is shown excluding GST, and the GST paid or refunded is shown on its own line."
+        : "The entity is registered for GST. Amounts are shown excluding GST, except debtors and creditors, which include GST."
+      : "The entity isn't registered for GST, so amounts include any GST charged to it.",
+  };
+  if (format === "tier4") {
+    return [
+      {
+        title: "Basis of preparation",
+        body: `${name} is permitted to apply the Tier 4 (NFP) Standard because it doesn't have public accountability and its annual operating payments are under the Tier 4 threshold. [Confirm this.] The performance report is prepared on the cash basis: cash received and paid is recorded when it moves in or out of the entity's bank accounts.`,
+      },
+      gst,
+      { title: "Related party transactions", body: "[Describe any transactions with people or organisations related to the entity, or say there were none.]" },
+      { title: "Correction of errors", body: "There were no corrections of errors this year. [Edit this if there were.]" },
+    ];
+  }
+  const assets = await tx.query("select 1 from accounts where account_type = 'fixed_asset' and is_active limit 1");
+  const notes: StatementNote[] = [
+    {
+      title: "Basis of preparation",
+      body: `${name} has elected to apply the Tier 3 (NFP) Standard because it doesn't have public accountability and its total expenses are under the Tier 3 threshold. [Confirm this.] All transactions are reported on the accrual basis, on the assumption that the entity will continue to operate for the foreseeable future.`,
+    },
+    gst,
+    {
+      title: "Revenue",
+      body: "[Say how donations, grants and fees are recognised: for example, grants are recognised as revenue when received, unless there is a documented expectation that unspent funds must be used in a particular way or returned, in which case they are deferred.]",
+    },
+  ];
+  if (assets.rowCount !== 0) {
+    notes.push({ title: "Property, plant and equipment", body: "Property, plant and equipment is shown at cost less accumulated depreciation. [Give the depreciation methods and rates, and any revaluations.]" });
+  }
+  notes.push(
+    { title: "Income tax", body: `${name} is [wholly exempt from New Zealand income tax as a registered charity]. [Edit this if it isn't.]` },
+    { title: "Related party transactions", body: "[Describe any transactions with people or organisations related to the entity, or say there were none.]" },
+    { title: "Events after the balance date", body: "There were no events after the balance date that affect this report. [Edit this if there were.]" },
+  );
   return notes;
 }
 
