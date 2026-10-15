@@ -295,7 +295,7 @@ export async function listHistoryImports(tx: OrgTx) {
     created_by_email: string | null;
     created_at: string;
   }>(
-    "select id::text, file_name, from_date::text, to_date::text, journal_count, line_count, total_debit::text, created_by_email, created_at::text from history_imports order by id desc",
+    "select id::text, file_name, from_date::text, to_date::text, journal_count, line_count, total_debit::text, created_by_email, created_at::text from history_imports order by history_imports.id desc",
   );
   return rows.rows.map((row) => ({
     id: row.id,
