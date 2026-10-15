@@ -1121,6 +1121,15 @@ that something happened.
   balance at the conversion date with the imported one and locks the period.
   Accounts get a usual GST code, filled in when the account is picked on a
   line. The chart of accounts, contacts and items export as CSV.
+  **History** (step 7; IM22-IM28, as NetSuite's journal import does, not
+  yet reviewed, decision 540): a general ledger from the old system after
+  the opening balances, such as a year from MYOB, comes in as one journal
+  per date and ID# (MYOB's Src and ID# can be joined), up to 50,000 rows.
+  MYOB's layout with account headings works; rows without dates are
+  skipped. Every journal must balance and every account exist, or nothing
+  posts; a transaction already imported is refused. Imported journals are
+  "Imported history", out of the journal list unless chosen there, and in
+  every report. No GST codes, so GST returns leave them out.
 - **Products and services** (Sales, like Xero's items, for everyone): a
   code (unique ignoring case), name, description, sale and purchase prices,
   income and purchase accounts and sales and purchase tax codes; service,

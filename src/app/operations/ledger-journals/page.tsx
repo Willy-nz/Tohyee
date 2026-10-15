@@ -61,6 +61,7 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   livestock_valuation: "Livestock valuation",
   livestock_rations: "Livestock rations",
   recode: "Recode",
+  history: "Imported history",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -519,6 +520,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="customer_overpayment_refund">Overpayment refunds</option>
               <option value="bank_transaction">Bank transactions</option>
               <option value="bank_transfer">Transfers</option>
+              <option value="history">Imported history</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>

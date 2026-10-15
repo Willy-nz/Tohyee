@@ -61,6 +61,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/repeating-price-changes.test.ts` (RP1-RP8, not yet
   approved) and `tests/integration/performance-reports.test.ts` (NPR1-NPR11,
   not yet approved) and
+  `tests/integration/history-import.test.ts` (IM22-IM28, not yet
+  approved) and
   `tests/integration/repeating-bills.test.ts` (RB1-RB12, SPT3) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
   `tests/integration/purchase-orders.test.ts` (PO1-PO9, SPT4) and
@@ -10351,6 +10353,64 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
   re-codes 3900 to 840, named Historical Adjustment, and it **stays Equity**
   ("it stays Equity, not Current liability") rather than refusing the file.
 
+### History: a general ledger as journals (IM22-IM28; as NetSuite's journal import does, added 15 Oct 2026, not yet reviewed)
+
+Asked for on 15 Oct 2026 so a year of the family farm's MYOB books can be
+checked against its set of accounts. Jess chose one journal per
+transaction, kept out of the journal list. Tested in
+`tests/integration/history-import.test.ts`. Setup: the default chart plus
+6400 Feed (expense); opening balances brought in as at **31 May 2025**.
+
+- **IM22** A general ledger file, one row per line: date, ID#, account,
+  memo, debit, credit. Rows with the same **date and ID#** are one journal:
+
+  | Date | ID# | Account | Memo | Debit | Credit |
+  |---|---|---|---|---|---|
+  | 05/06/2025 | CD000101 | 6400 | Farm Source feed | 1,000.00 | |
+  | 05/06/2025 | CD000101 | 2100 | Farm Source feed | 150.00 | |
+  | 05/06/2025 | CD000101 | 1000 | Farm Source feed | | 1,150.00 |
+  | 20/06/2025 | CR000050 | 1000 | Milk payment | 23,000.00 | |
+  | 20/06/2025 | CR000050 | 4000 | Milk payment | | 20,000.00 |
+  | 20/06/2025 | CR000050 | 2100 | Milk payment | | 3,000.00 |
+  | 30/06/2025 | GJ000007 | 6300 | Depreciation June | 500.00 | |
+  | 30/06/2025 | GJ000007 | 1650 | Depreciation June | | 500.00 |
+
+  The check shows **3 journals, 8 lines, 5 Jun to 30 Jun 2025**, debits and
+  credits **24,650.00** each, and posts nothing. Importing posts 3 journals,
+  each dated as in the file, with the ID# as its reference and the first
+  memo as its description, marked "Imported history". At 30 Jun 2025 bank
+  has moved **+21,850.00**, GST **-2,850.00** (a credit), feed **1,000.00**.
+  Two columns can make the ID# (MYOB's Src and ID#, joined as "CD 000101"),
+  so a cheque and a receipt with the same number on the same day stay two
+  journals.
+- **IM23** The journal list leaves imported history out unless "Imported
+  history" is chosen; reports, account transactions and drilling in all
+  include it. A single Amount column (debits positive, credits negative)
+  works instead of Debit and Credit.
+- **IM24** MYOB's general ledger (detail) layout: the account is a heading
+  row ("6400 Feed", no date or amount) and the lines under it take it; rows
+  with no date (beginning balance, totals, net activity) are skipped and
+  counted. A transaction shows under each of its accounts; its rows are
+  put together by date and ID# wherever they are in the file. The IM22
+  file laid out that way gives the same 3 journals.
+- **IM25** Nothing is posted unless every journal balances: if CR000050's
+  GST row were **2,999.00**, the whole file is refused, naming the rows of
+  CR000050 and the **1.00** it's out by. Unknown account codes are refused
+  (bring in the chart of accounts first), and so are dates in a locked
+  period or on or before the conversion date (they're in the opening
+  balances already).
+- **IM26** The same journal twice: importing the file again, or another
+  file with a row for **CD000101 on 5 Jun 2025**, is refused for those
+  journals ("already imported"), so overlapping files can't double up.
+  Retrying the same request returns the first result.
+- **IM27** No GST codes: the lines post straight to the accounts named, so
+  the GST account moves but GST returns don't count imported history (it
+  was filed from the old system). Lines on accounts receivable, accounts
+  payable and inventory post as they are; open invoices, bills and stock
+  records don't change, so the period close checks show the difference.
+- **IM28** Not built: undoing an import (correct with journals),
+  foreign-currency lines, tracking categories and contacts on lines.
+
 ### Not supported yet (refused rather than guessed)
 
 - Opening balances on **foreign-currency accounts**.
@@ -10366,8 +10426,8 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 - **Unpresented payments and deposits** at the conversion date: the bank
   account's opening balance is taken as what the bank's statement said.
 - Several **conversion dates** (for example bringing in history month by
-  month), and importing **transactions** (invoices, bills and journals
-  from before the conversion date, other than what's still owed).
+  month), and importing **transactions** as invoices and bills (a general
+  ledger after the conversion date comes in as journals, IM22-IM28).
 - Contacts' **people**, customer groups, price levels and credit limits,
   items' units, price level prices, suppliers and kits, and payment terms
   from another system's day-and-term columns. Suppliers' payment terms

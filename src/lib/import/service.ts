@@ -59,8 +59,8 @@ export type ImportResult = {
 const MAX_RECORDS = 5000;
 
 /** Checks records sent by the import screen: `[{ row, values: { field: text } }]`. */
-export function parseRecords(input: unknown, label = "records"): ImportRecord[] {
-  return requireArray(input, label, MAX_RECORDS).map((raw, index) => {
+export function parseRecords(input: unknown, label = "records", maxRecords = MAX_RECORDS): ImportRecord[] {
+  return requireArray(input, label, maxRecords).map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new ValidationError(`${label} ${index + 1} must be an object.`);
     const entry = raw as Record<string, unknown>;
     const row = Number(entry.row);

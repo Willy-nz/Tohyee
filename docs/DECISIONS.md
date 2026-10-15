@@ -4949,3 +4949,20 @@ testing) and #154's code signing (later, Jess).
      - A document's GST total can now be below zero (a negative line with
        GST and the rest exempt), on sales documents as well; it posts to
        the other side of the GST account. The database had refused it.
+
+540. **A general ledger brought in as history** (15 October 2026). Jess
+     wants to test Tohyee with a year of her family farm's MYOB books and
+     chose one journal per transaction, hidden from the journal list
+     ("Yea hidden from manual jnl list like you suggested"). Examples
+     IM22-IM28 (as NetSuite's journal import does, not yet reviewed),
+     tenant migration 0149.
+     - Rows with the same date and ID# are one journal (origin `history`),
+       after the opening balances' date and outside locked periods. All or
+       nothing; each journal must balance; accounts must exist.
+     - A transaction (date and ID#) can't be imported twice.
+     - Lines post straight to the accounts named, including accounts
+       receivable, payable and inventory; open invoices, bills and stock
+       records don't change. No GST codes, so GST returns leave them out.
+     - Not built: undo, foreign currency, tracking and contacts on lines.
+     - Real data stays in Jess's own organisation; nothing from it goes
+       into the repository or its tests.

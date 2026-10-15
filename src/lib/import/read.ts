@@ -8,6 +8,8 @@ import { optionalString, requireOneOf } from "@/lib/validation";
 
 export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 5000;
+/** A general ledger can be a year of every transaction line (IM22). */
+export const MAX_HISTORY_ROWS = 50000;
 
 export type ImportFile = {
   fileName: string;
@@ -53,8 +55,9 @@ export function readImportFile(input: { kind: unknown; fileName: unknown; fileBa
   rows = rows.map((row) => row.map((cell) => fromCsvCell(cell ?? "")));
   while (rows.length > 0 && !rows[rows.length - 1].some((cell) => cell.trim() !== "")) rows.pop();
   if (rows.length === 0) throw new ValidationError("The file has no rows.");
-  if (rows.length > MAX_IMPORT_ROWS + 20) {
-    throw new ValidationError(`The file has more than ${MAX_IMPORT_ROWS} rows. Split it into smaller files.`);
+  const maxRows = kind === "general_ledger" ? MAX_HISTORY_ROWS : MAX_IMPORT_ROWS;
+  if (rows.length > maxRows + 20) {
+    throw new ValidationError(`The file has more than ${maxRows} rows. Split it into smaller files.`);
   }
   const headerRow = findHeaderRow(kind, rows);
   return { fileName, rows, headerRow, headings: headingsOf(rows, headerRow) };
