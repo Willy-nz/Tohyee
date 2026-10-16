@@ -2,6 +2,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { cmp, dec } from "@/lib/money/decimal";
+import { financialYearEndMonth } from "@/lib/reports/financial";
 import { money, suggestedIncomeYear } from "@/lib/tax/income/rules";
 import { addPayment, listPayments, requireIncomeYear } from "@/lib/tax/income/service";
 import { requireArray, requireId } from "@/lib/validation";
@@ -95,7 +96,7 @@ async function lines(tx: OrgTx, accountIds: string[], side: "debit" | "credit"):
   return result.rows;
 }
 
-function toLine(row: LineRow): BookLine {
+function toLine(row: LineRow, endMonth: number): BookLine {
   return {
     journalLineId: row.id,
     journalId: row.journal_id,
@@ -104,7 +105,7 @@ function toLine(row: LineRow): BookLine {
     reference: row.reference,
     description: row.description,
     account: row.account,
-    suggestedIncomeYear: suggestedIncomeYear(row.posting_date),
+    suggestedIncomeYear: suggestedIncomeYear(row.posting_date, endMonth),
   };
 }
 
@@ -119,12 +120,13 @@ export async function bookPayments(tx: OrgTx): Promise<BookPayments> {
   const accounts = await listPaymentAccounts(tx);
   const ids = accounts.map((account) => account.accountId);
   const typed = await unlinkedTyped(tx);
+  const endMonth = await financialYearEndMonth(tx);
   const payments = (await lines(tx, ids, "debit")).map((row) => {
-    const line = toLine(row);
+    const line = toLine(row, endMonth);
     const match = typed.find((entry) => entry.paid_on === line.date && cmp(dec(entry.amount), dec(line.amount)) === 0);
     return { ...line, typedMatch: match ? { paymentId: match.id, incomeYear: match.income_year } : null };
   });
-  return { accounts, payments, refunds: (await lines(tx, ids, "credit")).map(toLine) };
+  return { accounts, payments, refunds: (await lines(tx, ids, "credit")).map((row) => toLine(row, endMonth)) };
 }
 
 /** Counts a payment from the books towards an income year, or links the same typed payment (ITX39). */

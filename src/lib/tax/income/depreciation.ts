@@ -1,5 +1,5 @@
 import { cmp, dec, type Decimal, divide, mul, roundHalfUp, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
-import { incomeYearOf, money } from "@/lib/tax/income/rules";
+import { incomeYearDates, incomeYearOf, money } from "@/lib/tax/income/rules";
 
 /*
  * Tax depreciation and Investment Boost (examples ITX11-ITX17, decision 546).
@@ -42,6 +42,8 @@ export type TaxAssetInput = {
   /** For an asset with tax history before Tohyee: its ATV at the start of an income year. */
   opening: { incomeYear: number; atv: Decimal } | null;
   disposal: { date: string; proceeds: Decimal } | null;
+  /** The balance date's month (default 31 March). */
+  endMonth?: number;
 };
 
 export type TaxAssetYear = {
@@ -59,12 +61,11 @@ export type TaxAssetYear = {
   disposed: boolean;
 };
 
-/** Months from the month of `date` to the end of its income year (31 March), counting part months as whole. */
-export function monthsToYearEnd(date: string): number {
-  const year = Number(date.slice(0, 4));
-  const month = Number(date.slice(5, 7));
-  const endYear = incomeYearOf(date);
-  return endYear * 12 + 3 - (year * 12 + month) + 1;
+/** Months from the month of `date` to the end of its income year, counting part months as whole. */
+export function monthsToYearEnd(date: string, endMonth = 3): number {
+  const end = incomeYearDates(incomeYearOf(date, endMonth), endMonth).end;
+  const index = (value: string) => Number(value.slice(0, 4)) * 12 + Number(value.slice(5, 7));
+  return index(end) - index(date) + 1;
 }
 
 function share(amount: Decimal, percent: Decimal): Decimal {
@@ -77,9 +78,10 @@ function min(a: Decimal, b: Decimal): Decimal {
 
 /** An asset's tax depreciation year by year, up to and including `throughYear` (ITX12-ITX17). */
 export function taxDepreciationYears(input: TaxAssetInput, throughYear: number): TaxAssetYear[] {
-  const acquiredYear = incomeYearOf(input.availableOn);
+  const endMonth = input.endMonth ?? 3;
+  const acquiredYear = incomeYearOf(input.availableOn, endMonth);
   const startYear = input.opening ? input.opening.incomeYear : acquiredYear;
-  const disposalYear = input.disposal ? incomeYearOf(input.disposal.date) : null;
+  const disposalYear = input.disposal ? incomeYearOf(input.disposal.date, endMonth) : null;
   const boostAmount = input.investmentBoost ? roundHalfUp(mul(input.cost, INVESTMENT_BOOST_RATE), 2) : ZERO_DECIMAL;
   // Straight line runs on the cost less any Investment Boost (IRD: "the remaining 80%").
   const slBase = sub(input.cost, boostAmount);
@@ -111,7 +113,7 @@ export function taxDepreciationYears(input: TaxAssetInput, throughYear: number):
       break;
     }
     const first = !input.opening && year === acquiredYear;
-    const months = first ? monthsToYearEnd(input.availableOn) : 12;
+    const months = first ? monthsToYearEnd(input.availableOn, endMonth) : 12;
     let boost = ZERO_DECIMAL;
     let depreciation = ZERO_DECIMAL;
     if (input.method === "low_value") {

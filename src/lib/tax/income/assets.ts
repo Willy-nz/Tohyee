@@ -3,6 +3,7 @@ import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { COUNTING_LINES_SQL } from "@/lib/fixed-assets/service";
+import { financialYearEndMonth } from "@/lib/reports/financial";
 import { add, cmp, dec, type Decimal, divide, isZero, mul, parseDecimalInput, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
 import {
   INVESTMENT_BOOST_FROM,
@@ -110,7 +111,7 @@ function toDetails(row: AssetRow): TaxDetails | null {
   };
 }
 
-function yearFor(row: AssetRow, details: TaxDetails | null, incomeYear: number): TaxAssetYear | null {
+function yearFor(row: AssetRow, details: TaxDetails | null, incomeYear: number, endMonth: number): TaxAssetYear | null {
   if (!details) return null;
   const rows = taxDepreciationYears(
     {
@@ -122,13 +123,14 @@ function yearFor(row: AssetRow, details: TaxDetails | null, incomeYear: number):
       availableOn: details.availableOn,
       opening: details.openingIncomeYear === null ? null : { incomeYear: details.openingIncomeYear, atv: dec(details.openingAtv!) },
       disposal: row.disposal_date ? { date: row.disposal_date, proceeds: dec(row.proceeds!) } : null,
+      endMonth,
     },
     incomeYear,
   );
   return rows.find((entry) => entry.incomeYear === incomeYear) ?? null;
 }
 
-function toAsset(row: AssetRow, incomeYear: number): TaxAsset {
+function toAsset(row: AssetRow, incomeYear: number, endMonth: number): TaxAsset {
   const details = toDetails(row);
   return {
     assetId: row.id,
@@ -142,14 +144,15 @@ function toAsset(row: AssetRow, incomeYear: number): TaxAsset {
     bookRate: row.rate,
     disposal: row.disposal_date ? { date: row.disposal_date, proceeds: money(dec(row.proceeds!)) } : null,
     details,
-    year: yearFor(row, details, incomeYear),
+    year: yearFor(row, details, incomeYear, endMonth),
   };
 }
 
 /** Fixed assets in use or disposed, with their tax details and this income year's tax figures (ITX11-ITX17). */
 export async function listTaxAssets(tx: OrgTx, incomeYear: number): Promise<TaxAsset[]> {
   const result = await tx.query<AssetRow>(`${ASSETS_SQL} where f.status in ('registered', 'disposed') order by f.asset_number`);
-  return result.rows.map((row) => toAsset(row, incomeYear));
+  const endMonth = await financialYearEndMonth(tx);
+  return result.rows.map((row) => toAsset(row, incomeYear, endMonth));
 }
 
 function versionOf(input: unknown): number {
@@ -180,6 +183,7 @@ export async function setTaxDetails(
   const row = found.rows[0];
   if (!row || (row.status !== "registered" && row.status !== "disposed")) throw new NotFoundError("Fixed asset not found.");
   const label = `${row.asset_number} ${row.name}`;
+  const endMonth = await financialYearEndMonth(tx);
   const method = requireOneOf(input.method, "method", TAX_DEPRECIATION_METHODS);
   const depreciating = method === "dv" || method === "sl";
   const rate = depreciating ? parseDecimalInput(input.rate, "rate", { maxScale: 4 }) : null;
@@ -210,8 +214,8 @@ export async function setTaxDetails(
     openingYear = value;
     openingAtv = parseDecimalInput(input.openingAtv, "openingAtv", { maxScale: 2, allowZero: true });
     if (cmp(dec(openingAtv), dec(taxCost)) > 0) throw new ValidationError("The opening adjusted tax value can't be more than the tax cost.");
-    if (incomeYearDates(openingYear).end < availableOn) throw new ValidationError("The opening adjusted tax value is for an income year before the asset was available for use.");
-    if (investmentBoost && openingYear === incomeYearOf(availableOn)) {
+    if (incomeYearDates(openingYear, endMonth).end < availableOn) throw new ValidationError("The opening adjusted tax value is for an income year before the asset was available for use.");
+    if (investmentBoost && openingYear === incomeYearOf(availableOn, endMonth)) {
       throw new ValidationError("With an opening adjusted tax value for the year it was bought, the Investment Boost is already in it: start from the next year, or leave the opening value out.");
     }
   }
@@ -240,7 +244,7 @@ export async function setTaxDetails(
     },
   });
   const after = await tx.query<AssetRow>(`${ASSETS_SQL} where f.id = $1`, [assetId]);
-  return toAsset(after.rows[0], incomeYearOf(availableOn));
+  return toAsset(after.rows[0], incomeYearOf(availableOn, endMonth), endMonth);
 }
 
 /** How much of a posted amount counts for tax, by its account's treatment (ITX18). */
@@ -273,7 +277,8 @@ export async function assetAdjustments(
   treatments: Map<string, { treatment: Treatment; businessUsePercent: string | null; code: string; name: string }>,
   budgetFrom: string | null,
 ): Promise<AssetAdjustments> {
-  const { start, end } = incomeYearDates(incomeYear);
+  const endMonth = await financialYearEndMonth(tx);
+  const { start, end } = incomeYearDates(incomeYear, endMonth);
   const assets = (await tx.query<AssetRow>(`${ASSETS_SQL} where f.status in ('registered', 'disposed') order by f.asset_number`)).rows;
   const withDetails = assets.filter((row) => row.d_method !== null);
   const notSetUp = assets.filter((row) => row.d_method === null && !(row.disposal_date !== null && row.disposal_date < start)).map((row) => `${row.asset_number} ${row.name}`);
@@ -308,7 +313,7 @@ export async function assetAdjustments(
   let recovered = ZERO_DECIMAL;
   let loss = ZERO_DECIMAL;
   for (const row of withDetails) {
-    const year = yearFor(row, toDetails(row), incomeYear);
+    const year = yearFor(row, toDetails(row), incomeYear, endMonth);
     if (!year) continue;
     boost = add(boost, dec(year.boostClaimed));
     depreciation = add(depreciation, dec(year.depreciationClaimed));
@@ -355,7 +360,8 @@ export type TaxAssetTotals = {
 
 /** Register figures for the IR10's other information boxes (ITX23). */
 export async function taxAssetTotals(tx: OrgTx, incomeYear: number): Promise<TaxAssetTotals> {
-  const { start, end } = incomeYearDates(incomeYear);
+  const endMonth = await financialYearEndMonth(tx);
+  const { start, end } = incomeYearDates(incomeYear, endMonth);
   const assets = (await tx.query<AssetRow>(`${ASSETS_SQL} where f.status in ('registered', 'disposed') order by f.asset_number`)).rows;
   const detailed = assets.filter((row) => row.d_method !== null);
   const book = detailed.length
@@ -370,7 +376,7 @@ export async function taxAssetTotals(tx: OrgTx, incomeYear: number): Promise<Tax
   let boostAssetValue = ZERO_DECIMAL;
   for (const row of detailed) {
     const details = toDetails(row)!;
-    const year = yearFor(row, details, incomeYear);
+    const year = yearFor(row, details, incomeYear, endMonth);
     if (!year) continue;
     boostClaimed = add(boostClaimed, dec(year.boostClaimed));
     depreciationClaimed = add(depreciationClaimed, dec(year.depreciationClaimed));

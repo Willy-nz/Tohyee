@@ -5093,3 +5093,12 @@ testing) and #154's code signing (later, Jess).
      debits to them paid from a bank or credit card are offered with a
      suggested income year from the date, and counting one links it so it
      can't count twice. Refunds are listed, not counted.
+
+551. **Income tax for other balance dates** (17 October 2026). Jess said "ok
+     keep going". From IRD's SPS 24/01 and the Income Tax Act 2007 schedule
+     3 part A (ITX41-ITX43, not yet reviewed): income years follow the
+     early/late balance date rule R&D already uses; provisional tax is due
+     on the 28th of the 5th, 9th and 13th months after the balance date (28
+     December is 15 January, 28 April is 7 May). The end-of-year tax date for
+     April to September balance dates isn't shown until Jess or Will
+     confirms which February (and April) it is.

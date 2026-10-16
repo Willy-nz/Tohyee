@@ -204,10 +204,16 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect(bad.status).toBe(400);
   });
 
-  it("ITX1 another balance date isn't supported yet", async () => {
+  it("ITX41-ITX43 a 30 June balance date: its own income year and instalment dates, no end-of-year date yet", async () => {
     await as((tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 6 }));
     const report = await as((tx) => buildIncomeTax(tx, { incomeYear: 2027, today: "2026-10-16" }));
-    expect(report.supported).toBe(false);
-    if (!report.supported) expect(report.reason).toContain("31 March balance date");
+    expect(report.supported).toBe(true);
+    if (!report.supported) return;
+    expect([report.start, report.end, report.endMonth]).toEqual(["2026-07-01", "2027-06-30", 6]);
+    expect(report.label).toBe("2027 income year (1 Jul 2026 to 30 Jun 2027)");
+    expect(report.provisional.kind === "schedule" && report.provisional.instalments.map((entry) => entry.dueDate)).toEqual(["2026-11-28", "2027-03-28", "2027-07-28"]);
+    expect(report.endOfYear.dueDate).toBeNull();
+    expect(report.dueDates.some((entry) => entry.key.startsWith("end-"))).toBe(false);
+    expect(report.notes.join(" ")).toContain("doesn't work out the end-of-year tax due date yet");
   });
 });

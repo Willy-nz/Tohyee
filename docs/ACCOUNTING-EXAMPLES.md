@@ -17403,9 +17403,9 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
 "Entertainment expenses".
 
 - **ITX1 What's covered.** A **company** (28%) or an **individual sole
-  trader** (individual rates), with a **31 March balance date**, for income
-  years **2025 onwards** (the 2025 income year is 1 April 2024 to 31 March
-  2025). Anything else (other balance dates, trusts, partnerships, LTCs,
+  trader** (individual rates), for income years **2025 onwards** (with a 31
+  March balance date, the 2025 income year is 1 April 2024 to 31 March
+  2025; other balance dates: ITX41-ITX43). Anything else (trusts, partnerships, LTCs,
   Māori authorities, earlier years) says it isn't supported yet rather than
   guessing. Individuals' ACC earners' levy, independent earner tax credit,
   Working for Families and student loans aren't worked out. Only **owners and
@@ -17798,3 +17798,37 @@ and `tests/unit/income-tax-rules.test.ts`. Nothing posts.
 - **ITX40 Refunds.** Credits to those accounts from the bank (money in) are
   listed as possible refunds but not counted as payments; a company types a
   refund into its imputation credit account (ITX26).
+
+## Income tax (#292) stage 7: other balance dates (ITX41-ITX43; from IRD SPS 24/01 and the Income Tax Act 2007 schedule 3, read by Claude 17 Oct 2026, not yet reviewed)
+
+Jess said "ok keep going". Replaces ITX1's "31 March only". Tested in
+`tests/unit/income-tax-rules.test.ts` (every row of schedule 3 part A) and
+`tests/integration/income-tax.test.ts`.
+
+- **ITX41 Which income year.** IRD's SPS 24/01 (para 9): a balance date
+  from 1 April to 30 September is a **late balance date**, and its income
+  year "will correspond to the tax year ending on the preceding 31 March";
+  1 October to 30 March is an **early balance date**, corresponding to "the
+  tax year ending on the following 31 March". So with a 31 May balance date
+  the **2026 income year is 1 June 2025 to 31 May 2026**; with 31 October,
+  the 2026 income year is 1 November 2024 to 31 October 2025. This is the
+  same rule R&D already uses. The tax rates are the income year's (ITX4).
+  The workpaper, tax depreciation (months to the balance date) and the IR10
+  use those dates. The imputation credit account stays 1 April to 31 March
+  (IR274).
+- **ITX42 Provisional tax dates.** The 28th of the **5th, 9th and 13th
+  months** after the balance date before the income year (two instalments:
+  the 7th and 13th), except that 28 December is **15 January** and 28 April
+  is **7 May**, as the Income Tax Act 2007 schedule 3 part A table lists for
+  every balance date month. With 30 June, the 2027 income year (1 July 2026
+  to 30 June 2027): **28 Nov 2026, 28 Mar 2027, 28 Jul 2027**. With 31
+  March it's still 28 Aug, 15 Jan, 7 May (ITX5).
+- **ITX43 End-of-year tax date.** Schedule 3's last two columns give the
+  month: with 31 March, February and April (7 Feb, or 7 Apr with a tax
+  agent's extension, ITX10); with an early balance date, the 11th and 13th
+  months after it (31 October 2025: **7 Sep 2026**, or 7 Nov 2026). For
+  **April to September** balance dates the columns also say February and
+  April, but which year that is hasn't been checked, so Tohyee doesn't show
+  an end-of-year tax date for them and says to check myIR (question for
+  Jess or Will). Suggested income years for payments from the books (ITX38)
+  are only for 31 March.

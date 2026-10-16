@@ -298,7 +298,7 @@ function Workpaper({ organisationId, report, onSaved }: { organisationId: string
   );
 }
 
-function YearFigures({ organisationId, incomeYear, type, years, onSaved }: { organisationId: string; incomeYear: number; type: TaxpayerType; years: number[]; onSaved: () => void }) {
+function YearFigures({ organisationId, incomeYear, type, years, endMonth, onSaved }: { organisationId: string; incomeYear: number; type: TaxpayerType; years: number[]; endMonth: number; onSaved: () => void }) {
   const [year, setYear] = useState(incomeYear);
   const loaded = useApiData<{ report: IncomeTaxReport }>("/api/income-tax", { organisationId, incomeYear: year });
   const report = loaded.data?.report;
@@ -308,7 +308,7 @@ function YearFigures({ organisationId, incomeYear, type, years, onSaved }: { org
         <select value={year} onChange={(event) => setYear(Number(event.target.value))}>
           {years.map((value) => (
             <option key={value} value={value}>
-              {incomeYearLabel(value)}
+              {incomeYearLabel(value, endMonth)}
             </option>
           ))}
         </select>
@@ -936,7 +936,7 @@ const PROPOSED_FIELDS: Array<{ key: "assessedRit" | "returnFiledOn" | "lossesBro
   { key: "otherIncome", label: "Other income" },
 ];
 
-function ProposalCard({ organisationId, proposal, onDone }: { organisationId: string; proposal: IrdProposal; onDone: () => void }) {
+function ProposalCard({ organisationId, proposal, endMonth, onDone }: { organisationId: string; proposal: IrdProposal; endMonth: number; onDone: () => void }) {
   const [reason, setReason] = useState("");
   const [declining, setDeclining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -953,7 +953,7 @@ function ProposalCard({ organisationId, proposal, onDone }: { organisationId: st
   return (
     <div className={ui.reportBlock}>
       <p>
-        <strong>{incomeYearLabel(proposal.incomeYear)}</strong> · proposed by {proposal.aiKeyName ?? proposal.proposedByEmail} on {formatDate(proposal.createdAt.slice(0, 10))}
+        <strong>{incomeYearLabel(proposal.incomeYear, endMonth)}</strong> · proposed by {proposal.aiKeyName ?? proposal.proposedByEmail} on {formatDate(proposal.createdAt.slice(0, 10))}
         {proposal.documentId ? (
           <>
             {" "}
@@ -1026,7 +1026,7 @@ function ProposalCard({ organisationId, proposal, onDone }: { organisationId: st
   );
 }
 
-function IrdDocuments({ organisationId, incomeYear, years, onChanged }: { organisationId: string; incomeYear: number; years: number[]; onChanged: () => void }) {
+function IrdDocuments({ organisationId, incomeYear, years, endMonth, onChanged }: { organisationId: string; incomeYear: number; years: number[]; endMonth: number; onChanged: () => void }) {
   const loaded = useApiData<{ documents: IrdDocument[]; proposals: IrdProposal[] }>("/api/income-tax/documents", { organisationId });
   const [file, setFile] = useState<File | null>(null);
   const [year, setYear] = useState(String(incomeYear));
@@ -1082,7 +1082,7 @@ function IrdDocuments({ organisationId, incomeYear, years, onChanged }: { organi
         <>
           <h3>Proposed figures to check</h3>
           {data.proposals.map((proposal) => (
-            <ProposalCard key={proposal.id} organisationId={organisationId} proposal={proposal} onDone={refresh} />
+            <ProposalCard key={proposal.id} organisationId={organisationId} proposal={proposal} endMonth={endMonth} onDone={refresh} />
           ))}
         </>
       ) : null}
@@ -1307,8 +1307,8 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
         </Card>
       )}
       <BookPayments organisationId={organisationId} years={report.years} onChanged={reload} />
-      <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
-      <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} onSaved={reload} />
+      <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} endMonth={report.endMonth} onChanged={reload} />
+      <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} endMonth={report.endMonth} onSaved={reload} />
       <Card title="Notes">
         <ul>
           {report.notes.map((text) => (
@@ -1333,7 +1333,7 @@ export function IncomeTaxView({ organisationId }: { organisationId: string }) {
           <select value={report.incomeYear} onChange={(event) => setIncomeYear(Number(event.target.value))}>
             {report.years.map((value) => (
               <option key={value} value={value}>
-                {incomeYearLabel(value)}
+                {incomeYearLabel(value, report.endMonth)}
               </option>
             ))}
           </select>
