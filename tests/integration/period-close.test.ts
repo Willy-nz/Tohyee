@@ -6,6 +6,9 @@ import { listBankAccounts, listStatementLines } from "@/lib/bank/accounts";
 import { importStatementFile } from "@/lib/bank/imports";
 import { reconcileStatementLine } from "@/lib/bank/reconcile";
 import { approveBill, createBill, deleteBill } from "@/lib/bills/service";
+import { applySupplierCreditNote } from "@/lib/supplier-credit-notes/applications";
+import { approveSupplierCreditNote, createSupplierCreditNote } from "@/lib/supplier-credit-notes/service";
+import { recordPayment } from "@/lib/invoices/payments";
 import { type Contact, createContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -667,6 +670,7 @@ describeWithDatabase("year end and period close", () => {
       ["payables", "pass"],
       ["gst", "not_applicable"],
       ["opening_balance", "pass"],
+      ["credit", "not_applicable"],
     ]);
 
     // A viewer can't close, over HTTP.
@@ -727,6 +731,48 @@ describeWithDatabase("year end and period close", () => {
     await w.close("2026-06-30", bookkeeper, "bookkeeper");
     await w.close("2026-07-31", bookkeeper, "bookkeeper");
     expect(await w.lockDate()).toBe("2026-07-31");
+  });
+
+  it("PC13: credit that could be used on something due is a warning; credit with nothing due passes", async () => {
+    const w = await setup();
+    const draft = await w.draftBill("2026-06-10", "1000.00");
+    await w.as((tx) => approveBill(tx, draft.id, { idempotencyKey: key("approve") }));
+    const { creditNote } = await w.as((tx) =>
+      createSupplierCreditNote(tx, {
+        idempotencyKey: key("cn"),
+        contactId: w.paw.id,
+        creditNoteDate: "2026-06-15",
+        supplierCreditNoteNumber: "CN-104",
+        amountsMode: "exclusive",
+        lines: [{ description: "Returned", quantity: "1", unitPrice: "200.00", accountCode: "6010", taxCode: "GST" }],
+      }),
+    );
+    await w.as((tx) => approveSupplierCreditNote(tx, creditNote.id, { idempotencyKey: key("approve") }));
+    const warned = await w.check("2026-06-30", "credit");
+    expect(warned).toMatchObject({ status: "warning", title: "Credit that could be used" });
+    expect(warned.items.map((item) => [item.label, item.detail])).toEqual([["Paw Supplies", "230.00 of credit (CN-104), with 1,150.00 due on bills."]]);
+    // Before the credit note's date it isn't there yet.
+    await w.as((tx) => postJournal(tx, { idempotencyKey: key("j"), postingDate: "2026-05-10", reference: "J", lines: [{ accountCode: "6010", debitAmount: "1.00" }, { accountCode: "3000", creditAmount: "1.00" }] }));
+    expect((await w.check("2026-05-31", "credit")).status).toBe("not_applicable");
+
+    await w.as((tx) =>
+      applySupplierCreditNote(tx, creditNote.id, { idempotencyKey: key("apply"), applicationDate: "2026-06-20", applications: [{ billId: draft.id, amount: "230.00" }] }),
+    );
+    // All used: no credit left at all.
+    expect((await w.check("2026-06-30", "credit")).status).toBe("not_applicable");
+
+    // A customer's overpayment with an invoice due: a warning; once nothing is due, it passes and says how much credit there is.
+    const paid = await w.draftInvoice("2026-06-05", "100.00");
+    const paidNumber = (await w.as((tx) => approveInvoice(tx, paid.id, { idempotencyKey: key("approve") }))).invoice.invoiceNumber;
+    await w.as((tx) => recordPayment(tx, paid.id, { idempotencyKey: key("pay"), paymentDate: "2026-06-06", amount: "190.00", bankAccountCode: "1000" }));
+    const due = await w.draftInvoice("2026-06-25", "100.00");
+    await w.as((tx) => approveInvoice(tx, due.id, { idempotencyKey: key("approve") }));
+    const customer = await w.check("2026-06-30", "credit");
+    expect(customer.status).toBe("warning");
+    expect(customer.items.map((item) => item.detail)).toEqual([`75.00 of credit (the overpayment on ${paidNumber}), with 115.00 due on invoices.`]);
+    await w.as((tx) => recordPayment(tx, due.id, { idempotencyKey: key("pay"), paymentDate: "2026-06-26", amount: "115.00", bankAccountCode: "1000" }));
+    const passed = await w.check("2026-06-30", "credit");
+    expect(passed).toMatchObject({ status: "pass", summary: "Nothing due could use the credit there is: 1 credit of 75.00 with nothing due to use it on." });
   });
 
   it("PC12: reopening needs an owner or admin and a reason, and reopens every later month", async () => {
