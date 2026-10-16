@@ -17664,3 +17664,51 @@ guide we read don't say whether to drop them.
   only figures Tohyee can work out: box 1 (more than one line of business)
   is typed for the year. Assets outside the fixed asset register aren't in
   boxes 54, 55 or 60, and the screen says so.
+
+## Income tax (#292) stage 4: the imputation credit account (ITX25-ITX29; from IRD's IR274, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
+
+From IRD's *Imputation: a guide for New Zealand companies* IR274 (April
+2024), read through a summarising fetch tool, so check it. Tested in
+`tests/unit/ica.test.ts` and `tests/integration/ica.test.ts`. Nothing posts
+to the books and nothing is filed.
+
+- **ITX25 Who and when.** Only companies keep an imputation credit account
+  (ICA) here. The ICA year is 1 April to 31 March whatever the balance date
+  (IR274), so the 2026 ICA year is 1 April 2025 to 31 March 2026. Every
+  entry is dated the day it happened, not the year it relates to: income
+  tax paid on 7 February 2026 for the 2025 income year is a 2026 ICA
+  credit.
+- **ITX26 Credits and debits.** Credits: income tax paid (every payment to
+  IRD typed on the Income tax page, on its date, so it isn't typed twice),
+  imputation credits on dividends received, RWT deducted from interest and
+  dividends received, and other credits. Debits: imputation credits
+  attached to dividends paid, income tax refunds received, and other debits
+  (for example the shareholder continuity debit when more than 34% of the
+  shares change hands, which Tohyee doesn't work out). An opening balance
+  can be typed for the first year (credit positive, debit negative). Kererū
+  Joinery's 2026 ICA year: opening 5,000.00; provisional tax paid 28 Aug
+  2025 +6,183.80; dividend received 31 Oct 2025 with 280.00 of credits
+  +280.00; dividend paid 15 Dec 2025 -2,800.00; refund received 10 Jan 2026
+  -500.00; end-of-year tax paid 7 Feb 2026 +2,000.00; RWT on interest 31 Mar
+  2026 +140.00. Closing balance **10,303.80** credit.
+- **ITX27 Dividends paid and the maximum ratio.** Credits attached to a
+  dividend can be at most 28/72 of the cash dividend (IR274: "Maximum ratio
+  is 28:72"): a 7,200.00 dividend can carry at most **2,800.00**, which is
+  the default; more is refused. The first dividend in an ICA year is the
+  benchmark: a later dividend with a different ratio is flagged (IR274: it
+  needs an IR407 ratio change declaration before it's paid, or an
+  allocation debit arises), but not refused.
+- **ITX28 A debit balance at 31 March.** Another company: opening 9,500.00
+  credit; a 36,000.00 dividend on 1 Mar 2026 carrying 14,000.00 of credits
+  (the maximum). Closing balance **-4,500.00**: further income tax
+  **4,500.00** and imputation penalty tax of 10% **450.00** are due on **20
+  June 2026** (a Saturday, so on time by Monday 22 June 2026). IR274 is
+  inconsistent about whether the 10% is of the closing balance or of the
+  further income tax; they're the same amount here. Paying further income
+  tax isn't worked into the next year (type it as an other credit once
+  paid, if that's how IRD treats it for you; check).
+- **ITX29 What's typed.** Owners and admins type dividends paid (date, cash
+  amount, credits attached), dividends received (date, credits), RWT
+  deducted, refunds, other credits and debits, and an opening balance. Each
+  shows who typed it; a typed entry can be removed, and the history keeps
+  it.

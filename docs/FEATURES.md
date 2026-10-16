@@ -1978,6 +1978,14 @@ that something happened.
   that box 27 matches the profit and loss and that 43 - 50 = 51, and
   downloads as CSV. Each account's box has a default by type (and for the
   starting chart) and can be changed. Nothing is filed.
+- **Imputation credit account** (#292 stage 4; examples ITX25-ITX29,
+  decision 548, tenant migration 0153; from IRD's IR274, not yet reviewed):
+  for companies, the Income tax page keeps the ICA for each 1 April to 31
+  March year: income tax paid (from the payments typed there), typed
+  dividends paid (credits at most 28/72, a different ratio from the year's
+  first dividend flagged), dividends received, RWT, refunds and other
+  entries, with a running balance. A debit balance at 31 March shows
+  further income tax and the 10% penalty due 20 June.
 
 ## Not built yet, on purpose
 
@@ -2036,8 +2044,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: the imputation credit account,
-   reading IRD documents with AI and a person checking, picking IRD
+0. Income tax (#292), next stages: reading IRD documents with AI and a person checking, picking IRD
    payments from the bank, other balance dates, interest, and later
    preparing returns.
 
