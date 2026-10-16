@@ -2016,8 +2016,13 @@ that something happened.
   with the $60,000 rules for the standard option and nothing on $100 or
   less. Overpayment interest isn't worked out.
 - **IR4 imputation return boxes** (ITX49): a company's imputation credit
-  account fills boxes 41-45 of the IR4's annual imputation return. The rest
-  of the IR4 isn't filled yet.
+  account fills boxes 41-45 of the IR4's annual imputation return.
+- **IR4 income and tax boxes** (ITX50-ITX53, decision 553): once a
+  company's income year ends, the Income tax page fills IR4 boxes 20B-30L
+  (taxable income, tax, credits, provisional tax paid, refund or tax to pay)
+  from the workpaper, using the form's own arithmetic. Boxes Tohyee has no
+  figures for are 0.00 with a note. Provisional tax for next year, the
+  disclosures and shareholder details aren't filled.
 
 ## Not built yet, on purpose
 

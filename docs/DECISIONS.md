@@ -5109,3 +5109,13 @@ testing) and #154's code signing (later, Jess).
      due date (or the next business day) to the payment day; the $60,000
      rules for the standard option; no interest on $100 or less; payments
      to the earliest amount due. Overpayment interest isn't worked out.
+553. **IR4 income and tax boxes** (17 October 2026). Jess said "Use my
+     computer to download them"; Claude downloaded IRD's 2026 IR4 and IR3
+     forms and IR3 guide into her Downloads folder and read the IR4. The
+     Income tax page fills the IR4's boxes 20B-30L for a company once its
+     income year has ended, using only the arithmetic the form prints
+     (ITX50-ITX53, not yet reviewed). Boxes Tohyee has no figures for
+     (donations, group losses, overseas tax, imputation credits received,
+     RLWT, the foreign investor tax credit) are 0.00 with a note; the typed
+     tax credits go in 30I. The cents on 30A are kept because the form
+     doesn't say whether to drop or round them. Nothing is filed.

@@ -8,6 +8,7 @@ import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { assetAdjustments, listTaxAssets, type TaxAsset } from "@/lib/tax/income/assets";
 import { buildIca, type Ica } from "@/lib/tax/income/ica";
+import { ir4Return, type Ir4Return } from "@/lib/tax/income/ir4";
 import { buildIr10, type Ir10 } from "@/lib/tax/income/ir10";
 import { type InterestPeriod, requirements, underpaymentInterest } from "@/lib/tax/income/uomi";
 import {
@@ -424,6 +425,8 @@ export type IncomeTaxReport =
       ir10: Ir10 | null;
       /** A company's imputation credit account for the ICA year matching this income year (ITX25-ITX28). */
       ica: Ica | null;
+      /** A company's IR4 income and tax calculation boxes, once the income year has ended (ITX50-ITX53). */
+      ir4: Ir4Return | null;
       adjustments: TaxAdjustment[];
       payments: TaxPayment[];
       paidTotal: string;
@@ -639,7 +642,9 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   };
 
   // The IR10 once the income year has ended and the figures are all actuals (ITX24).
-  const ir10 = amounts.actualsTo === end && amounts.budgetFrom === null ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
+  const yearEnded = amounts.actualsTo === end && amounts.budgetFrom === null;
+  const ir10 = yearEnded ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
+  const ir4 = yearEnded && type === "company" ? ir4Return({ workpaper: paper, paidTowardsYear: paid }) : null;
 
   const notes: string[] = [];
   if (!endDue) {
@@ -705,6 +710,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     typed,
     taxAssets,
     ir10,
+    ir4,
     interest,
     ica: type === "company" ? await buildIca(tx, incomeYear) : null,
     adjustments,
