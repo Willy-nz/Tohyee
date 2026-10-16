@@ -17385,3 +17385,129 @@ shown only to someone with payroll access. Nothing here posts to the books.
   people report to. Pay (basis, salary, hourly rate, hours) is included only
   when the person whose AI key it is has payroll access in Tohyee. IRD
   numbers, bank accounts and dates of birth are never given out.
+
+## Income tax (#292) stage 1: taxable income, tax, provisional tax and terminal tax (ITX1-ITX10; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
+
+Tax is law, so these examples are **not** "as Xero does": they were written
+from IRD's own pages (listed below) and need Jess or Will to check them
+before anyone relies on the figures. The screen says so until they're
+reviewed. Tested in `tests/unit/income-tax-rules.test.ts` and
+`tests/integration/income-tax.test.ts`. Nothing here posts to the books,
+files a return, makes a payment or chooses a provisional tax option.
+
+Sources (read 16 Oct 2026 through a summarising fetch tool, so check the
+pages): IRD "Tax rates for individuals"; "Work out provisional tax using the
+standard option"; "Provisional tax options - Standard option"; "Payment dates
+for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
+(April 2025); IR328 tax calendar 2026-27; "7 February" campaign page;
+"Entertainment expenses".
+
+- **ITX1 What's covered.** A **company** (28%) or an **individual sole
+  trader** (individual rates), with a **31 March balance date**, for income
+  years **2025 onwards** (the 2025 income year is 1 April 2024 to 31 March
+  2025). Anything else (other balance dates, trusts, partnerships, LTCs,
+  Māori authorities, earlier years) says it isn't supported yet rather than
+  guessing. Individuals' ACC earners' levy, independent earner tax credit,
+  Working for Families and student loans aren't worked out. Only **owners and
+  admins** see or change income tax, because a sole trader's other income is
+  personal.
+- **ITX2 Tax treatment of an account.** Every income and expense account
+  counts in full unless set otherwise: **Not deductible** (an expense added
+  back in full, e.g. fines, income tax itself, private spending), **Entertainment,
+  50% deductible** (half added back; IRD: entertainment with a "significant
+  private element" is 50% deductible), **Business use %** (the private part
+  of an expense added back: 80% business use adds back 20%), or **Not
+  taxable** (income taken off, e.g. capital gains). The capital gains on
+  disposal of fixed assets account (7040) starts as Not taxable; all can be
+  changed. Only profit and loss accounts take a treatment. Changes are in the
+  history. GST on the non-deductible half of entertainment isn't adjusted
+  here.
+- **ITX3 Taxable income (company).** Kererū Joinery Ltd, 2026 income year.
+  Profit and loss: Sales 480,000.00; Capital gains on disposal 3,000.00 (Not
+  taxable); Purchases 180,000.00; Wages 150,000.00; Entertainment 2,400.00
+  (50%); Fines 350.00 (Not deductible); Motor vehicle 9,000.00 (80% business
+  use); Depreciation 12,000.00; Other expenses 60,000.00. Net profit
+  **69,250.00**. Adjustments: entertainment +1,200.00; fines +350.00; motor
+  vehicle private use +1,800.00; capital gain -3,000.00; a typed adjustment
+  "Holiday pay accrued but not paid within 63 days" +4,000.00. Taxable income
+  before losses **73,600.00**. Losses brought forward (typed) 10,000.00, all
+  used (the screen reminds that a company can use them only if shareholder
+  continuity holds). Taxable income **63,600.00**. Tax at 28% **17,808.00**.
+  Tax credits (typed: RWT on interest) 140.00. **Residual income tax (RIT)
+  17,668.00**. Book depreciation is used as tax depreciation for now, and the
+  screen says so.
+- **ITX4 Individual rates.** Mere Tane, sole trader. Business taxable income
+  70,000.00 plus typed other income (interest) 1,000.00 = **71,000.00**.
+  2026 income year (from 1 April 2025: 10.5% to 15,600; 17.5% to 53,500; 30%
+  to 78,100; 33% to 180,000; 39% over): 1,638.00 + 6,632.50 + 5,250.00 =
+  **13,520.50**; less RWT 330.00 = RIT **13,190.50**. The same income in the
+  2025 income year (IRD's rates for 1 April 2024 to 31 March 2025: 10.5% to
+  14,000; 12.82% to 15,600; 17.5% to 48,000; 21.64% to 53,500; 30% to 70,000;
+  30.99% to 78,100; 33% to 180,000; 39% over): 1,470.00 + 205.12 + 5,670.00
+  + 1,190.20 + 4,950.00 + 309.90 = **13,795.22**. Tax is worked out exactly
+  and rounded once to the cent, half up. A loss gives no tax; it's carried
+  forward with any losses brought forward that weren't used.
+- **ITX5 Standard provisional tax, last year's return filed on time.**
+  Kererū's 2026 RIT 17,668.00 is typed from IRD's assessment, and the 2026
+  return was filed on 20 June 2026. For the 2027 income year: 17,668.00 + 5%
+  = **18,551.40**, in three instalments of **6,183.80** due **28 Aug 2026,
+  15 Jan 2027, 7 May 2027**. Amounts that don't divide evenly are rounded
+  half up to the cent, and the last instalment is what's left, so they add
+  up exactly. RIT of 5,000.00 or less last year means no provisional tax (see
+  ITX8).
+- **ITX6 Last year's return filed late.** As ITX5, but 2025 RIT was 12,000.00
+  and the 2026 return was filed on 10 Oct 2026 (after the first instalment,
+  before the second). Instalment 1: 12,000.00 + 10% = 13,200.00 ÷ 3 =
+  **4,400.00**. Instalment 2: 18,551.40 x 2 ÷ 3 = 12,367.60, less what was
+  paid towards the year before 15 Jan 2027 (4,400.00 paid on 28 Aug) =
+  **7,967.60**. Instalment 3: 18,551.40 - 4,400.00 - 7,967.60 = **6,183.80**.
+  Filed after the second instalment: instalments 1 and 2 are 4,400.00 each,
+  and the third is 18,551.40 less what was paid before 7 May. Not filed yet:
+  the instalments based on two years ago are shown, and the third uses
+  Tohyee's own figure for last year's RIT, marked as an estimate. "Paid
+  towards" the earlier instalments is payments for that income year dated
+  before this instalment's due date, up to what the earlier instalments were
+  (so 7,967.60 paid on 14 Jan for instalment 2 isn't counted against it).
+  An earlier instalment that's due and unpaid is caught up in the next one:
+  with only 4,400.00 paid, instalment 3 is 14,151.40. Before the earlier
+  instalments are due, they count as paid as worked out. This is our
+  reading of IRD's "minus instalments 1 and 2 paid"; check it.
+- **ITX7 Six-monthly GST filers** pay two instalments, **28 Oct and 7 May**:
+  18,551.40 ÷ 2 = **9,275.70** each. If last year's return wasn't filed by
+  28 Oct, Tohyee says it can't work out the two-instalment schedule yet
+  (IRD's table is for three instalments).
+- **ITX8 Not a provisional taxpayer.** Last year's RIT 4,800.00 (5,000.00 or
+  less): no instalments; this year's tax is all due as end-of-year tax. The
+  screen notes voluntary payments can reduce interest. If last year's RIT
+  isn't known yet, Tohyee says so rather than guessing.
+- **ITX9 Forecast and end-of-year tax.** On 16 Oct 2026, Kererū's 2027
+  income year: actuals to 30 Sep 2026 (the last whole month) net profit
+  50,000.00 (including entertainment 1,000.00), plus the overall budget for
+  Oct 2026 to Mar 2027, 70,000.00 (including entertainment 1,200.00) =
+  forecast profit **120,000.00**; entertainment adds back 1,100.00; forecast
+  taxable income **121,100.00**; tax **33,908.00**; forecast RIT 33,908.00.
+  Less the standard instalments of 18,551.40 = expected **end-of-year tax
+  15,356.60**, due **7 Feb 2028** (7 Apr 2028 with a tax agent's extension of
+  time). Treatments apply to budget amounts the same way. With no budget for
+  the rest of the year, the forecast is actuals only and says so. Because the
+  forecast RIT is under 60,000.00, interest runs only from the day after the
+  end-of-year tax date (IRD); interest isn't worked out.
+- **ITX10 Due dates and working days.** Each date shows the due date and the
+  date it's on time by: IRD's calendar says "If a due date falls on a
+  weekend or public holiday you can file or pay on the next business day".
+  7 Feb 2027 is a Sunday and Waitangi Day (Saturday 6 Feb) is observed on
+  Monday 8 Feb, so the 2026 end-of-year tax is on time by **Tuesday 9 Feb
+  2027**. 28 Aug 2027 (a Saturday) is on time by Monday 30 Aug 2027.
+  National public holidays come from Tohyee's holiday list (2025-2027 at the
+  moment); regional anniversary days and years not on the list aren't
+  checked, and the screen says so. End-of-year tax for a year is due 7 Feb
+  after the year ends (7 Apr with a tax agent's extension of time, which is
+  a setting).
+
+**Typed IRD figures.** For each income year, owners and admins type what
+IRD has: the assessed RIT, the date the return was filed, losses brought
+forward, tax credits (PAYE, RWT, imputation credits), an individual's other
+income, and payments made to IRD towards that year (date and amount). Each
+is labelled "typed from IRD" with who typed it and when; Tohyee's own
+figures are labelled "Tohyee estimate". Payments are typed, not picked from
+the bank, in this stage.

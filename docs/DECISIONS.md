@@ -5028,3 +5028,23 @@ testing) and #154's code signing (later, Jess).
        owner or admin can close past. Credit with nothing due passes.
      - The Pay bills and Receive payments screens show the chosen contact's
        unused credit before anything is paid.
+
+545. **Income tax, stage 1** (16 October 2026). Jess asked for a tax module
+     that forecasts tax and makes NZ tax returns (#292) and agreed the first
+     slice: companies and sole traders, tax treatment per account, taxable
+     income, standard provisional tax, end-of-year tax, and typing in IRD's
+     figures. Tax is law, so the examples (ITX1-ITX10) come from IRD's
+     published rules, not from Xero, and stay "not yet reviewed" until Jess or
+     Will checks them. Chosen by Claude for this stage, not yet reviewed:
+     - Only a 31 March balance date and income years 2025 onwards; other
+       cases say they aren't supported rather than guessing.
+     - Only owners and admins see income tax (a sole trader's other income is
+       personal).
+     - Book depreciation stands in for tax depreciation until the tax
+       depreciation register is built; the screen says so.
+     - IRD figures and payments to IRD are typed (labelled "typed from IRD");
+       Tohyee's own figures are labelled estimates. Nothing posts, files,
+       pays or elects a provisional tax option.
+     - Next: tax depreciation register with Investment Boost, IR10, the
+       imputation credit account, reading IRD documents with AI and a
+       person checking, and picking IRD payments from the bank.

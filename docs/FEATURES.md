@@ -1942,6 +1942,21 @@ that something happened.
   in the ordinary boxes unless unticked, with "IRD says ..." notes for
   purchases more than 2 years old and changes over $1,000. Filed returns
   list what later returns claimed for them.
+- **Income tax, stage 1** (#292; examples ITX1-ITX10, decision 545, tenant
+  migration 0150), from IRD's published rules and **not yet reviewed by an
+  accountant** (the screen says so): for a company or a sole trader with a
+  31 March balance date, from the 2025 income year. Accountant › Income tax
+  (owners and admins): taxable income from the books, with each income or
+  expense account counting in full, not deductible, entertainment 50%,
+  business use % or not taxable, plus typed adjustments, losses brought
+  forward, other income and tax credits; actuals to the last whole month
+  then the overall budget, so the current year is a forecast; tax at the
+  company rate or individual rates; standard provisional tax (5% and 10%
+  uplifts, a return filed late, six-monthly GST filers' two instalments);
+  expected end-of-year tax; and due dates moved to the next business day.
+  IRD's figures and payments to IRD are typed in and labelled. Nothing
+  posts, files, pays or chooses a provisional tax option. Book depreciation
+  stands in for tax depreciation.
 
 ## Not built yet, on purpose
 
@@ -1999,6 +2014,12 @@ isn't acceptable, because people would trust it:
 ## Next, in rough order
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
+
+0. Income tax (#292), next stages: the tax depreciation register with
+   Investment Boost, IR10 from the ledger, the imputation credit account,
+   reading IRD documents with AI and a person checking, picking IRD
+   payments from the bank, other balance dates, interest, and later
+   preparing returns.
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works
    on them).
