@@ -17595,3 +17595,72 @@ examples"; "Claiming Investment Boost" (news, 2025).
   year: +20,000.00 book depreciation, -20,000.00 Investment Boost,
   -16,000.00 tax depreciation: taxable income 16,000.00 lower than with book
   depreciation.
+
+## Income tax (#292) stage 3: the IR10 financial statements summary (ITX19-ITX24; from IRD's IR10 form and IR10G guide, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
+
+From IRD's *Financial statements summary IR10* (March 2026) and *IR10 guide
+IR10G* (June 2026), read through a summarising fetch tool, so check them.
+Tested in `tests/unit/ir10.test.ts` and `tests/integration/ir10.test.ts`.
+Tohyee fills the boxes for a finished income year from the books, the
+income tax workpaper and the fixed asset register; it doesn't file it.
+Figures are GST-exclusive (the books are). Amounts show cents: the form and
+guide we read don't say whether to drop them.
+
+- **ITX19 Which box an account goes in.** Owners and admins choose an
+  IR10 box for each account, from the boxes its type allows: revenue and
+  other income 2, 7, 8, 9 or 10; expenses and depreciation 12 to 24; current
+  and non-current assets 30 to 42; liabilities 44 to 47 or 49. Direct costs
+  always go to cost of goods sold, bank accounts to 31 (or 46 when
+  overdrawn), and equity to 51. Defaults: revenue 2, other income 10,
+  expenses 24, depreciation 13, accounts receivable 30, inventory and other
+  current assets 32, fixed assets 38, other non-current assets 42, accounts
+  payable 45, other current liabilities and credit cards 47, non-current
+  liabilities 49, and Tohyee's starting chart where the account still has
+  its starting code and name (4200 Interest income 7; 6080 Insurance 14;
+  6090 Interest expense 15; 6010 Accounting fees and 6100 Legal fees 16;
+  6150 Rent 18; 6160 Repairs and maintenance 19; 6200 Wages and salaries 22;
+  1640 Motor vehicles and 1650 its accumulated depreciation 33; 2800 Term
+  loan 49). An accumulated depreciation account follows its fixed asset
+  type's asset account unless set. Equity and liability accounts can also
+  be marked as **drawings** (box 57), **dividends paid** (56) or an
+  **owner or shareholder current account** (58); 3100 Owner drawings starts
+  as drawings.
+- **ITX20 Profit and loss boxes.** A company's 2026 income year: sales
+  200,000.00 (box 2); interest 500.00 (7); stock 10,000.00 at the start and
+  15,000.00 at the end (boxes 3 and 5, from inventory accounts); direct
+  costs 85,000.00, so purchases (box 4) = 85,000.00 + 15,000.00 - 10,000.00
+  = **90,000.00** (the guide: "add closing stock to it and deduct opening
+  stock"); gross profit (6) **115,000.00**; total income (11) **115,500.00**;
+  depreciation 4,500.00 (13), insurance 2,000.00 (14), wages 40,000.00 (22),
+  other 4,000.00 (24), total expenses (25) **50,500.00**; exceptional items
+  (26) are left blank (not separated out; type them into myIR if they're
+  over 5% of turnover); net profit before tax (27) **65,000.00**, which must
+  equal the profit and loss.
+- **ITX21 Tax adjustments.** Box 29 is taxable profit before losses brought
+  forward and, for individuals, before other income: entertainment +500.00,
+  book depreciation added back +4,500.00, Investment Boost -6,000.00, tax
+  depreciation -5,400.00, so box 29 **58,600.00** and box 28 (29 - 27)
+  **-6,400.00**. Box 28 is blank when it's nil.
+- **ITX22 Balance sheet boxes** at 31 March 2026: accounts receivable
+  30,000.00 (30); bank 79,500.00 (31); stock 15,000.00 (32); van 30,000.00
+  less 4,500.00 accumulated depreciation, **25,500.00** (33); total assets
+  (43) **150,000.00**; term loan 30,000.00 (49); total liabilities (50)
+  30,000.00; owners' equity (51) **120,000.00** (owner funds 60,000.00, less
+  drawings 5,000.00, plus profit 65,000.00). Tohyee checks 43 - 50 = 51.
+- **ITX23 Other information.** Tax depreciation (52) is the tax depreciation
+  and Investment Boost claimed on assets with tax details, plus the book
+  depreciation of anything else (the guide: "Also include Investment Boost
+  claimed in this box"): 6,000.00 + 5,400.00 = **11,400.00**. Untaxed
+  realised gains (53): income on accounts marked Not taxable. Additions (54):
+  the cost of register assets bought in the year, **30,000.00**. Disposals
+  (55): proceeds of register disposals in the year. Dividends paid (56) and
+  drawings (57): the net debits in the year on accounts marked so, drawings
+  **5,000.00**. Current accounts (58): their closing balances added together,
+  credit (owed to the owners) positive (our reading; the guide doesn't say).
+  Tax-deductible loss on disposal (59): from tax depreciation. Investment
+  Boost assets (60): the cost of assets whose Investment Boost is claimed
+  this year, less any private-use share, **30,000.00**.
+- **ITX24 When it's shown.** Only for an income year that has ended, and
+  only figures Tohyee can work out: box 1 (more than one line of business)
+  is typed for the year. Assets outside the fixed asset register aren't in
+  boxes 54, 55 or 60, and the screen says so.

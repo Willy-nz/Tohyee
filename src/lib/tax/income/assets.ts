@@ -338,3 +338,58 @@ export async function assetAdjustments(
   }
   return { adjustments, notSetUp, budgetedDepreciationAccounts };
 }
+
+export type TaxAssetTotals = {
+  /** Book depreciation the ledger shows in the year on assets with tax details, before any account treatment. */
+  bookDepreciation: Decimal;
+  boostClaimed: Decimal;
+  depreciationClaimed: Decimal;
+  loss: Decimal;
+  /** The business-use share of the cost of assets whose Investment Boost is claimed this year (IR10 box 60). */
+  boostAssetValue: Decimal;
+  /** The cost of register assets bought in the year (IR10 box 54). */
+  additions: Decimal;
+  /** Proceeds of register disposals in the year (IR10 box 55). */
+  disposalProceeds: Decimal;
+};
+
+/** Register figures for the IR10's other information boxes (ITX23). */
+export async function taxAssetTotals(tx: OrgTx, incomeYear: number): Promise<TaxAssetTotals> {
+  const { start, end } = incomeYearDates(incomeYear);
+  const assets = (await tx.query<AssetRow>(`${ASSETS_SQL} where f.status in ('registered', 'disposed') order by f.asset_number`)).rows;
+  const detailed = assets.filter((row) => row.d_method !== null);
+  const book = detailed.length
+    ? await tx.query<{ amount: string | null }>(
+        `select sum(c.amount)::text as amount from (${COUNTING_LINES_SQL}) c where c.asset_id = any($1::bigint[]) and c.charged_on between $2::date and $3::date`,
+        [detailed.map((row) => row.id), start, end],
+      )
+    : { rows: [{ amount: null }] };
+  let boostClaimed = ZERO_DECIMAL;
+  let depreciationClaimed = ZERO_DECIMAL;
+  let loss = ZERO_DECIMAL;
+  let boostAssetValue = ZERO_DECIMAL;
+  for (const row of detailed) {
+    const details = toDetails(row)!;
+    const year = yearFor(row, details, incomeYear);
+    if (!year) continue;
+    boostClaimed = add(boostClaimed, dec(year.boostClaimed));
+    depreciationClaimed = add(depreciationClaimed, dec(year.depreciationClaimed));
+    loss = add(loss, dec(year.loss));
+    if (!isZero(dec(year.investmentBoost))) boostAssetValue = add(boostAssetValue, divide(mul(dec(details.taxCost), dec(details.businessUsePercent)), dec("100"), 2));
+  }
+  let additions = ZERO_DECIMAL;
+  for (const row of assets) if (row.purchase_date >= start && row.purchase_date <= end) additions = add(additions, dec(row.cost));
+  const disposals = await tx.query<{ proceeds: string | null }>(
+    "select sum(proceeds)::text as proceeds from fixed_asset_disposals where status = 'active' and disposal_date between $1::date and $2::date",
+    [start, end],
+  );
+  return {
+    bookDepreciation: dec(book.rows[0].amount ?? "0"),
+    boostClaimed,
+    depreciationClaimed,
+    loss,
+    boostAssetValue,
+    additions,
+    disposalProceeds: dec(disposals.rows[0].proceeds ?? "0"),
+  };
+}

@@ -5060,3 +5060,11 @@ testing) and #154's code signing (later, Jess).
        part-private asset, and scales recovered amounts and losses by
        business use. These readings are flagged on the screen.
      - Only owners and admins, like the rest of income tax.
+
+547. **The IR10 from the books** (16 October 2026). Jess said "Cool do that"
+     to the IR10 next. Chosen by Claude from IRD's IR10 form and IR10G guide,
+     not yet reviewed (ITX19-ITX24): each account is given an IR10 box with
+     defaults by type and for Tohyee's starting chart; drawings, dividends
+     paid and current accounts are marked on accounts; amounts keep cents;
+     box 26 (exceptional items) is left blank; box 58's sign is credit
+     positive. Shown for finished income years only; nothing is filed.

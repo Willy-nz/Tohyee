@@ -1968,6 +1968,16 @@ that something happened.
   year of sale) and closing ATV. In taxable income, those assets' book
   depreciation and book gains and losses come out and the tax figures go
   in; assets without tax details keep book depreciation and are listed.
+- **IR10 financial statements summary** (#292 stage 3; examples ITX19-ITX24,
+  decision 547, tenant migration 0152; from IRD's IR10 and IR10G, not yet
+  reviewed): for a finished income year, the Income tax page fills all 60
+  IR10 boxes from the books, the taxable income workpaper and the fixed
+  asset register (purchases worked out from direct costs and stock, bank
+  overdrafts as current loans, tax depreciation including Investment Boost,
+  additions, disposals, drawings, dividends and current accounts), checks
+  that box 27 matches the profit and loss and that 43 - 50 = 51, and
+  downloads as CSV. Each account's box has a default by type (and for the
+  starting chart) and can be changed. Nothing is filed.
 
 ## Not built yet, on purpose
 
@@ -2026,7 +2036,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: IR10 from the ledger, the imputation credit account,
+0. Income tax (#292), next stages: the imputation credit account,
    reading IRD documents with AI and a person checking, picking IRD
    payments from the bank, other balance dates, interest, and later
    preparing returns.
