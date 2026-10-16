@@ -116,7 +116,7 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     });
     expect(report.workpaper.adjustments.map((entry) => entry.amount)).toEqual(["1200.00", "350.00", "1800.00", "-3000.00", "4000.00"]);
     expect(report.notes.join(" ")).toContain("shareholding");
-    expect(report.notes.join(" ")).toContain("Book depreciation");
+    expect(report.notes.join(" ")).toContain("outside the fixed asset register");
     expect(report.reviewNote).toContain("haven't been reviewed");
   });
 

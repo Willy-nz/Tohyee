@@ -6,6 +6,7 @@ import { addDays, monthEndOf, monthStartOf } from "@/lib/financial-year";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, type Decimal, isZero, parseDecimalInput, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
+import { assetAdjustments, listTaxAssets, type TaxAsset } from "@/lib/tax/income/assets";
 import {
   EXPENSE_TREATMENTS,
   endOfYearTaxDue,
@@ -397,6 +398,7 @@ export type IncomeTaxReport =
       budgetName: string | null;
       accounts: ReportAccount[];
       typed: IncomeTaxYear;
+      taxAssets: TaxAsset[];
       adjustments: TaxAdjustment[];
       payments: TaxPayment[];
       paidTotal: string;
@@ -481,11 +483,13 @@ async function estimatedRit(tx: OrgTx, type: TaxpayerType, year: number, today: 
   const amounts = await yearAmounts(tx, year, today, false);
   if (!amounts.hasActivity) return null;
   const typed = await getIncomeTaxYear(tx, year);
+  const treatments = await treatmentsById(tx);
+  const fromAssets = await assetAdjustments(tx, year, treatments, null);
   const result = workpaper({
     type,
     year,
-    accounts: toWorkpaperAccounts(amounts.lines.values(), await treatmentsById(tx)),
-    typedAdjustments: (await listAdjustments(tx, year)).map((entry) => ({ description: entry.description, amount: dec(entry.amount) })),
+    accounts: toWorkpaperAccounts(amounts.lines.values(), treatments),
+    typedAdjustments: [...fromAssets.adjustments, ...(await listAdjustments(tx, year)).map((entry) => ({ description: entry.description, amount: dec(entry.amount) }))],
     otherIncome: dec(typed.otherIncome),
     lossesBroughtForward: dec(typed.lossesBroughtForward),
     taxCredits: dec(typed.taxCredits),
@@ -519,11 +523,13 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   const typed = await getIncomeTaxYear(tx, incomeYear);
   const adjustments = await listAdjustments(tx, incomeYear);
   const payments = await listPayments(tx, incomeYear);
+  const fromAssets = await assetAdjustments(tx, incomeYear, treatments, amounts.budgetFrom);
+  const taxAssets = await listTaxAssets(tx, incomeYear);
   const paper = workpaper({
     type,
     year: incomeYear,
     accounts,
-    typedAdjustments: adjustments.map((entry) => ({ description: entry.description, amount: dec(entry.amount) })),
+    typedAdjustments: [...fromAssets.adjustments, ...adjustments.map((entry) => ({ description: entry.description, amount: dec(entry.amount) }))],
     otherIncome: dec(typed.otherIncome),
     lossesBroughtForward: dec(typed.lossesBroughtForward),
     taxCredits: dec(typed.taxCredits),
@@ -590,7 +596,14 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
         : `There's nothing in the overall budget from ${shortDate(amounts.budgetFrom)} to ${shortDate(end)}, so this year's figures are actuals only so far.`,
     );
   }
-  notes.push("Book depreciation is used as tax depreciation for now: check it matches IRD's rates for your assets.");
+  if (fromAssets.notSetUp.length > 0) {
+    const shown = fromAssets.notSetUp.slice(0, 10).join(", ") + (fromAssets.notSetUp.length > 10 ? ` and ${fromAssets.notSetUp.length - 10} more` : "");
+    notes.push(`These fixed assets have no tax details, so their book depreciation stands in for tax depreciation: ${shown}. Give them tax details under Tax depreciation.`);
+  }
+  if (fromAssets.budgetedDepreciationAccounts.length > 0) {
+    notes.push(`The budget for the rest of the year has depreciation on ${fromAssets.budgetedDepreciationAccounts.join(", ")}, which stays in alongside these assets' full-year tax depreciation. Take it out of the budget, or add an adjustment.`);
+  }
+  notes.push("Depreciation posted by journals outside the fixed asset register stays as booked.");
   if (type === "company" && !isZero(dec(typed.lossesBroughtForward))) notes.push("A company can use losses brought forward only if its shareholding has stayed continuous enough; check before relying on them.");
   if (type === "individual") notes.push("The ACC earners' levy, independent earner tax credit, Working for Families and student loan repayments aren't worked out.");
   notes.push(
@@ -629,6 +642,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
       };
     }),
     typed,
+    taxAssets,
     adjustments,
     payments,
     paidTotal: money(paid),
