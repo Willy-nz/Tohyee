@@ -18,7 +18,12 @@ import { foreignAccountState, RUN_NOT_VOIDED } from "@/lib/ledger/foreign";
 import { openCurrencyBalances } from "@/lib/ledger/fx-revaluation";
 import { getPeriodControls, type PeriodControls, setLockDate } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, dec, isNegative, isZero, neg, sub, toFixedString } from "@/lib/money/decimal";
+import { add, dec, type Decimal, isNegative, isPositive, isZero, neg, sub, toFixedString } from "@/lib/money/decimal";
+import { listBills } from "@/lib/bills/service";
+import { listCreditNotes } from "@/lib/credit-notes/service";
+import { listOverpayments } from "@/lib/invoices/overpayments";
+import { listInvoices } from "@/lib/invoices/service";
+import { listSupplierCreditNotes } from "@/lib/supplier-credit-notes/service";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
@@ -168,7 +173,7 @@ export type CheckStatus = "pass" | "warning" | "not_applicable";
 export type CheckItem = { label: string; detail: string; href: string | null };
 
 export type PeriodCheck = {
-  key: "bank" | "drafts" | "depreciation" | "fx_revaluation" | "stock" | "negative_stock" | "receivables" | "payables" | "gst" | "opening_balance";
+  key: "bank" | "drafts" | "depreciation" | "fx_revaluation" | "stock" | "negative_stock" | "receivables" | "payables" | "gst" | "opening_balance" | "credit";
   title: string;
   status: CheckStatus;
   summary: string;
@@ -512,6 +517,94 @@ async function openingBalanceCheck(tx: OrgTx, periodEnd: string, money: (value: 
  * The checklist for closing the month ending `periodEnd` (PC2-PC9). It posts
  * nothing; every check is worked out from the books when it runs.
  */
+/**
+ * Credit that could be used (PC13): a contact with credit left (supplier
+ * credit notes; customer credit notes and overpayments) and something due
+ * (bills; invoices), both dated on or before the month end and in the same
+ * currency. Credit with nothing due to use it on passes.
+ */
+async function creditCheck(tx: OrgTx, periodEnd: string, money: (value: string) => string): Promise<PeriodCheck> {
+  const title = "Credit that could be used";
+  type Credit = { contactId: string; contactName: string; currency: string; label: string; remaining: string; side: "bills" | "invoices" };
+  const credits: Credit[] = [];
+  const due = new Map<string, Decimal>();
+  const addDue = (side: string, contactId: string, currency: string, amount: string | null) => {
+    if (!amount) return;
+    const key = `${side}|${contactId}|${currency}`;
+    due.set(key, add(due.get(key) ?? dec("0"), dec(amount)));
+  };
+  for (let beforeId: string | null = null, first = true; first || beforeId; first = false) {
+    const page: Awaited<ReturnType<typeof listSupplierCreditNotes>> = await listSupplierCreditNotes(tx, { hasRemainingCredit: true, limit: 200, ...(beforeId ? { beforeId } : {}) });
+    for (const note of page.creditNotes) {
+      if (note.creditNoteDate <= periodEnd && note.remainingCredit) {
+        credits.push({ contactId: note.contactId, contactName: note.contactName, currency: note.currencyCode, label: note.supplierCreditNoteNumber, remaining: note.remainingCredit, side: "bills" });
+      }
+    }
+    beforeId = page.nextBeforeId;
+  }
+  for (let beforeId: string | null = null, first = true; first || beforeId; first = false) {
+    const page: Awaited<ReturnType<typeof listCreditNotes>> = await listCreditNotes(tx, { hasRemainingCredit: true, limit: 200, ...(beforeId ? { beforeId } : {}) });
+    for (const note of page.creditNotes) {
+      if (note.creditNoteDate <= periodEnd && note.remainingCredit) {
+        credits.push({ contactId: note.contactId, contactName: note.contactName, currency: note.currencyCode, label: note.creditNoteNumber ?? "a credit note", remaining: note.remainingCredit, side: "invoices" });
+      }
+    }
+    beforeId = page.nextBeforeId;
+  }
+  for (const payment of await listOverpayments(tx, { hasRemainingCredit: true })) {
+    if (payment.paymentDate <= periodEnd) {
+      credits.push({ contactId: payment.contactId, contactName: payment.contactName, currency: payment.currencyCode, label: `the overpayment on ${payment.invoiceNumber}`, remaining: payment.overpaymentRemaining, side: "invoices" });
+    }
+  }
+  if (credits.length === 0) return notApplicable("credit", title, `No credit notes or overpayments with credit left on or before ${longDate(periodEnd)}.`);
+  for (let beforeId: string | null = null, first = true; first || beforeId; first = false) {
+    const page: Awaited<ReturnType<typeof listBills>> = await listBills(tx, { awaitingPayment: true, limit: 200, ...(beforeId ? { beforeId } : {}) });
+    for (const bill of page.bills) if (bill.billDate <= periodEnd) addDue("bills", bill.contactId, bill.currencyCode, bill.amountDue);
+    beforeId = page.nextBeforeId;
+  }
+  for (let beforeId: string | null = null, first = true; first || beforeId; first = false) {
+    const page: Awaited<ReturnType<typeof listInvoices>> = await listInvoices(tx, { awaitingPayment: true, limit: 200, ...(beforeId ? { beforeId } : {}) });
+    for (const invoice of page.invoices) if (invoice.invoiceDate <= periodEnd) addDue("invoices", invoice.contactId, invoice.currencyCode, invoice.amountDue);
+    beforeId = page.nextBeforeId;
+  }
+  // One line per contact, side and currency.
+  const groups = new Map<string, { credit: Credit; labels: string[]; total: Decimal; due: Decimal | undefined }>();
+  for (const credit of credits) {
+    const key = `${credit.side}|${credit.contactId}|${credit.currency}`;
+    const group = groups.get(key) ?? { credit, labels: [], total: dec("0"), due: due.get(key) };
+    group.labels.push(credit.label);
+    group.total = add(group.total, dec(credit.remaining));
+    groups.set(key, group);
+  }
+  const amount = (value: Decimal, currency: string) => (currency === tx.baseCurrency ? money(toFixedString(value, 2)) : `${currency} ${formatMoney(toFixedString(value, 2))}`);
+  const items: CheckItem[] = [];
+  let idle = 0;
+  let idleTotal = dec("0");
+  for (const group of [...groups.values()].sort((a, b) => a.credit.contactName.localeCompare(b.credit.contactName))) {
+    if (group.due && isPositive(group.due)) {
+      items.push({
+        label: group.credit.contactName,
+        detail: `${amount(group.total, group.credit.currency)} of credit (${group.labels.join(", ")}), with ${amount(group.due, group.credit.currency)} due on ${group.credit.side}.`,
+        href: `/operations/contacts/${group.credit.contactId}`,
+      });
+    } else {
+      idle += group.labels.length;
+      if (group.credit.currency === tx.baseCurrency) idleTotal = add(idleTotal, group.total);
+    }
+  }
+  if (items.length === 0) {
+    return pass("credit", title, `Nothing due could use the credit there is: ${idle} ${idle === 1 ? "credit" : "credits"} of ${money(toFixedString(idleTotal, 2))} with nothing due to use ${idle === 1 ? "it" : "them"} on.`);
+  }
+  return {
+    key: "credit",
+    title,
+    status: "warning",
+    summary: `${items.length} ${items.length === 1 ? "contact has" : "contacts have"} credit that could go against what's due. Apply it from the credit note or overpayment, or close anyway.`,
+    items,
+    fix: null,
+  };
+}
+
 export async function periodChecklist(tx: OrgTx, input: { periodEnd: unknown }): Promise<PeriodChecklist> {
   const periodEnd = parsePeriodEnd(input.periodEnd);
   const { lockDate } = await getPeriodControls(tx);
@@ -528,6 +621,7 @@ export async function periodChecklist(tx: OrgTx, input: { periodEnd: unknown }):
     await ledgerCheck(tx, "payables", periodEnd, money),
     await gstCheck(tx, periodEnd),
     await openingBalanceCheck(tx, periodEnd, money),
+    await creditCheck(tx, periodEnd, money),
   ];
   return {
     periodEnd,

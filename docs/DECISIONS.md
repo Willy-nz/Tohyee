@@ -5017,3 +5017,14 @@ testing) and #154's code signing (later, Jess).
        `users reset-two-step`).
      - Each refusal is in the admin audit log and the sign-in monitor.
      - Putting the right key back makes the same authenticator work again.
+
+544. **Credit that could be used** (16 October 2026). Jess asked about a
+     tool that finds unapplied credit notes in Xero files and said "Ok sure"
+     to nudges in Tohyee. Bills and invoices already showed a contact's
+     unused credit. Added (PC13, chosen by Claude, not yet reviewed):
+     - A period close check: a contact with credit left (supplier credit
+       notes; customer credit notes and overpayments) and something due in
+       the same currency, both on or before the month end, is a warning an
+       owner or admin can close past. Credit with nothing due passes.
+     - The Pay bills and Receive payments screens show the chosen contact's
+       unused credit before anything is paid.

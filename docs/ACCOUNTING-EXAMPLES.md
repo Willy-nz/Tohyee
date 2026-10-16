@@ -10744,6 +10744,20 @@ doesn't apply.
   June and July are both open and 15 Jul 2026 posts again; the audit log
   has the reason. Reopening June again changes nothing. Reopening May moves
   the lock to 30 Apr 2026.
+- **PC13** Credit that could be used (added 16 Oct 2026 when Jess said
+  "Ok sure" to nudges for unused credit; chosen by Claude, not yet
+  reviewed). A bill from Clutha Rural for **1,150.00** on 10 Jun 2026 and
+  their supplier credit note CN-104 for **230.00** on 15 Jun 2026, neither
+  used: June's check "Credit that could be used" is a **warning**, listing
+  "Clutha Rural: 230.00 of credit (CN-104), with 1,150.00 due on bills".
+  Applying CN-104 to the bill uses it up, so there's nothing to check. The same goes for customers:
+  a credit note or an overpayment with credit left while that customer
+  has an invoice with something due, both dated on or before the month
+  end and in the same currency. Credit with nothing due to use it on
+  passes, and the summary says how much there is ("1 credit of 75.00 with
+  nothing due to use it on"). As with the other warnings, an owner or
+  admin can close anyway. The Pay bills screen says the same when the
+  chosen supplier has unused credit.
 
 ### Not supported yet (refused rather than guessed)
 

@@ -112,6 +112,45 @@ function useDocuments(kind: BatchKind, organisationId: string, contactId: string
   return { list, documents: sorted };
 }
 
+/** The contact's credit notes (and, for customers, overpayments) with credit left, to use before paying (PC13). */
+function UnusedCredit({ organisationId, kind, contactId, currency }: { organisationId: string; kind: BatchKind; contactId: string; currency: string }) {
+  const supplier = kind === "supplier";
+  const notes = useApiData<{ creditNotes: Array<{ id: string; currencyCode: string; remainingCredit: string | null; supplierCreditNoteNumber?: string; creditNoteNumber?: string | null }> }>(
+    supplier ? "/api/supplier-credit-notes" : "/api/credit-notes",
+    { organisationId, contactId, hasRemainingCredit: "true" },
+  );
+  const overpayments = useApiData<{ overpayments: Array<{ id: string; currencyCode: string; overpaymentRemaining: string; invoiceNumber: string }> }>(
+    supplier ? null : "/api/overpayments",
+    { organisationId, contactId, hasRemainingCredit: "true" },
+  );
+  const sources = [
+    ...(notes.data?.creditNotes ?? [])
+      .filter((note) => note.currencyCode === currency)
+      .map((note) => ({
+        key: `cn-${note.id}`,
+        href: `/operations/${supplier ? "supplier-credit-notes" : "credit-notes"}/${note.id}`,
+        label: (supplier ? note.supplierCreditNoteNumber : note.creditNoteNumber) ?? "a credit note",
+        left: note.remainingCredit ?? "0",
+      })),
+    ...(overpayments.data?.overpayments ?? [])
+      .filter((payment) => payment.currencyCode === currency)
+      .map((payment) => ({ key: `op-${payment.id}`, href: `/operations/overpayments/${payment.id}`, label: `the overpayment on ${payment.invoiceNumber}`, left: payment.overpaymentRemaining })),
+  ];
+  if (sources.length === 0) return null;
+  return (
+    <Notice tone="warning">
+      There&apos;s unused credit for this {supplier ? "supplier" : "customer"}:{" "}
+      {sources.map((source, index) => (
+        <span key={source.key}>
+          {index > 0 ? ", " : ""}
+          <Link href={source.href}>{source.label}</Link> ({formatMoney(source.left)} left)
+        </span>
+      ))}
+      . Apply it to {supplier ? "their bills" : "their invoices"} first, so {supplier ? "you don't pay more than you owe" : "they're asked only for what's owed"}.
+    </Notice>
+  );
+}
+
 export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; organisationId: string }) {
   const confirm = useConfirm();
   const words = WORDS[kind];
@@ -226,6 +265,7 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
           </select>
         </Field>
       </Card>
+      {contactId ? <UnusedCredit organisationId={organisationId} kind={kind} contactId={contactId} currency={currency} /> : null}
       {contactId ? (
         <Card
           title={`${words.documents.charAt(0).toUpperCase() + words.documents.slice(1)} with something due`}
