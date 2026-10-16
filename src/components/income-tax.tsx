@@ -2,7 +2,7 @@
 
 import { type FormEvent, Fragment, useState } from "react";
 import { DateInput } from "@/components/date-input";
-import { Money } from "@/components/books";
+import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -11,6 +11,7 @@ import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_L
 import type { TaxAsset } from "@/lib/tax/income/assets";
 import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
 import type { Ica } from "@/lib/tax/income/ica";
+import type { BookPayments as BookPaymentsData } from "@/lib/tax/income/book-payments";
 import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
 import { postForm } from "@/components/rd";
 import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
@@ -1141,6 +1142,124 @@ function IrdDocuments({ organisationId, incomeYear, years, onChanged }: { organi
   );
 }
 
+function BookPayments({ organisationId, years, onChanged }: { organisationId: string; years: number[]; onChanged: () => void }) {
+  const loaded = useApiData<BookPaymentsData>("/api/income-tax/book-payments", { organisationId });
+  const accounts = useAccounts(organisationId);
+  const [chosen, setChosen] = useState<string[] | null>(null);
+  const [yearFor, setYearFor] = useState<Record<string, string>>({});
+  const [status, setStatus] = useState<Status>(null);
+  const data = loaded.data;
+  const selected = chosen ?? data?.accounts.map((account) => account.accountId) ?? [];
+  const balanceSheet = (accounts.data?.accounts ?? []).filter((account) => ["asset", "liability", "equity"].includes(account.accountClass) && account.isActive);
+  async function saveAccounts() {
+    try {
+      await api("/api/income-tax/book-payments/accounts", { method: "PUT", body: { organisationId, accountIds: selected } });
+      setChosen(null);
+      setStatus(null);
+      loaded.reload();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  async function count(journalLineId: string, incomeYear: string) {
+    try {
+      await api("/api/income-tax/book-payments/count", { method: "POST", body: { organisationId, journalLineId, incomeYear: Number(incomeYear) } });
+      setStatus(null);
+      loaded.reload();
+      onChanged();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  return (
+    <Card title="Payments to IRD in the books" description="Choose the accounts you code income tax payments to. Payments to them from a bank or credit card show here to count towards an income year, so you don't type them twice.">
+      <Field label="Income tax payments are coded to" hint="Hold Ctrl (or Cmd) to choose more than one.">
+        <select multiple size={Math.min(6, Math.max(3, balanceSheet.length))} value={selected} onChange={(event) => setChosen(Array.from(event.target.selectedOptions, (option) => option.value))}>
+          {balanceSheet.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.code} {account.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {chosen !== null ? (
+        <Button size="small" variant="secondary" onClick={() => void saveAccounts()}>
+          Save accounts
+        </Button>
+      ) : null}
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+      {!data ? (
+        <p className={ui.muted}>Loading…</p>
+      ) : data.accounts.length === 0 ? (
+        <Empty>Choose an account to see payments to IRD from the books.</Empty>
+      ) : data.payments.length === 0 ? (
+        <Empty>Every payment to IRD in the books is counted.</Empty>
+      ) : (
+        <div className={ui.tableWrap}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Reference</th>
+                <th className={ui.num}>Amount</th>
+                <th>Towards</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {data.payments.map((line) => {
+                const year = yearFor[line.journalLineId] ?? String(line.typedMatch?.incomeYear ?? line.suggestedIncomeYear ?? "");
+                return (
+                  <tr key={line.journalLineId}>
+                    <td data-label="Date">{formatDate(line.date)}</td>
+                    <td data-label="Reference">
+                      {line.reference}
+                      {line.description ? <span className={ui.muted}> · {line.description}</span> : null}
+                      <span className={ui.muted}> · {line.account}</span>
+                      {line.typedMatch ? <div className={ui.muted}>Matches a payment typed for {line.typedMatch.incomeYear}: counting links them.</div> : null}
+                    </td>
+                    <td data-label="Amount" className={ui.num}>
+                      <Money value={line.amount} />
+                    </td>
+                    <td data-label="Towards">
+                      <select aria-label={`Income year for the payment on ${line.date}`} value={year} onChange={(event) => setYearFor((current) => ({ ...current, [line.journalLineId]: event.target.value }))}>
+                        <option value="">Choose…</option>
+                        {years.map((value) => (
+                          <option key={value} value={value}>
+                            {value} income year{line.suggestedIncomeYear === value ? " (suggested)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <Button size="small" variant="secondary" disabled={!year} onClick={() => void count(line.journalLineId, year)}>
+                        Count it
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {data && data.refunds.length > 0 ? (
+        <>
+          <h3>Money in on those accounts</h3>
+          <p className={ui.muted}>Possible refunds from IRD. They aren&apos;t counted as payments; a company types a refund into its imputation credit account.</p>
+          <ul>
+            {data.refunds.map((line) => (
+              <li key={line.journalLineId}>
+                {formatDate(line.date)} · {line.reference} · <Money value={line.amount} />
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </Card>
+  );
+}
+
 function Report({ organisationId, report, reload }: { organisationId: string; report: Supported; reload: () => void }) {
   return (
     <>
@@ -1187,6 +1306,7 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
           <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>
         </Card>
       )}
+      <BookPayments organisationId={organisationId} years={report.years} onChanged={reload} />
       <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
       <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} onSaved={reload} />
       <Card title="Notes">

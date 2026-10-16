@@ -5086,3 +5086,10 @@ testing) and #154's code signing (later, Jess).
      read them and propose figures only when its key's owner is an owner or
      admin; nothing changes until a person accepts a proposal. Tohyee calls
      no AI and never touches myIR.
+
+550. **IRD payments picked from the books** (16 October 2026). Jess said "ok
+     sounds good". Chosen by Claude, not yet reviewed (ITX36-ITX40): owners
+     and admins choose the accounts IRD income tax payments are coded to;
+     debits to them paid from a bank or credit card are offered with a
+     suggested income year from the date, and counting one links it so it
+     can't count twice. Refunds are listed, not counted.

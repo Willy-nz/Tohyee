@@ -1997,6 +1997,13 @@ that something happened.
   beside the current figures and the document, and accepts or declines it;
   payments already typed aren't added twice. Tohyee calls no AI and never
   touches myIR.
+- **IRD payments from the books** (#292 stage 6; examples ITX36-ITX40,
+  decision 550, tenant migration 0155): owners and admins choose the
+  accounts income tax payments are coded to; payments to them from a bank
+  or credit card (not voided or reversed) are listed with a suggested income
+  year from the date and counted with one click, linked to their journal
+  line so they can't count twice (a matching typed payment is linked
+  instead). Money in on those accounts is listed as possible refunds.
 
 ## Not built yet, on purpose
 
@@ -2055,8 +2062,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: picking IRD
-   payments from the bank, other balance dates, interest, and later
+0. Income tax (#292), next stages: other balance dates, interest, and later
    preparing returns.
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works

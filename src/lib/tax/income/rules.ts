@@ -426,3 +426,19 @@ export function workpaper(input: {
     rit: money(isNegative(taxToPay) ? ZERO_DECIMAL : taxToPay),
   };
 }
+
+/**
+ * The income year a payment to IRD on this date is most likely towards (ITX38),
+ * for a 31 March balance date: August to January, that year's instalments;
+ * February and March, end-of-year tax for the year before; April, end-of-year
+ * tax under a tax agent's extension; May, the last instalment of the year just
+ * ended. June and July: no suggestion. A person confirms it.
+ */
+export function suggestedIncomeYear(date: string): number | null {
+  const month = Number(date.slice(5, 7));
+  const year = incomeYearOf(date);
+  if (month >= 8 || month === 1) return year;
+  if (month === 2 || month === 3 || month === 5) return year - 1;
+  if (month === 4) return year - 2;
+  return null;
+}

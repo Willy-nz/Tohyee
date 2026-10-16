@@ -6,6 +6,7 @@ import {
   incomeYearOf,
   onTimeBy,
   standardSchedule,
+  suggestedIncomeYear,
   taxOn,
   workpaper,
   type WorkpaperAccount,
@@ -186,5 +187,9 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     expect(onTimeBy("2026-02-07")).toEqual({ date: "2026-02-09", holidaysChecked: true });
     // Years not on the holiday list: weekends only, and it says so.
     expect(onTimeBy("2030-02-07")).toEqual({ date: "2030-02-07", holidaysChecked: false });
+  });
+
+  it("ITX38 suggests the income year a payment is towards", () => {
+    expect(["2026-08-28", "2027-01-15", "2027-02-07", "2027-03-20", "2027-04-07", "2027-05-07", "2027-06-30", "2027-07-15"].map(suggestedIncomeYear)).toEqual([2027, 2027, 2026, 2026, 2026, 2027, null, null]);
   });
 });
