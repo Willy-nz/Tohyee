@@ -1955,8 +1955,19 @@ that something happened.
   uplifts, a return filed late, six-monthly GST filers' two instalments);
   expected end-of-year tax; and due dates moved to the next business day.
   IRD's figures and payments to IRD are typed in and labelled. Nothing
-  posts, files, pays or chooses a provisional tax option. Book depreciation
-  stands in for tax depreciation.
+  posts, files, pays or chooses a provisional tax option.
+- **Tax depreciation and Investment Boost** (#292 stage 2; examples
+  ITX11-ITX18, decision 546, tenant migration 0151; from IRD's pages, not
+  yet reviewed): on the Income tax page, each fixed asset gets tax details
+  (diminishing value, straight line, low-value write-off up to 1,000.00 or
+  not depreciable; the IRD rate typed from IRD's rate finder; tax cost;
+  business use %; first available date; opening ATV for older assets) and
+  Investment Boost (20% for new assets first available from 22 May 2025,
+  then depreciation on the remaining 80%). Each year shows opening ATV,
+  boost, depreciation, depreciation recovered or loss on sale (none in the
+  year of sale) and closing ATV. In taxable income, those assets' book
+  depreciation and book gains and losses come out and the tax figures go
+  in; assets without tax details keep book depreciation and are listed.
 
 ## Not built yet, on purpose
 
@@ -2015,8 +2026,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: the tax depreciation register with
-   Investment Boost, IR10 from the ledger, the imputation credit account,
+0. Income tax (#292), next stages: IR10 from the ledger, the imputation credit account,
    reading IRD documents with AI and a person checking, picking IRD
    payments from the bank, other balance dates, interest, and later
    preparing returns.

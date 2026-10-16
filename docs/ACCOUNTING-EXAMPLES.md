@@ -17511,3 +17511,87 @@ income, and payments made to IRD towards that year (date and amount). Each
 is labelled "typed from IRD" with who typed it and when; Tohyee's own
 figures are labelled "Tohyee estimate". Payments are typed, not picked from
 the bank, in this stage.
+
+## Income tax (#292) stage 2: tax depreciation and Investment Boost (ITX11-ITX18; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
+
+Tax is law, so like ITX1-ITX10 these come from IRD's pages, not Xero, and
+stay "not yet reviewed" until Jess or Will checks them. Tested in
+`tests/unit/tax-depreciation.test.ts` and
+`tests/integration/tax-depreciation.test.ts`. Nothing posts: the book
+register keeps posting book depreciation; this is the tax side only.
+
+Sources (read 16 Oct 2026 through a summarising fetch tool, so check the
+pages): IRD "Work out diminishing value depreciation"; "Work out
+straight-line depreciation"; "Claiming depreciation"; IR260 *Depreciation*
+(April 2024); "New assets - Investment Boost"; "What you can claim with
+Investment Boost"; "Investment Boost benefits"; "Investment Boost
+examples"; "Claiming Investment Boost" (news, 2025).
+
+- **ITX11 An asset's tax details.** Owners and admins give a fixed asset
+  from the register its tax details: **method** (diminishing value,
+  straight line, low-value write-off, or not depreciable, e.g. land, or a
+  building at IRD's 0%), the **IRD rate** typed from IRD's rate finder
+  (Tohyee has no list of IRD rates), the **tax cost** (the book cost unless
+  changed), the **business use %** (100 unless changed), the date it was
+  **first available for use**, and whether it's **new** (or new to NZ) for
+  Investment Boost. An asset with tax history from before Tohyee gets its
+  **adjusted tax value (ATV)** at the start of an income year instead. An
+  asset without tax details keeps its book depreciation in the tax
+  workpaper, and the screen lists it.
+- **ITX12 Diminishing value, part year, private use** (IRD's example). An
+  espresso machine costing 10,000.00 at 30% DV, first used 20 May 2024 (the
+  2025 income year): 10,000.00 x 30% x 11 ÷ 12 = **2,750.00** (part months
+  count as whole months, so May counts). ATV **7,250.00**. Next year 7,250.00
+  x 30% = **2,175.00**, ATV 5,075.00. At 70% business use the deduction is
+  2,750.00 x 70% = **1,925.00**; the ATV still goes down by the full
+  2,750.00 (our reading; check it). Each year's depreciation is rounded half
+  up to the cent (IRD's pages don't say).
+- **ITX13 Straight line until it's used up** (IRD's example). A computer
+  costing 1,200.00 at 21% SL, first used in April 2024: **252.00** a year for
+  the 2025 to 2028 income years, then **192.00** in 2029, leaving ATV 0.00.
+- **ITX14 Investment Boost, straight line, and a sale** (IRD's "Investment
+  Boost benefits" example). A new asset costing 100,000.00 at 20% SL, first
+  available on 1 April 2026: Investment Boost 20% = **20,000.00**, then
+  depreciation on the remaining 80,000.00: 80,000.00 x 20% = 16,000.00, so
+  **36,000.00** in the 2027 income year and **16,000.00** a year after.
+  Sold for 40,000.00 in the 2030 income year: no depreciation in the year
+  of sale (IR260: "You cannot claim a deduction for depreciation in the year
+  you dispose of an asset, except in the case of buildings"); ATV
+  100,000.00 - 36,000.00 - 16,000.00 - 16,000.00 = 32,000.00, so
+  **depreciation recovered 8,000.00** is taxable. Investment Boost needs the
+  asset to be new (or new to NZ) and first available for use on or after
+  **22 May 2025**; Tohyee refuses it otherwise, and for low-value and not
+  depreciable assets.
+- **ITX15 Investment Boost, diminishing value, part year.** A new deep
+  fryer costing 2,500.00 at 25% DV (rate as typed), first available on 23
+  May 2025 (the 2026 income year, 11 months): Investment Boost **500.00**;
+  depreciation 2,000.00 x 25% x 11 ÷ 12 = **458.33**; ATV **1,541.67**.
+- **ITX16 Mixed use with Investment Boost** (IRD's taxi example, with our
+  rate and month). A new car costing 45,000.00, 50% business use, first
+  available on 1 March 2026, 30% DV: Investment Boost 9,000.00, of which
+  **4,500.00** is claimed (IRD: "half of the Investment Boost amount");
+  depreciation 36,000.00 x 30% x 1 ÷ 12 = 900.00, of which **450.00** is
+  claimed. ATV 35,100.00 (down by the full amounts; our reading).
+- **ITX17 Low-value assets and a loss on sale.** A laptop costing 950.00
+  (excluding GST when registered), first used 10 July 2025: written off in
+  full, **950.00**, in the 2026 income year; Tohyee refuses a low-value
+  write-off over 1,000.00 or for an asset bought before 17 March 2021, and
+  reminds that assets bought together from one supplier at the same rate
+  don't count. Sold later for 300.00: **300.00** is depreciation recovered.
+  A loss: IR260's car with ATV 7,864.00 (typed as the ATV at the start of
+  the year), 85% business use, sold for 6,000.00: loss 1,864.00 x 85% =
+  **1,584.40** deductible (IR260 shows "$1,584"). Sale price above cost: the
+  part above cost isn't taxable; depreciation recovered is at most cost less
+  ATV. Recovered and loss amounts are also scaled by business use (our
+  reading). Proceeds come from the register's disposal (excluding GST).
+- **ITX18 In the taxable income workpaper.** For assets with tax details,
+  the book figures the ledger shows for the year come out and the tax
+  figures go in, as separate lines: book depreciation added back (as the
+  depreciation account counts for tax), book gains and losses on disposal
+  reversed (as their accounts count, so a capital gain already treated as
+  not taxable isn't taken off twice), then tax depreciation, Investment
+  Boost, depreciation recovered and losses on sale. Kererū's 100,000.00
+  asset from ITX14 with 20,000.00 of book depreciation in the 2027 income
+  year: +20,000.00 book depreciation, -20,000.00 Investment Boost,
+  -16,000.00 tax depreciation: taxable income 16,000.00 lower than with book
+  depreciation.

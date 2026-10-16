@@ -5048,3 +5048,15 @@ testing) and #154's code signing (later, Jess).
      - Next: tax depreciation register with Investment Boost, IR10, the
        imputation credit account, reading IRD documents with AI and a
        person checking, and picking IRD payments from the bank.
+
+546. **Tax depreciation and Investment Boost** (16 October 2026). Jess said
+     "Ok lets go" to the next income tax stage. Chosen by Claude, from IRD's
+     pages and not yet reviewed (ITX11-ITX18):
+     - Tax details sit on fixed assets in the existing register; book
+       depreciation keeps posting. Tohyee has no list of IRD rates: the rate
+       is typed from IRD's rate finder.
+     - Where IRD's pages are silent, Tohyee rounds each year's depreciation
+       half up to the cent, reduces the ATV by the full depreciation of a
+       part-private asset, and scales recovered amounts and losses by
+       business use. These readings are flagged on the screen.
+     - Only owners and admins, like the rest of income tax.
