@@ -10,6 +10,8 @@ import { formatDate, formatMoney, personName } from "@/lib/format";
 import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_LABELS, TREATMENT_LABELS, type TaxpayerType, type Treatment } from "@/lib/tax/income/rules";
 import type { TaxAsset } from "@/lib/tax/income/assets";
 import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
+import type { Ica } from "@/lib/tax/income/ica";
+import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
 import { IR10_BOX_LABELS, IR10_ROLE_LABELS } from "@/lib/tax/income/ir10-boxes";
 import { TAX_DEPRECIATION_METHOD_LABELS, TAX_DEPRECIATION_METHODS, type TaxDepreciationMethod } from "@/lib/tax/income/depreciation";
 import type { IncomeTaxReport, IncomeTaxSettings, IncomeTaxYear, ReportAccount, TaxPayment } from "@/lib/tax/income/service";
@@ -806,6 +808,123 @@ function Ir10Card({ organisationId, report, ir10, onSaved }: { organisationId: s
   );
 }
 
+function IcaCard({ organisationId, ica, onSaved }: { organisationId: string; ica: Ica; onSaved: () => void }) {
+  const [form, setForm] = useState({ entryDate: "", kind: "dividend_paid" as IcaKind, amount: "", dividendAmount: "", description: "" });
+  const [key, setKey] = useState(() => newIdempotencyKey("ica"));
+  const [status, setStatus] = useState<Status>(null);
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await api("/api/income-tax/ica", { method: "POST", body: { organisationId, idempotencyKey: key, ...form, dividendAmount: form.kind === "dividend_paid" ? form.dividendAmount : undefined } });
+      setForm((current) => ({ ...current, amount: "", dividendAmount: "", description: "" }));
+      setKey(newIdempotencyKey("ica"));
+      setStatus(null);
+      onSaved();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  async function remove(id: string) {
+    try {
+      await api(`/api/income-tax/ica/${id}`, { method: "DELETE", query: { organisationId } });
+      onSaved();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  return (
+    <Card
+      title="Imputation credit account"
+      description={`The ${ica.icaYear} ICA year, ${formatDate(ica.start)} to ${formatDate(ica.end)}. Income tax paid comes from the payments typed below; type dividends, refunds and other entries here. Credits are positive, debits negative.`}
+    >
+      {ica.debitBalance ? (
+        <Notice tone="error">
+          Debit balance at 31 March: further income tax <Money value={ica.debitBalance.furtherIncomeTax} /> and imputation penalty tax <Money value={ica.debitBalance.penalty} /> are due{" "}
+          {formatDate(ica.debitBalance.dueDate)}
+          {ica.debitBalance.onTimeBy.date !== ica.debitBalance.dueDate ? ` (on time by ${formatDate(ica.debitBalance.onTimeBy.date)})` : ""}.
+        </Notice>
+      ) : null}
+      <table className={ui.reportTable}>
+        <tbody>
+          <tr>
+            <td>Balance at {formatDate(ica.start)}</td>
+            <td />
+            <td className={ui.num}>
+              <Money value={ica.opening} />
+            </td>
+          </tr>
+          {ica.rows.map((row, index) => (
+            <tr key={`${row.kind}-${row.id ?? index}`}>
+              <td>
+                {formatDate(row.date)} · {row.label}
+                {row.dividendAmount ? (
+                  <>
+                    {" "}
+                    on <Money value={row.dividendAmount} />
+                  </>
+                ) : null}
+                {row.description ? <span className={ui.muted}> · {row.description}</span> : null} {row.ratioDiffers ? <Badge tone="amber">Different ratio</Badge> : null}{" "}
+                {row.id !== null && row.kind !== "tax_paid" ? (
+                  <button type="button" className={ui.linkButton} onClick={() => void remove(row.id!)}>
+                    Remove
+                  </button>
+                ) : null}
+              </td>
+              <td className={ui.num}>
+                <Money value={row.amount} />
+              </td>
+              <td className={ui.num}>
+                <Money value={row.balance} />
+              </td>
+            </tr>
+          ))}
+          <tr className={ui.reportTotal}>
+            <td>Balance at {formatDate(ica.end)}</td>
+            <td />
+            <td className={ui.num}>
+              <Money value={ica.closing} />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <form className={ui.inlineForm} onSubmit={add}>
+        <Field label="Date">
+          <DateInput value={form.entryDate} onChange={(event) => setForm((current) => ({ ...current, entryDate: event.target.value }))} required />
+        </Field>
+        <Field label="Entry">
+          <select value={form.kind} onChange={(event) => setForm((current) => ({ ...current, kind: event.target.value as IcaKind }))}>
+            {ICA_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {ICA_KIND_LABELS[kind]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {form.kind === "dividend_paid" ? (
+          <Field label="Cash dividend">
+            <input inputMode="decimal" value={form.dividendAmount} onChange={(event) => setForm((current) => ({ ...current, dividendAmount: event.target.value }))} required />
+          </Field>
+        ) : null}
+        <Field label={form.kind === "dividend_paid" ? "Credits attached" : form.kind === "opening" ? "Balance (debit negative)" : "Amount"} hint={form.kind === "dividend_paid" ? "Blank for the most allowed: 28/72 of the dividend." : undefined}>
+          <input inputMode="decimal" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} required={form.kind !== "dividend_paid"} />
+        </Field>
+        <Field label="Note">
+          <input value={form.description} maxLength={200} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+        </Field>
+        <Button type="submit" variant="secondary">
+          Add entry
+        </Button>
+      </form>
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+      <ul className={ui.muted}>
+        {ica.notes.map((text) => (
+          <li key={text}>{text}</li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function Report({ organisationId, report, reload }: { organisationId: string; report: Supported; reload: () => void }) {
   return (
     <>
@@ -846,6 +965,7 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       <Workpaper organisationId={organisationId} report={report} onSaved={reload} />
       <TaxAssets organisationId={organisationId} assets={report.taxAssets} incomeYear={report.incomeYear} onSaved={reload} />
       <Provisional report={report} />
+      {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
       {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
         <Card title="IR10 financial statements summary">
           <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>

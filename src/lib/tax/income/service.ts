@@ -7,6 +7,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, type Decimal, isZero, parseDecimalInput, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { assetAdjustments, listTaxAssets, type TaxAsset } from "@/lib/tax/income/assets";
+import { buildIca, type Ica } from "@/lib/tax/income/ica";
 import { buildIr10, type Ir10 } from "@/lib/tax/income/ir10";
 import {
   EXPENSE_TREATMENTS,
@@ -407,6 +408,8 @@ export type IncomeTaxReport =
       taxAssets: TaxAsset[];
       /** The IR10, once the income year has ended (ITX24). */
       ir10: Ir10 | null;
+      /** A company's imputation credit account for the ICA year matching this income year (ITX25-ITX28). */
+      ica: Ica | null;
       adjustments: TaxAdjustment[];
       payments: TaxPayment[];
       paidTotal: string;
@@ -655,6 +658,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     typed,
     taxAssets,
     ir10,
+    ica: type === "company" ? await buildIca(tx, incomeYear) : null,
     adjustments,
     payments,
     paidTotal: money(paid),

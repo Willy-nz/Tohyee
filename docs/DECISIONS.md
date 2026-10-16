@@ -5068,3 +5068,12 @@ testing) and #154's code signing (later, Jess).
      paid and current accounts are marked on accounts; amounts keep cents;
      box 26 (exceptional items) is left blank; box 58's sign is credit
      positive. Shown for finished income years only; nothing is filed.
+
+548. **The imputation credit account** (16 October 2026). Jess said "Ok" to
+     the next tax stage. Chosen by Claude from IRD's IR274, not yet reviewed
+     (ITX25-ITX29): companies only; income tax paid comes from the payments
+     already typed on the Income tax page; dividends, refunds, RWT and other
+     entries are typed; credits over 28/72 of a dividend are refused and a
+     ratio different from the year's first dividend is flagged; a debit
+     balance at 31 March shows further income tax and 10% penalty due 20
+     June. Shareholder continuity debits aren't worked out.
