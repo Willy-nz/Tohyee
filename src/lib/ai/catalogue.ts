@@ -2,6 +2,7 @@ import { type AiAccessLevel, levelAllows } from "@/lib/ai/access-levels";
 import { BANK_READ_TOOLS, BANK_WRITE_TOOLS } from "@/lib/ai/bank-tools";
 import { FARM_READ_TOOLS, FARM_WRITE_TOOLS } from "@/lib/ai/farm-tools";
 import { FULL_READ_TOOLS, FULL_WRITE_TOOLS } from "@/lib/ai/full-tools";
+import { TAX_READ_TOOLS, TAX_WRITE_TOOLS } from "@/lib/ai/tax-tools";
 import { type AiTool, READ_TOOLS } from "@/lib/ai/tools";
 import { WRITE_TOOLS } from "@/lib/ai/write-tools";
 
@@ -11,10 +12,12 @@ export const AI_TOOLS: readonly AiTool[] = [
   ...BANK_READ_TOOLS,
   ...FARM_READ_TOOLS,
   ...FULL_READ_TOOLS,
+  ...TAX_READ_TOOLS,
   ...WRITE_TOOLS,
   ...BANK_WRITE_TOOLS,
   ...FARM_WRITE_TOOLS,
   ...FULL_WRITE_TOOLS,
+  ...TAX_WRITE_TOOLS,
 ];
 
 export function findAiTool(name: unknown): AiTool | null {

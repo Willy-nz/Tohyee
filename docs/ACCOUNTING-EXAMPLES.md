@@ -17712,3 +17712,52 @@ to the books and nothing is filed.
   deducted, refunds, other credits and debits, and an opening balance. Each
   shows who typed it; a typed entry can be removed, and the history keeps
   it.
+
+## Income tax (#292) stage 5: IRD documents read by the connected AI, checked by a person (ITX30-ITX35; chosen by Claude 16 Oct 2026 following the bills inbox, not yet reviewed)
+
+Jess asked (16 Oct 2026) for a way to get IRD's figures in "manually or with
+AI and human checks", and never by collecting myIR passwords or reading
+myIR pages. Like the bills inbox (decisions 339-348), Tohyee calls no AI:
+the organisation's own connected AI reads the files through Tohyee's tools
+and can only **propose** figures; a person accepts or declines each
+proposal. Tested in `tests/integration/ird-documents.test.ts`.
+
+- **ITX30 IRD documents.** Owners and admins upload IRD files (PDF, JPG,
+  PNG or HEIC, up to 10 MB) on the Income tax page, optionally with the
+  income year and a note: assessments, statements of account, provisional
+  tax letters, myIR downloads. Each shows who uploaded it and when, and can
+  be opened. Removing one needs a reason; the file is gone and the history
+  keeps who, when and why. Nothing changes any figure.
+- **ITX31 What the AI sees.** Income tax is for owners and admins only, so
+  the AI tools for it work only when the AI key's owner is an owner or
+  admin now: `list_ird_documents`, `read_ird_document` (the file, to read)
+  and `get_income_tax_figures` (what's typed for an income year, and the
+  payments). A key whose owner is a bookkeeper gets "only owners and
+  admins", whatever its level.
+- **ITX32 The AI proposes.** With a key at "Make drafts" or above,
+  `propose_ird_figures` saves a proposal for an income year, optionally
+  from one IRD document: any of assessed RIT with the date the return was
+  filed (both or neither), losses brought forward, tax credits, an
+  individual's other income, and payments to IRD (date and amount), with
+  the AI's note on where in the document it found them. Values are checked
+  as if typed (e.g. a payment of 0 is refused). It changes nothing.
+- **ITX33 A person checks.** The Income tax page lists proposals waiting to
+  be checked, each beside the current figures and the document. Accepting
+  saves the proposed figures as if the person typed them (other figures
+  stay as they were) and adds the payments, marking each "from an IRD
+  document, proposed by AI key '<name>', accepted by <person>". A proposed
+  payment already typed (same income year, date and amount) is shown as
+  such and isn't added twice. Declining needs a reason. A proposal is
+  accepted or declined once; the history keeps both.
+- **ITX34 Example.** Kererū's 2026 assessment PDF is uploaded. The AI
+  reads it and proposes: assessed RIT 17,668.00, return filed 20 Jun 2026,
+  and a payment of 6,183.80 on 28 Aug 2026 towards 2027 ("Statement of
+  account, page 2"). Jess accepts: the 2026 figures show 17,668.00 filed
+  20 Jun 2026, so the 2027 instalments become 6,183.80 each (ITX5), and the
+  2027 payment is added. A second proposal with a payment of 6,183.80 on 28
+  Aug 2026 for 2027 again shows it as already typed; accepting adds nothing
+  for it.
+- **ITX35 If the figures changed meanwhile.** Accepting uses the year's
+  figures as they are then: if someone typed figures after the proposal
+  was made, the screen shows the current figures beside the proposal, so
+  the person decides with both in view.

@@ -5,6 +5,7 @@ import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
 import type { CallToolResult, McpServer, ToolContent } from "@/lib/ai/mcp-protocol";
 import { ToolFileAnswer } from "@/lib/ai/tools";
 import type { AiTokenIdentity } from "@/lib/ai/tokens";
+import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { HttpError } from "@/lib/errors";
 import { loadMemberNames } from "@/lib/people/names";
@@ -46,7 +47,8 @@ const LEVEL_WORDS = {
 export function mcpServerFor(identity: AiTokenIdentity): McpServer {
   const organisation = identity.membership.organisation;
   const level = identity.effectiveLevel;
-  const tools = toolsForLevel(level);
+  const roleAllows = (tool: { minRole?: Role }) => !tool.minRole || roleAtLeast(identity.membership.role, tool.minRole);
+  const tools = toolsForLevel(level).filter(roleAllows);
   return {
     serverInfo: { name: "tohyee", title: "Tohyee", version: packageJson.version },
     instructions:
@@ -58,6 +60,7 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
     unavailableTool(name) {
       const tool = findAiTool(name);
       if (!tool) return null;
+      if (!roleAllows(tool)) return `${name} is only for owners and admins; this key's owner isn't one now.`;
       return levelAllows(level, tool.level)
         ? null
         : `${name} needs an AI key with "${AI_ACCESS_LEVEL_LABELS[tool.level]}" access and ${roleNeededFor(tool.level)}; this key is "${AI_ACCESS_LEVEL_LABELS[level]}".`;
@@ -65,7 +68,7 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
     async callTool(name, args) {
       const tool = findAiTool(name);
       // Checked again here: tools/list and tools/call are separate requests.
-      if (!tool || !levelAllows(level, tool.level)) return text(`This key can't use ${name}.`, true);
+      if (!tool || !levelAllows(level, tool.level) || !roleAllows(tool)) return text(`This key can't use ${name}.`, true);
       try {
         const people = await loadMemberNames(organisation.id);
         const result = await withOrganisationTransaction(

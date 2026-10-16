@@ -5077,3 +5077,12 @@ testing) and #154's code signing (later, Jess).
      ratio different from the year's first dividend is flagged; a debit
      balance at 31 March shows further income tax and 10% penalty due 20
      June. Shareholder continuity debits aren't worked out.
+
+549. **IRD documents read by the connected AI** (16 October 2026). Jess said
+     "Ok" to the next tax stage; she'd asked for IRD figures to come in
+     "manually or with AI and human checks". Chosen by Claude following the
+     bills inbox (decisions 339-348), not yet reviewed (ITX30-ITX35): IRD
+     files are uploaded by owners and admins; the organisation's own AI can
+     read them and propose figures only when its key's owner is an owner or
+     admin; nothing changes until a person accepts a proposal. Tohyee calls
+     no AI and never touches myIR.
