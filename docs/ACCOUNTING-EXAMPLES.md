@@ -17889,7 +17889,38 @@ interest it charges.
   credits, 43A refunds, 43B credits on dividends paid, 43C other debits,
   44B closing balance, 45 the 10% penalty on a debit closing balance.
   Kererū's 2026 ICA (ITX26): **41 5,000.00; 42A 8,183.80; 42B 140.00; 42C
-  280.00; 43A 500.00; 43B 2,800.00; 44B 10,303.80**. The rest of the IR4
-  (income boxes, the tax calculation) isn't filled yet: the guide we read
-  doesn't define enough of the boxes (e.g. 25 and the tax lines) to do it
-  without guessing. Tested in `tests/unit/ica.test.ts`.
+  280.00; 43A 500.00; 43B 2,800.00; 44B 10,303.80**. The income boxes and
+  tax calculation are ITX50-ITX53. Tested in `tests/unit/ica.test.ts`.
+
+## Income tax (#292) stage 10: the IR4's income and tax calculation (ITX50-ITX53; from IRD's IR4 form for 2026, downloaded from ird.govt.nz and read by Claude 17 Oct 2026, not yet reviewed)
+
+The form's own arithmetic, filled from the workpaper once the income year
+has ended, for companies only. 20B is the workpaper's income before losses
+(all the books' income after tax adjustments: the form wants interest,
+dividends, overseas income, residential rental and property sales in boxes
+13-21 instead, which doesn't change box 23); 23 = 20B; 24B donations 0; 25 =
+23 - 24B; 26A losses brought forward; 26B losses used; 27 = 25 - 26B (the
+form says "see the guide" here; this is what the workpaper does); 28 and
+28A (group losses, subvention payments) 0; 29 = 27; 30A = 29; 30B 28% of
+30A; 30C overseas tax 0; 30D = 30B - 30C, not below 0; 30E 0; 30F = 30D -
+30E; 30G imputation credits 0; 30H = 30F - 30G, not below 0; 30I the tax
+credits typed for the year (box 17A); 30IA RLWT 0; 30J = 30H - 30I - 30IA,
+a debit when positive, a credit otherwise; 30K everything recorded as paid
+towards the year; 30L = 30J (debit positive) - 30K, tax to pay when
+positive, a refund otherwise. The form prints 30A in whole dollars but
+doesn't say whether to drop or round the cents, so Tohyee keeps them.
+Made-up figures:
+
+- **ITX50** Income 100,000.00, credits 140.00, paid 20,000.00: **20B, 23,
+  25, 27, 29, 30A 100,000.00; 30B-30H 28,000.00; 30I 140.00; 30J 27,860.00
+  debit; 30K 20,000.00; 30L 7,860.00 tax to pay.**
+- **ITX51** The same with 30,000.00 paid: **30L 2,140.00 refund.**
+- **ITX52** Income 50,000.00, losses brought forward 80,000.00, credits
+  140.00, nothing paid: **25 50,000.00; 26A 80,000.00; 26B 50,000.00; 27,
+  29 and 30B 0.00; 30J 140.00 credit; 30L 140.00 refund.** (The workpaper's
+  RIT is 0.00; the return refunds the credits.)
+- **ITX53** A loss of 12,000.00 with 5,000.00 paid: **20B, 29 and 30A
+  -12,000.00; 30B 0.00; 30J 0.00 credit; 30L 5,000.00 refund.**
+
+Tested in `tests/unit/ir4.test.ts`, and against the workpaper in
+`tests/integration/ir10.test.ts`.

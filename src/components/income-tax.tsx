@@ -11,6 +11,7 @@ import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_L
 import type { TaxAsset } from "@/lib/tax/income/assets";
 import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
 import type { Ica } from "@/lib/tax/income/ica";
+import { IR4_BOX_LABELS, IR4_BOXES, type Ir4Return } from "@/lib/tax/income/ir4";
 import type { BookPayments as BookPaymentsData } from "@/lib/tax/income/book-payments";
 import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
 import { postForm } from "@/components/rd";
@@ -811,6 +812,37 @@ function Ir10Card({ organisationId, report, ir10, onSaved }: { organisationId: s
   );
 }
 
+function Ir4Card({ ir4, incomeYear }: { ir4: Ir4Return; incomeYear: number }) {
+  return (
+    <Card title={`IR4 company return: income and tax (${incomeYear})`}>
+      <Notice tone="warning">From IRD&apos;s 2026 IR4 form, read by Claude and not yet reviewed by an accountant. Check every box before filing.</Notice>
+      <table className={ui.reportTable}>
+        <tbody>
+          {IR4_BOXES.map((box) => (
+            <tr key={box}>
+              <td>
+                <span className={ui.muted}>{box}</span> {IR4_BOX_LABELS[box]}
+                {box === "30J" ? <> ({ir4.residual})</> : null}
+                {box === "30L" ? <> ({ir4.outcome === "refund" ? "refund" : "tax to pay"})</> : null}
+              </td>
+              <td className={ui.num}>
+                <Money value={ir4.boxes[box]} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul>
+        {ir4.notes.map((note) => (
+          <li key={note} className={ui.muted}>
+            {note}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function IcaCard({ organisationId, ica, onSaved }: { organisationId: string; ica: Ica; onSaved: () => void }) {
   const [form, setForm] = useState({ entryDate: "", kind: "dividend_paid" as IcaKind, amount: "", dividendAmount: "", description: "" });
   const [key, setKey] = useState(() => newIdempotencyKey("ica"));
@@ -1357,6 +1389,7 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       <Provisional report={report} />
       <InterestCard report={report} />
       {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
+      {report.ir4 ? <Ir4Card ir4={report.ir4} incomeYear={report.incomeYear} /> : null}
       {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
         <Card title="IR10 financial statements summary">
           <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>

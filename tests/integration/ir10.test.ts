@@ -92,9 +92,13 @@ describeWithDatabase("income tax: the IR10 financial statements summary", () => 
     expect(boxes([30, 31, 32, 33, 43, 49, 50, 51])).toEqual(["30000.00", "79500.00", "15000.00", "25500.00", "150000.00", "30000.00", "30000.00", "120000.00"]);
     expect(boxes([52, 53, 54, 55, 57, 59, 60])).toEqual(["11400.00", null, "30000.00", null, "5000.00", null, "30000.00"]);
     expect(ir10.checks.every((check) => check.ok)).toBe(true);
+    // ITX50: the IR4's income and tax boxes follow the workpaper.
+    const ir4 = report.ir4!;
+    expect([ir4.boxes["20B"], ir4.boxes["29"], ir4.boxes["30B"], ir4.boxes["30K"]]).toEqual([report.workpaper.beforeLosses, report.workpaper.taxableIncome, report.workpaper.tax, report.paidTotal]);
     // Not shown until the year has ended.
     const current = await as((tx) => buildIncomeTax(tx, { incomeYear: 2027, today: "2026-10-16" }));
     expect(current.supported && current.ir10).toBeNull();
+    expect(current.supported && current.ir4).toBeNull();
   });
 
   it("ITX19 choosing a box moves the amount", async () => {
