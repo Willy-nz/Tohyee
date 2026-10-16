@@ -255,7 +255,8 @@ export async function saveIncomeTaxYear(
   if ((assessedRit === null) !== (returnFiledOn === null)) {
     throw new ValidationError("Type both IRD's assessed RIT and the date the return was filed, or neither.");
   }
-  if (returnFiledOn !== null && returnFiledOn <= incomeYearDates(incomeYear).end) throw new ValidationError(`The ${incomeYear} return can't be filed before the income year ends on 31 March ${incomeYear}.`);
+  const yearEnd = incomeYearDates(incomeYear, await financialYearEndMonth(tx)).end;
+  if (returnFiledOn !== null && returnFiledOn <= yearEnd) throw new ValidationError(`The ${incomeYear} return can't be filed before the income year ends on ${shortDate(yearEnd)}.`);
   const losses = amountOrZero(input.lossesBroughtForward, "lossesBroughtForward");
   const credits = amountOrZero(input.taxCredits, "taxCredits");
   const otherIncome = amountOrZero(input.otherIncome, "otherIncome", true);
@@ -390,12 +391,14 @@ export type ReportAccount = {
 export type DueDate = { key: string; label: string; dueDate: string; onTimeBy: OnTimeBy; amount: string | null; estimate: boolean };
 
 export type IncomeTaxReport =
-  | { supported: false; reason: string; settings: IncomeTaxSettings; incomeYear: number; years: number[] }
+  | { supported: false; reason: string; settings: IncomeTaxSettings; incomeYear: number; years: number[]; endMonth: number }
   | {
       supported: true;
       settings: IncomeTaxSettings & { taxpayerType: TaxpayerType };
       incomeYear: number;
       label: string;
+      /** The balance date's month (3 for 31 March). */
+      endMonth: number;
       start: string;
       end: string;
       years: number[];
@@ -417,7 +420,7 @@ export type IncomeTaxReport =
       lastYear: { incomeYear: number; rit: string | null; typed: boolean; filedOn: string | null };
       twoYearsAgo: { incomeYear: number; rit: string | null };
       provisional: ProvisionalSchedule;
-      endOfYear: { rit: string; provisional: string; amount: string; dueDate: string; onTimeBy: OnTimeBy; agentExtension: boolean };
+      endOfYear: { rit: string; provisional: string; amount: string; dueDate: string | null; onTimeBy: OnTimeBy | null; agentExtension: boolean };
       dueDates: DueDate[];
       notes: string[];
     };
@@ -426,7 +429,7 @@ type Line = { accountId: string; code: string; name: string; side: "income" | "e
 
 /** Income and expense amounts for the income year: actuals to the last whole month, the overall budget after (ITX9). */
 async function yearAmounts(tx: OrgTx, year: number, today: string, withBudget: boolean): Promise<{ lines: Map<string, Line>; actualsTo: string | null; budgetFrom: string | null; budgetName: string | null; hasActivity: boolean }> {
-  const { start, end } = incomeYearDates(year);
+  const { start, end } = incomeYearDates(year, await financialYearEndMonth(tx));
   const lastWholeMonth = monthEndOf(addDays(monthStartOf(today), -1));
   const actualsTo = end <= lastWholeMonth ? end : lastWholeMonth >= start ? lastWholeMonth : null;
   const lines = new Map<string, Line>();
@@ -515,19 +518,17 @@ function sumPayments(payments: TaxPayment[]): Decimal {
 /** The income tax workspace for an income year (ITX1-ITX10). */
 export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; today?: string }): Promise<IncomeTaxReport> {
   const today = input.today ?? todayIsoDate();
-  const current = incomeYearOf(today);
+  const endMonth = await financialYearEndMonth(tx);
+  const current = incomeYearOf(today, endMonth);
   const incomeYear = input.incomeYear == null || input.incomeYear === "" ? Math.max(current, FIRST_SUPPORTED_INCOME_YEAR) : requireIncomeYear(input.incomeYear);
   const years: number[] = [];
   for (let year = Math.max(current + 1, FIRST_SUPPORTED_INCOME_YEAR); year >= FIRST_SUPPORTED_INCOME_YEAR; year -= 1) years.push(year);
   const settings = await getIncomeTaxSettings(tx);
-  if ((await financialYearEndMonth(tx)) !== 3) {
-    return { supported: false, reason: "Tohyee works out income tax only for a 31 March balance date so far, and this organisation's financial year ends in another month.", settings, incomeYear, years };
-  }
   if (!settings.taxpayerType) {
-    return { supported: false, reason: "Choose whether this organisation is a company or an individual (sole trader) to see its income tax.", settings, incomeYear, years };
+    return { supported: false, reason: "Choose whether this organisation is a company or an individual (sole trader) to see its income tax.", settings, incomeYear, years, endMonth };
   }
   const type = settings.taxpayerType;
-  const { start, end } = incomeYearDates(incomeYear);
+  const { start, end } = incomeYearDates(incomeYear, endMonth);
   const amounts = await yearAmounts(tx, incomeYear, today, true);
   const treatments = await treatmentsById(tx);
   const accounts = toWorkpaperAccounts(amounts.lines.values(), treatments);
@@ -567,21 +568,22 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     twoYearsAgo: twoYearsAgo === null ? null : dec(twoYearsAgo),
     payments: payments.map((payment) => ({ date: payment.paidOn, amount: dec(payment.amount) })),
     today,
+    endMonth,
   });
 
   // End-of-year tax: this year's RIT less provisional tax (the instalments, or what's been paid if more) (ITX9).
   const paid = sumPayments(payments);
   const scheduled = provisional.kind === "schedule" ? dec(provisional.total) : ZERO_DECIMAL;
   const provisionalExpected = cmp(paid, scheduled) > 0 ? paid : scheduled;
-  const endDue = endOfYearTaxDue(incomeYear, settings.agentExtension);
+  const endDue = endOfYearTaxDue(incomeYear, settings.agentExtension, endMonth);
   const endAmount = sub(dec(paper.rit), provisionalExpected);
-  const endOfYear = { rit: paper.rit, provisional: money(provisionalExpected), amount: money(endAmount), dueDate: endDue, onTimeBy: onTimeBy(endDue), agentExtension: settings.agentExtension };
+  const endOfYear = { rit: paper.rit, provisional: money(provisionalExpected), amount: money(endAmount), dueDate: endDue, onTimeBy: endDue ? onTimeBy(endDue) : null, agentExtension: settings.agentExtension };
 
   const dueDates: DueDate[] = [];
   if (isSupportedIncomeYear(lastYearNumber)) {
-    const lastDue = endOfYearTaxDue(lastYearNumber, settings.agentExtension);
+    const lastDue = endOfYearTaxDue(lastYearNumber, settings.agentExtension, endMonth);
     const lastPaid = sumPayments(await listPayments(tx, lastYearNumber));
-    dueDates.push({
+    if (lastDue) dueDates.push({
       key: `end-${lastYearNumber}`,
       label: `End-of-year tax for the ${lastYearNumber} income year`,
       dueDate: lastDue,
@@ -595,13 +597,19 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
       dueDates.push({ key: `instalment-${instalment.number}`, label: `Provisional tax instalment ${instalment.number} for the ${incomeYear} income year`, dueDate: instalment.dueDate, onTimeBy: instalment.onTimeBy, amount: instalment.amount, estimate: instalment.estimate });
     }
   }
-  dueDates.push({ key: `end-${incomeYear}`, label: `End-of-year tax for the ${incomeYear} income year`, dueDate: endDue, onTimeBy: endOfYear.onTimeBy, amount: endOfYear.amount, estimate: true });
+  if (endDue) dueDates.push({ key: `end-${incomeYear}`, label: `End-of-year tax for the ${incomeYear} income year`, dueDate: endDue, onTimeBy: onTimeBy(endDue), amount: endOfYear.amount, estimate: true });
   dueDates.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   // The IR10 once the income year has ended and the figures are all actuals (ITX24).
   const ir10 = amounts.actualsTo === end && amounts.budgetFrom === null ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
 
   const notes: string[] = [];
+  if (!endDue) {
+    notes.push(
+      "For a balance date from April to September, Tohyee doesn't work out the end-of-year tax due date yet: the Income Tax Act's schedule 3 gives the month (February, or April with a tax agent's extension), and which year that falls in still needs checking. Check the date in myIR.",
+    );
+  }
+  if (endMonth !== 3) notes.push(`The ${incomeYear} income year runs ${shortDate(start)} to ${shortDate(end)} (IRD SPS 24/01). The provisional tax dates follow the balance date (Income Tax Act 2007 schedule 3).`);
   if (amounts.budgetFrom) {
     const hasBudget = [...amounts.lines.values()].some((line) => !isZero(line.budget));
     notes.push(
@@ -632,7 +640,8 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     supported: true,
     settings: { ...settings, taxpayerType: type },
     incomeYear,
-    label: incomeYearLabel(incomeYear),
+    label: incomeYearLabel(incomeYear, endMonth),
+    endMonth,
     start,
     end,
     years,

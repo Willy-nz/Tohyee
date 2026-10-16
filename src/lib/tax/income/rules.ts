@@ -1,4 +1,5 @@
 import { addDays } from "@/lib/financial-year";
+import { incomeYearDates as rdIncomeYearDates, incomeYearOf as rdIncomeYearOf } from "@/lib/rd/amounts";
 import { add, cmp, dec, type Decimal, divide, isNegative, isPositive, isZero, mul, roundHalfUp, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { publicHolidayYear } from "@/lib/payroll/leave/public-holiday-dates";
 
@@ -48,20 +49,27 @@ export function weekdayName(date: string): string {
   return WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
 }
 
-/** The 2026 income year is 1 April 2025 to 31 March 2026. */
-export function incomeYearDates(year: number): { start: string; end: string } {
-  return { start: `${year - 1}-04-01`, end: `${year}-03-31` };
+/**
+ * An income year's dates for a balance date at the end of `endMonth` (ITX41,
+ * IRD SPS 24/01 para 9, the same rule as R&D's): with 31 March, the 2026
+ * income year is 1 April 2025 to 31 March 2026; a late balance date (April to
+ * September) corresponds to the tax year ending the 31 March before it (31 May
+ * 2026 is the 2026 income year); an early one (October to February) to the
+ * tax year ending the 31 March after it (31 October 2025 is the 2026 income
+ * year).
+ */
+export function incomeYearDates(year: number, endMonth = 3): { start: string; end: string } {
+  return rdIncomeYearDates(year, endMonth);
 }
 
-export function incomeYearLabel(year: number): string {
-  const { start, end } = incomeYearDates(year);
+export function incomeYearLabel(year: number, endMonth = 3): string {
+  const { start, end } = incomeYearDates(year, endMonth);
   return `${year} income year (${shortDate(start)} to ${shortDate(end)})`;
 }
 
-/** The income year (31 March balance date) a date is in. */
-export function incomeYearOf(date: string): number {
-  const year = Number(date.slice(0, 4));
-  return date.slice(5) > "03-31" ? year + 1 : year;
+/** The income year a date is in, for a balance date at the end of `endMonth`. */
+export function incomeYearOf(date: string, endMonth = 3): number {
+  return rdIncomeYearOf(date, endMonth);
 }
 
 export function isSupportedIncomeYear(year: number): boolean {
@@ -148,14 +156,48 @@ export function onTimeBy(date: string): OnTimeBy {
 
 // --- Due dates ---------------------------------------------------------------
 
-/** Standard option instalment due dates for an income year (31 March balance date). */
-export function instalmentDates(year: number, count: 2 | 3): string[] {
-  return count === 3 ? [`${year - 1}-08-28`, `${year}-01-15`, `${year}-05-07`] : [`${year - 1}-10-28`, `${year}-05-07`];
+/** "2026-08" plus `count` months. */
+function addMonthsTo(month: string, count: number): { year: number; month: number } {
+  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + count;
+  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
 }
 
-/** End-of-year (terminal) tax for an income year: 7 Feb after it ends, or 7 Apr with a tax agent's extension of time. */
-export function endOfYearTaxDue(year: number, agentExtension: boolean): string {
-  return agentExtension ? `${year + 1}-04-07` : `${year + 1}-02-07`;
+/**
+ * A provisional tax date: the 28th of the month that's `monthsAfter` months
+ * after the balance date before the income year, except that 28 December is
+ * 15 January and 28 April is 7 May (Income Tax Act 2007 schedule 3 part A,
+ * ITX42).
+ */
+function instalmentDate(previousBalanceDate: string, monthsAfter: number): string {
+  const { year, month } = addMonthsTo(previousBalanceDate.slice(0, 7), monthsAfter);
+  if (month === 12) return `${year + 1}-01-15`;
+  if (month === 4) return `${year}-05-07`;
+  return `${year}-${String(month).padStart(2, "0")}-28`;
+}
+
+/**
+ * Standard option instalment due dates for an income year: the 5th, 9th and
+ * 13th months after the balance date before it (7th and 13th for six-monthly
+ * GST filers). With 31 March: 28 Aug, 15 Jan, 7 May (two: 28 Oct, 7 May).
+ */
+export function instalmentDates(year: number, count: 2 | 3, endMonth = 3): string[] {
+  const previous = addDays(incomeYearDates(year, endMonth).start, -1);
+  return (count === 3 ? [5, 9, 13] : [7, 13]).map((months) => instalmentDate(previous, months));
+}
+
+/**
+ * End-of-year (terminal) tax for an income year (ITX43): the 7th of the 11th
+ * month after the balance date, or of the 13th with a tax agent's extension
+ * of time (with 31 March: 7 Feb and 7 Apr), from the last two columns of
+ * schedule 3 part A. For April to September balance dates the schedule says
+ * February and April, and which year that is hasn't been checked yet, so
+ * Tohyee returns null rather than guess.
+ */
+export function endOfYearTaxDue(year: number, agentExtension: boolean, endMonth = 3): string | null {
+  if (endMonth >= 4 && endMonth <= 9) return null;
+  const end = incomeYearDates(year, endMonth).end;
+  const { year: dueYear, month } = addMonthsTo(end.slice(0, 7), agentExtension ? 13 : 11);
+  return `${dueYear}-${String(month).padStart(2, "0")}-07`;
 }
 
 // --- Standard provisional tax -----------------------------------------------
@@ -210,6 +252,8 @@ export function standardSchedule(input: {
   twoYearsAgo: Decimal | null;
   payments: Payment[];
   today: string;
+  /** The balance date's month (default 31 March). */
+  endMonth?: number;
 }): ProvisionalSchedule {
   const { year, lastYear, twoYearsAgo } = input;
   const label = (offset: number) => `the ${year - offset} income year`;
@@ -226,7 +270,7 @@ export function standardSchedule(input: {
       ],
     };
   }
-  const dates = instalmentDates(year, input.instalmentCount);
+  const dates = instalmentDates(year, input.instalmentCount, input.endMonth ?? 3);
   const total = roundHalfUp(mul(lastYear.amount, UPLIFT_5), 2);
   const filedOn = lastYear.typed ? input.lastYearFiledOn : null;
   // A return filed on the next business day after a due date on a weekend or holiday counts as filed on the due date.
@@ -434,7 +478,9 @@ export function workpaper(input: {
  * tax under a tax agent's extension; May, the last instalment of the year just
  * ended. June and July: no suggestion. A person confirms it.
  */
-export function suggestedIncomeYear(date: string): number | null {
+export function suggestedIncomeYear(date: string, endMonth = 3): number | null {
+  // Worked out only for a 31 March balance date (ITX38).
+  if (endMonth !== 3) return null;
   const month = Number(date.slice(5, 7));
   const year = incomeYearOf(date);
   if (month >= 8 || month === 1) return year;

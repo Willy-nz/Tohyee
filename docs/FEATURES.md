@@ -2004,6 +2004,12 @@ that something happened.
   year from the date and counted with one click, linked to their journal
   line so they can't count twice (a matching typed payment is linked
   instead). Money in on those accounts is listed as possible refunds.
+- **Income tax for other balance dates** (#292 stage 7; examples
+  ITX41-ITX43, decision 551): income years follow IRD's early/late balance
+  date rule (SPS 24/01), and provisional tax dates follow the Income Tax Act
+  2007 schedule 3 part A for every balance date month. The end-of-year tax
+  date for April to September balance dates isn't shown yet (waiting on a
+  check of which year schedule 3's February and April are).
 
 ## Not built yet, on purpose
 
@@ -2062,7 +2068,8 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: other balance dates, interest, and later
+0. Income tax (#292), next stages: the end-of-year tax date for April to
+   September balance dates (once checked), interest, and later
    preparing returns.
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works

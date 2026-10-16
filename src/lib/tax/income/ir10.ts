@@ -4,7 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays } from "@/lib/financial-year";
 import { add, cmp, dec, type Decimal, isNegative, isZero, neg, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
-import { accountTotals, earningsOf, naturalAmount } from "@/lib/reports/financial";
+import { accountTotals, earningsOf, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { taxAssetTotals } from "@/lib/tax/income/assets";
 import { allowedBoxes, allowedRoles, defaultBox, defaultRole, IR10_BOX_LABELS, IR10_ROLES, type Ir10Role } from "@/lib/tax/income/ir10-boxes";
 import { incomeYearDates, money, moneyText, type Treatment, type Workpaper } from "@/lib/tax/income/rules";
@@ -115,7 +115,7 @@ export async function buildIr10(
     treatments: Map<string, { treatment: Treatment }>;
   },
 ): Promise<Ir10> {
-  const { start, end } = incomeYearDates(input.incomeYear);
+  const { start, end } = incomeYearDates(input.incomeYear, await financialYearEndMonth(tx));
   const accounts = await listIr10Accounts(tx);
   const byId = new Map(accounts.map((account) => [account.accountId, account]));
   const box = new Map<number, Decimal>();

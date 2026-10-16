@@ -3,7 +3,9 @@ import { dec } from "@/lib/money/decimal";
 import {
   endOfYearTaxDue,
   incomeYearLabel,
+  incomeYearDates,
   incomeYearOf,
+  instalmentDates,
   onTimeBy,
   standardSchedule,
   suggestedIncomeYear,
@@ -190,6 +192,51 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
   });
 
   it("ITX38 suggests the income year a payment is towards", () => {
-    expect(["2026-08-28", "2027-01-15", "2027-02-07", "2027-03-20", "2027-04-07", "2027-05-07", "2027-06-30", "2027-07-15"].map(suggestedIncomeYear)).toEqual([2027, 2027, 2026, 2026, 2026, 2027, null, null]);
+    expect(["2026-08-28", "2027-01-15", "2027-02-07", "2027-03-20", "2027-04-07", "2027-05-07", "2027-06-30", "2027-07-15"].map((date) => suggestedIncomeYear(date))).toEqual([2027, 2027, 2026, 2026, 2026, 2027, null, null]);
+  });
+
+  it("ITX41 income years for late and early balance dates (SPS 24/01)", () => {
+    expect(incomeYearDates(2026, 5)).toEqual({ start: "2025-06-01", end: "2026-05-31" });
+    expect(incomeYearDates(2026, 10)).toEqual({ start: "2024-11-01", end: "2025-10-31" });
+    expect(incomeYearDates(2026, 1)).toEqual({ start: "2025-02-01", end: "2026-01-31" });
+    expect(incomeYearOf("2026-05-31", 5)).toBe(2026);
+    expect(incomeYearOf("2026-06-01", 5)).toBe(2027);
+    expect(incomeYearOf("2025-10-31", 10)).toBe(2026);
+  });
+
+  it("ITX42 instalment dates match every row of schedule 3 part A", () => {
+    // Income Tax Act 2007 schedule 3 part A: for each balance date month, the dates in the 3rd to 14th months after it.
+    const table: Record<number, string[]> = {
+      10: ["28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan"],
+      11: ["28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan"],
+      12: ["28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb"],
+      1: ["7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar"],
+      2: ["28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May"],
+      3: ["28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May"],
+      4: ["28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun"],
+      5: ["28 Aug", "28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul"],
+      6: ["28 Sep", "28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug"],
+      7: ["28 Oct", "28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep"],
+      8: ["28 Nov", "15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct"],
+      9: ["15 Jan", "28 Jan", "28 Feb", "28 Mar", "7 May", "28 May", "28 Jun", "28 Jul", "28 Aug", "28 Sep", "28 Oct", "28 Nov"],
+    };
+    const label = (date: string) => `${Number(date.slice(8))} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(date.slice(5, 7)) - 1]}`;
+    for (const [month, row] of Object.entries(table)) {
+      const endMonth = Number(month);
+      // Columns C, G, K are the 5th, 9th and 13th months; E and K the 7th and 13th.
+      expect(instalmentDates(2027, 3, endMonth).map(label), `month ${month}`).toEqual([row[2], row[6], row[10]]);
+      expect(instalmentDates(2027, 2, endMonth).map(label), `month ${month}`).toEqual([row[4], row[10]]);
+    }
+    expect(instalmentDates(2027, 3, 6)).toEqual(["2026-11-28", "2027-03-28", "2027-07-28"]);
+    expect(instalmentDates(2027, 3, 3)).toEqual(["2026-08-28", "2027-01-15", "2027-05-07"]);
+  });
+
+  it("ITX43 end-of-year tax dates, and none yet for April to September", () => {
+    expect(endOfYearTaxDue(2026, false, 10)).toBe("2026-09-07");
+    expect(endOfYearTaxDue(2026, true, 10)).toBe("2026-11-07");
+    expect(endOfYearTaxDue(2026, false, 2)).toBe("2027-01-07");
+    expect(endOfYearTaxDue(2026, false, 3)).toBe("2027-02-07");
+    expect(endOfYearTaxDue(2026, false, 5)).toBeNull();
+    expect(suggestedIncomeYear("2026-08-28", 5)).toBeNull();
   });
 });
