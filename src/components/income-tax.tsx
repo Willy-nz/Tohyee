@@ -9,6 +9,8 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, personName } from "@/lib/format";
 import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_LABELS, TREATMENT_LABELS, type TaxpayerType, type Treatment } from "@/lib/tax/income/rules";
 import type { TaxAsset } from "@/lib/tax/income/assets";
+import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
+import { IR10_BOX_LABELS, IR10_ROLE_LABELS } from "@/lib/tax/income/ir10-boxes";
 import { TAX_DEPRECIATION_METHOD_LABELS, TAX_DEPRECIATION_METHODS, type TaxDepreciationMethod } from "@/lib/tax/income/depreciation";
 import type { IncomeTaxReport, IncomeTaxSettings, IncomeTaxYear, ReportAccount, TaxPayment } from "@/lib/tax/income/service";
 
@@ -327,9 +329,10 @@ function YearForm({ organisationId, typed, type, onSaved }: { organisationId: st
     lossesBroughtForward: typed.lossesBroughtForward,
     taxCredits: typed.taxCredits,
     otherIncome: typed.otherIncome,
+    multipleActivity: typed.multipleActivity,
   });
   const [status, setStatus] = useState<Status>(null);
-  const set = (name: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [name]: value }));
+  const set = (name: Exclude<keyof typeof form, "multipleActivity">) => (value: string) => setForm((current) => ({ ...current, [name]: value }));
   async function save(event: FormEvent) {
     event.preventDefault();
     try {
@@ -361,7 +364,12 @@ function YearForm({ organisationId, typed, type, onSaved }: { organisationId: st
           </Field>
         ) : null}
       </div>
-      <Button type="submit">Save figures</Button>
+      <label className={ui.checkbox}>
+        <input type="checkbox" checked={form.multipleActivity} onChange={(event) => setForm((current) => ({ ...current, multipleActivity: event.target.checked }))} /> More than one line of business (IR10 box 1)
+      </label>
+      <div>
+        <Button type="submit">Save figures</Button>
+      </div>
       {typed.updatedByEmail ? (
         <span className={ui.muted}>
           {" "}
@@ -665,6 +673,139 @@ function TaxAssets({ organisationId, assets, incomeYear, onSaved }: { organisati
   );
 }
 
+function downloadIr10(incomeYear: number, ir10: Ir10) {
+  const rows = [["Box", "Label", "Amount"], ...Object.keys(ir10.labels).map((key) => [key, ir10.labels[Number(key)], ir10.boxes[Number(key)] ?? ""])];
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `IR10-${incomeYear}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+const IR10_SECTIONS: Array<{ title: string; from: number; to: number }> = [
+  { title: "Profit and loss", from: 1, to: 29 },
+  { title: "Balance sheet", from: 30, to: 51 },
+  { title: "Other information", from: 52, to: 60 },
+];
+const IR10_TOTALS = new Set([6, 11, 25, 27, 29, 43, 48, 50, 51]);
+
+function Ir10Accounts({ organisationId, onSaved }: { organisationId: string; onSaved: () => void }) {
+  const loaded = useApiData<{ accounts: Ir10Account[] }>("/api/income-tax/ir10", { organisationId });
+  const [error, setError] = useState<string | null>(null);
+  async function save(account: Ir10Account, box: number, role: string) {
+    try {
+      setError(null);
+      await api("/api/income-tax/ir10", { method: "PUT", body: { organisationId, accountId: account.accountId, box, role: role || null } });
+      loaded.reload();
+      onSaved();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
+  }
+  if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
+  return (
+    <>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.tableWrap}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>IR10 box</th>
+              <th>Also</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loaded.data.accounts
+              .filter((account) => account.isActive || account.isSet)
+              .map((account) => (
+                <tr key={account.accountId}>
+                  <td data-label="Account">
+                    {account.code} {account.name} {account.isSet ? null : <span className={ui.muted}>(default)</span>}
+                  </td>
+                  <td data-label="IR10 box">
+                    {account.allowedBoxes.length === 1 ? (
+                      `${account.box} ${IR10_BOX_LABELS[account.box]}`
+                    ) : (
+                      <select aria-label={`IR10 box for ${account.code}`} value={account.box} onChange={(event) => void save(account, Number(event.target.value), account.role ?? "")}>
+                        {account.allowedBoxes.map((number) => (
+                          <option key={number} value={number}>
+                            {number} {IR10_BOX_LABELS[number]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
+                  <td data-label="Also">
+                    {account.allowedRoles.length > 0 ? (
+                      <select aria-label={`IR10 role for ${account.code}`} value={account.role ?? ""} onChange={(event) => void save(account, account.box, event.target.value)}>
+                        <option value="">Nothing else</option>
+                        {account.allowedRoles.map((role) => (
+                          <option key={role} value={role}>
+                            {IR10_ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function Ir10Card({ organisationId, report, ir10, onSaved }: { organisationId: string; report: Supported; ir10: Ir10; onSaved: () => void }) {
+  const [showAccounts, setShowAccounts] = useState(false);
+  return (
+    <Card
+      title="IR10 financial statements summary"
+      description={`The ${report.incomeYear} income year's IR10 from the books, to copy into myIR or attach to the return. Tohyee doesn't file it.`}
+      actions={
+        <Button variant="secondary" size="small" onClick={() => downloadIr10(report.incomeYear, ir10)}>
+          Download CSV
+        </Button>
+      }
+    >
+      {ir10.checks.map((check) => (
+        <Notice key={check.label} tone={check.ok ? "success" : "error"}>
+          {check.ok ? "✓" : "✗"} {check.label}. {check.detail}.
+        </Notice>
+      ))}
+      {IR10_SECTIONS.map((section) => (
+        <div key={section.title}>
+          <h3>{section.title}</h3>
+          <table className={ui.reportTable}>
+            <tbody>
+              {Array.from({ length: section.to - section.from + 1 }, (_, index) => section.from + index).map((number) => (
+                <tr key={number} className={IR10_TOTALS.has(number) ? ui.reportTotal : undefined}>
+                  <td>
+                    <span className={ui.muted}>{number}</span> {ir10.labels[number]}
+                  </td>
+                  <td className={ui.num}>{number === 1 ? ir10.boxes[1] : ir10.boxes[number] === null ? <span className={ui.muted}>blank</span> : <Money value={ir10.boxes[number]} />}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      <ul className={ui.muted}>
+        {ir10.notes.map((text) => (
+          <li key={text}>{text}</li>
+        ))}
+      </ul>
+      <button type="button" className={ui.linkButton} onClick={() => setShowAccounts((value) => !value)}>
+        {showAccounts ? "Hide which box each account goes in" : "Change which box each account goes in"}
+      </button>
+      {showAccounts ? <Ir10Accounts organisationId={organisationId} onSaved={onSaved} /> : null}
+    </Card>
+  );
+}
+
 function Report({ organisationId, report, reload }: { organisationId: string; report: Supported; reload: () => void }) {
   return (
     <>
@@ -705,6 +846,11 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       <Workpaper organisationId={organisationId} report={report} onSaved={reload} />
       <TaxAssets organisationId={organisationId} assets={report.taxAssets} incomeYear={report.incomeYear} onSaved={reload} />
       <Provisional report={report} />
+      {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
+        <Card title="IR10 financial statements summary">
+          <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>
+        </Card>
+      )}
       <YearFigures organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} onSaved={reload} />
       <Card title="Notes">
         <ul>

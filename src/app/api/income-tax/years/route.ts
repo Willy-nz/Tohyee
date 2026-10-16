@@ -12,6 +12,7 @@ export const PUT = route(async (request) => {
       lossesBroughtForward: body.lossesBroughtForward,
       taxCredits: body.taxCredits,
       otherIncome: body.otherIncome,
+      multipleActivity: body.multipleActivity,
       version: body.version,
     }),
   );

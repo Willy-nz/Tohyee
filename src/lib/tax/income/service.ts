@@ -7,6 +7,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, type Decimal, isZero, parseDecimalInput, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { assetAdjustments, listTaxAssets, type TaxAsset } from "@/lib/tax/income/assets";
+import { buildIr10, type Ir10 } from "@/lib/tax/income/ir10";
 import {
   EXPENSE_TREATMENTS,
   endOfYearTaxDue,
@@ -34,7 +35,7 @@ import {
   accountAdjustment,
   FIRST_SUPPORTED_INCOME_YEAR,
 } from "@/lib/tax/income/rules";
-import { optionalString, requireBoolean, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
+import { optionalBoolean, optionalString, requireBoolean, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 
 /*
  * Income tax, stage 1 (examples ITX1-ITX10, decision 545): the taxable income
@@ -181,6 +182,8 @@ export type IncomeTaxYear = {
   lossesBroughtForward: string;
   taxCredits: string;
   otherIncome: string;
+  /** IR10 box 1: more than one line of business. */
+  multipleActivity: boolean;
   /** 0 until something's typed for the year. */
   version: number;
   updatedByEmail: string | null;
@@ -194,12 +197,13 @@ type YearRow = {
   losses_brought_forward: string;
   tax_credits: string;
   other_income: string;
+  multiple_activity: boolean;
   version: number;
   updated_by_email: string | null;
   updated_at: string;
 };
 
-const YEAR_COLUMNS = "income_year, assessed_rit::text, return_filed_on::text, losses_brought_forward::text, tax_credits::text, other_income::text, version, updated_by_email, updated_at";
+const YEAR_COLUMNS = "income_year, assessed_rit::text, return_filed_on::text, losses_brought_forward::text, tax_credits::text, other_income::text, multiple_activity, version, updated_by_email, updated_at";
 
 function toYear(row: YearRow): IncomeTaxYear {
   return {
@@ -209,6 +213,7 @@ function toYear(row: YearRow): IncomeTaxYear {
     lossesBroughtForward: row.losses_brought_forward,
     taxCredits: row.tax_credits,
     otherIncome: row.other_income,
+    multipleActivity: row.multiple_activity,
     version: row.version,
     updatedByEmail: row.updated_by_email,
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -216,7 +221,7 @@ function toYear(row: YearRow): IncomeTaxYear {
 }
 
 function emptyYear(incomeYear: number): IncomeTaxYear {
-  return { incomeYear, assessedRit: null, returnFiledOn: null, lossesBroughtForward: "0.00", taxCredits: "0.00", otherIncome: "0.00", version: 0, updatedByEmail: null, updatedAt: null };
+  return { incomeYear, assessedRit: null, returnFiledOn: null, lossesBroughtForward: "0.00", taxCredits: "0.00", otherIncome: "0.00", multipleActivity: false, version: 0, updatedByEmail: null, updatedAt: null };
 }
 
 export function requireIncomeYear(input: unknown): number {
@@ -240,7 +245,7 @@ function amountOrZero(input: unknown, field: string, allowNegative = false): str
 /** Saves what IRD has for an income year, typed in (ITX3-ITX6). */
 export async function saveIncomeTaxYear(
   tx: OrgTx,
-  input: { incomeYear: unknown; assessedRit?: unknown; returnFiledOn?: unknown; lossesBroughtForward?: unknown; taxCredits?: unknown; otherIncome?: unknown; version: unknown },
+  input: { incomeYear: unknown; assessedRit?: unknown; returnFiledOn?: unknown; lossesBroughtForward?: unknown; taxCredits?: unknown; otherIncome?: unknown; multipleActivity?: unknown; version: unknown },
 ): Promise<IncomeTaxYear> {
   const incomeYear = requireIncomeYear(input.incomeYear);
   const version = typeof input.version === "number" && input.version === 0 ? 0 : requireVersion(input.version);
@@ -253,16 +258,17 @@ export async function saveIncomeTaxYear(
   const losses = amountOrZero(input.lossesBroughtForward, "lossesBroughtForward");
   const credits = amountOrZero(input.taxCredits, "taxCredits");
   const otherIncome = amountOrZero(input.otherIncome, "otherIncome", true);
+  const multipleActivity = optionalBoolean(input.multipleActivity, "multipleActivity") ?? false;
   const before = await getIncomeTaxYear(tx, incomeYear);
   if (before.version !== version) throw new ConflictError(`Someone else changed the ${incomeYear} figures. Reload and try again.`);
   const saved = await tx.query<YearRow>(
-    `insert into income_tax_years (income_year, assessed_rit, return_filed_on, losses_brought_forward, tax_credits, other_income, updated_by_email)
-     values ($1, $2::numeric, $3::date, $4::numeric, $5::numeric, $6::numeric, $7)
+    `insert into income_tax_years (income_year, assessed_rit, return_filed_on, losses_brought_forward, tax_credits, other_income, multiple_activity, updated_by_email)
+     values ($1, $2::numeric, $3::date, $4::numeric, $5::numeric, $6::numeric, $8, $7)
      on conflict (income_year) do update set assessed_rit = excluded.assessed_rit, return_filed_on = excluded.return_filed_on,
        losses_brought_forward = excluded.losses_brought_forward, tax_credits = excluded.tax_credits, other_income = excluded.other_income,
-       version = income_tax_years.version + 1, updated_by_email = excluded.updated_by_email, updated_at = now()
+       multiple_activity = excluded.multiple_activity, version = income_tax_years.version + 1, updated_by_email = excluded.updated_by_email, updated_at = now()
      returning ${YEAR_COLUMNS}`,
-    [incomeYear, assessedRit, returnFiledOn, losses, credits, otherIncome, tx.actor.email],
+    [incomeYear, assessedRit, returnFiledOn, losses, credits, otherIncome, tx.actor.email, multipleActivity],
   );
   const after = toYear(saved.rows[0]);
   await writeAuditEvent(tx, {
@@ -270,8 +276,8 @@ export async function saveIncomeTaxYear(
     entityType: "income_tax_year",
     entityId: String(incomeYear),
     details: {
-      from: { assessedRit: before.assessedRit, returnFiledOn: before.returnFiledOn, lossesBroughtForward: before.lossesBroughtForward, taxCredits: before.taxCredits, otherIncome: before.otherIncome },
-      to: { assessedRit: after.assessedRit, returnFiledOn: after.returnFiledOn, lossesBroughtForward: after.lossesBroughtForward, taxCredits: after.taxCredits, otherIncome: after.otherIncome },
+      from: { assessedRit: before.assessedRit, returnFiledOn: before.returnFiledOn, lossesBroughtForward: before.lossesBroughtForward, taxCredits: before.taxCredits, otherIncome: before.otherIncome, multipleActivity: before.multipleActivity },
+      to: { assessedRit: after.assessedRit, returnFiledOn: after.returnFiledOn, lossesBroughtForward: after.lossesBroughtForward, taxCredits: after.taxCredits, otherIncome: after.otherIncome, multipleActivity: after.multipleActivity },
     },
   });
   return after;
@@ -399,6 +405,8 @@ export type IncomeTaxReport =
       accounts: ReportAccount[];
       typed: IncomeTaxYear;
       taxAssets: TaxAsset[];
+      /** The IR10, once the income year has ended (ITX24). */
+      ir10: Ir10 | null;
       adjustments: TaxAdjustment[];
       payments: TaxPayment[];
       paidTotal: string;
@@ -587,6 +595,9 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   dueDates.push({ key: `end-${incomeYear}`, label: `End-of-year tax for the ${incomeYear} income year`, dueDate: endDue, onTimeBy: endOfYear.onTimeBy, amount: endOfYear.amount, estimate: true });
   dueDates.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
+  // The IR10 once the income year has ended and the figures are all actuals (ITX24).
+  const ir10 = amounts.actualsTo === end && amounts.budgetFrom === null ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
+
   const notes: string[] = [];
   if (amounts.budgetFrom) {
     const hasBudget = [...amounts.lines.values()].some((line) => !isZero(line.budget));
@@ -643,6 +654,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     }),
     typed,
     taxAssets,
+    ir10,
     adjustments,
     payments,
     paidTotal: money(paid),
