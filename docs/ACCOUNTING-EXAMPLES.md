@@ -17761,3 +17761,40 @@ proposal. Tested in `tests/integration/ird-documents.test.ts`.
   figures as they are then: if someone typed figures after the proposal
   was made, the screen shows the current figures beside the proposal, so
   the person decides with both in view.
+
+## Income tax (#292) stage 6: IRD payments picked from the books (ITX36-ITX40; chosen by Claude 16 Oct 2026, not yet reviewed)
+
+Jess said "ok sounds good" to picking payments to IRD from the bank instead
+of typing them. Tested in `tests/integration/tax-payments-from-books.test.ts`
+and `tests/unit/income-tax-rules.test.ts`. Nothing posts.
+
+- **ITX36 Which accounts.** Owners and admins choose the accounts payments
+  to IRD for income tax are coded to (for example 2300 Income tax payable,
+  or an "Income tax paid" account). Only balance sheet accounts can be
+  chosen. Nothing is chosen at first, so nothing is picked up until someone
+  chooses.
+- **ITX37 What's offered.** Debits to those accounts in journals that also
+  credit a bank or credit card account (money that left the bank), dated
+  from 1 April 2024, that aren't counted yet. Voided or reversed ones, and
+  opening balances, aren't offered. Kererū pays 6,183.80 from 1000
+  Business bank account on 28 Aug 2026 coded to 2300: it's offered, dated
+  28 Aug 2026, 6,183.80.
+- **ITX38 Which income year.** Each one shows a suggested income year from
+  its date (31 March balance date), which the person can change before
+  counting it: paid **August to January**, that income year's instalments
+  (28 Aug 2026 → 2027); **February or March**, end-of-year tax for the
+  year before (7 Feb 2027 → 2026); **April**, end-of-year tax under a tax
+  agent's extension, for the income year that ended a year earlier (7 Apr
+  2027 → 2026, as IR328 lists 7 April 2026 for the 2025 year); **May**, the
+  last instalment for the year just ended (7 May 2027 → 2027). June and
+  July have no suggestion.
+- **ITX39 Counting one.** Counting a payment makes the income tax payment
+  for the chosen year, dated and for the amount in the books, linked to
+  that journal line, so it can't be counted twice. If a payment for the
+  same income year, date and amount was already typed, counting links that
+  one instead of adding another. Removing the payment frees the line to be
+  counted again. Counted payments feed provisional tax (ITX6), end-of-year
+  tax (ITX9) and the imputation credit account (ITX26) like typed ones.
+- **ITX40 Refunds.** Credits to those accounts from the bank (money in) are
+  listed as possible refunds but not counted as payments; a company types a
+  refund into its imputation credit account (ITX26).
