@@ -890,6 +890,36 @@ function IcaCard({ organisationId, ica, onSaved }: { organisationId: string; ica
           </tr>
         </tbody>
       </table>
+      <details>
+        <summary>IR4 annual imputation return (page 7) boxes</summary>
+        <table className={ui.reportTable}>
+          <tbody>
+            {(
+              [
+                ["41", "Opening balance (credit; debit negative)"],
+                ["42A", "Income tax and provisional tax paid"],
+                ["42B", "RWT on interest received"],
+                ["42C", "Imputation credits on dividends received"],
+                ["42D", "Other credits"],
+                ["43A", "Income tax refunded"],
+                ["43B", "Imputation credits on dividends paid"],
+                ["43C", "Other debits"],
+                ["44B", "Closing balance (credit; debit negative)"],
+                ["45", "Imputation penalty tax"],
+              ] as const
+            ).map(([box, label]) => (
+              <tr key={box}>
+                <td>
+                  <span className={ui.muted}>{box}</span> {label}
+                </td>
+                <td className={ui.num}>
+                  <Money value={ica.ir4[box]} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
       <form className={ui.inlineForm} onSubmit={add}>
         <Field label="Date">
           <DateInput value={form.entryDate} onChange={(event) => setForm((current) => ({ ...current, entryDate: event.target.value }))} required />
