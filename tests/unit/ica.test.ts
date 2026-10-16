@@ -45,6 +45,8 @@ describe("imputation credit account (ITX25-ITX28, from IR274, not yet reviewed)"
     ]);
     expect(ica.closing).toBe("10303.80");
     expect(ica.debitBalance).toBeNull();
+    // ITX49: the IR4's imputation return boxes.
+    expect(ica.ir4).toEqual({ "41": "5000.00", "42A": "8183.80", "42B": "140.00", "42C": "280.00", "42D": "0.00", "43A": "500.00", "43B": "2800.00", "43C": "0.00", "44B": "10303.80", "45": "0.00" });
     // The next year opens with the closing balance.
     expect(icaLedger([move("2025-04-01", "opening", "5000"), move("2026-01-10", "refund", "-500")], 2027).opening).toBe("4500.00");
   });
@@ -52,6 +54,7 @@ describe("imputation credit account (ITX25-ITX28, from IR274, not yet reviewed)"
   it("ITX28 a debit balance at 31 March: further income tax and 10% penalty due 20 June", () => {
     const ica = icaLedger([move("2025-04-01", "opening", "9500"), move("2026-03-01", "dividend_paid", "-14000", "36000")], 2026);
     expect(ica.closing).toBe("-4500.00");
+    expect([ica.ir4["41"], ica.ir4["43B"], ica.ir4["44B"], ica.ir4["45"]]).toEqual(["9500.00", "14000.00", "-4500.00", "450.00"]);
     expect(ica.debitBalance).toEqual({ furtherIncomeTax: "4500.00", penalty: "450.00", dueDate: "2026-06-20", onTimeBy: { date: "2026-06-22", holidaysChecked: true } });
   });
 

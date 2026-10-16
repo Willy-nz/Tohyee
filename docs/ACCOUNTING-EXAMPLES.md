@@ -17878,3 +17878,18 @@ interest it charges.
 - **ITX48 Not provisional.** With last year's RIT 5,000.00 or less, there
   are no instalments, so interest runs from the day after the end-of-year
   date, as in ITX45.
+
+## Income tax (#292) stage 9: the IR4's imputation return boxes (ITX49; from IRD's IR4 guide 2026, read by Claude 17 Oct 2026, not yet reviewed)
+
+- **ITX49** A company's imputation credit account fills the IR4's annual
+  imputation return (page 7) for the ICA year: 41 opening balance (with an
+  opening balance typed in the year), 42A income tax paid, 42B RWT
+  deducted (IRD's box is RWT on interest; RWT on dividends belongs in 42D,
+  and the screen says so), 42C credits on dividends received, 42D other
+  credits, 43A refunds, 43B credits on dividends paid, 43C other debits,
+  44B closing balance, 45 the 10% penalty on a debit closing balance.
+  Kererū's 2026 ICA (ITX26): **41 5,000.00; 42A 8,183.80; 42B 140.00; 42C
+  280.00; 43A 500.00; 43B 2,800.00; 44B 10,303.80**. The rest of the IR4
+  (income boxes, the tax calculation) isn't filled yet: the guide we read
+  doesn't define enough of the boxes (e.g. 25 and the tax lines) to do it
+  without guessing. Tested in `tests/unit/ica.test.ts`.

@@ -52,6 +52,12 @@ export type Ica = {
   closing: string;
   /** When the closing balance is a debit: further income tax and the 10% penalty, due 20 June. */
   debitBalance: { furtherIncomeTax: string; penalty: string; dueDate: string; onTimeBy: OnTimeBy } | null;
+  /**
+   * The IR4's annual imputation return boxes (ITX49, IR4 guide 2026, page 7):
+   * credits and debits positive, the opening and closing balances credit
+   * positive (debit negative).
+   */
+  ir4: Record<"41" | "42A" | "42B" | "42C" | "42D" | "43A" | "43B" | "43C" | "44B" | "45", string>;
   notes: string[];
 };
 
@@ -91,6 +97,19 @@ export function icaLedger(movements: Movement[], icaYear: number): Ica {
       ratioDiffers,
     });
   }
+  const sumOf = (kinds: Array<IcaKind | "tax_paid">) => rows.filter((row) => kinds.includes(row.kind)).reduce((sum, row) => add(sum, dec(row.amount)), ZERO_DECIMAL);
+  const ir4 = {
+    "41": money(add(opening, sumOf(["opening"]))),
+    "42A": money(sumOf(["tax_paid"])),
+    "42B": money(sumOf(["rwt_deducted"])),
+    "42C": money(sumOf(["dividend_received"])),
+    "42D": money(sumOf(["other_credit"])),
+    "43A": money(neg(sumOf(["refund"]))),
+    "43B": money(neg(sumOf(["dividend_paid"]))),
+    "43C": money(neg(sumOf(["other_debit"]))),
+    "44B": money(balance),
+    "45": isNegative(balance) ? money(roundHalfUp(mul(neg(balance), IMPUTATION_PENALTY_RATE), 2)) : "0.00",
+  };
   let debitBalance: Ica["debitBalance"] = null;
   const notes: string[] = [];
   if (isNegative(balance)) {
@@ -103,7 +122,8 @@ export function icaLedger(movements: Movement[], icaYear: number): Ica {
     notes.push("A dividend this year carries a different ratio of credits from the year's first dividend. IR274 says that needs an IR407 ratio change declaration before it's paid, or an allocation debit arises; Tohyee doesn't work that debit out.");
   }
   notes.push("A change of more than 34% in who owns the shares can wipe out credits (a shareholder continuity debit); Tohyee doesn't check this, so type it as an other debit.");
-  return { icaYear, start, end, opening: money(opening), rows, closing: money(balance), debitBalance, notes };
+  notes.push("IR4 boxes: RWT deducted goes in 42B (RWT on interest); put RWT on dividends in 42D instead if that's what it was.");
+  return { icaYear, start, end, opening: money(opening), rows, closing: money(balance), debitBalance, ir4, notes };
 }
 
 async function movements(tx: OrgTx): Promise<Movement[]> {

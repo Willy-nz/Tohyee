@@ -2015,6 +2015,9 @@ that something happened.
   everything's paid on its due date, at IRD's dated rates, simple and daily,
   with the $60,000 rules for the standard option and nothing on $100 or
   less. Overpayment interest isn't worked out.
+- **IR4 imputation return boxes** (ITX49): a company's imputation credit
+  account fills boxes 41-45 of the IR4's annual imputation return. The rest
+  of the IR4 isn't filled yet.
 
 ## Not built yet, on purpose
 
