@@ -935,6 +935,13 @@ budgets, expense claims, fixed assets, projects.
 - **Checks**: `npm run lint`, `npm run typecheck`,
   `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres npm test`
   (about 15 minutes for the full suite), `npm run build`. CI runs the same.
+- **Year simulation** (opt-in, not in CI): `SIMULATION=1` with the usual
+  `TEST_DATABASE_URL` runs `tests/simulation/year.test.ts`, a made-up year of
+  trading checked against its own tally of every account, the GST returns,
+  the reports and the next year's rollover. `SIMULATION_SEED=<number>` gives a
+  different year; `SIMULATION_BASIS=payments` uses the payments basis. Run it
+  after changing anything that posts to the ledger. It prints
+  `PROBLEMS FOUND: 0` when everything ties out.
 - **Releases**: bump `package.json`, merge to main, then publish a release on
   GitHub with a new `v<version>` tag on main. Publishing the tag runs the
   workflows that build and attach TohyeeSetup, the Docker zip and the Linux
