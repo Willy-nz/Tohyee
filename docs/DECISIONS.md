@@ -5102,3 +5102,10 @@ testing) and #154's code signing (later, Jess).
      December is 15 January, 28 April is 7 May). The end-of-year tax date for
      April to September balance dates isn't shown until Jess or Will
      confirms which February (and April) it is.
+
+552. **Use-of-money interest estimate** (17 October 2026). Jess said "Ok keep
+     going". From IRD's pages, not yet reviewed (ITX44-ITX48): IRD's dated
+     rates; simple daily interest over 365 days; days from the day after the
+     due date (or the next business day) to the payment day; the $60,000
+     rules for the standard option; no interest on $100 or less; payments
+     to the earliest amount due. Overpayment interest isn't worked out.

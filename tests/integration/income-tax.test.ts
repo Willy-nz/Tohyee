@@ -158,6 +158,8 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
       ["2027-05-07", "6183.80"],
     ]);
     expect(report.endOfYear).toMatchObject({ rit: "33908.00", provisional: "18551.40", amount: "15356.60", dueDate: "2028-02-07" });
+    // ITX45, ITX47: RIT under 60,000.00, so no interest unless the end-of-year tax is late.
+    expect(report.interest).toMatchObject({ rit: "33908.00", ritTyped: false, soFar: { amount: "0.00" }, ifPaidOnTime: "0.00" });
     expect(report.dueDates.map((entry) => [entry.label, entry.dueDate, entry.onTimeBy.date, entry.amount])).toEqual([
       ["Provisional tax instalment 1 for the 2027 income year", "2026-08-28", "2026-08-28", "6183.80"],
       ["Provisional tax instalment 2 for the 2027 income year", "2027-01-15", "2027-01-15", "6183.80"],

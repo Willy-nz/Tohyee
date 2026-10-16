@@ -1260,6 +1260,31 @@ function BookPayments({ organisationId, years, onChanged }: { organisationId: st
   );
 }
 
+function InterestCard({ report }: { report: Supported }) {
+  const interest = report.interest;
+  return (
+    <Card
+      title="Use-of-money interest (estimate)"
+      description={`On ${interest.ritTyped ? "IRD's assessed" : "Tohyee's forecast"} RIT of ${formatMoney(interest.rit)}, at IRD's rates (latest from ${formatDate(interest.ratesKnownTo)}, used for future days too). IRD works out what it actually charges.`}
+    >
+      <div className={ui.statRow}>
+        <Stat label={`So far, to ${formatDate(interest.soFar.asAt)}`} value={<Money value={interest.soFar.amount} />} />
+        <Stat label="If everything's paid on its due date" value={interest.ifPaidOnTime === null ? <span className={ui.muted}>Not worked out</span> : <Money value={interest.ifPaidOnTime} />} />
+      </div>
+      {interest.soFar.periods.length > 0 ? (
+        <ul>
+          {interest.soFar.periods.map((period) => (
+            <li key={period.from}>
+              {formatDate(period.from)} to {formatDate(period.to)} ({period.days} days): <Money value={period.outstanding} /> unpaid at {period.rate}% = <Money value={period.interest} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className={ui.muted}>Simple daily interest (rate × days ÷ 365), from the day after each amount was due to the day it&apos;s paid; nothing while $100 or less is unpaid. Interest IRD pays on overpayments isn&apos;t worked out.</p>
+    </Card>
+  );
+}
+
 function Report({ organisationId, report, reload }: { organisationId: string; report: Supported; reload: () => void }) {
   return (
     <>
@@ -1300,6 +1325,7 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       <Workpaper organisationId={organisationId} report={report} onSaved={reload} />
       <TaxAssets organisationId={organisationId} assets={report.taxAssets} incomeYear={report.incomeYear} onSaved={reload} />
       <Provisional report={report} />
+      <InterestCard report={report} />
       {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
       {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
         <Card title="IR10 financial statements summary">

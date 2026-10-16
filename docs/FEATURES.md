@@ -2010,6 +2010,11 @@ that something happened.
   2007 schedule 3 part A for every balance date month. The end-of-year tax
   date for April to September balance dates isn't shown yet (waiting on a
   check of which year schedule 3's February and April are).
+- **Use-of-money interest estimate** (#292 stage 8; examples ITX44-ITX48,
+  decision 552): the Income tax page estimates interest so far and if
+  everything's paid on its due date, at IRD's dated rates, simple and daily,
+  with the $60,000 rules for the standard option and nothing on $100 or
+  less. Overpayment interest isn't worked out.
 
 ## Not built yet, on purpose
 
@@ -2069,7 +2074,7 @@ isn't acceptable, because people would trust it:
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
 0. Income tax (#292), next stages: the end-of-year tax date for April to
-   September balance dates (once checked), interest, and later
+   September balance dates (once checked), and later
    preparing returns.
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works
