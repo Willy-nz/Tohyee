@@ -385,7 +385,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     };
     args.preview_depreciation = { periodEnd: "2026-06-30" };
     args.query_dataset = { name: "no_such_table" };
-    for (const tool of AI_TOOLS.filter((entry) => entry.level === "read")) {
+    // Tools with a minimum role (income tax, owners and admins) aren't offered to the viewer's key; ird-documents tests them.
+    for (const tool of AI_TOOLS.filter((entry) => entry.level === "read" && !entry.minRole)) {
       const required = ((tool.inputSchema as { required?: string[] }).required ?? []).filter((name) => name.endsWith("Id"));
       if (!args[tool.name] && required.length > 0) {
         // A record this test doesn't make: still read inside the read-only transaction, and found missing.

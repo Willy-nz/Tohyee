@@ -1986,6 +1986,17 @@ that something happened.
   first dividend flagged), dividends received, RWT, refunds and other
   entries, with a running balance. A debit balance at 31 March shows
   further income tax and the 10% penalty due 20 June.
+- **IRD documents read by the connected AI** (#292 stage 5; examples
+  ITX30-ITX35, decision 549, tenant migration 0154): owners and admins
+  upload IRD files (assessments, statements, letters from myIR) on the
+  Income tax page. The organisation's own AI, when its key's owner is an
+  owner or admin, can list and read them and the typed figures
+  (`list_ird_documents`, `read_ird_document`, `get_income_tax_figures`) and
+  propose figures (`propose_ird_figures`: assessed RIT and filing date,
+  losses, credits, other income, payments). A person checks each proposal
+  beside the current figures and the document, and accepts or declines it;
+  payments already typed aren't added twice. Tohyee calls no AI and never
+  touches myIR.
 
 ## Not built yet, on purpose
 
@@ -2044,7 +2055,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: reading IRD documents with AI and a person checking, picking IRD
+0. Income tax (#292), next stages: picking IRD
    payments from the bank, other balance dates, interest, and later
    preparing returns.
 

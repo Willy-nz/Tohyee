@@ -11,6 +11,8 @@ import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_L
 import type { TaxAsset } from "@/lib/tax/income/assets";
 import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
 import type { Ica } from "@/lib/tax/income/ica";
+import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
+import { postForm } from "@/components/rd";
 import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
 import { IR10_BOX_LABELS, IR10_ROLE_LABELS } from "@/lib/tax/income/ir10-boxes";
 import { TAX_DEPRECIATION_METHOD_LABELS, TAX_DEPRECIATION_METHODS, type TaxDepreciationMethod } from "@/lib/tax/income/depreciation";
@@ -925,6 +927,220 @@ function IcaCard({ organisationId, ica, onSaved }: { organisationId: string; ica
   );
 }
 
+const PROPOSED_FIELDS: Array<{ key: "assessedRit" | "returnFiledOn" | "lossesBroughtForward" | "taxCredits" | "otherIncome"; label: string; date?: boolean }> = [
+  { key: "assessedRit", label: "Assessed RIT" },
+  { key: "returnFiledOn", label: "Return filed on", date: true },
+  { key: "lossesBroughtForward", label: "Losses brought forward" },
+  { key: "taxCredits", label: "Tax credits" },
+  { key: "otherIncome", label: "Other income" },
+];
+
+function ProposalCard({ organisationId, proposal, onDone }: { organisationId: string; proposal: IrdProposal; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  const [declining, setDeclining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function decide(action: "accept" | "decline") {
+    try {
+      setError(null);
+      await api(`/api/income-tax/proposals/${proposal.id}/${action}`, { method: "POST", body: { organisationId, reason: action === "decline" ? reason : undefined } });
+      onDone();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
+  }
+  const show = (value: string | null | undefined, date?: boolean) => (value == null ? <span className={ui.muted}>none</span> : date ? formatDate(value) : <Money value={value} />);
+  return (
+    <div className={ui.reportBlock}>
+      <p>
+        <strong>{incomeYearLabel(proposal.incomeYear)}</strong> · proposed by {proposal.aiKeyName ?? proposal.proposedByEmail} on {formatDate(proposal.createdAt.slice(0, 10))}
+        {proposal.documentId ? (
+          <>
+            {" "}
+            from{" "}
+            <a href={`/api/income-tax/documents/${proposal.documentId}/file?organisationId=${encodeURIComponent(organisationId)}`} target="_blank" rel="noreferrer">
+              {proposal.documentName}
+            </a>
+          </>
+        ) : null}
+      </p>
+      {proposal.note ? <p className={ui.muted}>“{proposal.note}”</p> : null}
+      <table className={ui.reportTable}>
+        <thead>
+          <tr>
+            <th />
+            <th className={ui.num}>Now</th>
+            <th className={ui.num}>Proposed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {PROPOSED_FIELDS.filter((field) => proposal.figures[field.key] !== undefined).map((field) => (
+            <tr key={field.key}>
+              <td>{field.label}</td>
+              <td className={ui.num}>{show(proposal.current[field.key], field.date)}</td>
+              <td className={ui.num}>
+                <strong>{show(proposal.figures[field.key], field.date)}</strong>
+              </td>
+            </tr>
+          ))}
+          {proposal.payments.map((payment, index) => (
+            <tr key={`payment-${index}`}>
+              <td>
+                Payment on {formatDate(payment.paidOn)}
+                {payment.note ? <span className={ui.muted}> · {payment.note}</span> : null}
+              </td>
+              <td className={ui.num}>{payment.alreadyTyped ? <Badge>Already typed</Badge> : null}</td>
+              <td className={ui.num}>
+                <strong>
+                  <Money value={payment.amount} />
+                </strong>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {declining ? (
+        <div className={ui.inlineForm}>
+          <Field label="Why decline?">
+            <input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
+          </Field>
+          <Button variant="secondary" size="small" onClick={() => void decide("decline")}>
+            Decline
+          </Button>
+          <Button variant="secondary" size="small" onClick={() => setDeclining(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className={ui.rowButtons}>
+          <Button size="small" onClick={() => void decide("accept")}>
+            Accept: I&apos;ve checked them against the document
+          </Button>
+          <Button variant="secondary" size="small" onClick={() => setDeclining(true)}>
+            Decline…
+          </Button>
+        </div>
+      )}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+    </div>
+  );
+}
+
+function IrdDocuments({ organisationId, incomeYear, years, onChanged }: { organisationId: string; incomeYear: number; years: number[]; onChanged: () => void }) {
+  const loaded = useApiData<{ documents: IrdDocument[]; proposals: IrdProposal[] }>("/api/income-tax/documents", { organisationId });
+  const [file, setFile] = useState<File | null>(null);
+  const [year, setYear] = useState(String(incomeYear));
+  const [note, setNote] = useState("");
+  const [key, setKey] = useState(() => newIdempotencyKey("ird-doc"));
+  const [removing, setRemoving] = useState<{ id: string; reason: string } | null>(null);
+  const [status, setStatus] = useState<Status>(null);
+  const refresh = () => {
+    loaded.reload();
+    onChanged();
+  };
+  async function upload(event: FormEvent) {
+    event.preventDefault();
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setStatus({ tone: "error", text: `${file.name} is more than 10 MB.` });
+      return;
+    }
+    const form = new FormData();
+    form.set("organisationId", organisationId);
+    form.set("idempotencyKey", key);
+    form.set("file", file);
+    if (year) form.set("incomeYear", year);
+    if (note) form.set("note", note);
+    try {
+      await postForm("/api/income-tax/documents", form);
+      setFile(null);
+      setNote("");
+      setKey(newIdempotencyKey("ird-doc"));
+      setStatus(null);
+      refresh();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  async function remove() {
+    if (!removing) return;
+    try {
+      await api(`/api/income-tax/documents/${removing.id}/remove`, { method: "POST", body: { organisationId, reason: removing.reason } });
+      setRemoving(null);
+      refresh();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  const data = loaded.data;
+  return (
+    <Card
+      title="IRD documents"
+      description="Upload IRD's assessments, statements of account and letters (downloaded from myIR). Your connected AI can read them and propose the figures; nothing changes until you check and accept them. Tohyee never asks for your myIR password."
+    >
+      {data && data.proposals.length > 0 ? (
+        <>
+          <h3>Proposed figures to check</h3>
+          {data.proposals.map((proposal) => (
+            <ProposalCard key={proposal.id} organisationId={organisationId} proposal={proposal} onDone={refresh} />
+          ))}
+        </>
+      ) : null}
+      {!data ? (
+        <p className={ui.muted}>Loading…</p>
+      ) : data.documents.length === 0 ? (
+        <Empty>No IRD documents yet.</Empty>
+      ) : (
+        <ul>
+          {data.documents.map((document) => (
+            <li key={document.id}>
+              <a href={`/api/income-tax/documents/${document.id}/file?organisationId=${encodeURIComponent(organisationId)}`} target="_blank" rel="noreferrer">
+                {document.fileName}
+              </a>
+              {document.incomeYear ? ` · ${document.incomeYear} income year` : ""}
+              {document.note ? ` · ${document.note}` : ""}
+              <span className={ui.muted}> · added {formatDate(document.createdAt.slice(0, 10))}</span>{" "}
+              {removing?.id === document.id ? (
+                <span className={ui.inlineForm}>
+                  <input aria-label="Why remove it?" placeholder="Why remove it?" value={removing.reason} onChange={(event) => setRemoving({ id: document.id, reason: event.target.value })} />
+                  <Button size="small" variant="secondary" onClick={() => void remove()}>
+                    Remove
+                  </Button>
+                </span>
+              ) : (
+                <button type="button" className={ui.linkButton} onClick={() => setRemoving({ id: document.id, reason: "" })}>
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form className={ui.inlineForm} onSubmit={upload}>
+        <Field label="IRD file" hint="PDF, JPG, PNG or HEIC, up to 10 MB.">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
+        </Field>
+        <Field label="Income year">
+          <select value={year} onChange={(event) => setYear(event.target.value)}>
+            <option value="">Not sure</option>
+            {years.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Note">
+          <input value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} />
+        </Field>
+        <Button type="submit" variant="secondary">
+          Upload
+        </Button>
+      </form>
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+    </Card>
+  );
+}
+
 function Report({ organisationId, report, reload }: { organisationId: string; report: Supported; reload: () => void }) {
   return (
     <>
@@ -971,7 +1187,8 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
           <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>
         </Card>
       )}
-      <YearFigures organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} onSaved={reload} />
+      <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
+      <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} onSaved={reload} />
       <Card title="Notes">
         <ul>
           {report.notes.map((text) => (

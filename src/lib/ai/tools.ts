@@ -62,6 +62,8 @@ export type AiTool = {
   level: AiAccessLevel;
   /** Run in a read-only transaction even though the level isn't "read" (a Full access tool that only looks, decision 488). */
   readOnly?: boolean;
+  /** The role the key's owner needs now, beyond the level's own, e.g. income tax is for owners and admins (decision 549). Hidden otherwise. */
+  minRole?: Role;
   run(tx: OrgTx, args: Record<string, unknown>, context: ToolContext): Promise<unknown>;
 };
 
