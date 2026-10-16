@@ -23,10 +23,11 @@ const ORG = "ai-writes";
 const noContext = undefined as unknown;
 type Json = Record<string, unknown>;
 
-const READ = AI_TOOLS.filter((tool) => tool.level === "read").map((tool) => tool.name).sort();
-const DRAFT = AI_TOOLS.filter((tool) => tool.level === "read" || tool.level === "draft").map((tool) => tool.name).sort();
+// These keys belong to bookkeepers and viewers, so tools for owners and admins only (income tax, decision 549) aren't offered.
+const READ = AI_TOOLS.filter((tool) => tool.level === "read" && !tool.minRole).map((tool) => tool.name).sort();
+const DRAFT = AI_TOOLS.filter((tool) => (tool.level === "read" || tool.level === "draft") && !tool.minRole).map((tool) => tool.name).sort();
 /** Everything up to "Make and post"; Full access tools are in ai-bank-tools.test.ts (decision 488). */
-const ALL = AI_TOOLS.filter((tool) => tool.level !== "full").map((tool) => tool.name).sort();
+const ALL = AI_TOOLS.filter((tool) => tool.level !== "full" && !tool.minRole).map((tool) => tool.name).sort();
 
 let rpcId = 0;
 async function rpc(token: string, method: string, rpcParams?: unknown) {
