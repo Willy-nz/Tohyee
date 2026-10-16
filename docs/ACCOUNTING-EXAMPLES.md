@@ -17832,3 +17832,49 @@ Jess said "ok keep going". Replaces ITX1's "31 March only". Tested in
   an end-of-year tax date for them and says to check myIR (question for
   Jess or Will). Suggested income years for payments from the books (ITX38)
   are only for 31 March.
+
+## Income tax (#292) stage 8: use-of-money interest (ITX44-ITX48; from IRD's pages, read by Claude 17 Oct 2026, not yet reviewed)
+
+From IRD's "Interest on overpayments and underpayments (UOMI)" (rates
+table), "Interest on provisional tax" (the $60,000 rules) and "Use of money
+interest (UOMI) rate change - January 2026", read through a summarising
+fetch tool, so check them. Tested in `tests/unit/uomi.test.ts` and
+`tests/integration/income-tax.test.ts`. An estimate only: IRD works out the
+interest it charges.
+
+- **ITX44 Rates.** The rate charged on underpayments, by the date it
+  started (IRD's table): 16 Jan 2026 **8.97%**; 8 May 2025 9.89%; 16 Jan
+  2025 10.88%; 29 Aug 2023 10.91%; 9 May 2023 10.39%; 17 Jan 2023 9.21%; 30
+  Aug 2022 7.96%; 10 May 2022 7.28%; 8 May 2020 7.00%; 29 Aug 2019 8.35%.
+  Interest is simple and daily ("does not compound"): amount x rate x days ÷
+  365 (the ÷ 365 is our reading), rounded once to the cent. Days run from
+  the day after the due date to the day it's paid (our reading of "starts
+  the day after the original due date" and "stops on the day the overdue
+  balance ... is paid"). A due date on a weekend or holiday counts as the
+  next business day (ITX10). No interest on $100 or less. Later rates
+  aren't known, so the latest is used for future days, and the screen says
+  so. Interest IRD pays on overpayments isn't worked out.
+- **ITX45 RIT under 60,000.00.** Interest runs only from the day after the
+  end-of-year tax date, on what's still unpaid. Kererū's 2026 RIT 17,668.00;
+  instalments of 15,000.00 paid on time; 2,668.00 due 7 Feb 2027 (on time by
+  9 Feb) but paid 9 Mar 2027: 28 days, 2,668.00 x 8.97% x 28 ÷ 365 =
+  **18.36**. Paid by 9 Feb 2027: nil.
+- **ITX46 RIT of 60,000.00 or more.** With the earlier instalments paid in
+  full and on time, interest runs from the day after the last instalment on
+  RIT less what was paid. Kererū's 2027 RIT turns out 90,000.00; the three
+  standard instalments of 6,183.80 are paid on time; the rest, 71,448.60, is
+  paid on the end-of-year date 7 Feb 2028: 276 days from 7 May 2027, 71,448.60
+  x 8.97% x 276 ÷ 365 = **4,846.21**. An earlier instalment paid late or
+  short has interest from the day after its own date on the smaller of (the
+  instalment less what was paid) and (RIT ÷ the number of instalments less
+  what was paid): instalment 1 of 6,183.80 paid 30 days late, 27 Sep 2026,
+  is **45.59** (6,183.80 x 8.97% x 30 ÷ 365). Payments go to the earliest
+  amount due first.
+- **ITX47 What the screen shows.** For the year: interest so far to today
+  on what's late, and what it'll be if the rest is paid on the end-of-year
+  date, using IRD's RIT once typed and Tohyee's forecast before then. Without
+  an end-of-year date (April to September balance dates, ITX43) the second
+  figure isn't worked out.
+- **ITX48 Not provisional.** With last year's RIT 5,000.00 or less, there
+  are no instalments, so interest runs from the day after the end-of-year
+  date, as in ITX45.

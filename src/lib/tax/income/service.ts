@@ -4,11 +4,12 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays, monthEndOf, monthStartOf } from "@/lib/financial-year";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { add, cmp, dec, type Decimal, isZero, parseDecimalInput, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { assetAdjustments, listTaxAssets, type TaxAsset } from "@/lib/tax/income/assets";
 import { buildIca, type Ica } from "@/lib/tax/income/ica";
 import { buildIr10, type Ir10 } from "@/lib/tax/income/ir10";
+import { type InterestPeriod, requirements, underpaymentInterest } from "@/lib/tax/income/uomi";
 import {
   EXPENSE_TREATMENTS,
   endOfYearTaxDue,
@@ -409,6 +410,16 @@ export type IncomeTaxReport =
       accounts: ReportAccount[];
       typed: IncomeTaxYear;
       taxAssets: TaxAsset[];
+      /** Use-of-money interest, an estimate (ITX44-ITX48). */
+      interest: {
+        rit: string;
+        ritTyped: boolean;
+        soFar: { asAt: string; amount: string; periods: InterestPeriod[] };
+        /** If the remaining instalments and end-of-year tax are paid on their dates; null without an end-of-year date. */
+        ifPaidOnTime: string | null;
+        usesLatestRateForFuture: boolean;
+        ratesKnownTo: string;
+      };
       /** The IR10, once the income year has ended (ITX24). */
       ir10: Ir10 | null;
       /** A company's imputation credit account for the ICA year matching this income year (ITX25-ITX28). */
@@ -600,6 +611,33 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   if (endDue) dueDates.push({ key: `end-${incomeYear}`, label: `End-of-year tax for the ${incomeYear} income year`, dueDate: endDue, onTimeBy: onTimeBy(endDue), amount: endOfYear.amount, estimate: true });
   dueDates.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
+  // Use-of-money interest, an estimate (ITX44-ITX48): on IRD's RIT once typed, Tohyee's figure before then.
+  const interestRit = typed.assessedRit !== null ? dec(typed.assessedRit) : dec(paper.rit);
+  const due = requirements({
+    rit: interestRit,
+    instalments: provisional.kind === "schedule" ? provisional.instalments.map((entry) => ({ due: entry.onTimeBy.date, amount: dec(entry.amount) })) : null,
+    endOfYearDue: endOfYear.onTimeBy?.date ?? null,
+  });
+  const paidSoFar = payments.map((payment) => ({ date: payment.paidOn, amount: dec(payment.amount) }));
+  const soFar = underpaymentInterest({ requirements: due, payments: paidSoFar.filter((payment) => payment.date <= today), asAt: today, today });
+  let ifPaidOnTime: string | null = null;
+  if (endOfYear.onTimeBy) {
+    const endDate = endOfYear.onTimeBy.date;
+    const scheduled = provisional.kind === "schedule" ? provisional.instalments.filter((entry) => entry.onTimeBy.date > today).map((entry) => ({ date: entry.onTimeBy.date, amount: dec(entry.amount) })) : [];
+    const planned = [...paidSoFar, ...scheduled];
+    const rest = sub(interestRit, planned.reduce((sum, payment) => add(sum, payment.amount), ZERO_DECIMAL));
+    if (isPositive(rest)) planned.push({ date: endDate, amount: rest });
+    ifPaidOnTime = underpaymentInterest({ requirements: due, payments: planned, asAt: endDate > today ? endDate : today, today }).interest;
+  }
+  const interest = {
+    rit: money(interestRit),
+    ritTyped: typed.assessedRit !== null,
+    soFar: { asAt: today, amount: soFar.interest, periods: soFar.periods },
+    ifPaidOnTime,
+    usesLatestRateForFuture: true,
+    ratesKnownTo: soFar.ratesKnownTo,
+  };
+
   // The IR10 once the income year has ended and the figures are all actuals (ITX24).
   const ir10 = amounts.actualsTo === end && amounts.budgetFrom === null ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
 
@@ -630,8 +668,8 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   if (type === "individual") notes.push("The ACC earners' levy, independent earner tax credit, Working for Families and student loan repayments aren't worked out.");
   notes.push(
     cmp(dec(paper.rit), INTEREST_THRESHOLD) < 0
-      ? "With RIT under 60,000.00 on the standard option, IRD charges or pays interest only from the day after the end-of-year tax date. Interest isn't worked out here."
-      : "With RIT of 60,000.00 or more, IRD can charge interest from the day after the last instalment on any shortfall (and earlier if an instalment is paid late or short). Interest isn't worked out here.",
+      ? "With RIT under 60,000.00 on the standard option, IRD charges or pays interest only from the day after the end-of-year tax date. The interest shown is an estimate; IRD works out what it charges."
+      : "With RIT of 60,000.00 or more, IRD can charge interest from the day after the last instalment on any shortfall (and earlier if an instalment is paid late or short). The interest shown is an estimate; IRD works out what it charges.",
   );
   if (dueDates.some((entry) => !entry.onTimeBy.holidaysChecked)) notes.push("Some dates are in years not on Tohyee's public holiday list, so only weekends move them.");
   notes.push("Regional anniversary days aren't checked.");
@@ -667,6 +705,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     typed,
     taxAssets,
     ir10,
+    interest,
     ica: type === "company" ? await buildIca(tx, incomeYear) : null,
     adjustments,
     payments,
