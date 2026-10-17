@@ -657,7 +657,8 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   const interestRit = typed.assessedRit !== null ? dec(typed.assessedRit) : dec(paper.rit);
   const due = requirements({
     rit: interestRit,
-    instalments: provisional.kind === "schedule" ? provisional.instalments.map((entry) => ({ due: entry.onTimeBy.date, amount: dec(entry.amount) })) : null,
+    // Each instalment's own share: a caught-up shortfall is already required by its own earlier date (ITX6).
+    instalments: provisional.kind === "schedule" ? provisional.instalments.map((entry) => ({ due: entry.onTimeBy.date, amount: dec(entry.ownAmount) })) : null,
     endOfYearDue: endOfYear.onTimeBy?.date ?? null,
   });
   const paidSoFar = payments.map((payment) => ({ date: payment.paidOn, amount: dec(payment.amount) }));

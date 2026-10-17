@@ -17469,7 +17469,7 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
   before this instalment's due date, up to what the earlier instalments were
   (so 7,967.60 paid on 14 Jan for instalment 2 isn't counted against it).
   An earlier instalment that's due and unpaid is caught up in the next one:
-  with only 4,400.00 paid, instalment 3 is 14,151.40. Before the earlier
+  with only 4,400.00 paid, instalment 3 is 14,151.40. That 14,151.40 is instalment 3's own 6,183.80 plus the 7,967.60 caught up; the year's provisional tax stays 18,551.40 (it was once added up from what's due, 26,519.00, which counted the shortfall twice and understated end-of-year tax; found in a review on issue #292, 17 Oct 2026). Interest (ITX46) uses each instalment's own share. Filed after the second instalment, instalment 2 also catches up an unpaid instalment 1. Before the earlier
   instalments are due, they count as paid as worked out. This is our
   reading of IRD's "minus instalments 1 and 2 paid"; check it.
 - **ITX7 Six-monthly GST filers** pay two instalments, **28 Oct and 7 May**:
@@ -18047,3 +18047,7 @@ The examples not named here are still not yet reviewed.
   63,600.75). Next year's provisional tax drops its cents too (ITX62-ITX64),
   and so does every IR10 box. Tested in `tests/unit/next-year-provisional.test.ts`
   and `tests/unit/income-tax-rules.test.ts`.
+
+## Income tax (#292): a review on issue #292 (ITX6 follow-up, 18 Oct 2026)
+
+A review comment on issue #292 (17 Oct 2026) found that a late-filed return's schedule counted a caught-up shortfall twice in the year's total; fixed in ITX6. It also said IRD applies provisional tax payments to instalments as the taxpayer directs, so Tohyee's earliest-first, by-date rule is our reading, still for Will (ITX6). And it said that without an extension of time to file, IRD's standard option page has last year's RIT plus 5% apply even when the return is filed after an instalment date. IRD's "Standard option" page (read 18 Oct 2026) says so; its "Work out provisional tax using the standard option" page doesn't mention extensions. Tohyee hasn't changed that yet: a question for Jess or Will.

@@ -5157,3 +5157,10 @@ testing) and #154's code signing (later, Jess).
      cent; unused overseas tax lost. Still for Will: the "paid towards" rule
      for a late-filed return (ITX6). The worked examples go into a document
      for Will to review (ITX66).
+558. **Provisional tax shortfalls counted once** (18 October 2026). A
+     review comment on issue #292 found the late-filed schedule's year total
+     added up what's due, counting a caught-up shortfall twice. Jess said
+     "Yes" to fixing it. Each instalment now has a cumulative target: its
+     own share, what's due (with any shortfall caught up), and the year's
+     total is the last target (ITX6). The extension-of-time point from the
+     same review waits for Jess or Will.

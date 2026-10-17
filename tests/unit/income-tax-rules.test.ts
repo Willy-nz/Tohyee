@@ -135,6 +135,12 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     // An instalment that's due and not paid is caught up in the next one.
     const unpaid = standardSchedule({ ...base, lastYearFiledOn: "2026-10-10", payments: [{ date: "2026-08-28", amount: dec("4400") }] });
     expect(unpaid.kind === "schedule" && unpaid.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "7967.60", "14151.40"]);
+    // The shortfall is counted once: instalment 3's own share is 6,183.80 and 7,967.60 of it is caught up; the year's total
+    // stays 18,551.40 (it was once the sum of what's due, 26,519.00).
+    if (unpaid.kind !== "schedule") throw new Error("expected a schedule");
+    expect(unpaid.instalments.map((instalment) => [instalment.ownAmount, instalment.catchUp])).toEqual([["4400.00", "0.00"], ["7967.60", "0.00"], ["6183.80", "7967.60"]]);
+    expect(unpaid.total).toBe("18551.40");
+    expect(afterFirst.kind === "schedule" && afterFirst.total).toBe("18551.40");
     // Before the second instalment is due, it's assumed paid as worked out.
     const early = standardSchedule({ ...base, today: "2026-10-16", lastYearFiledOn: "2026-10-10", payments: [{ date: "2026-08-28", amount: dec("4400") }] });
     expect(early.kind === "schedule" && early.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "7967.60", "6183.80"]);
