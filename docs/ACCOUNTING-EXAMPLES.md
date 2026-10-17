@@ -17506,7 +17506,7 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
 
 **Typed IRD figures.** For each income year, owners and admins type what
 IRD has: the assessed RIT, the date the return was filed, losses brought
-forward, tax credits (PAYE, RWT, imputation credits), an individual's other
+forward, tax credits (PAYE, RWT and other refundable credits; imputation credits and overseas tax are typed apart, ITX58), an individual's other
 income, and payments made to IRD towards that year (date and amount). Each
 is labelled "typed from IRD" with who typed it and when; Tohyee's own
 figures are labelled "Tohyee estimate". Payments are typed, not picked from
@@ -17875,9 +17875,7 @@ interest it charges.
   amount due first.
 - **ITX47 What the screen shows.** For the year: interest so far to today
   on what's late, and what it'll be if the rest is paid on the end-of-year
-  date, using IRD's RIT once typed and Tohyee's forecast before then. Without
-  an end-of-year date (April to September balance dates, ITX43) the second
-  figure isn't worked out.
+  date, using IRD's RIT once typed and Tohyee's forecast before then.
 - **ITX48 Not provisional.** With last year's RIT 5,000.00 or less, there
   are no instalments, so interest runs from the day after the end-of-year
   date, as in ITX45.
