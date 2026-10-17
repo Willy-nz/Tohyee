@@ -523,6 +523,7 @@ function Provisional({ report }: { report: Supported }) {
                   </td>
                   <td data-label="Amount" className={ui.num}>
                     <Money value={instalment.amount} /> {instalment.estimate ? <Badge tone="amber">Estimate</Badge> : null}
+                    {instalment.catchUp !== "0.00" ? <div className={ui.muted}>Includes {formatMoney(instalment.catchUp)} not paid towards earlier instalments</div> : null}
                   </td>
                   <td data-label="How">{instalment.basis}</td>
                 </tr>

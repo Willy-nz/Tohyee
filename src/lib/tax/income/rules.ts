@@ -210,7 +210,12 @@ export type Instalment = {
   number: number;
   dueDate: string;
   onTimeBy: OnTimeBy;
+  /** What to pay by this date: this instalment's own share plus any earlier shortfall caught up (ITX6). */
   amount: string;
+  /** This instalment's own share of the year's provisional tax, without earlier shortfalls (ITX6). */
+  ownAmount: string;
+  /** The part of `amount` that's an earlier instalment's shortfall, caught up here (ITX6). */
+  catchUp: string;
   /** How the amount was worked out, in words. */
   basis: string;
   /** Uses Tohyee's estimate of last year's RIT rather than IRD's figure. */
@@ -288,25 +293,31 @@ export function standardSchedule(input: {
   // A return filed on the next business day after a due date on a weekend or holiday counts as filed on the due date.
   const filedBy = (index: number) => filedOn !== null && filedOn <= onTimeBy(dates[index]).date;
   const notes = [...estimateNote];
-  const amounts: Array<{ amount: Decimal; basis: string; estimate: boolean }> = [];
+  // Each instalment has a cumulative target: what should be paid by its date (ITX6). Its own share is that target less the
+  // last one; what's due is the target less what was paid towards the earlier instalments (payments dated before its due
+  // date, up to the earlier target), so a shortfall is caught up once. The year's total is the last target, never the sum
+  // of what's due (which would count a caught-up shortfall twice).
+  const amounts: Array<{ target: Decimal; due: Decimal; basis: string; estimate: boolean }> = [];
   const paidBefore = (date: string) => input.payments.filter((payment) => payment.date < date).reduce((sum, payment) => add(sum, payment.amount), ZERO_DECIMAL);
-  // What's been paid towards the instalments before number `index` (0-based): payments dated before its due date, up to what
-  // those instalments were, so a payment made early for this one isn't counted twice; until they're all due, they count as
-  // paid as worked out (ITX6).
   const paidTowards = (index: number) => {
-    const earlier = amounts.slice(0, index).reduce((sum, entry) => add(sum, entry.amount), ZERO_DECIMAL);
+    const earlier = index === 0 ? ZERO_DECIMAL : amounts[index - 1].target;
     if (!dates.slice(0, index).every((date) => date <= input.today)) return earlier;
     const actual = paidBefore(dates[index]);
     return cmp(actual, earlier) < 0 ? actual : earlier;
   };
   const uplifted = `${moneyText(lastYear.amount)} + 5% = ${moneyText(total)}`;
+  const push = (target: Decimal, basis: (paid: Decimal) => string, estimate: boolean) => {
+    const paid = paidTowards(amounts.length);
+    amounts.push({ target, due: sub(target, paid), basis: basis(paid), estimate });
+  };
 
   if (filedBy(0)) {
     const share = divide(total, dec(String(input.instalmentCount)), 2);
     for (let index = 0; index < dates.length; index += 1) {
       const last = index === dates.length - 1;
+      const target = last ? total : mul(share, dec(String(index + 1)));
       const amount = last ? sub(total, mul(share, dec(String(dates.length - 1)))) : share;
-      amounts.push({ amount, basis: `RIT for ${label(1)}: ${uplifted}, ÷ ${input.instalmentCount}${last ? ", less the other instalments so they add up" : ""}`, estimate: false });
+      amounts.push({ target, due: amount, basis: `RIT for ${label(1)}: ${uplifted}, ÷ ${input.instalmentCount}${last ? ", less the other instalments so they add up" : ""}`, estimate: false });
     }
   } else if (input.instalmentCount === 2) {
     return {
@@ -322,32 +333,36 @@ export function standardSchedule(input: {
     }
     const early = divide(mul(twoYearsAgo, UPLIFT_10), dec("3"), 2);
     const earlyBasis = `RIT for ${label(2)}: ${moneyText(twoYearsAgo)} + 10% = ${moneyText(mul(twoYearsAgo, UPLIFT_10))}, ÷ 3 (last year's return wasn't filed by the first instalment)`;
-    amounts.push({ amount: early, basis: earlyBasis, estimate: false });
+    push(early, () => earlyBasis, false);
     if (filedBy(1)) {
       const twoThirds = divide(mul(total, dec("2")), dec("3"), 2);
-      amounts.push({ amount: sub(twoThirds, paidTowards(1)), basis: `RIT for ${label(1)}: ${uplifted}, x 2 ÷ 3 = ${moneyText(twoThirds)}, less ${moneyText(paidTowards(1))} paid towards the year before ${shortDate(dates[1])}`, estimate: false });
+      push(twoThirds, (paid) => `RIT for ${label(1)}: ${uplifted}, x 2 ÷ 3 = ${moneyText(twoThirds)}, less ${moneyText(paid)} paid towards the year before ${shortDate(dates[1])}`, false);
     } else {
-      amounts.push({ amount: early, basis: earlyBasis, estimate: false });
+      push(mul(early, dec("2")), (paid) => `${earlyBasis}${cmp(paid, early) < 0 ? `, plus ${moneyText(sub(early, paid))} not paid towards instalment 1` : ""}`, false);
     }
-    const paid = paidTowards(2);
-    amounts.push({
-      amount: sub(total, paid),
-      basis: `RIT for ${label(1)}: ${uplifted}, less ${moneyText(paid)} paid towards the year before ${shortDate(dates[2])}`,
-      estimate: !lastYear.typed,
-    });
+    push(total, (paid) => `RIT for ${label(1)}: ${uplifted}, less ${moneyText(paid)} paid towards the year before ${shortDate(dates[2])}`, !lastYear.typed);
     if (!lastYear.typed) notes.push(`The last instalment uses Tohyee's estimate of the RIT for ${label(1)}; it changes once IRD's figure is typed.`);
   }
 
-  const instalments: Instalment[] = amounts.map((entry, index) => ({
-    number: index + 1,
-    dueDate: dates[index],
-    onTimeBy: onTimeBy(dates[index]),
-    amount: money(isNegative(entry.amount) ? ZERO_DECIMAL : entry.amount),
-    basis: entry.basis,
-    estimate: entry.estimate,
-  }));
-  const sum = instalments.reduce((acc, instalment) => add(acc, dec(instalment.amount)), ZERO_DECIMAL);
-  return { kind: "schedule", instalments, total: money(sum), notes };
+  const instalments: Instalment[] = amounts.map((entry, index) => {
+    const previous = index === 0 ? ZERO_DECIMAL : amounts[index - 1].target;
+    const own = sub(entry.target, previous);
+    const due = isNegative(entry.due) ? ZERO_DECIMAL : entry.due;
+    const catchUp = sub(due, isNegative(own) ? ZERO_DECIMAL : own);
+    return {
+      number: index + 1,
+      dueDate: dates[index],
+      onTimeBy: onTimeBy(dates[index]),
+      amount: money(due),
+      ownAmount: money(isNegative(own) ? ZERO_DECIMAL : own),
+      catchUp: money(isPositive(catchUp) ? catchUp : ZERO_DECIMAL),
+      basis: entry.basis,
+      estimate: entry.estimate,
+    };
+  });
+  // The year's provisional tax: the last cumulative target, not the sum of what's due (ITX6).
+  const yearTotal = amounts[amounts.length - 1].target;
+  return { kind: "schedule", instalments, total: money(isNegative(yearTotal) ? ZERO_DECIMAL : yearTotal), notes };
 }
 
 // --- Taxable income ----------------------------------------------------------
