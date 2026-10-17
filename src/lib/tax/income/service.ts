@@ -8,6 +8,7 @@ import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { assetAdjustments, listTaxAssets, type TaxAsset } from "@/lib/tax/income/assets";
 import { buildIca, type Ica } from "@/lib/tax/income/ica";
+import { ir3Return, type Ir3Return } from "@/lib/tax/income/ir3";
 import { ir4Return, type Ir4Return } from "@/lib/tax/income/ir4";
 import { buildIr10, type Ir10 } from "@/lib/tax/income/ir10";
 import { type InterestPeriod, requirements, underpaymentInterest } from "@/lib/tax/income/uomi";
@@ -427,6 +428,8 @@ export type IncomeTaxReport =
       ica: Ica | null;
       /** A company's IR4 income and tax calculation boxes, once the income year has ended (ITX50-ITX53). */
       ir4: Ir4Return | null;
+      /** A sole trader's IR3 income boxes and tax calculation, once the income year has ended (ITX54-ITX57). */
+      ir3: Ir3Return | null;
       adjustments: TaxAdjustment[];
       payments: TaxPayment[];
       paidTotal: string;
@@ -645,6 +648,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   const yearEnded = amounts.actualsTo === end && amounts.budgetFrom === null;
   const ir10 = yearEnded ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
   const ir4 = yearEnded && type === "company" ? ir4Return({ workpaper: paper, paidTowardsYear: paid }) : null;
+  const ir3 = yearEnded && type === "individual" ? ir3Return({ workpaper: paper, paidTowardsYear: paid }) : null;
 
   const notes: string[] = [];
   if (!endDue) {
@@ -711,6 +715,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     taxAssets,
     ir10,
     ir4,
+    ir3,
     interest,
     ica: type === "company" ? await buildIca(tx, incomeYear) : null,
     adjustments,

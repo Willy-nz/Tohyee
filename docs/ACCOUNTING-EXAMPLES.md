@@ -17899,8 +17899,8 @@ has ended, for companies only. 20B is the workpaper's income before losses
 (all the books' income after tax adjustments: the form wants interest,
 dividends, overseas income, residential rental and property sales in boxes
 13-21 instead, which doesn't change box 23); 23 = 20B; 24B donations 0; 25 =
-23 - 24B; 26A losses brought forward; 26B losses used; 27 = 25 - 26B (the
-form says "see the guide" here; this is what the workpaper does); 28 and
+23 - 24B; 26A losses brought forward; 26B losses used; 27 = 25 - 26B (the IR4
+guide, IR4GU 2026, says so; read later the same day); 28 and
 28A (group losses, subvention payments) 0; 29 = 27; 30A = 29; 30B 28% of
 30A; 30C overseas tax 0; 30D = 30B - 30C, not below 0; 30E 0; 30F = 30D -
 30E; 30G imputation credits 0; 30H = 30F - 30G, not below 0; 30I the tax
@@ -17908,7 +17908,9 @@ credits typed for the year (box 17A); 30IA RLWT 0; 30J = 30H - 30I - 30IA,
 a debit when positive, a credit otherwise; 30K everything recorded as paid
 towards the year; 30L = 30J (debit positive) - 30K, tax to pay when
 positive, a refund otherwise. The form prints 30A in whole dollars but
-doesn't say whether to drop or round the cents, so Tohyee keeps them.
+neither it nor the guide says whether to drop or round the cents, so Tohyee
+keeps them. The guide caps donations (24B) at box 23, and nil when 23 is a
+loss; Tohyee has no donations figure yet.
 Made-up figures:
 
 - **ITX50** Income 100,000.00, credits 140.00, paid 20,000.00: **20B, 23,
@@ -17924,3 +17926,37 @@ Made-up figures:
 
 Tested in `tests/unit/ir4.test.ts`, and against the workpaper in
 `tests/integration/ir10.test.ts`.
+
+## Income tax (#292) stage 11: the IR3's income boxes and tax worksheet (ITX54-ITX57; from IRD's IR3 form and IR3 guide for 2026, downloaded from ird.govt.nz and read by Claude 17 Oct 2026, not yet reviewed)
+
+For a sole trader once the income year has ended. 24 self-employed net
+income is the workpaper's income before losses less the other income typed
+in Tohyee; that other income is shown on its own line (it's one figure, so
+the person puts it in the box that fits: 11B, 13B, 14B, 23, 27...) and both
+go into 28; 29 other expenses 0 (the business's are already in 24); 30 =
+28 - 29; 31A losses brought forward; 31B losses used; 32 = 30 - 31B. Then
+the guide's Question 36 worksheet: 1 = 32, or 0.00 if a loss; 2 tax on 1
+(return box 36); 3 IETC 0 (not worked out); 4 = 2 - 3, not below 0; 5
+overseas tax 0; 6 = 4 - 5, not below 0; 9 imputation credits 0; 10 = 6 -
+9, not below 0; 11 overpaid PIE tax 0; 12 the tax credits typed for the
+year (the box 21A subtotal); 13 = 11 + 12; 14 = 10 - 13, a debit when
+positive (return box 36A); 15 everything recorded as paid towards the year;
+16 = 14 (debit positive) - 15, tax to pay when positive, a refund otherwise
+(return box 36B). The guide's 2026 rates table prints the 33% band's
+threshold as $78,101 but its tax column ($15,650.50) only works from
+$78,100; Tohyee uses 78,100 (as in ITX4). Made-up figures:
+
+- **ITX54** Business income 60,000.00, paid 5,000.00: **24, 28, 30, 32,
+  worksheet 1 60,000.00; worksheet 2 10,220.50; 14 10,220.50 debit; 16
+  5,220.50 tax to pay.**
+- **ITX55** Business 40,000.00, other income 10,000.00, credits 1,050.00,
+  nothing paid: **24 40,000.00; other 10,000.00; 28 50,000.00; worksheet 2
+  7,658.00; 12 1,050.00; 14 and 16 6,608.00, tax to pay.**
+- **ITX56** Business 20,000.00, losses brought forward 30,000.00, credits
+  200.00: **31B 20,000.00; 32 and worksheet 2 0.00; 14 200.00 credit; 16
+  200.00 refund.**
+- **ITX57** A loss of 8,000.00 with 1,000.00 paid: **32 -8,000.00;
+  worksheet 1 and 2 0.00; 14 0.00 credit; 16 1,000.00 refund.**
+
+Tested in `tests/unit/ir3.test.ts`, and against the workpaper in
+`tests/integration/income-tax.test.ts`.

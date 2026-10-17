@@ -118,6 +118,19 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect(report.notes.join(" ")).toContain("shareholding");
     expect(report.notes.join(" ")).toContain("outside the fixed asset register");
     expect(report.reviewNote).toContain("haven't been reviewed");
+    // ITX50: the company gets the IR4's tax calculation, not the IR3's.
+    expect(report.ir4).toMatchObject({ residual: "debit", outcome: "tax_to_pay" });
+    expect(report.ir4!.boxes["30J"]).toBe("17668.00");
+    expect(report.ir3).toBeNull();
+    // ITX54: as a sole trader, the IR3's worksheet instead, on individual rates.
+    const settings = await as((tx) => getIncomeTaxSettings(tx));
+    await as((tx) => updateIncomeTaxSettings(tx, { taxpayerType: "individual", agentExtension: settings.agentExtension, version: settings.version }));
+    const asIndividual = await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }));
+    if (!asIndividual.supported) throw new Error("expected a report");
+    expect(asIndividual.ir4).toBeNull();
+    expect([asIndividual.ir3!.boxes["32"], asIndividual.ir3!.boxes.W2, asIndividual.ir3!.boxes.W14]).toEqual(["63600.00", asIndividual.workpaper.tax, asIndividual.workpaper.rit]);
+    const back = await as((tx) => getIncomeTaxSettings(tx));
+    await as((tx) => updateIncomeTaxSettings(tx, { taxpayerType: "company", agentExtension: back.agentExtension, version: back.version }));
   });
 
   it("ITX5, ITX9, ITX10 the 2027 forecast, standard instalments and end-of-year tax", async () => {

@@ -2023,6 +2023,11 @@ that something happened.
   from the workpaper, using the form's own arithmetic. Boxes Tohyee has no
   figures for are 0.00 with a note. Provisional tax for next year, the
   disclosures and shareholder details aren't filled.
+- **IR3 income boxes and tax worksheet** (ITX54-ITX57, decision 554): once
+  a sole trader's income year ends, the Income tax page fills IR3 boxes
+  24-32 and the IR3 guide's tax calculation worksheet (the refund or tax to
+  pay) from the workpaper. IETC, PIE income, the ACC earners' levy, Working
+  for Families and student loans aren't worked out.
 
 ## Not built yet, on purpose
 

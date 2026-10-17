@@ -4,8 +4,8 @@ import { money, type Workpaper } from "@/lib/tax/income/rules";
 /*
  * The IR4 company return's income and tax calculation boxes (examples
  * ITX50-ITX53, decision 553), from IRD's IR4 form for 2026 (March 2026
- * edition), downloaded from ird.govt.nz on 17 Oct 2026 and read by Claude,
- * not yet reviewed. Pure and browser-safe. Only boxes the form itself
+ * edition) and IR4 guide (IR4GU 2026), downloaded from ird.govt.nz on 17 Oct
+ * 2026 and read by Claude, not yet reviewed. Pure and browser-safe. Only boxes the form itself
  * defines, filled from Tohyee's workpaper; boxes Tohyee has nothing for are
  * zero, and the notes say which those are.
  */
@@ -111,9 +111,9 @@ export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
     notes: [
       "Box 20B holds all the books' income after tax adjustments. Interest, dividends, overseas income, residential rental and property sales belong in boxes 13 to 21 instead; moving them there doesn't change box 23.",
       "Box 30I is the tax credits typed for the year, treated as RWT and other credits (box 17A). Imputation credits on dividends received go in box 30G and overseas tax paid in 30C instead; neither is refunded, so split them out if the typed credits include them.",
-      "Tohyee has nothing for donations (24B), group loss offsets and subvention payments (28, 28A), the foreign investor tax credit (30E) or RLWT (30IA), so they're 0.00.",
-      "Box 27 is 25 less the losses used, as in the workpaper; the form sends you to the guide when losses are claimed. Tohyee doesn't check the shareholder continuity or business continuity tests (26C).",
-      "The paper form prints 30A in whole dollars. The form doesn't say whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",
+      "Tohyee has nothing for donations (24B: the IR4 guide caps them at box 23, and nil when 23 is a loss), group loss offsets and subvention payments (28, 28A), the foreign investor tax credit (30E) or RLWT (30IA), so they're 0.00.",
+      "Box 27 is 25 less 26B, as the IR4 guide says. Tohyee doesn't check the shareholder continuity or business continuity tests (26C).",
+      "The paper form prints 30A in whole dollars. Neither the form nor the guide says whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",
       "Box 30K is every payment recorded towards this income year, including any end-of-year tax already paid.",
       "2027 provisional tax (boxes 32 and 33), the disclosures (34-39) and shareholder details (40) aren't filled.",
     ],
