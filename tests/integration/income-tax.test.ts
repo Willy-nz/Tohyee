@@ -13,6 +13,7 @@ import {
   addPayment,
   buildIncomeTax,
   getIncomeTaxSettings,
+  getIncomeTaxYear,
   removePayment,
   saveIncomeTaxYear,
   setAccountTreatment,
@@ -131,12 +132,24 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect([asIndividual.ir3!.boxes["32"], asIndividual.ir3!.boxes.W2, asIndividual.ir3!.boxes.W14]).toEqual(["63600.00", asIndividual.workpaper.tax, asIndividual.workpaper.rit]);
     const back = await as((tx) => getIncomeTaxSettings(tx));
     await as((tx) => updateIncomeTaxSettings(tx, { taxpayerType: "company", agentExtension: back.agentExtension, version: back.version }));
+
+    // ITX58: imputation credits typed apart come off before the other credits; left out of a save, they're kept.
+    const year = (await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }))) as Extract<Awaited<ReturnType<typeof buildIncomeTax>>, { supported: true }>;
+    const saved = await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", imputationCredits: "1000", overseasTaxPaid: "0", version: year.typed.version }));
+    const kept = await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", version: saved.version }));
+    expect([kept.imputationCredits, kept.overseasTaxPaid]).toEqual(["1000.00", "0.00"]);
+    const withImputation = await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }));
+    if (!withImputation.supported) throw new Error("expected a report");
+    expect([withImputation.workpaper.rit, withImputation.ir4!.boxes["30G"], withImputation.ir4!.boxes["30J"]]).toEqual(["16668.00", "1000.00", "16668.00"]);
+    expect(withImputation.notes.join(" ")).toContain("imputation credit account has 0.00");
+    await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", imputationCredits: "0", version: kept.version }));
   });
 
   it("ITX5, ITX9, ITX10 the 2027 forecast, standard instalments and end-of-year tax", async () => {
     // IRD's assessment of 2026, typed in; versions guard against two people saving at once.
     await expect(as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, assessedRit: "17668", returnFiledOn: "2026-06-20", lossesBroughtForward: "10000", taxCredits: "140", version: 0 }))).rejects.toThrow("Someone else changed");
-    await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, assessedRit: "17668", returnFiledOn: "2026-06-20", lossesBroughtForward: "10000", taxCredits: "140", version: 1 }));
+    const current = await as((tx) => getIncomeTaxYear(tx, 2026));
+    await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, assessedRit: "17668", returnFiledOn: "2026-06-20", lossesBroughtForward: "10000", taxCredits: "140", version: current.version }));
     // Actuals to 30 Sep 2026: profit 50,000 with entertainment 1,000.
     await journal("2026-09-30", [
       { accountCode: "1000", debitAmount: "50000.00" },

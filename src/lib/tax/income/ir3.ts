@@ -10,7 +10,7 @@ import { money, type Workpaper } from "@/lib/tax/income/rules";
  * Tohyee's workpaper; boxes Tohyee has nothing for are zero, with notes.
  */
 
-export const IR3_BOXES = ["24", "other", "28", "29", "30", "31A", "31B", "32", "W1", "W2", "W3", "W4", "W5", "W6", "W9", "W10", "W11", "W12", "W13", "W14", "W15", "W16"] as const;
+export const IR3_BOXES = ["24", "other", "28", "29", "30", "31A", "31B", "32", "W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12", "W13", "W14", "W15", "W16"] as const;
 export type Ir3Box = (typeof IR3_BOXES)[number];
 
 export const IR3_BOX_LABELS: Record<Ir3Box, string> = {
@@ -28,7 +28,9 @@ export const IR3_BOX_LABELS: Record<Ir3Box, string> = {
   W4: "Worksheet 4: 2 less 3 (not below 0)",
   W5: "Worksheet 5: overseas tax paid (box 17A)",
   W6: "Worksheet 6: 4 less 5 (not below 0)",
-  W9: "Worksheet 9: imputation credits (boxes 14 and 34)",
+  W7: "Worksheet 7: imputation credits (box 14)",
+  W8: "Worksheet 8: excess imputation credits brought forward (box 34)",
+  W9: "Worksheet 9: 7 plus 8",
   W10: "Worksheet 10: 6 less 9 (not below 0)",
   W11: "Worksheet 11: overpaid PIE tax",
   W12: "Worksheet 12: tax credit subtotal (box 21A)",
@@ -71,9 +73,11 @@ export function ir3Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
   const w2 = dec(paper.tax);
   const w3 = ZERO_DECIMAL;
   const w4 = atLeastZero(sub(w2, w3));
-  const w5 = ZERO_DECIMAL;
+  const w5 = dec(paper.overseasTaxPaid);
   const w6 = atLeastZero(sub(w4, w5));
-  const w9 = ZERO_DECIMAL;
+  const w7 = dec(paper.imputationCredits);
+  const w8 = ZERO_DECIMAL;
+  const w9 = add(w7, w8);
   const w10 = atLeastZero(sub(w6, w9));
   const w11 = ZERO_DECIMAL;
   const w12 = dec(paper.taxCredits);
@@ -99,6 +103,8 @@ export function ir3Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
     W4: money(w4),
     W5: money(w5),
     W6: money(w6),
+    W7: money(w7),
+    W8: money(w8),
     W9: money(w9),
     W10: money(w10),
     W11: money(w11),
@@ -115,7 +121,7 @@ export function ir3Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
     notes: [
       "Box 24 holds all the books' income after tax adjustments. Interest, dividends, rents and property sales belong in their own boxes (13, 14, 22, 23, 25) instead; moving them doesn't change box 28.",
       "The other income typed in Tohyee is one figure, so put it in the box that fits it (salary or wages from your summary of income in 11B, interest in 13B, and so on). It's in box 28 either way.",
-      "Worksheet box 12 is the tax credits typed for the year, treated as the box 21A subtotal (PAYE, RWT and other credits). Imputation credits go in worksheet 7 and overseas tax paid in worksheet 5 instead; neither is refunded, so split them out if the typed credits include them.",
+      "Worksheet box 12 is the tax credits typed for the year (the box 21A subtotal: PAYE, RWT and other credits); 5 the overseas tax paid and 7 the imputation credits received, as typed. Imputation credits more than worksheet 6 carry forward to next year's box 34 (the guide's excess imputation credits worksheet), shown on the workpaper. Tohyee doesn't hold last year's excess yet, so worksheet 8 is 0.00.",
       "Tohyee doesn't work out the independent earner tax credit (worksheet 3), PIE income (35), the ACC earners' levy, Working for Families or student loan repayments, so those are 0.00 or left out. Donations are claimed on an IR526, not in the IR3.",
       "Box 29 is 0.00 because the business's expenses are already in box 24.",
       "The worksheet prints box 1 in whole dollars. Neither the form nor the guide says whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",

@@ -5127,3 +5127,13 @@ testing) and #154's code signing (later, Jess).
      for the person to put in the right box. IETC, PIE, the ACC earners'
      levy, Working for Families and student loans aren't worked out. The
      IR4 guide, read the same day, confirms box 27 = 25 - 26B.
+555. **Imputation credits and overseas tax typed apart** (17 October 2026).
+     Claude asked whether Tohyee should record imputation credits and
+     overseas tax paid separately from RWT; Jess said "Yes". Each income
+     year now has three credit figures, applied in the IR4 and IR3's order
+     (ITX58-ITX61, not yet reviewed): overseas tax and imputation credits
+     bring the tax to nil but no further; the rest is refundable. A
+     company's excess imputation credits become a loss (÷ 0.28); an
+     individual's carry forward as credits. Figures already typed as tax
+     credits aren't split automatically, because Tohyee can't tell what
+     they were. The connected AI can propose the two new figures.
