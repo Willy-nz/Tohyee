@@ -69,7 +69,7 @@ export const TAX_WRITE_TOOLS: readonly AiTool[] = [
     level: "draft",
     minRole: "admin",
     description:
-      "Proposes IRD's figures for an income year, usually from an IRD document you've read: assessed RIT with the date the return was filed (both or neither), losses brought forward, tax credits (RWT, PAYE and other refundable credits), imputation credits on dividends received, overseas tax paid, an individual's other income, and payments to IRD towards that year. Give a note saying where in the document each figure is. Nothing changes until a person checks the proposal against the document and accepts it on the Income tax page. Owners and admins only.",
+      "Proposes IRD's figures for an income year, usually from an IRD document you've read: assessed RIT with the date the return was filed (both or neither), losses brought forward, tax credits (RWT, PAYE and other refundable credits), imputation credits on dividends received, overseas tax paid, an individual's excess imputation credits brought forward (from IRD's letter), an individual's other income, and payments to IRD towards that year. Give a note saying where in the document each figure is. Nothing changes until a person checks the proposal against the document and accepts it on the Income tax page. Owners and admins only.",
     inputSchema: schema(
       {
         incomeYear: { type: "integer", minimum: 2025, maximum: 2100, description: "The 2026 income year is 1 April 2025 to 31 March 2026." },
@@ -80,6 +80,7 @@ export const TAX_WRITE_TOOLS: readonly AiTool[] = [
         taxCredits: MONEY,
         imputationCredits: MONEY,
         overseasTaxPaid: MONEY,
+        imputationBroughtForward: MONEY,
         otherIncome: MONEY,
         payments: {
           type: "array",
@@ -103,6 +104,7 @@ export const TAX_WRITE_TOOLS: readonly AiTool[] = [
         taxCredits: args.taxCredits,
         imputationCredits: args.imputationCredits,
         overseasTaxPaid: args.overseasTaxPaid,
+        imputationBroughtForward: args.imputationBroughtForward,
         otherIncome: args.otherIncome,
         payments: args.payments,
         note: args.note,

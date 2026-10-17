@@ -17998,3 +17998,31 @@ Tohyee doesn't carry it anywhere and says to check. Made-up figures:
 
 Tested in `tests/unit/tax-credits.test.ts`, `tests/integration/income-tax.test.ts`
 and `tests/integration/ird-documents.test.ts`.
+
+## Income tax (#292) stage 13: next year's provisional tax on the returns, and imputation credits brought forward (ITX62-ITX65; from IRD's 2026 IR4 guide (Question 33) and IR3 guide (Questions 34 and 39), read by Claude 17 Oct 2026, not yet reviewed)
+
+IR4 boxes 33A and 33B, and IR3 boxes 39A and 39B: when the return's RIT
+(IR4 30J, IR3 36A, as a debit) is more than 5,000.00, the standard option
+"S" and the RIT plus 5%, rounded to the cent (as the instalments in ITX5
+are); otherwise none is required. The forms print 33B and the guide's
+worksheet box 3 in whole dollars without saying whether to drop or round
+the cents, so Tohyee keeps them. The estimation and ratio options are the
+person's choice. An individual types excess imputation credits brought
+forward from IRD's letter (IR3 box 34, worksheet 8); they add to this
+year's imputation credits (worksheet 9) and anything still over the tax
+carries forward again. A company can't type them (its excess becomes a
+loss, ITX59). When Tohyee's own workpaper for last year shows a different
+excess, the page says so. Made-up figures:
+
+- **ITX62** A company with RIT 22,860.00: **33A S; 33B 24,003.00 for 2027.**
+  Kererū's 2026 RIT 17,668.00: **18,551.40.**
+- **ITX63** RIT of exactly 5,000.00, or 2,660.00: **none required.**
+  5,000.01: **5,250.01.**
+- **ITX64** An individual with RIT 7,170.50: **39A S; 39B 7,529.03** (7,529.025
+  rounded half up).
+- **ITX65** An individual with tax 525.00, imputation credits 300.00 and
+  400.00 brought forward: **worksheet 7 300.00; 8 400.00; 9 700.00; 10
+  0.00; 175.00 carried forward.**
+
+Tested in `tests/unit/next-year-provisional.test.ts` and
+`tests/integration/income-tax.test.ts`.

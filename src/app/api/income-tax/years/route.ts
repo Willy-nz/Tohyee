@@ -13,6 +13,7 @@ export const PUT = route(async (request) => {
       taxCredits: body.taxCredits,
       imputationCredits: body.imputationCredits,
       overseasTaxPaid: body.overseasTaxPaid,
+      imputationBroughtForward: body.imputationBroughtForward,
       otherIncome: body.otherIncome,
       multipleActivity: body.multipleActivity,
       version: body.version,

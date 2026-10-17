@@ -123,6 +123,8 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect(report.ir4).toMatchObject({ residual: "debit", outcome: "tax_to_pay" });
     expect(report.ir4!.boxes["30J"]).toBe("17668.00");
     expect(report.ir3).toBeNull();
+    // ITX62: next year's provisional tax on the standard option: 17,668.00 + 5%.
+    expect(report.ir4!.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "18551.40" });
     // ITX54: as a sole trader, the IR3's worksheet instead, on individual rates.
     const settings = await as((tx) => getIncomeTaxSettings(tx));
     await as((tx) => updateIncomeTaxSettings(tx, { taxpayerType: "individual", agentExtension: settings.agentExtension, version: settings.version }));
@@ -130,6 +132,15 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     if (!asIndividual.supported) throw new Error("expected a report");
     expect(asIndividual.ir4).toBeNull();
     expect([asIndividual.ir3!.boxes["32"], asIndividual.ir3!.boxes.W2, asIndividual.ir3!.boxes.W14]).toEqual(["63600.00", asIndividual.workpaper.tax, asIndividual.workpaper.rit]);
+    // ITX65: an individual can type excess imputation credits brought forward; ITX64: next year's provisional tax.
+    const typedYear = await as((tx) => getIncomeTaxYear(tx, 2026));
+    const withForward = await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", imputationBroughtForward: "100", version: typedYear.version }));
+    const forward = await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }));
+    if (!forward.supported) throw new Error("expected a report");
+    expect([forward.ir3!.boxes.W8, forward.lastYearExcessImputation]).toEqual(["100.00", null]);
+    expect(forward.ir3!.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "11613.53" });
+    expect(forward.workpaper.rit).toBe("11060.50");
+    await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", imputationBroughtForward: "0", version: withForward.version }));
     const back = await as((tx) => getIncomeTaxSettings(tx));
     await as((tx) => updateIncomeTaxSettings(tx, { taxpayerType: "company", agentExtension: back.agentExtension, version: back.version }));
 
@@ -142,6 +153,7 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     if (!withImputation.supported) throw new Error("expected a report");
     expect([withImputation.workpaper.rit, withImputation.ir4!.boxes["30G"], withImputation.ir4!.boxes["30J"]]).toEqual(["16668.00", "1000.00", "16668.00"]);
     expect(withImputation.notes.join(" ")).toContain("imputation credit account has 0.00");
+    await expect(as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, imputationBroughtForward: "100", version: kept.version }))).rejects.toThrow("A company doesn't bring excess imputation credits forward");
     await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", imputationCredits: "0", version: kept.version }));
   });
 

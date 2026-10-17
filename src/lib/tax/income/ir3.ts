@@ -1,5 +1,5 @@
 import { add, dec, type Decimal, isNegative, isPositive, neg, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
-import { money, type Workpaper } from "@/lib/tax/income/rules";
+import { money, nextYearStandard, type Workpaper } from "@/lib/tax/income/rules";
 
 /*
  * The IR3 individual return's income boxes and the guide's Question 36 tax
@@ -41,6 +41,8 @@ export const IR3_BOX_LABELS: Record<Ir3Box, string> = {
 };
 
 export type Ir3Return = {
+  /** Next year's provisional tax on the standard option (box 39A, 39B; ITX62-ITX64), or null when none is required. */
+  nextYear: { incomeYear: number; option: "S"; amount: string } | null;
   boxes: Record<Ir3Box, string>;
   /** Worksheet box 14's tick: a debit when 10 is more than 13. Box 14 itself is shown positive. */
   residual: "credit" | "debit";
@@ -59,7 +61,7 @@ const unsigned = (value: Decimal) => (isNegative(value) ? neg(value) : value);
  * used; worksheet 2 the workpaper's tax; worksheet 12 the tax credits typed
  * for the year; worksheet 15 what's recorded as paid towards the year.
  */
-export function ir3Return(input: { workpaper: Workpaper; paidTowardsYear: Decimal }): Ir3Return {
+export function ir3Return(input: { incomeYear: number; workpaper: Workpaper; paidTowardsYear: Decimal }): Ir3Return {
   const paper = input.workpaper;
   const other = dec(paper.otherIncome);
   const box28 = dec(paper.beforeLosses);
@@ -76,7 +78,7 @@ export function ir3Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
   const w5 = dec(paper.overseasTaxPaid);
   const w6 = atLeastZero(sub(w4, w5));
   const w7 = dec(paper.imputationCredits);
-  const w8 = ZERO_DECIMAL;
+  const w8 = dec(paper.imputationBroughtForward);
   const w9 = add(w7, w8);
   const w10 = atLeastZero(sub(w6, w9));
   const w11 = ZERO_DECIMAL;
@@ -114,19 +116,22 @@ export function ir3Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
     W15: money(w15),
     W16: money(unsigned(signed16)),
   };
+  const standard = nextYearStandard(dec(paper.rit));
   return {
     boxes,
     residual,
     outcome,
+    nextYear: standard ? { incomeYear: input.incomeYear + 1, ...standard } : null,
     notes: [
       "Box 24 holds all the books' income after tax adjustments. Interest, dividends, rents and property sales belong in their own boxes (13, 14, 22, 23, 25) instead; moving them doesn't change box 28.",
       "The other income typed in Tohyee is one figure, so put it in the box that fits it (salary or wages from your summary of income in 11B, interest in 13B, and so on). It's in box 28 either way.",
-      "Worksheet box 12 is the tax credits typed for the year (the box 21A subtotal: PAYE, RWT and other credits); 5 the overseas tax paid and 7 the imputation credits received, as typed. Imputation credits more than worksheet 6 carry forward to next year's box 34 (the guide's excess imputation credits worksheet), shown on the workpaper. Tohyee doesn't hold last year's excess yet, so worksheet 8 is 0.00.",
+      "Worksheet box 12 is the tax credits typed for the year (the box 21A subtotal: PAYE, RWT and other credits); 5 the overseas tax paid and 7 the imputation credits received, as typed. Imputation credits more than worksheet 6 carry forward to next year's box 34 (the guide's excess imputation credits worksheet), shown on the workpaper. Worksheet 8 is the excess brought forward typed from IRD's letter.",
       "Tohyee doesn't work out the independent earner tax credit (worksheet 3), PIE income (35), the ACC earners' levy, Working for Families or student loan repayments, so those are 0.00 or left out. Donations are claimed on an IR526, not in the IR3.",
       "Box 29 is 0.00 because the business's expenses are already in box 24.",
       "The worksheet prints box 1 in whole dollars. Neither the form nor the guide says whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",
       "Worksheet box 15 is every payment recorded towards this income year, including any end-of-year tax already paid.",
-      "2027 provisional tax (box 39), foreign rights (40) and part-year returns (41) aren't filled.",
+      "Box 39 is next year's provisional tax on the standard option (this year's RIT plus 5%, the guide's worksheet) when the RIT is more than 5,000.00. Choose the estimation or ratio option yourself if they suit better. The guide's worksheet prints it in whole dollars; Tohyee keeps the cents.",
+      "Foreign rights (40) and part-year returns (41) aren't filled.",
     ],
   };
 }

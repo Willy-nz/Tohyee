@@ -2021,18 +2021,23 @@ that something happened.
   company's income year ends, the Income tax page fills IR4 boxes 20B-30L
   (taxable income, tax, credits, provisional tax paid, refund or tax to pay)
   from the workpaper, using the form's own arithmetic. Boxes Tohyee has no
-  figures for are 0.00 with a note. Provisional tax for next year, the
-  disclosures and shareholder details aren't filled.
+  figures for are 0.00 with a note. Next year's provisional tax (box 33)
+  shows the standard option (ITX62); the disclosures and shareholder
+  details aren't filled.
 - **IR3 income boxes and tax worksheet** (ITX54-ITX57, decision 554): once
   a sole trader's income year ends, the Income tax page fills IR3 boxes
   24-32 and the IR3 guide's tax calculation worksheet (the refund or tax to
-  pay) from the workpaper. IETC, PIE income, the ACC earners' levy, Working
-  for Families and student loans aren't worked out.
+  pay) from the workpaper, and next year's provisional tax (box 39) on the
+  standard option. IETC, PIE income, the ACC earners' levy, Working for
+  Families and student loans aren't worked out.
 - **Imputation credits and overseas tax** (ITX58-ITX61, decision 555): each
   income year takes imputation credits received and overseas tax paid apart
   from the refundable tax credits, in the IR4 and IR3's order. A company's
   excess imputation credits become a loss carried forward; an individual's
   carry forward as credits.
+- **Imputation credits brought forward** (ITX65, decision 556): a sole
+  trader types last year's excess imputation credits from IRD's letter
+  (IR3 box 34); Tohyee says if its own figure for last year differs.
 
 ## Not built yet, on purpose
 

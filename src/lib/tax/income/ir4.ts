@@ -1,5 +1,5 @@
 import { add, dec, type Decimal, isNegative, isPositive, neg, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
-import { money, type Workpaper } from "@/lib/tax/income/rules";
+import { money, nextYearStandard, type Workpaper } from "@/lib/tax/income/rules";
 
 /*
  * The IR4 company return's income and tax calculation boxes (examples
@@ -38,6 +38,8 @@ export const IR4_BOX_LABELS: Record<Ir4Box, string> = {
 };
 
 export type Ir4Return = {
+  /** Next year's provisional tax on the standard option (box 33A, 33B; ITX62-ITX64), or null when none is required. */
+  nextYear: { incomeYear: number; option: "S"; amount: string } | null;
   boxes: Record<Ir4Box, string>;
   /** Box 30J's tick: a debit when 30H is more than 30I and 30IA. Box 30J itself is shown positive. */
   residual: "credit" | "debit";
@@ -56,7 +58,7 @@ const atLeastZero = (value: Decimal) => (isNegative(value) ? ZERO_DECIMAL : valu
  * ITX60); 30K what's recorded as paid towards the year. The form's own
  * arithmetic does the rest.
  */
-export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decimal }): Ir4Return {
+export function ir4Return(input: { incomeYear: number; workpaper: Workpaper; paidTowardsYear: Decimal }): Ir4Return {
   const paper = input.workpaper;
   const box20B = dec(paper.beforeLosses);
   const box23 = box20B;
@@ -105,10 +107,12 @@ export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
     "30K": money(box30K),
     "30L": money(isNegative(signedL) ? neg(signedL) : signedL),
   };
+  const standard = nextYearStandard(dec(paper.rit));
   return {
     boxes,
     residual,
     outcome,
+    nextYear: standard ? { incomeYear: input.incomeYear + 1, ...standard } : null,
     notes: [
       "Box 20B holds all the books' income after tax adjustments. Interest, dividends, overseas income, residential rental and property sales belong in boxes 13 to 21 instead; moving them there doesn't change box 23.",
       "Box 30I is the tax credits typed for the year (RWT and other credits, box 17A); 30C the overseas tax paid (box 18A) and 30G the imputation credits received (box 14), as typed. Imputation credits more than 30F become a loss to carry forward (the excess ÷ 0.28, IR4 guide), shown on the workpaper.",
@@ -116,7 +120,8 @@ export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
       "Box 27 is 25 less 26B, as the IR4 guide says. Tohyee doesn't check the shareholder continuity or business continuity tests (26C).",
       "The paper form prints 30A in whole dollars. Neither the form nor the guide says whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",
       "Box 30K is every payment recorded towards this income year, including any end-of-year tax already paid.",
-      "2027 provisional tax (boxes 32 and 33), the disclosures (34-39) and shareholder details (40) aren't filled.",
+      "Box 33 is next year's provisional tax on the standard option (this year's RIT plus 5%, IR4 guide) when the RIT is more than 5,000.00. Choose the estimation or ratio option yourself if they suit better. The form prints 33B in whole dollars; Tohyee keeps the cents.",
+      "The initial provisional tax date (32), the disclosures (34-39) and shareholder details (40) aren't filled.",
     ],
   };
 }

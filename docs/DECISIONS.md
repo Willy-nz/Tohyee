@@ -5137,3 +5137,11 @@ testing) and #154's code signing (later, Jess).
      individual's carry forward as credits. Figures already typed as tax
      credits aren't split automatically, because Tohyee can't tell what
      they were. The connected AI can propose the two new figures.
+556. **Next year's provisional tax on the returns; imputation credits
+     brought forward** (17 October 2026). Claude offered both; Jess said
+     "Yes do those things". From the 2026 IR4 and IR3 guides, not yet
+     reviewed (ITX62-ITX65): the IR4's box 33 and IR3's box 39 show the
+     standard option (RIT plus 5%) when the RIT is more than 5,000.00; an
+     individual types excess imputation credits brought forward from IRD's
+     letter, and Tohyee compares it with its own figure for last year. The
+     cents on the provisional tax amount are kept for now.
