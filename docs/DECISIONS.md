@@ -5119,3 +5119,11 @@ testing) and #154's code signing (later, Jess).
      RLWT, the foreign investor tax credit) are 0.00 with a note; the typed
      tax credits go in 30I. The cents on 30A are kept because the form
      doesn't say whether to drop or round them. Nothing is filed.
+554. **IR3 income boxes and tax worksheet** (17 October 2026). Jess said
+     "Ok keep going". From IRD's 2026 IR3 form and IR3 guide, read in her
+     Chrome, not yet reviewed (ITX54-ITX57): a sole trader's Income tax page
+     fills IR3 boxes 24-32 and the guide's Question 36 worksheet once the
+     income year has ended. The typed other income is shown on its own line
+     for the person to put in the right box. IETC, PIE, the ACC earners'
+     levy, Working for Families and student loans aren't worked out. The
+     IR4 guide, read the same day, confirms box 27 = 25 - 26B.

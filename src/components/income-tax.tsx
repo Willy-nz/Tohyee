@@ -11,7 +11,8 @@ import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_L
 import type { TaxAsset } from "@/lib/tax/income/assets";
 import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
 import type { Ica } from "@/lib/tax/income/ica";
-import { IR4_BOX_LABELS, IR4_BOXES, type Ir4Return } from "@/lib/tax/income/ir4";
+import { IR3_BOX_LABELS, IR3_BOXES } from "@/lib/tax/income/ir3";
+import { IR4_BOX_LABELS, IR4_BOXES } from "@/lib/tax/income/ir4";
 import type { BookPayments as BookPaymentsData } from "@/lib/tax/income/book-payments";
 import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
 import { postForm } from "@/components/rd";
@@ -812,28 +813,30 @@ function Ir10Card({ organisationId, report, ir10, onSaved }: { organisationId: s
   );
 }
 
-function Ir4Card({ ir4, incomeYear }: { ir4: Ir4Return; incomeYear: number }) {
+type TaxReturnBoxes = { boxes: Record<string, string>; residual: "credit" | "debit"; outcome: "refund" | "tax_to_pay"; notes: string[] };
+
+function TaxReturnCard({ title, source, order, labels, result, residualBox, outcomeBox }: { title: string; source: string; order: readonly string[]; labels: Record<string, string>; result: TaxReturnBoxes; residualBox: string; outcomeBox: string }) {
   return (
-    <Card title={`IR4 company return: income and tax (${incomeYear})`}>
-      <Notice tone="warning">From IRD&apos;s 2026 IR4 form, read by Claude and not yet reviewed by an accountant. Check every box before filing.</Notice>
+    <Card title={title}>
+      <Notice tone="warning">From {source}, read by Claude and not yet reviewed by an accountant. Check every box before filing.</Notice>
       <table className={ui.reportTable}>
         <tbody>
-          {IR4_BOXES.map((box) => (
+          {order.map((box) => (
             <tr key={box}>
               <td>
-                <span className={ui.muted}>{box}</span> {IR4_BOX_LABELS[box]}
-                {box === "30J" ? <> ({ir4.residual})</> : null}
-                {box === "30L" ? <> ({ir4.outcome === "refund" ? "refund" : "tax to pay"})</> : null}
+                {box === "other" || /^W\d/.test(box) ? null : <span className={ui.muted}>{box}</span>} {labels[box]}
+                {box === residualBox ? <> ({result.residual})</> : null}
+                {box === outcomeBox ? <> ({result.outcome === "refund" ? "refund" : "tax to pay"})</> : null}
               </td>
               <td className={ui.num}>
-                <Money value={ir4.boxes[box]} />
+                <Money value={result.boxes[box]} />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       <ul>
-        {ir4.notes.map((note) => (
+        {result.notes.map((note) => (
           <li key={note} className={ui.muted}>
             {note}
           </li>
@@ -1389,7 +1392,12 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       <Provisional report={report} />
       <InterestCard report={report} />
       {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
-      {report.ir4 ? <Ir4Card ir4={report.ir4} incomeYear={report.incomeYear} /> : null}
+      {report.ir4 ? (
+        <TaxReturnCard title={`IR4 company return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR4 form and guide" order={IR4_BOXES} labels={IR4_BOX_LABELS} result={report.ir4} residualBox="30J" outcomeBox="30L" />
+      ) : null}
+      {report.ir3 ? (
+        <TaxReturnCard title={`IR3 individual return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR3 form and guide (the Question 36 worksheet)" order={IR3_BOXES} labels={IR3_BOX_LABELS} result={report.ir3} residualBox="W14" outcomeBox="W16" />
+      ) : null}
       {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
         <Card title="IR10 financial statements summary">
           <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>
