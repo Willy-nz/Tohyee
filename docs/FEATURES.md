@@ -2028,6 +2028,11 @@ that something happened.
   24-32 and the IR3 guide's tax calculation worksheet (the refund or tax to
   pay) from the workpaper. IETC, PIE income, the ACC earners' levy, Working
   for Families and student loans aren't worked out.
+- **Imputation credits and overseas tax** (ITX58-ITX61, decision 555): each
+  income year takes imputation credits received and overseas tax paid apart
+  from the refundable tax credits, in the IR4 and IR3's order. A company's
+  excess imputation credits become a loss carried forward; an individual's
+  carry forward as credits.
 
 ## Not built yet, on purpose
 

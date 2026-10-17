@@ -17960,3 +17960,41 @@ $78,100; Tohyee uses 78,100 (as in ITX4). Made-up figures:
 
 Tested in `tests/unit/ir3.test.ts`, and against the workpaper in
 `tests/integration/income-tax.test.ts`.
+
+## Income tax (#292) stage 12: imputation credits and overseas tax apart from refundable credits (ITX58-ITX61; from IRD's 2026 IR4 form and guide and IR3 guide, read by Claude 17 Oct 2026, not yet reviewed)
+
+Three typed figures for the year instead of one: tax credits (RWT, PAYE and
+other credits, refunded if more than the tax: IR4 box 17A, IR3 box 21A),
+imputation credits on dividends received (box 14) and overseas tax paid
+(IR4 18A, IR3 17A). The tax comes down in the forms' order: less overseas
+tax, not below nil (IR4 30D, IR3 worksheet 6); less imputation credits, not
+below nil (30H, worksheet 10); less the other credits, which can go below
+nil and be refunded (30J, worksheet 14). Imputation credits more than what
+they come off: for a company, the excess ÷ 0.28 is added to the loss
+carried forward (IR4 guide, box 30G); for an individual, the excess carries
+forward as credits for next year's box 34 (IR3 guide, excess imputation
+credits worksheet). Overseas tax more than the tax just stops at nil;
+Tohyee doesn't carry it anywhere and says to check. Made-up figures:
+
+- **ITX58** A company with taxable income 100,000.00, overseas tax
+  3,000.00, imputation credits 2,000.00 and RWT 140.00: **30B 28,000.00;
+  30C 3,000.00; 30D 25,000.00; 30G 2,000.00; 30H 23,000.00; 30I 140.00; 30J
+  and RIT 22,860.00 debit.** Leaving the two new figures out of a save keeps
+  what's there. When a company's imputation credit account (31 March
+  balance date) shows different credits on dividends received for the year
+  from those typed, the page says so.
+- **ITX59** A company with taxable income 10,000.00, imputation credits
+  4,200.00 and RWT 140.00: **tax 2,800.00; excess 1,400.00; loss 5,000.00
+  added to the loss carried forward; 30H 0.00; 30J 140.00 credit, refunded;
+  RIT 0.00.**
+- **ITX60** A company with taxable income 10,000.00 and overseas tax
+  3,500.00: **30D 0.00; RIT 0.00.**
+- **ITX61** An individual with taxable income 60,000.00, overseas tax
+  500.00, imputation credits 1,500.00 and RWT 1,050.00: **worksheet 4
+  10,220.50; 5 500.00; 6 9,720.50; 7 and 9 1,500.00; 10 8,220.50; 12
+  1,050.00; 14 7,170.50 debit.** With taxable income 5,000.00 and
+  imputation credits 800.00: **tax 525.00; 275.00 of excess imputation
+  credits carried forward, no loss.**
+
+Tested in `tests/unit/tax-credits.test.ts`, `tests/integration/income-tax.test.ts`
+and `tests/integration/ird-documents.test.ts`.

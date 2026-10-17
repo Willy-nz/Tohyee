@@ -125,6 +125,11 @@ describeWithDatabase("income tax: IRD documents and proposed figures", () => {
     expect(again.payments[0].alreadyTyped).toBe(true);
     await as((tx) => acceptProposal(tx, again.id));
     expect(await as((tx) => listPayments(tx, 2027))).toHaveLength(1);
+    // ITX58: imputation credits and overseas tax can be proposed too, and accepting keeps the other typed figures.
+    await callTool(ownerToken, "propose_ird_figures", { incomeYear: 2025, imputationCredits: "350.00", overseasTaxPaid: "20.00" });
+    const credits = (await as((tx) => listProposals(tx)))[0];
+    await as((tx) => acceptProposal(tx, credits.id));
+    expect(await as((tx) => getIncomeTaxYear(tx, 2025))).toMatchObject({ imputationCredits: "350.00", overseasTaxPaid: "20.00", taxCredits: "0.00" });
   });
 
   it("ITX33 declining needs a reason; the AI can't accept; removing a document needs a reason", async () => {

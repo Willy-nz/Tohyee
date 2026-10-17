@@ -264,8 +264,24 @@ function Workpaper({ organisationId, report, onSaved }: { organisationId: string
               <Money value={paper.tax} />
             </td>
           </tr>
+          {paper.overseasTaxPaid !== "0.00" ? (
+            <tr>
+              <td>Overseas tax paid (typed; not below nil)</td>
+              <td className={ui.num}>
+                <Money value={negated(paper.overseasTaxPaid)} />
+              </td>
+            </tr>
+          ) : null}
+          {paper.imputationCredits !== "0.00" ? (
+            <tr>
+              <td>Imputation credits received (typed; not below nil)</td>
+              <td className={ui.num}>
+                <Money value={negated(paper.imputationCredits)} />
+              </td>
+            </tr>
+          ) : null}
           <tr>
-            <td>Tax credits (typed)</td>
+            <td>Tax credits: RWT, PAYE and others (typed)</td>
             <td className={ui.num}>
               <Money value={negated(paper.taxCredits)} />
             </td>
@@ -277,11 +293,19 @@ function Workpaper({ organisationId, report, onSaved }: { organisationId: string
             </td>
           </tr>
           <tr>
-            <td>Loss carried forward</td>
+            <td>Loss carried forward{paper.imputationLoss !== "0.00" ? ` (including ${formatMoney(paper.imputationLoss)} from excess imputation credits)` : ""}</td>
             <td className={ui.num}>
               <Money value={paper.lossCarriedForward} />
             </td>
           </tr>
+          {paper.excessImputationCredits !== "0.00" && paper.imputationLoss === "0.00" ? (
+            <tr>
+              <td>Excess imputation credits carried forward</td>
+              <td className={ui.num}>
+                <Money value={paper.excessImputationCredits} />
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
       <form className={ui.inlineForm} onSubmit={add}>
@@ -335,6 +359,8 @@ function YearForm({ organisationId, typed, type, onSaved }: { organisationId: st
     returnFiledOn: typed.returnFiledOn ?? "",
     lossesBroughtForward: typed.lossesBroughtForward,
     taxCredits: typed.taxCredits,
+    imputationCredits: typed.imputationCredits,
+    overseasTaxPaid: typed.overseasTaxPaid,
     otherIncome: typed.otherIncome,
     multipleActivity: typed.multipleActivity,
   });
@@ -362,8 +388,14 @@ function YearForm({ organisationId, typed, type, onSaved }: { organisationId: st
         <Field label="Losses brought forward">
           <input inputMode="decimal" value={form.lossesBroughtForward} onChange={(event) => set("lossesBroughtForward")(event.target.value)} />
         </Field>
-        <Field label="Tax credits" hint="PAYE, RWT and imputation credits for the year.">
+        <Field label="Tax credits" hint="PAYE, RWT and other credits that are refunded if more than the tax. Not imputation credits or overseas tax.">
           <input inputMode="decimal" value={form.taxCredits} onChange={(event) => set("taxCredits")(event.target.value)} />
+        </Field>
+        <Field label="Imputation credits received" hint="On dividends received. They can bring the tax to nil but aren't refunded.">
+          <input inputMode="decimal" value={form.imputationCredits} onChange={(event) => set("imputationCredits")(event.target.value)} />
+        </Field>
+        <Field label="Overseas tax paid" hint="Tax paid overseas on overseas income. It can bring the tax to nil but isn't refunded.">
+          <input inputMode="decimal" value={form.overseasTaxPaid} onChange={(event) => set("overseasTaxPaid")(event.target.value)} />
         </Field>
         {type === "individual" ? (
           <Field label="Other income" hint="Wages, interest, dividends and other income outside the business.">
@@ -993,11 +1025,13 @@ function IcaCard({ organisationId, ica, onSaved }: { organisationId: string; ica
   );
 }
 
-const PROPOSED_FIELDS: Array<{ key: "assessedRit" | "returnFiledOn" | "lossesBroughtForward" | "taxCredits" | "otherIncome"; label: string; date?: boolean }> = [
+const PROPOSED_FIELDS: Array<{ key: "assessedRit" | "returnFiledOn" | "lossesBroughtForward" | "taxCredits" | "imputationCredits" | "overseasTaxPaid" | "otherIncome"; label: string; date?: boolean }> = [
   { key: "assessedRit", label: "Assessed RIT" },
   { key: "returnFiledOn", label: "Return filed on", date: true },
   { key: "lossesBroughtForward", label: "Losses brought forward" },
   { key: "taxCredits", label: "Tax credits" },
+  { key: "imputationCredits", label: "Imputation credits received" },
+  { key: "overseasTaxPaid", label: "Overseas tax paid" },
   { key: "otherIncome", label: "Other income" },
 ];
 

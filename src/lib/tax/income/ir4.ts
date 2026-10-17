@@ -52,7 +52,8 @@ const atLeastZero = (value: Decimal) => (isNegative(value) ? ZERO_DECIMAL : valu
  * The IR4's boxes 20B-30L for a company (ITX50-ITX53): 20B is the workpaper's
  * income before losses (the books' net profit plus tax adjustments); 26A and
  * 26B its losses brought forward and used; 30I the tax credits typed for the
- * year; 30K what's recorded as paid towards the year. The form's own
+ * year; 30C and 30G the overseas tax and imputation credits typed (ITX58-
+ * ITX60); 30K what's recorded as paid towards the year. The form's own
  * arithmetic does the rest.
  */
 export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decimal }): Ir4Return {
@@ -67,11 +68,11 @@ export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
   const box29 = box27;
   const box30A = box29;
   const box30B = dec(paper.tax);
-  const box30C = ZERO_DECIMAL;
+  const box30C = dec(paper.overseasTaxPaid);
   const box30D = atLeastZero(sub(box30B, box30C));
   const box30E = ZERO_DECIMAL;
   const box30F = sub(box30D, box30E);
-  const box30G = ZERO_DECIMAL;
+  const box30G = dec(paper.imputationCredits);
   const box30H = atLeastZero(sub(box30F, box30G));
   const box30I = dec(paper.taxCredits);
   const box30IA = ZERO_DECIMAL;
@@ -110,7 +111,7 @@ export function ir4Return(input: { workpaper: Workpaper; paidTowardsYear: Decima
     outcome,
     notes: [
       "Box 20B holds all the books' income after tax adjustments. Interest, dividends, overseas income, residential rental and property sales belong in boxes 13 to 21 instead; moving them there doesn't change box 23.",
-      "Box 30I is the tax credits typed for the year, treated as RWT and other credits (box 17A). Imputation credits on dividends received go in box 30G and overseas tax paid in 30C instead; neither is refunded, so split them out if the typed credits include them.",
+      "Box 30I is the tax credits typed for the year (RWT and other credits, box 17A); 30C the overseas tax paid (box 18A) and 30G the imputation credits received (box 14), as typed. Imputation credits more than 30F become a loss to carry forward (the excess ÷ 0.28, IR4 guide), shown on the workpaper.",
       "Tohyee has nothing for donations (24B: the IR4 guide caps them at box 23, and nil when 23 is a loss), group loss offsets and subvention payments (28, 28A), the foreign investor tax credit (30E) or RLWT (30IA), so they're 0.00.",
       "Box 27 is 25 less 26B, as the IR4 guide says. Tohyee doesn't check the shareholder continuity or business continuity tests (26C).",
       "The paper form prints 30A in whole dollars. Neither the form nor the guide says whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",

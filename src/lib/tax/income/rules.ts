@@ -376,6 +376,15 @@ export type Workpaper = {
   taxableIncome: string;
   lossCarriedForward: string;
   tax: string;
+  /** Overseas tax paid: comes off the tax, but never below nil (ITX60). */
+  overseasTaxPaid: string;
+  /** Imputation credits on dividends received: come off what's left, never below nil (ITX58). */
+  imputationCredits: string;
+  /** Imputation credits more than the tax they can come off (ITX59, ITX61). */
+  excessImputationCredits: string;
+  /** A company's excess imputation credits turned into a loss (excess ÷ 0.28), included in the loss carried forward (ITX59). */
+  imputationLoss: string;
+  /** RWT, PAYE and other credits: refunded if more than the tax. */
   taxCredits: string;
   /** Tax less credits: negative is a refund. */
   taxToPay: string;
@@ -417,7 +426,9 @@ function adjustmentText(account: WorkpaperAccount): string {
   }
 }
 
-/** Accounting profit to taxable income, tax and RIT (ITX3, ITX4). */
+const COMPANY_RATE = dec("0.28");
+
+/** Accounting profit to taxable income, tax and RIT (ITX3, ITX4, ITX58-ITX61). */
 export function workpaper(input: {
   type: TaxpayerType;
   year: number;
@@ -426,6 +437,8 @@ export function workpaper(input: {
   otherIncome: Decimal;
   lossesBroughtForward: Decimal;
   taxCredits: Decimal;
+  overseasTaxPaid?: Decimal;
+  imputationCredits?: Decimal;
 }): Workpaper {
   let netProfit = ZERO_DECIMAL;
   const adjustments: Adjustment[] = [];
@@ -454,7 +467,15 @@ export function workpaper(input: {
     carried = sub(input.lossesBroughtForward, beforeLosses);
   }
   const tax = taxOn(taxable, input.type, input.year);
-  const taxToPay = sub(tax, input.taxCredits);
+  // The IR4's box 30 and the IR3 guide's Question 36 worksheet (ITX58-ITX61).
+  const overseas = input.overseasTaxPaid ?? ZERO_DECIMAL;
+  const imputation = input.imputationCredits ?? ZERO_DECIMAL;
+  const afterOverseas = cmp(overseas, tax) > 0 ? ZERO_DECIMAL : sub(tax, overseas);
+  const afterImputation = cmp(imputation, afterOverseas) > 0 ? ZERO_DECIMAL : sub(afterOverseas, imputation);
+  const excessImputation = cmp(imputation, afterOverseas) > 0 ? sub(imputation, afterOverseas) : ZERO_DECIMAL;
+  const imputationLoss = input.type === "company" ? roundHalfUp(divide(excessImputation, COMPANY_RATE, 6), 2) : ZERO_DECIMAL;
+  carried = add(carried, imputationLoss);
+  const taxToPay = sub(afterImputation, input.taxCredits);
   return {
     netProfit: money(netProfit),
     adjustments,
@@ -465,6 +486,10 @@ export function workpaper(input: {
     taxableIncome: money(taxable),
     lossCarriedForward: money(carried),
     tax: money(tax),
+    overseasTaxPaid: money(overseas),
+    imputationCredits: money(imputation),
+    excessImputationCredits: money(excessImputation),
+    imputationLoss: money(imputationLoss),
     taxCredits: money(input.taxCredits),
     taxToPay: money(taxToPay),
     rit: money(isNegative(taxToPay) ? ZERO_DECIMAL : taxToPay),
