@@ -687,11 +687,6 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   const ir3 = yearEnded && type === "individual" ? ir3Return({ incomeYear, workpaper: paper, paidTowardsYear: paid }) : null;
 
   const notes: string[] = [];
-  if (!endDue) {
-    notes.push(
-      "For a balance date from April to September, Tohyee doesn't work out the end-of-year tax due date yet: the Income Tax Act's schedule 3 gives the month (February, or April with a tax agent's extension), and which year that falls in still needs checking. Check the date in myIR.",
-    );
-  }
   if (endMonth !== 3) notes.push(`The ${incomeYear} income year runs ${shortDate(start)} to ${shortDate(end)} (IRD SPS 24/01). The provisional tax dates follow the balance date (Income Tax Act 2007 schedule 3).`);
   if (amounts.budgetFrom) {
     const hasBudget = [...amounts.lines.values()].some((line) => !isZero(line.budget));

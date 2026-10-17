@@ -3,7 +3,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays } from "@/lib/financial-year";
-import { add, cmp, dec, type Decimal, isNegative, isZero, neg, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, isNegative, isZero, neg, sub, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, earningsOf, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { taxAssetTotals } from "@/lib/tax/income/assets";
 import { allowedBoxes, allowedRoles, defaultBox, defaultRole, IR10_BOX_LABELS, IR10_ROLES, type Ir10Role } from "@/lib/tax/income/ir10-boxes";
@@ -196,7 +196,9 @@ export async function buildIr10(
   const boxes: Record<number, string | null> = { 1: input.multipleActivity ? "Yes" : "No" };
   for (let number = 2; number <= 60; number += 1) {
     const value = box.get(number) ?? ZERO_DECIMAL;
-    boxes[number] = number === 26 || isZero(value) ? null : money(value);
+    // Whole dollars: each box drops its cents (Jess, 17 Oct 2026).
+    const dollars = truncate(value, 0);
+    boxes[number] = number === 26 || isZero(dollars) ? null : money(dollars);
   }
   const netProfit = dec(input.workpaper.netProfit);
   const checks = [
@@ -214,8 +216,8 @@ export async function buildIr10(
   const notes = [
     "Box 26 (exceptional items) is left blank: Tohyee doesn't separate them out. If they're over 5% of turnover, enter them in myIR.",
     "Boxes 54, 55 and 60 count only assets in the fixed asset register.",
-    "Box 58 adds up current accounts' closing balances, with money owed to the owners positive (our reading; IRD's guide doesn't say).",
-    "Amounts show cents; check whether myIR wants whole dollars.",
+    "Box 58 adds up current accounts' closing balances, with money owed to the owners positive.",
+    "Each box drops its cents, so a total box can differ by a dollar or two from adding up the boxes above it. The checks use the figures with cents.",
   ];
   return { boxes, labels: IR10_BOX_LABELS, checks, notes };
 }

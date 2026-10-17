@@ -124,7 +124,7 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect(report.ir4!.boxes["30J"]).toBe("17668.00");
     expect(report.ir3).toBeNull();
     // ITX62: next year's provisional tax on the standard option: 17,668.00 + 5%.
-    expect(report.ir4!.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "18551.40" });
+    expect(report.ir4!.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "18551.00" });
     // ITX54: as a sole trader, the IR3's worksheet instead, on individual rates.
     const settings = await as((tx) => getIncomeTaxSettings(tx));
     await as((tx) => updateIncomeTaxSettings(tx, { taxpayerType: "individual", agentExtension: settings.agentExtension, version: settings.version }));
@@ -138,7 +138,7 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     const forward = await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }));
     if (!forward.supported) throw new Error("expected a report");
     expect([forward.ir3!.boxes.W8, forward.lastYearExcessImputation]).toEqual(["100.00", null]);
-    expect(forward.ir3!.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "11613.53" });
+    expect(forward.ir3!.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "11613.00" });
     expect(forward.workpaper.rit).toBe("11060.50");
     await as((tx) => saveIncomeTaxYear(tx, { incomeYear: 2026, lossesBroughtForward: "10000", taxCredits: "140", imputationBroughtForward: "0", version: withForward.version }));
     const back = await as((tx) => getIncomeTaxSettings(tx));
@@ -244,7 +244,7 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect(bad.status).toBe(400);
   });
 
-  it("ITX41-ITX43 a 30 June balance date: its own income year and instalment dates, no end-of-year date yet", async () => {
+  it("ITX41-ITX43 a 30 June balance date: its own income year, instalment dates and end-of-year date", async () => {
     await as((tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 6 }));
     const report = await as((tx) => buildIncomeTax(tx, { incomeYear: 2027, today: "2026-10-16" }));
     expect(report.supported).toBe(true);
@@ -252,8 +252,12 @@ describeWithDatabase("income tax: taxable income, provisional and end-of-year ta
     expect([report.start, report.end, report.endMonth]).toEqual(["2026-07-01", "2027-06-30", 6]);
     expect(report.label).toBe("2027 income year (1 Jul 2026 to 30 Jun 2027)");
     expect(report.provisional.kind === "schedule" && report.provisional.instalments.map((entry) => entry.dueDate)).toEqual(["2026-11-28", "2027-03-28", "2027-07-28"]);
-    expect(report.endOfYear.dueDate).toBeNull();
-    expect(report.dueDates.some((entry) => entry.key.startsWith("end-"))).toBe(false);
-    expect(report.notes.join(" ")).toContain("doesn't work out the end-of-year tax due date yet");
+    // The 2027 year ends 30 Jun 2027: end-of-year tax is due 7 Apr 2028 with this organisation's tax agent's extension (7 Feb
+    // without; Jess, 17 Oct 2026); the 2026 year's on 7 Apr 2027.
+    expect(report.endOfYear.dueDate).toBe("2028-04-07");
+    expect(report.dueDates.filter((entry) => entry.key.startsWith("end-")).map((entry) => [entry.key, entry.dueDate])).toEqual([
+      ["end-2026", "2027-04-07"],
+      ["end-2027", "2028-04-07"],
+    ]);
   });
 });
