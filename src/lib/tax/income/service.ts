@@ -190,6 +190,8 @@ export type IncomeTaxYear = {
   imputationCredits: string;
   /** Overseas tax paid (IR4 box 18A, IR3 box 17A). */
   overseasTaxPaid: string;
+  /** An individual's excess imputation credits brought forward, from IRD's letter (IR3 box 34). */
+  imputationBroughtForward: string;
   otherIncome: string;
   /** IR10 box 1: more than one line of business. */
   multipleActivity: boolean;
@@ -207,6 +209,7 @@ type YearRow = {
   tax_credits: string;
   imputation_credits: string;
   overseas_tax_paid: string;
+  imputation_brought_forward: string;
   other_income: string;
   multiple_activity: boolean;
   version: number;
@@ -214,7 +217,7 @@ type YearRow = {
   updated_at: string;
 };
 
-const YEAR_COLUMNS = "income_year, assessed_rit::text, return_filed_on::text, losses_brought_forward::text, tax_credits::text, imputation_credits::text, overseas_tax_paid::text, other_income::text, multiple_activity, version, updated_by_email, updated_at";
+const YEAR_COLUMNS = "income_year, assessed_rit::text, return_filed_on::text, losses_brought_forward::text, tax_credits::text, imputation_credits::text, overseas_tax_paid::text, imputation_brought_forward::text, other_income::text, multiple_activity, version, updated_by_email, updated_at";
 
 function toYear(row: YearRow): IncomeTaxYear {
   return {
@@ -225,6 +228,7 @@ function toYear(row: YearRow): IncomeTaxYear {
     taxCredits: row.tax_credits,
     imputationCredits: row.imputation_credits,
     overseasTaxPaid: row.overseas_tax_paid,
+    imputationBroughtForward: row.imputation_brought_forward,
     otherIncome: row.other_income,
     multipleActivity: row.multiple_activity,
     version: row.version,
@@ -234,7 +238,7 @@ function toYear(row: YearRow): IncomeTaxYear {
 }
 
 function emptyYear(incomeYear: number): IncomeTaxYear {
-  return { incomeYear, assessedRit: null, returnFiledOn: null, lossesBroughtForward: "0.00", taxCredits: "0.00", imputationCredits: "0.00", overseasTaxPaid: "0.00", otherIncome: "0.00", multipleActivity: false, version: 0, updatedByEmail: null, updatedAt: null };
+  return { incomeYear, assessedRit: null, returnFiledOn: null, lossesBroughtForward: "0.00", taxCredits: "0.00", imputationCredits: "0.00", overseasTaxPaid: "0.00", imputationBroughtForward: "0.00", otherIncome: "0.00", multipleActivity: false, version: 0, updatedByEmail: null, updatedAt: null };
 }
 
 export function requireIncomeYear(input: unknown): number {
@@ -258,7 +262,7 @@ function amountOrZero(input: unknown, field: string, allowNegative = false): str
 /** Saves what IRD has for an income year, typed in (ITX3-ITX6). */
 export async function saveIncomeTaxYear(
   tx: OrgTx,
-  input: { incomeYear: unknown; assessedRit?: unknown; returnFiledOn?: unknown; lossesBroughtForward?: unknown; taxCredits?: unknown; imputationCredits?: unknown; overseasTaxPaid?: unknown; otherIncome?: unknown; multipleActivity?: unknown; version: unknown },
+  input: { incomeYear: unknown; assessedRit?: unknown; returnFiledOn?: unknown; lossesBroughtForward?: unknown; taxCredits?: unknown; imputationCredits?: unknown; overseasTaxPaid?: unknown; imputationBroughtForward?: unknown; otherIncome?: unknown; multipleActivity?: unknown; version: unknown },
 ): Promise<IncomeTaxYear> {
   const incomeYear = requireIncomeYear(input.incomeYear);
   const version = typeof input.version === "number" && input.version === 0 ? 0 : requireVersion(input.version);
@@ -277,16 +281,21 @@ export async function saveIncomeTaxYear(
   // Left out (undefined), these two keep what's saved, so callers from before they existed don't wipe them.
   const imputation = input.imputationCredits === undefined ? before.imputationCredits : amountOrZero(input.imputationCredits, "imputationCredits");
   const overseas = input.overseasTaxPaid === undefined ? before.overseasTaxPaid : amountOrZero(input.overseasTaxPaid, "overseasTaxPaid");
+  const broughtForward = input.imputationBroughtForward === undefined ? before.imputationBroughtForward : amountOrZero(input.imputationBroughtForward, "imputationBroughtForward");
+  if (!isZero(dec(broughtForward))) {
+    const type = await tx.query<{ taxpayer_type: string | null }>("select taxpayer_type from income_tax_settings where id");
+    if (type.rows[0]?.taxpayer_type === "company") throw new ValidationError("A company doesn't bring excess imputation credits forward: they become a loss to carry forward instead.");
+  }
   if (before.version !== version) throw new ConflictError(`Someone else changed the ${incomeYear} figures. Reload and try again.`);
   const saved = await tx.query<YearRow>(
-    `insert into income_tax_years (income_year, assessed_rit, return_filed_on, losses_brought_forward, tax_credits, other_income, multiple_activity, updated_by_email, imputation_credits, overseas_tax_paid)
-     values ($1, $2::numeric, $3::date, $4::numeric, $5::numeric, $6::numeric, $8, $7, $9::numeric, $10::numeric)
+    `insert into income_tax_years (income_year, assessed_rit, return_filed_on, losses_brought_forward, tax_credits, other_income, multiple_activity, updated_by_email, imputation_credits, overseas_tax_paid, imputation_brought_forward)
+     values ($1, $2::numeric, $3::date, $4::numeric, $5::numeric, $6::numeric, $8, $7, $9::numeric, $10::numeric, $11::numeric)
      on conflict (income_year) do update set assessed_rit = excluded.assessed_rit, return_filed_on = excluded.return_filed_on,
        losses_brought_forward = excluded.losses_brought_forward, tax_credits = excluded.tax_credits, other_income = excluded.other_income,
-       imputation_credits = excluded.imputation_credits, overseas_tax_paid = excluded.overseas_tax_paid,
+       imputation_credits = excluded.imputation_credits, overseas_tax_paid = excluded.overseas_tax_paid, imputation_brought_forward = excluded.imputation_brought_forward,
        multiple_activity = excluded.multiple_activity, version = income_tax_years.version + 1, updated_by_email = excluded.updated_by_email, updated_at = now()
      returning ${YEAR_COLUMNS}`,
-    [incomeYear, assessedRit, returnFiledOn, losses, credits, otherIncome, tx.actor.email, multipleActivity, imputation, overseas],
+    [incomeYear, assessedRit, returnFiledOn, losses, credits, otherIncome, tx.actor.email, multipleActivity, imputation, overseas, broughtForward],
   );
   const after = toYear(saved.rows[0]);
   await writeAuditEvent(tx, {
@@ -294,8 +303,8 @@ export async function saveIncomeTaxYear(
     entityType: "income_tax_year",
     entityId: String(incomeYear),
     details: {
-      from: { assessedRit: before.assessedRit, returnFiledOn: before.returnFiledOn, lossesBroughtForward: before.lossesBroughtForward, taxCredits: before.taxCredits, imputationCredits: before.imputationCredits, overseasTaxPaid: before.overseasTaxPaid, otherIncome: before.otherIncome, multipleActivity: before.multipleActivity },
-      to: { assessedRit: after.assessedRit, returnFiledOn: after.returnFiledOn, lossesBroughtForward: after.lossesBroughtForward, taxCredits: after.taxCredits, imputationCredits: after.imputationCredits, overseasTaxPaid: after.overseasTaxPaid, otherIncome: after.otherIncome, multipleActivity: after.multipleActivity },
+      from: { assessedRit: before.assessedRit, returnFiledOn: before.returnFiledOn, lossesBroughtForward: before.lossesBroughtForward, taxCredits: before.taxCredits, imputationCredits: before.imputationCredits, overseasTaxPaid: before.overseasTaxPaid, imputationBroughtForward: before.imputationBroughtForward, otherIncome: before.otherIncome, multipleActivity: before.multipleActivity },
+      to: { assessedRit: after.assessedRit, returnFiledOn: after.returnFiledOn, lossesBroughtForward: after.lossesBroughtForward, taxCredits: after.taxCredits, imputationCredits: after.imputationCredits, overseasTaxPaid: after.overseasTaxPaid, imputationBroughtForward: after.imputationBroughtForward, otherIncome: after.otherIncome, multipleActivity: after.multipleActivity },
     },
   });
   return after;
@@ -443,6 +452,8 @@ export type IncomeTaxReport =
       ir4: Ir4Return | null;
       /** A sole trader's IR3 income boxes and tax calculation, once the income year has ended (ITX54-ITX57). */
       ir3: Ir3Return | null;
+      /** An individual's: the excess imputation credits Tohyee works out for last year, to check against IRD's letter (ITX65). */
+      lastYearExcessImputation: string | null;
       adjustments: TaxAdjustment[];
       payments: TaxPayment[];
       paidTotal: string;
@@ -521,8 +532,8 @@ function toWorkpaperAccounts(lines: Iterable<Line>, treatments: Map<string, Acco
     });
 }
 
-/** Tohyee's estimate of a past year's RIT from the books, or null when the books have nothing for it. */
-async function estimatedRit(tx: OrgTx, type: TaxpayerType, year: number, today: string): Promise<Decimal | null> {
+/** Tohyee's workpaper for a past year from the books (actuals only), or null when the books have nothing for it. */
+async function pastWorkpaper(tx: OrgTx, type: TaxpayerType, year: number, today: string): Promise<Workpaper | null> {
   if (!isSupportedIncomeYear(year)) return null;
   const amounts = await yearAmounts(tx, year, today, false);
   if (!amounts.hasActivity) return null;
@@ -539,8 +550,15 @@ async function estimatedRit(tx: OrgTx, type: TaxpayerType, year: number, today: 
     taxCredits: dec(typed.taxCredits),
     imputationCredits: dec(typed.imputationCredits),
     overseasTaxPaid: dec(typed.overseasTaxPaid),
+    imputationBroughtForward: dec(typed.imputationBroughtForward),
   });
-  return dec(result.rit);
+  return result;
+}
+
+/** Tohyee's estimate of a past year's RIT from the books, or null when the books have nothing for it. */
+async function estimatedRit(tx: OrgTx, type: TaxpayerType, year: number, today: string): Promise<Decimal | null> {
+  const result = await pastWorkpaper(tx, type, year, today);
+  return result ? dec(result.rit) : null;
 }
 
 function sumPayments(payments: TaxPayment[]): Decimal {
@@ -579,6 +597,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     taxCredits: dec(typed.taxCredits),
     imputationCredits: dec(typed.imputationCredits),
     overseasTaxPaid: dec(typed.overseasTaxPaid),
+    imputationBroughtForward: dec(typed.imputationBroughtForward),
   });
 
   // Last year's RIT: IRD's typed figure, or Tohyee's estimate from the books (ITX5, ITX6).
@@ -664,8 +683,8 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   // The IR10 once the income year has ended and the figures are all actuals (ITX24).
   const yearEnded = amounts.actualsTo === end && amounts.budgetFrom === null;
   const ir10 = yearEnded ? await buildIr10(tx, { incomeYear, workpaper: paper, multipleActivity: typed.multipleActivity, treatments }) : null;
-  const ir4 = yearEnded && type === "company" ? ir4Return({ workpaper: paper, paidTowardsYear: paid }) : null;
-  const ir3 = yearEnded && type === "individual" ? ir3Return({ workpaper: paper, paidTowardsYear: paid }) : null;
+  const ir4 = yearEnded && type === "company" ? ir4Return({ incomeYear, workpaper: paper, paidTowardsYear: paid }) : null;
+  const ir3 = yearEnded && type === "individual" ? ir3Return({ incomeYear, workpaper: paper, paidTowardsYear: paid }) : null;
 
   const notes: string[] = [];
   if (!endDue) {
@@ -691,6 +710,14 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
   }
   notes.push("Depreciation posted by journals outside the fixed asset register stays as booked.");
   if (type === "company" && !isZero(dec(typed.lossesBroughtForward))) notes.push("A company can use losses brought forward only if its shareholding has stayed continuous enough; check before relying on them.");
+  let lastYearExcessImputation: string | null = null;
+  if (type === "individual") {
+    const last = await pastWorkpaper(tx, type, lastYearNumber, today);
+    if (last && !isZero(dec(last.excessImputationCredits))) lastYearExcessImputation = last.excessImputationCredits;
+    if (lastYearExcessImputation && cmp(dec(lastYearExcessImputation), dec(typed.imputationBroughtForward)) !== 0) {
+      notes.push(`Tohyee works out ${money(dec(lastYearExcessImputation))} of excess imputation credits for the ${lastYearNumber} income year, but ${money(dec(typed.imputationBroughtForward))} is typed as brought forward. Use the figure in IRD's excess imputation credits letter.`);
+    }
+  }
   const ica = type === "company" ? await buildIca(tx, incomeYear) : null;
   if (ica && endMonth === 3 && cmp(dec(ica.ir4["42C"]), dec(typed.imputationCredits)) !== 0) {
     notes.push(`The imputation credit account has ${money(dec(ica.ir4["42C"]))} of credits on dividends received this year, but ${money(dec(typed.imputationCredits))} is typed as imputation credits received. Check which is right.`);
@@ -738,6 +765,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     ir10,
     ir4,
     ir3,
+    lastYearExcessImputation,
     interest,
     ica,
     adjustments,

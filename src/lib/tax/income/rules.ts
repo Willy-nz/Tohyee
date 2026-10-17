@@ -236,6 +236,16 @@ const UPLIFT_5 = dec("1.05");
 const UPLIFT_10 = dec("1.10");
 
 /**
+ * Next year's provisional tax on the standard option, for the return (IR4
+ * box 33, IR3 box 39; ITX62-ITX64): this year's RIT plus 5% when the RIT is
+ * more than 5,000.00, otherwise none is required.
+ */
+export function nextYearStandard(rit: Decimal): { option: "S"; amount: string } | null {
+  if (cmp(rit, PROVISIONAL_THRESHOLD) <= 0) return null;
+  return { option: "S", amount: money(roundHalfUp(mul(rit, UPLIFT_5), 2)) };
+}
+
+/**
  * The standard option schedule for an income year (ITX5-ITX8).
  * - `lastYear`: last year's RIT, typed from IRD's assessment (with the date
  *   the return was filed) or Tohyee's estimate (not filed yet).
@@ -380,7 +390,9 @@ export type Workpaper = {
   overseasTaxPaid: string;
   /** Imputation credits on dividends received: come off what's left, never below nil (ITX58). */
   imputationCredits: string;
-  /** Imputation credits more than the tax they can come off (ITX59, ITX61). */
+  /** An individual's excess imputation credits brought forward from last year (IR3 box 34; ITX65). */
+  imputationBroughtForward: string;
+  /** Imputation credits more than the tax they can come off (ITX59, ITX61, ITX65). */
   excessImputationCredits: string;
   /** A company's excess imputation credits turned into a loss (excess ÷ 0.28), included in the loss carried forward (ITX59). */
   imputationLoss: string;
@@ -439,6 +451,8 @@ export function workpaper(input: {
   taxCredits: Decimal;
   overseasTaxPaid?: Decimal;
   imputationCredits?: Decimal;
+  /** Individuals only; ignored for a company. */
+  imputationBroughtForward?: Decimal;
 }): Workpaper {
   let netProfit = ZERO_DECIMAL;
   const adjustments: Adjustment[] = [];
@@ -469,7 +483,8 @@ export function workpaper(input: {
   const tax = taxOn(taxable, input.type, input.year);
   // The IR4's box 30 and the IR3 guide's Question 36 worksheet (ITX58-ITX61).
   const overseas = input.overseasTaxPaid ?? ZERO_DECIMAL;
-  const imputation = input.imputationCredits ?? ZERO_DECIMAL;
+  const broughtForward = input.type === "individual" ? (input.imputationBroughtForward ?? ZERO_DECIMAL) : ZERO_DECIMAL;
+  const imputation = add(input.imputationCredits ?? ZERO_DECIMAL, broughtForward);
   const afterOverseas = cmp(overseas, tax) > 0 ? ZERO_DECIMAL : sub(tax, overseas);
   const afterImputation = cmp(imputation, afterOverseas) > 0 ? ZERO_DECIMAL : sub(afterOverseas, imputation);
   const excessImputation = cmp(imputation, afterOverseas) > 0 ? sub(imputation, afterOverseas) : ZERO_DECIMAL;
@@ -487,7 +502,8 @@ export function workpaper(input: {
     lossCarriedForward: money(carried),
     tax: money(tax),
     overseasTaxPaid: money(overseas),
-    imputationCredits: money(imputation),
+    imputationCredits: money(sub(imputation, broughtForward)),
+    imputationBroughtForward: money(broughtForward),
     excessImputationCredits: money(excessImputation),
     imputationLoss: money(imputationLoss),
     taxCredits: money(input.taxCredits),

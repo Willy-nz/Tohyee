@@ -141,6 +141,7 @@ export type ProposedFigures = {
   taxCredits?: string;
   imputationCredits?: string;
   overseasTaxPaid?: string;
+  imputationBroughtForward?: string;
   otherIncome?: string;
   payments?: Array<{ paidOn: string; amount: string; note: string | null }>;
 };
@@ -234,6 +235,7 @@ export async function proposeIrdFigures(
     taxCredits?: unknown;
     imputationCredits?: unknown;
     overseasTaxPaid?: unknown;
+    imputationBroughtForward?: unknown;
     otherIncome?: unknown;
     payments?: unknown;
     note?: unknown;
@@ -262,6 +264,8 @@ export async function proposeIrdFigures(
   if (imputation !== undefined) figures.imputationCredits = imputation;
   const overseas = amount(input.overseasTaxPaid, "overseasTaxPaid");
   if (overseas !== undefined) figures.overseasTaxPaid = overseas;
+  const broughtForward = amount(input.imputationBroughtForward, "imputationBroughtForward");
+  if (broughtForward !== undefined) figures.imputationBroughtForward = broughtForward;
   const other = amount(input.otherIncome, "otherIncome", { allowNegative: true });
   if (other !== undefined) figures.otherIncome = other;
   if (input.payments != null) {
@@ -311,7 +315,7 @@ export async function acceptProposal(tx: OrgTx, idInput: unknown): Promise<IrdPr
   const row = await lockWaiting(tx, idInput);
   const figures = row.figures;
   const current = await getIncomeTaxYear(tx, row.income_year);
-  const changesYear = figures.assessedRit !== undefined || figures.lossesBroughtForward !== undefined || figures.taxCredits !== undefined || figures.imputationCredits !== undefined || figures.overseasTaxPaid !== undefined || figures.otherIncome !== undefined;
+  const changesYear = figures.assessedRit !== undefined || figures.lossesBroughtForward !== undefined || figures.taxCredits !== undefined || figures.imputationCredits !== undefined || figures.overseasTaxPaid !== undefined || figures.imputationBroughtForward !== undefined || figures.otherIncome !== undefined;
   if (changesYear) {
     await saveIncomeTaxYear(tx, {
       incomeYear: row.income_year,
@@ -321,6 +325,7 @@ export async function acceptProposal(tx: OrgTx, idInput: unknown): Promise<IrdPr
       taxCredits: figures.taxCredits ?? current.taxCredits,
       imputationCredits: figures.imputationCredits ?? current.imputationCredits,
       overseasTaxPaid: figures.overseasTaxPaid ?? current.overseasTaxPaid,
+      imputationBroughtForward: figures.imputationBroughtForward ?? current.imputationBroughtForward,
       otherIncome: figures.otherIncome ?? current.otherIncome,
       multipleActivity: current.multipleActivity,
       version: current.version,

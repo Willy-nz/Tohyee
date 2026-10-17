@@ -341,7 +341,7 @@ function YearFigures({ organisationId, incomeYear, type, years, endMonth, onSave
       </Field>
       {report && report.supported ? (
         <>
-          <YearForm key={`${year}-${report.typed.version}`} organisationId={organisationId} typed={report.typed} type={type} onSaved={() => { loaded.reload(); onSaved(); }} />
+          <YearForm key={`${year}-${report.typed.version}`} organisationId={organisationId} typed={report.typed} type={type} lastYearExcess={report.lastYearExcessImputation} onSaved={() => { loaded.reload(); onSaved(); }} />
           <Payments key={`p-${year}`} organisationId={organisationId} incomeYear={year} payments={report.payments} total={report.paidTotal} onSaved={() => { loaded.reload(); onSaved(); }} />
         </>
       ) : loaded.error ? (
@@ -353,7 +353,7 @@ function YearFigures({ organisationId, incomeYear, type, years, endMonth, onSave
   );
 }
 
-function YearForm({ organisationId, typed, type, onSaved }: { organisationId: string; typed: IncomeTaxYear; type: TaxpayerType; onSaved: () => void }) {
+function YearForm({ organisationId, typed, type, lastYearExcess, onSaved }: { organisationId: string; typed: IncomeTaxYear; type: TaxpayerType; lastYearExcess: string | null; onSaved: () => void }) {
   const [form, setForm] = useState({
     assessedRit: typed.assessedRit ?? "",
     returnFiledOn: typed.returnFiledOn ?? "",
@@ -361,6 +361,7 @@ function YearForm({ organisationId, typed, type, onSaved }: { organisationId: st
     taxCredits: typed.taxCredits,
     imputationCredits: typed.imputationCredits,
     overseasTaxPaid: typed.overseasTaxPaid,
+    imputationBroughtForward: typed.imputationBroughtForward,
     otherIncome: typed.otherIncome,
     multipleActivity: typed.multipleActivity,
   });
@@ -397,6 +398,14 @@ function YearForm({ organisationId, typed, type, onSaved }: { organisationId: st
         <Field label="Overseas tax paid" hint="Tax paid overseas on overseas income. It can bring the tax to nil but isn't refunded.">
           <input inputMode="decimal" value={form.overseasTaxPaid} onChange={(event) => set("overseasTaxPaid")(event.target.value)} />
         </Field>
+        {type === "individual" ? (
+          <Field
+            label="Excess imputation credits brought forward"
+            hint={`From IRD's excess imputation credits letter for last year (IR3 box 34).${lastYearExcess ? ` Tohyee works out ${formatMoney(lastYearExcess)} from last year's books.` : ""}`}
+          >
+            <input inputMode="decimal" value={form.imputationBroughtForward} onChange={(event) => set("imputationBroughtForward")(event.target.value)} />
+          </Field>
+        ) : null}
         {type === "individual" ? (
           <Field label="Other income" hint="Wages, interest, dividends and other income outside the business.">
             <input inputMode="decimal" value={form.otherIncome} onChange={(event) => set("otherIncome")(event.target.value)} />
@@ -845,9 +854,9 @@ function Ir10Card({ organisationId, report, ir10, onSaved }: { organisationId: s
   );
 }
 
-type TaxReturnBoxes = { boxes: Record<string, string>; residual: "credit" | "debit"; outcome: "refund" | "tax_to_pay"; notes: string[] };
+type TaxReturnBoxes = { boxes: Record<string, string>; residual: "credit" | "debit"; outcome: "refund" | "tax_to_pay"; nextYear: { incomeYear: number; option: "S"; amount: string } | null; notes: string[] };
 
-function TaxReturnCard({ title, source, order, labels, result, residualBox, outcomeBox }: { title: string; source: string; order: readonly string[]; labels: Record<string, string>; result: TaxReturnBoxes; residualBox: string; outcomeBox: string }) {
+function TaxReturnCard({ title, source, order, labels, result, residualBox, outcomeBox, provisionalBox }: { title: string; source: string; order: readonly string[]; labels: Record<string, string>; result: TaxReturnBoxes; residualBox: string; outcomeBox: string; provisionalBox: string }) {
   return (
     <Card title={title}>
       <Notice tone="warning">From {source}, read by Claude and not yet reviewed by an accountant. Check every box before filing.</Notice>
@@ -865,6 +874,13 @@ function TaxReturnCard({ title, source, order, labels, result, residualBox, outc
               </td>
             </tr>
           ))}
+          <tr>
+            <td>
+              <span className={ui.muted}>{provisionalBox}A, {provisionalBox}B</span>{" "}
+              {result.nextYear ? `${result.nextYear.incomeYear} provisional tax, standard option (S): RIT plus 5%` : "Next year's provisional tax: none required (RIT 5,000.00 or less)"}
+            </td>
+            <td className={ui.num}>{result.nextYear ? <Money value={result.nextYear.amount} /> : null}</td>
+          </tr>
         </tbody>
       </table>
       <ul>
@@ -1025,13 +1041,14 @@ function IcaCard({ organisationId, ica, onSaved }: { organisationId: string; ica
   );
 }
 
-const PROPOSED_FIELDS: Array<{ key: "assessedRit" | "returnFiledOn" | "lossesBroughtForward" | "taxCredits" | "imputationCredits" | "overseasTaxPaid" | "otherIncome"; label: string; date?: boolean }> = [
+const PROPOSED_FIELDS: Array<{ key: "assessedRit" | "returnFiledOn" | "lossesBroughtForward" | "taxCredits" | "imputationCredits" | "overseasTaxPaid" | "imputationBroughtForward" | "otherIncome"; label: string; date?: boolean }> = [
   { key: "assessedRit", label: "Assessed RIT" },
   { key: "returnFiledOn", label: "Return filed on", date: true },
   { key: "lossesBroughtForward", label: "Losses brought forward" },
   { key: "taxCredits", label: "Tax credits" },
   { key: "imputationCredits", label: "Imputation credits received" },
   { key: "overseasTaxPaid", label: "Overseas tax paid" },
+  { key: "imputationBroughtForward", label: "Excess imputation credits brought forward" },
   { key: "otherIncome", label: "Other income" },
 ];
 
@@ -1427,10 +1444,10 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       <InterestCard report={report} />
       {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
       {report.ir4 ? (
-        <TaxReturnCard title={`IR4 company return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR4 form and guide" order={IR4_BOXES} labels={IR4_BOX_LABELS} result={report.ir4} residualBox="30J" outcomeBox="30L" />
+        <TaxReturnCard title={`IR4 company return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR4 form and guide" order={IR4_BOXES} labels={IR4_BOX_LABELS} result={report.ir4} residualBox="30J" outcomeBox="30L" provisionalBox="33" />
       ) : null}
       {report.ir3 ? (
-        <TaxReturnCard title={`IR3 individual return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR3 form and guide (the Question 36 worksheet)" order={IR3_BOXES} labels={IR3_BOX_LABELS} result={report.ir3} residualBox="W14" outcomeBox="W16" />
+        <TaxReturnCard title={`IR3 individual return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR3 form and guide (the Question 36 worksheet)" order={IR3_BOXES} labels={IR3_BOX_LABELS} result={report.ir3} residualBox="W14" outcomeBox="W16" provisionalBox="39" />
       ) : null}
       {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
         <Card title="IR10 financial statements summary">
