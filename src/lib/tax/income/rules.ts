@@ -1,6 +1,6 @@
 import { addDays } from "@/lib/financial-year";
 import { incomeYearDates as rdIncomeYearDates, incomeYearOf as rdIncomeYearOf } from "@/lib/rd/amounts";
-import { add, cmp, dec, type Decimal, divide, isNegative, isPositive, isZero, mul, roundHalfUp, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, divide, isNegative, isPositive, isZero, mul, roundHalfUp, sub, toFixedString, truncate, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { publicHolidayYear } from "@/lib/payroll/leave/public-holiday-dates";
 
 /*
@@ -190,12 +190,13 @@ export function instalmentDates(year: number, count: 2 | 3, endMonth = 3): strin
  * month after the balance date, or of the 13th with a tax agent's extension
  * of time (with 31 March: 7 Feb and 7 Apr), from the last two columns of
  * schedule 3 part A. For April to September balance dates the schedule says
- * February and April, and which year that is hasn't been checked yet, so
- * Tohyee returns null rather than guess.
+ * February and April: Jess confirmed (17 Oct 2026) that's the calendar year
+ * after the balance date (31 May 2026: 7 Feb 2027, or 7 Apr 2027). Never
+ * null now; the type stays nullable for callers.
  */
 export function endOfYearTaxDue(year: number, agentExtension: boolean, endMonth = 3): string | null {
-  if (endMonth >= 4 && endMonth <= 9) return null;
   const end = incomeYearDates(year, endMonth).end;
+  if (endMonth >= 4 && endMonth <= 9) return `${Number(end.slice(0, 4)) + 1}-${agentExtension ? "04" : "02"}-07`;
   const { year: dueYear, month } = addMonthsTo(end.slice(0, 7), agentExtension ? 13 : 11);
   return `${dueYear}-${String(month).padStart(2, "0")}-07`;
 }
@@ -242,7 +243,8 @@ const UPLIFT_10 = dec("1.10");
  */
 export function nextYearStandard(rit: Decimal): { option: "S"; amount: string } | null {
   if (cmp(rit, PROVISIONAL_THRESHOLD) <= 0) return null;
-  return { option: "S", amount: money(roundHalfUp(mul(rit, UPLIFT_5), 2)) };
+  // The returns print this in whole dollars; the cents are dropped (Jess, 17 Oct 2026).
+  return { option: "S", amount: money(truncate(mul(rit, UPLIFT_5), 0)) };
 }
 
 /**
@@ -480,7 +482,8 @@ export function workpaper(input: {
   } else {
     carried = sub(input.lossesBroughtForward, beforeLosses);
   }
-  const tax = taxOn(taxable, input.type, input.year);
+  // Tax is worked out on whole dollars of taxable income: the returns' box (IR4 30A, IR3 worksheet 1) drops the cents (Jess, 17 Oct 2026).
+  const tax = taxOn(truncate(taxable, 0), input.type, input.year);
   // The IR4's box 30 and the IR3 guide's Question 36 worksheet (ITX58-ITX61).
   const overseas = input.overseasTaxPaid ?? ZERO_DECIMAL;
   const broughtForward = input.type === "individual" ? (input.imputationBroughtForward ?? ZERO_DECIMAL) : ZERO_DECIMAL;

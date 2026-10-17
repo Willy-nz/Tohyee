@@ -1,4 +1,4 @@
-import { add, dec, type Decimal, isNegative, isPositive, neg, sub, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, type Decimal, isNegative, isPositive, neg, sub, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { money, nextYearStandard, type Workpaper } from "@/lib/tax/income/rules";
 
 /*
@@ -68,7 +68,7 @@ export function ir4Return(input: { incomeYear: number; workpaper: Workpaper; pai
   const box26B = dec(paper.lossesUsed);
   const box27 = sub(box25, box26B);
   const box29 = box27;
-  const box30A = box29;
+  const box30A = truncate(box29, 0);
   const box30B = dec(paper.tax);
   const box30C = dec(paper.overseasTaxPaid);
   const box30D = atLeastZero(sub(box30B, box30C));
@@ -118,9 +118,9 @@ export function ir4Return(input: { incomeYear: number; workpaper: Workpaper; pai
       "Box 30I is the tax credits typed for the year (RWT and other credits, box 17A); 30C the overseas tax paid (box 18A) and 30G the imputation credits received (box 14), as typed. Imputation credits more than 30F become a loss to carry forward (the excess ÷ 0.28, IR4 guide), shown on the workpaper.",
       "Tohyee has nothing for donations (24B: the IR4 guide caps them at box 23, and nil when 23 is a loss), group loss offsets and subvention payments (28, 28A), the foreign investor tax credit (30E) or RLWT (30IA), so they're 0.00.",
       "Box 27 is 25 less 26B, as the IR4 guide says. Tohyee doesn't check the shareholder continuity or business continuity tests (26C).",
-      "The paper form prints 30A in whole dollars. Neither the form nor the guide says whether to drop or round the cents, so Tohyee shows them and works the tax on the full figure.",
+      "30A is taxable income with the cents dropped, and the tax is worked out on it (Jess, 17 Oct 2026).",
       "Box 30K is every payment recorded towards this income year, including any end-of-year tax already paid.",
-      "Box 33 is next year's provisional tax on the standard option (this year's RIT plus 5%, IR4 guide) when the RIT is more than 5,000.00. Choose the estimation or ratio option yourself if they suit better. The form prints 33B in whole dollars; Tohyee keeps the cents.",
+      "Box 33 is next year's provisional tax on the standard option (this year's RIT plus 5%, IR4 guide) when the RIT is more than 5,000.00. Choose the estimation or ratio option yourself if they suit better. 33B drops the cents, as the form prints whole dollars.",
       "The initial provisional tax date (32), the disclosures (34-39) and shareholder details (40) aren't filled.",
     ],
   };

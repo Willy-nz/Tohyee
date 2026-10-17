@@ -17544,7 +17544,7 @@ examples"; "Claiming Investment Boost" (news, 2025).
   count as whole months, so May counts). ATV **7,250.00**. Next year 7,250.00
   x 30% = **2,175.00**, ATV 5,075.00. At 70% business use the deduction is
   2,750.00 x 70% = **1,925.00**; the ATV still goes down by the full
-  2,750.00 (our reading; check it). Each year's depreciation is rounded half
+  2,750.00 (confirmed by Jess, 17 Oct 2026). Each year's depreciation is rounded half
   up to the cent (IRD's pages don't say).
 - **ITX13 Straight line until it's used up** (IRD's example). A computer
   costing 1,200.00 at 21% SL, first used in April 2024: **252.00** a year for
@@ -17571,7 +17571,8 @@ examples"; "Claiming Investment Boost" (news, 2025).
   available on 1 March 2026, 30% DV: Investment Boost 9,000.00, of which
   **4,500.00** is claimed (IRD: "half of the Investment Boost amount");
   depreciation 36,000.00 x 30% x 1 ÷ 12 = 900.00, of which **450.00** is
-  claimed. ATV 35,100.00 (down by the full amounts; our reading).
+  claimed. ATV 35,100.00 (down by the full amounts, as in ITX12; confirmed by Jess,
+  17 Oct 2026).
 - **ITX17 Low-value assets and a loss on sale.** A laptop costing 950.00
   (excluding GST when registered), first used 10 July 2025: written off in
   full, **950.00**, in the 2026 income year; Tohyee refuses a low-value
@@ -17603,8 +17604,9 @@ IR10G* (June 2026), read through a summarising fetch tool, so check them.
 Tested in `tests/unit/ir10.test.ts` and `tests/integration/ir10.test.ts`.
 Tohyee fills the boxes for a finished income year from the books, the
 income tax workpaper and the fixed asset register; it doesn't file it.
-Figures are GST-exclusive (the books are). Amounts show cents: the form and
-guide we read don't say whether to drop them.
+Figures are GST-exclusive (the books are). Each box drops its cents (Jess,
+17 Oct 2026; ITX66), so a total box can differ by a dollar or two from
+adding up the boxes above it; the checks use the figures with cents.
 
 - **ITX19 Which box an account goes in.** Owners and admins choose an
   IR10 box for each account, from the boxes its type allows: revenue and
@@ -17656,7 +17658,7 @@ guide we read don't say whether to drop them.
   (55): proceeds of register disposals in the year. Dividends paid (56) and
   drawings (57): the net debits in the year on accounts marked so, drawings
   **5,000.00**. Current accounts (58): their closing balances added together,
-  credit (owed to the owners) positive (our reading; the guide doesn't say).
+  credit (owed to the owners) positive (confirmed by Jess, 17 Oct 2026).
   Tax-deductible loss on disposal (59): from tax depreciation. Investment
   Boost assets (60): the cost of assets whose Investment Boost is claimed
   this year, less any private-use share, **30,000.00**.
@@ -17828,9 +17830,9 @@ Jess said "ok keep going". Replaces ITX1's "31 March only". Tested in
   agent's extension, ITX10); with an early balance date, the 11th and 13th
   months after it (31 October 2025: **7 Sep 2026**, or 7 Nov 2026). For
   **April to September** balance dates the columns also say February and
-  April, but which year that is hasn't been checked, so Tohyee doesn't show
-  an end-of-year tax date for them and says to check myIR (question for
-  Jess or Will). Suggested income years for payments from the books (ITX38)
+  April: in the calendar year after the balance date (Jess, 17 Oct 2026).
+  31 May 2026: **7 Feb 2027**, or 7 Apr 2027; 30 June 2027: **7 Feb 2028**.
+  Suggested income years for payments from the books (ITX38)
   are only for 31 March.
 
 ## Income tax (#292) stage 8: use-of-money interest (ITX44-ITX48; from IRD's pages, read by Claude 17 Oct 2026, not yet reviewed)
@@ -17847,8 +17849,9 @@ interest it charges.
   2025 10.88%; 29 Aug 2023 10.91%; 9 May 2023 10.39%; 17 Jan 2023 9.21%; 30
   Aug 2022 7.96%; 10 May 2022 7.28%; 8 May 2020 7.00%; 29 Aug 2019 8.35%.
   Interest is simple and daily ("does not compound"): amount x rate x days ÷
-  365 (the ÷ 365 is our reading), rounded once to the cent. Days run from
-  the day after the due date to the day it's paid (our reading of "starts
+  365, rounded once to the cent. Days run from
+  the day after the due date to the day it's paid, as Jess confirmed on 17
+  Oct 2026 (from "starts
   the day after the original due date" and "stops on the day the overdue
   balance ... is paid"). A due date on a weekend or holiday counts as the
   next business day (ITX10). No interest on $100 or less. Later rates
@@ -17907,9 +17910,9 @@ guide, IR4GU 2026, says so; read later the same day); 28 and
 credits typed for the year (box 17A); 30IA RLWT 0; 30J = 30H - 30I - 30IA,
 a debit when positive, a credit otherwise; 30K everything recorded as paid
 towards the year; 30L = 30J (debit positive) - 30K, tax to pay when
-positive, a refund otherwise. The form prints 30A in whole dollars but
-neither it nor the guide says whether to drop or round the cents, so Tohyee
-keeps them. The guide caps donations (24B) at box 23, and nil when 23 is a
+positive, a refund otherwise. The form prints 30A in whole dollars, so the
+cents are dropped and the tax is worked out on whole dollars (Jess, 17 Oct
+2026; ITX66). The guide caps donations (24B) at box 23, and nil when 23 is a
 loss; Tohyee has no donations figure yet.
 Made-up figures:
 
@@ -17944,7 +17947,7 @@ positive (return box 36A); 15 everything recorded as paid towards the year;
 16 = 14 (debit positive) - 15, tax to pay when positive, a refund otherwise
 (return box 36B). The guide's 2026 rates table prints the 33% band's
 threshold as $78,101 but its tax column ($15,650.50) only works from
-$78,100; Tohyee uses 78,100 (as in ITX4). Made-up figures:
+$78,100; Tohyee uses 78,100 (as in ITX4), confirmed by Jess on 17 Oct 2026. Made-up figures:
 
 - **ITX54** Business income 60,000.00, paid 5,000.00: **24, 28, 30, 32,
   worksheet 1 60,000.00; worksheet 2 10,220.50; 14 10,220.50 debit; 16
@@ -17986,9 +17989,11 @@ Tohyee doesn't carry it anywhere and says to check. Made-up figures:
 - **ITX59** A company with taxable income 10,000.00, imputation credits
   4,200.00 and RWT 140.00: **tax 2,800.00; excess 1,400.00; loss 5,000.00
   added to the loss carried forward; 30H 0.00; 30J 140.00 credit, refunded;
-  RIT 0.00.**
+  RIT 0.00.** Rounding the loss to the cent confirmed by Jess,
+  17 Oct 2026.
 - **ITX60** A company with taxable income 10,000.00 and overseas tax
-  3,500.00: **30D 0.00; RIT 0.00.**
+  3,500.00: **30D 0.00; RIT 0.00.** The unused overseas tax is lost (confirmed by Jess,
+  17 Oct 2026).
 - **ITX61** An individual with taxable income 60,000.00, overseas tax
   500.00, imputation credits 1,500.00 and RWT 1,050.00: **worksheet 4
   10,220.50; 5 500.00; 6 9,720.50; 7 and 9 1,500.00; 10 8,220.50; 12
@@ -18003,10 +18008,9 @@ and `tests/integration/ird-documents.test.ts`.
 
 IR4 boxes 33A and 33B, and IR3 boxes 39A and 39B: when the return's RIT
 (IR4 30J, IR3 36A, as a debit) is more than 5,000.00, the standard option
-"S" and the RIT plus 5%, rounded to the cent (as the instalments in ITX5
-are); otherwise none is required. The forms print 33B and the guide's
-worksheet box 3 in whole dollars without saying whether to drop or round
-the cents, so Tohyee keeps them. The estimation and ratio options are the
+"S" and the RIT plus 5% with the cents dropped, as the forms print whole
+dollars (Jess, 17 Oct 2026; the instalments in ITX5 still work in cents);
+otherwise none is required. The estimation and ratio options are the
 person's choice. An individual types excess imputation credits brought
 forward from IRD's letter (IR3 box 34, worksheet 8); they add to this
 year's imputation credits (worksheet 9) and anything still over the tax
@@ -18015,14 +18019,33 @@ loss, ITX59). When Tohyee's own workpaper for last year shows a different
 excess, the page says so. Made-up figures:
 
 - **ITX62** A company with RIT 22,860.00: **33A S; 33B 24,003.00 for 2027.**
-  Kererū's 2026 RIT 17,668.00: **18,551.40.**
+  Kererū's 2026 RIT 17,668.00: **18,551.00.**
 - **ITX63** RIT of exactly 5,000.00, or 2,660.00: **none required.**
-  5,000.01: **5,250.01.**
-- **ITX64** An individual with RIT 7,170.50: **39A S; 39B 7,529.03** (7,529.025
-  rounded half up).
+  5,000.01: **5,250.00.**
+- **ITX64** An individual with RIT 7,170.50: **39A S; 39B 7,529.00**
+  (7,529.025 with the cents dropped).
 - **ITX65** An individual with tax 525.00, imputation credits 300.00 and
   400.00 brought forward: **worksheet 7 300.00; 8 400.00; 9 700.00; 10
   0.00; 175.00 carried forward.**
 
 Tested in `tests/unit/next-year-provisional.test.ts` and
 `tests/integration/income-tax.test.ts`.
+
+## Income tax (#292): Jess's answers, 17 Oct 2026 (ITX66)
+
+Jess answered the open questions on 17 Oct 2026. Confirmed as built:
+ATV down by the full depreciation for part-private assets (ITX12, ITX16),
+IR10 box 58's sign (ITX22), use-of-money interest ÷ 365 with the payment
+day charged (ITX44), $78,100 for the 33% band (ITX54), rounding the
+imputation loss to the cent (ITX59), unused overseas tax lost (ITX60).
+Changed: whole dollars (ITX66) and the end-of-year date for April to
+September balance dates (ITX43). Still for Will: what counts as "paid
+towards" earlier instalments when last year's return is filed late (ITX6).
+The examples not named here are still not yet reviewed.
+
+- **ITX66 Whole dollars.** The cents are dropped (not rounded) from IR4 box
+  30A and IR3 worksheet box 1, and the tax is worked out on that: taxable
+  income 63,600.75 gives **30A 63,600.00 and tax 17,808.00** (box 29 keeps
+  63,600.75). Next year's provisional tax drops its cents too (ITX62-ITX64),
+  and so does every IR10 box. Tested in `tests/unit/next-year-provisional.test.ts`
+  and `tests/unit/income-tax-rules.test.ts`.

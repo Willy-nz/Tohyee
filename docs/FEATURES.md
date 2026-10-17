@@ -2007,9 +2007,9 @@ that something happened.
 - **Income tax for other balance dates** (#292 stage 7; examples
   ITX41-ITX43, decision 551): income years follow IRD's early/late balance
   date rule (SPS 24/01), and provisional tax dates follow the Income Tax Act
-  2007 schedule 3 part A for every balance date month. The end-of-year tax
-  date for April to September balance dates isn't shown yet (waiting on a
-  check of which year schedule 3's February and April are).
+  2007 schedule 3 part A for every balance date month. End-of-year tax for
+  April to September balance dates is due in February (April with a tax
+  agent) of the calendar year after the balance date (decision 557).
 - **Use-of-money interest estimate** (#292 stage 8; examples ITX44-ITX48,
   decision 552): the Income tax page estimates interest so far and if
   everything's paid on its due date, at IRD's dated rates, simple and daily,
@@ -2038,6 +2038,9 @@ that something happened.
 - **Imputation credits brought forward** (ITX65, decision 556): a sole
   trader types last year's excess imputation credits from IRD's letter
   (IR3 box 34); Tohyee says if its own figure for last year differs.
+- **Whole dollars on the returns and IR10** (ITX66, decision 557): taxable
+  income (IR4 30A, IR3 worksheet 1), next year's provisional tax and every
+  IR10 box drop their cents, and the tax is worked out on whole dollars.
 
 ## Not built yet, on purpose
 
@@ -2096,9 +2099,8 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-0. Income tax (#292), next stages: the end-of-year tax date for April to
-   September balance dates (once checked), and later
-   preparing returns.
+0. Income tax (#292), next stages: Will's review of the worked examples
+   (ITX1-ITX66) and the "paid towards" rule for a late-filed return (ITX6).
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works
    on them).

@@ -26,15 +26,15 @@ describe("next year's provisional tax and imputation credits brought forward (IT
 
   it("ITX63 none required with RIT of 5,000.00 or less", () => {
     expect(nextYearStandard(dec("5000"))).toBeNull();
-    expect(nextYearStandard(dec("5000.01"))).toEqual({ option: "S", amount: "5250.01" });
+    expect(nextYearStandard(dec("5000.01"))).toEqual({ option: "S", amount: "5250.00" });
     const ir4 = ir4Return({ incomeYear: 2026, workpaper: paper("company", "10000", { tax: "140" }), paidTowardsYear: dec("0") });
     expect([ir4.boxes["30J"], ir4.nextYear]).toEqual(["2660.00", null]);
   });
 
-  it("ITX64 an individual's 39A and 39B, rounded to the cent", () => {
+  it("ITX64 an individual's 39A and 39B, with the cents dropped", () => {
     const ir3 = ir3Return({ incomeYear: 2026, workpaper: paper("individual", "60000", { tax: "3050" }), paidTowardsYear: dec("0") });
     expect(ir3.boxes.W14).toBe("7170.50");
-    expect(ir3.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "7529.03" });
+    expect(ir3.nextYear).toEqual({ incomeYear: 2027, option: "S", amount: "7529.00" });
   });
 
   it("ITX65 an individual's excess imputation credits brought forward come off with this year's", () => {
@@ -43,5 +43,14 @@ describe("next year's provisional tax and imputation credits brought forward (IT
     expect([ir3.boxes.W6, ir3.boxes.W7, ir3.boxes.W8, ir3.boxes.W9, ir3.boxes.W10, result.excessImputationCredits]).toEqual(["525.00", "300.00", "400.00", "700.00", "0.00", "175.00"]);
     // Ignored for a company, which turns excess credits into a loss instead.
     expect(paper("company", "5000", { broughtForward: "400" }).imputationBroughtForward).toBe("0.00");
+  });
+
+  it("ITX66 whole dollars: the tax is on taxable income with its cents dropped, and so are 30A and worksheet box 1", () => {
+    const company = paper("company", "63600.75");
+    expect([company.taxableIncome, company.tax]).toEqual(["63600.75", "17808.00"]);
+    const ir4 = ir4Return({ incomeYear: 2026, workpaper: company, paidTowardsYear: dec("0") });
+    expect([ir4.boxes["29"], ir4.boxes["30A"], ir4.boxes["30B"]]).toEqual(["63600.75", "63600.00", "17808.00"]);
+    const ir3 = ir3Return({ incomeYear: 2026, workpaper: paper("individual", "-0.75"), paidTowardsYear: dec("0") });
+    expect(ir3.boxes.W1).toBe("0.00");
   });
 });

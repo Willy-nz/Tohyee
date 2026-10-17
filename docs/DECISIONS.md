@@ -5145,3 +5145,15 @@ testing) and #154's code signing (later, Jess).
      individual types excess imputation credits brought forward from IRD's
      letter, and Tohyee compares it with its own figure for last year. The
      cents on the provisional tax amount are kept for now.
+557. **Jess's answers to the income tax questions** (17 October 2026).
+     Claude asked; Jess chose answers. Drop the cents (not round) on IR4 30A
+     and 33B, IR3 worksheet box 1 and 39B, and every IR10 box, and work the
+     tax out on whole dollars. End-of-year tax for April to September
+     balance dates is due in February (April with a tax agent) of the
+     calendar year after the balance date. Confirmed as built: $78,100 for
+     the 33% band; ATV down by the full depreciation for part-private
+     assets; IR10 box 58 with money owed to the owners positive; interest
+     ÷ 365 with the payment day charged; the imputation loss rounded to the
+     cent; unused overseas tax lost. Still for Will: the "paid towards" rule
+     for a late-filed return (ITX6). The worked examples go into a document
+     for Will to review (ITX66).

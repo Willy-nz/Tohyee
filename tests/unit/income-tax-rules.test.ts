@@ -231,12 +231,15 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     expect(instalmentDates(2027, 3, 3)).toEqual(["2026-08-28", "2027-01-15", "2027-05-07"]);
   });
 
-  it("ITX43 end-of-year tax dates, and none yet for April to September", () => {
+  it("ITX43 end-of-year tax dates, with April to September in the calendar year after the balance date", () => {
     expect(endOfYearTaxDue(2026, false, 10)).toBe("2026-09-07");
     expect(endOfYearTaxDue(2026, true, 10)).toBe("2026-11-07");
     expect(endOfYearTaxDue(2026, false, 2)).toBe("2027-01-07");
     expect(endOfYearTaxDue(2026, false, 3)).toBe("2027-02-07");
-    expect(endOfYearTaxDue(2026, false, 5)).toBeNull();
+    expect(endOfYearTaxDue(2026, false, 5)).toBe("2027-02-07");
+    expect(endOfYearTaxDue(2026, true, 5)).toBe("2027-04-07");
+    expect(endOfYearTaxDue(2026, false, 9)).toBe("2027-02-07");
+    expect(endOfYearTaxDue(2027, false, 6)).toBe("2028-02-07");
     expect(suggestedIncomeYear("2026-08-28", 5)).toBeNull();
   });
 });
