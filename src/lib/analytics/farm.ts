@@ -254,5 +254,73 @@ export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
     ]),
   });
 
+  // Pasture and feed (PF8): row for row, as recorded; estimates labelled.
+  const readings = await tx.query<Record<string, string | null>>(
+    `select r.id::text, f.name as farm, r.paddock_id::text, p.name as paddock, r.measured_on::text, r.cover::text, r.method, r.note, r.source
+       from pasture_readings r join paddocks p on p.id = r.paddock_id join farms f on f.id = r.farm_id
+      where r.status = 'active' order by r.measured_on, r.id`,
+  );
+  tables.push({
+    name: "tohyee_farm_pasture_readings",
+    columns: [
+      { name: "reading_id", type: "BIGINT" },
+      { name: "farm", type: "VARCHAR" },
+      { name: "paddock_id", type: "BIGINT" },
+      { name: "paddock", type: "VARCHAR" },
+      { name: "measured_on", type: "DATE" },
+      { name: "cover_kg_dm_ha", type: "INTEGER" },
+      { name: "method", type: "VARCHAR" },
+      { name: "estimate", type: "BOOLEAN" },
+      { name: "note", type: "VARCHAR" },
+      { name: "source", type: "VARCHAR" },
+    ],
+    rows: readings.rows.map((row) => [row.id, row.farm, row.paddock_id, row.paddock, row.measured_on, row.cover, row.method, row.method === "satellite" || row.method === "model" ? "true" : "false", row.note, row.source]),
+  });
+  const grazings = await tx.query<Record<string, string | null>>(
+    `select g.id::text, f.name as farm, g.paddock_id::text, p.name as paddock, g.mob, g.head::text, g.in_on::text, g.out_on::text, g.pre_cover::text, g.post_cover::text, g.note
+       from grazings g join paddocks p on p.id = g.paddock_id join farms f on f.id = g.farm_id
+      where g.status = 'active' order by g.in_on, g.id`,
+  );
+  tables.push({
+    name: "tohyee_farm_grazings",
+    columns: [
+      { name: "grazing_id", type: "BIGINT" },
+      { name: "farm", type: "VARCHAR" },
+      { name: "paddock_id", type: "BIGINT" },
+      { name: "paddock", type: "VARCHAR" },
+      { name: "mob", type: "VARCHAR" },
+      { name: "head", type: "INTEGER" },
+      { name: "in_on", type: "DATE" },
+      { name: "out_on", type: "DATE" },
+      { name: "pre_cover_kg_dm_ha", type: "INTEGER" },
+      { name: "post_cover_kg_dm_ha", type: "INTEGER" },
+      { name: "note", type: "VARCHAR" },
+    ],
+    rows: grazings.rows.map((row) => [row.id, row.farm, row.paddock_id, row.paddock, row.mob, row.head, row.in_on, row.out_on, row.pre_cover, row.post_cover, row.note]),
+  });
+  const supplements = await tx.query<Record<string, string | null>>(
+    `select s.id::text, f.name as farm, s.paddock_id::text, p.name as paddock, s.fed_on::text, s.feed, s.quantity::text, s.unit, s.kg_dm::text, s.mob, s.note
+       from supplements_fed s join farms f on f.id = s.farm_id left join paddocks p on p.id = s.paddock_id
+      where s.status = 'active' order by s.fed_on, s.id`,
+  );
+  tables.push({
+    name: "tohyee_farm_supplements",
+    columns: [
+      { name: "supplement_id", type: "BIGINT" },
+      { name: "farm", type: "VARCHAR" },
+      { name: "paddock_id", type: "BIGINT" },
+      { name: "paddock", type: "VARCHAR" },
+      { name: "fed_on", type: "DATE" },
+      { name: "feed", type: "VARCHAR" },
+      { name: "quantity", type: MONEY },
+      { name: "unit", type: "VARCHAR" },
+      { name: "kg_dm", type: MONEY },
+      { name: "mob", type: "VARCHAR" },
+      { name: "note", type: "VARCHAR" },
+    ],
+    // A quantity in kg DM is its own kg DM (PF6).
+    rows: supplements.rows.map((row) => [row.id, row.farm, row.paddock_id, row.paddock, row.fed_on, row.feed, row.quantity, row.unit, row.unit === "kg_dm" ? row.quantity : row.kg_dm, row.mob, row.note]),
+  });
+
   return tables;
 }

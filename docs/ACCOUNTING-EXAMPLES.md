@@ -18051,3 +18051,58 @@ The examples not named here are still not yet reviewed.
 ## Income tax (#292): a review on issue #292 (ITX6 follow-up, 18 Oct 2026)
 
 A review comment on issue #292 (17 Oct 2026) found that a late-filed return's schedule counted a caught-up shortfall twice in the year's total; fixed in ITX6. It also said IRD applies provisional tax payments to instalments as the taxpayer directs, so Tohyee's earliest-first, by-date rule is our reading, still for Will (ITX6). And it said that without an extension of time to file, IRD's standard option page has last year's RIT plus 5% apply even when the return is filed after an instalment date. IRD's "Standard option" page (read 18 Oct 2026) says so; its "Work out provisional tax using the standard option" page doesn't mention extensions. Tohyee hasn't changed that yet: a question for Jess or Will.
+
+## Farming (#249) stage 4: pasture and feed records (PF1-PF8; chosen by Claude 19 Oct 2026 when Jess said "Yea do those", not yet reviewed)
+
+Records only: nothing here posts to the books, judges whether a cover is
+high or low, or recommends a grazing or feeding plan. Supplements bought are
+bills as now; feeding them out is recorded here without moving stock. Tested
+in `tests/unit/pasture.test.ts` and `tests/integration/pasture.test.ts`.
+
+- **PF1 A cover reading** is a paddock, a date, the cover in kg DM/ha (a
+  whole number from 0 to 20,000) and how it was got: plate meter, visual,
+  other measurement, satellite or model. Satellite and model readings are
+  **estimates** and are labelled so everywhere. A plate meter's clicks
+  aren't converted (that needs an equation for the pasture type); type the
+  cover the meter or app gives.
+- **PF2 Growth** between two readings of a paddock by the same method, with
+  no grazing in between: 2,100 on 1 Sep and 2,450 on 15 Sep is 350 ÷ 14 =
+  **25.0 kg DM/ha/day** (rounded half up to one place). A grazing that
+  overlaps the days between, or readings by different methods (a plate
+  meter and a satellite), give no growth figure, and the screen says why.
+  A fall with no grazing shows as negative growth.
+- **PF3 Farm cover on a date** uses each active paddock's latest reading on
+  or before that date. Paddock A 10.00 ha at 2,500; B 5.00 ha at 1,900; C
+  8.00 ha with no reading: average **2,300 kg DM/ha** ((25,000 + 9,500) ÷
+  15.00, rounded to the kg), **34,500 kg DM** in total, and "C has no
+  reading". The area is the effective hectares, or the mapped hectares when
+  none are typed; a paddock with neither is left out and named. The oldest
+  reading used, and how many are estimates, are shown beside the average.
+- **PF4 Feed wedge:** the paddocks with a reading, highest cover first (A
+  2,500, B 1,900), each with its reading's date and method. No target line
+  is drawn: that's a feed plan, and Tohyee doesn't make one.
+- **PF5 A grazing** is a paddock, a mob (its name, and head if known), the
+  day in and the day out (blank while still in), and optionally the covers
+  before and after. Milkers, 220 head, on paddock A (10.00 ha) 3 Sep to 4
+  Sep, 2,800 before and 1,600 after: **1,200 kg DM/ha eaten, 12,000 kg DM**
+  in total, **54.5 kg DM a head** for the grazing (rounded to one place).
+  Without both covers, nothing is worked out. A day out before the day in
+  is refused, and so is a second open grazing on the same paddock.
+- **PF6 Supplements fed** are a date, a feed name, a quantity and unit (kg
+  DM, kg as fed, tonnes as fed, bales or other), and optionally which
+  paddock and mob, and the kg DM. Quantities aren't converted: a quantity
+  in kg DM is its own kg DM; anything else counts only when its kg DM is
+  typed. August: 20 bales baleage (kg DM typed 4,000), 2,000 kg DM of PKE,
+  10 bales hay (no kg DM): **6,000 kg DM** fed, and "10 bales hay not
+  counted: no kg DM".
+- **PF7 Importing readings** from a CSV or Excel file (columns for paddock,
+  date, cover and optionally method; the method for the whole file can be
+  chosen instead) shows a preview first. A paddock is matched by its
+  current name on the farm; a row with an unknown paddock, a date that
+  isn't one, or a cover that isn't a whole number from 0 to 20,000 is shown
+  with its error and skipped. The same file can't be imported twice.
+- **PF8 Who and where.** Anyone in the organisation sees pasture records;
+  bookkeepers and above add, import and remove them (as soil tests). A
+  record entered by mistake is removed, and kept for the history. They're
+  copied into the analytics database as `tohyee_farm_pasture_readings`,
+  `tohyee_farm_grazings` and `tohyee_farm_supplements`.

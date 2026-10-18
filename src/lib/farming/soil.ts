@@ -611,7 +611,7 @@ type ImportInput = {
 };
 
 /** The file's rows: CSV text, or the first visible sheet of an Excel workbook (base64). */
-async function fileRows(
+export async function fileRows(
   fileName: string,
   input: ImportInput,
 ): Promise<{ rows: string[][]; sha256: string }> {

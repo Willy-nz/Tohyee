@@ -2042,6 +2042,13 @@ that something happened.
   income (IR4 30A, IR3 worksheet 1), next year's provisional tax and every
   IR10 box drop their cents, and the tax is worked out on whole dollars.
 
+- **Pasture and feed** (#249 stage 4; PF1-PF8, decision 559): Farming ›
+  Pasture and feed records cover readings (typed, or imported from CSV or
+  Excel with a preview), shows each paddock's growth and the farm's cover
+  and feed wedge on a date, and records grazings (what was eaten, with
+  covers before and after) and supplements fed in kg DM. Satellite and
+  model readings are labelled as estimates. Records only.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
