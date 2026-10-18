@@ -295,6 +295,15 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_livestock_suggestions",
         "list_farms_and_paddocks",
         "farm_benchmarks",
+        "list_soil_tests",
+        "list_fertiliser_products",
+        "list_fertiliser_plans",
+        "get_fertiliser_plan",
+        "fertiliser_what_if",
+        "pasture_cover",
+        "list_pasture_readings",
+        "list_grazings",
+        "list_supplements_fed",
         "list_staff",
       ].sort(),
     );
@@ -391,7 +400,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       if (!args[tool.name] && required.length > 0) {
         // A record this test doesn't make: still read inside the read-only transaction, and found missing.
         const result = await callTool(viewerToken, tool.name, Object.fromEntries(required.map((name) => [name, "999999"])));
-        expect(result.text, tool.name).toMatch(/not found|doesn't exist|no such|isn't/i);
+        expect(result.text, tool.name).toMatch(/not found|doesn't exist|no such|isn't|Farming is off/i);
         continue;
       }
       const result = await callTool(viewerToken, tool.name, args[tool.name] ?? {});
