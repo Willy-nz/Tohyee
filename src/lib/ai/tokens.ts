@@ -208,11 +208,13 @@ export async function remoteAccessAddress(): Promise<string | null> {
 }
 
 /**
- * Stops every AI key a person made, in every organisation (#132): when their
+ * Stops every AI key and farm app key a person made, in every organisation (#132): when their
  * password is changed or reset, or their two-step sign-in is reset, a key
  * made by whoever had their account shouldn't keep working. Returns how many.
  */
 export async function revokeUserAiKeys(client: DbClient, userId: string): Promise<number> {
   const revoked = await client.query("update ai_access_tokens set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
-  return revoked.rowCount ?? 0;
+  // Farm app keys (FA2, decision 561) stop for the same reason; they're counted with the AI keys.
+  const apps = await client.query("update farm_app_keys set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
+  return (revoked.rowCount ?? 0) + (apps.rowCount ?? 0);
 }

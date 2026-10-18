@@ -147,6 +147,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming/benchmarks", label: "Benchmarks" },
           { href: "/operations/farming/notebook", label: "Farm notebook" },
+          { href: "/operations/farming/apps", label: "Farm apps" },
           { href: "/operations/ai/workspace", label: "AI dashboards and data" },
           { href: "/operations/farming/import", label: "Import paddock shapes", minRole: "bookkeeper" },
           { href: "/operations/livestock", label: "Livestock", module: "livestock" },

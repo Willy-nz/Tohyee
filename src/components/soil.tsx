@@ -17,6 +17,7 @@ import type {
   SoilSummary,
   SoilTest,
 } from "@/lib/farming/soil";
+import type { SoilSample } from "@/lib/farming/soil-samples";
 import { formatDate, todayInBrowser } from "@/lib/format";
 
 /**
@@ -198,6 +199,7 @@ function FarmSoil({
           onAdded={reload}
         />
       ) : null}
+      <SoilSamples organisationId={organisationId} farm={farm} />
       <Card
         title="All soil tests"
         description="Newest first. Open one to see every result and attach the lab's report."
@@ -807,5 +809,64 @@ export function PaddockRecords({
         </ul>
       )}
     </>
+  );
+}
+
+/** Soil samples taken in the field, before the lab's results (FA4), entered here or by a farm app. */
+function SoilSamples({ organisationId, farm }: { organisationId: string; farm: Farm }) {
+  const { can } = useWorkspace();
+  const samples = useApiData<{ samples: SoilSample[] }>(`/api/farming/farms/${farm.id}/soil-samples`, { organisationId });
+  const { busy, error, run } = useRun();
+  if (!samples.data || samples.data.samples.length === 0) return null;
+  return (
+    <Card title="Samples taken" description="Soil samples recorded in the field, waiting for or matched to the lab's results. Apps record them through the Farming API.">
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.tableWrap}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <thead>
+            <tr>
+              <th>Taken</th>
+              <th>Paddock</th>
+              <th>Sample</th>
+              <th>Depth</th>
+              <th>Where</th>
+              <th>Recorded by</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {samples.data.samples.map((sample) => (
+              <tr key={sample.id}>
+                <td data-label="Taken">{formatDate(sample.takenOn)}</td>
+                <td data-label="Paddock">{sample.paddockName}</td>
+                <td data-label="Sample">{sample.sampleName ?? "–"}</td>
+                <td data-label="Depth">{sample.depth ?? "–"}</td>
+                <td data-label="Where">
+                  {sample.latitude && sample.longitude ? (
+                    <a href={`https://www.openstreetmap.org/?mlat=${sample.latitude}&mlon=${sample.longitude}#map=17/${sample.latitude}/${sample.longitude}`} target="_blank" rel="noreferrer">
+                      {sample.latitude}, {sample.longitude}
+                    </a>
+                  ) : (
+                    "–"
+                  )}
+                </td>
+                <td data-label="Recorded by">
+                  {sample.createdByEmail}
+                  {sample.recordedVia ? <span className={ui.muted}>, via {sample.recordedVia}</span> : null}
+                  {sample.note ? <div className={ui.muted}>{sample.note}</div> : null}
+                </td>
+                <td>
+                  {can("bookkeeper") ? (
+                    <button type="button" className={ui.linkButton} disabled={busy} onClick={() => void run(() => api(`/api/farming/soil-samples/${sample.id}`, { method: "DELETE", query: { organisationId } }), () => samples.reload())}>
+                      Remove
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
