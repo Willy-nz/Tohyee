@@ -15,6 +15,9 @@ import { formatDate } from "@/lib/format";
  */
 
 const GUIDE = "https://github.com/Willy-nz/Tohyee/blob/main/docs/FARM-APPS.md";
+/** A timestamp as the browser's own date (an ISO date in UTC can be the day before in New Zealand). */
+const localDay = (iso: string) => new Date(iso).toLocaleDateString("en-CA");
+
 const SAMPLE = "https://github.com/Willy-nz/Tohyee/tree/main/examples/farm-apps/soil-sampling";
 
 export function FarmApps({ organisationId }: { organisationId: string }) {
@@ -113,8 +116,8 @@ export function FarmApps({ organisationId }: { organisationId: string }) {
                       <code>{key.startsWith}…</code>
                     </td>
                     <td data-label="May">{key.scopes.map((scope) => FARM_APP_SCOPE_LABELS[scope]).join("; ")}</td>
-                    <td data-label="Made">{formatDate(key.createdAt.slice(0, 10))}</td>
-                    <td data-label="Last used">{key.lastUsedAt ? formatDate(key.lastUsedAt.slice(0, 10)) : "Never"}</td>
+                    <td data-label="Made">{formatDate(localDay(key.createdAt))}</td>
+                    <td data-label="Last used">{key.lastUsedAt ? formatDate(localDay(key.lastUsedAt)) : "Never"}</td>
                     <td>
                       {key.revokedAt ? null : (
                         <button type="button" className={ui.linkButton} disabled={busy} onClick={() => void run(async () => { await api(`/api/farming/app-keys/${key.id}/revoke`, { method: "POST", body: { organisationId } }); keys.reload(); })}>
