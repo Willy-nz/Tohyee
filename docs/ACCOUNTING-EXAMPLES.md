@@ -17350,7 +17350,7 @@ statements, with figures from the same functions as the report screens
 
 Tier 3 and Tier 4 not-for-profit formats: see NPR1-NPR11.
 
-## The AI's farm workspace (AIW1-AIW9; chosen with Jess on 14 Oct 2026, not yet reviewed)
+## The AI's farm workspace (AIW1-AIW14; AIW1-AIW9 chosen with Jess on 14 Oct 2026, AIW10-AIW14 by Claude on 19 Oct 2026; not yet reviewed)
 
 Tested in `tests/integration/ai-farm-workspace.test.ts`. Jess chose: people
 bring their own AI, chatting in its own app; the AI organises messy data its
@@ -17385,6 +17385,28 @@ shown only to someone with payroll access. Nothing here posts to the books.
   people report to. Pay (basis, salary, hourly rate, hours) is included only
   when the person whose AI key it is has payroll access in Tohyee. IRD
   numbers, bank accounts and dates of birth are never given out.
+
+- **AIW10 Which farm.** The soil, fertiliser and pasture tools take a
+  farm; with only one active farm the AI can leave it out. With two or
+  more, it's told to say which (list_farms_and_paddocks lists them).
+- **AIW11 Soil tests and fertiliser, read only.** The AI reads soil tests
+  as the lab reported them (each paddock's latest and the tests
+  themselves), the fertiliser products, the plans and one plan's versions,
+  purchases, applications and plan against actual. It's told Tohyee
+  doesn't judge results high or low, and to leave agronomic advice to the
+  farm's adviser.
+- **AIW12 Working out an application, saving nothing.** Given a product,
+  a paddock (its effective hectares) or hectares, a rate and optionally
+  prices, the AI gets FB2's sums: paddock 12, 20.00 ha of urea (46% N) at
+  100 kg/ha, 780.00/t, spreading 25.00/ha: **2.000 t; 46.0 kg N/ha; 920.0
+  kg N; product 1,560.00; spreading 500.00; total 2,060.00**. 15 ha at 80
+  kg/ha with no prices: **1.200 t, 36.8 kg N/ha, 552.0 kg N**, no costs.
+  The answer says nothing was saved. Tohyee never suggests a rate.
+- **AIW13 Pasture.** The AI reads the farm's cover on a date (PF3, PF4),
+  the readings, grazings and supplements fed, with estimates marked.
+  Paddock 12 (20.0 ha) at 2,500 measured and 14 (15.0 ha) at 1,900 by
+  satellite: **2,243 kg DM/ha, 78,500 kg DM, 1 estimate**.
+- **AIW14** With Farming off, the tools say so.
 
 ## Income tax (#292) stage 1: taxable income, tax, provisional tax and terminal tax (ITX1-ITX10; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
 

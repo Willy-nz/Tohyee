@@ -2049,6 +2049,11 @@ that something happened.
   covers before and after) and supplements fed in kg DM. Satellite and
   model readings are labelled as estimates. Records only.
 
+- **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
+  can read soil tests, fertiliser products and plans, pasture cover,
+  readings, grazings and supplements fed, and work out a proposed
+  fertiliser application's tonnes, nutrients and cost without saving it.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

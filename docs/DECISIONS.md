@@ -5174,3 +5174,11 @@ testing) and #154's code signing (later, Jess).
      without converting units. Records only: no cover judged, no feed plan
      or target, nothing posts. Stored in the organisation's PostgreSQL and
      copied to its analytics file, as decided for #249.
+560. **The AI reads soil, fertiliser and pasture data** (19 October 2026).
+     The second of the three Jess agreed to (decision 559). Read-only tools
+     for soil tests, fertiliser products and plans, pasture cover,
+     readings, grazings and supplements, and a fertiliser "what if" that
+     works out tonnes, nutrients and cost for a rate the person or AI
+     gives, saving nothing (AIW10-AIW14, not yet reviewed). Tohyee doesn't
+     suggest rates or judge results; the tool descriptions tell the AI so.
+     Farming's viewers and up can use them, as on the screens.

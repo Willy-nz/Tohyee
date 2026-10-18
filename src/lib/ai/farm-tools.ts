@@ -8,7 +8,12 @@ import { roleAtLeast } from "@/lib/auth/roles";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { farmBenchmarks } from "@/lib/farming/benchmarks";
-import { listFarms, listPaddocks } from "@/lib/farming/paddocks";
+import { getPlanReport, listPlans, listProducts } from "@/lib/farming/fertiliser";
+import { fertiliserWhatIf, parseWhatIf } from "@/lib/farming/fertiliser-what-if";
+import { listGrazings, listReadings, listSupplements, pastureSummary } from "@/lib/farming/pasture";
+import { listSoilTests, soilSummary } from "@/lib/farming/soil";
+import { ValidationError } from "@/lib/errors";
+import { getPaddock, listFarms, listPaddocks } from "@/lib/farming/paddocks";
 import { financialYearEnd } from "@/lib/financial-year";
 import { headCount, listMovements, MOVEMENT_TYPES, requireLivestock } from "@/lib/livestock/movements";
 import { listLivestockSuggestions, suggestLivestockMovements } from "@/lib/livestock/suggestions";
@@ -133,6 +138,20 @@ async function staffList(tx: OrgTx, role: Parameters<typeof roleAtLeast>[0], inc
     staff: rows.rows.map((row) => ({ name: row.name, jobTitle: row.job_title, startDate: row.start_date, finishDate: row.finish_date, reportsTo: row.reports_to, group: row.group_name, archived: row.is_archived })),
   };
 }
+
+
+/** The farm a tool is about: the one given, or the only active farm (AIW10). */
+async function farmFor(tx: OrgTx, farmId: unknown): Promise<string> {
+  if (farmId !== undefined && farmId !== null && farmId !== "") return String(farmId);
+  const farms = (await listFarms(tx)).filter((farm) => farm.isActive);
+  if (farms.length === 1) return farms[0].id;
+  if (farms.length === 0) throw new ValidationError("There are no farms yet.");
+  throw new ValidationError(`There are ${farms.length} farms: give farmId (list_farms_and_paddocks lists them).`);
+}
+
+const FARM_ID: JsonSchema = { type: "string", description: "The farm, from list_farms_and_paddocks. Leave out when there's only one." };
+const PADDOCK_ID: JsonSchema = { type: "string", description: "One paddock only, from list_farms_and_paddocks." };
+const LIMIT = (fallback: number): JsonSchema => ({ type: "integer", minimum: 1, description: `At most this many, newest first (default ${fallback}).` });
 
 export const FARM_READ_TOOLS: AiTool[] = [
   {
@@ -262,6 +281,109 @@ export const FARM_READ_TOOLS: AiTool[] = [
     level: "read",
     inputSchema: schema({ includeFormer: { type: "boolean" } }),
     run: (tx, args, context) => staffList(tx, context.role, args.includeFormer === true),
+  },
+  {
+    name: "list_soil_tests",
+    title: "List soil tests",
+    description:
+      "Soil tests as the lab reported them (results as text and number, the lab's units). Gives each current paddock's latest test and date, and the tests themselves, newest first. Tohyee doesn't judge whether a result is high or low or a test too old; say so if asked, and leave agronomic advice to the person's adviser.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(100) }),
+    run: async (tx, args) => {
+      const farmId = await farmFor(tx, args.farmId);
+      return { latestByPaddock: await soilSummary(tx, { farmId }), tests: firstRows(await listSoilTests(tx, { farmId, paddockId: args.paddockId }), boundedLimit(args.limit, 100, 1000)) };
+    },
+  },
+  {
+    name: "list_fertiliser_products",
+    title: "List fertiliser products",
+    description: "Fertiliser products with their N, P, K and S content (% by weight), as typed in Tohyee.",
+    level: "read",
+    inputSchema: schema(),
+    run: async (tx) => ({ products: await listProducts(tx) }),
+  },
+  {
+    name: "list_fertiliser_plans",
+    title: "List fertiliser plans",
+    description: "A farm's fertiliser plans (budgets), each with its latest version.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID }),
+    run: async (tx, args) => ({ plans: await listPlans(tx, { farmId: await farmFor(tx, args.farmId) }) }),
+  },
+  {
+    name: "get_fertiliser_plan",
+    title: "Get a fertiliser plan",
+    description:
+      "One plan: every version's lines (paddock, product, kg/ha, treated ha, tonnes, kg N/ha, quoted costs), what was bought (linked bill lines) and applied, and plan against actual by product and paddock. A plan is a budget and posts nothing; buying fertiliser is a bill.",
+    level: "read",
+    inputSchema: schema({ planId: { type: "string" } }, ["planId"]),
+    run: (tx, args) => getPlanReport(tx, args.planId),
+  },
+  {
+    name: "fertiliser_what_if",
+    title: "Work out a fertiliser application",
+    description:
+      "What a proposed application would come to, saving nothing: tonnes, kg/ha and total kg of N, P, K and S from the product's content, and the product and spreading cost if you give prices. Give paddockId (its effective hectares are used) or hectares. You or the person choose the rate: Tohyee doesn't recommend one.",
+    level: "read",
+    inputSchema: schema(
+      {
+        productId: { type: "string", description: "From list_fertiliser_products." },
+        paddockId: PADDOCK_ID,
+        hectares: { type: "string", description: "Treated hectares, instead of a paddock's effective area." },
+        kgPerHa: { type: "string", description: "Product kg a hectare." },
+        pricePerTonne: { type: "string", description: "Excluding GST." },
+        spreadingPerHa: { type: "string", description: "Excluding GST." },
+      },
+      ["productId", "kgPerHa"],
+    ),
+    run: async (tx, args) => {
+      const product = (await listProducts(tx)).find((entry) => entry.id === String(args.productId));
+      if (!product) throw new ValidationError("That product wasn't found: list_fertiliser_products lists them.");
+      let hectares = args.hectares;
+      let paddock: string | null = null;
+      if (args.paddockId) {
+        const found = await getPaddock(tx, args.paddockId);
+        paddock = found.name;
+        hectares ??= found.effectiveHa;
+        if (!hectares) throw new ValidationError(`${found.name} has no effective area: give hectares.`);
+      }
+      if (hectares === undefined || hectares === null || hectares === "") throw new ValidationError("Give paddockId or hectares.");
+      const parsed = parseWhatIf({ hectares, kgPerHa: args.kgPerHa, pricePerTonne: args.pricePerTonne, spreadingPerHa: args.spreadingPerHa });
+      return { paddock, ...fertiliserWhatIf({ ...parsed, product }), note: "Worked out only: nothing was saved. To plan it, a person adds it to a fertiliser plan in Tohyee." };
+    },
+  },
+  {
+    name: "pasture_cover",
+    title: "Pasture cover",
+    description:
+      "The farm's pasture cover on a date: each paddock's latest reading on or before it, the area-weighted average and total kg DM, the feed wedge (highest first), each paddock's growth since the reading before (only by the same method with no grazing between), who's grazing now, and supplements fed by month in kg DM. Satellite and model readings are estimates. No targets or feed plan.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, onDate: DATE }),
+    run: async (tx, args) => pastureSummary(tx, { farmId: await farmFor(tx, args.farmId), onDate: args.onDate ?? todayIsoDate() }),
+  },
+  {
+    name: "list_pasture_readings",
+    title: "List pasture readings",
+    description: "Cover readings (kg DM/ha) by paddock and date, with the method; satellite and model readings are marked as estimates.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500) }),
+    run: async (tx, args) => firstRows(await listReadings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId }), boundedLimit(args.limit, 500, 5000)),
+  },
+  {
+    name: "list_grazings",
+    title: "List grazings",
+    description: "Which mob was in which paddock from the day in to the day out (none while still in), with covers before and after and what was eaten.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500) }),
+    run: async (tx, args) => firstRows(await listGrazings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId }), boundedLimit(args.limit, 500, 5000)),
+  },
+  {
+    name: "list_supplements_fed",
+    title: "List supplements fed",
+    description: "Supplements fed out: date, feed, quantity and unit as recorded (never converted), and kg DM where known. Buying feed is a bill, not here.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, limit: LIMIT(500) }),
+    run: async (tx, args) => firstRows(await listSupplements(tx, { farmId: await farmFor(tx, args.farmId) }), boundedLimit(args.limit, 500, 5000)),
   },
 ];
 
