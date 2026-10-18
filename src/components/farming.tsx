@@ -4,6 +4,7 @@ import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
+import { PaddockPastureSummary } from "@/components/pasture";
 import { PaddockRecords } from "@/components/soil";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -700,6 +701,7 @@ function PaddockPanel({
           </ul>
         </>
       ) : null}
+      <PaddockPastureSummary organisationId={organisationId} paddockId={paddock.id} />
       <PaddockRecords organisationId={organisationId} paddockId={paddock.id} />
       {editable ? (
         <div className={ui.actions}>

@@ -5164,3 +5164,13 @@ testing) and #154's code signing (later, Jess).
      own share, what's due (with any shortfall caught up), and the year's
      total is the last target (ITX6). The extension-of-time point from the
      same review waits for Jess or Will.
+559. **Pasture and feed records** (19 October 2026). Claude offered pasture
+     and feed records, AI read tools for farm data and a Farming API for
+     people's own apps; Jess said "Yea do those". #249 stage 4 (PF1-PF8,
+     not yet reviewed): cover readings (typed or imported, satellite and
+     model labelled as estimates), growth only between same-method readings
+     with no grazing between, the farm's area-weighted cover and feed wedge
+     on a date, grazings with what was eaten, and supplements fed in kg DM
+     without converting units. Records only: no cover judged, no feed plan
+     or target, nothing posts. Stored in the organisation's PostgreSQL and
+     copied to its analytics file, as decided for #249.
