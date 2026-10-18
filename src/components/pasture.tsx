@@ -109,15 +109,15 @@ function FarmPasture({ organisationId, farm }: { organisationId: string; farm: F
               <p>
                 <strong>{kg(data.cover.averageKgDmPerHa)} kg DM/ha</strong> average over {data.cover.hectares} ha, {kg(data.cover.totalKgDm)} kg DM in all, from {data.cover.readings} reading{data.cover.readings === 1 ? "" : "s"}
                 {data.cover.oldestReading ? `, the oldest ${formatDate(data.cover.oldestReading)}` : ""}
-                {data.cover.estimates ? ` (${data.cover.estimates} an estimate)` : ""}.
+                {data.cover.estimates ? ` (${data.cover.estimates} ${data.cover.estimates === 1 ? "is an estimate" : "are estimates"})` : ""}.
               </p>
             )}
             {data.cover.noReading.length ? <p className={ui.muted}>No reading yet: {data.cover.noReading.join(", ")}.</p> : null}
             {data.cover.noArea.length ? <p className={ui.muted}>Left out because they have no area: {data.cover.noArea.join(", ")}.</p> : null}
+            {data.cover.wedge.length ? <h3>Feed wedge: highest cover first</h3> : null}
             {data.cover.wedge.length ? (
               <div className={ui.tableWrap}>
                 <table className={`${ui.table} ${ui.stackOnPhone}`}>
-                  <caption className={ui.muted}>Feed wedge: highest cover first</caption>
                   <thead>
                     <tr>
                       <th>Paddock</th>
