@@ -2054,6 +2054,13 @@ that something happened.
   readings, grazings and supplements fed, and work out a proposed
   fertiliser application's tonnes, nutrients and cost without saving it.
 
+- **Farm apps and the Farming API** (FA1-FA8, decision 561): Farm › Farm
+  apps makes keys for people's own apps, with scopes to read farms, soil
+  and pasture and to record soil samples and pasture readings, through
+  `/api/farm-apps/v1` (OpenAPI 3.1). A sample soil sampling app is in
+  `examples/farm-apps/soil-sampling`, and soil samples taken in the field
+  show on Soil tests. Guide: [FARM-APPS.md](FARM-APPS.md).
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

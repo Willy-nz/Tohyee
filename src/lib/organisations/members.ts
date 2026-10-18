@@ -248,11 +248,13 @@ export async function removeMember(
         where organisation_id = $1 and user_id = $2 and revoked_at is null`,
       [organisationId, userId],
     );
+    // Their farm app keys too (FA2, decision 561).
+    const appKeys = await client.query("update farm_app_keys set revoked_at = now() where organisation_id = $1 and user_id = $2 and revoked_at is null", [organisationId, userId]);
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: "organisation.member_removed",
       entityType: "organisation",
       entityId: organisationId,
-      details: { userId, role: current, aiKeysRevoked: revoked.rowCount },
+      details: { userId, role: current, aiKeysRevoked: revoked.rowCount, farmAppKeysRevoked: appKeys.rowCount },
     });
   });
 }

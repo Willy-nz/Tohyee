@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soil sampler</title>
+<!--
+  A sample app for Tohyee's Farming API (docs/FARM-APPS.md). One file, no
+  build step: open it in a browser, or put it on any web host. It needs an
+  app key with read_farm, read_soil and record_soil_samples, made under
+  Farming › Apps. The key is kept in this browser only (localStorage).
+-->
+<style>
+  :root { --ink: #1d2a33; --muted: #5d6b75; --line: #d9e0e5; --bg: #f6f8f9; --card: #fff; --accent: #2a6f4f; --warn: #8a5a00; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #e8eef1; --muted: #a3b1ba; --line: #33424c; --bg: #121a1f; --card: #1b252b; --accent: #6cc39a; --warn: #f0c060; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 14px 0; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  label { display: block; margin: 8px 0 2px; font-weight: 600; font-size: .9rem; }
+  input, select, textarea, button { font: inherit; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+  button { background: var(--accent); color: #fff; border: none; font-weight: 600; margin-top: 12px; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 8px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  li:first-child { border-top: none; }
+  .due { color: var(--warn); font-weight: 600; }
+  .msg { padding: 10px; border-radius: 8px; margin-top: 10px; background: var(--bg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Soil sampler</h1>
+  <p class="muted" id="who">Not connected yet.</p>
+
+  <section id="settings">
+    <h2>Connect to Tohyee</h2>
+    <label for="server">Tohyee address</label>
+    <input id="server" placeholder="https://your-farm.tohyee.nz" autocomplete="url">
+    <label for="key">App key</label>
+    <input id="key" placeholder="tohyee_app_…" autocomplete="off">
+    <p class="muted">Make the key under Farming › Apps with: read farms, read soil, record soil samples. It's kept in this browser only.</p>
+    <button id="connect">Connect</button>
+  </section>
+
+  <section id="due" hidden>
+    <h2>Paddocks by last soil test</h2>
+    <div class="row">
+      <div><label for="months">Mark as due after</label>
+      <select id="months"><option value="12">12 months</option><option value="24" selected>24 months</option><option value="36">36 months</option></select></div>
+    </div>
+    <p class="muted">"Due" is this app's own rule, not Tohyee's or an adviser's: change it to suit.</p>
+    <ul id="paddocks"></ul>
+  </section>
+
+  <section id="record" hidden>
+    <h2>Record a sample</h2>
+    <label for="paddock">Paddock</label>
+    <select id="paddock"></select>
+    <div class="row">
+      <div><label for="takenOn">Taken on</label><input id="takenOn" type="date"></div>
+      <div><label for="depth">Depth</label><input id="depth" value="0-75 mm"></div>
+    </div>
+    <label for="sampleName">Sample name (as on the bag)</label>
+    <input id="sampleName">
+    <label for="note">Note</label>
+    <textarea id="note" rows="2" maxlength="500"></textarea>
+    <button class="secondary" id="locate" type="button">Use my location</button>
+    <p class="muted" id="where">No location: that's fine.</p>
+    <button id="save">Save sample</button>
+    <div class="msg" id="message" hidden></div>
+  </section>
+
+  <section id="recent" hidden>
+    <h2>Samples taken</h2>
+    <ul id="samples"></ul>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  let position = null;
+  const state = { server: store.get("tohyee.server"), key: store.get("tohyee.appKey"), paddocks: [] };
+  $("server").value = state.server;
+  $("key").value = state.key;
+  $("takenOn").value = new Date().toLocaleDateString("en-CA");
+
+  async function call(path, options = {}) {
+    const response = await fetch(`${state.server.replace(/\/$/, "")}/api/farm-apps/v1${path}`, {
+      method: options.method || "GET",
+      headers: { authorization: `Bearer ${state.key}`, "content-type": "application/json" },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Tohyee answered ${response.status}.`);
+    return body;
+  }
+
+  function show(id, on = true) { $(id).hidden = !on; }
+  function say(text) { $("message").textContent = text; show("message"); }
+  const monthsSince = (date) => { const then = new Date(`${date}T00:00:00`); const now = new Date(); return (now.getFullYear() - then.getFullYear()) * 12 + now.getMonth() - then.getMonth(); };
+  const nz = (date) => new Date(`${date}T00:00:00`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
+
+  function renderPaddocks() {
+    const limit = Number($("months").value);
+    $("paddocks").replaceChildren(...state.paddocks.map((paddock) => {
+      const li = document.createElement("li");
+      const due = !paddock.lastSampledOn || monthsSince(paddock.lastSampledOn) >= limit;
+      li.innerHTML = `<span><strong></strong></span><span></span>`;
+      li.children[0].firstChild.textContent = paddock.paddockName;
+      li.children[1].textContent = paddock.lastSampledOn ? `Last tested ${nz(paddock.lastSampledOn)}` : "Never tested";
+      if (due) li.children[1].className = "due";
+      return li;
+    }));
+  }
+
+  async function loadSamples() {
+    const { samples } = await call("/soil/samples");
+    $("samples").replaceChildren(...samples.slice(0, 20).map((sample) => {
+      const li = document.createElement("li");
+      li.textContent = `${nz(sample.takenOn)} · paddock ${sample.paddockName}${sample.sampleName ? ` · ${sample.sampleName}` : ""}`;
+      return li;
+    }));
+    if (samples.length === 0) $("samples").innerHTML = '<li class="muted">None yet.</li>';
+  }
+
+  async function connect() {
+    state.server = $("server").value.trim();
+    state.key = $("key").value.trim();
+    store.set("tohyee.server", state.server);
+    store.set("tohyee.appKey", state.key);
+    try {
+      const me = await call("/me");
+      $("who").textContent = `${me.organisation.name}, as ${me.person} (${me.key}).`;
+      const soil = await call("/soil/paddocks");
+      state.paddocks = soil.paddocks;
+      $("paddock").replaceChildren(...soil.paddocks.map((paddock) => new Option(paddock.paddockName, paddock.paddockId)));
+      renderPaddocks();
+      show("settings", false); show("due"); show("record"); show("recent");
+      await loadSamples();
+    } catch (error) {
+      $("who").textContent = error.message;
+    }
+  }
+
+  $("connect").onclick = connect;
+  $("months").onchange = renderPaddocks;
+  $("locate").onclick = () => {
+    if (!navigator.geolocation) return ($("where").textContent = "This device can't give a location.");
+    $("where").textContent = "Finding you…";
+    navigator.geolocation.getCurrentPosition(
+      (found) => { position = { latitude: Number(found.coords.latitude.toFixed(6)), longitude: Number(found.coords.longitude.toFixed(6)) }; $("where").textContent = `${position.latitude}, ${position.longitude} (±${Math.round(found.coords.accuracy)} m)`; },
+      (problem) => { position = null; $("where").textContent = `No location: ${problem.message}`; },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
+  $("save").onclick = async () => {
+    try {
+      const { sample } = await call("/soil/samples", { method: "POST", body: { paddockId: $("paddock").value, takenOn: $("takenOn").value, sampleName: $("sampleName").value || null, depth: $("depth").value || null, note: $("note").value || null, ...(position || {}) } });
+      say(`Saved: paddock ${sample.paddockName}${sample.sampleName ? `, ${sample.sampleName}` : ""}. It's on Soil tests in Tohyee.`);
+      $("sampleName").value = ""; $("note").value = ""; position = null; $("where").textContent = "No location: that's fine.";
+      await loadSamples();
+    } catch (error) {
+      say(error.message);
+    }
+  };
+  if (state.server && state.key) connect();
+</script>
+</body>
+</html>

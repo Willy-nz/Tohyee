@@ -18128,3 +18128,47 @@ in `tests/unit/pasture.test.ts` and `tests/integration/pasture.test.ts`.
   record entered by mistake is removed, and kept for the history. They're
   copied into the analytics database as `tohyee_farm_pasture_readings`,
   `tohyee_farm_grazings` and `tohyee_farm_supplements`.
+
+## Farming (#249) stage 5: the Farming API for people's own apps (FA1-FA8; chosen by Claude 19 Oct 2026 when Jess said "Yea do those", not yet reviewed)
+
+A small, versioned API (`/api/farm-apps/v1`) so an app someone builds,
+often with an AI, can read farm data and record field work without
+touching the accounting core. Nothing in it posts to the books. Tested in
+`tests/unit/farm-app-keys.test.ts` and `tests/integration/farm-apps.test.ts`.
+
+- **FA1 App keys.** Each person makes their own app keys for one
+  organisation on Farming › Apps: a name and the scopes it needs, from
+  **read farm** (farms, paddocks and their shapes), **read soil** (soil
+  tests and samples), **read pasture** (cover and readings), **record soil
+  samples** and **record pasture readings**. The key (`tohyee_app_…`) is
+  shown once; only its SHA-256 is kept. At most 10 active keys a person.
+  An app key never reaches the books, payroll, contacts or the AI tools,
+  and an AI key never works on this API.
+- **FA2 Roles.** Read scopes need any role that sees Farming; recording
+  needs the bookkeeper role or higher, both when the key is made and each
+  time it's used. A bookkeeper made a viewer keeps their key, but it can
+  only read. A key stops working when its owner leaves the organisation,
+  their login is turned off, or it's revoked.
+- **FA3 What's recorded** is marked with who and which app: "Jess, via app
+  'Soil sampler'". Records are the same as on the screens and can be
+  removed there.
+- **FA4 Soil samples** are what someone took in the field, before the lab
+  results come back: a paddock, the day, a sample name, the depth, where
+  it was taken (latitude and longitude, optional) and a note. They show on
+  Soil tests under "Samples taken". A sample on a retired paddock, or a
+  latitude or longitude that isn't one, is refused.
+- **FA5 Paddocks due for testing** isn't a rule in Tohyee: the API gives
+  each paddock's latest test date (and none for never tested), and the app
+  decides what "due" means, saying so to its user.
+- **FA6 Pasture readings** recorded by an app follow PF1 (whole kg DM/ha,
+  a method) and show on Pasture and feed.
+- **FA7 Apps on other sites.** The API answers browsers from any site
+  (CORS), because a key, not a cookie, is what lets an app in: the
+  signed-in session never works on it. 120 requests a minute per key;
+  too many wrong keys from one address and it's told to wait, as for AI
+  keys.
+- **FA8 The contract** is described at `/api/farm-apps/v1/openapi.json`
+  (OpenAPI 3.1), with a guide in `docs/FARM-APPS.md` and a working sample,
+  the soil sampling app in `examples/farm-apps/soil-sampling/`. A breaking
+  change gets a new version (`v2`); `v1` keeps working until it's retired
+  with notice.

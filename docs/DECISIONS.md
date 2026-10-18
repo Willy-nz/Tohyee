@@ -5182,3 +5182,13 @@ testing) and #154's code signing (later, Jess).
      gives, saving nothing (AIW10-AIW14, not yet reviewed). Tohyee doesn't
      suggest rates or judge results; the tool descriptions tell the AI so.
      Farming's viewers and up can use them, as on the screens.
+561. **A Farming API for people's own apps** (19 October 2026). The third of
+     the three Jess agreed to (decision 559), following #249 section 5.
+     `/api/farm-apps/v1` with per-person app keys (`tohyee_app_…`, only the
+     SHA-256 kept, in the core database like AI keys) and five scopes: read
+     farm, soil and pasture; record soil samples and pasture readings
+     (bookkeeper or higher, checked at use). Keys only, never cookies, so
+     it answers browsers on any site (CORS). Records say which app made
+     them. An OpenAPI 3.1 contract, a guide (docs/FARM-APPS.md) and a
+     one-file soil sampling app. New: soil samples taken in the field
+     (FA4). Photos aren't taken yet. FA1-FA8, not yet reviewed.

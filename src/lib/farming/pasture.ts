@@ -113,8 +113,9 @@ export async function addReading(tx: OrgTx, input: { paddockId: unknown; measure
   const method = requireOneOf(input.method, "Method", PASTURE_METHODS);
   const note = optionalString(input.note, "Note", { maxLength: 200 });
   const row = await tx.query<{ id: string }>(
-    "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, note, source, created_by_email) values ($1, $2, $3, $4, $5, $6, 'Entered in Tohyee', $7) returning id::text",
-    [paddock.farm_id, paddock.id, measuredOn, cover, method, note, tx.actor.email],
+    "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, note, source, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id::text",
+    // Recorded by a farm app, the record says which (FA3).
+    [paddock.farm_id, paddock.id, measuredOn, cover, method, note, (tx.actor.via ? `Recorded via ${tx.actor.via}` : "Entered in Tohyee").slice(0, 200), tx.actor.email],
   );
   await writeAuditEvent(tx, { eventType: "farming.pasture_reading_added", entityType: "pasture_reading", entityId: row.rows[0].id, details: { paddockId: paddock.id, measuredOn, cover, method } });
   return (await loadReadings(tx, "r.id = $1", [row.rows[0].id]))[0];
