@@ -2,7 +2,7 @@ import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { listSourceFiles } from "@/lib/analytics/engine";
 import { organisationSourceFolder, sourceFolderStatus } from "@/lib/analytics/folders";
-import { lastBooksRun, listSources, recentLoads } from "@/lib/analytics/sources";
+import { lastBooksRun, listSources, recentLoads, sourcesForViewer } from "@/lib/analytics/sources";
 
 /**
  * The organisation's analytics: whether it's on, whether its folder is
@@ -14,10 +14,12 @@ export const GET = route(async (request) => {
   const organisationId = searchParams(request).get("organisationId");
   const result = await withOrganisation(request, organisationId, "viewer", async (tx, { membership }) => {
     const enabled = await tx.query<{ on: boolean }>("select analytics_enabled as on from organisation_settings where id = true");
+    const canManage = roleAtLeast(membership.role, "admin");
+    const sources = await listSources(tx);
     return {
       enabled: enabled.rows[0]?.on === true,
-      canManage: roleAtLeast(membership.role, "admin"),
-      sources: await listSources(tx),
+      canManage,
+      sources: canManage ? sources : sourcesForViewer(sources),
       books: await lastBooksRun(tx),
       loads: await recentLoads(tx, 50),
     };

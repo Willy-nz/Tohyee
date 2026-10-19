@@ -5616,6 +5616,109 @@ testing) and #154's code signing (later, Jess).
      books copy dated over the last twelve months, offered when the tables
      they need are copied. Not built: asking the AI to build a dashboard
      (optional in the issue).
+602. **External databases as Analytics sources** (20 October 2026; Jess
+     asked "Can you connect an sql server to analytics?" and chose all of
+     Microsoft SQL Server, PostgreSQL and MySQL; Power BI and Looker Studio
+     as the reference for the flow). In Analytics › Data sources an admin
+     or owner adds a connection (server, port or SQL Server instance,
+     database, user, password, encryption), which is tested before it's
+     saved (tenant migration 0166, `analytics_db_connections`). A source then
+     reads one table or view, or one typed SELECT, through that connection:
+     its columns are previewed with their types and first 20 rows, confirmed
+     like a file's, and loaded into the organisation's own DuckDB copy. A
+     source's database, connection and table name can't change afterwards
+     (set up a new source instead); what it reads, its columns, row limit
+     and nightly reload can. Database sources reload nightly after 04:00 and
+     on demand, recorded in the same load history as files (`file_name`
+     holds "Connection › schema.table" or "Connection › query"), and need no
+     analytics folder. A connection used by a source can't be removed.
+     Viewers see database sources like file sources, but not their typed
+     queries or the connections. Connections are made from the Tohyee
+     server, so a database on the office network is the normal case. Not
+     built: Looker Studio or Power BI connectors (Jess: Tohyee will have
+     better reporting), other databases, Windows (integrated) sign-in for
+     SQL Server, and incremental loads (each load reads everything again).
+603. **Database sources only ever read** (20 October 2026). Three layers.
+     (1) A typed query must be one SELECT or WITH ... SELECT, checked by
+     Tohyee's own scanner: comments are removed before checking and the
+     cleaned text is what's sent (so MySQL's `/*! */` can't hide anything),
+     a semicolon may only end it, and words that change data or reach
+     outside the database (INSERT, UPDATE, DELETE, MERGE, DROP, CREATE,
+     ALTER, TRUNCATE, GRANT, EXEC, CALL, COPY, INTO, LOCK, SET, DECLARE,
+     WAITFOR, OPENROWSET, OUTFILE ...) are refused outside quotes, as are
+     calls to functions that write, lock or read the server's files
+     (nextval, pg_read_file, pg_advisory_*, dblink, lo_*, load_file,
+     get_lock ...) and FOR UPDATE/SHARE. (2) Tohyee wraps every query in its
+     own SELECT of the chosen columns, which also makes most non-SELECT
+     text invalid SQL. (3) PostgreSQL sessions start with
+     `default_transaction_read_only` on and each read runs after `SET
+     TRANSACTION READ ONLY`; MySQL sessions are `SET SESSION TRANSACTION
+     READ ONLY` and each read is `START TRANSACTION READ ONLY`. SQL Server
+     has no read-only session, so the screen says to use a login with only
+     read rights (e.g. `db_datareader`) and every query is the checked
+     single SELECT. All three screens recommend a read-only user. Limits:
+     connecting stops after 15 seconds; previews, tests and table lists
+     after 30 seconds; a load after 10 minutes in all
+     (`TOHYEE_ANALYTICS_DATABASE_SECONDS`), with each database's own
+     statement time limit set too (`statement_timeout`,
+     `max_execution_time`, the SQL Server request timeout). A source has a
+     row limit (1,000,000 unless changed, at most 5,000,000); a load that
+     finds more rows fails and keeps the last copy, rather than loading
+     part of the data and giving wrong totals. Rows are read 2,000 at a
+     time (a PostgreSQL cursor, MySQL and SQL Server streams) so memory
+     stays bounded.
+604. **Database passwords and where they can go** (20 October 2026). The
+     password is encrypted with the server's key (src/lib/secrets, as for
+     IMAP and bank feeds), read only on the server to connect, and never
+     sent to the browser, written to the audit trail (which records where
+     a connection points and whether the password changed) or logged. Only
+     admins and owners can add, change, test, list or remove connections
+     and preview their tables, as with every other source setup. A saved
+     password is reused only for the same server, port, instance, database
+     and user: changing any of those needs it typed again, so a connection
+     can't be repointed to send the saved password somewhere else. Tohyee
+     doesn't follow redirects: a SQL Server that sends the client on to
+     another server after login (Azure redirects, availability-group
+     routing) is refused, through Tohyee's own TCP connector. MySQL
+     connections turn off LOAD DATA LOCAL (so a server can't ask for files
+     on the Tohyee server) and multiple statements. Tohyee's own PostgreSQL
+     databases (the server's and every organisation's, by name) can't be
+     connected to, so an admin of one organisation can't read another's
+     even with a login for it. Errors while connecting are reported as plain
+     kinds (server not found, nothing answering, wrong password, no such
+     database, certificate couldn't be checked, no encryption, timed out)
+     without the driver's text; once connected, a query's error shows the
+     database's first line about it (up to 300 characters), which is about
+     the admin's own query. Encryption choices: Don't encrypt; Encrypt
+     without checking the certificate (default for PostgreSQL and MySQL;
+     SQL Server's "trust server certificate"); Encrypt and check the
+     certificate (default for SQL Server, as Power BI does). The drivers are
+     `pg` (already used), `mysql2` (MIT) and `mssql` with `tedious` (MIT),
+     all compatible with AGPLv3, loaded only on the server and only when a
+     database source is used.
+605. **Database column types in DuckDB** (20 October 2026). The database
+     says what each column is, so nothing is guessed from values: whole
+     numbers load as whole numbers; exact decimals as Money when they have
+     up to two places, Quantity for three or four places on a quantity-like
+     name, otherwise Number (whole when they have none); PostgreSQL
+     `money` and SQL Server `money`/`smallmoney` as Money; floating-point
+     columns as Number (they're approximate at the source); dates as
+     dates; date-times (with or without a time zone) as Date and time in
+     local time (PostgreSQL sessions use the business time zone, SQL
+     Server's `datetimeoffset` keeps its own local time, and the offset is
+     dropped); booleans, SQL Server `bit` and MySQL `TINYINT(1)`/`BIT(1)` as
+     Yes / no; everything else as text. Binary data (bytea, BLOB,
+     VARBINARY, images, map shapes) can't be loaded. People confirm or
+     change each type, as for files. Values travel as text so decimals
+     stay exact: PostgreSQL's raw text, MySQL with decimals, big numbers and
+     dates as strings, and SQL Server decimals, money, floats and dates
+     converted to text in Tohyee's outer SELECT (its driver would otherwise
+     turn decimals into floating-point numbers). DuckDB then converts each
+     column exactly as it does for a CSV (blank becomes empty, a value that
+     isn't the type fails the load); MySQL's zero dates load as blank.
+     Table and column names follow the friendly-name work (#336):
+     `dbo.SalesOrders` suggests `sales_orders`, `CustomerName` becomes
+     `customer_name`, shown as "Customer name".
 606. **Google Analytics as a data source: signing in and who can**
      (20 October 2026; Jess asked for "Google analytics for websites to
      tohyee"; Looker Studio's Google Analytics connector as the reference).
