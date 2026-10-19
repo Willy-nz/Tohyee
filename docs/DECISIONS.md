@@ -5341,3 +5341,23 @@ testing) and #154's code signing (later, Jess).
      while they check Analytics is still on each time they open, and a
      slicer's list no longer leaves a click listener on the page each time
      it's opened and closed with its own button. Not yet reviewed.
+577. **Analytics in plain words, with date presets** (20 October 2026).
+     Issue #336. Pickers show sources and columns by plain names, grouped by
+     where they come from ("Invoices › Net", "Ledger › Account class"),
+     with the real name in a tooltip and beside each field in the field
+     list; the data source picker says in a sentence what each Tohyee table
+     holds. Saved dashboards keep the real names. Beside From and To,
+     Dates offers This month, Last month, This quarter, This financial
+     year, Last financial year, Last 12 months and All time. Financial
+     years follow the organisation's balance date (31 March unless
+     changed), and quarters are quarters of that year, so with 31 March
+     they're the calendar quarters (whether Xero's "This quarter" does the
+     same wasn't checked). Last 12 months is this month so far and the 11
+     whole months before it, so a chart by month doesn't start with part
+     of a month. "Keep these dates" with a preset chosen keeps the preset,
+     so the dashboard (and its tiles pinned to Home) moves on with the
+     calendar; today is the server's (New Zealand) date. Yes/No columns
+     show Yes and No in tables, charts, slicers and filters and are still
+     sent as true and false. "Date range applies to" keeps starting on the
+     source's first date (invoice date, bill date, posting date). Not yet
+     reviewed.

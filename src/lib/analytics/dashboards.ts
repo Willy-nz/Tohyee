@@ -23,6 +23,9 @@ import {
   type Visual,
 } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
+import { type DatePreset, isDatePreset, presetRange } from "@/lib/analytics/date-ranges";
+import { todayIsoDate } from "@/lib/dates";
+import { getOrganisationSettings } from "@/lib/organisations/settings";
 
 /** Analytics dashboards (step 3): tiles of questions about loaded tables. */
 
@@ -39,8 +42,17 @@ export type Slicer = { table: string; field: string; label: string };
 export type DashboardSettings = {
   from: string | null;
   to: string | null;
+  /** Dates that move with today, e.g. "this financial year" (decision 577); `from` and `to` are then worked out when it's read. */
+  preset: DatePreset | null;
   slicers: Slicer[];
 };
+
+/** Today and the organisation's balance date, for dates that move (decision 577). */
+export type DateContext = { today: string; yearEndMonth: number };
+
+export async function dateContext(tx: OrgTx): Promise<DateContext> {
+  return { today: todayIsoDate(), yearEndMonth: (await getOrganisationSettings(tx)).financialYearEndMonth };
+}
 
 export type Dashboard = {
   id: string;
@@ -69,12 +81,14 @@ type Row = {
   updated_at: Date;
 };
 
-function toDashboard(row: Row): Dashboard {
+function toDashboard(row: Row, dates: DateContext): Dashboard {
+  const preset = isDatePreset(row.settings.preset) ? row.settings.preset : null;
+  const range = preset ? presetRange(preset, dates.today, dates.yearEndMonth) : { from: row.settings.from ?? null, to: row.settings.to ?? null };
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    settings: { from: row.settings.from ?? null, to: row.settings.to ?? null, slicers: row.settings.slicers ?? [] },
+    settings: { ...range, preset, slicers: row.settings.slicers ?? [] },
     tiles: row.tiles,
     createdByEmail: row.created_by_email,
     createdAt: new Date(row.created_at).toISOString(),
@@ -102,7 +116,8 @@ export async function listDashboards(tx: OrgTx, reader: DashboardReader = EVERYO
         [reader.userId ?? ""],
       )
     : await tx.query<Row>(`select ${COLUMNS} from analytics_dashboards order by name, id`);
-  return result.rows.map(toDashboard);
+  const dates = await dateContext(tx);
+  return result.rows.map((row) => toDashboard(row, dates));
 }
 
 export async function getDashboard(tx: OrgTx, id: string, reader: DashboardReader = EVERYONE): Promise<Dashboard> {
@@ -114,7 +129,7 @@ export async function getDashboard(tx: OrgTx, id: string, reader: DashboardReade
     const shared = await tx.query("select 1 from analytics_dashboard_shares where dashboard_id = $1 and user_id = $2", [dashboardId, reader.userId ?? ""]);
     if (shared.rows.length === 0) throw new NotFoundError("That dashboard wasn't found.");
   }
-  return toDashboard(result.rows[0]);
+  return toDashboard(result.rows[0], await dateContext(tx));
 }
 
 /** The report viewers a dashboard is shared with (user ids). */
@@ -183,7 +198,11 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     return { table, field, label };
   });
   if (slicers.length > 6) throw new ValidationError("A dashboard can have up to 6 slicers.");
-  return { from: date(raw.from, "From"), to: date(raw.to, "To"), slicers };
+  if (raw.preset !== undefined && raw.preset !== null && raw.preset !== "" && !isDatePreset(raw.preset)) {
+    throw new ValidationError("Choose dates from the list.");
+  }
+  const preset = isDatePreset(raw.preset) ? raw.preset : null;
+  return { from: date(raw.from, "From"), to: date(raw.to, "To"), preset, slicers };
 }
 
 function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
@@ -369,14 +388,20 @@ export async function runPivotDrilldown(
 
 /** The values a slicer offers: up to 500 distinct values of a column, sorted. */
 export async function sliceValues(organisationId: string, table: string, field: string): Promise<string[]> {
+  return (await columnValues(organisationId, table, field)).values;
+}
+
+/** A column's values (up to 500, for slicers and "is one of" filters) and its type, so true/false can show as Yes/No. */
+export async function columnValues(organisationId: string, table: string, field: string): Promise<{ values: string[]; type: string }> {
   const tables = await listTables(organisationId);
-  if (!tables.get(table)?.some((column) => column.name === field)) throw new ValidationError(`There's no column ${field} in ${table}.`);
+  const column = tables.get(table)?.find((entry) => entry.name === field);
+  if (!column) throw new ValidationError(`There's no column ${field} in ${table}.`);
   const rows = await runBuiltQuery(
     organisationId,
     `select distinct cast(${quoteIdentifier(field)} as VARCHAR) as value from ${quoteIdentifier(table)} where ${quoteIdentifier(field)} is not null order by 1 limit 500`,
     [],
   );
-  return rows.map((row) => row.value ?? "");
+  return { values: rows.map((row) => row.value ?? ""), type: column.type };
 }
 
 /** The loaded tables and their columns, for building tiles. */
