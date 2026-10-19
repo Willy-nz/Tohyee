@@ -5506,3 +5506,52 @@ testing) and #154's code signing (later, Jess).
      an admin with no store connected, "Connect Shopify". Non-admins with
      no store see nothing, because only admins can connect. The card says
      the connection hasn't been tried with a real Shopify store yet.
+590. **How a chart looks is saved on its tile** (20 October 2026, issues
+     #331 and #333 from Jess's BigDog dashboard; Power BI and Looker Studio
+     as the reference, as the issue says). A Format section in the chart
+     panel: colours, data labels, legend, axes (titles, gridlines, lowest
+     and highest, start at zero, log scale), a number format per value,
+     stacking (side by side, stacked, 100% stacked), smooth lines, dots on
+     lines, a donut's total in the middle, and the card (title shown or
+     not, a subtitle or note, plain, shaded or no background, border).
+     It's kept in the dashboard's `tiles` (no migration) and checked when
+     saved: unknown settings are dropped and wrong values refused. Every
+     setting is optional and left out means the chart looks as before, so
+     Reset to default removes them. The preview changes as settings
+     change. "Horizontal vs vertical" is the existing Columns and Bars;
+     bars now read top to bottom in the tile's order (they were drawn
+     bottom up). Pinned tiles use the same format.
+591. **Chart colours come only from the checked set** (20 October 2026).
+     A value's colour is picked by name from the eight series colours
+     (`--chart-1` to `--chart-8`), not as any colour, so it changes with
+     the light and dark themes and stays apart for colour-blind readers.
+     Colour sets: Tohyee (blue first, the default), Tohyee blues (four
+     steps of one blue, `--chart-blues-1` to `4`; a chart with more values
+     uses the full set), Orange first and Green first. Each order was run
+     through the data-visualisation colour validator in both themes (light
+     on #ffffff, dark on #121925): the re-orderings pass every adjacent
+     colour-vision and normal-vision check, and the blues pass as an
+     ordered ramp. "A colour for each group" (columns and bars with one
+     value) uses up to eight groups and otherwise one colour. "Red when
+     below zero" uses `--chart-negative` (#d03b3b light, #e66767 dark,
+     both over 4.5:1). A greys-with-one-highlight set was tried and left
+     out: its grey failed the checks.
+592. **A second axis, because Jess asked for it** (20 October 2026, #331).
+     Chart guidance (and the earlier "one axis only" comment in the code)
+     says two scales mislead, but a count beside dollars is unreadable on
+     one, which is the issue. Each value of Columns and line, Line and Area
+     can go on the left or right axis, and Columns and line can show each
+     value as columns or a line. The right axis has its own scale (title,
+     bounds, start at zero, log) and takes the number format of its first
+     value. To keep it honest, the right axis draws no gridlines of its
+     own, and the legend names its values "(right axis)".
+593. **Number formats are for showing only** (20 October 2026, #333).
+     Each value has its own format: automatic (dollars for money columns,
+     otherwise a plain number), dollars, a percentage (0.25 shows as 25%)
+     or plain; 0-4 decimal places or automatic; short ($1.5K) or full;
+     thousands separator; and, for key figures, words before or after.
+     Values arrive as exact decimal strings and are only turned into
+     numbers to be drawn or shown; nothing is added up from them (a
+     donut's total is added exactly). Axes stay short unless turned off;
+     tooltips are full. A 100% stacked chart draws each value's share of
+     the group, with the amount and share in the tooltip.

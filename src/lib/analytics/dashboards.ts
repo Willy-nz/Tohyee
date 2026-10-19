@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import { parseChartFormat, type ChartFormat } from "@/lib/analytics/chart-format";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import {
   buildPivotDrillSql,
@@ -35,6 +36,8 @@ export type Tile = {
   visual: Visual;
   width: "half" | "full";
   query: TileQuery;
+  /** How the chart looks (#331, #333); left out, it looks as it always has. */
+  format?: ChartFormat;
 };
 
 export type Slicer = { table: string; field: string; label: string };
@@ -223,12 +226,19 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     if (visual !== "pivot" && query.pivot) throw new ValidationError(`${title}: pivot fields can only be used with a pivot table.`);
     if (visual !== "table" && visual !== "kpi" && visual !== "pivot" && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
     if ((visual === "pie" || visual === "donut") && query.measures.length !== 1) throw new ValidationError(`${title}: a pie shows one value.`);
+    let format: ChartFormat | undefined;
+    try {
+      format = parseChartFormat(tile.format);
+    } catch (error) {
+      throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+    }
     return {
       id: typeof tile.id === "string" && /^[a-z0-9-]{1,40}$/.test(tile.id) ? tile.id : randomUUID(),
       title,
       visual,
       width: tile.width === "full" ? "full" : "half",
       query,
+      ...(format ? { format } : {}),
     };
   });
 }

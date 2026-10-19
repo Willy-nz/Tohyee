@@ -239,6 +239,35 @@ describeWithDatabase("analytics dashboards", () => {
     expect(values.data).toEqual({ values: ["Canterbury", "Otago"], type: "VARCHAR" });
   });
 
+  it("saves how a chart looks with its tile, keeping only known settings (#331, #333)", async () => {
+    const patch = (tiles: unknown[]) =>
+      dashboardRoute.PATCH(
+        apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }),
+        params({ dashboardId }),
+      );
+    const format = {
+      palette: "blues",
+      series: [{ as: "bar" }, { as: "line", axis: "right", color: "orange", number: { style: "plain", decimals: 0 } }],
+      legend: { position: "bottom" },
+      rightAxis: { title: "Last year", zero: false },
+      card: { subtitle: "Excludes GST", background: "tinted" },
+      madeUp: "dropped",
+    };
+    const saved = await body(await patch([{ ...tile, visual: "combo", format }]));
+    expect(saved.status).toBe(200);
+    const kept: Record<string, unknown> = { ...format };
+    delete kept.madeUp;
+    expect(saved.data.dashboard.tiles[0].format).toEqual(kept);
+
+    const refused = await body(await patch([{ ...tile, format: { series: [{ color: "#123456" }] } }]));
+    expect(refused.status).toBe(400);
+    expect(refused.data.error).toMatch(/^Sales by month: Value 1 colour/);
+
+    // Reset to default: a tile without a format has none saved.
+    const reset = await body(await patch([tile]));
+    expect(reset.data.dashboard.tiles[0].format).toBeUndefined();
+  });
+
   it("deletes a dashboard without touching the data", async () => {
     const deleted = await dashboardRoute.DELETE(
       apiRequest(`/api/analytics/dashboards/${dashboardId}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }),

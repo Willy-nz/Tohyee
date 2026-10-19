@@ -13,12 +13,16 @@ type ChartProps = {
 
 const CHART_SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
 
+const BLUES = ["#0d366b", "#256abf", "#5598e7", "#86b6ef"];
+
 const DEFAULT_THEME: ChartTheme = {
   text: "#1b2533",
   mutedText: "#546072",
   grid: "#dde2e9",
   background: "#ffffff",
   palette: CHART_SLOTS,
+  blues: BLUES,
+  negative: "#d03b3b",
 };
 
 function readTheme(palette: "default" | "accent"): ChartTheme {
@@ -31,6 +35,8 @@ function readTheme(palette: "default" | "accent"): ChartTheme {
     background: color("--surface", DEFAULT_THEME.background),
     // The chart series colours in their fixed order (--chart-1 to --chart-8 in globals.css).
     palette: palette === "accent" ? [color("--accent", "#1f5fae"), color("--text-muted", "#546072"), color("--text", "#1b2533")] : CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
+    blues: BLUES.map((fallback, index) => color(`--chart-blues-${index + 1}`, fallback)),
+    negative: color("--chart-negative", DEFAULT_THEME.negative!),
   };
 }
 

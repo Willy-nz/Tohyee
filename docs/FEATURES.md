@@ -1919,6 +1919,20 @@ that something happened.
   accessible HTML table; CSV and Excel exports use the standard report
   export (decision 375).
 
+- **Analytics: chart formatting and a second axis** (#331, #333,
+  decisions 590-593). The chart panel has a Format section with a live
+  preview and Reset to default: colour sets (Tohyee, Tohyee blues, Orange
+  first, Green first; all checked for colour-blind readers in light and
+  dark), a colour per value, a colour for each group, red when below zero,
+  data labels, the legend (automatic, shown or hidden; top, bottom or
+  right), axis titles, gridlines, lowest and highest, start at zero and log
+  scale, a number format per value (dollars, percentage or plain; decimal
+  places; short or full; thousands separator), stacked and 100% stacked,
+  smooth lines and dots, a donut's total in the middle, and the card's
+  title, subtitle, background and border. Columns and line, Line and Area
+  can put each value on a left or right axis (the right with its own scale
+  and format), and Columns and line can show each value as columns or a
+  line.
 - **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
   367). Each organisation's ledger lines, invoices, bills, contacts, items and
   (with the CRM on) companies, opportunities and activities are copied into
