@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -205,7 +205,7 @@ function MonthGrid({ anchor, from, to, items, selectedId, onSelect }: { anchor: 
       <div className={styles.month} role="grid" aria-label={monthLabel(anchor)}>
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => <div key={name} className={styles.weekday} role="columnheader">{name}</div>)}
         {days.map((day) => (
-          <div key={day} className={`${styles.cell} ${day.slice(0, 7) !== month ? styles.otherMonth : ""}`} role="gridcell" aria-label={longDay(day)}>
+          <div key={day} className={`${styles.cell} ${day.slice(0, 7) !== month ? styles.otherMonth : ""} ${day === todayInBrowser() ? styles.todayCell : ""}`} role="gridcell" aria-label={longDay(day)}>
             <div className={styles.cellDate}>{Number(day.slice(8))}</div>
             {items.filter((item) => item.date === day).map((item) => (
               <button key={item.id} type="button" className={`${styles.chip} ${styles[item.kind]} ${item.state !== "open" ? styles.faded : ""} ${item.id === selectedId ? styles.selected : ""}`} onClick={() => onSelect(item.id)} title={`${item.title} (${timeText(item)})`}>
@@ -247,6 +247,9 @@ function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editable = item.state === "open";
+  const panel = useRef<HTMLDivElement>(null);
+  // The panel is below the calendar: bring it into view when an item is chosen.
+  useEffect(() => panel.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), []);
   const patch = async (body: Record<string, unknown>) => {
     setBusy(true);
     setError(null);
@@ -264,6 +267,7 @@ function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: 
     void patch({ date, startTime, endTime, kind, title, farmId: farmId || null });
   };
   return (
+    <div ref={panel}>
     <Card
       title={item.title}
       description={`${FARM_MAIL_KIND_LABELS[item.kind]}${item.date ? `, ${longDay(item.date)}` : ", no date yet"}${item.startTime ? `, ${timeText(item)}` : ""}`}
@@ -317,6 +321,7 @@ function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: 
         <p className={ui.muted}>{item.state === "dismissed" ? "Hidden: not a farm arrangement." : `${item.stateNote ?? "Changed"}. It can't be edited now.`}</p>
       )}
     </Card>
+    </div>
   );
 }
 
@@ -361,7 +366,7 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
       {error ? <Notice tone="error">{error}</Notice> : null}
       {mailboxes && mailboxes.length ? (
         <div className={ui.tableWrap}>
-          <table className={ui.stackOnPhone}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
             <thead><tr><th>Mailbox</th><th>Last checked</th><th>Items</th><th>Farm when none is named</th><th>Actions</th></tr></thead>
             <tbody>
               {mailboxes.map((mailbox) => (

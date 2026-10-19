@@ -130,6 +130,14 @@
   color: var(--text-muted);
 }
 
+.todayCell .cellDate {
+  color: var(--accent);
+}
+
+.todayCell {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .cellDate {
   font-size: var(--text-sm);
   font-weight: 600;
