@@ -4,12 +4,13 @@ import { useState } from "react";
 import { Field } from "@/components/ui";
 import styles from "./studio.module.css";
 
-export type Connector = "books" | "csv" | "excel" | "email";
+export type Connector = "books" | "csv" | "excel" | "email" | "google-analytics";
 const connectors: { id: Connector; icon: string; title: string; description: string }[] = [
   { id: "books", icon: "T", title: "Books and CRM", description: "Use this organisation’s ledger, invoices, contacts and CRM. Refreshed nightly or on demand." },
   { id: "csv", icon: "CSV", title: "CSV file", description: "Connect an export in your analytics folder. Review fields and choose how often to reload." },
   { id: "excel", icon: "XLSX", title: "Excel workbook", description: "Choose a sheet from an .xlsx workbook, preview its columns and confirm field types." },
   { id: "email", icon: "@", title: "Report emails", description: "Collect CSV and Excel attachments from Gmail, Microsoft or IMAP into your analytics folder." },
+  { id: "google-analytics", icon: "GA", title: "Google Analytics", description: "A website's visitors, sessions, pages and traffic sources from a GA4 property. Loaded nightly or on demand." },
 ];
 
 export function ConnectorPicker({ selected, onSelect }: { selected: Connector | null; onSelect: (connector: Connector) => void }) {

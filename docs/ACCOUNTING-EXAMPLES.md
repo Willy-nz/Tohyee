@@ -18708,3 +18708,65 @@ her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
 
 Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
 `tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
+
+## Analytics: a website's Google Analytics data (GA1-GA8; built by Claude 20 Oct 2026 when Jess asked for "Google analytics for websites to tohyee", as Looker Studio's Google Analytics connector does, not yet reviewed)
+
+Not accounting: a data source for Analytics, so a website's visitors can be
+charted beside sales. Decisions 606-609. The figures are made up for a
+small shop's website, Paw Prints, for 1-3 October 2026. Google is a canned
+fake in the tests; nothing here has been tried against a real GA4
+property.
+
+- **GA1 Signing in.** An admin chooses Google Analytics in Data sources ›
+  Add data source and signs in with Google through the organisation's
+  Google app (Settings › Email). Google is asked for
+  `openid https://www.googleapis.com/auth/userinfo.email
+  https://www.googleapis.com/auth/analytics.readonly`, offline, returning to
+  `/api/analytics/google/callback`. A viewer can't start it; the one-time
+  state works once, for the admin who started it. The tokens are stored
+  encrypted. If the Analytics permission was unticked at Google, Tohyee
+  says so and stores nothing. Viewers see that it's connected, not the
+  Google address.
+- **GA2 Choosing the property.** Google lists every GA4 property the
+  account can see, across all its pages: "Old site" (account Old shop,
+  111) and "Paw Prints website" (account Paw Prints Ltd, 321654987). Only
+  a listed property can be chosen. Choosing another property later drops
+  the first one's tables before the new one loads.
+- **GA3 What's asked of Google.** Five daily reports, each by `date` with
+  GA4's names: totals (`activeUsers`, `newUsers`, `sessions`,
+  `engagedSessions`, `screenPageViews`, `engagementRate`, `keyEvents`,
+  `totalRevenue`); traffic by `sessionDefaultChannelGroup`,
+  `sessionSource`, `sessionMedium`; pages by `pagePath`, `pageTitle`;
+  `country`; and `deviceCategory`. 50,000 rows a request, ordered by the
+  dimensions; when Google sends fewer, the next page starts after what
+  came (the test's fake sends two at a time: offsets 0 then 2).
+- **GA4 What's loaded.** 1 October: 48 visitors, 60 sessions, 212 page
+  views, engagement rate "0.6666666666666666" stored as 0.666667, 2 key
+  events, revenue 129.95; 2 October revenue "64.5" stored as 64.50; 3
+  October nothing sold, 0.00. Revenue for the three days is 194.45 (in NZD,
+  the property's currency, as Google said). Instagram (Organic Social,
+  referral) brought 40 sessions on 1 October. "(not set)" and "(direct)"
+  are kept as Google sends them. 10 rows across the five tables. A load
+  that fails part-way keeps the last copy of every table.
+- **GA5 History.** 13 months by default: loading on 20 October 2026 asks
+  for 1 October 2025 to today. 1 month on 31 January 2026 is 1 January
+  2026; 25 months on 5 March 2026 is 1 March 2024. Between 1 and 60.
+- **GA6 Google says no.** Quota used up (429 RESOURCE_EXHAUSTED): the load
+  fails once, without retrying, saying the property's limit is used up and
+  the data already loaded is kept (the 3 days are still there). The Data
+  API not enabled in the Google Cloud project (403, SERVICE_DISABLED): says
+  to enable it. The account can't see the property (403): says so. Two
+  503s then an answer: retried, and it loads.
+- **GA7 The sign-in runs out.** Google answers `invalid_grant` when the
+  access token is refreshed (as it does seven days after consent while the
+  app is in Testing): the load fails saying an admin needs to connect
+  again, the connection is marked, and the nightly load skips it while the
+  books still copy. Connecting again keeps the property; the next nightly
+  load runs.
+- **GA8 Disconnecting.** Deletes the stored sign-in, asks Google to
+  withdraw it, and drops every `google_analytics_*` table; the load history
+  stays. Viewers can't. Refresh now afterwards says it isn't connected.
+
+Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
+and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
+template).

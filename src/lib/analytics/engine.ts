@@ -811,8 +811,19 @@ export const TOHYEE_TABLE_PREFIX = "tohyee_";
  * readable when this runs (inside the read's transaction).
  */
 export function replaceTohyeeTables(organisationId: string, tables: readonly TableCopy[]): Promise<number> {
+  return replaceTableSet(organisationId, TOHYEE_TABLE_PREFIX, tables, "The books couldn't be copied");
+}
+
+/**
+ * Replaces every table whose name starts with `prefix` with these, as
+ * `replaceTohyeeTables` does for the books: staged, then swapped in together,
+ * and tables with the prefix not in the set dropped. Google Analytics uses
+ * it for its `google_analytics_*` tables (decision 607).
+ */
+export function replaceTableSet(organisationId: string, prefix: string, tables: readonly TableCopy[], failure: string): Promise<number> {
+  if (!/^[a-z][a-z0-9_]*_$/.test(prefix)) throw new ValidationError("That isn't a table prefix.");
   for (const table of tables) {
-    if (!table.name.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError(`${table.name} isn't a Tohyee table.`);
+    if (!table.name.startsWith(prefix)) throw new ValidationError(`${table.name} doesn't start with ${prefix}.`);
     assertTableName(table.name);
     for (const column of table.columns) assertTableName(column.name);
   }
@@ -851,7 +862,7 @@ export function replaceTohyeeTables(organisationId: string, tables: readonly Tab
           }
         }
         const existing = await connection.runAndReadAll(
-          `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, 'tohyee_')`,
+          `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, ${quoteString(prefix)})`,
         );
         const keep = new Set(tables.map((table) => table.name));
         await connection.run("begin transaction");
@@ -871,8 +882,24 @@ export function replaceTohyeeTables(organisationId: string, tables: readonly Tab
         return copied;
       } catch (error) {
         for (const table of tables) await connection.run(`drop table if exists ${staging(table.name)}`).catch(() => undefined);
-        throw new ValidationError(`The books couldn't be copied: ${loadErrorMessage(error)}`);
+        throw new ValidationError(`${failure}: ${loadErrorMessage(error)}`);
       }
+    }),
+  );
+}
+
+/** Drops every table whose name starts with `prefix` (disconnecting Google Analytics drops its tables). */
+export function dropTablesWithPrefix(organisationId: string, prefix: string): Promise<string[]> {
+  if (!/^[a-z][a-z0-9_]*_$/.test(prefix) || prefix === TOHYEE_TABLE_PREFIX) throw new ValidationError("That isn't a table prefix that can be dropped.");
+  if (!fs.existsSync(analyticsFilePath(organisationId))) return Promise.resolve([]);
+  return serialise(organisationId, () =>
+    withAnalytics(organisationId, async (connection) => {
+      const existing = await connection.runAndReadAll(
+        `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, ${quoteString(prefix)})`,
+      );
+      const names = (existing.getRows() as Array<[string]>).map(([name]) => name);
+      for (const name of names) await connection.run(`drop table if exists ${quoteIdentifier(name)}`);
+      return names;
     }),
   );
 }
