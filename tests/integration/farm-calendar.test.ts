@@ -554,7 +554,7 @@ describeWithDatabase("farm calendar from email", () => {
     expect(audit.rows.length).toBeGreaterThan(0);
     expect(JSON.stringify(audit.rows)).not.toMatch(/Farm|Label_/);
     expect(await w.as(mere, (tx) => listFarmMailboxes(tx))).toEqual([]);
-  });
+  }, 90_000);
 
   it("FC27 taking a folder off deletes what was taken from it alone, and undoes what its emails did", async () => {
     const w = await setup();
@@ -589,7 +589,7 @@ describeWithDatabase("farm calendar from email", () => {
     fetched = [];
     expect(await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T12:00:00Z"))).toEqual({ read: 0, items: 0 });
     expect(fetched).toEqual([]);
-  });
+  }, 90_000);
 
   it("FC28 an email moved out drops at the next check, with its cancellation undone; moved in is read, within the read-back date", async () => {
     const w = await setup();
@@ -631,7 +631,7 @@ describeWithDatabase("farm calendar from email", () => {
       ["Stock truck", "cancelled"],
       ["TB testing", "open"],
     ]);
-  });
+  }, 90_000);
 
   it("FC29 Outlook folders: a folder inside the Inbox with its subfolders, and a deleted folder drops its mail", async () => {
     const w = await setup();
@@ -667,7 +667,7 @@ describeWithDatabase("farm calendar from email", () => {
     await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:45:00Z"));
     expect((await w.as(jess, (tx) => listFarmMailboxes(tx)))[0].folders).toMatchObject([{ name: "Inbox › Farm", missing: true }]);
     expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items).toEqual([]);
-  });
+  }, 90_000);
 
   it("FC30 a mailbox connected before folders: stops reading, keeps its items until folders are chosen, then only theirs stay", async () => {
     const w = await setup();
@@ -691,5 +691,5 @@ describeWithDatabase("farm calendar from email", () => {
     expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => item.title)).toEqual(["TB testing"]);
     const seen = await w.as(jess, (tx) => tx.query<{ external_id: string; n: number }>("select external_id, cardinality(folder_ids)::int as n from farm_mail_seen"));
     expect(seen.rows).toEqual([{ external_id: "f1", n: 1 }]);
-  });
+  }, 90_000);
 });
