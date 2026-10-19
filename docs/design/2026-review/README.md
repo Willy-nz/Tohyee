@@ -25,13 +25,13 @@ with a balance chart and collapsible assumptions. Two parts differ:
 
 ## Mockups
 
-Open `mockups.html` locally in a browser. The top navigation switches between three proposals; calendar events and its review filter demonstrate selection. All values, names and excerpts are fictional. Other buttons explain the intended action and do not perform it.
+Keep `mockups.html` and `mountain-photo.png` together and open the HTML locally in a browser. The top navigation switches between three proposals; calendar events and its review filter demonstrate selection. All values, names and excerpts are fictional. Other buttons explain the intended action and do not perform it.
 
 1. **Farm calendar:** schedule and selected evidence side by side on desktop; stacked reading order on narrow screens. Distinguish checked facts, extracted suggestions and missing times. Keep mailbox configuration out of the daily workflow. Production mobile detail should use an accessible sheet or dedicated detail screen with Back and restored focus; the static prototype only scrolls to the detail section.
 2. **Reconciliation:** use “Review” for opening details and “Confirm match” for the mutation, with one clear primary action and a visible explanation of its effect. Keep batch review available.
 3. **Cash forecast:** lead with the cash question, shortfall and balance trajectory, with existing assumptions and full detail available. The illustrative chart is not a new calculation engine. Preserve current report exports, transaction drill-through, account selection and double-counting warnings.
 
-The mountain watermark remains appropriate in the existing app shell; these focused workspace concepts omit the decorative image rather than replacing its brand role. Preserve existing organisation navigation and permission behaviour. The mockup's three-button navigation is only a screen selector.
+The mockups now use the owner’s replacement mountain/lake photo, supplied 19 October 2026, as a subtle desktop header watermark. The original is preserved in `mountain-photo.png`; CSS frames the mountains and lake above the car/foreground. Text has a solid background, controls stay opaque, and the decorative image is hidden below 1100px. Claude: use this source for the app’s next watermark update, preserve the existing light/dark readability protections, and verify the crop at actual header sizes. This PR updates design assets only; it does not replace the deployed app image. Preserve existing organisation navigation and permission behaviour. The mockup's three-button navigation is only a screen selector.
 
 ## Findings and acceptance criteria for Claude
 
@@ -83,4 +83,4 @@ References: [WCAG contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast
 
 ## Validation of this handoff
 
-Source findings were inspected at the baseline above. The HTML is self-contained with no external dependencies or live data calls. Its script was syntax-checked. Browser installation failed in the review environment, so the mockups have not been rendered or interaction-tested here; Claude should render and inspect them before implementation. No production test suite was run for this documentation-only change. No claim is made that the redesign is already implemented or that Claude has reviewed it.
+Source findings were inspected at the baseline above. The HTML uses one adjacent local photo, with no external dependencies or live data calls. Its script was syntax-checked. Browser installation failed in the review environment, so the mockups have not been rendered or interaction-tested here; Claude should render and inspect them before implementation. No production test suite was run for this documentation-only change. No claim is made that the redesign is already implemented or that Claude has reviewed it.

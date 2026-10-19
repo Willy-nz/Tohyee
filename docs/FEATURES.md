@@ -531,9 +531,14 @@ that something happened.
   meetings out of the emails with fixed rules (no AI): Today, Week, Month
   and Needs checking, filtered by farm and sender, with tentative wording
   marked, moved and cancelled bookings followed, a link to each email, and
-  corrections. Private to the member who connects it. Not yet: attachments,
-  team sharing, repeating arrangements, adding to Google or Outlook
-  calendars.
+  corrections. Private to the member who connects it. Since FC17-FC23
+  (decisions 573-575, tenant migration 0163): items you add yourself, with
+  private notes; repeats every 1, 2 or 4 weeks or monthly, with a date
+  skipped; sharing chosen items with the whole organisation after a preview
+  of exactly what they'll see (never the email or notes); and a private
+  calendar link (.ics) for Google, Apple or Outlook to subscribe to, shown
+  once. Not yet: attachments, changing one date of a repeat, repeats read
+  from email wording.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with

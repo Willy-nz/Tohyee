@@ -5324,6 +5324,30 @@ testing) and #154's code signing (later, Jess).
      item in Needs checking instead (FC14). People can hide an item ("Not
      a farm arrangement") or say one replaces another. Moved and cancelled
      items are kept, faded, so it's clear what happened.
+573. **Your own farm calendar items, and repeats** (19 October 2026). Jess
+     chose own items, repeats, sharing and a calendar link from what the
+     farm calendar didn't do. Members can add items by hand (any of the
+     six kinds or Other, with private notes); they're checked from the
+     start. Any dated item can repeat every 1, 2 or 4 weeks or every month
+     until an optional end date; a monthly repeat falls on the last day of
+     shorter months, as Outlook does. A date can be skipped, but one date
+     of a series can't be changed on its own. Repeats aren't read from
+     email wording. FC17-FC19, tenant migration 0163, not yet reviewed.
+574. **Sharing farm calendar items is a choice per item, after a preview**
+     (19 October 2026). Decision 571 keeps mail private, so nothing is
+     shared unless its member shares that item, after seeing exactly what
+     the team will see: what, kind, date, times, tentative, farm, repeat
+     and who shared it, never the sender, subject, email sentence, link,
+     notes or mailbox. Every member of the organisation sees shared items,
+     read-only; sharing checks the item so a later email doesn't change it.
+     FC20, FC21.
+575. **A private calendar link** (19 October 2026). Each member can have
+     one iCalendar (.ics) link for Google, Apple or Outlook to subscribe
+     to, carrying what their farm calendar shows from 60 days back, with no
+     email content or notes. Only a hash of it is stored, so it's shown
+     once; making a new one stops the old. It answers "not found" alike
+     for a wrong, replaced or turned-off link, a member who has left, or
+     Farming turned off, and is limited to 60 requests an hour. FC22, FC23.
 580. **Sub-headings in long menu columns, and an All settings page**
      (20 October 2026). Issue #338 (Jess, 19 Oct 2026: the Accountant menu
      was hard to scan). Any top-bar menu column of more than seven links
