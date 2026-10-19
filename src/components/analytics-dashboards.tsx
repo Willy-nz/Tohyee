@@ -17,6 +17,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { ChartFormat } from "@/lib/analytics/chart-format";
 import { tileChartSpec, tileValueNames } from "@/lib/analytics/tile-chart";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
+import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, paragraphs, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import type {
   Aggregate,
   ColumnInfo,
@@ -196,7 +197,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
       {list.error ? <Notice tone="error">{list.error}</Notice> : !list.data ? <p className={ui.muted}>Loading reports…</p> : !reports.length ? <Empty>{search ? "No reports match your search." : can("bookkeeper") ? "Your first report starts here. Choose Create report to build it." : "No reports are available to you yet."}</Empty> : view === "list" ? (
         <div className={ui.tableWrap}><table className={ui.table}><thead><tr><th>Report</th><th>Charts and tables</th><th>Last updated</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link href={`/analytics/dashboards/${report.id}`}>{report.name}</Link><div className={ui.muted}>{report.description}</div></td><td>{report.tiles.length}</td><td>{formatDateTime(report.updatedAt)}</td></tr>)}</tbody></table></div>
       ) : <div className={styles.dashboardCards}>{reports.map((report) => <Link key={report.id} href={`/analytics/dashboards/${report.id}`} className={styles.dashboardCard}>
-        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
+        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{tile.visual === "text" ? "Text" : VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
         <strong>{report.name}</strong>{report.description ? <span className={ui.muted}>{report.description}</span> : null}<span className={styles.reportMeta}>{report.tiles.length} charts and tables · {formatDateTime(report.updatedAt)}</span>
       </Link>)}</div>}
     </>
@@ -224,7 +225,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [draft, setDraft] = useState<Dashboard | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
   const [sharing, setSharing] = useState(false);
-  const [editingTile, setEditingTile] = useState<Tile | "new" | null>(null);
+  const [editingTile, setEditingTile] = useState<Tile | "new" | "new-text" | null>(null);
+  // Drag and drop (the arrows do the same from the keyboard).
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -263,16 +267,16 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     }
   }
 
-  function moveTile(index: number, by: number) {
+  function moveTile(index: number, to: number) {
     if (!dashboard) return;
-    const tiles = [...dashboard.tiles];
-    const [tile] = tiles.splice(index, 1);
-    tiles.splice(Math.max(0, Math.min(tiles.length, index + by)), 0, tile);
-    void save({ ...dashboard, tiles });
+    const tiles = moveTileTo(dashboard.tiles, index, to);
+    if (tiles !== dashboard.tiles) void save({ ...dashboard, tiles });
   }
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
+  const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && editingTile.visual === "text" ? editingTile : null;
+  const chartTile = textTile || editingTile === "new-text" ? null : editingTile;
 
   return (
     <>
@@ -300,6 +304,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             <>
               <Button variant="secondary" onClick={() => setEditingTile("new")} disabled={busy || Boolean(editingTile) || !tables.data?.tables.length}>
                 + Add chart
+              </Button>
+              <Button variant="secondary" onClick={() => setEditingTile("new-text")} disabled={busy || Boolean(editingTile)}>
+                + Add text
               </Button>
               <Button
                 onClick={async () => {
@@ -340,13 +347,25 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
-      {editingTile && canEdit ? (
+      {canEdit && textTile ? (
+        <TextTileEditor
+          key={textTile === "new" ? "new-text" : textTile.id}
+          saving={busy}
+          tile={textTile === "new" ? null : textTile}
+          onCancel={() => setEditingTile(null)}
+          onSave={async (tile) => {
+            const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
+            const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
+            if (await save({ ...dashboard, tiles })) setEditingTile(null);
+          }}
+        />
+      ) : chartTile && canEdit ? (
         <TileEditor
-          key={editingTile === "new" ? "new" : editingTile.id}
+          key={chartTile === "new" ? "new" : chartTile.id}
           saving={busy}
           organisationId={organisationId}
           tables={tables.data?.tables ?? []}
-          tile={editingTile === "new" ? null : editingTile}
+          tile={chartTile === "new" ? null : chartTile}
           filters={shown}
           onCancel={() => setEditingTile(null)}
           onSave={async (tile) => {
@@ -362,7 +381,32 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       ) : (
         <div className={styles.grid}>
           {dashboard.tiles.map((tile, index) => (
-            <section key={tile.id} className={tileClass(tile)}>
+            <section
+              key={tile.id}
+              className={`${tileClass(tile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
+              draggable={editing && !busy}
+              onDragStart={(event) => {
+                setDragging(index);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", tile.id);
+              }}
+              onDragOver={(event) => {
+                if (dragging === null) return;
+                event.preventDefault();
+                setDropAt(index);
+              }}
+              onDragLeave={() => setDropAt((current) => (current === index ? null : current))}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (dragging !== null) moveTile(dragging, index);
+                setDragging(null);
+                setDropAt(null);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                setDropAt(null);
+              }}
+            >
               <div className={styles.tileHeader}>
                 <div>
                   <h2 className={tile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle}>{tile.title}</h2>
@@ -370,20 +414,30 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                 </div>
                 {editing ? (
                   <div className={styles.tileTools}>
-                    <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, -1)} disabled={busy || index === 0}>
+                    <span className={styles.dragHandle} aria-hidden="true" title="Drag to move">⠿</span>
+                    <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, index - 1)} disabled={busy || index === 0}>
                       ↑
                     </Button>
                     <Button
                       size="small"
                       variant="secondary"
                       aria-label={`Move ${tile.title} later`}
-                      onClick={() => moveTile(index, 1)}
+                      onClick={() => moveTile(index, index + 1)}
                       disabled={busy || index === dashboard.tiles.length - 1}
                     >
                       ↓
                     </Button>
-                    <Button size="small" variant="secondary" onClick={() => setEditingTile(tile)} disabled={busy}>
+                    <Button size="small" variant="secondary" aria-label={`Edit ${tile.title}`} onClick={() => setEditingTile(tile)} disabled={busy}>
                       Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      aria-label={`Duplicate ${tile.title}`}
+                      onClick={() => void save({ ...dashboard, tiles: duplicateTile(dashboard.tiles, index, `t${Date.now().toString(36)}`) })}
+                      disabled={busy || dashboard.tiles.length >= 40}
+                    >
+                      Duplicate
                     </Button>
                     <Button
                       size="small"
@@ -394,12 +448,26 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Remove
                     </Button>
                   </div>
-                ) : (
+                ) : tile.visual === "text" ? null : (
                   // Only saved tiles can be pinned, so not while the dashboard is being changed.
                   <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
                 )}
               </div>
-              <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+              {editing ? (
+                // Clicking a tile opens it for changing (the Edit button does the same from the keyboard).
+                <div
+                  className={styles.clickToEdit}
+                  title="Click to edit"
+                  onClick={(event) => {
+                    if (busy || (event.target as HTMLElement).closest("button, a, input, select, textarea, summary")) return;
+                    setEditingTile(tile);
+                  }}
+                >
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+                </div>
+              ) : (
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+              )}
             </section>
           ))}
         </div>
@@ -408,11 +476,20 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   );
 }
 
+const WIDTH_CLASSES: Record<TileWidth, string> = {
+  quarter: styles.quarter,
+  third: styles.third,
+  half: styles.half,
+  "two-thirds": styles.twoThirds,
+  full: styles.full,
+};
+
 function tileClass(tile: Tile): string {
   const card = tile.format?.card;
   return [
     styles.tile,
-    tile.width === "full" ? styles.full : "",
+    WIDTH_CLASSES[tile.width] ?? styles.half,
+    tile.visual === "text" ? styles.textTile : "",
     card?.background === "tinted" ? styles.tinted : card?.background === "none" ? styles.bare : "",
     card?.border === false ? styles.borderless : "",
   ].filter(Boolean).join(" ");
@@ -653,7 +730,18 @@ function useTileResult(organisationId: string, query: TileQuery | null, filters:
   return state?.key === key ? state : null;
 }
 
-function TileBody({ organisationId, dashboardId, tile, filters }: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
+function TileBody(props: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
+  if (props.tile.visual === "text") {
+    return (
+      <div className={styles.textBody}>
+        {paragraphs(props.tile.text).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+      </div>
+    );
+  }
+  return <QueryTileBody {...props} />;
+}
+
+function QueryTileBody({ organisationId, dashboardId, tile, filters }: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
   const state = useTileResult(organisationId, tile.query, filters, { dashboardId, tileId: tile.id });
   const { current } = useWorkspace();
   const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
@@ -730,7 +818,7 @@ function TileResult({
   onDrill,
   exportFor,
 }: {
-  tile: Pick<Tile, "title" | "visual" | "format">;
+  tile: Pick<Tile, "title" | "visual" | "format" | "height">;
   result: QueryResult;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   exportFor?: PivotExportFor;
@@ -773,7 +861,7 @@ function TileResult({
       </div>
     );
   }
-  return <Chart spec={spec} rows={rows} />;
+  return <Chart spec={spec} rows={rows} height={CHART_HEIGHTS[tile.height ?? "medium"]} />;
 }
 
 function pivotRowLabel(row: PivotRow, index: number, field: ResultColumn): string {
@@ -980,8 +1068,9 @@ function TileEditor({
   const { can } = useWorkspace();
   const [fieldSearch, setFieldSearch] = useState("");
   const [title, setTitle] = useState(tile?.title ?? "");
-  const [visual, setVisual] = useState<Visual>(tile?.visual ?? "column");
-  const [width, setWidth] = useState<"half" | "full">(tile?.width ?? "half");
+  const [visual, setVisual] = useState<Visual>(tile && tile.visual !== "text" ? tile.visual : "column");
+  const [width, setWidth] = useState<TileWidth>(tile?.width ?? "half");
+  const [height, setHeight] = useState<TileHeight>(tile?.height ?? "medium");
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
   const [format, setFormat] = useState<ChartFormat | undefined>(tile?.format);
   const table = tables.find((entry) => entry.name === query.table);
@@ -1054,7 +1143,7 @@ function TileEditor({
         ) : preview.error ? (
           <Notice tone="error">{preview.error}</Notice>
         ) : (
-          <TileResult tile={{ title: title || "Preview", visual, format }} result={preview.result!} />
+          <TileResult tile={{ title: title || "Preview", visual, format, height }} result={preview.result!} />
         )}
       </div>
 
@@ -1075,12 +1164,18 @@ function TileEditor({
             ))}
           </select>
         </Field>
-        <Field label="Width">
-          <select value={width} onChange={(event) => setWidth(event.target.value as "half" | "full")}>
-            <option value="half">Half</option>
-            <option value="full">Full</option>
+        <Field label="Width" hint="Of a row; on phones every chart is full width.">
+          <select value={width} onChange={(event) => setWidth(event.target.value as TileWidth)}>
+            {TILE_WIDTHS.map((entry) => <option key={entry} value={entry}>{WIDTH_LABELS[entry]}</option>)}
           </select>
         </Field>
+        {visual !== "kpi" && visual !== "table" && visual !== "pivot" ? (
+          <Field label="Height">
+            <select value={height} onChange={(event) => setHeight(event.target.value as TileHeight)}>
+              {TILE_HEIGHTS.map((entry) => <option key={entry} value={entry}>{HEIGHT_LABELS[entry]}</option>)}
+            </select>
+          </Field>
+        ) : null}
         <Field label="Data source">
           <select value={query.table} onChange={(event) => setQuery(blankQuery(tables.find((entry) => entry.name === event.target.value)))}>
             {tables.map((entry) => (
@@ -1379,6 +1474,7 @@ function TileEditor({
               title: title.trim() || query.measures[0]?.label || "Tile",
               visual,
               width,
+              ...(height !== "medium" ? { height } : {}),
               query: { ...query, filters: query.filters.filter((filter) => String(filter.value).trim() !== "") },
               ...(format ? { format } : {}),
             })
@@ -1393,5 +1489,42 @@ function TileEditor({
         </fieldset>
       </aside>
     </section>
+  );
+}
+
+/** Adding or changing a text card: a heading and notes to split a dashboard into sections (#335). */
+function TextTileEditor({ saving, tile, onSave, onCancel }: { saving: boolean; tile: Tile | null; onSave: (tile: Tile) => void; onCancel: () => void }) {
+  const [title, setTitle] = useState(tile?.title ?? "");
+  const [text, setText] = useState(tile?.text ?? "");
+  const [width, setWidth] = useState<TileWidth>(tile?.width ?? "full");
+  return (
+    <Card title={tile ? "Change the text" : "Add text"} description="A heading and notes, e.g. to start a section of the report. Leave a blank line between paragraphs.">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave({ id: tile?.id ?? `t${Date.now().toString(36)}`, title: title.trim() || "Notes", visual: "text", width, query: null, ...(text.trim() ? { text: text.trim() } : {}) });
+        }}
+      >
+        <fieldset disabled={saving} className={styles.propertyFields}>
+          <div className={styles.propertyGrid}>
+            <Field label="Heading">
+              <input autoFocus value={title} maxLength={100} placeholder="e.g. Sales" onChange={(event) => setTitle(event.target.value)} />
+            </Field>
+            <Field label="Notes" hint="Up to 2,000 characters.">
+              <textarea rows={4} maxLength={2000} value={text} onChange={(event) => setText(event.target.value)} />
+            </Field>
+            <Field label="Width">
+              <select value={width} onChange={(event) => setWidth(event.target.value as TileWidth)}>
+                {TILE_WIDTHS.map((entry) => <option key={entry} value={entry}>{WIDTH_LABELS[entry]}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className={ui.rowButtons}>
+            <Button type="submit">{saving ? "Saving…" : tile ? "Apply changes" : "Add to report"}</Button>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          </div>
+        </fieldset>
+      </form>
+    </Card>
   );
 }

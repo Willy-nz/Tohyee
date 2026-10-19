@@ -9,6 +9,8 @@ type ChartProps = {
   spec: ChartSpec;
   palette?: "default" | "accent";
   rows: Record<string, string | number | null>[];
+  /** Drawing height in pixels (a tile's Small, Medium or Large); the stylesheet's otherwise. */
+  height?: number;
 };
 
 const CHART_SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
@@ -48,7 +50,7 @@ function isKpiSummary(option: EChartsOption | KpiSummary): option is KpiSummary 
   return !isChartOption(option);
 }
 
-export function Chart({ spec, rows, palette = "default" }: ChartProps) {
+export function Chart({ spec, rows, palette = "default", height }: ChartProps) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ECharts | null>(null);
@@ -120,7 +122,7 @@ export function Chart({ spec, rows, palette = "default" }: ChartProps) {
           ) : null}
         </div>
       ) : (
-        <div ref={containerRef} className={styles.canvas} role="img" aria-label={title} />
+        <div ref={containerRef} className={styles.canvas} style={height ? { height, minHeight: height } : undefined} role="img" aria-label={title} />
       )}
       <table className={styles.visuallyHidden}>
         <caption>{title} data</caption>

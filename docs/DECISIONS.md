@@ -5419,3 +5419,19 @@ testing) and #154's code signing (later, Jess).
      latest 24 months in the dashboard's dates, also read out as text for
      screen readers. The number uses the value's format (#333), including
      words before or after it (e.g. "customers").
+596. **Dashboard layout: widths, heights, copies, text cards, drag**
+     (20 October 2026, #335; Power BI and Looker Studio as the reference).
+     A dashboard is a twelve-column grid: a tile is a quarter, a third, a
+     half, two-thirds or the full width, so four key figures fit a row.
+     On narrower screens quarters and thirds become halves, and on phones
+     everything is full width. Charts are Small, Medium or Large (220, 340
+     or 480 pixels high). Duplicate puts a copy (a new id, "(copy)" on the
+     title) straight after the tile; a saved list where two tiles share an
+     id gives the second a new one, so pins still find the right tile. Text
+     cards are a heading and plain-text notes (up to 2,000 characters,
+     blank lines between paragraphs; no formatting or links, so nothing in
+     them can run); they have no question, so they can't be pinned. In
+     edit mode a tile can be dragged onto another's place, or clicked to
+     open it; the up and down arrows and the Edit button stay as the
+     keyboard and touch way to do the same. A dashboard holds up to 40
+     tiles (was 24), counting text cards.

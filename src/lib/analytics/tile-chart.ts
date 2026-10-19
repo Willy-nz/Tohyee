@@ -9,11 +9,11 @@ const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "c
  * dashboard and pinned tiles both use this, so a chart looks the same in both.
  */
 export function tileChartSpec(
-  tile: { visual: Visual; format?: ChartFormat },
+  tile: { visual: string; format?: ChartFormat },
   measures: ResultColumn[],
   options: { compact?: boolean } = {},
 ): ChartSpec | null {
-  if (!CHARTS.has(tile.visual) || measures.length === 0) return null;
+  if (!CHARTS.has(tile.visual as Visual) || measures.length === 0) return null;
   return {
     kind: tile.visual as ChartSpec["kind"],
     category: "category",
