@@ -4,7 +4,7 @@ import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
-import { add, dec, divide, isPositive, isZero, mul, sum, toFixedString, toPlainString, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, divide, isPositive, isZero, mul, sub, sum, toFixedString, toPlainString, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { annualEntitlement } from "@/lib/payroll/leave/annual";
 import { laterOf } from "@/lib/payroll/leave/dates";
@@ -362,7 +362,15 @@ export type LeaveLiabilityRow = {
   finalPayDate: string | null;
   /** The holiday pay on finishing on their approved final pay (decision 189). */
   holidayPayOnFinishing: string;
-  /** Holiday pay owed: annual holidays, the running 8%, alternative holidays and holiday pay on finishing. */
+  /**
+   * Sick leave expected to be used from carried-over leave (decision 564; HL62): the
+   * assessment in force (null: none), the days counted (no more than the balance) and
+   * their value at a usual day's pay.
+   */
+  sickExpected: { days: string; effectiveFrom: string; reason: string | null } | null;
+  sickDays: string;
+  sickValue: string;
+  /** Owed: annual holidays, the running 8%, alternative holidays, holiday pay on finishing and expected sick leave. */
   total: string;
   /** The employer's KiwiSaver rate when enrolled (null otherwise), and the employer KiwiSaver on `total` (decision 190). */
   kiwiSaverRate: string | null;
@@ -370,7 +378,7 @@ export type LeaveLiabilityRow = {
   problem: string | null;
 };
 
-type LiabilityFigures = { annualValue: string; runningEightPercent: string; alternativeValue: string; holidayPayOnFinishing: string; total: string; kiwiSaver: string; withKiwiSaver: string };
+type LiabilityFigures = { annualValue: string; runningEightPercent: string; alternativeValue: string; holidayPayOnFinishing: string; sickValue: string; total: string; kiwiSaver: string; withKiwiSaver: string };
 
 export type LeaveLiabilityReport = {
   asAt: string;
@@ -397,7 +405,9 @@ export function kiwiSaverOnLiability(total: string, employerRate: string): strin
  * untaken alternative holidays at a usual day's pay (ordinary weekly pay ÷
  * usual days, decision 153). Someone who finished before the date stays in
  * until their final pay is paid, at the holiday pay on finishing on it, and
- * is a problem while it isn't approved (decision 189). The employer
+ * is a problem while it isn't approved (decision 189). Sick leave expected
+ * to be used from carried-over leave is in only where someone has assessed
+ * it (decision 564; HL62), at a usual day's pay. The employer
  * KiwiSaver on each enrolled employee's total is shown beside it (decision
  * 190). By Department (the biggest line of their cost allocation at the
  * date). Read-only; `postLeaveLiability` posts it by Department (decision
@@ -433,6 +443,14 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
     [asAt],
   );
   const departmentOf = new Map(departments.rows.map((row) => [row.employee_id, row]));
+  // The latest sick leave assessment on or before the date for each employee (decision 564).
+  const expectations = await tx.query<{ employee_id: string; effective_from: string; days: string; reason: string | null }>(
+    `select distinct on (employee_id) employee_id::text, effective_from::text, days::text, reason
+       from payroll_sick_leave_expectations where effective_from <= $1
+      order by employee_id, effective_from desc, entry_number desc`,
+    [asAt],
+  );
+  const expectationOf = new Map(expectations.rows.filter((row) => !isZero(dec(row.days))).map((row) => [row.employee_id, row]));
   const rows: LeaveLiabilityRow[] = [];
   for (const employee of employees.rows) {
     const facts = await loadEmployeeFacts(tx, employee.id, await allSettings(tx, employee.id));
@@ -455,6 +473,9 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
       finishDate: null,
       finalPayDate: null,
       holidayPayOnFinishing: "0.00",
+      sickExpected: null,
+      sickDays: "0.00",
+      sickValue: "0.00",
       total: "0.00",
       kiwiSaverRate: enrolled ? toFixedString(dec(employee.kiwisaver_employer_rate), 2) : null,
       kiwiSaver: "0.00",
@@ -518,7 +539,20 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
       if (row.alternativeHolidays > 0 && isPositive(usualDays)) {
         row.alternativeValue = toFixedString(divide(mul(owp, dec(String(row.alternativeHolidays))), usualDays, 6), 2);
       }
-      row.total = toFixedString(sum([dec(row.annualValue), dec(row.runningEightPercent), dec(row.alternativeValue)]), 2);
+      const expected = expectationOf.get(facts.id);
+      if (expected && summary.sick) {
+        row.sickExpected = { days: toFixedString(dec(expected.days), 2), effectiveFrom: expected.effective_from, reason: expected.reason };
+        // Never more than the sick leave they have at the date (HL62).
+        const balance = isPositive(dec(summary.sick.days)) ? dec(summary.sick.days) : ZERO_DECIMAL;
+        const days = isPositive(sub(dec(expected.days), balance)) ? balance : dec(expected.days);
+        row.sickDays = toFixedString(days, 2);
+        if (!isPositive(usualDays)) {
+          row.problem = `${facts.name}'s expected sick leave can't be valued: their usual week has no days. Set their work pattern, or record 0 expected days.`;
+        } else {
+          row.sickValue = toFixedString(divide(mul(owp, days), usualDays, 6), 2);
+        }
+      }
+      row.total = toFixedString(sum([dec(row.annualValue), dec(row.runningEightPercent), dec(row.alternativeValue), dec(row.sickValue)]), 2);
       if (enrolled) row.kiwiSaver = kiwiSaverOnLiability(row.total, employee.kiwisaver_employer_rate);
     } catch (error) {
       if (!(error instanceof ValidationError)) throw error;
@@ -526,9 +560,9 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
     }
     rows.push(row);
   }
-  const zero = (): LiabilityFigures => ({ annualValue: "0.00", runningEightPercent: "0.00", alternativeValue: "0.00", holidayPayOnFinishing: "0.00", total: "0.00", kiwiSaver: "0.00", withKiwiSaver: "0.00" });
+  const zero = (): LiabilityFigures => ({ annualValue: "0.00", runningEightPercent: "0.00", alternativeValue: "0.00", holidayPayOnFinishing: "0.00", sickValue: "0.00", total: "0.00", kiwiSaver: "0.00", withKiwiSaver: "0.00" });
   const addTo = (figures: LiabilityFigures, row: LeaveLiabilityRow) => {
-    for (const field of ["annualValue", "runningEightPercent", "alternativeValue", "holidayPayOnFinishing", "total", "kiwiSaver"] as const) {
+    for (const field of ["annualValue", "runningEightPercent", "alternativeValue", "holidayPayOnFinishing", "sickValue", "total", "kiwiSaver"] as const) {
       figures[field] = toFixedString(add(dec(figures[field]), dec(row[field])), 2);
     }
     figures.withKiwiSaver = toFixedString(add(dec(figures.total), dec(figures.kiwiSaver)), 2);
@@ -568,6 +602,8 @@ export async function exportLeaveLiability(tx: OrgTx, input: { asAt?: unknown } 
       "Finished",
       "Final pay date",
       "Holiday pay on finishing",
+      "Expected sick days",
+      "Expected sick leave value",
       "Total",
       "Employer KiwiSaver rate",
       "Employer KiwiSaver",
@@ -587,6 +623,8 @@ export async function exportLeaveLiability(tx: OrgTx, input: { asAt?: unknown } 
       row.finishDate,
       row.finalPayDate,
       row.holidayPayOnFinishing,
+      row.sickDays,
+      row.sickValue,
       row.total,
       row.kiwiSaverRate,
       row.kiwiSaver,
@@ -606,6 +644,8 @@ export async function exportLeaveLiability(tx: OrgTx, input: { asAt?: unknown } 
       null,
       null,
       report.totals.holidayPayOnFinishing,
+      null,
+      report.totals.sickValue,
       report.totals.total,
       null,
       report.totals.kiwiSaver,

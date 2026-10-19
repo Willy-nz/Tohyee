@@ -1542,15 +1542,19 @@ as it returned them, so check them against the PDF (they match NZ IAS 19's
 paragraphs of the same numbers). The examples are **not approved by Jess**.
 
 188. **Sick leave stays out of the liability (question 1), documented, not
-     built.** Para 17: "a sick leave obligation is likely to be material
-     only if there is a formal or informal understanding that unused paid
-     sick leave may be taken as paid annual leave." The Holidays Act 2003
-     doesn't let sick leave be taken as annual holidays, so for most
-     organisations there's no material obligation and nothing to estimate.
-     An organisation whose own agreements do allow it has to journal its
-     own estimate by hand; the liability screen says so. Bereavement and
-     family violence leave don't accumulate (para 13(b): recognised when
-     the absence occurs), so they stay out too.
+     built.** Corrected on 19 October 2026 (#310 item 4; decision 564).
+     The reasoning was wrong: it read para 17's "a sick leave obligation is
+     likely to be material only if there is a formal or informal
+     understanding that unused paid sick leave may be taken as paid annual
+     leave" as the test. Paras 16-17 measure accumulating paid absences at
+     the additional amount expected to be paid because of the unused
+     entitlement carried over, and the standard's own example recognises
+     a liability for sick days expected to be used beyond the new
+     entitlement, with no annual leave conversion. Whether that's material
+     is each organisation's judgement, so Tohyee now takes an assessment
+     (decision 564) rather than leaving it out. Bereavement and family
+     violence leave don't accumulate (para 13(b): recognised when the
+     absence occurs), so they stay out.
 189. **Finished employees stay in the liability until their final pay is
      paid (question 2; HL53, HL57, HL58).** Para 11 recognises the benefits
      expected to be paid for service already given, "after deducting any
@@ -3284,13 +3288,16 @@ think is best").
      with that contact (from the aged reports' figures at the date) are
      eliminated from accounts receivable and payable. Marks with an
      organisation outside the group are ignored.
-441. **Eliminations never change profit or net assets**: each eliminated
-     amount is taken off its account, and what the two sides don't agree on
-     (per pair of organisations, intercompany accounts and what's owed each
-     compared on their own) goes back on an "Intercompany differences (check
-     these)" line (in the profit and loss; in the balance sheet as an asset
-     when a debit, a liability when a credit) with a notice naming the
-     amounts (CO9, question 1).
+441. **Automatic eliminations never change profit or net assets**: each
+     eliminated amount is taken off its account, and what the two sides
+     don't agree on (per pair of organisations, intercompany accounts and
+     what's owed each compared on their own) goes back on an "Intercompany
+     differences (check these)" line (in the profit and loss; in the balance
+     sheet as an asset when a debit, a liability when a credit) with a
+     notice naming the amounts (CO9, question 1). This is only the
+     automatic matching: an elimination adjustment (decision 443) can and
+     sometimes must change them, such as unrealised profit in stock (CO12,
+     decision 563). Corrected in #310.
 442. **Earnings follow the group's year** (the parent's year end): current
      year earnings are the translated profit since the group's year start,
      retained earnings (previous years) everything before, whatever each
@@ -5192,6 +5199,51 @@ testing) and #154's code signing (later, Jess).
      them. An OpenAPI 3.1 contract, a guide (docs/FARM-APPS.md) and a
      one-file soil sampling app. New: soil samples taken in the field
      (FA4). Photos aren't taken yet. FA1-FA8, not yet reviewed.
+562. **Provisional tax: the extension-of-time condition** (19 October 2026).
+     From issue #310; Jess chose "as IRD's page says". Two years ago plus
+     10% applies only with an extension of time to file (Tohyee's tax
+     agent's extension setting); without one, last year's RIT plus 5%
+     applies however late the return is, from Tohyee's estimate until IRD's
+     figure is typed (ITX67). Supersedes the open point in decision 558.
+563. **Unrealised profit is taken out by an adjustment** (19 October 2026).
+     #310 pointed out that decision 441 read as if consolidation never
+     changes profit, which isn't right when one group company sells to
+     another at a profit and the goods (or an asset) are still in the group.
+     Jess: "Fix wording and support it". Decision 441 now says it's only the
+     automatic matching. Tohyee doesn't work out unrealised profit itself
+     (it would need to know what's still on hand and its cost); the
+     accountant types an elimination adjustment, which reduces consolidated
+     profit and the asset (CO12, not yet reviewed).
+564. **Expected sick leave in the leave liability** (19 October 2026). #310
+     item 4; Jess: "Fix wording and add it" (decision 188 corrected).
+     Someone with payroll access records, per employee and from a date,
+     the sick days expected to be taken from carried-over leave beyond
+     new entitlements, with a reason (none needed for 0, which takes it
+     out). The latest assessment on or before the report's date applies;
+     it's never more than the employee's sick leave balance at that date,
+     valued at a usual day's pay (ordinary weekly pay ÷ usual days, as
+     alternative holidays, decision 153), and is part of each employee's
+     total, so the employer KiwiSaver (decision 190), the Departments and
+     the posting (decision 177) include it. Refused above the balance on
+     the assessment's date. Assessments are kept, never edited. Tohyee
+     doesn't estimate the days: that judgement (and whether it's material)
+     is the organisation's. Finished employees aren't paid sick leave, so
+     it doesn't apply to them. HL62, tenant migration 0160, not yet
+     reviewed.
+565. **Tax form cents stay dropped, marked unconfirmed** (19 October 2026).
+     #310 item 6 asked for decision 557's rule to be checked field by field.
+     Jess: "Keep dropping cents". What IRD's material says, as read on 17
+     October 2026: the IR4 form prints 30A in whole dollars, and neither
+     the IR4 nor the IR3 guide says whether to round or drop the cents;
+     the IR10 form wasn't checked for it. So the rule is Jess's choice,
+     not a confirmed IRD rule, for every field it covers: IR4 30A and 33B, IR3
+     worksheet box 1 and 39B, and every IR10 box. As built: cents are
+     dropped towards zero (a loss of 12,000.75 is -12,000), tax is worked
+     out on the whole dollars of taxable income, the boxes after 30A (IR4)
+     and box 1 (IR3) keep cents, and each IR10 box drops its own cents
+     with the checks using the figures with cents (ITX66, ITX68). IRD's
+     electronic filing specification wasn't read. Not yet reviewed by an
+     accountant.
 566. **Livestock is current or non-current per class** (19 October 2026).
      #310 item 2: decision 503's answer "non-current asset" for all
      livestock doesn't fit stock held for sale (NZ IAS 1 para 66). Jess:

@@ -33,4 +33,12 @@ describe("IR4 income and tax boxes (ITX50-ITX53, from IRD's 2026 IR4 form, not y
       "-12000.00", "-12000.00", "-12000.00", "0.00", "0.00", "credit", "5000.00", "refund",
     ]);
   });
+
+  it("ITX68 cents are dropped, not rounded, and a loss drops towards zero (decision 557; IRD hasn't confirmed)", () => {
+    const profit = ir4Return({ incomeYear: 2026, workpaper: paper("100000.99"), paidTowardsYear: dec("0") });
+    // 30A drops the cents; the tax is 28% of the whole dollars.
+    expect([profit.boxes["29"], profit.boxes["30A"], profit.boxes["30B"]]).toEqual(["100000.99", "100000.00", "28000.00"]);
+    const loss = ir4Return({ incomeYear: 2026, workpaper: paper("-12000.75"), paidTowardsYear: dec("0") });
+    expect([loss.boxes["29"], loss.boxes["30A"], loss.boxes["30B"]]).toEqual(["-12000.75", "-12000.00", "0.00"]);
+  });
 });
