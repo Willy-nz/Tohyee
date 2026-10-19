@@ -20,16 +20,16 @@ function rows(value: string | null): string {
 function SetupHelp({ callbackPath }: { callbackPath: string }) {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   return (
-    <details>
+    <details style={{ overflowWrap: "anywhere" }}>
       <summary>What an admin sets up in Google first</summary>
-      <ol>
+      <ol style={{ paddingLeft: 20 }}>
         <li>
           Tohyee signs in with the Google app saved under <Link href="/operations/settings/email">Settings › Email</Link>. Add{" "}
-          <code>{origin}{callbackPath}</code> to that app&apos;s authorised redirect URIs in Google Cloud.
+          <code style={{ wordBreak: "break-all" }}>{origin}{callbackPath}</code> to that app&apos;s authorised redirect URIs in Google Cloud.
         </li>
         <li>In the same Google Cloud project, enable the <strong>Google Analytics Data API</strong> and the <strong>Google Analytics Admin API</strong> (APIs &amp; Services › Library).</li>
         <li>
-          On the app&apos;s consent screen (Google Auth Platform › Data access), add the scope <code>https://www.googleapis.com/auth/analytics.readonly</code>.
+          On the app&apos;s consent screen (Google Auth Platform › Data access), add the scope <code style={{ wordBreak: "break-all" }}>https://www.googleapis.com/auth/analytics.readonly</code>.
         </li>
         <li>
           While the app&apos;s publishing status is <strong>Testing</strong>, only its test users can sign in, and Google ends each sign-in after 7 days, so
@@ -193,15 +193,15 @@ export function GoogleAnalyticsCard({
             ) : null}
           </p>
           {connection.propertyId ? (
-            <details>
+            <details style={{ overflowWrap: "anywhere" }}>
               <summary>View the {data.tables.length} tables</summary>
               <dl>
                 {data.tables.map((table) => (
                   <div key={table}>
                     <dt>
-                      {tableLabel(table)} <code>{table}</code>
+                      <strong>{tableLabel(table)}</strong> <code>{table}</code>
                     </dt>
-                    <dd>{tableDescription(table)}</dd>
+                    <dd style={{ margin: "0 0 8px" }}>{tableDescription(table)}</dd>
                   </div>
                 ))}
               </dl>
