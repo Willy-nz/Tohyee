@@ -521,6 +521,16 @@ that something happened.
   shown on the invoice and in the top bar with "Try again" (no automatic
   retry), and payouts are posted with their fees (without GST). Tested
   against a pretend GoCardless only.
+- **Farm calendar from email** (Farm › Farm calendar; #319, FC1-FC16,
+  decisions 570-572, tenant migration 0162, not yet reviewed): each member
+  connects their own Gmail or Microsoft mailbox, read-only, and Tohyee reads
+  vet visits, deliveries, stock trucks, contractor work, deadlines and
+  meetings out of the emails with fixed rules (no AI): Today, Week, Month
+  and Needs checking, filtered by farm and sender, with tentative wording
+  marked, moved and cancelled bookings followed, a link to each email, and
+  corrections. Private to the member who connects it. Not yet: attachments,
+  team sharing, repeating arrangements, adding to Google or Outlook
+  calendars.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with

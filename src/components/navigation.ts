@@ -145,6 +145,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
           { href: "/operations/farming/soil", label: "Soil tests" },
           { href: "/operations/farming/pasture", label: "Pasture and feed" },
+          { href: "/operations/farming/calendar", label: "Farm calendar" },
           { href: "/operations/farming/benchmarks", label: "Benchmarks" },
           { href: "/operations/farming/notebook", label: "Farm notebook" },
           { href: "/operations/farming/apps", label: "Farm apps" },

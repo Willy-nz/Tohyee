@@ -257,4 +257,10 @@ export async function removeMember(
       details: { userId, role: current, aiKeysRevoked: revoked.rowCount, farmAppKeysRevoked: appKeys.rowCount },
     });
   });
+  // Their farm mailboxes, and everything read from them (FC15).
+  const organisation = await getOrganisation(organisationId);
+  if (organisation && organisation.provisioningStatus === "ready" && organisation.migrationStatus === "current") {
+    const { disconnectMemberFarmMail } = await import("@/lib/farming/calendar");
+    await disconnectMemberFarmMail(organisation, userId);
+  }
 }

@@ -5290,3 +5290,37 @@ testing) and #154's code signing (later, Jess).
      (no change): depreciation recovered on an asset brought in with an
      opening ATV assumes the same business-use percentage in earlier years
      (ITX17).
+570. **A farm calendar from email** (19 October 2026). Issue #319 (written
+     by ChatGPT, whose code couldn't be published); Jess: "just look at the
+     issue and make it from that". Farm › Farm calendar: Today, Week,
+     Month and Needs checking, filtered by farm and sender, from emails in
+     a member's own Gmail or Microsoft mailbox. Fixed text rules, not AI
+     (FC2-FC12): New Zealand day-month dates worked out from the email's
+     day, times, tentative wording, moved and cancelled bookings (the
+     earlier item in the conversation or from the sender), quoted replies
+     skipped, each email read once, one item per kind and date. The
+     history (30-365 days, 90 by default) is read in steps, newest first,
+     150 emails a check, every 15 minutes (TOHYEE_FARM_MAIL_SCHEDULER=off
+     stops it). Neither Xero nor NetSuite has this, so the rules are
+     Claude's. Not included, as #319 said: attachments, team sharing,
+     repeating arrangements, writing to other calendars. FC1-FC16, tenant
+     migration 0162, not yet reviewed; not tried with a real mailbox.
+571. **Farm mail is private to the member who connects it** (19 October
+     2026), as Jess asked for email import ("mail must stay private to the
+     person who connects it"). Mailboxes and their items are only ever
+     read or changed by their own member: admins and owners don't see
+     them, and someone else's is "not found". Read-only scopes
+     (gmail.readonly, Mail.Read); the email's text is read and thrown
+     away, keeping only each arrangement's sentence, the subject, the
+     sender and a link, and only the id and date of emails with nothing in
+     them. Audit events don't name the mailbox. Disconnecting, or the
+     member leaving the organisation, deletes the tokens and everything
+     read. It uses the organisation's Google or Microsoft app (Settings ›
+     Email) with its own sign-in address, /api/farming/mail/callback, so a
+     farm mailbox token can't read calendars or send.
+572. **What a person checked stays as they left it** (19 October 2026).
+     Correcting or confirming an item marks it checked: it leaves Needs
+     checking, and a later email that would move or cancel it makes a new
+     item in Needs checking instead (FC14). People can hide an item ("Not
+     a farm arrangement") or say one replaces another. Moved and cancelled
+     items are kept, faded, so it's clear what happened.

@@ -1278,6 +1278,9 @@ Enforced by the app (and covered by tests):
   `crm_calendar_events`, linked through `crm_participant_links`.
   Disconnecting deletes those rows. Every 15 minutes, off with
   TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+  The farm calendar checks its own read-only mailboxes on the same
+  15-minute rhythm (`src/lib/farming/calendar.ts`, decision 570); turn it
+  off with TOHYEE_FARM_MAIL_SCHEDULER=off.
   Sales emails (decision 496) reuse a member's connection once
   `crm_connected_accounts.can_send` is set (a sign-in that also granted
   gmail.send or Mail.Send); `src/lib/crm/sales-email.ts` records each send

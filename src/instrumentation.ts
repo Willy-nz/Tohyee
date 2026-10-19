@@ -16,6 +16,9 @@
  * And the CRM mail sync, which syncs connected Gmail and Microsoft 365
  * mailboxes every 15 minutes (off with TOHYEE_MAIL_SYNC_SCHEDULER=off).
  *
+ * And the farm calendar's mailbox checks every 15 minutes (#319; off with
+ * TOHYEE_FARM_MAIL_SCHEDULER=off).
+ *
  * And the sales platform sync, which catches up connected Shopify stores'
  * customers and products every 15 minutes
  * (off with TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off).
@@ -137,6 +140,11 @@ export async function register() {
   if (process.env.TOHYEE_MAIL_SYNC_SCHEDULER !== "off") {
     const { startMailScheduler } = await import("@/lib/crm/mail/service");
     startMailScheduler();
+  }
+
+  if (process.env.TOHYEE_FARM_MAIL_SCHEDULER !== "off") {
+    const { startFarmMailScheduler } = await import("@/lib/farming/calendar");
+    startFarmMailScheduler();
   }
 
   if (process.env.TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER !== "off") {
