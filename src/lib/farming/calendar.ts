@@ -295,7 +295,7 @@ async function earlierItem(tx: OrgTx, accountId: string, mail: FarmMail, arrange
   const columns = "id::text, kind, title, item_date::text, thread_id, sender_email, checked_at::text";
   const base = "account_id = $1 and kind = $2 and state = 'open' and change <> 'cancelled' and external_id <> $3";
   if (mail.threadId) {
-    const inThread = await tx.query<ItemRow>(`select ${columns} from farm_calendar_items where ${base} and thread_id = $4 order by sent_at desc, id desc limit 1`, [
+    const inThread = await tx.query<ItemRow>(`select ${columns} from farm_calendar_items where ${base} and thread_id = $4 order by sent_at desc, farm_calendar_items.id desc limit 1`, [
       accountId,
       arrangement.kind,
       mail.externalId,
@@ -305,7 +305,7 @@ async function earlierItem(tx: OrgTx, accountId: string, mail: FarmMail, arrange
   }
   const fromSender = await tx.query<ItemRow>(
     `select ${columns} from farm_calendar_items where ${base} and lower(sender_email) = lower($4) and item_date >= $5
-      order by ($6::date is not null and item_date = $6) desc, sent_at desc, id desc limit 1`,
+      order by ($6::date is not null and item_date = $6) desc, sent_at desc, farm_calendar_items.id desc limit 1`,
     [accountId, arrangement.kind, mail.externalId, mail.from.email, nzDay(mail.sentAt), arrangement.change === "cancelled" ? arrangement.date : null],
   );
   return fromSender.rows[0] ?? null;
@@ -314,7 +314,7 @@ async function earlierItem(tx: OrgTx, accountId: string, mail: FarmMail, arrange
 async function farmFor(tx: OrgTx, account: AccountRow, arrangement: Arrangement): Promise<string | null> {
   if (arrangement.farmIds.length === 1) return arrangement.farmIds[0];
   if (arrangement.farmIds.length > 1) return null;
-  const active = await tx.query<{ id: string }>("select id::text from farms where is_active order by id limit 2");
+  const active = await tx.query<{ id: string }>("select id::text from farms where is_active order by farms.id limit 2");
   if (active.rows.length === 1) return active.rows[0].id;
   return account.default_farm_id;
 }
@@ -478,7 +478,7 @@ export async function checkFarmMailbox(organisation: OrganisationRecord, account
       else if (history.oldest && history.oldest < backfillBefore) backfillBefore = history.oldest;
     }
     return await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
-      const farms = (await tx.query<{ id: string; name: string }>("select id::text, name from farms where is_active order by id")).rows;
+      const farms = (await tx.query<{ id: string; name: string }>("select id::text, name from farms where is_active order by farms.id")).rows;
       let items = 0;
       for (const mail of mails.sort((a, b) => a.sentAt.localeCompare(b.sentAt))) {
         const marked = await tx.query("insert into farm_mail_seen (account_id, external_id, sent_at) values ($1, $2, $3) on conflict do nothing", [account.id, mail.externalId, mail.sentAt]);
@@ -538,7 +538,7 @@ export async function checkAllFarmMail(): Promise<{ checked: number; failed: num
         ids = await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
           const on = await tx.query<{ enabled: boolean }>("select enabled from farming_settings where id = true");
           if (on.rows[0]?.enabled !== true) return [];
-          return (await tx.query<{ id: string }>("select id::text from farm_mail_accounts where status = 'active' order by last_check_at nulls first")).rows.map((row) => row.id);
+          return (await tx.query<{ id: string }>("select id::text from farm_mail_accounts where status = 'active' order by last_check_at nulls first, farm_mail_accounts.id")).rows.map((row) => row.id);
         });
       } catch {
         continue;
