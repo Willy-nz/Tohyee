@@ -1,6 +1,6 @@
 "use client";
 
-import { type InputHTMLAttributes, useEffect, useRef, useState } from "react";
+import { type InputHTMLAttributes, useEffect, useId, useRef, useState } from "react";
 import { isIsoDate, parseDateEntry, showDateEntry } from "@/lib/date-entry";
 import { todayInBrowser } from "@/lib/format";
 
@@ -14,14 +14,21 @@ type DateInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "valu
 };
 
 const HELP = "Type a date like 14/10/2026, 1410, +14 (days) or +20m (20th of next month)";
+const PICKER_KEYS = "Alt+Down opens the calendar";
 
 /**
  * A date field for fast keyboard entry (#258): type it day first or in
  * shorthand, and it's read when you leave the field or press Enter. The
- * calendar button opens the browser's own date picker.
+ * calendar button opens the browser's own date picker; from the keyboard,
+ * Alt+Down does (the button stays out of the tab order so typing dates stays
+ * fast). A date that can't be read says so under the field once you leave
+ * it (#323 finding 6).
  */
 export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, className, disabled, required, min, max, ...rest }: DateInputProps) {
   const [text, setText] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
+  const hintId = useId();
+  const errorId = useId();
   const picker = useRef<HTMLInputElement | null>(null);
   const field = useRef<HTMLInputElement | null>(null);
   const shown = text ?? showDateEntry(value);
@@ -32,6 +39,17 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
   useEffect(() => {
     field.current?.setCustomValidity(problem);
   }, [problem]);
+  const openPicker = () => {
+    const input = picker.current;
+    if (!input) return;
+    try {
+      input.showPicker();
+    } catch {
+      input.focus();
+    }
+  };
+  // Shown under the field once it's left (while typing, only the border says so).
+  const showProblem = invalid && !focused;
   const commit = () => {
     if (text === null) return;
     if (text.trim() === "") {
@@ -45,7 +63,8 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
     if (parsed !== value) onChange({ target: { value: parsed } });
   };
   return (
-    <span style={{ display: "inline-flex", alignItems: "stretch", gap: 4, maxWidth: "100%", ...style }} className={className}>
+    <span style={{ display: "inline-flex", flexDirection: "column", gap: 2, maxWidth: "100%", ...style }} className={className}>
+    <span style={{ display: "inline-flex", alignItems: "stretch", gap: 4, maxWidth: "100%" }}>
       <input
         {...rest}
         ref={field}
@@ -56,18 +75,28 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
         placeholder={rest.placeholder ?? "dd/mm/yyyy"}
         title={problem || HELP}
         aria-invalid={invalid || undefined}
+        aria-describedby={[rest["aria-describedby"], hintId, showProblem ? errorId : null].filter(Boolean).join(" ")}
         disabled={disabled}
         required={required}
         value={shown}
         size={11}
         style={{ minWidth: 0, flex: "1 1 auto", ...(invalid ? { borderColor: "var(--danger, #b42318)" } : {}) }}
         onChange={(event) => setText(event.target.value)}
+        onFocus={(event) => {
+          setFocused(true);
+          rest.onFocus?.(event);
+        }}
         onBlur={(event) => {
+          setFocused(false);
           commit();
           onBlur?.(event);
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") commit();
+          if (event.key === "ArrowDown" && event.altKey && !disabled) {
+            event.preventDefault();
+            openPicker();
+          }
           if (event.key === "Escape" && text !== null) {
             setText(null);
             event.preventDefault();
@@ -82,15 +111,7 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
         title="Choose a date"
         disabled={disabled}
         style={{ position: "relative", padding: "0 8px", borderRadius: 8, border: "1px solid var(--border, #c4ccd8)", background: "var(--surface, #fff)", color: "inherit", cursor: "pointer" }}
-        onClick={() => {
-          const input = picker.current;
-          if (!input) return;
-          try {
-            input.showPicker();
-          } catch {
-            input.focus();
-          }
-        }}
+        onClick={openPicker}
       >
         <span aria-hidden="true">📅</span>
         <input
@@ -108,6 +129,15 @@ export function DateInput({ value, onChange, base, onBlur, onKeyDown, style, cla
           style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", pointerEvents: "none", border: 0, padding: 0 }}
         />
       </button>
+    </span>
+      <span id={hintId} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" }}>
+        {HELP}. {PICKER_KEYS}.
+      </span>
+      {showProblem ? (
+        <span id={errorId} role="alert" style={{ color: "var(--danger-text, #b42318)", fontSize: "var(--text-sm, 0.875rem)" }}>
+          {problem}
+        </span>
+      ) : null}
     </span>
   );
 }

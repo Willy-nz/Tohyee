@@ -102,27 +102,30 @@
 .meeting { --kind: #5f6f80; }
 
 .month {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  border-top: 1px solid var(--border);
-  border-left: 1px solid var(--border);
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 
 .weekday {
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
   background: var(--surface-sunken);
   padding: 4px 6px;
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 600;
+  text-align: left;
+}
+
+.weekday abbr {
+  text-decoration: none;
 }
 
 .cell {
-  min-height: 6.5rem;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  height: 6.5rem;
+  border: 1px solid var(--border);
   padding: 4px;
+  vertical-align: top;
 }
 
 .otherMonth {
@@ -179,6 +182,78 @@
 
 .monthList {
   display: none;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header > :first-child {
+  flex: 1 1 auto;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Details beside the schedule on wide screens (finding 4 of #323); on narrower ones they replace it, with Back. */
+.layout {
+  display: block;
+}
+
+.panelFocus:focus {
+  outline: none;
+}
+
+.panelFocus:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.back {
+  margin-bottom: 8px;
+}
+
+@media (min-width: 1024px) {
+  .layout.hasSelection {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .detail {
+    position: sticky;
+    top: 72px;
+    max-height: calc(100vh - 88px);
+    overflow-y: auto;
+  }
+
+  .back {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .layout.hasSelection .schedule {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item,
+  .chip {
+    transition: none;
+  }
 }
 
 @media (max-width: 767px) {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -58,13 +58,32 @@ function range(view: View, anchor: string): { from: string; to: string; label: s
   return { from: mondayOf(monthStart(anchor)), to: addDays(mondayOf(monthEnd(anchor)), 6), label: monthLabel(anchor) };
 }
 
-function stateBadge(item: CalendarItem) {
+function badges(item: CalendarItem) {
   if (item.state === "moved") return <Badge tone="neutral">{item.stateNote ?? "Moved"}</Badge>;
   if (item.state === "cancelled") return <Badge tone="red">Cancelled</Badge>;
-  if (item.needsChecking) return <Badge tone="amber">Needs checking</Badge>;
-  if (item.checked) return <Badge tone="green">Checked</Badge>;
-  if (item.tentative) return <Badge tone="blue">Tentative</Badge>;
-  return null;
+  return (
+    <>
+      {item.needsChecking ? <Badge tone="amber">Needs checking</Badge> : item.checked ? <Badge tone="green">Checked by you</Badge> : <Badge tone="neutral">From email</Badge>}
+      {item.tentative && !item.checked ? <Badge tone="blue">Tentative</Badge> : null}
+      {!item.startTime && item.date ? <span>No time given</span> : null}
+    </>
+  );
+}
+
+type Loaded<T> = { data: T | null; error: string | null; loading: boolean; reload: () => void };
+
+/** One request's state (finding 1 of #323): an error with Retry, never an empty "nothing here" while loading or after a failure. */
+function LoadState<T>({ result, children }: { result: Loaded<T>; children: (data: T) => ReactNode }) {
+  if (result.error) {
+    return (
+      <Notice tone="error">
+        Couldn&apos;t load the calendar: {result.error}{" "}
+        <Button size="small" variant="secondary" onClick={result.reload}>Retry</Button>
+      </Notice>
+    );
+  }
+  if (!result.data) return <p className={ui.muted} role="status">Loading…</p>;
+  return <>{children(result.data)}</>;
 }
 
 export function FarmCalendarHome({ organisationId }: { organisationId: string }) {
@@ -73,7 +92,8 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
   const [anchor, setAnchor] = useState(todayInBrowser());
   const [farmId, setFarmId] = useState("");
   const [sender, setSender] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<CalendarItem | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
   const mailboxes = useApiData<{ mailboxes: FarmMailbox[] }>("/api/farming/mail", { organisationId });
   const shown = range(view === "check" ? "week" : view, anchor);
@@ -93,8 +113,14 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
   const connected = searchParams.get("connected");
   const connectError = searchParams.get("error");
   const activeFarms = (farms.data?.farms ?? []).filter((farm) => farm.isActive);
-  const items = view === "check" ? (toCheck.data?.items ?? []) : (calendar.data?.items ?? []);
-  const selected = items.find((item) => item.id === selectedId) ?? null;
+  const active = view === "check" ? toCheck : calendar;
+  const items = active.data?.items ?? null;
+  // The selection stays while its item still exists, including while the list reloads after a change.
+  const selected = chosen ? (items ? (items.find((item) => item.id === chosen.id) ?? null) : chosen) : null;
+  const selectedId = selected?.id ?? null;
+  const setSelectedId = (id: string | null) => setChosen(id ? (items?.find((item) => item.id === id) ?? null) : null);
+  const problems = (mailboxes.data?.mailboxes ?? []).filter((mailbox) => mailbox.status === "paused" || mailbox.lastError);
+  const noMailbox = mailboxes.data !== null && mailboxes.data.mailboxes.length === 0;
   const step = (direction: 1 | -1) => {
     if (view === "today") setAnchor(addDays(anchor, direction));
     else if (view === "week") setAnchor(addDays(anchor, 7 * direction));
@@ -103,26 +129,47 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
       setAnchor(new Date(Date.UTC(year, month - 1 + direction, 1)).toISOString().slice(0, 10));
     }
   };
+  /** Back to the item that was chosen, so keyboard and screen reader users keep their place (finding 2). */
+  const close = () => {
+    const id = selectedId;
+    setSelectedId(null);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-item-id="${id}"]`)?.focus());
+  };
 
   return (
     <>
       {connected ? <Notice tone="success">{connected} is connected. Its emails are read now and every 15 minutes.</Notice> : null}
       {connectError ? <Notice tone="error">{connectError}</Notice> : null}
-      <div className={ui.tabs} role="tablist" aria-label="Calendar views">
-        {VIEWS.map((entry) => (
-          <button key={entry} type="button" role="tab" aria-selected={entry === view} className={`${ui.tab} ${entry === view ? ui.tabActive : ""}`} onClick={() => setView(entry)}>
-            {VIEW_LABELS[entry]}
-            {entry === "check" && calendar.data?.needsChecking ? ` (${calendar.data.needsChecking})` : ""}
-          </button>
-        ))}
+      {problems.map((mailbox) => (
+        <Notice key={mailbox.id} tone="warning">
+          {mailbox.email}: {mailbox.status === "paused" ? "paused after failed checks. Connect it again under Mailbox settings." : `the last check didn't work (${mailbox.lastError}).`}
+        </Notice>
+      ))}
+      <div className={styles.header}>
+        <div className={ui.tabs} role="group" aria-label="Calendar view">
+          {VIEWS.map((entry) => (
+            <button key={entry} type="button" aria-pressed={entry === view} className={`${ui.tab} ${entry === view ? ui.tabActive : ""}`} onClick={() => setView(entry)}>
+              {VIEW_LABELS[entry]}
+              {entry === "check" && calendar.data?.needsChecking ? ` (${calendar.data.needsChecking})` : ""}
+            </button>
+          ))}
+        </div>
+        <Button variant="secondary" size="small" aria-expanded={settingsOpen} aria-controls="farm-mailbox-settings" onClick={() => setSettingsOpen(!settingsOpen)}>
+          Mailbox settings
+        </Button>
       </div>
+      {settingsOpen || noMailbox ? (
+        <div id="farm-mailbox-settings">
+          <Mailboxes organisationId={organisationId} mailboxes={mailboxes.data?.mailboxes ?? null} error={mailboxes.error} farms={activeFarms} onChanged={reload} />
+        </div>
+      ) : null}
       <div className={styles.toolbar}>
         {view !== "check" ? (
           <div className={styles.range}>
-            <Button variant="secondary" size="small" onClick={() => step(-1)} aria-label="Earlier">‹</Button>
+            <Button variant="secondary" size="small" onClick={() => step(-1)} aria-label={`Earlier ${view === "month" ? "month" : view === "week" ? "week" : "day"}`}>‹</Button>
             <Button variant="secondary" size="small" onClick={() => setAnchor(todayInBrowser())}>Today</Button>
-            <Button variant="secondary" size="small" onClick={() => step(1)} aria-label="Later">›</Button>
-            <span className={styles.rangeLabel}>{shown.label}</span>
+            <Button variant="secondary" size="small" onClick={() => step(1)} aria-label={`Later ${view === "month" ? "month" : view === "week" ? "week" : "day"}`}>›</Button>
+            <span className={styles.rangeLabel} aria-live="polite">{shown.label}</span>
           </div>
         ) : null}
         <Field label="Farm">
@@ -132,25 +179,34 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
             <option value="none">No farm</option>
           </select>
         </Field>
-        <Field label="From">
+        <Field label="Sender" hint="Who the email came from, not who does the work.">
           <select value={sender} onChange={(event) => setSender(event.target.value)}>
             <option value="">Anyone</option>
             {(calendar.data?.senders ?? []).map((entry) => <option key={entry.email} value={entry.email}>{entry.name ? `${entry.name} (${entry.email})` : entry.email}</option>)}
           </select>
         </Field>
       </div>
-      {calendar.error ? <Notice tone="error">{calendar.error}</Notice> : null}
-      {view === "check" ? (
-        <CheckList items={items} loading={toCheck.loading} selectedId={selectedId} onSelect={setSelectedId} />
-      ) : view === "month" ? (
-        <MonthGrid anchor={anchor} from={shown.from} to={shown.to} items={items} selectedId={selectedId} onSelect={setSelectedId} />
-      ) : (
-        <Agenda from={shown.from} to={shown.to} items={items} selectedId={selectedId} onSelect={setSelectedId} loading={calendar.loading} />
-      )}
-      {selected ? (
-        <ItemPanel key={selected.id} organisationId={organisationId} item={selected} farms={activeFarms} others={(calendar.data?.items ?? []).filter((other) => other.id !== selected.id && other.state === "open")} onClose={() => setSelectedId(null)} onChanged={reload} />
-      ) : null}
-      <Mailboxes organisationId={organisationId} mailboxes={mailboxes.data?.mailboxes ?? null} error={mailboxes.error} farms={activeFarms} onChanged={reload} />
+      <p className={ui.muted}>Private to you: what&apos;s read from your email isn&apos;t shown to anyone else in the organisation.</p>
+      <div className={`${styles.layout} ${selected ? styles.hasSelection : ""}`}>
+        <div className={styles.schedule}>
+          <LoadState result={active as Loaded<{ items: CalendarItem[] }>}>
+            {(data) =>
+              view === "check" ? (
+                <CheckList items={data.items} selectedId={selectedId} onSelect={setSelectedId} />
+              ) : view === "month" ? (
+                <MonthGrid anchor={anchor} from={shown.from} to={shown.to} items={data.items} selectedId={selectedId} onSelect={setSelectedId} />
+              ) : (
+                <Agenda from={shown.from} to={shown.to} items={data.items} selectedId={selectedId} onSelect={setSelectedId} />
+              )
+            }
+          </LoadState>
+        </div>
+        {selected ? (
+          <aside className={styles.detail} aria-label="Selected item">
+            <ItemPanel key={selected.id} organisationId={organisationId} item={selected} farms={activeFarms} others={(calendar.data?.items ?? []).filter((other) => other.id !== selected.id && other.state === "open")} onClose={close} onChanged={reload} />
+          </aside>
+        ) : null}
+      </div>
     </>
   );
 }
@@ -158,24 +214,24 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
 function ItemButton({ item, selected, onSelect }: { item: CalendarItem; selected: boolean; onSelect: (id: string) => void }) {
   const classes = [styles.item, styles[item.kind], selected ? styles.selected : "", item.state !== "open" ? styles.faded : "", item.state === "cancelled" ? styles.struck : ""].join(" ");
   return (
-    <button type="button" className={classes} onClick={() => onSelect(item.id)} aria-pressed={selected}>
+    <button type="button" className={classes} onClick={() => onSelect(item.id)} aria-pressed={selected} data-item-id={item.id}>
       <span className={styles.time}>{timeText(item)}</span>
       <span className={styles.title}>{item.title}</span>
       <span className={styles.meta}>
         <span>{FARM_MAIL_KIND_LABELS[item.kind]}</span>
         {item.farmName ? <span>{item.farmName}</span> : null}
-        <span>{item.senderName ?? item.senderEmail}</span>
-        {stateBadge(item)}
+        <span>Sender: {item.senderName ?? item.senderEmail}</span>
+        {badges(item)}
       </span>
     </button>
   );
 }
 
-function Agenda({ from, to, items, selectedId, onSelect, loading }: { from: string; to: string; items: CalendarItem[]; selectedId: string | null; onSelect: (id: string) => void; loading: boolean }) {
+function Agenda({ from, to, items, selectedId, onSelect }: { from: string; to: string; items: CalendarItem[]; selectedId: string | null; onSelect: (id: string) => void }) {
   const today = todayInBrowser();
   const days: string[] = [];
   for (let day = from; day <= to; day = addDays(day, 1)) days.push(day);
-  if (items.length === 0) return loading ? <p className={ui.muted}>Loading…</p> : <Empty>Nothing on the calendar for these days.</Empty>;
+  if (items.length === 0) return <Empty>Nothing on the calendar for these days.</Empty>;
   return (
     <div>
       {days.map((day) => {
@@ -196,39 +252,67 @@ function Agenda({ from, to, items, selectedId, onSelect, loading }: { from: stri
   );
 }
 
+/** The month as a plain table: rows of weeks, a header row of weekdays (finding 2: native semantics rather than a half-built grid). */
 function MonthGrid({ anchor, from, to, items, selectedId, onSelect }: { anchor: string; from: string; to: string; items: CalendarItem[]; selectedId: string | null; onSelect: (id: string) => void }) {
-  const days: string[] = [];
-  for (let day = from; day <= to; day = addDays(day, 1)) days.push(day);
+  const weeks: string[][] = [];
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    if (weekday(day) === 0) weeks.push([]);
+    weeks[weeks.length - 1].push(day);
+  }
   const month = anchor.slice(0, 7);
+  const today = todayInBrowser();
   return (
     <>
-      <div className={styles.month} role="grid" aria-label={monthLabel(anchor)}>
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => <div key={name} className={styles.weekday} role="columnheader">{name}</div>)}
-        {days.map((day) => (
-          <div key={day} className={`${styles.cell} ${day.slice(0, 7) !== month ? styles.otherMonth : ""} ${day === todayInBrowser() ? styles.todayCell : ""}`} role="gridcell" aria-label={longDay(day)}>
-            <div className={styles.cellDate}>{Number(day.slice(8))}</div>
-            {items.filter((item) => item.date === day).map((item) => (
-              <button key={item.id} type="button" className={`${styles.chip} ${styles[item.kind]} ${item.state !== "open" ? styles.faded : ""} ${item.id === selectedId ? styles.selected : ""}`} onClick={() => onSelect(item.id)} title={`${item.title} (${timeText(item)})`}>
-                {item.startTime ? `${time12(item.startTime)} ` : ""}{item.title}
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
+      <table className={styles.month}>
+        <caption className={styles.visuallyHidden}>{monthLabel(anchor)}</caption>
+        <thead>
+          <tr>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((name) => <th key={name} scope="col" className={styles.weekday}><abbr title={name}>{name.slice(0, 3)}</abbr></th>)}</tr>
+        </thead>
+        <tbody>
+          {weeks.map((week) => (
+            <tr key={week[0]}>
+              {week.map((day) => {
+                const dayItems = items.filter((item) => item.date === day);
+                return (
+                  <td key={day} className={`${styles.cell} ${day.slice(0, 7) !== month ? styles.otherMonth : ""} ${day === today ? styles.todayCell : ""}`}>
+                    <div className={styles.cellDate}>
+                      <span aria-hidden="true">{Number(day.slice(8))}</span>
+                      <span className={styles.visuallyHidden}>{longDay(day)}{day === today ? ", today" : ""}{dayItems.length ? `, ${dayItems.length} item${dayItems.length === 1 ? "" : "s"}` : ""}</span>
+                    </div>
+                    {dayItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        data-item-id={item.id}
+                        aria-pressed={item.id === selectedId}
+                        className={`${styles.chip} ${styles[item.kind]} ${item.state !== "open" ? styles.faded : ""} ${item.id === selectedId ? styles.selected : ""}`}
+                        onClick={() => onSelect(item.id)}
+                        title={`${item.title} (${timeText(item)})`}
+                      >
+                        {item.startTime ? `${time12(item.startTime)} ` : ""}{item.title}
+                      </button>
+                    ))}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div className={styles.monthList}>
-        <Agenda from={monthStart(anchor)} to={monthEnd(anchor)} items={items.filter((item) => item.date?.startsWith(month))} selectedId={selectedId} onSelect={onSelect} loading={false} />
+        <Agenda from={monthStart(anchor)} to={monthEnd(anchor)} items={items.filter((item) => item.date?.startsWith(month))} selectedId={selectedId} onSelect={onSelect} />
       </div>
     </>
   );
 }
 
-function CheckList({ items, loading, selectedId, onSelect }: { items: CalendarItem[]; loading: boolean; selectedId: string | null; onSelect: (id: string) => void }) {
-  if (items.length === 0) return loading ? <p className={ui.muted}>Loading…</p> : <Empty>Nothing to check. Items with no exact date, or something unclear, show here.</Empty>;
+function CheckList({ items, selectedId, onSelect }: { items: CalendarItem[]; selectedId: string | null; onSelect: (id: string) => void }) {
+  if (items.length === 0) return <Empty>Nothing to check. Items with no exact date, or something unclear, show here.</Empty>;
   return (
     <ul className={styles.items}>
       {items.map((item) => (
         <li key={item.id}>
-          <ItemButton item={{ ...item }} selected={item.id === selectedId} onSelect={onSelect} />
+          <ItemButton item={item} selected={item.id === selectedId} onSelect={onSelect} />
           <ul className={styles.reasons}>{item.checkReasons.length ? item.checkReasons.map((reason) => <li key={reason}>{reason}</li>) : <li>No exact date</li>}</ul>
         </li>
       ))}
@@ -248,8 +332,11 @@ function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: 
   const [error, setError] = useState<string | null>(null);
   const editable = item.state === "open";
   const panel = useRef<HTMLDivElement>(null);
-  // The panel is below the calendar: bring it into view when an item is chosen.
-  useEffect(() => panel.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), []);
+  // Focus moves to the details when an item is chosen (finding 2); on a phone they replace the schedule.
+  useEffect(() => {
+    panel.current?.focus({ preventScroll: true });
+    panel.current?.scrollIntoView({ block: "nearest" });
+  }, []);
   const patch = async (body: Record<string, unknown>) => {
     setBusy(true);
     setError(null);
@@ -267,7 +354,8 @@ function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: 
     void patch({ date, startTime, endTime, kind, title, farmId: farmId || null });
   };
   return (
-    <div ref={panel}>
+    <div ref={panel} tabIndex={-1} className={styles.panelFocus} aria-label={`${item.title}, details`}>
+    <Button variant="secondary" size="small" className={styles.back} onClick={onClose}>‹ Back to the calendar</Button>
     <Card
       title={item.title}
       description={`${FARM_MAIL_KIND_LABELS[item.kind]}${item.date ? `, ${longDay(item.date)}` : ", no date yet"}${item.startTime ? `, ${timeText(item)}` : ""}`}
@@ -284,7 +372,7 @@ function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: 
       {item.alsoSeen ? <p className={ui.muted}>Also in {item.alsoSeen} later email{item.alsoSeen === 1 ? "" : "s"}.</p> : null}
       {editable ? (
         <form onSubmit={save}>
-          <div className={ui.grid4}>
+          <div className={ui.grid2}>
             <Field label="Date"><DateInput value={date} onChange={(event) => setDate(event.target.value)} /></Field>
             <Field label="Start"><input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
             <Field label="End"><input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
