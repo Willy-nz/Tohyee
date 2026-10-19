@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ConnectorPicker, type Connector } from "@/components/analytics/studio";
+import { ConnectorPicker, type Connector, isDatabaseConnector } from "@/components/analytics/studio";
+import { DatabaseConnector, DatabaseSourceSetup } from "@/components/analytics-databases";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -68,6 +69,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
   const [connector, setConnector] = useState<Connector | null>(null);
   const [search, setSearch] = useState("");
   const [setUp, setSetUp] = useState<{ file: string; source?: AnalyticsSource } | null>(null);
+  const [databaseEdit, setDatabaseEdit] = useState<AnalyticsSource | null>(null);
 
   if (!modules) return <p className={ui.muted}>Loading…</p>;
   if (!modules.analytics) {
@@ -98,13 +100,13 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         {data.canManage ? <Button variant={tab === "connect" ? "primary" : "secondary"} aria-pressed={tab === "connect"} onClick={() => setTab("connect")}>Add data source</Button> : null}
         <Button variant={tab === "history" ? "primary" : "secondary"} aria-pressed={tab === "history"} onClick={() => setTab("history")}>Load history</Button>
       </div>
-      {tab === "connect" && data.canManage ? <ConnectorPicker selected={connector} onSelect={(next) => { setConnector(next); setSetUp(null); }} /> : null}
+      {tab === "connect" && data.canManage ? <ConnectorPicker selected={connector} onSelect={(next) => { setConnector(next); setSetUp(null); setDatabaseEdit(null); }} /> : null}
       {tab === "connect" && (connector === "csv" || connector === "excel" || connector === "email") && !data.folder.chosen ? (
         <Notice tone="warning">
           This organisation doesn&apos;t have an analytics folder yet. A server admin chooses it on the server computer, in the
           server settings under Analytics folders. Tohyee only reads files in that folder.
         </Notice>
-      ) : tab === "connect" && connector && connector !== "books" && !data.folder.readable ? (
+      ) : tab === "connect" && connector && connector !== "books" && !isDatabaseConnector(connector) && !data.folder.readable ? (
         <Notice tone="error">Tohyee can&apos;t open this organisation&apos;s analytics folder. A server admin needs to check it still exists.</Notice>
       ) : null}
 
@@ -124,12 +126,49 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         />
       ) : null}
 
+      {tab !== "history" && databaseEdit?.database && data.canManage ? (
+        <DatabaseSourceSetup
+          key={databaseEdit.id}
+          organisationId={organisationId}
+          connection={{ id: databaseEdit.database.connectionId, name: databaseEdit.database.connectionName, engine: databaseEdit.database.engine }}
+          existing={databaseEdit}
+          takenTables={data.sources.filter((source) => source.id !== databaseEdit.id).map((source) => source.tableName)}
+          onDone={() => {
+            setDatabaseEdit(null);
+            setTab("sources");
+            overview.reload();
+          }}
+          onCancel={() => setDatabaseEdit(null)}
+        />
+      ) : null}
+
+      {tab === "connect" && isDatabaseConnector(connector) && data.canManage ? (
+        <DatabaseConnector
+          key={`${organisationId}-${connector}`}
+          organisationId={organisationId}
+          engine={connector}
+          takenTables={data.sources.map((source) => source.tableName)}
+          onDone={() => {
+            setTab("sources");
+            overview.reload();
+          }}
+        />
+      ) : null}
+
       {tab === "sources" || (tab === "connect" && connector === "books") ? <BooksCard organisationId={organisationId} data={data} onChanged={overview.reload} /> : null}
 
       {tab === "sources" ? <>
       <Field label="Search data sources"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, file or table…" /></Field>
       {search && !visibleSources.length ? <p role="status">No sources match your search.</p> : null}
-      <SourcesCard organisationId={organisationId} data={{ ...data, sources: visibleSources }} onEdit={(source) => setSetUp({ file: source.fileName, source })} onChanged={overview.reload} />
+      <SourcesCard organisationId={organisationId} data={{ ...data, sources: visibleSources }} onEdit={(source) => {
+        if (source.database) {
+          setSetUp(null);
+          setDatabaseEdit(source);
+        } else {
+          setDatabaseEdit(null);
+          setSetUp({ file: source.fileName, source });
+        }
+      }} onChanged={overview.reload} />
       </> : null}
 
       {tab === "connect" && connector === "email" && data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
@@ -314,7 +353,9 @@ function SourcesCard({
   }
 
   async function remove(source: AnalyticsSource) {
-    const ok = await confirm("Its loaded data is removed too (the file in the folder isn't touched). The load history stays.", {
+    const ok = await confirm(source.database
+      ? "Its loaded data is removed too (nothing in the database changes). The load history stays."
+      : "Its loaded data is removed too (the file in the folder isn't touched). The load history stays.", {
       title: `Remove ${source.name}?`,
       confirmLabel: "Remove",
       danger: true,
@@ -333,10 +374,10 @@ function SourcesCard({
   }
 
   return (
-    <Card title="Sources" description="Each source loads one file into one table. Money columns load as exact decimals.">
+    <Card title="Sources" description="Each source loads one file, or one database table, view or query, into one table. Money columns load as exact decimals.">
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {data.sources.length === 0 ? (
-        <Empty>{data.canManage ? "No sources yet. Choose Add data source to connect a file." : "No sources yet. An admin sets them up."}</Empty>
+        <Empty>{data.canManage ? "No sources yet. Choose Add data source to connect a file or a database." : "No sources yet. An admin sets them up."}</Empty>
       ) : (
         <div className={ui.tableWrap}>
           <table className={ui.table}>

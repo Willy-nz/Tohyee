@@ -26,6 +26,8 @@
     "exceljs": "^4.4.0",
     "geographiclib-geodesic": "^2.2.0",
     "imapflow": "^2.2.1",
+    "mssql": "^12.7.10",
+    "mysql2": "^3.24.6",
     "next": "16.3.8",
     "nodemailer": "^10.0.11",
     "pdf-lib": "^1.17.1",
@@ -38,6 +40,7 @@
   },
   "devDependencies": {
     "@types/mailparser": "^3.9.0",
+    "@types/mssql": "^12.3.0",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",

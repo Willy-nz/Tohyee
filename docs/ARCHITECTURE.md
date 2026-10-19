@@ -1744,6 +1744,15 @@ run time.
   server-side cursors (`declare … cursor` / `fetch`, `BOOKS_BATCH_SIZE` rows
   at a time) inside its read-only transaction and appends each batch to
   DuckDB as it arrives, so its memory doesn't grow with the ledger.
+  Database sources (decisions 602-605, `src/lib/analytics/databases/`) read
+  an external SQL Server, PostgreSQL or MySQL database through `mssql`,
+  `pg` or `mysql2`, loaded only on the server when first used. Every read is
+  wrapped in Tohyee's own outer SELECT (chosen columns as exact text, row
+  limit), inside read-only transactions where the database has them, and is
+  streamed 2,000 rows at a time into a text staging table that `loadRows`
+  converts like a CSV. The connection is made after the organisation
+  transaction that read the (encrypted) password has ended. A load stops
+  after 10 minutes (`TOHYEE_ANALYTICS_DATABASE_SECONDS`).
 - **Sales roles** (decision 491): `sales_rep` and `sales_manager` rank below
   `report_viewer`, so every route guarded by rank refuses them. The CRM's
   routes use `withCrm` (`src/lib/api/http.ts`), which admits them, and pass a
