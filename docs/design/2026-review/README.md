@@ -8,6 +8,21 @@ Tohyee has a coherent visual foundation: blue/slate colours, serif page headings
 
 This is a source review of representative workflows, supplemented by existing repository screenshots. It is not a signed-in production usability test, complete accessibility audit, or certification of every module. Older screenshots use a superseded green palette; findings were checked against current source. Current home already has a needs-attention area, month calendar already switches to agenda on phones, and current date input already uses NZ date entry. Do not reimplement those as missing features.
 
+## What happened (added when merged)
+
+Built in #325 and released in 0.10.0. Findings 1, 2, 4 and 5 were done as
+written: calendar loading and failure states with Retry, view buttons with
+`aria-pressed`, the month as a table, focus moved to the detail and back,
+details beside the schedule from 1024px wide with Back on phones, "Sender",
+mailbox settings behind a button, and the cash forecast led by its summary
+with a balance chart and collapsible assumptions. Two parts differ:
+
+- Finding 3: the button that opens a line now says "Review", but applying a
+  match still says "OK", as Xero does (decision 537).
+- Finding 6: the picker button stays out of the tab order; Alt+Down opens
+  the picker from the date field instead, and an invalid date shows a
+  visible error after leaving the field.
+
 ## Mockups
 
 Open `mockups.html` locally in a browser. The top navigation switches between three proposals; calendar events and its review filter demonstrate selection. All values, names and excerpts are fictional. Other buttons explain the intended action and do not perform it.
