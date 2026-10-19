@@ -5386,3 +5386,8 @@ testing) and #154's code signing (later, Jess).
      folders, and at the first check after folders are chosen anything not
      in them is removed (FC28). Disconnecting still deletes it all at once.
      FC30.
+598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
+     Jess supplied a better photo in #339. Only the mountains, sky and lake
+     are used (a plain crop, not AI-restored): the car, shelter, sign and
+     fence are left out of the app. Everything else about the watermark
+     stays as before. See docs/AORAKI-RESTORATION.md.
