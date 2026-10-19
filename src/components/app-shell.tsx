@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Fragment,
   type ReactNode,
   type RefObject,
   Suspense,
@@ -28,7 +29,9 @@ import {
   isCurrent,
   type Menu,
   type MenuGroup,
+  menuSections,
   visibleMenus,
+  visibleSettings,
   visibleNewActions,
 } from "@/components/navigation";
 import { ThemeSwitch } from "@/components/theme";
@@ -154,27 +157,43 @@ function MenuPanel({
       aria-label={label}
       role="group"
     >
-      {groups.map((group) => (
-        <div key={group.heading} className={styles.dropdownGroup} role="group" aria-labelledby={`${id}-${group.heading}`}>
-          <div className={styles.dropdownHeading} id={`${id}-${group.heading}`}>
-            {group.heading}
+      {groups.map((group, groupIndex) => {
+        const headingId = `${id}-g${groupIndex}`;
+        return (
+          <div key={group.heading} className={styles.dropdownGroup} role="group" aria-labelledby={headingId}>
+            <div className={styles.dropdownHeading} id={headingId}>
+              {group.heading}
+            </div>
+            {menuSections(group).map((section, sectionIndex) => {
+              const links = section.links.map((link) => {
+                const current = isCurrent(pathname, search, link.href);
+                return (
+                  <Link
+                    key={`${link.href}|${link.label}`}
+                    href={link.href}
+                    className={`${styles.dropdownLink} ${current ? styles.dropdownLinkActive : ""}`}
+                    aria-current={current ? "page" : undefined}
+                    onClick={onNavigate}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              });
+              if (!section.heading) return <Fragment key={`s${sectionIndex}`}>{links}</Fragment>;
+              // A sub-heading labels its own group, so screen readers announce it with its links (#338).
+              const sectionId = `${headingId}-s${sectionIndex}`;
+              return (
+                <div key={`s${sectionIndex}`} className={styles.dropdownSection} role="group" aria-labelledby={sectionId}>
+                  <div className={styles.dropdownSubheading} id={sectionId}>
+                    {section.heading}
+                  </div>
+                  {links}
+                </div>
+              );
+            })}
           </div>
-          {group.links.map((link) => {
-            const current = isCurrent(pathname, search, link.href);
-            return (
-              <Link
-                key={`${link.href}|${link.label}`}
-                href={link.href}
-                className={`${styles.dropdownLink} ${current ? styles.dropdownLinkActive : ""}`}
-                aria-current={current ? "page" : undefined}
-                onClick={onNavigate}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -514,16 +533,21 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
                       {menu.groups.map((group) => (
                         <div key={group.heading}>
                           <div className={styles.phoneHeading}>{group.heading}</div>
-                          {group.links.map((link) => (
-                            <Link
-                              key={`${link.href}|${link.label}`}
-                              href={link.href}
-                              className={`${styles.phoneLink} ${isCurrent(pathname, search, link.href) ? styles.phoneLinkActive : ""}`}
-                              aria-current={isCurrent(pathname, search, link.href) ? "page" : undefined}
-                              onClick={close}
-                            >
-                              {link.label}
-                            </Link>
+                          {menuSections(group).map((section, sectionIndex) => (
+                            <div key={`s${sectionIndex}`} className={section.heading ? styles.phoneSubsection : undefined}>
+                              {section.heading ? <div className={styles.phoneSubheading}>{section.heading}</div> : null}
+                              {section.links.map((link) => (
+                                <Link
+                                  key={`${link.href}|${link.label}`}
+                                  href={link.href}
+                                  className={`${styles.phoneLink} ${isCurrent(pathname, search, link.href) ? styles.phoneLinkActive : ""}`}
+                                  aria-current={isCurrent(pathname, search, link.href) ? "page" : undefined}
+                                  onClick={close}
+                                >
+                                  {link.label}
+                                </Link>
+                              ))}
+                            </div>
                           ))}
                         </div>
                       ))}
@@ -694,16 +718,19 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   );
   const menus = useMemo(() => visibleMenus(app, { can, modules }), [app, can, modules]);
   const newActions = useMemo(() => visibleNewActions({ can, modules }), [can, modules]);
+  const settings = useMemo(() => (app === "accounting" ? visibleSettings({ can, modules }) : []), [app, can, modules]);
   const items = useMemo<Destination[]>(
     () =>
       destinations(menus, newActions, [
+        // Settings that are only on the All settings page stay searchable (decision 580).
+        ...settings.flatMap((group) => group.links.map((link) => ({ href: link.href, label: link.label, group: `Settings › ${group.heading}` }))),
         { href: AI_LINK.href, label: "AI assistant", group: "AI" },
         { href: "/operations/profile", label: "Profile and two-step sign-in", group: "You" },
         ...(app !== "accounting" && !reportViewer && modules?.accounting !== false ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
         ...(app !== "crm" && modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
         ...(app !== "analytics" && modules?.analytics ? [{ href: "/analytics", label: "Analytics", group: "Apps" }] : []),
       ]),
-    [menus, newActions, app, modules, reportViewer],
+    [menus, newActions, settings, app, modules, reportViewer],
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
 
