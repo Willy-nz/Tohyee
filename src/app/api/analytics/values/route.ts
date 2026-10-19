@@ -1,11 +1,11 @@
 import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
-import { getDashboard, sliceValues } from "@/lib/analytics/dashboards";
+import { columnValues, getDashboard } from "@/lib/analytics/dashboards";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
 /**
- * The values a slicer offers (up to 500). Report viewers (decision 360) only
+ * The values a slicer offers (up to 500), and the column's type. Report viewers (decision 360) only
  * for a slicer on a dashboard shared with them (`dashboardId`).
  */
 export const GET = route(async (request) => {
@@ -22,5 +22,5 @@ export const GET = route(async (request) => {
     }
     return tx.organisationId;
   });
-  return json({ values: await sliceValues(organisationId, table, field) });
+  return json(await columnValues(organisationId, table, field));
 });

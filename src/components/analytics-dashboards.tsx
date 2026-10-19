@@ -3,12 +3,13 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -20,8 +21,6 @@ import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics
 import type {
   Aggregate,
   ColumnInfo,
-  Filter,
-  FilterOp,
   Grain,
   Measure,
   PivotColumn,
@@ -36,7 +35,11 @@ import type {
   Visual,
 } from "@/lib/analytics/query";
 import { api, apiDownload, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
+import { DATE_PRESETS, type DatePreset, isDatePreset, matchingPreset, presetRange } from "@/lib/analytics/date-ranges";
+import { booleanText, showValue } from "@/lib/analytics/display";
+import { filterComplete } from "@/lib/analytics/filters";
+import { changeMeasure, fieldLabel, measureLabel, tableDescription, tableLabel } from "@/lib/analytics/labels";
+import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
 import type { ReportExportData, ReportExportTable } from "@/lib/reports/export-types";
 import styles from "./analytics-dashboards.module.css";
@@ -65,16 +68,6 @@ const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
   { value: "count_distinct", label: "Count of different values" },
 ];
 
-const OPS: Array<{ value: FilterOp; label: string }> = [
-  { value: "eq", label: "is" },
-  { value: "neq", label: "is not" },
-  { value: "contains", label: "contains" },
-  { value: "gt", label: "more than" },
-  { value: "gte", label: "at least" },
-  { value: "lt", label: "less than" },
-  { value: "lte", label: "at most" },
-];
-
 const GRAINS: Array<{ value: Grain; label: string }> = [
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
@@ -98,27 +91,28 @@ function heading(label: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** A value from a query, shown the way its column is meant to be read. Never turned into a JS number. */
-function showValue(value: string | null, column: ResultColumn): string {
-  if (value === null) return "";
-  switch (column.format) {
-    case "money":
-      return `$${formatMoney(value)}`;
-    case "number":
-      return formatQuantity(formatMoney(value, 4));
-    case "integer":
-      return formatQuantity(value);
-    case "date":
-      return formatDate(value);
-    default:
-      return value;
-  }
+/** A column in a picker: its plain name, with the real one in a tooltip (decision 577). */
+function columnOptions(columns: ColumnInfo[], prefix = "") {
+  return columns.map((column) => (
+    <option key={column.name} value={column.name} title={column.name}>
+      {prefix}{fieldLabel(column.name)}
+    </option>
+  ));
 }
+
+/**
+ * Organisations seen with Analytics on in this tab. Coming back to a page,
+ * it shows straight away while the setting is checked again, rather than
+ * "Loading…" in place of the page and its buttons (#330).
+ */
+const analyticsSeenOn = new Set<string>();
 
 function RequireAnalytics({ organisationId, children }: { organisationId: string; children: React.ReactNode }) {
   const modules = useModules(organisationId);
   const { can } = useWorkspace();
-  if (!modules) return <p className={ui.muted}>Loading…</p>;
+  if (modules?.analytics) analyticsSeenOn.add(organisationId);
+  if (modules && !modules.analytics) analyticsSeenOn.delete(organisationId);
+  if (!modules) return analyticsSeenOn.has(organisationId) ? <>{children}</> : <p className={ui.muted}>Loading…</p>;
   if (!modules.analytics) {
     return (
       <Notice tone="info">
@@ -203,7 +197,9 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   );
 }
 
-type Filters = { from: string; to: string; values: Record<string, string[]> };
+/** What the dashboard is showing: its dates (and the preset they came from, if one was chosen) and slicer choices. */
+type Filters = { from: string; to: string; preset?: DatePreset | null; values: Record<string, string[]> };
+type DateContext = { today: string; financialYearEndMonth: number };
 type PivotExportFor = { organisationId: string; organisationName: string; filters: Filters };
 
 /** One dashboard: its date range and slicers, and its tiles; Edit to change them. */
@@ -219,7 +215,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const router = useRouter();
   const { can } = useWorkspace();
   const confirm = useConfirm();
-  const loaded = useApiData<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
+  const loaded = useApiData<{ dashboard: Dashboard } & Partial<DateContext>>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
   const tables = useApiData<{ tables: TableInfo[] }>(can("bookkeeper") ? "/api/analytics/tables" : null, { organisationId });
   const [draft, setDraft] = useState<Dashboard | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
@@ -230,7 +226,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [error, setError] = useState<string | null>(null);
 
   const dashboard = draft ?? loaded.data?.dashboard ?? null;
-  const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", values: {} };
+  const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
+  const dates: DateContext = { today: loaded.data?.today ?? todayInBrowser(), financialYearEndMonth: loaded.data?.financialYearEndMonth ?? 3 };
   const canEdit = can("bookkeeper");
 
   async function save(next: Dashboard) {
@@ -335,6 +332,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         onChange={setFilters}
         editing={editing}
         tables={tables.data?.tables ?? []}
+        dates={dates}
         onSettings={(settings) => setDraft({ ...dashboard, settings })}
       />
 
@@ -490,6 +488,7 @@ function FilterBar({
   onChange,
   editing,
   tables,
+  dates,
   onSettings,
   dashboardId,
 }: {
@@ -500,19 +499,42 @@ function FilterBar({
   onChange: (filters: Filters) => void;
   editing: boolean;
   tables: TableInfo[];
+  dates: DateContext;
   onSettings: (settings: DashboardSettings) => void;
 }) {
   const [newSlicer, setNewSlicer] = useState("");
-  const slicerChoices = tables.flatMap((table) =>
-    table.columns.filter((column) => !isNumber(column.type) && !isDate(column.type)).map((column) => `${table.name}.${column.name}`),
-  );
+  // Slicers pick from columns with a few values: text and Yes/No, grouped by where they come from (decision 577).
+  const slicerTables = tables
+    .map((table) => ({ table, columns: table.columns.filter((column) => !isNumber(column.type) && !isDate(column.type)) }))
+    .filter((entry) => entry.columns.length > 0);
+  // The preset chosen, or the one these dates happen to be today, so the list shows where they came from.
+  const preset = filters.preset ?? matchingPreset(filters, dates.today, dates.financialYearEndMonth);
+  const presetName = DATE_PRESETS.find((entry) => entry.value === filters.preset)?.label;
   return (
     <div className={styles.filterBar}>
+      <Field label="Dates">
+        <select
+          value={preset ?? ""}
+          onChange={(event) => {
+            const chosen = event.target.value;
+            if (!isDatePreset(chosen)) return onChange({ ...filters, preset: null });
+            const range = presetRange(chosen, dates.today, dates.financialYearEndMonth);
+            onChange({ ...filters, from: range.from ?? "", to: range.to ?? "", preset: chosen });
+          }}
+        >
+          <option value="">Custom</option>
+          {DATE_PRESETS.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </Field>
       <Field label="From">
-        <DateInput value={filters.from} onChange={(event) => onChange({ ...filters, from: event.target.value })} />
+        <DateInput value={filters.from} onChange={(event) => onChange({ ...filters, from: event.target.value, preset: null })} />
       </Field>
       <Field label="To">
-        <DateInput value={filters.to} onChange={(event) => onChange({ ...filters, to: event.target.value })} />
+        <DateInput value={filters.to} onChange={(event) => onChange({ ...filters, to: event.target.value, preset: null })} />
       </Field>
       {settings.slicers.map((slicer) => (
         <SlicerControl
@@ -530,10 +552,14 @@ function FilterBar({
           <Field label="Add a slicer">
             <select value={newSlicer} onChange={(event) => setNewSlicer(event.target.value)}>
               <option value="">Choose a column</option>
-              {slicerChoices.map((choice) => (
-                <option key={choice} value={choice}>
-                  {choice}
-                </option>
+              {slicerTables.map(({ table, columns }) => (
+                <optgroup key={table.name} label={tableLabel(table.name)}>
+                  {columns.map((column) => (
+                    <option key={column.name} value={`${table.name}.${column.name}`} title={`${table.name}.${column.name}`}>
+                      {tableLabel(table.name)} › {fieldLabel(column.name)}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </Field>
@@ -543,7 +569,7 @@ function FilterBar({
             disabled={!newSlicer}
             onClick={() => {
               const [table, field] = newSlicer.split(".");
-              onSettings({ ...settings, slicers: [...settings.slicers, { table, field, label: field.replaceAll("_", " ") }] });
+              onSettings({ ...settings, slicers: [...settings.slicers, { table, field, label: fieldLabel(field) }] });
               setNewSlicer("");
             }}
           >
@@ -552,8 +578,8 @@ function FilterBar({
           <Button
             size="small"
             variant="secondary"
-            onClick={() => onSettings({ ...settings, from: filters.from || null, to: filters.to || null })}
-            title="Open the dashboard with these dates"
+            onClick={() => onSettings({ ...settings, from: filters.from || null, to: filters.to || null, preset: filters.preset ?? null })}
+            title={presetName ? `Open the dashboard with ${presetName.toLowerCase()}, moving on with the calendar` : "Open the dashboard with these dates"}
           >
             Keep these dates
           </Button>
@@ -578,25 +604,35 @@ function SlicerControl({
   onChange: (values: string[]) => void;
   onRemove?: () => void;
 }) {
-  const values = useApiData<{ values: string[] }>("/api/analytics/values", { organisationId, dashboardId, table: slicer.table, field: slicer.field });
-  const summary = chosen.length === 0 ? "All" : chosen.length === 1 ? chosen[0] : `${chosen.length} chosen`;
+  const values = useApiData<{ values: string[]; type?: string }>("/api/analytics/values", { organisationId, dashboardId, table: slicer.table, field: slicer.field });
+  // Yes/No columns show Yes and No; what's sent stays true and false (decision 577).
+  const show = (value: string) => (values.data?.type === "BOOLEAN" ? booleanText(value) : value);
+  const summary = chosen.length === 0 ? "All" : chosen.length === 1 ? show(chosen[0]) : `${chosen.length} chosen`;
+  const menu = useRef<HTMLDetailsElement>(null);
+  const [open, setOpen] = useState(false);
+  // A click elsewhere or Escape closes the list. The listeners go when it closes, however it closes, and with
+  // the page: before, closing it with its own button left one behind on the document for every opening (#330).
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (menu.current && !menu.current.contains(event.target as Node)) menu.current.open = false;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !menu.current) return;
+      menu.current.open = false;
+      menu.current.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
     <div className={styles.slicer}>
       <span className={styles.slicerLabel}>{slicer.label}</span>
-      <details
-        className={styles.slicerMenu}
-        onToggle={(event) => {
-          const menu = event.currentTarget;
-          if (!menu.open) return;
-          const close = (click: MouseEvent) => {
-            if (!menu.contains(click.target as Node)) {
-              menu.open = false;
-              document.removeEventListener("mousedown", close);
-            }
-          };
-          document.addEventListener("mousedown", close);
-        }}
-      >
+      <details ref={menu} className={styles.slicerMenu} onToggle={(event) => setOpen(event.currentTarget.open)}>
         <summary>{summary}</summary>
         <div className={styles.slicerList} role="group" aria-label={slicer.label}>
           {(values.data?.values ?? []).map((value) => (
@@ -606,7 +642,7 @@ function SlicerControl({
                 checked={chosen.includes(value)}
                 onChange={(event) => onChange(event.target.checked ? [...chosen, value] : chosen.filter((entry) => entry !== value))}
               />{" "}
-              {value}
+              {show(value)}
             </label>
           ))}
           {chosen.length ? (
@@ -703,7 +739,7 @@ function TileBody({ organisationId, dashboardId, tile, filters }: { organisation
             <div className={ui.tableWrap}>
               <table className={ui.table} aria-label={drill.title}>
                 <thead>
-                  <tr>{drill.result.columns.map((column) => <th key={column.key} scope="col" className={column.role === "measure" ? ui.num : undefined}>{heading(column.label)}</th>)}</tr>
+                  <tr>{drill.result.columns.map((column) => <th key={column.key} scope="col" className={column.role === "measure" ? ui.num : undefined}>{fieldLabel(column.label)}</th>)}</tr>
                 </thead>
                 <tbody>
                   {drill.result.rows.map((row, index) => (
@@ -742,7 +778,10 @@ function TileResult({
     return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
   }
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
-  const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(result.rows, measures[0]?.key ?? "m0") : result.rows;
+  // Yes/No groups are named Yes and No on the chart too (decision 577).
+  const yesNo = result.columns.some((column) => column.key === "category" && column.format === "boolean");
+  const named = yesNo ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : booleanText(row.category) })) : result.rows;
+  const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(named, measures[0]?.key ?? "m0") : named;
   if (tile.visual === "kpi") return <KeyFigureView result={result} format={tile.format} />;
   if (!spec) {
     return (
@@ -752,7 +791,7 @@ function TileResult({
             <tr>
               {result.columns.map((column) => (
                 <th key={column.key} className={column.role === "measure" ? ui.num : undefined}>
-                  {heading(column.label)}
+                  {column.role === "category" ? fieldLabel(column.label) : heading(column.label)}
                 </th>
               ))}
             </tr>
@@ -792,9 +831,9 @@ function pivotColumnLabel(column: PivotColumn, pivot: PivotData): string {
 /** The pivot as a report table for the existing CSV/Excel export (`/api/reports/export`), exact values kept as text. */
 export function pivotExportTable(pivot: PivotData): ReportExportTable {
   const columns = [
-    ...pivot.rowFields.map((field) => heading(field.label)),
+    ...pivot.rowFields.map((field) => fieldLabel(field.label)),
     ...pivot.columns.map((column) =>
-      [column.total ? "Grand total" : pivot.columnField ? `${heading(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}` : "", column.measure.label]
+      [column.total ? "Grand total" : pivot.columnField ? `${fieldLabel(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}` : "", column.measure.label]
         .filter(Boolean)
         .join(" · "),
     ),
@@ -841,7 +880,7 @@ export function PivotTable({
         basis: null,
         filters: Object.entries(values)
           .filter(([, chosen]) => chosen.length > 0)
-          .map(([field, chosen]) => `${heading(field)}: ${chosen.join(", ")}`)
+          .map(([field, chosen]) => `${fieldLabel(field)}: ${chosen.join(", ")}`)
           .slice(0, 30),
         producedAt: new Date().toISOString(),
         tables: [pivotExportTable(pivot)],
@@ -885,11 +924,11 @@ export function PivotTable({
             {pivot.columnField ? (
               <>
                 <tr>
-                  {pivot.rowFields.map((field) => <th key={field.key} scope="col" rowSpan={2}>{heading(field.label)}</th>)}
+                  {pivot.rowFields.map((field) => <th key={field.key} scope="col" rowSpan={2}>{fieldLabel(field.label)}</th>)}
                   {pivot.columnValues.map((value, index) => {
                     const column = pivot.columns.find((entry) => !entry.total && entry.pivotValue === value)!;
                     const count = pivot.columns.filter((entry) => !entry.total && entry.pivotValue === value).length;
-                    return <th key={`column-${index}`} scope="colgroup" colSpan={count}>{heading(pivot.columnField!.label)}: {pivotColumnLabel(column, pivot)}</th>;
+                    return <th key={`column-${index}`} scope="colgroup" colSpan={count}>{fieldLabel(pivot.columnField!.label)}: {pivotColumnLabel(column, pivot)}</th>;
                   })}
                   {pivot.columns.some((column) => column.total) ? (
                     <th scope="colgroup" colSpan={pivot.columns.filter((column) => column.total).length}>Grand total</th>
@@ -899,7 +938,7 @@ export function PivotTable({
               </>
             ) : (
               <tr>
-                {pivot.rowFields.map((field) => <th key={field.key} scope="col">{heading(field.label)}</th>)}
+                {pivot.rowFields.map((field) => <th key={field.key} scope="col">{fieldLabel(field.label)}</th>)}
                 {pivot.columns.map((column) => <th key={column.key} scope="col" className={ui.num}>{column.measure.label}</th>)}
               </tr>
             )}
@@ -951,7 +990,10 @@ function blankQuery(table: TableInfo | undefined): TileQuery {
     table: table?.name ?? "",
     groupBy: date ? { field: date.name, grain: "month" } : text ? { field: text.name } : null,
     pivot: null,
-    measures: money ? [{ label: money.name.replaceAll("_", " "), aggregate: "sum", field: money.name }] : [{ label: "Rows", aggregate: "count" }],
+    measures: [money ? { label: "", aggregate: "sum" as const, field: money.name } : { label: "", aggregate: "count" as const }].map((measure) => ({
+      ...measure,
+      label: measureLabel(measure, table?.name ?? ""),
+    })),
     filters: [],
     dateField: date?.name ?? null,
     sort: { by: "category", direction: "asc" },
@@ -992,10 +1034,9 @@ function TileEditor({
   const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : [])]);
   const preview = useTileResult(organisationId, query.table ? query : null, filters);
 
+  // A label Tohyee filled in follows the value's column and calculation; a typed one stays (#329).
   const setMeasure = (index: number, patch: Partial<Measure>) =>
-    setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? { ...measure, ...patch } : measure)) });
-  const setFilter = (index: number, patch: Partial<Filter>) =>
-    setQuery({ ...query, filters: query.filters.map((filter, at) => (at === index ? { ...filter, ...patch } : filter)) });
+    setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? changeMeasure(measure, patch, query.table) : measure)) });
   const changeVisual = (next: Visual) => {
     if (next === "pivot") {
       const current = query.groupBy;
@@ -1038,7 +1079,7 @@ function TileEditor({
       <aside className={styles.fieldsPanel}>
         <h2>Data</h2><p className={ui.muted}>Fields in the selected source</p>
         <Field label="Search fields"><input type="search" value={fieldSearch} onChange={(event) => setFieldSearch(event.target.value)} placeholder="Find a field…" /></Field>
-        <div className={styles.fieldList}>{columns.filter((column) => column.name.toLowerCase().includes(fieldSearch.toLowerCase().trim())).map((column) => <div className={styles.fieldItem} key={column.name}><span className={styles.fieldType}>{isNumber(column.type) ? "123" : isDate(column.type) ? "Date" : "ABC"}</span><span>{heading(column.name)}<small>{column.type}</small></span></div>)}</div>
+        <div className={styles.fieldList}>{columns.filter((column) => `${column.name} ${fieldLabel(column.name)}`.toLowerCase().includes(fieldSearch.toLowerCase().trim())).map((column) => <div className={styles.fieldItem} key={column.name} title={`${query.table}.${column.name}`}><span className={styles.fieldType}>{isNumber(column.type) ? "123" : isDate(column.type) ? "Date" : column.type === "BOOLEAN" ? "Y/N" : "ABC"}</span><span>{fieldLabel(column.name)}<small>{column.name}</small></span></div>)}</div>
         {!columns.length ? <p>No fields loaded. <Link href="/analytics/sources">Add a data source</Link>.</p> : null}
         {can("admin") ? <Link href="/analytics/shaping">Prepare or combine data →</Link> : null}
       </aside>
@@ -1081,11 +1122,11 @@ function TileEditor({
             <option value="full">Full</option>
           </select>
         </Field>
-        <Field label="Data source">
+        <Field label="Data source" hint={tableDescription(query.table) || undefined}>
           <select value={query.table} onChange={(event) => setQuery(blankQuery(tables.find((entry) => entry.name === event.target.value)))}>
-            {tables.map((entry) => (
-              <option key={entry.name} value={entry.name}>
-                {entry.name}
+            {[...tables].sort((a, b) => tableLabel(a.name).localeCompare(tableLabel(b.name))).map((entry) => (
+              <option key={entry.name} value={entry.name} title={entry.name}>
+                {tableLabel(entry.name)}
               </option>
             ))}
           </select>
@@ -1106,9 +1147,7 @@ function TileEditor({
                       setQuery({ ...query, pivot: { rows, column: query.pivot?.column ?? null } });
                     }}
                   >
-                    {columns.filter((column) => !usedPivotFields.has(column.name) || column.name === dimension.field).map((column) => (
-                      <option key={column.name} value={column.name}>{column.name}</option>
-                    ))}
+                    {columnOptions(columns.filter((column) => !usedPivotFields.has(column.name) || column.name === dimension.field))}
                   </select>
                 </Field>
                 {isDate(columns.find((column) => column.name === dimension.field)?.type ?? "") ? (
@@ -1173,9 +1212,7 @@ function TileEditor({
                 }}
               >
                 <option value="">None</option>
-                {columns.filter((column) => !pivotRows.some((row) => row.field === column.name)).map((column) => (
-                  <option key={column.name} value={column.name}>{column.name}</option>
-                ))}
+                {columnOptions(columns.filter((column) => !pivotRows.some((row) => row.field === column.name)))}
               </select>
             </Field>
             {query.pivot?.column && isDate(columns.find((column) => column.name === query.pivot?.column?.field)?.type ?? "") ? (
@@ -1213,7 +1250,7 @@ function TileEditor({
                 }}
               >
                 <option value="">Nothing (one total)</option>
-                {columns.map((column) => <option key={column.name} value={column.name}>{column.name}</option>)}
+                {columnOptions(columns)}
               </select>
             </Field>
             {isDate(groupType) ? (
@@ -1228,13 +1265,7 @@ function TileEditor({
         <Field label="Date range applies to" hint="The dashboard's From and To.">
           <select value={query.dateField ?? ""} onChange={(event) => setQuery({ ...query, dateField: event.target.value || null })}>
             <option value="">No date</option>
-            {columns
-              .filter((column) => isDate(column.type))
-              .map((column) => (
-                <option key={column.name} value={column.name}>
-                  {column.name}
-                </option>
-              ))}
+            {columnOptions(columns.filter((column) => isDate(column.type)))}
           </select>
         </Field>
         {visual !== "pivot" ? <Field label="Order by">
@@ -1277,21 +1308,13 @@ function TileEditor({
           {measure.aggregate !== "count" ? (
             <select aria-label={`Value ${index + 1} of`} value={measure.field ?? ""} onChange={(event) => setMeasure(index, { field: event.target.value })}>
               <option value="">Choose a column</option>
-              {(["sum", "avg"].includes(measure.aggregate) ? numbers : columns).map((column) => (
-                <option key={column.name} value={column.name}>
-                  {column.name}
-                </option>
-              ))}
+              {columnOptions(["sum", "avg"].includes(measure.aggregate) ? numbers : columns)}
             </select>
           ) : null}
           {["sum", "avg"].includes(measure.aggregate) ? (
             <select aria-label={`Value ${index + 1} times`} value={measure.times ?? ""} onChange={(event) => setMeasure(index, { times: event.target.value || undefined })}>
               <option value="">× nothing</option>
-              {numbers.map((column) => (
-                <option key={column.name} value={column.name}>
-                  × {column.name}
-                </option>
-              ))}
+              {columnOptions(numbers, "× ")}
             </select>
           ) : null}
           {["sum", "avg", "min", "max"].includes(measure.aggregate) ? (
@@ -1320,51 +1343,14 @@ function TileEditor({
           size="small"
           variant="secondary"
           disabled={query.measures.length >= 6}
-          onClick={() => setQuery({ ...query, measures: [...query.measures, { label: "Rows", aggregate: "count" }] })}
+          onClick={() => setQuery({ ...query, measures: [...query.measures, { label: measureLabel({ aggregate: "count" }, query.table), aggregate: "count" }] })}
         >
           Add a value
         </Button>
       </div>
 
       <h3 className={styles.subheading}>Only include rows where</h3>
-      {query.filters.map((filter, index) => (
-        <div key={index} className={styles.measureRow}>
-          <select aria-label={`Filter ${index + 1} column`} value={filter.field} onChange={(event) => setFilter(index, { field: event.target.value })}>
-            {columns.map((column) => (
-              <option key={column.name} value={column.name}>
-                {column.name}
-              </option>
-            ))}
-          </select>
-          <select aria-label={`Filter ${index + 1} test`} value={filter.op} onChange={(event) => setFilter(index, { op: event.target.value as FilterOp })}>
-            {OPS.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-          <input
-            aria-label={`Filter ${index + 1} value`}
-            type={isDate(columns.find((column) => column.name === filter.field)?.type ?? "") ? "date" : "text"}
-            value={String(filter.value)}
-            onChange={(event) => setFilter(index, { value: event.target.value })}
-          />
-          <Button size="small" variant="danger" onClick={() => setQuery({ ...query, filters: query.filters.filter((_f, at) => at !== index) })}>
-            Remove
-          </Button>
-        </div>
-      ))}
-      <div className={styles.addRow}>
-        <Button
-          size="small"
-          variant="secondary"
-          disabled={!columns.length}
-          onClick={() => setQuery({ ...query, filters: [...query.filters, { field: columns[0].name, op: "eq", value: "" }] })}
-        >
-          Add a filter
-        </Button>
-      </div>
-
+      <TileFilters organisationId={organisationId} table={query.table} columns={columns} filters={query.filters} onChange={(filters) => setQuery({ ...query, filters })} />
 
       {visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} /> : null}
 
@@ -1379,7 +1365,7 @@ function TileEditor({
               title: title.trim() || query.measures[0]?.label || "Tile",
               visual,
               width,
-              query: { ...query, filters: query.filters.filter((filter) => String(filter.value).trim() !== "") },
+              query: { ...query, filters: query.filters.filter(filterComplete) },
               ...(format ? { format } : {}),
             })
           }

@@ -250,3 +250,12 @@ export function calendarFeed(events: FeedEvent[], name: string, now: Date): stri
   lines.push("END:VCALENDAR");
   return `${lines.map(fold).join("\r\n")}\r\n`;
 }
+
+/** A folder (Outlook) or label (Gmail) a farm mailbox reads (#340; FC25). Its name is private to the member. */
+export type ChosenFolder = { id: string; externalId: string; name: string; includeSubfolders: boolean; missing: boolean };
+
+/** What a mailbox reads (FC25, FC26): its folders, or that it reads nothing yet. */
+export function folderSummary(folders: ChosenFolder[]): string {
+  if (!folders.length) return "Not reading: no folders chosen";
+  return `Reads ${folders.map((folder) => `${folder.name}${folder.includeSubfolders ? " and its subfolders" : ""}${folder.missing ? " (not found in the mailbox)" : ""}`).join("; ")}`;
+}

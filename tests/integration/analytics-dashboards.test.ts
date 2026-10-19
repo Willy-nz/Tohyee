@@ -11,9 +11,11 @@ import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import * as tablesRoute from "@/app/api/analytics/tables/route";
 import * as valuesRoute from "@/app/api/analytics/values/route";
 import * as settingsRoute from "@/app/api/organisations/[organisationId]/settings/route";
+import { presetRange } from "@/lib/analytics/date-ranges";
 import { closeAnalytics } from "@/lib/analytics/engine";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
+import { todayIsoDate } from "@/lib/dates";
 import {
   apiRequest,
   createTestOrganisation,
@@ -163,7 +165,7 @@ describeWithDatabase("analytics dashboards", () => {
     );
     expect(made.status).toBe(201);
     dashboardId = made.data.dashboard.id;
-    expect(made.data.dashboard.settings).toEqual({ from: "2026-01-01", to: "2026-12-31", slicers: [{ table: "sales", field: "region", label: "Region" }] });
+    expect(made.data.dashboard.settings).toEqual({ from: "2026-01-01", to: "2026-12-31", preset: null, slicers: [{ table: "sales", field: "region", label: "Region" }] });
     expect(made.data.dashboard.tiles[0]).toMatchObject({ id: "monthly", visual: "column", width: "full" });
 
     const renamed = await body(
@@ -176,6 +178,33 @@ describeWithDatabase("analytics dashboards", () => {
     expect(renamed.data.dashboard.tiles).toHaveLength(1);
     const listed = await body(await dashboardsRoute.GET(apiRequest(`/api/analytics/dashboards?organisationId=${ORG}`, { cookie: viewerCookie }), noContext));
     expect(listed.data.dashboards.map((entry: { name: string }) => entry.name)).toEqual(["Monthly sales"]);
+  });
+
+  it("keeps a date preset and works its dates out from today and the balance date (decision 577)", async () => {
+    const today = todayIsoDate();
+    const settings = (preset: unknown) => ({ organisationId: ORG, settings: { from: "2020-01-01", to: "2020-01-31", preset, slicers: [] } });
+    const refused = await dashboardRoute.PATCH(
+      apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: settings("next_decade") }),
+      params({ dashboardId }),
+    );
+    expect(refused.status).toBe(400);
+    const saved = await body(
+      await dashboardRoute.PATCH(
+        apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: settings("this_financial_year") }),
+        params({ dashboardId }),
+      ),
+    );
+    // The organisation keeps New Zealand's usual 31 March balance date.
+    expect(saved.data.dashboard.settings).toMatchObject({ preset: "this_financial_year", ...presetRange("this_financial_year", today, 3) });
+    const read = await body(await dashboardRoute.GET(apiRequest(`/api/analytics/dashboards/${dashboardId}?organisationId=${ORG}`, { cookie: viewerCookie }), params({ dashboardId })));
+    expect(read.data).toMatchObject({ today, financialYearEndMonth: 3, dashboard: { settings: { preset: "this_financial_year", ...presetRange("this_financial_year", today, 3) } } });
+    const fixed = await body(
+      await dashboardRoute.PATCH(
+        apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: settings(null) }),
+        params({ dashboardId }),
+      ),
+    );
+    expect(fixed.data.dashboard.settings).toMatchObject({ preset: null, from: "2020-01-01", to: "2020-01-31" });
   });
 
   it("answers a tile for anyone who can see the organisation, with the dashboard's dates and slicers", async () => {
@@ -207,7 +236,7 @@ describeWithDatabase("analytics dashboards", () => {
     const values = await body(
       await valuesRoute.GET(apiRequest(`/api/analytics/values?organisationId=${ORG}&table=sales&field=region`, { cookie: viewerCookie }), noContext),
     );
-    expect(values.data.values).toEqual(["Canterbury", "Otago"]);
+    expect(values.data).toEqual({ values: ["Canterbury", "Otago"], type: "VARCHAR" });
   });
 
   it("saves how a chart looks with its tile, keeping only known settings (#331, #333)", async () => {

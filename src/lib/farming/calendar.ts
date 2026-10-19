@@ -6,8 +6,8 @@ import { parseIsoDate } from "@/lib/dates";
 import { type Actor, assertOrganisationUsable, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { requireFarming } from "@/lib/farming/paddocks";
-import { type FarmMail, FARM_GOOGLE_SCOPES, FARM_MICROSOFT_SCOPES, fetchFarmMail, listFarmMailIds } from "@/lib/farming/mail-providers";
-import { type CalendarItem, CALENDAR_KINDS, type CalendarKind, calendarFeed, type FeedEvent, isRepeatDate, type Repeat, repeatDates, REPEATS, teamView } from "@/lib/farming/calendar-shared";
+import { type FarmMail, FARM_GOOGLE_SCOPES, FARM_MICROSOFT_SCOPES, fetchFarmMail, type FolderListing, listFolderMailIds, listMailFolders, type MailFolder } from "@/lib/farming/mail-providers";
+import { type CalendarItem, CALENDAR_KINDS, type ChosenFolder, type CalendarKind, calendarFeed, type FeedEvent, isRepeatDate, type Repeat, repeatDates, REPEATS, teamView } from "@/lib/farming/calendar-shared";
 import { type Arrangement, type FarmMailKind, nzDay, readEmail } from "@/lib/farming/mail-rules";
 import { RequestLimiter } from "@/lib/ai/limits";
 import { coreQuery } from "@/lib/db/transactions";
@@ -16,7 +16,7 @@ import { getMembership, getOrganisation, type OrganisationRecord, parseOrganisat
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 
-export type { CalendarItem } from "@/lib/farming/calendar-shared";
+export type { CalendarItem, ChosenFolder } from "@/lib/farming/calendar-shared";
 
 /*
  * The farm calendar from email (#319; examples FC1-FC16, decisions
@@ -26,6 +26,8 @@ export type { CalendarItem } from "@/lib/farming/calendar-shared";
  * link). Everything here belongs to the member who connected it: every
  * query is limited to the signed-in member's mailboxes, admins included
  * (decision 571). Network calls happen outside database transactions.
+ * Only the folders (Outlook) or labels (Gmail) the member chose are read,
+ * and nothing until they choose one (#340; FC25-FC30, decisions 584-586).
  */
 
 export const FARM_MAIL_CALLBACK_PATH = "/api/farming/mail/callback";
@@ -34,7 +36,10 @@ const STATE_MINUTES = 15;
 const PAUSE_AFTER_FAILURES = 3;
 /** Emails read in one check, new and old together (the rest wait for the next check). */
 const MAX_READ_PER_CHECK = 150;
-const MAX_IDS = 1000;
+/** Emails listed per chosen folder each check, newest first (FC29). */
+export const MAX_IDS_PER_FOLDER = 2000;
+/** Folders a mailbox can have chosen. */
+const MAX_CHOSEN_FOLDERS = 50;
 
 export type FarmMailbox = {
   id: string;
@@ -47,6 +52,8 @@ export type FarmMailbox = {
   lastError: string | null;
   /** Older history is still being read. */
   readingHistory: boolean;
+  /** The folders or labels it reads (FC25); none means nothing is read. */
+  folders: ChosenFolder[];
   items: number;
   /** Items from it shared with the farm team (they go if it's disconnected). */
   shared: number;
@@ -186,6 +193,16 @@ export async function listFarmMailboxes(tx: OrgTx): Promise<FarmMailbox[]> {
        from farm_mail_accounts a where a.user_id = $1 order by a.email`,
     [userId],
   );
+  const folders = await tx.query<{ id: string; account_id: string; external_id: string; name: string; include_subfolders: boolean; missing: boolean }>(
+    `select f.id::text, f.account_id::text, f.external_id, f.name, f.include_subfolders, f.missing
+       from farm_mail_folders f join farm_mail_accounts a on a.id = f.account_id
+      where a.user_id = $1 order by lower(f.name), f.id`,
+    [userId],
+  );
+  const chosen = (accountId: string): ChosenFolder[] =>
+    folders.rows
+      .filter((folder) => folder.account_id === accountId)
+      .map((folder) => ({ id: folder.id, externalId: folder.external_id, name: folder.name, includeSubfolders: folder.include_subfolders, missing: folder.missing }));
   return rows.rows.map((row) => ({
     id: row.id,
     provider: row.provider,
@@ -195,7 +212,8 @@ export async function listFarmMailboxes(tx: OrgTx): Promise<FarmMailbox[]> {
     status: row.status,
     lastCheckAt: row.last_check_at,
     lastError: row.last_error,
-    readingHistory: row.backfill_before !== null,
+    readingHistory: row.backfill_before !== null && chosen(row.id).length > 0,
+    folders: chosen(row.id),
     items: row.items,
     shared: row.shared,
   }));
@@ -248,9 +266,120 @@ export async function disconnectMemberFarmMail(organisation: OrganisationRecord,
 /** "Check now" for one of the member's own mailboxes. */
 export async function mailboxForCheck(tx: OrgTx, idInput: unknown): Promise<string> {
   const id = await ownMailbox(tx, idInput);
-  const row = await tx.query<{ status: string }>("select status from farm_mail_accounts where id = $1", [id]);
+  const row = await tx.query<{ status: string; folders: number }>("select status, (select count(*)::int from farm_mail_folders f where f.account_id = a.id) as folders from farm_mail_accounts a where id = $1", [id]);
   if (row.rows[0].status === "paused") throw new ConflictError("This mailbox is paused after failed checks. Connect it again to start checking.");
+  if (row.rows[0].folders === 0) throw new ConflictError("Choose the folders Tohyee reads first: nothing is read until you do.");
   return id;
+}
+
+// Folders (FC25-FC30) -----------------------------------------------------------------------------
+
+/** One of the member's own mailboxes, to list or choose its folders. */
+export async function mailboxForFolders(tx: OrgTx, idInput: unknown): Promise<string> {
+  return ownMailbox(tx, idInput);
+}
+
+/**
+ * FC25: the mailbox's folders (Outlook) or labels (Gmail) to choose from,
+ * fetched from the mailbox now (names and ids only, no email), and the ones
+ * chosen. The route checks it's the member's own first.
+ */
+export async function mailboxFolderChoices(organisation: OrganisationRecord, accountId: string, now = new Date()): Promise<MailFolder[]> {
+  const { account, app } = await loadAccount(organisation, accountId, false);
+  const { token, refreshed } = await accessToken(account, app, now);
+  if (refreshed) await storeRefreshed(organisation, account.id, refreshed, now);
+  return listMailFolders(account.provider, token);
+}
+
+/**
+ * FC25, FC26, FC27: the folders the mailbox reads, from `available` (as the
+ * mailbox listed them just now). A folder taken off stops being read, and
+ * everything taken from it alone is deleted now (FC27). Choosing none stops
+ * reading altogether. Newly chosen folders are read at the next check, back
+ * to the mailbox's read-back date.
+ */
+export async function chooseMailboxFolders(tx: OrgTx, idInput: unknown, input: unknown, available: MailFolder[]): Promise<FarmMailbox[]> {
+  const id = await ownMailbox(tx, idInput);
+  if (!Array.isArray(input)) throw new ValidationError("Choose the folders to read.");
+  if (input.length > MAX_CHOSEN_FOLDERS) throw new ValidationError(`Choose at most ${MAX_CHOSEN_FOLDERS} folders.`);
+  const wanted = new Map<string, boolean>();
+  for (const entry of input as Array<{ id?: unknown; includeSubfolders?: unknown }>) {
+    const externalId = typeof entry?.id === "string" ? entry.id : "";
+    if (!externalId || !available.some((folder) => folder.id === externalId)) throw new ValidationError("That folder isn't in the mailbox any more. Open the list again.");
+    wanted.set(externalId, entry.includeSubfolders === true);
+  }
+  const existing = await tx.query<{ id: string; external_id: string }>("select id::text, external_id from farm_mail_folders where account_id = $1 for update", [id]);
+  const removed = existing.rows.filter((row) => !wanted.has(row.external_id)).map((row) => row.id);
+  if (removed.length) await removeFolders(tx, id, removed);
+  let added = 0;
+  for (const [externalId, includeSubfolders] of wanted) {
+    const folder = available.find((entry) => entry.id === externalId)!;
+    const saved = await tx.query<{ inserted: boolean }>(
+      `insert into farm_mail_folders (account_id, external_id, name, include_subfolders) values ($1, $2, $3, $4)
+       on conflict (account_id, external_id) do update set name = excluded.name, include_subfolders = excluded.include_subfolders, missing = false
+       returning (xmax = 0) as inserted`,
+      [id, externalId, folder.path.slice(0, 500), includeSubfolders],
+    );
+    if (saved.rows[0].inserted) added += 1;
+  }
+  // New folders are read from the read-back date at the next check.
+  if (added) await tx.query("update farm_mail_accounts set backfill_before = coalesce(backfill_before, now()), updated_at = now() where id = $1", [id]);
+  // Audited by count only: folder names are private (decision 571).
+  await writeAuditEvent(tx, { eventType: "farming.mailbox_folders_chosen", entityType: "farm_mail_account", entityId: id, details: { folders: wanted.size, added, removed: removed.length } });
+  return listFarmMailboxes(tx);
+}
+
+/** FC27: takes folders off a mailbox, deleting what was taken only from them. */
+async function removeFolders(tx: OrgTx, accountId: string, folderIds: string[]): Promise<void> {
+  const emptied = await tx.query<{ external_id: string; empty: boolean }>(
+    `update farm_mail_seen set folder_ids = array(select unnest(folder_ids) except select unnest($2::bigint[]))
+      where account_id = $1 and folder_ids && $2::bigint[]
+      returning external_id, cardinality(folder_ids) = 0 as empty`,
+    [accountId, folderIds],
+  );
+  // RETURNING gives the new row, so "empty" is after the folders were taken off.
+  const gone = emptied.rows.filter((row) => row.empty).map((row) => row.external_id);
+  if (gone.length) await dropEmails(tx, accountId, gone);
+  await tx.query("delete from farm_mail_folders where account_id = $1 and id = any($2::bigint[])", [accountId, folderIds]);
+}
+
+/**
+ * FC27, FC28: forgets emails as if they had never been read: their items
+ * go (shared ones too), what they did to earlier items is undone (a move or
+ * cancellation), and emails that only noted a deleted item are read again.
+ */
+async function dropEmails(tx: OrgTx, accountId: string, externalIds: string[]): Promise<void> {
+  if (!externalIds.length) return;
+  const gone = await tx.query<{ id: string; also: string[] }>(
+    "select id::text, also_seen_external_ids as also from farm_calendar_items where account_id = $1 and external_id = any($2::text[])",
+    [accountId, externalIds],
+  );
+  const goneIds = gone.rows.map((row) => row.id);
+  // Earlier items they moved or cancelled are as they were before.
+  await tx.query(
+    `update farm_calendar_items set state = 'open', state_note = null, replaced_by = null, updated_at = now()
+      where state = 'moved' and replaced_by = any($1::bigint[]) and not (id = any($1::bigint[]))`,
+    [goneIds],
+  );
+  await tx.query(
+    `update farm_calendar_items set state = 'open', state_note = null, cancelled_by_external_id = null, updated_at = now()
+      where account_id = $1 and state = 'cancelled' and cancelled_by_external_id = any($2::text[])`,
+    [accountId, externalIds],
+  );
+  // Other items stop counting them as another mention (FC9).
+  await tx.query(
+    `update farm_calendar_items
+        set also_seen = greatest(0, also_seen - cardinality(array(select unnest(also_seen_external_ids) intersect select unnest($2::text[])))),
+            also_seen_external_ids = array(select unnest(also_seen_external_ids) except select unnest($2::text[])), updated_at = now()
+      where account_id = $1 and also_seen_external_ids && $2::text[]`,
+    [accountId, externalIds],
+  );
+  // An email that only added to a deleted item is read again, so it can make its own.
+  const reread = gone.rows.flatMap((row) => row.also).filter((external) => !externalIds.includes(external));
+  if (reread.length) await tx.query("delete from farm_mail_seen where account_id = $1 and external_id = any($2::text[])", [accountId, reread]);
+  await tx.query("update farm_calendar_items set replaced_by = null where replaced_by = any($1::bigint[])", [goneIds]);
+  await tx.query("delete from farm_calendar_items where id = any($1::bigint[])", [goneIds]);
+  await tx.query("delete from farm_mail_seen where account_id = $1 and external_id = any($2::text[])", [accountId, externalIds]);
 }
 
 // Reading (FC2-FC12) -------------------------------------------------------------------------
@@ -351,7 +480,10 @@ async function applyMail(tx: OrgTx, account: AccountRow, mail: FarmMail, farms: 
         [account.id, arrangement.kind, arrangement.date, mail.from.email, mail.threadId],
       );
       if (same.rows[0]) {
-        await tx.query("update farm_calendar_items set also_seen = also_seen + 1, updated_at = now() where id = $1", [same.rows[0].id]);
+        await tx.query("update farm_calendar_items set also_seen = also_seen + 1, also_seen_external_ids = array_append(also_seen_external_ids, $2), updated_at = now() where id = $1", [
+          same.rows[0].id,
+          mail.externalId,
+        ]);
         continue;
       }
     }
@@ -366,7 +498,11 @@ async function applyMail(tx: OrgTx, account: AccountRow, mail: FarmMail, farms: 
           `Would ${arrangement.change === "moved" ? "move" : "cancel"} "${earlier.title}"${earlier.item_date ? ` on ${shortDay(earlier.item_date)}` : ""}, which you've checked`,
         );
       } else if (arrangement.change === "cancelled") {
-        await tx.query("update farm_calendar_items set state = 'cancelled', state_note = $2, updated_at = now() where id = $1", [earlier.id, `Cancelled by an email on ${sentDay}`]);
+        await tx.query("update farm_calendar_items set state = 'cancelled', state_note = $2, cancelled_by_external_id = $3, updated_at = now() where id = $1", [
+          earlier.id,
+          `Cancelled by an email on ${sentDay}`,
+          mail.externalId,
+        ]);
         made += 1;
         continue;
       } else {
@@ -394,108 +530,160 @@ async function accessToken(account: AccountRow, app: ProviderApp, now: Date) {
   return { token: refreshed.accessToken, refreshed };
 }
 
-/**
- * Checks one mailbox (FC9): new emails since the last check, then older
- * history back to the chosen start, reading at most 150 emails a check.
- * Each email is read once; it's fetched, read and only its arrangements
- * kept.
- */
-export async function checkFarmMailbox(organisation: OrganisationRecord, accountId: string, now = new Date()): Promise<{ read: number; items: number }> {
-  const prepared = await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
+type Refreshed = Awaited<ReturnType<typeof refreshAccess>>;
+
+function refreshedValues(refreshed: Refreshed | null, now: Date): [string | null, string | null, string | null] {
+  return [
+    refreshed ? encryptSecret(refreshed.accessToken) : null,
+    refreshed ? new Date(now.getTime() + refreshed.expiresInSeconds * 1000).toISOString() : null,
+    refreshed?.refreshToken ? encryptSecret(refreshed.refreshToken) : null,
+  ];
+}
+
+async function storeRefreshed(organisation: OrganisationRecord, accountId: string, refreshed: Refreshed, now: Date): Promise<void> {
+  await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, (tx) =>
+    tx.query(
+      `update farm_mail_accounts set access_token_ciphertext = coalesce($2, access_token_ciphertext), access_token_expires_at = coalesce($3, access_token_expires_at),
+              refresh_token_ciphertext = coalesce($4, refresh_token_ciphertext), updated_at = now() where id = $1`,
+      [accountId, ...refreshedValues(refreshed, now)],
+    ),
+  );
+}
+
+type FolderRow = { id: string; external_id: string; include_subfolders: boolean };
+
+async function loadAccount(organisation: OrganisationRecord, accountId: string, activeOnly: boolean) {
+  return withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
     await requireFarming(tx);
     const found = await tx.query<AccountRow>(
       `select id::text, user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at::text,
               history_from::text, checked_through::text, backfill_before::text, default_farm_id::text
-         from farm_mail_accounts where id = $1 and status = 'active'`,
+         from farm_mail_accounts where id = $1 ${activeOnly ? "and status = 'active'" : ""}`,
       [accountId],
     );
     const account = found.rows[0];
     if (!account) throw new NotFoundError("Mailbox not found.");
-    return { account, app: await appFor(tx, account.provider) };
+    const folders = await tx.query<FolderRow>("select id::text, external_id, include_subfolders from farm_mail_folders where account_id = $1 order by farm_mail_folders.id", [accountId]);
+    return { account, folders: folders.rows, app: await appFor(tx, account.provider) };
   });
-  const { account, app } = prepared;
+}
+
+/**
+ * Checks one mailbox (FC9, FC26-FC29): lists each chosen folder's emails
+ * back to the read-back date, newest first; reads the ones not read yet
+ * (at most 150 a check, the rest next time); and drops emails that are no
+ * longer in any chosen folder, with what was taken from them. Each email
+ * is read once while it stays in a chosen folder. With no folder chosen,
+ * nothing is read and nothing is asked of the mailbox.
+ */
+export async function checkFarmMailbox(organisation: OrganisationRecord, accountId: string, now = new Date()): Promise<{ read: number; items: number }> {
+  const { account, folders, app } = await loadAccount(organisation, accountId, true);
+  if (folders.length === 0) return { read: 0, items: 0 };
   try {
     const { token, refreshed } = await accessToken(account, app, now);
-    const seenIds = async (ids: string[]) =>
-      withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
-        const rows = await tx.query<{ external_id: string; sent_at: string }>("select external_id, sent_at::text from farm_mail_seen where account_id = $1 and external_id = any($2::text[])", [
-          account.id,
-          ids,
-        ]);
-        return new Map(rows.rows.map((row) => [row.external_id, row.sent_at]));
-      });
-    let budget = MAX_READ_PER_CHECK;
-    const mails: FarmMail[] = [];
-    const seenOnly: Array<{ id: string; sentAt: string }> = [];
-    /**
-     * Reads a window newest first, while the budget lasts. `oldest` is the
-     * oldest date of the unbroken run read (or already seen) from the newest,
-     * so the history can carry on below it next time.
+    // Gmail's labels once a check: which still exist, and their sublabels.
+    const labels = account.provider === "google" ? await listMailFolders(account.provider, token) : null;
+    const listings: Array<{ folder: FolderRow; listing: FolderListing }> = [];
+    for (const folder of folders) {
+      listings.push({ folder, listing: await listFolderMailIds(account.provider, token, { externalId: folder.external_id, includeSubfolders: folder.include_subfolders }, new Date(account.history_from), MAX_IDS_PER_FOLDER, labels) });
+    }
+    // Which chosen folders each listed email is in, newest first per folder.
+    const inFolders = new Map<string, Set<string>>();
+    for (const { folder, listing } of listings) {
+      for (const id of listing.ids) inFolders.set(id, (inFolders.get(id) ?? new Set()).add(folder.id));
+    }
+    const listed = [...inFolders.keys()];
+    const seen = await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
+      const rows = await tx.query<{ external_id: string; sent_at: string }>("select external_id, sent_at::text from farm_mail_seen where account_id = $1 and external_id = any($2::text[])", [
+        account.id,
+        listed,
+      ]);
+      return new Map(rows.rows.map((row) => [row.external_id, row.sent_at]));
+    });
+    /*
+     * FC28: an email read before and no longer listed has left the chosen
+     * folders, and is dropped. When a folder has more emails than are
+     * listed, only emails newer than the oldest listed one it had read
+     * (less a day, as Gmail and Outlook date emails a little differently)
+     * can be known to have left.
      */
-    const readWindow = async (after: Date, before: Date | null) => {
-      const listed = await listFarmMailIds(account.provider, token, after, before, MAX_IDS);
-      const seen = await seenIds(listed.ids);
-      let oldest: string | null = null;
-      let reachedEnd = true;
-      for (const id of listed.ids) {
-        let date = seen.get(id) ?? null;
-        if (date === null) {
-          if (budget <= 0) {
-            reachedEnd = false;
-            break;
-          }
-          budget -= 1;
-          const mail = await fetchFarmMail(account.provider, token, id, account.email);
-          if (mail) {
-            mails.push(mail);
-            date = mail.sentAt;
-          } else {
-            seenOnly.push({ id, sentAt: before ? before.toISOString() : now.toISOString() });
-          }
-        }
-        if (date && (oldest === null || date < oldest)) oldest = date;
+    let dropAfter: string | null = null;
+    let dropNone = false;
+    for (const { listing } of listings) {
+      if (listing.complete) continue;
+      const dates = listing.ids.map((id) => seen.get(id)).filter((date): date is string => Boolean(date));
+      if (!dates.length) {
+        dropNone = true;
+        continue;
       }
-      return { finished: reachedEnd && listed.complete, oldest };
-    };
-    // New mail first.
-    const recent = await readWindow(new Date(new Date(account.checked_through).getTime() - 60 * 60 * 1000), null);
-    let checkedThrough = recent.finished ? now.toISOString() : account.checked_through;
-    // Then older history, newest first, a step at a time.
-    let backfillBefore = account.backfill_before;
-    if (backfillBefore && budget > 0) {
-      const history = await readWindow(new Date(account.history_from), new Date(backfillBefore));
-      if (history.finished) backfillBefore = null;
-      else if (history.oldest && history.oldest < backfillBefore) backfillBefore = history.oldest;
+      const oldest = new Date(new Date(dates.reduce((a, b) => (a < b ? a : b))).getTime() + 86_400_000).toISOString();
+      if (dropAfter === null || oldest > dropAfter) dropAfter = oldest;
+    }
+    let budget = MAX_READ_PER_CHECK;
+    let unread = 0;
+    const mails: FarmMail[] = [];
+    const seenOnly: string[] = [];
+    for (const id of listed) {
+      if (seen.has(id)) continue;
+      if (budget <= 0) {
+        unread += 1;
+        continue;
+      }
+      budget -= 1;
+      const mail = await fetchFarmMail(account.provider, token, id, account.email);
+      if (mail) mails.push(mail);
+      else seenOnly.push(id);
     }
     return await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
+      // Folders taken off while this check ran don't count.
+      const current = new Set((await tx.query<{ id: string }>("select id::text from farm_mail_folders where account_id = $1", [account.id])).rows.map((row) => row.id));
+      const foldersOf = (id: string) => [...(inFolders.get(id) ?? [])].filter((folder) => current.has(folder));
+      for (const { folder, listing } of listings) {
+        await tx.query("update farm_mail_folders set missing = $2 where id = $1", [folder.id, listing.missing]);
+      }
+      if (!dropNone) {
+        const left = await tx.query<{ external_id: string }>(
+          `select external_id from farm_mail_seen
+            where account_id = $1 and not (external_id = any($2::text[])) and ($3::timestamptz is null or sent_at > $3::timestamptz)`,
+          [account.id, listed, dropAfter],
+        );
+        await dropEmails(tx, account.id, left.rows.map((row) => row.external_id));
+      }
+      // Emails still listed keep which chosen folders they're in (FC27).
+      for (const id of listed) {
+        if (seen.has(id)) await tx.query("update farm_mail_seen set folder_ids = $3::bigint[] where account_id = $1 and external_id = $2", [account.id, id, foldersOf(id)]);
+      }
       const farms = (await tx.query<{ id: string; name: string }>("select id::text, name from farms where is_active order by farms.id")).rows;
       let items = 0;
+      let read = 0;
       for (const mail of mails.sort((a, b) => a.sentAt.localeCompare(b.sentAt))) {
-        const marked = await tx.query("insert into farm_mail_seen (account_id, external_id, sent_at) values ($1, $2, $3) on conflict do nothing", [account.id, mail.externalId, mail.sentAt]);
+        const folderIds = foldersOf(mail.externalId);
+        if (!folderIds.length) continue;
+        const marked = await tx.query("insert into farm_mail_seen (account_id, external_id, sent_at, folder_ids) values ($1, $2, $3, $4::bigint[]) on conflict do nothing", [
+          account.id,
+          mail.externalId,
+          mail.sentAt,
+          folderIds,
+        ]);
         if (!marked.rowCount) continue;
+        read += 1;
         items += await applyMail(tx, account, mail, farms);
       }
-      for (const entry of seenOnly) {
-        await tx.query("insert into farm_mail_seen (account_id, external_id, sent_at) values ($1, $2, $3) on conflict do nothing", [account.id, entry.id, entry.sentAt]);
+      for (const id of seenOnly) {
+        const folderIds = foldersOf(id);
+        if (!folderIds.length) continue;
+        await tx.query("insert into farm_mail_seen (account_id, external_id, sent_at, folder_ids) values ($1, $2, $3, $4::bigint[]) on conflict do nothing", [account.id, id, now.toISOString(), folderIds]);
       }
-      if (checkedThrough < account.checked_through) checkedThrough = account.checked_through;
+      const checkedThrough = now.toISOString() > account.checked_through ? now.toISOString() : account.checked_through;
       await tx.query(
         `update farm_mail_accounts
             set checked_through = $2, backfill_before = $3, last_check_at = $4, last_error = null, failures = 0,
                 access_token_ciphertext = coalesce($5, access_token_ciphertext), access_token_expires_at = coalesce($6, access_token_expires_at),
                 refresh_token_ciphertext = coalesce($7, refresh_token_ciphertext), updated_at = now()
           where id = $1`,
-        [
-          account.id,
-          checkedThrough,
-          backfillBefore,
-          now.toISOString(),
-          refreshed ? encryptSecret(refreshed.accessToken) : null,
-          refreshed ? new Date(now.getTime() + refreshed.expiresInSeconds * 1000).toISOString() : null,
-          refreshed?.refreshToken ? encryptSecret(refreshed.refreshToken) : null,
-        ],
+        [account.id, checkedThrough, unread > 0 ? (account.backfill_before ?? now.toISOString()) : null, now.toISOString(), ...refreshedValues(refreshed, now)],
       );
-      return { read: mails.length, items };
+      return { read, items };
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -528,7 +716,14 @@ export async function checkAllFarmMail(): Promise<{ checked: number; failed: num
         ids = await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
           const on = await tx.query<{ enabled: boolean }>("select enabled from farming_settings where id = true");
           if (on.rows[0]?.enabled !== true) return [];
-          return (await tx.query<{ id: string }>("select id::text from farm_mail_accounts where status = 'active' order by last_check_at nulls first, farm_mail_accounts.id")).rows.map((row) => row.id);
+          // FC25: a mailbox with no folder chosen isn't read at all.
+          return (
+            await tx.query<{ id: string }>(
+              `select a.id::text from farm_mail_accounts a
+                where a.status = 'active' and exists (select 1 from farm_mail_folders f where f.account_id = a.id)
+                order by a.last_check_at nulls first, a.id`,
+            )
+          ).rows.map((row) => row.id);
         });
       } catch {
         continue;
