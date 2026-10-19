@@ -5616,6 +5616,68 @@ testing) and #154's code signing (later, Jess).
      books copy dated over the last twelve months, offered when the tables
      they need are copied. Not built: asking the AI to build a dashboard
      (optional in the issue).
+599. **One chart look for the whole of Tohyee** (20 October 2026). Jess
+     asked to change "the colours and look of the graphs", all of them.
+     Xero is the reference for the look: calm, plenty of white space, one
+     blue doing most of the work. Every chart now takes its colours from
+     one shared theme, `src/lib/charts/theme.ts`, which matches the
+     `--chart-*` variables in `globals.css` (a test checks they agree).
+     It has eight series colours in a fixed order, four Tohyee blues, a
+     one-blue scale light to dark, a below/above pair (orange and blue with
+     a grey middle) and status colours (good, warning, and the red used
+     for "red when below zero") that are never used as a series colour.
+     The series colours are the same eight names as before (blue, orange,
+     aqua, yellow, pink, green, purple, red), so saved per-chart choices
+     (#333) still work and just pick up the new shade; the first is
+     Tohyee's own accent blue. Light: #1f5fae, #d66919, #009e98, #e2a520,
+     #d4679f, #057836, #694daf, #ba3e3c. Dark: #518fe9, #cf630d, #05908a,
+     #bd8703, #cd6199, #17843f, #7f65ca, #c04442. Tohyee blues: light
+     #004085, #1f5fae, #5388cd, #7ab0f9; dark #b4d4fe, #70adfe, #4c87d5,
+     #215da7. Each colour set (Tohyee, Orange first, Green first) was run
+     through the data-visualisation colour validator in both themes, on
+     the plain card (#ffffff / #121925) and the shaded card (#eef1f5 /
+     #0f1520): every set passes the lightness, strength, colour-blind
+     (worst neighbouring pair 15.1 light, 12.9 dark for the default set;
+     the target is 8) and normal-vision checks (worst 22.7 light, 20.4
+     dark; the floor is 15). The first three colours also pass when every
+     pair is compared (for charts where any two can sit side by side). In
+     light mode the yellow is under 3:1 against white (2.18), as yellows
+     are; every chart has its table for screen readers and the tooltip, so
+     values never depend on telling that colour apart. The blues pass as an
+     ordered scale in both themes. The first try at the dark aqua sat just
+     under the normal-vision floor beside the blue (15.0) and was darkened.
+600. **How chart marks are drawn** (20 October 2026). Columns and bars are
+     at most 24px thick (16px on a pinned tile) with a 4px rounded end at
+     the value's end (the bottom for a negative column), square on the
+     baseline; stacked segments have a 2px gap in the card's colour and
+     only the outer segment is rounded. Lines are 2px with round ends;
+     dots are 8px with a 2px ring in the card's colour, shown when there
+     are 12 points or fewer (3 on a pinned tile), and always on hover;
+     a saved "dots on lines" choice still wins. Areas are a light wash of
+     the line's colour (12%, 22% stacked) instead of the old solid fill,
+     which hid the values behind it. Gridlines are solid hairlines one step
+     off the card; the value axis has no line; the zero line is a little
+     darker. Text uses text colours, never a series colour; labels inside
+     a coloured column are white or dark, whichever reads. A legend shows
+     only for two or more values (unchanged). Pie and donut labels sit at
+     the card's edges and wrap, so long names aren't cut off. Axis labels
+     are kept inside the card by the chart itself rather than by guessed
+     margins, and short axis numbers keep one decimal so steps like 3.5K
+     and 4K don't both read "4K". Big single numbers (key figures) use
+     ordinary, not fixed-width, digits.
+601. **The same look outside Analytics** (20 October 2026). Every
+     tooltip has the same layout: the month or group in muted text, then
+     each value with a short key in its colour (a line for lines, a square
+     for columns), the name, and the amount in bold; columns get a faint
+     band behind the hovered group, lines a thin crosshair. The cash flow
+     forecast uses the chart blue, gridlines and tooltip, a light wash
+     under the line, the shared red for below zero, and a solid crosshair
+     (it was dashed). Key figure trend lines are in a quiet grey with the
+     latest month as a blue dot. The pasture feed wedge's bars now start
+     from one baseline in the chart blue (they were grey and lined up on
+     their right ends). Home's net profit chart uses the shared colours
+     (it had its own). Paddock maps and icons aren't charts and are
+     unchanged.
 602. **External databases as Analytics sources** (20 October 2026; Jess
      asked "Can you connect an sql server to analytics?" and chose all of
      Microsoft SQL Server, PostgreSQL and MySQL; Power BI and Looker Studio

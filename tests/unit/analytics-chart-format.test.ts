@@ -113,7 +113,13 @@ describe("second axis (#331)", () => {
       { seriesIndex: 0, dataIndex: 0, marker: "", seriesName: "<b>Sales</b>", axisValueLabel: "Jan 2026" },
       { seriesIndex: 1, dataIndex: 0, marker: "", seriesName: "Invoices (right axis)", axisValueLabel: "Jan 2026" },
     ]);
-    expect(html).toBe("Jan 2026<br/>&lt;b&gt;Sales&lt;/b&gt;: <b>$1,500.00</b><br/>Invoices (right axis): <b>3</b>");
+    // The month, then each value with its own format; the name is escaped, never HTML.
+    expect(html).toContain(">Jan 2026</div>");
+    expect(html).toContain("&lt;b&gt;Sales&lt;/b&gt;");
+    expect(html).not.toContain("<b>Sales</b>");
+    expect(html).toContain(">$1,500.00</span>");
+    expect(html).toContain(">Invoices (right axis)</span>");
+    expect(html).toContain(">3</span>");
   });
 });
 
@@ -138,10 +144,11 @@ describe("chart look (#333)", () => {
     const byGroup = option({ ...columns, format: { colorByCategory: true } }, months);
     expect(byGroup.series[0].data).toEqual([
       { value: 1500, itemStyle: { color: "#2a78d6" } },
-      { value: -250, itemStyle: { color: "#eb6834" } },
+      // Below zero, the rounded end is at the bottom (the data end).
+      { value: -250, itemStyle: { color: "#eb6834", borderRadius: [0, 0, 4, 4] } },
     ]);
     const red = option({ ...columns, format: { negativeRed: true } }, months);
-    expect(red.series[0].data).toEqual([1500, { value: -250, itemStyle: { color: "#d03b3b" } }]);
+    expect(red.series[0].data).toEqual([1500, { value: -250, itemStyle: { color: "#d03b3b", borderRadius: [0, 0, 4, 4] } }]);
   });
 
   it("shows data labels in the value's format", () => {
@@ -156,7 +163,7 @@ describe("chart look (#333)", () => {
     expect(option(combo, months).legend).toMatchObject({ show: true, top: 0 });
     expect(option({ ...combo, format: { legend: { show: "hide" } } }, months).legend).toMatchObject({ show: false });
     expect(option({ ...combo, format: { legend: { position: "right" } } }, months).legend).toMatchObject({ show: true, right: 0, orient: "vertical" });
-    expect(option({ ...combo, format: { legend: { position: "bottom" } } }, months).grid).toMatchObject({ bottom: 52 });
+    expect(option({ ...combo, format: { legend: { position: "bottom" } } }, months).grid).toMatchObject({ bottom: 36 });
   });
 
   it("sets axis titles, gridlines, bounds, start at zero and log scale", () => {
@@ -185,7 +192,8 @@ describe("chart look (#333)", () => {
       format: { stack: "percent" },
     };
     const result = option(spec, [{ month: "Jan", a: "30", b: "10" }]);
-    expect(result.series.map((series) => series.data)).toEqual([[0.75], [0.25]]);
+    // Only the top segment of the stack has the rounded end.
+    expect(result.series.map((series) => series.data)).toEqual([[0.75], [{ value: 0.25, itemStyle: { borderRadius: [4, 4, 0, 0] } }]]);
     expect(result.yAxis![0]).toMatchObject({ max: 1 });
     expect((result.yAxis![0].axisLabel as { formatter: (value: number) => string }).formatter(0.5)).toBe("50%");
   });

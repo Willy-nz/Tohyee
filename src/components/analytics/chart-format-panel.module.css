@@ -79,10 +79,10 @@
   height: 20px;
   margin-bottom: 10px;
   border-radius: 4px;
-  border: 1px solid var(--border);
 }
 
 .auto {
+  /* "Automatic": the first two colours of the set. */
   background: linear-gradient(135deg, var(--chart-1) 0 50%, var(--chart-2) 50% 100%);
 }
 

@@ -2,44 +2,26 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ECharts, EChartsOption } from "echarts";
-import { formatChartValue, toEChartsOption, type ChartSpec, type ChartTheme, type KpiSummary } from "@/lib/analytics/chart-spec";
+import { formatChartValue, toEChartsOption, type ChartSpec, type KpiSummary } from "@/lib/analytics/chart-spec";
+import { CHART_TOKENS, chartThemeFromTokens, readChartTheme, type ChartTheme } from "@/lib/charts/theme";
 import styles from "./chart.module.css";
 
 type ChartProps = {
   spec: ChartSpec;
-  palette?: "default" | "accent";
   rows: Record<string, string | number | null>[];
   /** Drawing height in pixels (a tile's Small, Medium or Large); the stylesheet's otherwise. */
   height?: number;
 };
 
-const CHART_SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+const DEFAULT_THEME: ChartTheme = chartThemeFromTokens(CHART_TOKENS.light);
 
-const BLUES = ["#0d366b", "#256abf", "#5598e7", "#86b6ef"];
-
-const DEFAULT_THEME: ChartTheme = {
-  text: "#1b2533",
-  mutedText: "#546072",
-  grid: "#dde2e9",
-  background: "#ffffff",
-  palette: CHART_SLOTS,
-  blues: BLUES,
-  negative: "#d03b3b",
-};
-
-function readTheme(palette: "default" | "accent"): ChartTheme {
-  const css = getComputedStyle(document.documentElement);
-  const color = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  return {
-    text: color("--text", DEFAULT_THEME.text),
-    mutedText: color("--text-muted", DEFAULT_THEME.mutedText),
-    grid: color("--border", DEFAULT_THEME.grid),
-    background: color("--surface", DEFAULT_THEME.background),
-    // The chart series colours in their fixed order (--chart-1 to --chart-8 in globals.css).
-    palette: palette === "accent" ? [color("--accent", "#1f5fae"), color("--text-muted", "#546072"), color("--text", "#1b2533")] : CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
-    blues: BLUES.map((fallback, index) => color(`--chart-blues-${index + 1}`, fallback)),
-    negative: color("--chart-negative", DEFAULT_THEME.negative!),
-  };
+/**
+ * The shared chart theme (decision 599), read from where the chart sits so it
+ * follows light and dark, and a shaded card's own surface for the gaps.
+ */
+function readTheme(element: Element | null): ChartTheme {
+  const css = getComputedStyle(element ?? document.documentElement);
+  return readChartTheme((name) => css.getPropertyValue(name));
 }
 
 function isChartOption(option: EChartsOption | KpiSummary): option is EChartsOption {
@@ -50,7 +32,7 @@ function isKpiSummary(option: EChartsOption | KpiSummary): option is KpiSummary 
   return !isChartOption(option);
 }
 
-export function Chart({ spec, rows, palette = "default", height }: ChartProps) {
+export function Chart({ spec, rows, height }: ChartProps) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ECharts | null>(null);
@@ -61,7 +43,7 @@ export function Chart({ spec, rows, palette = "default", height }: ChartProps) {
   const title = spec.title || spec.series.map((series) => series.label).join(", ") || "Chart";
 
   useEffect(() => {
-    const updateTheme = () => setTheme(readTheme(palette));
+    const updateTheme = () => setTheme(readTheme(containerRef.current));
     updateTheme();
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -71,7 +53,7 @@ export function Chart({ spec, rows, palette = "default", height }: ChartProps) {
       observer.disconnect();
       media.removeEventListener("change", updateTheme);
     };
-  }, [palette]);
+  }, []);
 
   useEffect(() => {
     optionRef.current = option;
