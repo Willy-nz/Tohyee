@@ -17707,7 +17707,11 @@ examples"; "Claiming Investment Boost" (news, 2025).
   **1,584.40** deductible (IR260 shows "$1,584"). Sale price above cost: the
   part above cost isn't taxable; depreciation recovered is at most cost less
   ATV. Recovered and loss amounts are also scaled by business use (our
-  reading). Proceeds come from the register's disposal (excluding GST).
+  reading). Proceeds come from the register's disposal (excluding GST). For an
+  asset brought in with its ATV from before Tohyee, "cost less ATV" is
+  taken to be what was claimed, which assumes the same business-use
+  percentage in the earlier years; if it changed, check the recovered amount
+  (decision 569).
 - **ITX18 In the taxable income workpaper.** For assets with tax details,
   the book figures the ledger shows for the year come out and the tax
   figures go in, as separate lines: book depreciation added back (as the
@@ -17779,12 +17783,20 @@ adding up the boxes above it; the checks use the figures with cents.
   realised gains (53): income on accounts marked Not taxable. Additions (54):
   the cost of register assets bought in the year, **30,000.00**. Disposals
   (55): proceeds of register disposals in the year. Dividends paid (56) and
-  drawings (57): the net debits in the year on accounts marked so, drawings
-  **5,000.00**. Current accounts (58): their closing balances added together,
+  drawings (57): the net debits in the year on accounts marked so, less
+  year-end clearing journals (ITX69), drawings **5,000.00**. Current accounts (58): their closing balances added together,
   credit (owed to the owners) positive (confirmed by Jess, 17 Oct 2026).
   Tax-deductible loss on disposal (59): from tax depreciation. Investment
   Boost assets (60): the cost of assets whose Investment Boost is claimed
   this year, less any private-use share, **30,000.00**.
+- **ITX69 Drawings cleared at the year end** (decision 569; from a review
+  Jess passed on; not yet reviewed). The accountant closes
+  drawings into owner's equity on 31 Mar 2026: Dr 3000 5,000.00 / Cr 3100
+  5,000.00. Box 57 is still **5,000.00**: a journal that credits a drawings
+  or dividends paid account and debits only equity or current accounts is
+  a clearing journal, and it (and its reversal) is left out of boxes 56 and
+  57. Owner's equity (51) is unchanged at 120,000.00. A drawing paid back
+  (Dr bank 1,000.00 / Cr 3100) still counts: box 57 **4,000.00**.
 - **ITX24 When it's shown.** Only for an income year that has ended, and
   only figures Tohyee can work out: box 1 (more than one line of business)
   is typed for the year. Assets outside the fixed asset register aren't in

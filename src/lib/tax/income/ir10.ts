@@ -3,7 +3,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays } from "@/lib/financial-year";
-import { add, cmp, dec, type Decimal, isNegative, isZero, neg, sub, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, isNegative, isPositive, isZero, neg, sub, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, earningsOf, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { taxAssetTotals } from "@/lib/tax/income/assets";
 import { allowedBoxes, allowedRoles, defaultBox, defaultRole, IR10_BOX_LABELS, IR10_ROLES, type Ir10Role } from "@/lib/tax/income/ir10-boxes";
@@ -179,14 +179,7 @@ export async function buildIr10(
   box.set(53, untaxed);
   box.set(54, assets.additions);
   box.set(55, assets.disposalProceeds);
-  let drawings = ZERO_DECIMAL;
-  let dividends = ZERO_DECIMAL;
-  for (const row of await accountTotals(tx, start, end)) {
-    const account = byId.get(row.id);
-    const movement = sub(dec(row.debits), dec(row.credits));
-    if (account?.role === "drawings") drawings = add(drawings, movement);
-    if (account?.role === "dividends_paid") dividends = add(dividends, movement);
-  }
+  const { drawings, dividends } = await drawingsAndDividends(tx, start, end, accounts);
   box.set(56, dividends);
   box.set(57, drawings);
   box.set(58, currentAccounts);
@@ -220,4 +213,51 @@ export async function buildIr10(
     "Each box drops its cents, so a total box can differ by a dollar or two from adding up the boxes above it. The checks use the figures with cents.",
   ];
   return { boxes, labels: IR10_BOX_LABELS, checks, notes };
+}
+
+/**
+ * Boxes 56 and 57 (ITX23, ITX69): the year's movement on the dividends paid
+ * and drawings accounts, leaving out year-end clearing journals (decision
+ * 569). A clearing journal credits a drawings or dividends account and
+ * debits only equity accounts or current accounts (closing drawings into
+ * owner's equity or a current account); it isn't a drawing, so without this
+ * the box would show 0.00. A reversal of one is left out too. Everything
+ * else counts, including drawings charged to a current account (Dr drawings,
+ * Cr current account).
+ */
+async function drawingsAndDividends(tx: OrgTx, start: string, end: string, accounts: Ir10Account[]): Promise<{ drawings: Decimal; dividends: Decimal }> {
+  const roleOf = new Map(accounts.filter((account) => account.role === "drawings" || account.role === "dividends_paid").map((account) => [account.accountId, account.role]));
+  if (roleOf.size === 0) return { drawings: ZERO_DECIMAL, dividends: ZERO_DECIMAL };
+  const transferIds = new Set(accounts.filter((account) => account.role === "current_account").map((account) => account.accountId));
+  const lines = await tx.query<{ journal_id: string; related_journal_id: string | null; account_id: string; account_class: string; debit: string; credit: string }>(
+    `select j.id::text as journal_id, j.related_journal_id::text, l.account_id::text, a.account_class, l.debit_amount::text as debit, l.credit_amount::text as credit
+       from ledger_journals j join ledger_journal_lines l on l.journal_id = j.id join accounts a on a.id = l.account_id
+      where j.posting_date between $1 and $2
+        and j.id in (select l2.journal_id from ledger_journal_lines l2 where l2.account_id = any($3::bigint[]))`,
+    [start, end, [...roleOf.keys()]],
+  );
+  const byJournal = new Map<string, typeof lines.rows>();
+  for (const line of lines.rows) byJournal.set(line.journal_id, [...(byJournal.get(line.journal_id) ?? []), line]);
+  const clearing = new Set<string>();
+  for (const [journalId, journalLines] of byJournal) {
+    const creditsOne = journalLines.some((line) => roleOf.has(line.account_id) && isPositive(dec(line.credit)));
+    const debitsOnlyEquity = journalLines
+      .filter((line) => isPositive(dec(line.debit)))
+      .every((line) => !roleOf.has(line.account_id) && (line.account_class === "equity" || transferIds.has(line.account_id)));
+    const touchesOnlyEquity = journalLines.every((line) => roleOf.has(line.account_id) || line.account_class === "equity" || transferIds.has(line.account_id));
+    if (creditsOne && debitsOnlyEquity && touchesOnlyEquity) clearing.add(journalId);
+  }
+  // A clearing journal's reversal (in the same year) goes with it.
+  const reversals = await tx.query<{ id: string }>("select id::text from ledger_journals where related_journal_id = any($1::bigint[]) and correction_kind = 'reversal'", [[...clearing]]);
+  for (const row of reversals.rows) clearing.add(row.id);
+  let drawings = ZERO_DECIMAL;
+  let dividends = ZERO_DECIMAL;
+  for (const line of lines.rows) {
+    const role = roleOf.get(line.account_id);
+    if (!role || clearing.has(line.journal_id)) continue;
+    const movement = sub(dec(line.debit), dec(line.credit));
+    if (role === "drawings") drawings = add(drawings, movement);
+    else dividends = add(dividends, movement);
+  }
+  return { drawings, dividends };
 }
