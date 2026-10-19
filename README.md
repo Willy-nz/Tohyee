@@ -161,9 +161,23 @@ and the [feature register](docs/FEATURES.md).
   retained earnings, as in NetSuite), profit and loss, balance sheet, account transactions, journal
   report, aged receivables and payables, budgets with budget vs actual, and
   custom reports with your own layout.
-- A cash flow forecast, consolidation of several organisations (with
+- A cash flow forecast that leads with the lowest balance, any shortfall
+  and a balance chart; consolidation of several organisations (with
   exchange rates from the European Central Bank), and report commentary
   that the organisation's connected AI can suggest and a person checks.
+
+**Income tax** (not yet reviewed by an accountant)
+- Taxable income from the books for a company or sole trader, with
+  non-deductible, entertainment, business-use and not-taxable treatments,
+  losses, credits, imputation credits and overseas tax; any balance date.
+- Standard provisional tax instalments (with late-filed and extension of
+  time rules), the expected end-of-year tax, and an estimate of use-of-money
+  interest.
+- Tax depreciation and Investment Boost per fixed asset, the imputation
+  credit account, and the IR10, IR4 and IR3 boxes once the year ends.
+- IRD documents uploaded and read by your own AI; you check each figure
+  before it's used. Tohyee doesn't file returns, pay IRD or ask for your
+  myIR password.
 
 **Accounting**
 - A starting NZ chart of accounts, manual journals, corrections by reversal,
@@ -231,7 +245,24 @@ and the [feature register](docs/FEATURES.md).
   or label. This is data ingestion, not a promise of scheduled outbound
   dashboard emails or direct Looker/Google Ads connectors.
 
-**Livestock (new on main)**
+**Farming**
+- Farms and paddocks drawn or imported (GeoJSON, KML/KMZ, shapefile), with
+  LINZ aerial photos behind; fertiliser plans against what was bought and
+  spread; soil tests and samples; farm benchmarks per kgMS, hectare, cow and
+  stock unit.
+- Pasture and feed: cover readings (typed or imported), growth, the feed
+  wedge, grazings and supplements fed. Records only: no feed plan or targets.
+- A **farm calendar** read from your own Gmail or Outlook: vet visits,
+  deliveries, stock trucks, contractors, deadlines and meetings, with
+  anything unclear kept aside to check. Only you see your mailbox and
+  calendar. Not yet tried with a real mailbox.
+- A **Farming API** for your own apps (keys you make, choosing exactly what
+  each may read or record), with a guide and a soil sampling app.
+- An AI workspace: a farm notebook and files your own AI can read, tables
+  and dashboards it builds, and livestock movements it suggests for you to
+  accept.
+
+**Livestock**
 - An optional Accounting module for dairy and beef cattle, sheep, deer and
   goats.
   Opening head counts and values, births, purchases, sales, deaths, ageing,
@@ -247,6 +278,9 @@ and the [feature register](docs/FEATURES.md).
   alter tax valuations.
 - High-priced animals (valued apart from their class at IRD's rate) and the
   Chatham Islands herd value ratio.
+- Classes held for sale shown as current assets, and where the herd scheme
+  revaluation goes tied to your reporting basis (profit and loss only for
+  general purpose statements).
 - **Scope limits:** this is not every NZ livestock tax rule. Pigs,
   associated-person transfers, long-term bailments, purchased bobby calves
   and a few other cases are refused rather than guessed. Farm budgets,
