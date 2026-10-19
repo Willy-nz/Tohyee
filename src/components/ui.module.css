@@ -25,7 +25,7 @@
   min-width: 0;
 }
 
-/* Home's header: a softly blended restoration of the supplied mountain photo. */
+/* Home's header: a softly blended crop of the owner's Aoraki / Lake Pukaki photo (#339). */
 .pageHeaderDecorated {
   position: relative;
   isolation: isolate;
@@ -41,7 +41,7 @@
   aspect-ratio: 700 / 202;
   pointer-events: none;
   /* Preserve the cool photographic colours instead of flattening them into blue. */
-  background: url("/images/aoraki-restored.webp") center 45% / cover no-repeat;
+  background: url("/images/aoraki-pukaki.webp") center 50% / cover no-repeat;
   opacity: 0.28;
   /* Fade every edge; keep the central peak legible without a rectangular sky patch. */
   -webkit-mask-image: linear-gradient(to right, transparent, #000 28%, #000 92%, transparent), linear-gradient(to bottom, transparent, #000 22%, #000 65%, transparent);
