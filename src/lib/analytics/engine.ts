@@ -550,6 +550,92 @@ export async function replaceTableFromSelect(
   );
 }
 
+/**
+ * Loads rows read from an external database into `table` (decision 605),
+ * the same way as a file: every value goes into a staging table as text,
+ * then each column is converted explicitly to its chosen type (so money
+ * stays exact), and the table is only replaced when every row has loaded.
+ * The rows are read while they're appended, a batch at a time.
+ */
+export function loadRows(input: {
+  organisationId: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  rows: AsyncIterable<Array<string | null>[]>;
+}): Promise<CsvLoadResult> {
+  assertTableName(input.table);
+  if (input.table.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
+  if (input.columns.length === 0) throw new ValidationError("Choose at least one column to load.");
+  const names = new Set<string>();
+  for (const column of input.columns) {
+    assertTableName(column.name);
+    if (names.has(column.name)) throw new ValidationError(`Two columns are both called ${column.name}.`);
+    names.add(column.name);
+    if (!Object.hasOwn(COLUMN_TYPES, column.kind)) throw new ValidationError(`Unknown column type for ${column.name}.`);
+  }
+  return serialise(input.organisationId, () =>
+    withAnalytics(input.organisationId, async (connection) => {
+      const started = performance.now();
+      const raw = `_tohyee_raw_${input.table}`;
+      const staging = `_tohyee_load_${input.table}`;
+      const rawColumns = input.columns.map((_, index) => `c${index}`);
+      try {
+        await connection.run(`drop table if exists ${quoteIdentifier(raw)}`);
+        await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
+        await connection.run(`create table ${quoteIdentifier(raw)} (${rawColumns.map((name) => `${name} VARCHAR`).join(", ")})`);
+        const appender = await connection.createAppender(raw);
+        try {
+          for await (const batch of input.rows) {
+            for (const row of batch) {
+              for (let index = 0; index < rawColumns.length; index += 1) {
+                const value = row[index];
+                if (value === null || value === undefined) appender.appendNull();
+                else appender.appendVarchar(value);
+              }
+              appender.endRow();
+            }
+            appender.flushSync();
+          }
+          appender.closeSync();
+        } catch (error) {
+          try {
+            appender.closeSync();
+          } catch {
+            // The first error is the one worth reporting.
+          }
+          throw error;
+        }
+        const select = input.columns
+          .map((column, index) => {
+            const value = rawColumns[index];
+            const converted = column.kind === "text" ? value : `cast(nullif(trim(${value}), '') as ${COLUMN_TYPES[column.kind]})`;
+            return `${converted} as ${quoteIdentifier(column.name)}`;
+          })
+          .join(", ");
+        await connection.run(`create table ${quoteIdentifier(staging)} as select ${select} from ${quoteIdentifier(raw)}`);
+        await connection.run(`drop table ${quoteIdentifier(raw)}`);
+        const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
+        const rows = Number(count.getRows()[0][0]);
+        await connection.run("begin transaction");
+        try {
+          await connection.run(`drop table if exists ${quoteIdentifier(input.table)}`);
+          await connection.run(`alter table ${quoteIdentifier(staging)} rename to ${quoteIdentifier(input.table)}`);
+          await connection.run("commit");
+        } catch (error) {
+          await connection.run("rollback");
+          throw error;
+        }
+        return { rows, milliseconds: Math.round(performance.now() - started) };
+      } catch (error) {
+        await connection.run(`drop table if exists ${quoteIdentifier(raw)}`).catch(() => undefined);
+        await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
+        if (error instanceof ValidationError) throw error;
+        throw new ValidationError(loadErrorMessage(error));
+      }
+    }),
+  );
+}
+
 /** Previews (shaping) stop after this long. */
 export const PREVIEW_TIME_LIMIT_MS = 10_000;
 

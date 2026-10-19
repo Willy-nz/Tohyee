@@ -15,7 +15,9 @@ const PAGE_CONTENT_SECURITY_POLICY =
 const nextConfig: NextConfig = {
   output: "standalone",
   // DuckDB (analytics, decision 354) is a native module: loaded by Node, not bundled.
-  serverExternalPackages: ["@duckdb/node-api", "@duckdb/node-bindings"],
+  // The MySQL and SQL Server drivers (analytics database sources, decision 602) are
+  // loaded by Node on the server too, only when a database source is used.
+  serverExternalPackages: ["@duckdb/node-api", "@duckdb/node-bindings", "mysql2", "mssql", "tedious"],
   // The fonts the server writes PDFs with (src/lib/pdf/writer.ts reads them
   // from the app's folder), so the standalone build and installers have them.
   outputFileTracingIncludes: {
