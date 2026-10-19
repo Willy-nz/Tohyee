@@ -77,6 +77,12 @@ describe("calculated values in a tile's question (#337)", () => {
     expect(() => ask([revenue, { ...revenue }, { label: "X", aggregate: "formula", formula: "[Revenue]" }])).toThrow("its own name");
     expect(() => ask([{ label: "X", aggregate: "formula", formula: "[A] +" }])).toThrow("X: The formula stops too early");
     expect(() => ask([{ ...revenue, where: [{ field: "nope", op: "eq", value: "x" }] }])).toThrow("Revenue condition 1: there's no column called nope");
+    // A value's conditions take the same tests as the tile's filters, but are always all of them ("and").
+    const kept = ask([{ ...revenue, where: [{ field: "account_type", op: "not_in", value: ["equity"] }, { field: "system_account", op: "blank", value: "", join: "or" }] }]);
+    expect(kept.measures[0].where).toEqual([
+      { field: "account_type", op: "not_in", value: ["equity"] },
+      { field: "system_account", op: "blank", value: "" },
+    ]);
   });
 
   it("keeps balances to the To date and moves the From date onto the other values", () => {

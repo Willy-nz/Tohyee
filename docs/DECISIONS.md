@@ -5348,6 +5348,121 @@ testing) and #154's code signing (later, Jess).
      once; making a new one stops the old. It answers "not found" alike
      for a wrong, replaced or turned-off link, a member who has left, or
      Farming turned off, and is limited to 60 requests an hour. FC22, FC23.
+584. **A farm mailbox reads only the folders its member ticks** (20 October
+     2026). Issue #340: Jess's farm mail shares a mailbox with mail for her
+     mum's company directorships, which must not come into Tohyee at all.
+     Each farm mailbox reads only the Outlook folders or Gmail labels its
+     member ticks (Gmail's Inbox and their own labels are offered; Sent,
+     Spam, Trash, Drafts and categories aren't), each with its subfolders
+     if asked, and nothing until at least one is ticked: there's no "whole
+     mailbox" choice. The same read-only scopes list them (gmail.readonly,
+     Mail.Read). Folder names are private like the rest (decision 571):
+     only the member sees them, and audit events give counts only. Tohyee
+     keeps, for each email read, only the ids of the chosen folders it was
+     in. Outlook nests folders; Gmail nests labels by name ("Farm/LIC"), so
+     a label's subfolders are the labels named under it. Neither Xero nor
+     NetSuite reads farm mail, so the rules are Claude's, following #340.
+     FC25, FC26, FC29, tenant migration 0164, not yet reviewed; not tried
+     with a real mailbox.
+585. **What leaves the chosen folders leaves Tohyee** (20 October 2026).
+     Taking a folder off deletes, straight away, every item taken from
+     emails that were only in that folder, shared ones included. An email
+     moved out of the chosen folders (or in a folder deleted in Outlook or
+     Gmail) is dropped at the next check the same way; one moved in is read
+     at the next check if it's no older than the read-back date. A dropped
+     email's effects on other items are undone: a booking it moved or
+     cancelled is back as it was, and an email that only added to an item
+     it made is read again. Privacy comes first here, so an item the member
+     checked or shared goes too when its email leaves. Each check lists the
+     chosen folders' emails back to the read-back date (at most 2,000 per
+     folder, newest first); in a folder with more, only the newest 2,000
+     are read and only emails newer than those can be known to have left.
+     FC27, FC28, FC29.
+586. **Mailboxes connected before folders stop until folders are chosen**
+     (20 October 2026). Migration 0164 can't know which folder each earlier
+     email came from without asking the mailbox, and deleting a member's
+     items in a migration can't be undone, so it deletes nothing: those
+     mailboxes stop being read, the farm calendar says so with Choose
+     folders, and at the first check after folders are chosen anything not
+     in them is removed (FC28). Disconnecting still deletes it all at once.
+     FC30.
+587. **Farm organisations get a farm Home** (20 October 2026). Issue #341,
+     from Jess. With Farming on, Home is a farm dashboard built from records
+     Tohyee already keeps: the farm calendar (only as the person looking
+     sees it, decision 571), stock, pasture and feed, fertiliser, farm
+     working expenses per unit, a small Money card and the farm notebook.
+     Cards with nothing to show are hidden rather than showing zeros. The
+     business Home is a link away (Business overview). Xero has no farm
+     Home, so it follows Xero's Home for look and the issue for content.
+     FH1-FH6, FH8, not yet reviewed.
+588. **The farm Home is customised like Home** (20 October 2026). It's a
+     second page in the dashboard frame (decision 372): per-person cards,
+     order and Hide, saved in the same preferences, with Analytics tiles
+     pinned alongside (decision 374). It shows up to 10 cards, not Home's
+     4, so each page now has its own limit. Pin to page offers it only when
+     Farming is on. FH7.
+589. **What the farm Home leaves out** (20 October 2026). No card is made
+     up where Tohyee has no records: production and income (milk solids are
+     entered only yearly), FWE against budget, soil tests due (soil tests
+     have no "due" rule on purpose) and income tax due. There are no
+     different default cards per role: Tohyee's roles don't say who is farm
+     staff or the accountant, and guessing from bookkeeper or viewer would
+     be wrong as often as right. Everyone starts with the same cards and
+     uses Customise. No card shows payroll figures.
+576. **Analytics shows money and value names the way people read them**
+     (20 October 2026). Issues #328-#330, found building a dashboard.
+     Negative money in Analytics tables, key figures and pivot tables shows
+     its minus first, -$27.00, as Tohyee shows negatives everywhere else
+     (the minus before the figure; no brackets). Charts' tooltips and axes
+     already did. A value's label follows its column and calculation
+     ("Amount", "Average net", "Count of invoices") until someone types
+     their own, which then stays; a label still matching what Tohyee
+     filled in (including the column name and "Rows" that earlier versions
+     used) counts as not typed. "+ Create report" needing two clicks
+     couldn't be made to happen here (tried after leaving a dashboard by
+     the top bar, the logo, Back and a fresh load, with charts, open
+     slicers and a slowed-down browser); two things that could cause it
+     are fixed: Analytics pages no longer swap themselves for "Loading…"
+     while they check Analytics is still on each time they open, and a
+     slicer's list no longer leaves a click listener on the page each time
+     it's opened and closed with its own button. Not yet reviewed.
+577. **Analytics in plain words, with date presets** (20 October 2026).
+     Issue #336. Pickers show sources and columns by plain names, grouped by
+     where they come from ("Invoices › Net", "Ledger › Account class"),
+     with the real name in a tooltip and beside each field in the field
+     list; the data source picker says in a sentence what each Tohyee table
+     holds. Saved dashboards keep the real names. Beside From and To,
+     Dates offers This month, Last month, This quarter, This financial
+     year, Last financial year, Last 12 months and All time. Financial
+     years follow the organisation's balance date (31 March unless
+     changed), and quarters are quarters of that year, so with 31 March
+     they're the calendar quarters (whether Xero's "This quarter" does the
+     same wasn't checked). Last 12 months is this month so far and the 11
+     whole months before it, so a chart by month doesn't start with part
+     of a month. "Keep these dates" with a preset chosen keeps the preset,
+     so the dashboard (and its tiles pinned to Home) moves on with the
+     calendar; today is the server's (New Zealand) date. Yes/No columns
+     show Yes and No in tables, charts, slicers and filters and are still
+     sent as true and false. "Date range applies to" keeps starting on the
+     source's first date (invoice date, bill date, posting date). Not yet
+     reviewed.
+578. **More tests for tile filters, and "or"** (20 October 2026). Issue
+     #332. A tile's filters offer the tests that fit the column: is one of
+     and is not one of (ticked from the column's own values, up to 500),
+     is blank and is not blank (empty or spaces-only text counts as
+     blank), between (both ends included) for numbers and dates, and for
+     dates: in the last N days (today and the N-1 days before), in the
+     last N months (this month so far and the N-1 whole months before, as
+     Last 12 months in decision 577), in this financial year and in last
+     financial year (from the balance date). Relative dates are worked out
+     each time the tile runs, from the server's today. Each filter after
+     the first can join the one before with "or": filters joined that way
+     are a group where one passing is enough, and groups are joined with
+     "and" (as Looker Studio's filter clauses work). Like "is not", "is not
+     one of" leaves out blank rows; add "or is blank" to keep them. Filters
+     saved with the earlier tests keep working on any column; the new
+     tests are checked against the column's type. A tile's filters don't
+     move with "and last year" (as before). Not yet reviewed.
 598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
      Jess supplied a better photo in #339. Only the mountains, sky and lake
      are used (a plain crop, not AI-restored): the car, shelter, sign and
@@ -5490,7 +5605,7 @@ testing) and #154's code signing (later, Jess).
      adds and takes away money. A value can also have its own conditions
      (only rows where...) and be a balance (everything to the To date,
      whatever the From date; not with a date grouping). Any value can be
-     saved on its data source under a name (tenant migration 0167,
+     saved on its data source under a name (tenant migration 0165,
      `analytics_measures`) for other charts to add; a chart keeps its own
      copy, so removing or renaming a saved value doesn't break charts. The
      books copy has eleven built-in values (BM1-BM4, as Xero does, not yet

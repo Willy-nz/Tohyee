@@ -41,7 +41,16 @@ that something happened.
   All settings) with the five most used left in the menu (#338, decision 580).
   **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
   you; Bills to pay with due-this-week; Next GST return), net profit by month,
-  a To do card and recent activity.
+  a To do card and recent activity. With Farming on, Home is the **farm
+  Home** (#341, FH1-FH8, decisions 587-589): this week on the farm (private to
+  you) and Needs checking, stock by class with AI suggestions waiting,
+  pasture cover, growth and supplements, fertiliser planned against applied,
+  farm working expenses per unit against last season, a small Money card and
+  the farm notebook. Each card links to its page, and empty cards are hidden.
+  Customise turns cards on and off and orders them, per person, with
+  Analytics tiles pinned alongside (up to 10). Not yet: production and
+  income, FWE against budget, soil tests due, and different default cards
+  per role.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
@@ -537,8 +546,15 @@ that something happened.
   skipped; sharing chosen items with the whole organisation after a preview
   of exactly what they'll see (never the email or notes); and a private
   calendar link (.ics) for Google, Apple or Outlook to subscribe to, shown
-  once. Not yet: attachments, changing one date of a repeat, repeats read
-  from email wording.
+  once. Since FC25-FC31 (#340, decisions 584-586, tenant migration 0164):
+  only the Outlook folders or Gmail labels the member ticks are read, with
+  their subfolders if asked, and nothing until one is ticked (mailboxes
+  connected earlier stopped until their member chooses); the chosen folders
+  show on the mailbox with Change folders; taking a folder off deletes what
+  was taken from it, and emails moved out of the chosen folders drop at the
+  next check (moved in, they're read). Not yet: attachments, changing one
+  date of a repeat, repeats read from email wording, and the private mailbox
+  import (#250), which should use the same folder choice when it's built.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
@@ -1879,6 +1895,15 @@ that something happened.
   range and slicers (tick boxes) that apply to every tile. Totals stay
   exact (DuckDB decimals, shown from their text); column and value names
   are checked against the table and typed values go in as parameters.
+  Negative money shows as -$27.00, and a value's label follows its column
+  and calculation until someone types their own (decision 576). Sources
+  and columns have plain names grouped by source (the real name in a
+  tooltip), Yes/No columns show Yes and No, and Dates offers presets from
+  This month to This financial year (from the balance date) and All time,
+  which a dashboard can keep so it moves with the calendar (decision 577).
+  Tile filters also have is one of / is not one of (ticked from the
+  column's values), is blank / is not blank, between, in the last N days
+  or months, this or last financial year, and "or" groups (decision 578).
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
   about 3 seconds. Analytics also copies Tohyee's books and CRM, shares
@@ -1895,7 +1920,7 @@ that something happened.
   export (decision 375).
 
 - **Analytics: calculated values, saved values and templates** (#337,
-  decision 597, examples BM1-BM4, tenant migration 0167). A chart can add a
+  decision 597, examples BM1-BM4, tenant migration 0165). A chart can add a
   calculated value, a formula over its other values such as
   `[Sales] - [Costs]` or `[Sales] / [Units]`, worked out in exact decimals.
   Any value can be saved on its data source for other charts, and the books

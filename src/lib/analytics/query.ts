@@ -1,6 +1,10 @@
 import { ValidationError } from "@/lib/errors";
 import { DECIMAL_RESULT, exactAverageSql, exactDivideSql } from "@/lib/analytics/decimal-sql";
 import { formulaKeepsMoney, formulaRefs, parseFormula, type FormulaNode } from "@/lib/analytics/formula";
+import { lastDays, lastMonths, presetRange } from "@/lib/analytics/date-ranges";
+import { columnKind, FILTER_OPS, MAX_LAST_DAYS, MAX_LAST_MONTHS, opAllowed, valueKind } from "@/lib/analytics/filters";
+import { cmp, dec } from "@/lib/money/decimal";
+import { todayIsoDate } from "@/lib/dates";
 import { previousPeriod, previousYear } from "@/lib/analytics/periods";
 
 /**
@@ -14,7 +18,23 @@ import { previousPeriod, previousYear } from "@/lib/analytics/periods";
 export type Grain = "day" | "week" | "month" | "quarter" | "year";
 export type PivotGrain = "month" | "quarter" | "year";
 export type Aggregate = "sum" | "avg" | "min" | "max" | "count" | "count_distinct";
-export type FilterOp = "eq" | "neq" | "in" | "contains" | "gt" | "gte" | "lt" | "lte";
+export type FilterOp =
+  | "eq"
+  | "neq"
+  | "in"
+  | "not_in"
+  | "contains"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "between"
+  | "blank"
+  | "not_blank"
+  | "last_days"
+  | "last_months"
+  | "this_financial_year"
+  | "last_financial_year";
 export type Visual = "column" | "bar" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | "table" | "pivot";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
@@ -57,7 +77,10 @@ export type Measure = {
   inputs?: FormulaInput[];
 };
 
-export type Filter = { field: string; op: FilterOp; value: string | string[] };
+export type Filter = { field: string; op: FilterOp; value: string | string[]; join?: "or" };
+
+/** Today and the balance date, for filters like "in this financial year" (decision 578). */
+export type QueryDates = { today: string; yearEndMonth: number };
 
 export type TileQuery = {
   table: string;
@@ -75,7 +98,7 @@ export type TileQuery = {
 };
 
 export type ColumnInfo = { name: string; type: string };
-export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent";
+export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
 export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure" };
 export type PivotColumn = { key: string; label: string; pivotValue: string | null; measure: ResultColumn; total: boolean };
 export type PivotRow = {
@@ -104,16 +127,26 @@ export type DashboardFilters = {
   to?: string | null;
   /** Slicers: field -> chosen values (applied to tiles whose table has the field). */
   values?: Record<string, string[]>;
+  /** Today and the balance date for relative date filters; set by the server, never taken from a request. */
+  dates?: QueryDates;
 };
 
 export const MAX_ROWS = 5000;
+
+/** Today in the server's time zone with a 31 March balance date, when the caller doesn't say. */
+function todayDates(): QueryDates {
+  return { today: todayIsoDate(), yearEndMonth: 3 };
+}
 export const MAX_PIVOT_CELLS = 2000;
 export const MAX_PIVOT_DRILL_ROWS = 500;
 const GRAINS: Grain[] = ["day", "week", "month", "quarter", "year"];
 const PIVOT_GRAINS: PivotGrain[] = ["month", "quarter", "year"];
 const AGGREGATES: Aggregate[] = ["sum", "avg", "min", "max", "count", "count_distinct"];
-const OPS: FilterOp[] = ["eq", "neq", "in", "contains", "gt", "gte", "lt", "lte"];
+const OPS: readonly FilterOp[] = FILTER_OPS;
+/** The tests Analytics had before decision 578: saved tiles may use them on any column, so they aren't limited by type. */
+const FIRST_OPS: readonly FilterOp[] = ["eq", "neq", "in", "contains", "gt", "gte", "lt", "lte"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const NUMBER = /^-?\d+(\.\d+)?$/;
 
 export function quoteIdentifier(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
@@ -129,6 +162,7 @@ function isNumberType(type: string) {
 
 /** Money is how Tohyee loads money columns (decision 356): two decimal places. */
 export function formatOfType(type: string): ValueFormat {
+  if (type === "BOOLEAN") return "boolean";
   if (/^DECIMAL\(\d+,2\)$/.test(type)) return "money";
   if (type.startsWith("DECIMAL") || type === "DOUBLE" || type === "FLOAT") return "number";
   if (isNumberType(type)) return "integer";
@@ -141,19 +175,44 @@ function column(columns: Map<string, string>, name: unknown, what: string): stri
   return name;
 }
 
-function parseFilter(entry: unknown, columns: Map<string, string>, what: string): Filter {
+function parseFilter(entry: unknown, columns: Map<string, string>, what: string, joins: boolean): Filter {
   const filter = (entry ?? {}) as Record<string, unknown>;
   const field = column(columns, filter.field, what);
   const op = filter.op as FilterOp;
   if (!OPS.includes(op)) throw new ValidationError(`${what}: choose how to compare.`);
-  if (op === "in") {
-    if (!Array.isArray(filter.value) || filter.value.length === 0 || filter.value.length > 200) {
-      throw new ValidationError(`${what}: choose between 1 and 200 values.`);
+  const type = columns.get(field)!;
+  if (!FIRST_OPS.includes(op) && !opAllowed(op, type)) throw new ValidationError(`${what}: that test doesn't work on ${field}.`);
+  const join = joins && filter.join === "or" ? { join: "or" as const } : {};
+  switch (valueKind(op)) {
+    case "none":
+      return { field, op, value: "", ...join };
+    case "list": {
+      if (!Array.isArray(filter.value) || filter.value.length === 0 || filter.value.length > 200) {
+        throw new ValidationError(`${what}: choose between 1 and 200 values.`);
+      }
+      return { field, op, value: filter.value.map(String), ...join };
     }
-    return { field, op, value: filter.value.map(String) };
+    case "two": {
+      if (!Array.isArray(filter.value) || filter.value.length !== 2 || filter.value.some((value) => typeof value !== "string" || !value.trim())) {
+        throw new ValidationError(`${what}: enter both ends of the range.`);
+      }
+      const [from, to] = filter.value.map((value) => String(value).trim());
+      const backwards = isDateType(type) ? DATE.test(from) && DATE.test(to) && from > to : NUMBER.test(from) && NUMBER.test(to) && cmp(dec(from), dec(to)) > 0;
+      if (backwards) throw new ValidationError(`${what}: the first value is after the second.`);
+      return { field, op, value: [from, to], ...join };
+    }
+    case "count": {
+      const most = op === "last_months" ? MAX_LAST_MONTHS : MAX_LAST_DAYS;
+      const count = String(filter.value ?? "").trim();
+      if (!/^\d+$/.test(count) || Number(count) < 1 || Number(count) > most) {
+        throw new ValidationError(`${what}: enter a whole number from 1 to ${most}.`);
+      }
+      return { field, op, value: String(Number(count)), ...join };
+    }
+    default:
+      if (typeof filter.value !== "string" && typeof filter.value !== "number") throw new ValidationError(`${what}: enter a value.`);
+      return { field, op, value: String(filter.value), ...join };
   }
-  if (typeof filter.value !== "string" && typeof filter.value !== "number") throw new ValidationError(`${what}: enter a value.`);
-  return { field, op, value: String(filter.value) };
 }
 
 /** Checks a value worked out from rows: what's added up, of which column, and which rows count. */
@@ -180,7 +239,7 @@ function parseBaseMeasure(measure: Record<string, unknown>, columns: Map<string,
   if (measure.where !== undefined && measure.where !== null) {
     if (!Array.isArray(measure.where) || measure.where.length > 10) throw new ValidationError(`${label}: a value can have up to 10 conditions.`);
     if (pivot && measure.where.length) throw new ValidationError(`${label}: pivot values can't have their own conditions.`);
-    const where = measure.where.map((entry, index) => parseFilter(entry, columns, `${label} condition ${index + 1}`));
+    const where = measure.where.map((entry, index) => parseFilter(entry, columns, `${label} condition ${index + 1}`, false));
     if (where.length) result.where = where;
   }
   if (measure.asAt === true) {
@@ -290,7 +349,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     throw new ValidationError("Give each value its own name, so a formula knows which one it means.");
   }
 
-  const filters = (Array.isArray(raw.filters) ? raw.filters : []).map((entry, index): Filter => parseFilter(entry, columns, `Filter ${index + 1}`));
+  const filters = (Array.isArray(raw.filters) ? raw.filters : []).map((entry, index): Filter => parseFilter(entry, columns, `Filter ${index + 1}`, index > 0));
   if (filters.length > 20) throw new ValidationError("A tile can have up to 20 filters.");
 
   let dateField: string | null = null;
@@ -328,7 +387,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
 type Built = { sql: string; params: unknown[]; columns: ResultColumn[] };
 
 /** One filter as a SQL condition, with every typed value passed as a parameter. */
-function conditionSql(filter: Filter, types: Map<string, string>, param: (value: unknown) => string): string {
+function conditionSql(filter: Filter, types: Map<string, string>, param: (value: unknown) => string, dates: QueryDates): string {
   const q = quoteIdentifier;
   const typed = (field: string, value: string) => {
     const type = types.get(field)!;
@@ -340,16 +399,41 @@ function conditionSql(filter: Filter, types: Map<string, string>, param: (value:
       if (!/^-?\d+(\.\d+)?$/.test(value.trim())) throw new ValidationError(`${field}: "${value}" isn't a number.`);
       return `cast(${param(value.trim())} as ${type.startsWith("DECIMAL") ? "DECIMAL(38,6)" : type})`;
     }
+    if (type === "BOOLEAN") {
+      // Shown as Yes and No (decision 577); sent as true and false.
+      if (value !== "true" && value !== "false") throw new ValidationError(`${field}: choose Yes or No.`);
+      return `cast(${param(value)} as BOOLEAN)`;
+    }
     return param(value);
   };
+  const dateRange = (field: string, range: { from: string | null; to: string | null }) =>
+    `cast(${field} as DATE) between cast(${param(range.from)} as DATE) and cast(${param(range.to)} as DATE)`;
   const field = q(filter.field);
+  const text = columnKind(types.get(filter.field)!) === "text";
   switch (filter.op) {
     case "in":
-      return `${field} in (${(filter.value as string[]).map((value) => typed(filter.field, value)).join(", ")})`;
+    case "not_in":
+      // Like "is not", "is not one of" leaves out blank rows; "or is blank" keeps them.
+      return `${field} ${filter.op === "in" ? "in" : "not in"} (${(filter.value as string[]).map((value) => typed(filter.field, value)).join(", ")})`;
     case "contains":
       return `contains(lower(cast(${field} as VARCHAR)), lower(${param(String(filter.value))}))`;
+    case "blank":
+      return text ? `(${field} is null or trim(${field}) = '')` : `${field} is null`;
+    case "not_blank":
+      return text ? `(${field} is not null and trim(${field}) <> '')` : `${field} is not null`;
+    case "between": {
+      const [from, to] = filter.value as string[];
+      return `${field} between ${typed(filter.field, from)} and ${typed(filter.field, to)}`;
+    }
+    case "last_days":
+      return dateRange(field, lastDays(Number(filter.value), dates.today));
+    case "last_months":
+      return dateRange(field, lastMonths(Number(filter.value), dates.today));
+    case "this_financial_year":
+    case "last_financial_year":
+      return dateRange(field, presetRange(filter.op, dates.today, dates.yearEndMonth));
     default: {
-      const symbol = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op];
+      const symbol = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op as "eq" | "neq" | "gt" | "gte" | "lt" | "lte"];
       return `${field} ${symbol} ${typed(filter.field, String(filter.value))}`;
     }
   }
@@ -364,8 +448,16 @@ function filterSql(
   /** With a balance on the tile, the From date goes on each other value instead (decision 597). */
   skipFrom = false,
 ): string {
+  const dates = dashboard.dates ?? todayDates();
   const q = quoteIdentifier;
-  const where: string[] = query.filters.map((filter) => conditionSql(filter, types, param));
+  const where: string[] = [];
+  // Filters joined with "or" form a group; the groups are joined with "and" (decision 578).
+  const groups: string[][] = [];
+  query.filters.forEach((filter, index) => {
+    if (index > 0 && filter.join === "or") groups[groups.length - 1].push(conditionSql(filter, types, param, dates));
+    else groups.push([conditionSql(filter, types, param, dates)]);
+  });
+  for (const group of groups) where.push(group.length === 1 ? group[0] : `(${group.join(" or ")})`);
   for (const [field, values] of Object.entries(dashboard.values ?? {})) {
     if (!types.has(field) || values.length === 0) continue;
     where.push(`cast(${q(field)} as VARCHAR) in (${values.slice(0, 200).map((value) => param(String(value))).join(", ")})`);
@@ -399,7 +491,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   const conditions = (shiftYears: number, dates: DashboardFilters = dashboard) => filterSql(query, types, dates, param, shiftYears, balances);
 
   const baseSql = (measure: BaseMeasure, dates: DashboardFilters) => {
-    const rules = (measure.where ?? []).map((filter) => conditionSql(filter, types, param));
+    const rules = (measure.where ?? []).map((filter) => conditionSql(filter, types, param, dashboard.dates ?? todayDates()));
     if (balances && !measure.asAt && query.dateField && dates.from) {
       if (!DATE.test(dates.from)) throw new ValidationError("The From date is YYYY-MM-DD.");
       rules.push(`cast(${q(query.dateField)} as DATE) >= cast(${param(dates.from)} as DATE)`);

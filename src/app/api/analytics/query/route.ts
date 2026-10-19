@@ -1,6 +1,6 @@
 import { json, readJson, route, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
-import { allowedFilters, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
+import { allowedFilters, dateContext, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
 import type { DashboardFilters } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
@@ -31,12 +31,14 @@ export const POST = route(async (request) => {
   const { organisationId, query } = await withOrganisation(request, body.organisationId, "report_viewer", async (tx, { auth, membership }) => {
     await requireAnalytics(tx);
     const reader = { userId: auth.user.id, reportViewer: membership.role === "report_viewer" };
+    // Today and the balance date, for filters like "in this financial year" (decision 578).
+    const dates = await dateContext(tx);
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
-      return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId), filters: allowedFilters(dashboard, filters, reader) } };
+      return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId), filters: { ...allowedFilters(dashboard, filters, reader), dates } } };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
-    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters } };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates } } };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));
   return json(await runTile(organisationId, query.tile.query, query.filters));

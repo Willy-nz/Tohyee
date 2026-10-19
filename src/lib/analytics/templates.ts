@@ -64,7 +64,8 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
   const byName = new Map(tables.map((table) => [table.name, table]));
   if (!template.needs.every((name) => byName.has(name))) return null;
   const { tile } = builder(id);
-  const settings: DashboardSettings = { ...lastTwelveMonths(today), slicers: [] };
+  // Dated "Last 12 months", so the report moves on with time (the dates are worked out again when it's opened).
+  const settings: DashboardSettings = { ...lastTwelveMonths(today), preset: "last_12_months", slicers: [] };
   const tiles: Tile[] = [];
   const ledger = "tohyee_ledger_lines";
   const builtIns = builtInMeasures(ledger, byName.get(ledger)?.columns ?? []);

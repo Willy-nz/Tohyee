@@ -4285,6 +4285,84 @@ viewers can see it. "Today" is the date in the business time zone
   guessing the period. If the GST return can't be worked out (e.g. a
   standard-rated line at another rate, G9), Home shows why.
 
+### The farm Home (FH1-FH8; built by Claude 20 Oct 2026 from issue #341, Claude's rules, not yet reviewed)
+
+Issue #341: for farm clients, Home should be a farm dashboard. Xero has no
+farm Home, so this follows Xero's Home for look (cards, Customise and Hide)
+and the issue for what's on it. Every figure comes from a record Tohyee
+already keeps; nothing is typed in for the dashboard and nothing posts.
+Made-up farm: **Home block**, paddocks **12** (20 ha) and **14** (15 ha),
+March year end, Jess (owner) and Mere (admin), on Tue 20 Oct 2026.
+
+- **FH1 Which Home.** With Farming on, Home is the farm Home. Otherwise
+  it's the Home above (H1-H4). **Business overview** at the bottom opens
+  that Home for a farm too, with **Back to the farm Home**.
+- **FH2 This week on the farm.** Today and the next six days of the farm
+  calendar, as the person looking sees it (decision 571): Jess's own
+  "Drench the calves, Wed 21 Oct 7am", and Mere's shared "Pick up drench,
+  Thu 22 Oct". Not Mere's own unshared errand, and nothing from Jess's
+  email for Mere. Also "N items need checking" (their own). At most 8 items,
+  open or cancelled (moved and hidden ones aren't shown). It's marked
+  **Private to you**.
+- **FH3 Stock.** With Livestock on: head now by class (the income year's
+  closing so far, from the head count, LV1), largest first. 300 cows less 2
+  deaths is **298**, and 75 R1 heifers in the opening are **75 R2
+  heifers** after ageing on 1 April (**373** head). Also how many movements
+  were recorded this year (**1**), and how many AI-suggested movements are
+  waiting for someone to accept or decline (**1**, linking to Livestock).
+- **FH4 Pasture and feed.** For each active farm with a reading or
+  supplements: the farm's cover today (PF4), **2,300** kg DM/ha
+  (12 at 2,600 and 14 at 1,900, area-weighted), total **80,500** kg DM. The
+  highest and lowest paddocks (the ends of the feed wedge). Growth
+  area-weighted over paddocks whose latest growth (PF2) ended in the last 30
+  days: 12 went from 2,000 on 30 Sep to 2,600 on 10 Oct, **60.0** kg
+  DM/ha/day (14 has one reading, so no growth). Supplements fed this month
+  and last month in kg DM (June's aren't shown).
+- **FH5 Fertiliser and farm performance.** Fertiliser: each active farm's
+  latest plan, its latest version against what was applied (FB6): planned
+  **2.000 t**, applied **2.000 t**; planned **$2,060.00** (product and
+  spreading), spent **$1,560.00** (product at the quoted price, FB4, plus
+  any linked spreading). Farm performance: the last finished season's farm
+  working expenses, and per kg MS, hectare, cow and stock unit where those
+  figures are entered (FK2), against the season before. Wages of
+  $120,000 with 240,000 kg MS and 200 ha: **$0.50/kg MS**, **$600.00/ha**;
+  the year before $100,000 with 200,000 kg MS, **$0.50/kg MS**. It shows
+  only once some expense accounts are grouped as working expenses (FK1).
+- **FH6 Empty cards are hidden.** A card with nothing to show isn't shown,
+  rather than showing zeros: no calendar items or Needs checking; Livestock
+  off or no stock; no readings or supplements; no plan; no working
+  expenses; no notes. Money is hidden when cash, bills, money owed and the
+  GST estimate are all nil. With nothing at all, the farm Home says what to
+  use to fill it.
+- **FH7 Customise and Hide.** As on Home: **Customise** turns cards on or
+  off and moves them up or down, and **Hide** hides the dashboard. It's per
+  person, and saved like Home's (decision 372). The farm Home shows up to
+  10 cards (Home shows 4), so Analytics tiles can be pinned to it with
+  **Pin to page** (offered only when Farming is on). Everyone starts with
+  the same cards in the same order.
+- **FH8 Money and the notebook.** Money: cash in bank, bills to pay (and
+  how many are due this week), money owed to you and the GST estimate,
+  worked out as Home does (H2-H4). The farm notebook: the latest three
+  goals and the latest three other notes. Each card links to its full page
+  (calendar, Livestock, Pasture, fertiliser plan, Farm benchmarks, Banking,
+  notebook).
+
+Not built, as Tohyee has no records for them yet: **production and
+income** (kg MS to date against last season and budget, payout forecast):
+milk solids are only entered once a year for benchmarks. **FWE against
+budget**: budgets aren't grouped as working expenses. **Paddocks with a soil
+test due**: soil tests deliberately have no "due" rule. **Income tax due**
+on the Money card. **Different default cards per role** (owner, farm staff,
+accountant): Tohyee's roles (owner, admin, bookkeeper, viewer) don't say
+who's farm staff and who's the accountant, so everyone starts with the same
+cards and changes them with Customise. No card shows payroll figures (pay
+runs, pay rates or wages per person). Farm performance uses the ledger's
+expense totals, as Farm benchmarks does for any viewer.
+
+Tests: `tests/integration/farm-home.test.ts` (FH1-FH8),
+`tests/unit/dashboard-tiles.test.ts` (FH7) and
+`tests/unit/dashboard-pages.test.ts`.
+
 ## GST return
 
 The GST return is New Zealand's GST101A (boxes 5-15), worked out from
@@ -18383,6 +18461,7 @@ Gmail; times are New Zealand time.
   mailbox, and everything read from it, is only Jess's: Mere (an admin) sees
   neither the mailbox nor its calendar items, and no one else can check,
   change or disconnect it. Mere can connect her own. Farming has to be on.
+  Since #340 only the folders or labels she ticks are read (FC25).
 - **FC2 A clear booking.** From `office@manukavets.example`, sent Mon 19
   Oct 2026, subject "TB testing": "Hi Jess, we've booked TB testing at the
   Home farm for Thursday 22 October at 9am." One item: **Vet or animal
@@ -18558,3 +18637,74 @@ and Mere (admin).
 
 Tests: `tests/integration/farm-calendar.test.ts` (FC17-FC23) and
 `tests/unit/farm-calendar-repeats.test.ts` (FC18, FC22).
+
+## Farming: which folders the farm calendar reads (FC25-FC31; built by Claude 20 Oct 2026 from issue #340, Claude's rules, not yet reviewed)
+
+Issue #340: Jess's farm email shares a mailbox with unrelated mail for her
+mum's company directorships, which must not come into Tohyee at all, not
+even privately. Xero and NetSuite don't read farm mail, so the rules are
+Claude's, following the issue and decision 571 (mail is private to the
+member who connects it). Same organisation as FC1: Kōwhai Dairies, farms
+**Home farm** and **Runoff**, Jess (owner) and Mere (admin). Jess's Gmail
+has the Inbox and her labels **Farm**, **Farm/LIC** and **Directorships**;
+her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
+
+- **FC25 Nothing is read until Jess ticks a folder.** After signing in,
+  Jess is taken straight to **Which labels to read** (Outlook: **folders**).
+  The list comes from the mailbox (only names and ids, no email): for
+  Gmail the Inbox and her own labels, nested ("Farm/LIC" under "Farm"),
+  not Sent, Spam, Trash, Drafts or categories; for Outlook every folder,
+  nested. Until she ticks one, nothing is read and the mailbox isn't asked
+  for any email: **Check now** says to choose folders first, and the
+  calendar shows "Tohyee isn't reading this mailbox until you choose which
+  folders to read". She ticks **Farm**: the TB testing email in Farm is
+  read; the board meeting email in Directorships is never fetched. The
+  mailbox shows "Reads Farm" with **Change folders**. Folder names are
+  private: Mere (an admin) can't list or change Jess's folders, and the
+  audit trail records only how many were chosen.
+- **FC26 Subfolders.** A ticked folder that has folders inside it offers
+  **and its subfolders** (Gmail: **and its sublabels**). With it, the LIC
+  herd test email in Farm/LIC is read too, and folders added inside Farm
+  later are read without choosing again. The mailbox shows "Reads Farm and
+  its subfolders".
+- **FC27 Taking a folder off.** Jess reads Farm and Directorships, then
+  unticks Directorships. After she confirms, everything taken from emails
+  that were only in Directorships is deleted at once, items she shared
+  with the team included: a reply there that moved the TB testing to Fri
+  23 Oct goes, and the TB testing is back on Thu 22 Oct as it was. The
+  stock truck email, labelled both Farm and Directorships, stays. Unticking
+  every folder stops reading and deletes everything taken from the mailbox
+  (the tokens stay, unlike disconnecting, FC15).
+- **FC28 Moving emails in and out.** At each check (every 15 minutes, or
+  **Check now**) Tohyee lists the chosen folders' emails back to the
+  read-back date. An email read before and no longer in any chosen folder
+  is dropped, as in FC27: Jess moves "Sorry, the stock truck is cancelled"
+  out of Farm, and at the next check the stock truck is back on. Its
+  effects are undone: a booking it moved or cancelled is back as it was,
+  and an email that only noted the same thing (FC9's "also in another
+  email") is read again, so the TB testing reminder still in Farm makes the
+  TB testing item itself at the check after. Moving the cancellation back
+  in reads it again: the truck is cancelled again. An email older than the
+  read-back date (90 days, or what Jess chose, before she connected) isn't
+  read even when moved in. Items Jess checked, corrected or shared go too
+  when their email leaves the folders: what she moved out isn't farm mail.
+- **FC29 A folder deleted in the mailbox.** If Jess deletes the Outlook
+  folder Farm (or the Gmail label), the next check finds it gone: the
+  mailbox shows "Inbox › Farm (not found in the mailbox)" and everything
+  taken from it is dropped, as in FC28. Change folders lists it to untick.
+  Each check lists at most 2,000 emails per chosen folder, newest first: in
+  a bigger folder only the newest 2,000 are read, and only emails newer
+  than those can be known to have moved out.
+- **FC30 Mailboxes connected before this.** A mailbox connected before
+  folders could be chosen stops being read when Tohyee is updated, and
+  says so, with **Choose folders**. What it read stays until Jess chooses:
+  at the first check after, anything not in the chosen folders is removed
+  as in FC28 (the board meeting goes; the TB testing in Farm stays and
+  isn't read again). Nothing is deleted by the update itself.
+- **FC31 Not included:** reading a folder's emails older than its newest
+  2,000 (FC29); Gmail's other system labels (Starred, Important) as
+  choices; and the private mailbox import (#250), which isn't built yet and
+  should use this same folder choice when it is.
+
+Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
+`tests/unit/farm-mail-folders.test.ts` (FC25, FC26).

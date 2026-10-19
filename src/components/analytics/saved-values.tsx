@@ -10,10 +10,28 @@ import type { Filter, Measure } from "@/lib/analytics/query";
 import { api, errorMessage } from "@/lib/client/api";
 import styles from "./chart-format-panel.module.css";
 
-const OP_WORDS: Record<string, string> = { eq: "is", neq: "is not", in: "is one of", contains: "contains", gt: "more than", gte: "at least", lt: "less than", lte: "at most" };
+const OP_WORDS: Record<string, string> = {
+  eq: "is",
+  neq: "is not",
+  in: "is one of",
+  not_in: "is not one of",
+  contains: "contains",
+  gt: "more than",
+  gte: "at least",
+  lt: "less than",
+  lte: "at most",
+  blank: "is blank",
+  not_blank: "is not blank",
+  between: "is between",
+  last_days: "is in the last days:",
+  last_months: "is in the last months:",
+  this_financial_year: "is this financial year",
+  last_financial_year: "is last financial year",
+};
 
 function describeFilter(filter: Filter): string {
-  return `${filter.field.replaceAll("_", " ")} ${OP_WORDS[filter.op] ?? filter.op} ${Array.isArray(filter.value) ? filter.value.join(", ") : filter.value}`;
+  const value = Array.isArray(filter.value) ? filter.value.join(filter.op === "between" ? " and " : ", ") : filter.value;
+  return `${filter.field.replaceAll("_", " ")} ${OP_WORDS[filter.op] ?? filter.op}${value ? ` ${value}` : ""}`;
 }
 
 /** What a value from a saved or built-in value counts, in words (its conditions can't be changed here). */

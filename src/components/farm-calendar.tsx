@@ -9,7 +9,8 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useConfirm } from "@/components/confirm-dialog";
 import { api, errorMessage } from "@/lib/client/api";
 import type { CalendarLinkStatus, FarmMailbox } from "@/lib/farming/calendar";
-import { CALENDAR_KIND_LABELS, CALENDAR_KINDS, type CalendarItem, type CalendarKind, REPEAT_LABELS, REPEATS, type Repeat, teamView } from "@/lib/farming/calendar-shared";
+import type { MailFolder } from "@/lib/farming/mail-providers";
+import { CALENDAR_KIND_LABELS, CALENDAR_KINDS, type CalendarItem, type CalendarKind, folderSummary, REPEAT_LABELS, REPEATS, type Repeat, teamView } from "@/lib/farming/calendar-shared";
 import type { Farm } from "@/lib/farming/paddocks";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import styles from "./farm-calendar.module.css";
@@ -135,6 +136,9 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
   const selectedId = selected?.key ?? null;
   const setSelectedId = (key: string | null) => setChosen(key ? (items?.find((item) => item.key === key) ?? null) : null);
   const problems = (mailboxes.data?.mailboxes ?? []).filter((mailbox) => mailbox.status === "paused" || mailbox.lastError);
+  // FC25, FC30: a mailbox with no folders chosen isn't read.
+  const noFolders = (mailboxes.data?.mailboxes ?? []).filter((mailbox) => mailbox.folders.length === 0);
+  const [picking, setPicking] = useState<string | null>(searchParams.get("folders"));
   const noMailbox = mailboxes.data !== null && mailboxes.data.mailboxes.length === 0;
   const step = (direction: 1 | -1) => {
     if (view === "today") setAnchor(addDays(anchor, direction));
@@ -153,7 +157,14 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
 
   return (
     <>
-      {connected ? <Notice tone="success">{connected} is connected. Its emails are read now and every 15 minutes.</Notice> : null}
+      {connected ? <Notice tone="success">{connected} is connected. Choose the folders Tohyee reads: nothing is read until you do. Then they&apos;re read now and every 15 minutes.</Notice> : null}
+      {noFolders.map((mailbox) => (
+        <Notice key={`folders-${mailbox.id}`} tone="warning">
+          {mailbox.email}: Tohyee isn&apos;t reading this mailbox until you choose which folders to read.
+          {mailbox.items ? " What it read before stays until you choose; then anything not in those folders is removed at the next check." : ""}{" "}
+          <Button size="small" variant="secondary" onClick={() => { setOpen("mailboxes"); setPicking(mailbox.id); }}>Choose folders</Button>
+        </Notice>
+      ))}
       {connectError ? <Notice tone="error">{connectError}</Notice> : null}
       {problems.map((mailbox) => (
         <Notice key={mailbox.id} tone="warning">
@@ -203,9 +214,9 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
           <CalendarLink organisationId={organisationId} onClose={() => setOpen(null)} />
         </div>
       ) : null}
-      {open === "mailboxes" || (noMailbox && open === null) ? (
+      {open === "mailboxes" || ((noMailbox || picking) && open === null) ? (
         <div id="farm-mailbox-settings">
-          <Mailboxes organisationId={organisationId} mailboxes={mailboxes.data?.mailboxes ?? null} error={mailboxes.error} farms={activeFarms} onChanged={reload} />
+          <Mailboxes organisationId={organisationId} mailboxes={mailboxes.data?.mailboxes ?? null} error={mailboxes.error} farms={activeFarms} onChanged={reload} picking={picking} onPick={setPicking} />
         </div>
       ) : null}
       <div className={styles.toolbar}>
@@ -719,7 +730,125 @@ function CalendarLink({ organisationId, onClose }: { organisationId: string; onC
   );
 }
 
-function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { organisationId: string; mailboxes: FarmMailbox[] | null; error: string | null; farms: Farm[]; onChanged: () => void }) {
+/**
+ * FC25-FC27: ticks the folders (Outlook) or labels (Gmail) a mailbox reads,
+ * from the mailbox's list now, each with its subfolders if wanted. Taking
+ * one off asks first, as what was taken from it is deleted.
+ */
+function FolderPicker({ organisationId, mailbox, onClose, onSaved }: { organisationId: string; mailbox: FarmMailbox; onClose: () => void; onSaved: (message: string) => void }) {
+  const confirm = useConfirm();
+  const list = useApiData<{ folders: MailFolder[] }>(`/api/farming/mail/${mailbox.id}/folders`, { organisationId });
+  const [chosen, setChosen] = useState<Map<string, boolean>>(() => new Map(mailbox.folders.map((folder) => [folder.externalId, folder.includeSubfolders])));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const kind = mailbox.provider === "google" ? "labels" : "folders";
+  const folders = list.data?.folders ?? [];
+  const hasChildren = (id: string) => folders.some((folder) => folder.parentId === id);
+  const toggle = (id: string, on: boolean) => {
+    const next = new Map(chosen);
+    if (on) next.set(id, next.get(id) ?? false);
+    else next.delete(id);
+    setChosen(next);
+  };
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    const removed = mailbox.folders.filter((folder) => !chosen.has(folder.externalId));
+    if (removed.length) {
+      const names = removed.map((folder) => folder.name).join(", ");
+      const ok = await confirm(
+        chosen.size
+          ? `Stop reading ${names}? Everything Tohyee took only from ${removed.length === 1 ? "it" : "them"} is deleted, including items you shared. Your mailbox isn't touched.`
+          : `Stop reading this mailbox? Everything Tohyee took from it is deleted, including items you shared. Your mailbox isn't touched.`,
+        { confirmLabel: "Stop reading", danger: true },
+      );
+      if (!ok) return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/farming/mail/${mailbox.id}/folders`, { method: "PUT", body: { organisationId, folders: [...chosen].map(([id, includeSubfolders]) => ({ id, includeSubfolders })) } });
+      if (chosen.size && mailbox.status === "active") {
+        await api(`/api/farming/mail/${mailbox.id}/check`, { method: "POST", body: { organisationId } });
+        onSaved(`Saved. Tohyee reads only the ${kind} you chose.`);
+      } else onSaved(chosen.size ? "Saved." : "Saved. Nothing is read from this mailbox now.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className={styles.folderPicker} onSubmit={save} aria-labelledby={`folders-${mailbox.id}`}>
+      <h3 id={`folders-${mailbox.id}`} className={styles.folderHeading}>Which {kind} to read in {mailbox.email}</h3>
+      <p className={ui.muted}>
+        Tohyee reads only the {kind} you tick, and nothing until you tick one. Moving an email out of them takes it off your calendar at the next check;
+        moving one in adds it, if it&apos;s no older than {mailbox.historyDays} days before you connected. Only you see these names.
+      </p>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {list.error ? (
+        <Notice tone="error">Couldn&apos;t get the {kind}: {list.error} <Button size="small" variant="secondary" onClick={list.reload}>Retry</Button></Notice>
+      ) : !list.data ? (
+        <p className={ui.muted} role="status">Getting the {kind} from your mailbox…</p>
+      ) : folders.length === 0 ? (
+        <p className={ui.muted}>The mailbox has no {kind} to choose.</p>
+      ) : (
+        <fieldset className={styles.folderList}>
+          <legend className={styles.visuallyHidden}>{kind === "labels" ? "Labels" : "Folders"}</legend>
+          {folders.map((folder) => (
+            <div key={folder.id} className={styles.folderRow} style={{ paddingLeft: `${folder.depth * 1.25}rem` }}>
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={chosen.has(folder.id)} disabled={busy} onChange={(event) => toggle(folder.id, event.target.checked)} />
+                <span>{folder.name}</span>
+              </label>
+              {chosen.has(folder.id) && hasChildren(folder.id) ? (
+                <label className={`${ui.checkbox} ${styles.subfolders}`}>
+                  <input
+                    type="checkbox"
+                    checked={chosen.get(folder.id) === true}
+                    disabled={busy}
+                    onChange={(event) => setChosen(new Map(chosen).set(folder.id, event.target.checked))}
+                    aria-label={`Include the ${kind === "labels" ? "labels" : "folders"} inside ${folder.path}`}
+                  />
+                  <span>and its sub{kind}</span>
+                </label>
+              ) : null}
+            </div>
+          ))}
+          {mailbox.folders.filter((folder) => !folders.some((entry) => entry.id === folder.externalId)).map((folder) => (
+            <div key={folder.externalId} className={styles.folderRow}>
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={chosen.has(folder.externalId)} disabled={busy} onChange={(event) => toggle(folder.externalId, event.target.checked)} />
+                <span>{folder.name} (not found in the mailbox: untick it)</span>
+              </label>
+            </div>
+          ))}
+        </fieldset>
+      )}
+      <div className={ui.rowButtons}>
+        <Button type="submit" disabled={busy || !list.data || [...chosen.keys()].some((id) => !folders.some((folder) => folder.id === id))}>{busy ? "Saving…" : "Save"}</Button>
+        <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+      </div>
+    </form>
+  );
+}
+
+function Mailboxes({
+  organisationId,
+  mailboxes,
+  error,
+  farms,
+  onChanged,
+  picking,
+  onPick,
+}: {
+  organisationId: string;
+  mailboxes: FarmMailbox[] | null;
+  error: string | null;
+  farms: Farm[];
+  onChanged: () => void;
+  picking: string | null;
+  onPick: (id: string | null) => void;
+}) {
   const confirm = useConfirm();
   const [provider, setProvider] = useState<"google" | "microsoft">("google");
   const [historyDays, setHistoryDays] = useState("90");
@@ -754,7 +883,7 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
   return (
     <Card
       title="Your mailboxes"
-      description="Connect your own Gmail or Microsoft mailbox. Tohyee only reads it (nothing is sent, changed or deleted) and keeps only each arrangement's sentence, subject, sender and a link. Your mailboxes and this calendar are only yours: nobody else in the organisation sees them, admins included."
+      description="Connect your own Gmail or Microsoft mailbox, then choose the folders or labels Tohyee reads: only those, nothing else. Tohyee only reads (nothing is sent, changed or deleted) and keeps only each arrangement's sentence, subject, sender and a link. Your mailboxes, their folders and this calendar are only yours: nobody else in the organisation sees them, admins included."
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -768,6 +897,11 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
                   <td data-label="Mailbox">
                     {mailbox.email}
                     <br /><small>{mailbox.provider === "google" ? "Gmail" : "Microsoft"}, from {mailbox.historyDays} days back{mailbox.readingHistory ? "; still reading older emails" : ""}</small>
+                    <br />
+                    {mailbox.folders.length ? <small>{folderSummary(mailbox.folders)}</small> : <Badge tone="amber">Not reading: choose folders</Badge>}{" "}
+                    <Button size="small" variant="secondary" disabled={busy} aria-expanded={picking === mailbox.id} onClick={() => onPick(picking === mailbox.id ? null : mailbox.id)}>
+                      {mailbox.folders.length ? "Change folders" : "Choose folders"}
+                    </Button>
                     {mailbox.status === "paused" ? <><br /><Badge tone="red">Paused</Badge> <small>Connect it again to carry on.</small></> : null}
                   </td>
                   <td data-label="Last checked">{mailbox.lastCheckAt ? new Date(mailbox.lastCheckAt).toLocaleString("en-NZ") : "Not yet"}{mailbox.lastError ? <><br /><small>{mailbox.lastError}</small></> : null}</td>
@@ -780,7 +914,7 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
                   </td>
                   <td data-label="Actions">
                     <div className={ui.rowButtons}>
-                      <Button size="small" variant="secondary" disabled={busy || mailbox.status === "paused"} onClick={() => void act(() => api(`/api/farming/mail/${mailbox.id}/check`, { method: "POST", body: { organisationId } }), "Checked.")}>Check now</Button>
+                      <Button size="small" variant="secondary" disabled={busy || mailbox.status === "paused" || mailbox.folders.length === 0} onClick={() => void act(() => api(`/api/farming/mail/${mailbox.id}/check`, { method: "POST", body: { organisationId } }), "Checked.")}>Check now</Button>
                       <Button
                         size="small"
                         variant="secondary"
@@ -801,6 +935,22 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
           </table>
         </div>
       ) : mailboxes ? <p className={ui.muted}>No mailbox connected yet.</p> : null}
+      {(() => {
+        const mailbox = mailboxes?.find((entry) => entry.id === picking);
+        return mailbox ? (
+          <FolderPicker
+            key={mailbox.id}
+            organisationId={organisationId}
+            mailbox={mailbox}
+            onClose={() => onPick(null)}
+            onSaved={(text) => {
+              onPick(null);
+              setMessage({ tone: "success", text });
+              onChanged();
+            }}
+          />
+        ) : null;
+      })()}
       <form className={ui.inlineForm} onSubmit={connect}>
         <Field label="Connect">
           <select value={provider} onChange={(event) => setProvider(event.target.value as "google" | "microsoft")}>
