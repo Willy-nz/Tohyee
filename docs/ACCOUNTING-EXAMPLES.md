@@ -17477,7 +17477,7 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
   half up to the cent, and the last instalment is what's left, so they add
   up exactly. RIT of 5,000.00 or less last year means no provisional tax (see
   ITX8).
-- **ITX6 Last year's return filed late.** As ITX5, but 2025 RIT was 12,000.00
+- **ITX6 Last year's return filed late, with an extension of time.** As ITX5 (for a taxpayer with a tax agent's extension of time; without one, see ITX67), but 2025 RIT was 12,000.00
   and the 2026 return was filed on 10 Oct 2026 (after the first instalment,
   before the second). Instalment 1: 12,000.00 + 10% = 13,200.00 ÷ 3 =
   **4,400.00**. Instalment 2: 18,551.40 x 2 ÷ 3 = 12,367.60, less what was
@@ -18172,3 +18172,17 @@ touching the accounting core. Nothing in it posts to the books. Tested in
   the soil sampling app in `examples/farm-apps/soil-sampling/`. A breaking
   change gets a new version (`v2`); `v1` keeps working until it's retired
   with notice.
+
+## Income tax (#292, #310): the extension-of-time condition (ITX67; from IRD's "Standard option" page, read 18 Oct 2026; Jess chose 19 Oct 2026)
+
+- **ITX67 No extension of time.** IRD's "Standard option" page: with no
+  extension of time to file, "your provisional tax will be your previous
+  year's RIT plus 5%. This includes if you file your return after any of
+  your provisional tax dates." Tohyee treats the tax agent's extension
+  setting as the extension of time. Without it: Kererū's 2026 RIT
+  17,668.00, its return filed 10 Oct 2026 (after the first instalment):
+  **6,183.80** three times, total **18,551.40**, with a note saying why.
+  Not filed yet: the same from Tohyee's estimate of last year's RIT, every
+  instalment marked as an estimate. Six-monthly GST filers get their two
+  instalments (9,275.70 each) instead of "can't work it out". With an
+  extension, ITX6 is unchanged. Tested in `tests/unit/income-tax-rules.test.ts`.
