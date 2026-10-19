@@ -18326,6 +18326,7 @@ Gmail; times are New Zealand time.
   mailbox, and everything read from it, is only Jess's: Mere (an admin) sees
   neither the mailbox nor its calendar items, and no one else can check,
   change or disconnect it. Mere can connect her own. Farming has to be on.
+  Since #340 only the folders or labels she ticks are read (FC25).
 - **FC2 A clear booking.** From `office@manukavets.example`, sent Mon 19
   Oct 2026, subject "TB testing": "Hi Jess, we've booked TB testing at the
   Home farm for Thursday 22 October at 9am." One item: **Vet or animal
@@ -18501,3 +18502,74 @@ and Mere (admin).
 
 Tests: `tests/integration/farm-calendar.test.ts` (FC17-FC23) and
 `tests/unit/farm-calendar-repeats.test.ts` (FC18, FC22).
+
+## Farming: which folders the farm calendar reads (FC25-FC31; built by Claude 20 Oct 2026 from issue #340, Claude's rules, not yet reviewed)
+
+Issue #340: Jess's farm email shares a mailbox with unrelated mail for her
+mum's company directorships, which must not come into Tohyee at all, not
+even privately. Xero and NetSuite don't read farm mail, so the rules are
+Claude's, following the issue and decision 571 (mail is private to the
+member who connects it). Same organisation as FC1: Kōwhai Dairies, farms
+**Home farm** and **Runoff**, Jess (owner) and Mere (admin). Jess's Gmail
+has the Inbox and her labels **Farm**, **Farm/LIC** and **Directorships**;
+her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
+
+- **FC25 Nothing is read until Jess ticks a folder.** After signing in,
+  Jess is taken straight to **Which labels to read** (Outlook: **folders**).
+  The list comes from the mailbox (only names and ids, no email): for
+  Gmail the Inbox and her own labels, nested ("Farm/LIC" under "Farm"),
+  not Sent, Spam, Trash, Drafts or categories; for Outlook every folder,
+  nested. Until she ticks one, nothing is read and the mailbox isn't asked
+  for any email: **Check now** says to choose folders first, and the
+  calendar shows "Tohyee isn't reading this mailbox until you choose which
+  folders to read". She ticks **Farm**: the TB testing email in Farm is
+  read; the board meeting email in Directorships is never fetched. The
+  mailbox shows "Reads Farm" with **Change folders**. Folder names are
+  private: Mere (an admin) can't list or change Jess's folders, and the
+  audit trail records only how many were chosen.
+- **FC26 Subfolders.** A ticked folder that has folders inside it offers
+  **and its subfolders** (Gmail: **and its sublabels**). With it, the LIC
+  herd test email in Farm/LIC is read too, and folders added inside Farm
+  later are read without choosing again. The mailbox shows "Reads Farm and
+  its subfolders".
+- **FC27 Taking a folder off.** Jess reads Farm and Directorships, then
+  unticks Directorships. After she confirms, everything taken from emails
+  that were only in Directorships is deleted at once, items she shared
+  with the team included: a reply there that moved the TB testing to Fri
+  23 Oct goes, and the TB testing is back on Thu 22 Oct as it was. The
+  stock truck email, labelled both Farm and Directorships, stays. Unticking
+  every folder stops reading and deletes everything taken from the mailbox
+  (the tokens stay, unlike disconnecting, FC15).
+- **FC28 Moving emails in and out.** At each check (every 15 minutes, or
+  **Check now**) Tohyee lists the chosen folders' emails back to the
+  read-back date. An email read before and no longer in any chosen folder
+  is dropped, as in FC27: Jess moves "Sorry, the stock truck is cancelled"
+  out of Farm, and at the next check the stock truck is back on. Its
+  effects are undone: a booking it moved or cancelled is back as it was,
+  and an email that only noted the same thing (FC9's "also in another
+  email") is read again, so the TB testing reminder still in Farm makes the
+  TB testing item itself at the check after. Moving the cancellation back
+  in reads it again: the truck is cancelled again. An email older than the
+  read-back date (90 days, or what Jess chose, before she connected) isn't
+  read even when moved in. Items Jess checked, corrected or shared go too
+  when their email leaves the folders: what she moved out isn't farm mail.
+- **FC29 A folder deleted in the mailbox.** If Jess deletes the Outlook
+  folder Farm (or the Gmail label), the next check finds it gone: the
+  mailbox shows "Inbox › Farm (not found in the mailbox)" and everything
+  taken from it is dropped, as in FC28. Change folders lists it to untick.
+  Each check lists at most 2,000 emails per chosen folder, newest first: in
+  a bigger folder only the newest 2,000 are read, and only emails newer
+  than those can be known to have moved out.
+- **FC30 Mailboxes connected before this.** A mailbox connected before
+  folders could be chosen stops being read when Tohyee is updated, and
+  says so, with **Choose folders**. What it read stays until Jess chooses:
+  at the first check after, anything not in the chosen folders is removed
+  as in FC28 (the board meeting goes; the TB testing in Farm stays and
+  isn't read again). Nothing is deleted by the update itself.
+- **FC31 Not included:** reading a folder's emails older than its newest
+  2,000 (FC29); Gmail's other system labels (Starred, Important) as
+  choices; and the private mailbox import (#250), which isn't built yet and
+  should use this same folder choice when it is.
+
+Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
+`tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
