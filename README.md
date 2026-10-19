@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 15 October 2026:** the latest packaged
-release is [v0.9.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.9.0),
+**Release availability, checked 19 October 2026:** the latest packaged
+release is [v0.10.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.10.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -65,6 +65,17 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.10.0: income tax
+
+| Area | What's new |
+| --- | --- |
+| **Income tax** (not yet reviewed by an accountant) | Taxable income from the books, provisional tax and use-of-money interest, tax depreciation and Investment Boost, the imputation credit account, and the IR10, IR4 and IR3 boxes. IRD documents read by your AI and checked by you. |
+| **Farming** | Pasture and feed records, a Farming API for your own apps, a farm calendar from your email (private to you), and your AI reading soil, fertiliser and pasture data. |
+| **Livestock** | Classes held for sale as current assets, and the herd scheme revaluation tied to your reporting basis. |
+| **Payroll** | Expected sick leave in the leave liability. |
+| **Easier to use** | Clearer bank reconciliation buttons, a cash forecast that leads with the shortfall and a chart, and date fields that say when a date can't be read. |
+| **Security** | Remote access pauses itself when someone is guessing passwords. |
 
 ## New in 0.9.0
 
