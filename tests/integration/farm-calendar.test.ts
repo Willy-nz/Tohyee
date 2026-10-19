@@ -15,7 +15,10 @@ import {
   skipCalendarDate,
   turnOffCalendarLink,
   checkFarmMailbox,
+  chooseMailboxFolders,
   claimFarmMailState,
+  mailboxFolderChoices,
+  mailboxForFolders,
   disconnectFarmMailbox,
   dismissCalendarItem,
   farmCalendar,
@@ -39,7 +42,17 @@ import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabas
  * reviewed). Gmail and Google's sign-in are canned responses; each test gets
  * its own organisation with two farms, Home farm and Runoff.
  */
-type Mail = { id: string; threadId: string; at: string; from: string; subject: string; text: string };
+type Mail = { id: string; threadId: string; at: string; from: string; subject: string; text: string; labels?: string[] };
+/** Gmail's labels in the fake: the Inbox, Jess's own labels, and system ones that aren't offered. */
+const LABELS = [
+  { id: "INBOX", name: "INBOX", type: "system" },
+  { id: "SENT", name: "SENT", type: "system" },
+  { id: "SPAM", name: "SPAM", type: "system" },
+  { id: "CATEGORY_UPDATES", name: "CATEGORY_UPDATES", type: "system" },
+  { id: "Label_1", name: "Farm", type: "user" },
+  { id: "Label_2", name: "Farm/LIC", type: "user" },
+  { id: "Label_3", name: "Directorships", type: "user" },
+];
 
 describeWithDatabase("farm calendar from email", () => {
   let server: TestServer;
@@ -47,7 +60,9 @@ describeWithDatabase("farm calendar from email", () => {
   let mere: SessionUser;
   let organisations = 0;
   let inbox: Mail[] = [];
+  let labels = LABELS;
   let fetched: string[] = [];
+  let outlook: { folders: Array<{ id: string; displayName: string; parentFolderId: string | null }>; mail: Array<Mail & { folder: string }> } = { folders: [], mail: [] };
   const previousSecret = process.env.TOHYEE_SECRET_KEY;
 
   const encode = (text: string) => Buffer.from(text, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -64,13 +79,18 @@ describeWithDatabase("farm calendar from email", () => {
   const fake = async (input: string): Promise<Response> => {
       const url = new URL(input);
       if (url.host === "oauth2.googleapis.com") return reply({ access_token: "access-1", refresh_token: "refresh-1", expires_in: 3600, scope: "openid email https://www.googleapis.com/auth/gmail.readonly" });
+      if (url.host === "login.microsoftonline.com") return reply({ access_token: "ms-access", refresh_token: "ms-refresh", expires_in: 3600 });
+      if (url.host === "graph.microsoft.com") return graph(url);
       if (url.pathname.endsWith("/users/me/profile")) return reply({ emailAddress: "Jess@KowhaiDairies.example" });
+      if (url.pathname.endsWith("/users/me/labels")) return reply({ labels });
       if (url.pathname.endsWith("/users/me/messages")) {
         const q = url.searchParams.get("q") ?? "";
         const after = Number(/after:(\d+)/.exec(q)?.[1] ?? 0) * 1000;
         const before = Number(/before:(\d+)/.exec(q)?.[1] ?? Number.MAX_SAFE_INTEGER / 1000) * 1000;
+        const label = url.searchParams.get("labelIds");
         const ids = inbox
           .filter((mail) => Date.parse(mail.at) >= after && Date.parse(mail.at) < before)
+          .filter((mail) => !label || (mail.labels ?? ["INBOX"]).includes(label))
           .sort((a, b) => b.at.localeCompare(a.at))
           .map((mail) => ({ id: mail.id }));
         return reply({ messages: ids });
@@ -97,6 +117,31 @@ describeWithDatabase("farm calendar from email", () => {
       });
   };
 
+  /** Microsoft Graph in the fake: folders by parent, a folder's messages, one message. */
+  const graph = (url: URL): Response => {
+    const path = decodeURIComponent(url.pathname.replace("/v1.0", ""));
+    if (path === "/me") return reply({ mail: "Jess@KowhaiDairies.example", userPrincipalName: "jess@kowhaidairies.example" });
+    const shape = (folder: { id: string; displayName: string }) => ({ ...folder, childFolderCount: outlook.folders.filter((child) => child.parentFolderId === folder.id).length });
+    if (path === "/me/mailFolders") return reply({ value: outlook.folders.filter((folder) => folder.parentFolderId === null).map(shape) });
+    const children = /^\/me\/mailFolders\/([^/]+)\/childFolders$/.exec(path);
+    if (children) {
+      if (!outlook.folders.some((folder) => folder.id === children[1])) return new Response(JSON.stringify({ error: { message: "not found" } }), { status: 404 });
+      return reply({ value: outlook.folders.filter((folder) => folder.parentFolderId === children[1]).map(shape) });
+    }
+    const messages = /^\/me\/mailFolders\/([^/]+)\/messages$/.exec(path);
+    if (messages) {
+      if (!outlook.folders.some((folder) => folder.id === messages[1])) return new Response(JSON.stringify({ error: { message: "not found" } }), { status: 404 });
+      const after = Date.parse(/receivedDateTime ge (\S+)/.exec(url.searchParams.get("$filter") ?? "")?.[1] ?? "1970-01-01T00:00:00Z");
+      return reply({ value: outlook.mail.filter((mail) => mail.folder === messages[1] && Date.parse(mail.at) >= after).sort((a, b) => b.at.localeCompare(a.at)).map((mail) => ({ id: mail.id })) });
+    }
+    const one = /^\/me\/messages\/([^/]+)$/.exec(path);
+    const mail = one ? outlook.mail.find((entry) => entry.id === one[1]) : undefined;
+    if (!mail) return new Response("not found", { status: 404 });
+    fetched.push(mail.id);
+    const [, name, address] = /^(.*) <(.*)>$/.exec(mail.from) ?? [null, null, mail.from];
+    return reply({ id: mail.id, conversationId: mail.threadId, subject: mail.subject, from: { emailAddress: { address, name } }, sentDateTime: mail.at, receivedDateTime: mail.at, webLink: `https://outlook.example/${mail.id}`, body: { contentType: "text", content: mail.text } });
+  };
+
   afterAll(async () => {
     setMailFetchForTests(null);
     await server?.teardown();
@@ -113,20 +158,40 @@ describeWithDatabase("farm calendar from email", () => {
     await as(jess, (tx) => setFarmingEnabled(tx, { enabled: true }));
     const home = (await as(jess, (tx) => saveFarm(tx, { name: "Home farm" })))[0];
     const runoff = (await as(jess, (tx) => saveFarm(tx, { name: "Runoff" }))).find((farm) => farm.name === "Runoff")!;
-    await as(jess, (tx) => saveMailSettings(tx, { googleClientId: "g-client.apps.googleusercontent.com", googleClientSecret: "g-secret" }));
+    await as(jess, (tx) => saveMailSettings(tx, { googleClientId: "g-client.apps.googleusercontent.com", googleClientSecret: "g-secret", microsoftClientId: "ms-client", microsoftClientSecret: "ms-secret" }));
     const organisation = (await getOrganisation(org))!;
     inbox = [];
+    labels = LABELS;
+    outlook = { folders: [], mail: [] };
     fetched = [];
     return { org, as, home, runoff, organisation };
   }
 
-  /** Connects Jess's Gmail at `now` (the history before it is read on the first checks). */
-  async function connect(w: Awaited<ReturnType<typeof setup>>, now: string, options: { historyDays?: number; defaultFarmId?: string } = {}) {
-    const { url } = await w.as(jess, (tx) => startFarmMailConnect(tx, { provider: "google", ...options }, "https://tohyee.test"));
+  /**
+   * Connects Jess's Gmail (or Outlook) at `now` (the history before it is
+   * read on the first checks) and chooses `folders` to read: the Inbox
+   * unless told otherwise; none with `folders: []`.
+   */
+  async function connect(
+    w: Awaited<ReturnType<typeof setup>>,
+    now: string,
+    options: { historyDays?: number; defaultFarmId?: string; provider?: "google" | "microsoft"; folders?: Array<{ id: string; includeSubfolders?: boolean }> } = {},
+  ) {
+    const { folders = [{ id: "INBOX" }], provider = "google", ...rest } = options;
+    const { url } = await w.as(jess, (tx) => startFarmMailConnect(tx, { provider, ...rest }, "https://tohyee.test"));
     const state = new URL(url).searchParams.get("state")!;
     const claimed = await w.as(jess, (tx) => claimFarmMailState(tx, state));
     const connection = await fetchFarmMailConnection(claimed, "code-1", "https://tohyee.test");
-    return w.as(jess, (tx) => saveFarmMailbox(tx, claimed, connection, new Date(now)));
+    const mailbox = await w.as(jess, (tx) => saveFarmMailbox(tx, claimed, connection, new Date(now)));
+    if (!folders.length) return mailbox;
+    return choose(w, mailbox.id, folders);
+  }
+
+  /** Chooses the folders a mailbox reads, as the screen does: from the mailbox's list now. */
+  async function choose(w: Awaited<ReturnType<typeof setup>>, mailboxId: string, folders: Array<{ id: string; includeSubfolders?: boolean }>) {
+    const available = await mailboxFolderChoices(w.organisation, mailboxId);
+    const mailboxes = await w.as(jess, (tx) => chooseMailboxFolders(tx, mailboxId, folders, available));
+    return mailboxes.find((mailbox) => mailbox.id === mailboxId)!;
   }
 
   const vet = "Manuka Vets <office@manukavets.example>";
@@ -146,8 +211,11 @@ describeWithDatabase("farm calendar from email", () => {
     await expect(w.as(mere, (tx) => claimFarmMailState(tx, state))).rejects.toThrow("expired or was already used");
     const claimed = await w.as(jess, (tx) => claimFarmMailState(tx, state));
     await expect(w.as(jess, (tx) => claimFarmMailState(tx, state))).rejects.toThrow("expired or was already used");
-    const mailbox = await w.as(jess, async (tx) => saveFarmMailbox(tx, claimed, await fetchFarmMailConnection(claimed, "code", "https://tohyee.test"), new Date("2026-10-19T09:00:00Z")));
-    expect(mailbox).toMatchObject({ provider: "google", email: "jess@kowhaidairies.example", historyDays: 30, status: "active", readingHistory: true });
+    const connected = await w.as(jess, async (tx) => saveFarmMailbox(tx, claimed, await fetchFarmMailConnection(claimed, "code", "https://tohyee.test"), new Date("2026-10-19T09:00:00Z")));
+    // FC25: nothing is read until a folder is chosen.
+    expect(connected).toMatchObject({ provider: "google", email: "jess@kowhaidairies.example", historyDays: 30, status: "active", readingHistory: false, folders: [] });
+    const mailbox = await choose(w, connected.id, [{ id: "INBOX" }]);
+    expect(mailbox).toMatchObject({ readingHistory: true, folders: [{ externalId: "INBOX", name: "Inbox", includeSubfolders: false, missing: false }] });
     inbox.push({ id: "m1", threadId: "t1", at: "2026-10-18T21:02:00Z", from: vet, subject: "TB testing", text: "Hi Jess, we've booked TB testing at the Home farm for Thursday 22 October at 9am." });
     await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T09:15:00Z"));
     expect((await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items).toHaveLength(1);
@@ -163,7 +231,7 @@ describeWithDatabase("farm calendar from email", () => {
     const audit = await w.as(jess, (tx) => tx.query<{ details: unknown }>("select details from audit_events where event_type = 'farming.mailbox_connected'"));
     expect(JSON.stringify(audit.rows)).not.toContain("kowhaidairies");
     const columns = await w.as(jess, (tx) => tx.query<{ column_name: string }>("select column_name from information_schema.columns where table_name = 'farm_mail_seen' order by ordinal_position"));
-    expect(columns.rows.map((row) => row.column_name)).toEqual(["account_id", "external_id", "sent_at"]);
+    expect(columns.rows.map((row) => row.column_name)).toEqual(["account_id", "external_id", "sent_at", "folder_ids"]);
   });
 
   it("FC2, FC7-FC9 reading, a move, a cancellation, each email once, history before connecting", async () => {
@@ -277,13 +345,15 @@ describeWithDatabase("farm calendar from email", () => {
     const { url } = await w.as(mere, (tx) => startFarmMailConnect(tx, { provider: "google" }, "https://tohyee.test"));
     const claimed = await w.as(mere, (tx) => claimFarmMailState(tx, new URL(url).searchParams.get("state")!));
     await w.as(mere, async (tx) => saveFarmMailbox(tx, claimed, await fetchFarmMailConnection(claimed, "code", "https://tohyee.test")));
+    const mereBox = (await w.as(mere, (tx) => listFarmMailboxes(tx)))[0];
+    await w.as(mere, (tx) => chooseMailboxFolders(tx, mereBox.id, [{ id: "INBOX" }], [{ id: "INBOX", name: "Inbox", path: "Inbox", parentId: null, depth: 0 }]));
     expect(await w.as(mere, (tx) => listFarmMailboxes(tx))).toHaveLength(1);
     const response = await memberRoute.DELETE(
       apiRequest(`/api/organisations/${w.org}/members/${mere.id}`, { method: "DELETE", cookie: await sessionCookieFor(jess) }),
       params({ organisationId: w.org, userId: mere.id }),
     );
     expect(response.status).toBe(200);
-    const accounts = await w.as(jess, (tx) => tx.query<{ n: number }>("select count(*)::int as n from farm_mail_accounts"));
+    const accounts = await w.as(jess, (tx) => tx.query<{ n: number }>("select (select count(*) from farm_mail_accounts)::int + (select count(*) from farm_mail_folders)::int as n"));
     expect(accounts.rows[0].n).toBe(0);
   });
 
@@ -445,4 +515,181 @@ describeWithDatabase("farm calendar from email", () => {
     // Mere's items, shared ones included, went with her.
     expect((await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items.map((item) => item.title)).toEqual(["Stock truck", "TB testing"]);
   });
+  it("FC25, FC26 only the chosen labels are read, nothing before one is chosen, subfolders when asked; Jess's alone", async () => {
+    const w = await setup();
+    inbox.push({ id: "f1", threadId: "f1", at: "2026-10-18T21:00:00Z", from: vet, subject: "TB testing", text: "We've booked TB testing at the Home farm for Thursday 22 October at 9am.", labels: ["Label_1"] });
+    inbox.push({ id: "l1", threadId: "l1", at: "2026-10-18T22:00:00Z", from: "LIC <herd@lic.example>", subject: "Herd test", text: "Your herd test is booked for Tuesday 27 October.", labels: ["Label_2"] });
+    inbox.push({ id: "d1", threadId: "d1", at: "2026-10-18T23:00:00Z", from: "Board <secretary@board.example>", subject: "Board meeting", text: "The board meeting is on Wednesday 21 October at 10am.", labels: ["INBOX", "Label_3"] });
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z", { folders: [] });
+    // FC25: no folder chosen, nothing read, nothing asked of the mailbox.
+    expect(mailbox.folders).toEqual([]);
+    await expect(w.as(jess, (tx) => mailboxForCheck(tx, mailbox.id))).rejects.toThrow("Choose the folders");
+    expect(await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T09:15:00Z"))).toEqual({ read: 0, items: 0 });
+    expect(fetched).toEqual([]);
+    // The list offers the Inbox and Jess's labels, nested, not Sent, Spam or categories.
+    const available = await mailboxFolderChoices(w.organisation, mailbox.id);
+    expect(available.map((folder) => [folder.id, folder.path, folder.depth])).toEqual([
+      ["INBOX", "Inbox", 0],
+      ["Label_3", "Directorships", 0],
+      ["Label_1", "Farm", 0],
+      ["Label_2", "Farm/LIC", 1],
+    ]);
+    // Mere (an admin) can't list or choose Jess's folders.
+    await expect(w.as(mere, (tx) => mailboxForFolders(tx, mailbox.id))).rejects.toThrow("Mailbox not found.");
+    await expect(w.as(mere, (tx) => chooseMailboxFolders(tx, mailbox.id, [{ id: "Label_1" }], available))).rejects.toThrow("Mailbox not found.");
+    await expect(w.as(jess, (tx) => chooseMailboxFolders(tx, mailbox.id, [{ id: "Label_99" }], available))).rejects.toThrow("isn't in the mailbox");
+    // Farm only: the directorships email is never fetched.
+    await choose(w, mailbox.id, [{ id: "Label_1" }]);
+    expect(await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T09:30:00Z"))).toEqual({ read: 1, items: 1 });
+    expect(fetched).toEqual(["f1"]);
+    // FC26: with its subfolders, Farm/LIC's email is read too.
+    const withSub = await choose(w, mailbox.id, [{ id: "Label_1", includeSubfolders: true }]);
+    expect(withSub.folders).toMatchObject([{ name: "Farm", includeSubfolders: true }]);
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T09:45:00Z"));
+    expect(fetched.sort()).toEqual(["f1", "l1"]);
+    const week = await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-31" }));
+    expect(week.items.map((item) => item.title)).toEqual(["TB testing", "Herd test"]);
+    // Folder names are private: not in the audit trail, not in Mere's lists.
+    const audit = await w.as(jess, (tx) => tx.query<{ details: unknown }>("select details from audit_events where event_type = 'farming.mailbox_folders_chosen'"));
+    expect(audit.rows.length).toBeGreaterThan(0);
+    expect(JSON.stringify(audit.rows)).not.toMatch(/Farm|Label_/);
+    expect(await w.as(mere, (tx) => listFarmMailboxes(tx))).toEqual([]);
+  }, 90_000);
+
+  it("FC27 taking a folder off deletes what was taken from it alone, and undoes what its emails did", async () => {
+    const w = await setup();
+    inbox.push({ id: "f1", threadId: "t1", at: "2026-10-19T10:00:00Z", from: vet, subject: "TB testing", text: "We've booked TB testing at the Home farm for Thursday 22 October at 9am.", labels: ["Label_1"] });
+    inbox.push({ id: "b1", threadId: "b1", at: "2026-10-19T10:05:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Truck", text: "Stock truck for the Runoff on Wednesday 21 October, 7am.", labels: ["Label_1", "Label_3"] });
+    // In the other label only: moves the TB testing (same conversation).
+    inbox.push({ id: "d1", threadId: "t1", at: "2026-10-19T11:00:00Z", from: vet, subject: "Re: TB testing", text: "Sorry, we've had to move the TB testing to Friday 23 October at 9am.", labels: ["Label_3"] });
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z", { folders: [{ id: "Label_1" }, { id: "Label_3" }] });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:30:00Z"));
+    const range = { from: "2026-10-19", to: "2026-10-25" };
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => [item.title, item.date, item.state])).toEqual([
+      ["Stock truck", "2026-10-21", "open"],
+      ["TB testing", "2026-10-22", "moved"],
+      ["TB testing", "2026-10-23", "open"],
+    ]);
+    const shared = (await w.as(jess, (tx) => farmCalendar(tx, range))).items[2];
+    await w.as(jess, (tx) => shareCalendarItem(tx, shared.id, true));
+    // Directorships off: its email's item (shared too) goes, the move is undone; the truck, in both, stays.
+    const after = await choose(w, mailbox.id, [{ id: "Label_1" }]);
+    expect(after.folders.map((folder) => folder.name)).toEqual(["Farm"]);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => [item.title, item.date, item.state, item.stateNote])).toEqual([
+      ["Stock truck", "2026-10-21", "open", null],
+      ["TB testing", "2026-10-22", "open", null],
+    ]);
+    expect((await w.as(mere, (tx) => farmCalendar(tx, range))).items).toEqual([]);
+    const seen = await w.as(jess, (tx) => tx.query<{ external_id: string }>("select external_id from farm_mail_seen order by external_id"));
+    expect(seen.rows.map((row) => row.external_id)).toEqual(["b1", "f1"]);
+    // Nothing chosen: everything from the mailbox goes, and it stops.
+    await choose(w, mailbox.id, []);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items).toEqual([]);
+    expect((await w.as(jess, (tx) => tx.query<{ n: number }>("select count(*)::int as n from farm_mail_seen"))).rows[0].n).toBe(0);
+    fetched = [];
+    expect(await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T12:00:00Z"))).toEqual({ read: 0, items: 0 });
+    expect(fetched).toEqual([]);
+  }, 90_000);
+
+  it("FC28 an email moved out drops at the next check, with its cancellation undone; moved in is read, within the read-back date", async () => {
+    const w = await setup();
+    inbox.push({ id: "f1", threadId: "t1", at: "2026-10-19T10:00:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Truck", text: "Stock truck for the Runoff on Wednesday 21 October, 7am.", labels: ["Label_1"] });
+    inbox.push({ id: "f2", threadId: "t1", at: "2026-10-19T11:00:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Re: Truck", text: "Sorry, the stock truck is cancelled.", labels: ["Label_1"] });
+    inbox.push({ id: "f3", threadId: "t3", at: "2026-10-19T12:00:00Z", from: vet, subject: "TB testing", text: "TB testing at the Home farm on Thursday 22 October.", labels: ["Label_1"] });
+    inbox.push({ id: "f4", threadId: "t4", at: "2026-10-19T12:30:00Z", from: vet, subject: "TB testing reminder", text: "Reminder: TB testing on Thursday 22 October.", labels: ["Label_1"] });
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z", { historyDays: 30, folders: [{ id: "Label_1" }] });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T13:00:00Z"));
+    const range = { from: "2026-10-19", to: "2026-10-25" };
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => [item.title, item.state, item.alsoSeen])).toEqual([
+      ["Stock truck", "cancelled", 0],
+      ["TB testing", "open", 1],
+    ]);
+    // Jess moves the cancellation and the first TB email out of Farm.
+    inbox.find((mail) => mail.id === "f2")!.labels = ["INBOX"];
+    inbox.find((mail) => mail.id === "f3")!.labels = ["INBOX"];
+    fetched = [];
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T13:15:00Z"));
+    // The truck is back on, and the TB testing from the email moved out has gone.
+    expect(fetched).toEqual([]);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => [item.title, item.state, item.stateNote])).toEqual([["Stock truck", "open", null]]);
+    // The reminder, still in Farm, only added to that item, so it's read again at the next check and makes its own.
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T13:20:00Z"));
+    expect(fetched).toEqual(["f4"]);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => [item.title, item.state, item.stateNote, item.alsoSeen])).toEqual([
+      ["Stock truck", "open", null, 0],
+      ["TB testing", "open", null, 0],
+    ]);
+    const seen = await w.as(jess, (tx) => tx.query<{ external_id: string }>("select external_id from farm_mail_seen order by external_id"));
+    expect(seen.rows.map((row) => row.external_id)).toEqual(["f1", "f4"]);
+    // Moved back in: read again. One older than the read-back date isn't.
+    inbox.find((mail) => mail.id === "f2")!.labels = ["Label_1"];
+    inbox.push({ id: "old", threadId: "old", at: "2026-09-01T10:00:00Z", from: vet, subject: "Scanning", text: "Pregnancy scanning on Friday 23 October.", labels: ["Label_1"] });
+    fetched = [];
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T13:30:00Z"));
+    expect(fetched).toEqual(["f2"]);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => [item.title, item.state])).toEqual([
+      ["Stock truck", "cancelled"],
+      ["TB testing", "open"],
+    ]);
+  }, 90_000);
+
+  it("FC29 Outlook folders: a folder inside the Inbox with its subfolders, and a deleted folder drops its mail", async () => {
+    const w = await setup();
+    outlook.folders = [
+      { id: "inbox", displayName: "Inbox", parentFolderId: null },
+      { id: "farm", displayName: "Farm", parentFolderId: "inbox" },
+      { id: "vet", displayName: "Vet", parentFolderId: "farm" },
+      { id: "board", displayName: "Board papers", parentFolderId: "inbox" },
+      { id: "sent", displayName: "Sent Items", parentFolderId: null },
+    ];
+    outlook.mail = [
+      { id: "o1", threadId: "c1", at: "2026-10-19T10:00:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Truck", text: "Stock truck for the Runoff on Wednesday 21 October, 7am.", folder: "farm" },
+      { id: "o2", threadId: "c2", at: "2026-10-19T10:30:00Z", from: vet, subject: "TB testing", text: "TB testing at the Home farm on Thursday 22 October at 9am.", folder: "vet" },
+      { id: "o3", threadId: "c3", at: "2026-10-19T11:00:00Z", from: "Board <secretary@board.example>", subject: "Board meeting", text: "The board meeting is on Wednesday 21 October at 10am.", folder: "board" },
+    ];
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z", { provider: "microsoft", folders: [] });
+    const available = await mailboxFolderChoices(w.organisation, mailbox.id);
+    expect(available.map((folder) => [folder.path, folder.depth])).toEqual([
+      ["Inbox", 0],
+      ["Inbox › Board papers", 1],
+      ["Inbox › Farm", 1],
+      ["Inbox › Farm › Vet", 2],
+      ["Sent Items", 0],
+    ]);
+    const chosen = await choose(w, mailbox.id, [{ id: "farm", includeSubfolders: true }]);
+    expect(chosen.folders).toMatchObject([{ name: "Inbox › Farm", includeSubfolders: true }]);
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:30:00Z"));
+    expect(fetched.sort()).toEqual(["o1", "o2"]);
+    const range = { from: "2026-10-19", to: "2026-10-25" };
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => item.title)).toEqual(["Stock truck", "TB testing"]);
+    // The Farm folder is deleted in Outlook: it's shown as missing, and its mail drops.
+    outlook.folders = outlook.folders.filter((folder) => folder.id !== "farm" && folder.id !== "vet");
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:45:00Z"));
+    expect((await w.as(jess, (tx) => listFarmMailboxes(tx)))[0].folders).toMatchObject([{ name: "Inbox › Farm", missing: true }]);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items).toEqual([]);
+  }, 90_000);
+
+  it("FC30 a mailbox connected before folders: stops reading, keeps its items until folders are chosen, then only theirs stay", async () => {
+    const w = await setup();
+    inbox.push({ id: "f1", threadId: "f1", at: "2026-10-19T10:00:00Z", from: vet, subject: "TB testing", text: "TB testing at the Home farm on Thursday 22 October.", labels: ["INBOX", "Label_1"] });
+    inbox.push({ id: "d1", threadId: "d1", at: "2026-10-19T10:30:00Z", from: "Board <secretary@board.example>", subject: "Board meeting", text: "The board meeting is on Wednesday 21 October at 10am.", labels: ["INBOX", "Label_3"] });
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z");
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:00:00Z"));
+    // As migration 0164 leaves a mailbox read before folders: none chosen, emails with no folder.
+    await w.as(jess, (tx) => tx.query("delete from farm_mail_folders"));
+    await w.as(jess, (tx) => tx.query("update farm_mail_seen set folder_ids = '{}'"));
+    const range = { from: "2026-10-19", to: "2026-10-25" };
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items).toHaveLength(2);
+    expect((await w.as(jess, (tx) => listFarmMailboxes(tx)))[0]).toMatchObject({ folders: [], readingHistory: false });
+    fetched = [];
+    expect(await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:15:00Z"))).toEqual({ read: 0, items: 0 });
+    expect(fetched).toEqual([]);
+    await choose(w, mailbox.id, [{ id: "Label_1" }]);
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:30:00Z"));
+    // The board email isn't in Farm, so it and its item go; the TB email isn't read again.
+    expect(fetched).toEqual([]);
+    expect((await w.as(jess, (tx) => farmCalendar(tx, range))).items.map((item) => item.title)).toEqual(["TB testing"]);
+    const seen = await w.as(jess, (tx) => tx.query<{ external_id: string; n: number }>("select external_id, cardinality(folder_ids)::int as n from farm_mail_seen"));
+    expect(seen.rows).toEqual([{ external_id: "f1", n: 1 }]);
+  }, 90_000);
 });

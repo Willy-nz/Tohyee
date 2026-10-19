@@ -218,8 +218,28 @@
   min-width: 0;
 }
 
+/* A column's heading, then (in long columns) grey sub-headings one level down (#338). */
 .dropdownHeading {
   padding: 6px 10px 4px;
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.dropdownSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dropdownSection + .dropdownSection {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 2px;
+}
+
+.dropdownSubheading {
+  padding: 6px 10px 2px;
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
@@ -673,9 +693,20 @@
 
   .phoneHeading {
     padding: 8px 12px 2px;
-    color: var(--text-muted);
+    color: var(--text);
     font-size: var(--text-xs);
     font-weight: 600;
+  }
+
+  .phoneSubheading {
+    padding: 6px 12px 0 20px;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+  }
+
+  .phoneSubsection .phoneLink {
+    padding-left: 20px;
   }
 
   .phoneLink {
