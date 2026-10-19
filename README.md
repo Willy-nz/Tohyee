@@ -254,8 +254,11 @@ and the [feature register](docs/FEATURES.md).
   wedge, grazings and supplements fed. Records only: no feed plan or targets.
 - A **farm calendar** read from your own Gmail or Outlook: vet visits,
   deliveries, stock trucks, contractors, deadlines and meetings, with
-  anything unclear kept aside to check. Only you see your mailbox and
-  calendar. Not yet tried with a real mailbox.
+  anything unclear kept aside to check. Add your own items, set repeats,
+  share chosen items with the farm team (after a preview), and subscribe
+  to it from your phone or Google, Apple or Outlook calendar with a
+  private link. Only you see your mailbox. Not yet tried with a real
+  mailbox.
 - A **Farming API** for your own apps (keys you make, choosing exactly what
   each may read or record), with a guide and a soil sampling app.
 - An AI workspace: a farm notebook and files your own AI can read, tables
