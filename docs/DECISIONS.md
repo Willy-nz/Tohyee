@@ -5348,6 +5348,11 @@ testing) and #154's code signing (later, Jess).
      once; making a new one stops the old. It answers "not found" alike
      for a wrong, replaced or turned-off link, a member who has left, or
      Farming turned off, and is limited to 60 requests an hour. FC22, FC23.
+598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
+     Jess supplied a better photo in #339. Only the mountains, sky and lake
+     are used (a plain crop, not AI-restored): the car, shelter, sign and
+     fence are left out of the app. Everything else about the watermark
+     stays as before. See docs/AORAKI-RESTORATION.md.
 590. **How a chart looks is saved on its tile** (20 October 2026, issues
      #331 and #333 from Jess's BigDog dashboard; Power BI and Looker Studio
      as the reference, as the issue says). A Format section in the chart
