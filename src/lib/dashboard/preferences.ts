@@ -13,8 +13,9 @@ function parseTiles(raw: unknown, allowed: readonly string[]): string[] {
 
 export async function getDashboardPreference(
   tx: OrgTx,
-  input: { userId: string; page: string; defaultTiles: readonly string[]; allowedTiles?: readonly string[] },
+  input: { userId: string; page: string; defaultTiles: readonly string[]; allowedTiles?: readonly string[]; maxTiles?: number },
 ): Promise<DashboardPreference> {
+  const maxTiles = input.maxTiles ?? MAX_DASHBOARD_TILES;
   const allowedTiles = input.allowedTiles ?? input.defaultTiles;
   const result = await tx.query<{ hidden: boolean; tiles: unknown }>(
     "select hidden, tiles from dashboard_preferences where user_id = $1 and page = $2",
@@ -23,7 +24,7 @@ export async function getDashboardPreference(
   const row = result.rows[0];
   if (!row) return { hidden: false, tiles: [...input.defaultTiles] };
   const tiles = parseTiles(row.tiles, allowedTiles);
-  return { hidden: row.hidden, tiles: tiles.length > 0 ? tiles.slice(0, MAX_DASHBOARD_TILES) : [...input.defaultTiles] };
+  return { hidden: row.hidden, tiles: tiles.length > 0 ? tiles.slice(0, maxTiles) : [...input.defaultTiles] };
 }
 
 /** Most pins kept while hidden, so a saved row can't grow without end. */
@@ -65,17 +66,18 @@ export async function saveDashboardPreference(
     tiles: unknown;
     defaultTiles: readonly string[];
     allowedTiles?: readonly string[];
+    maxTiles?: number;
   },
 ): Promise<DashboardPreference> {
   if (typeof input.hidden !== "boolean") throw new ValidationError("hidden must be true or false.");
   const allowedTiles = input.allowedTiles ?? input.defaultTiles;
-  const tiles = parseTiles(input.tiles, allowedTiles).slice(0, MAX_DASHBOARD_TILES);
+  const tiles = parseTiles(input.tiles, allowedTiles).slice(0, input.maxTiles ?? MAX_DASHBOARD_TILES);
   if (tiles.length === 0) throw new ValidationError("Pick at least one tile.");
   const existing = await tx.query<{ tiles: unknown }>(
     "select tiles from dashboard_preferences where user_id = $1 and page = $2 for update",
     [input.userId, input.page],
   );
-  // Hidden pins go back where they were; the page still only shows four.
+  // Hidden pins go back where they were; the page still only shows its most.
   const stored = [...tiles];
   for (const { index, tile } of await hiddenPins(tx, existing.rows[0]?.tiles, allowedTiles)) {
     if (!stored.includes(tile)) stored.splice(Math.min(index, stored.length), 0, tile);

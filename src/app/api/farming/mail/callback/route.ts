@@ -24,7 +24,8 @@ export async function GET(request: Request): Promise<Response> {
     if (!code) return back({ error: "Signing in didn't return a code. Try connecting again." });
     const connection = await fetchFarmMailConnection(claimed, code, origin);
     const mailbox = await withOrganisation(request, organisationId, "viewer", (tx) => saveFarmMailbox(tx, claimed, connection));
-    return back({ connected: mailbox.email });
+    // FC25: straight to choosing its folders; nothing is read until then.
+    return back({ connected: mailbox.email, folders: mailbox.id });
   } catch (error) {
     return back({ error: error instanceof Error ? error.message : "Connecting didn't work. Try again." });
   }

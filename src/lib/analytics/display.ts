@@ -1,0 +1,31 @@
+import type { ResultColumn } from "@/lib/analytics/query";
+import { formatCurrency, formatDate, formatMoney, formatQuantity } from "@/lib/format";
+
+/**
+ * A value from a query, shown the way its column is meant to be read, in
+ * tables, key figures and pivot tables alike. Never turned into a JS number.
+ * Money has the minus first, as everywhere else in Tohyee: -$27.00 (#328).
+ * True and false are Yes and No (decision 577).
+ */
+export function showValue(value: string | null, column: Pick<ResultColumn, "format">): string {
+  if (value === null) return "";
+  switch (column.format) {
+    case "money":
+      return formatCurrency(value);
+    case "number":
+      return formatQuantity(formatMoney(value, 4));
+    case "integer":
+      return formatQuantity(value);
+    case "date":
+      return formatDate(value);
+    case "boolean":
+      return booleanText(value);
+    default:
+      return value;
+  }
+}
+
+/** "true" -> "Yes", "false" -> "No"; anything else as it is. */
+export function booleanText(value: string): string {
+  return value === "true" ? "Yes" : value === "false" ? "No" : value;
+}
