@@ -91,6 +91,12 @@ export type Workings = {
   yearEnd: string;
   incomeYear: number;
   kinds: KindWorking[];
+  /**
+   * The classes that were current assets (LV27, decision 566), their closing value, and
+   * what moved it to the current account (closing less that account's balance before).
+   * Missing on valuations approved before tenant migration 0161: all non-current.
+   */
+  current?: { classes: string[]; closingValue: string; transfer: string };
   totals: {
     openingValue: string;
     revaluation: string;
@@ -108,6 +114,8 @@ export type JournalPreviewLine = { accountCode: string; accountName: string; des
 export type ValuationPreview = {
   workings: Workings;
   revaluationTarget: "profit_and_loss" | "reserve";
+  /** Things to know that don't stop approval (LV28: tax values under general purpose reporting). */
+  notices: string[];
   journal: JournalPreviewLine[];
   /** What stops approval; empty when it can be approved. */
   problems: string[];
@@ -852,7 +860,7 @@ function nsc(
 
 // Posting -------------------------------------------------------------------------
 
-type AccountIds = { asset: AccountRef; valueChange: AccountRef; revaluation: AccountRef };
+type AccountIds = { asset: AccountRef; currentAsset: AccountRef | null; valueChange: AccountRef; revaluation: AccountRef };
 type AccountRef = { code: string; name: string };
 
 async function postingAccounts(tx: OrgTx, target: "profit_and_loss" | "reserve", problems: string[]): Promise<AccountIds | null> {
@@ -866,7 +874,11 @@ async function postingAccounts(tx: OrgTx, target: "profit_and_loss" | "reserve",
     problems.push(`Choose the ${missing.join(", ")} account${missing.length > 1 ? "s" : ""} in Livestock › Settings.`);
     return null;
   }
-  return { asset: settings.accounts.asset!, valueChange: settings.accounts.valueChange!, revaluation: revaluation! };
+  if (settings.currentClasses.length > 0 && !settings.accounts.currentAsset) {
+    problems.push("Choose the livestock on hand (current) account in Livestock › Settings.");
+    return null;
+  }
+  return { asset: settings.accounts.asset!, currentAsset: settings.accounts.currentAsset, valueChange: settings.accounts.valueChange!, revaluation: revaluation! };
 }
 
 function journalLines(workings: Workings, accounts: AccountIds): JournalPreviewLine[] {
@@ -888,8 +900,29 @@ function journalLines(workings: Workings, accounts: AccountIds): JournalPreviewL
     push(accounts.revaluation, `${kind.kindName}: herd scheme revaluation (non-taxable)`, neg(dec(kind.revaluation)));
     push(accounts.valueChange, `${kind.kindName}: change in value`, neg(dec(kind.valueChange)));
   }
+  // LV27: the current classes' value moves to (or back from) the current account.
+  if (workings.current && accounts.currentAsset && !isZero(dec(workings.current.transfer))) {
+    const transfer = dec(workings.current.transfer);
+    push(accounts.currentAsset, "Livestock held for sale (current)", transfer);
+    push(accounts.asset, "Livestock held for sale (current)", neg(transfer));
+  }
   return lines;
 }
+
+/** The closing value of the current classes (LV27): their classes' value and any high-priced animals in them. */
+function currentClosing(workings: Workings, classes: readonly string[]): Decimal {
+  const set = new Set(classes);
+  let total = ZERO_DECIMAL;
+  for (const kind of workings.kinds) {
+    for (const entry of kind.classes) if (set.has(classKey(kind.kind, entry.classCode))) total = add(total, dec(entry.closingValue));
+    for (const animal of kind.highPriced ?? []) if (animal.status === "high_priced" && set.has(classKey(kind.kind, animal.classCode))) total = add(total, dec(animal.closingValue));
+  }
+  return total;
+}
+
+/** LV28: under general purpose reporting, the tax values aren't NZ IAS 41's measurement. */
+const GENERAL_PURPOSE_NOTICE =
+  "These are tax values (herd scheme and national standard cost). For general purpose financial statements, NZ IAS 41 measures livestock at fair value less costs to sell, with changes in profit or loss: your accountant adjusts for any difference. Tohyee doesn't work out fair value.";
 
 async function ledgerBalance(tx: OrgTx, accountCode: string, asAt: string): Promise<string> {
   const row = await tx.query<{ balance: string }>(
@@ -911,6 +944,7 @@ export async function previewValuation(tx: OrgTx, input: { yearEnd: unknown }): 
     return {
       workings: approved.workings,
       revaluationTarget: approved.revaluationTarget,
+      notices: settings.reportingBasis === "general_purpose" ? [GENERAL_PURPOSE_NOTICE] : [],
       journal: accounts ? journalLines(approved.workings, accounts) : [],
       problems: [],
       ledgerOpening: null,
@@ -922,10 +956,16 @@ export async function previewValuation(tx: OrgTx, input: { yearEnd: unknown }): 
   let ledgerOpening: string | null = null;
   if (accounts) {
     // LV4's value bridge: the books carry last year's closing exactly, so this year's journal lands on this year's closing.
-    ledgerOpening = await ledgerBalance(tx, accounts.asset.code, yearEnd);
+    // With current classes (LV27), across both accounts.
+    const currentBalance = accounts.currentAsset ? await ledgerBalance(tx, accounts.currentAsset.code, yearEnd) : "0.00";
+    ledgerOpening = money(add(dec(await ledgerBalance(tx, accounts.asset.code, yearEnd)), dec(currentBalance)));
+    if (accounts.currentAsset) {
+      const closing = currentClosing(workings, settings.currentClasses);
+      workings.current = { classes: [...settings.currentClasses], closingValue: money(closing), transfer: money(sub(closing, dec(currentBalance))) };
+    }
     if (openingKnown && cmp(dec(ledgerOpening), dec(openingTotal)) !== 0) {
       problems.push(
-        `Account ${accounts.asset.code} ${accounts.asset.name} shows ${ledgerOpening} at ${yearEnd}, but the livestock opening value is ${openingTotal}. Post the opening balance (or correct it) first, so the closing value ties to the balance sheet.`,
+        `${accounts.currentAsset ? `Accounts ${accounts.asset.code} and ${accounts.currentAsset.code} show` : `Account ${accounts.asset.code} ${accounts.asset.name} shows`} ${ledgerOpening} at ${yearEnd}, but the livestock opening value is ${openingTotal}. Post the opening balance (or correct it) first, so the closing value ties to the balance sheet.`,
       );
     }
   }
@@ -934,6 +974,7 @@ export async function previewValuation(tx: OrgTx, input: { yearEnd: unknown }): 
   return {
     workings,
     revaluationTarget: settings.revaluationTarget,
+    notices: settings.reportingBasis === "general_purpose" ? [GENERAL_PURPOSE_NOTICE] : [],
     journal: accounts ? journalLines(workings, accounts) : [],
     problems,
     ledgerOpening,

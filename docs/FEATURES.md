@@ -1041,7 +1041,10 @@ that something happened.
     - The workings and the trading statement show taxable profit, with the
       non-taxable revaluation separate.
     - One approved journal posts at the year end. The revaluation goes to
-      profit and loss or a reserve.
+      profit and loss or a reserve (the reserve only under special purpose
+      reporting; LV28, decision 567).
+    - Each class is current (held for sale) or non-current; the valuation
+      moves the current classes' value to 1490 (LV27, decision 566).
     - Approval is refused until counts, elections, rates, amounts and the
       ledger opening tie.
     - Replacing a valuation reverses its journal.

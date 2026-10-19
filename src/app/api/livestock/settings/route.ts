@@ -8,7 +8,7 @@ export const GET = route(async (request) => {
   return json({ settings });
 });
 
-/** Turns livestock on or off, sets the first income year, where the herd scheme revaluation goes and the accounts (LV12). Admins. */
+/** Turns livestock on or off, sets the first income year, where the herd scheme revaluation goes, the reporting basis (LV28) and the accounts (LV12). Admins. */
 export const PATCH = route(async (request) => {
   const body = await readJson(request);
   const settings = await withOrganisation(request, body.organisationId, "admin", (tx) =>
@@ -16,7 +16,9 @@ export const PATCH = route(async (request) => {
       enabled: body.enabled,
       firstYearStart: body.firstYearStart,
       revaluationTarget: body.revaluationTarget,
+      reportingBasis: body.reportingBasis,
       assetAccount: body.assetAccount,
+      currentAssetAccount: body.currentAssetAccount,
       valueChangeAccount: body.valueChangeAccount,
       revaluationAccount: body.revaluationAccount,
       reserveAccount: body.reserveAccount,

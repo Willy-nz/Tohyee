@@ -16575,6 +16575,9 @@ out: the male breeding stock rules aren't checked.
   Proposed (not decided): changing the setting applies from the next year
   not yet approved. Approved years are never re-posted.
 
+  Since 19 Oct 2026 (#310, LV28): the equity reserve is only for special
+  purpose reporting; under general purpose reporting it's profit and loss.
+
 ### Built (stage 2, head counts): how LV1-LV3 came out
 
 `tests/integration/livestock-head-counts.test.ts`, decision 504.
@@ -16688,11 +16691,14 @@ and forecasts (#221 stage 5).
    - **(b)** an equity reserve. Does it depend on the reporting basis
      (special-purpose tax-basis statements vs. GAAP)?
 
-   **Answered: each farm chooses** (LV12).
+   **Answered: each farm chooses** (LV12). Qualified on 19 Oct 2026 (#310
+   item 3, Jess: "Tie it to reporting basis"): only under special purpose
+   reporting; under general purpose reporting it's profit and loss (LV28).
 3. **Accounts:** are the proposed codes and names right? Should livestock be
    a current or non-current asset? **Answered: non-current asset** (1500
    Livestock on hand is a non-current asset). Codes and names not
-   discussed; the draft stands.
+   discussed; the draft stands. Qualified on 19 Oct 2026 (#310 item 2,
+   Jess: "Choose per class"): each class is current or non-current (LV27).
 4. **Agent account sales (LV7):** one sales document with deductions (the
    draft), or an invoice to the agent plus a bill from them? **Answered:
    one document with deductions.**
@@ -17048,6 +17054,62 @@ refusal test in `livestock-valuation.test.ts`. Decision 509.
   stock in the herd scheme", the rams are revalued from 4,000.00 to
   4,310.00 (310.00 non-taxable). Without it, they're refused.
 
+
+## Livestock and the reporting basis (#310; LV27, LV28, 19 Oct 2026, not yet reviewed)
+
+#310 pointed out that a blanket non-current classification and a free
+choice of where the revaluation goes don't fit every reporting basis. Jess
+answered "Choose per class" (item 2) and "Tie it to reporting basis" (item
+3). The tax workings (herd scheme, NSC, the trading statement and the
+workpaper) don't change.
+
+- **LV27 Current or non-current, per class** (decision 566; NZ IAS 1 para
+  66: assets held for sale in the normal operating cycle are current). In
+  Livestock settings each class is current (held for sale) or
+  non-current; unless chosen, non-current, as before. Making a class
+  current the first time makes **1490 Livestock on hand (current)** (a
+  current asset). Kōwhai Dairies (LV4) sells its rising one-year heifers
+  each year, so it makes that class current before approving the 31 May
+  2026 valuation. The journal is LV4's (Dr 1500 200,240.00, Cr 7060
+  138,260.00, Cr 5210 61,980.00) plus Dr **1490 106,080.00** / Cr **1500
+  106,080.00**, "Livestock held for sale (current)": the rising one-year
+  heifers' closing value. After it, 1500 is **1,084,410.00** and 1490
+  **106,080.00**, together LV4's 1,190,490.00.
+  - Each later valuation moves the current classes' closing value less
+    what 1490 already holds (back to 1500 if it fell). High-priced animals
+    go with their class.
+  - Changing a class applies from the next valuation approved; approved
+    years aren't re-posted. If Kōwhai makes the heifers non-current again
+    and replaces the 2026 valuation (LV9), the replacement has LV4's three
+    lines and nothing goes to 1490.
+  - The ledger check (LV4) is across 1500 and 1490 together. 1490 has to
+    be a current asset account, and 1500 can't be one.
+- **LV28 The reporting basis** (decision 567). A livestock setting:
+  **special purpose** (tax basis; the default) or **general purpose** (NZ
+  IFRS or PBE Standards).
+  - **Special purpose:** where the herd scheme revaluation goes is the
+    farm's choice (LV12), stated as its policy in the draft financial
+    statements' livestock note: "The herd scheme revaluation of opening
+    stock is taken to the herd scheme revaluation reserve in equity" (or
+    "is shown in profit and loss as a separate, non-taxable item"), and
+    "All livestock is shown as a non-current asset" (or, with current
+    classes, that stock held for sale is current and stock kept
+    non-current).
+  - **General purpose:** NZ IAS 41 para 26 puts changes in the value of
+    biological assets through profit or loss, so the reserve is refused
+    ("Under general purpose reporting (NZ IFRS or PBE Standards) changes in
+    livestock values go through profit or loss (NZ IAS 41 para 26), so the
+    herd scheme revaluation can't go to a reserve. Choose profit and
+    loss."), both when choosing the basis with the reserve set and when
+    choosing the reserve. Choosing general purpose on the screen sets
+    profit and loss with it.
+  - The herd scheme and NSC values are tax values, not NZ IAS 41's fair
+    value less costs to sell. Under general purpose the valuation says so
+    (a notice, not a problem): the accountant adjusts for the difference.
+    Tohyee doesn't work out fair value. Kōwhai's 2026 valuation can still
+    be approved, with LV4's journal.
+
+Test: `tests/integration/livestock-reporting.test.ts`.
 
 ## Farming (#249) stage 2: fertiliser plans, applications and costs (FB1-FB8 approved by Jess, 13 Oct 2026)
 

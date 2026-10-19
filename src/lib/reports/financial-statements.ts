@@ -69,7 +69,14 @@ export async function draftNotes(tx: OrgTx): Promise<StatementNote[]> {
   if (livestock?.enabled) {
     notes.push({
       title: "Livestock",
-      body: "Livestock is valued at the end of each year under the valuation methods elected with Inland Revenue, as shown in the livestock valuation. [Name the methods used for each type of stock.]",
+      body:
+        "Livestock is valued at the end of each year under the valuation methods elected with Inland Revenue, as shown in the livestock valuation. [Name the methods used for each type of stock.] " +
+        (livestock.revaluationTarget === "reserve"
+          ? "The herd scheme revaluation of opening stock is taken to the herd scheme revaluation reserve in equity. "
+          : "The herd scheme revaluation of opening stock is shown in profit and loss as a separate, non-taxable item. ") +
+        (livestock.currentClasses.length > 0
+          ? "Livestock held for sale in the normal operating cycle is a current asset; breeding and other stock kept is non-current."
+          : "All livestock is shown as a non-current asset."),
     });
   }
   notes.push({
