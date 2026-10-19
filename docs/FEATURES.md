@@ -1896,7 +1896,11 @@ that something happened.
   exact (DuckDB decimals, shown from their text); column and value names
   are checked against the table and typed values go in as parameters.
   Negative money shows as -$27.00, and a value's label follows its column
-  and calculation until someone types their own (decision 576).
+  and calculation until someone types their own (decision 576). Sources
+  and columns have plain names grouped by source (the real name in a
+  tooltip), Yes/No columns show Yes and No, and Dates offers presets from
+  This month to This financial year (from the balance date) and All time,
+  which a dashboard can keep so it moves with the calendar (decision 577).
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
   about 3 seconds. Analytics also copies Tohyee's books and CRM, shares

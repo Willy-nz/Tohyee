@@ -47,7 +47,7 @@ export type TileQuery = {
 };
 
 export type ColumnInfo = { name: string; type: string };
-export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent";
+export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
 export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure" };
 export type PivotColumn = { key: string; label: string; pivotValue: string | null; measure: ResultColumn; total: boolean };
 export type PivotRow = {
@@ -99,6 +99,7 @@ function isNumberType(type: string) {
 
 /** Money is how Tohyee loads money columns (decision 356): two decimal places. */
 export function formatOfType(type: string): ValueFormat {
+  if (type === "BOOLEAN") return "boolean";
   if (/^DECIMAL\(\d+,2\)$/.test(type)) return "money";
   if (type.startsWith("DECIMAL") || type === "DOUBLE" || type === "FLOAT") return "number";
   if (isNumberType(type)) return "integer";
@@ -242,6 +243,11 @@ function filterSql(
     if (isNumberType(type)) {
       if (!/^-?\d+(\.\d+)?$/.test(value.trim())) throw new ValidationError(`${field}: "${value}" isn't a number.`);
       return `cast(${param(value.trim())} as ${type.startsWith("DECIMAL") ? "DECIMAL(38,6)" : type})`;
+    }
+    if (type === "BOOLEAN") {
+      // Shown as Yes and No (decision 577); sent as true and false.
+      if (value !== "true" && value !== "false") throw new ValidationError(`${field}: choose Yes or No.`);
+      return `cast(${param(value)} as BOOLEAN)`;
     }
     return param(value);
   };
