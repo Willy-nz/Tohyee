@@ -18303,3 +18303,129 @@ touching the accounting core. Nothing in it posts to the books. Tested in
   instalment marked as an estimate. Six-monthly GST filers get their two
   instalments (9,275.70 each) instead of "can't work it out". With an
   extension, ITX6 is unchanged. Tested in `tests/unit/income-tax-rules.test.ts`.
+
+## Farming (#319): the farm calendar from email (FC1-FC16; built by Claude 19 Oct 2026 from issue #319 when Jess said "make it from that", not yet reviewed)
+
+Issue #319 describes a calendar only for Farming that turns emails into
+upcoming farm work, visits, deliveries and deadlines. ChatGPT built it in its
+own copy but couldn't publish it, so Claude built it from the issue. Neither
+Xero nor NetSuite has this, so these rules are Claude's, following the issue
+and Jess's rule that mail stays private to the person who connects it.
+Reading uses fixed text rules, not AI. Made-up names and emails throughout.
+
+Kōwhai Dairies has Farming on and two farms, **Home farm** and **Runoff**.
+Jess (owner) and Mere (admin) are members. The emails below reach Jess's
+Gmail; times are New Zealand time.
+
+- **FC1 Connecting, and who sees it.** Under Farm › Farm calendar, Jess
+  connects her Gmail (read-only: Gmail's `gmail.readonly`, or Microsoft's
+  `Mail.Read`; nothing is sent, changed or deleted). It uses the
+  organisation's Google or Microsoft app from Settings › Email, with
+  `/api/farming/mail/callback` added to the app's sign-in addresses. She
+  chooses how far back to read: 90 days unless she picks 30 to 365. The
+  mailbox, and everything read from it, is only Jess's: Mere (an admin) sees
+  neither the mailbox nor its calendar items, and no one else can check,
+  change or disconnect it. Mere can connect her own. Farming has to be on.
+- **FC2 A clear booking.** From `office@manukavets.example`, sent Mon 19
+  Oct 2026, subject "TB testing": "Hi Jess, we've booked TB testing at the
+  Home farm for Thursday 22 October at 9am." One item: **Vet or animal
+  health**, "TB testing", **Thu 22 Oct 2026, 9:00am**, Home farm,
+  **Scheduled**, from the vet's address, with the sentence it came from
+  and a link to the email. Only the sentence, the subject and the sender
+  are kept, never the email's body.
+- **FC3 Tentative wording.** "The fert truck should be there Tuesday,
+  weather permitting." (sent Mon 19 Oct): **Delivery**, **Tue 20 Oct
+  2026**, no time, **Tentative** ("should be", "weather permitting"). A
+  weekday on its own is the next one after the day the email was sent
+  ("next Tuesday" too, but it's also in Needs checking, as people mean
+  different weeks by it).
+  Other tentative words: tentatively, provisionally, pencilled in,
+  hopefully, probably, might, may, TBC, to be confirmed, subject to.
+- **FC4 No exact date.** "The spreader will come early next week." It's a
+  **Contractor** item with no date, so it's only in **Needs checking**:
+  "No exact date: 'early next week'". The same for "next week", "later in
+  the week", "end of the month", "soon", when the arrangement is in the
+  same sentence.
+- **FC5 Dates and times.** "Shearers arriving 7.30am on 3/11" (sent 19
+  Oct 2026): **Contractor**, **Tue 3 Nov 2026, 7:30am** (day/month, as in
+  New Zealand). "between 9 and 11am" is 9:00 to 11:00; "9am-12pm" 9:00 to
+  12:00. Written dates: "3 November", "3rd Nov", "November 3", "3/11/26",
+  "03.11.2026"; also "today", "tomorrow". A date without a year is the next
+  one on or after the email's day, unless it's at most 60 days before it
+  (then it's this year, in the past): "3 January" sent 19 Oct 2026 is 3
+  Jan 2027; "14 October" is 14 Oct 2026.
+- **FC6 A weekday that doesn't match.** "Thursday 23 October" (23 Oct
+  2026 is a Friday) goes to Needs checking: "Thursday doesn't match 23
+  October 2026 (a Friday)", dated 23 Oct. "Friday 23 October" is
+  Scheduled.
+- **FC7 A booking moved.** A reply in the same conversation: "Sorry,
+  we've had to move the TB testing to Friday 23 October at 9am." The FC2
+  item becomes **Moved** (kept, shown faded, with "moved to Fri 23 Oct")
+  and a new Scheduled item is made for **Fri 23 Oct 2026, 9:00am**. Moved
+  words: moved or changed to a day ("move the TB testing to Friday",
+  "changed to 23/10"; "moving the heifers to the Runoff" isn't a change),
+  rescheduled, postponed, pushed back, brought forward. The earlier item is the latest one of the same kind in the
+  conversation, or else from the same sender still to come. If there isn't
+  one, the new item is in Needs checking: "Says a booking moved, but there's
+  no earlier one to replace".
+- **FC8 Cancelled.** "The stock truck for Wednesday is cancelled." The
+  stock truck item that email's conversation (or sender) made becomes
+  **Cancelled** (kept, shown struck through). Cancelled words: cancelled,
+  canceled, called off, not coming, not going ahead. If there's nothing to
+  cancel, it's in Needs checking.
+- **FC9 Read once, quotes skipped.** Each email is read once, however
+  often the mailbox is checked. Quoted earlier messages in a reply ("On
+  Mon, 19 Oct 2026 ... wrote:", lines starting ">", "From: ... Sent: ...")
+  aren't read again. An item of the same kind on the same date from the
+  same sender or conversation isn't made twice: the existing one notes the
+  second email.
+- **FC10 More than one farm.** "Spraying the Runoff and the Home farm on
+  Wednesday 21 October." One **Contractor** item for Wed 21 Oct in Needs
+  checking: "Mentions more than one farm: Home farm, Runoff". Farm names
+  are matched as whole words, ignoring case.
+- **FC11 No farm named.** With one active farm, that's the farm. With
+  more, the mailbox's chosen farm (Jess can choose one when connecting, or
+  later), else no farm: the item shows under "No farm".
+- **FC12 Not farm arrangements.** An email needs one of the arrangement
+  words and a date (or a no-exact-date phrase) in the same sentence, or the
+  arrangement in the subject and the date in the text. "Our sale ends 31
+  October" (no arrangement word) and "Thanks for the delivery" (no date)
+  make nothing. The kinds and their words:
+  - **Vet or animal health:** vet, TB test, pregnancy scanning, preg test,
+    scanning, metrichecking, herd test, drenching, vaccinating, dehorning,
+    disbudding.
+  - **Delivery:** deliver, delivery, fert or fertiliser truck, feed, PKE,
+    palm kernel, baleage, silage, hay, fuel, dropping off.
+  - **Stock movement:** stock truck, cartage, trucking, pick up or collect
+    (cattle, calves, cows, heifers, lambs, ewes, stock), bobby calves,
+    kill date, processing date.
+  - **Contractor work:** contractor, spreading, spraying, mowing, baling,
+    wrapping, harvest, cultivating, drilling, sowing, regrassing,
+    shearing, crutching, fencing, digger.
+  - **Deadline:** deadline, due by, due on, payment due, must be done by,
+    NAIT, return due.
+  - **Visit or meeting:** meeting, appointment, field day, discussion
+    group, farm visit, inspection, audit, assessment.
+- **FC13 The views.** **Today**, **Week** (Monday to Sunday), **Month**,
+  and **Needs checking** (items with no exact date or a reason to check,
+  oldest email first). Filters: farm (or "No farm") and sender. Tentative
+  items are marked "Tentative"; moved and cancelled ones are shown faded
+  with what happened.
+- **FC14 Correcting.** Jess can change an item's date, times, kind,
+  title and farm; that marks it **Checked by Jess** and takes it out of
+  Needs checking. "Not a farm arrangement" hides it. "Replaces..." picks an
+  earlier item this one replaces (it becomes Moved). A later email moving or
+  cancelling an item Jess has checked doesn't change it: the new item goes
+  to Needs checking instead, saying which item it would have moved.
+- **FC15 Disconnecting.** Disconnecting deletes the mailbox's tokens and
+  everything read from it (its items and the list of emails read). A member
+  who leaves the organisation has their farm mailboxes disconnected the
+  same way. A mailbox that can't be read three times running is paused
+  until it's reconnected.
+- **FC16 Not included yet** (as #319 said): attachments, sharing with the
+  farm team, repeating arrangements, adding items to Google or Outlook
+  calendars, and AI reading. The sender filter is only the sender's
+  address: it doesn't say who the work is for.
+
+Tests: `tests/unit/farm-mail-rules.test.ts` (FC2-FC12) and
+`tests/integration/farm-calendar.test.ts` (FC1, FC7-FC9, FC11, FC13-FC15).
