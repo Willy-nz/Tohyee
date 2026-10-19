@@ -1,9 +1,11 @@
 "use client";
 
 import { DateInput } from "@/components/date-input";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { SALES_PLATFORMS_HREF } from "@/components/navigation";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
@@ -21,6 +23,7 @@ import {
   type SyncLogEntry,
   type SyncResult,
 } from "@/lib/sales-platforms/types";
+import { integrationsSummary } from "@/lib/sales-platforms/summary";
 import type { TaxCode } from "@/lib/tax/codes";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -387,6 +390,51 @@ export function ConnectionCard({
           </div>
         )}
       </div>
+    </Card>
+  );
+}
+
+/**
+ * A short card for CRM Home (#342, decision 582): connected stores with their
+ * state, last sync and last error, from the same connections as Settings ›
+ * Sales platforms; or, for an admin with none, a link to connect Shopify.
+ * Connecting and every other change happen on that page.
+ */
+export function SalesPlatformsSummary({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const { data } = useApiData<{ connections: SalesPlatformConnection[] }>("/api/sales-platforms/connections", { organisationId });
+  // Quiet while loading or if it can't be read: it's a pointer, not the page itself.
+  if (!data) return null;
+  const summary = integrationsSummary(data.connections, can("admin"));
+  if (!summary) return null;
+  if (summary.kind === "connect") {
+    return (
+      <Card
+        title="Selling on Shopify?"
+        description="Connect your Shopify store to bring its customers in as companies and its products in as items."
+        actions={<Link href={SALES_PLATFORMS_HREF}>Connect Shopify</Link>}
+      >
+        <p className={ui.muted}>This is set up under Accounting settings, in Sales platforms. It hasn&apos;t been tried with a real Shopify store yet.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card title="Sales platforms" description="Stores bringing customers and products into Tohyee." actions={<Link href={SALES_PLATFORMS_HREF}>Sales platforms</Link>}>
+      <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+        {summary.connections.map((connection) => {
+          const status = STATUS_BADGES[connection.status];
+          return (
+            <li key={connection.id}>
+              <strong>
+                {SALES_PLATFORM_LABELS[connection.platform]}: {connection.storeName ?? connection.storeDomain}
+              </strong>{" "}
+              <Badge tone={status.tone}>{status.text}</Badge>
+              <div className={ui.muted}>{connection.lastSyncAt ? `Last synced ${formatDateTime(connection.lastSyncAt)}.` : "Not synced yet."}</div>
+              {connection.lastError ? <div className={ui.muted}>The last sync failed: {connection.lastError}</div> : null}
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }

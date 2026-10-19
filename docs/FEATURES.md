@@ -36,6 +36,9 @@ that something happened.
   across the top (Contacts under Sales/Purchases; Tax and Accounting under
   Accountant), each opening to its overview, lists and settings; a ☰ menu with
   the same sections on phones, where line editors stack each line's fields.
+  Long columns have grey sub-headings so each group is two to six links, and
+  settings live on an **All settings** page of cards (Accountant › Settings ›
+  All settings) with the five most used left in the menu (#338, decision 580).
   **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
   you; Bills to pay with due-this-week; Next GST return), net profit by month,
   a To do card and recent activity.
@@ -860,8 +863,9 @@ that something happened.
   payments (NPR11). Accounts nothing has been posted to are hidden on the
   categories list until asked for.
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
-  its **own app** at `/crm`, with its own top bar and tabs (Home, Companies,
-  People, Pipeline, Tasks, Email and calendar; a ☰ menu on phones), the same
+  its **own app** at `/crm`, with its own top bar (Home, Contacts, Sales,
+  Tasks, Dashboard, More and Settings, the last ones opening to grouped
+  menus; a ☰ menu on phones; #342, decision 581), the same
   sign-in, organisations and roles. An **app switcher** (Accounting / CRM)
   beside the Tohyee name in both apps replaces the old CRM menu; it shows
   only while the CRM is on for the organisation, so people without it never
@@ -869,7 +873,9 @@ that something happened.
   `/crm`. The CRM's **Home** shows the signed-in person's open opportunities
   (with a total per currency), their tasks due today or overdue, and the
   team's ten most recent calls, meetings and notes (CRM10, not yet approved
-  by Jess). Companies are the contacts, which can now also be **prospects**; **people**
+  by Jess), and a card for Shopify: connected stores with their last sync
+  and error, or "Connect Shopify" for an admin; CRM › Settings ›
+  Integrations opens Settings › Sales platforms (decision 582). Companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with the organisation's own stages
   (starting with Twenty's, plus Lost) on a drag-and-drop pipeline board, where a won one makes its draft invoice in
   one click (and makes a prospect a customer); an opportunity for a company
