@@ -9476,6 +9476,19 @@ Setup:
   is **1.1000**, so its budget is **4,950.00**. Its actual is 5,600.00 (CO3).
   With Retail's 4000 budget of 18,000.00, the group's 4000 budget is
   **22,950.00** against an actual of **25,600.00**.
+- **CO12** Profit on stock still in the group (#310, Jess: "Fix wording and
+  support it"; not yet reviewed). On 25 Oct 2026 Holdings buys
+  goods for 1,000.00 and sells them to Retail for 1,500.00, paid. Retail
+  still has them (1410) on 31 Oct. 4000, 5000 and 1410 aren't intercompany
+  accounts, so nothing is eliminated automatically: consolidated net profit
+  for October is **8,540.00**, goods for resale **4,500.00** and both sides
+  of the balance sheet **41,950.00**. Jess adds the adjustment "Sale to
+  Retail and the profit in its stock" at 31 Oct: Dr Holdings 4000 1,500.00 /
+  Cr Holdings 5000 1,000.00 / Cr Retail 1410 500.00. Consolidated net profit
+  is now **8,040.00** (current year earnings too), goods for resale
+  **4,000.00** and both sides **41,450.00**: the group's profit and net
+  assets drop by the 500.00 not yet made outside the group. Tohyee doesn't
+  work out unrealised profit itself; the adjustment is typed.
 - **FX1** Holdings (NZD) turns on ECB rates. The ECB's rates for 5 Oct 2026
   are, per EUR, NZD 1.9000 and AUD 1.7000, so Holdings' list gets AUD
   **1.117647** on 5 Oct, from "European Central Bank". A rate Jess typed for
@@ -9486,7 +9499,7 @@ Setup:
   in.
 
 Built (decisions 437-445, core migration 0007, tenant migration 0102).
-Test: `tests/integration/consolidation.test.ts` (CO1-CO11, FX1). AI
+Test: `tests/integration/consolidation.test.ts` (CO1-CO12, FX1). AI
 commentary is item 6 part 3.
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion
@@ -17502,7 +17515,7 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
   half up to the cent, and the last instalment is what's left, so they add
   up exactly. RIT of 5,000.00 or less last year means no provisional tax (see
   ITX8).
-- **ITX6 Last year's return filed late.** As ITX5, but 2025 RIT was 12,000.00
+- **ITX6 Last year's return filed late, with an extension of time.** As ITX5 (for a taxpayer with a tax agent's extension of time; without one, see ITX67), but 2025 RIT was 12,000.00
   and the 2026 return was filed on 10 Oct 2026 (after the first instalment,
   before the second). Instalment 1: 12,000.00 + 10% = 13,200.00 ÷ 3 =
   **4,400.00**. Instalment 2: 18,551.40 x 2 ÷ 3 = 12,367.60, less what was
@@ -18197,3 +18210,17 @@ touching the accounting core. Nothing in it posts to the books. Tested in
   the soil sampling app in `examples/farm-apps/soil-sampling/`. A breaking
   change gets a new version (`v2`); `v1` keeps working until it's retired
   with notice.
+
+## Income tax (#292, #310): the extension-of-time condition (ITX67; from IRD's "Standard option" page, read 18 Oct 2026; Jess chose 19 Oct 2026)
+
+- **ITX67 No extension of time.** IRD's "Standard option" page: with no
+  extension of time to file, "your provisional tax will be your previous
+  year's RIT plus 5%. This includes if you file your return after any of
+  your provisional tax dates." Tohyee treats the tax agent's extension
+  setting as the extension of time. Without it: Kererū's 2026 RIT
+  17,668.00, its return filed 10 Oct 2026 (after the first instalment):
+  **6,183.80** three times, total **18,551.40**, with a note saying why.
+  Not filed yet: the same from Tohyee's estimate of last year's RIT, every
+  instalment marked as an estimate. Six-monthly GST filers get their two
+  instalments (9,275.70 each) instead of "can't work it out". With an
+  extension, ITX6 is unchanged. Tested in `tests/unit/income-tax-rules.test.ts`.

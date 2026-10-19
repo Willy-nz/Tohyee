@@ -365,7 +365,8 @@ export async function consolidatedProfitAndLoss(user: GroupUser, groupId: unknow
   const costOfSales = sectionOf(loaded, "cost_of_sales", "Cost of sales", ["direct_costs"], perOrg, elims, own);
   const otherIncome = sectionOf(loaded, "other_income", "Other income", ["other_income"], perOrg, elims, own);
   const expenses = sectionOf(loaded, "expenses", "Expenses", ["expense", "depreciation"], perOrg, elims, own);
-  // Eliminations never change profit: what doesn't agree is put back on its own line (CO9).
+  // Automatic eliminations never change profit: what doesn't agree is put back on its own line (CO9).
+  // Adjustments can (unrealised profit, CO12, decision 563).
   const difference = items.reduce((total, item) => add(total, item.signed), ZERO_DECIMAL);
   const sections = [revenue, costOfSales, otherIncome, expenses].filter((section): section is ConsolidatedSection => section !== null);
   if (!isZero(difference)) {

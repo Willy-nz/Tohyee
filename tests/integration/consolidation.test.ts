@@ -218,6 +218,37 @@ describeWithDatabase("consolidation (CO1-CO11, FX1)", () => {
     await expect(setRateOverride({ id: vic.id, email: vic.email }, made.id, { currencyCode: "AUD", month: "2026-10", kind: "average", rate: "1.2", reason: "x" })).rejects.toThrow("admin or owner of every organisation");
   });
 
+  it("CO12: an adjustment takes out the profit on stock one company sold another that's still on hand", async () => {
+    const w = await setup();
+    const made = await group(w);
+    // Holdings buys goods for 1,000.00 and sells them to Retail for 1,500.00 (paid); Retail still has them on 31 Oct.
+    await w.journal(w.ids.holdings, "2026-10-25", [{ accountCode: "5000", debitAmount: "1000.00" }, { accountCode: "1000", creditAmount: "1000.00" }]);
+    await w.journal(w.ids.holdings, "2026-10-25", [{ accountCode: "1000", debitAmount: "1500.00" }, { accountCode: "4000", creditAmount: "1500.00" }]);
+    await w.journal(w.ids.retail, "2026-10-25", [{ accountCode: "1410", debitAmount: "1500.00" }, { accountCode: "1000", creditAmount: "1500.00" }]);
+    const net = async () => (await consolidatedProfitAndLoss(w.user, made.id, { from: "2026-10-01", to: "2026-10-31" })).totals.find((line) => line.name === "Net profit")!.consolidated;
+    const stock = async () => {
+      const sheet = await consolidatedBalanceSheet(w.user, made.id, { asAt: "2026-10-31" });
+      return [sheet.sections[0].lines.find((line) => line.code === "1410")!.consolidated, sheet.totals[0].consolidated, sheet.totals[1].consolidated];
+    };
+    // Nothing is eliminated automatically: 4000 and 1410 aren't intercompany accounts, so the 500.00 profit is still in.
+    expect(await net()).toBe("8540.00");
+    expect(await stock()).toEqual(["4500.00", "41950.00", "41950.00"]);
+    await createAdjustment(w.user, made.id, {
+      date: "2026-10-31",
+      description: "Sale to Retail and the profit in its stock",
+      lines: [
+        { organisationId: w.ids.holdings, accountCode: "4000", debit: "1500.00" },
+        { organisationId: w.ids.holdings, accountCode: "5000", credit: "1000.00" },
+        { organisationId: w.ids.retail, accountCode: "1410", credit: "500.00" },
+      ],
+    });
+    // Profit and net assets both drop by 500.00.
+    expect(await net()).toBe("8040.00");
+    expect(await stock()).toEqual(["4000.00", "41450.00", "41450.00"]);
+    const sheet = await consolidatedBalanceSheet(w.user, made.id, { asAt: "2026-10-31" });
+    expect(sheet.sections[2].lines.find((line) => line.name === "Current year earnings")!.consolidated).toBe("8040.00");
+  });
+
   it("CO3: with no AUD rate for a date, the report is refused", async () => {
     const w = await setup();
     const made = await group(w);
