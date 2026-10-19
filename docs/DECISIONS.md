@@ -5324,3 +5324,8 @@ testing) and #154's code signing (later, Jess).
      item in Needs checking instead (FC14). People can hide an item ("Not
      a farm arrangement") or say one replaces another. Moved and cancelled
      items are kept, faded, so it's clear what happened.
+598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
+     Jess supplied a better photo in #339. Only the mountains, sky and lake
+     are used (a plain crop, not AI-restored): the car, shelter, sign and
+     fence are left out of the app. Everything else about the watermark
+     stays as before. See docs/AORAKI-RESTORATION.md.
