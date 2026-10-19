@@ -4,6 +4,7 @@ import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
+import { CashFlowChart } from "@/components/cash-flow-chart";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { ReportCommentary } from "@/components/report-commentary";
@@ -359,31 +360,19 @@ export function CashFlowForecastView({ organisationId }: { organisationId: strin
             </label>
           </div>
         }
-        title="Cash flow forecast"
-        description="From today's bank balance: open invoices and bills on their due dates, repeating invoices and bills, unpaid expense claims, forecast items and account averages. It posts nothing."
+        title="Will there be enough cash?"
+        description="From today's bank balance and what's in the books. It posts nothing."
       >
-        {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
-        {!forecast ? <p className={ui.muted}>Loading…</p> : null}
+        {loaded.error ? (
+          <Notice tone="error">
+            Couldn&apos;t work out the forecast: {loaded.error}{" "}
+            <Button size="small" variant="secondary" onClick={loaded.reload}>Retry</Button>
+          </Notice>
+        ) : null}
+        {!forecast && !loaded.error ? <p className={ui.muted} role="status">Loading…</p> : null}
         {forecast ? (
           <>
-            {forecast.availableAccounts.length > 0 ? (
-              <div className={ui.choiceList} aria-label="Bank accounts">
-                {forecast.availableAccounts.map((account) => (
-                  <label key={account.id} className={ui.checkbox}>
-                    <input
-                      type="checkbox"
-                      checked={chosen.includes(account.id)}
-                      onChange={(event) => {
-                        const next = event.target.checked ? [...chosen, account.id] : chosen.filter((id) => id !== account.id);
-                        if (next.length > 0) setAccountIds(next);
-                      }}
-                    />{" "}
-                    {account.code} {account.name}
-                    {account.accountType === "credit_card" ? " (card)" : ""}
-                  </label>
-                ))}
-              </div>
-            ) : null}
+            {/* The answer first (#323 finding 5): today, the lowest point and the end, then any shortfall. */}
             <div className={ui.statRow}>
               <Stat label={`In the bank today (${formatDate(forecast.today)})`} value={<Money value={forecast.opening} />} />
               <Stat label={`Lowest (${periodLabel(forecast.periods[forecast.lowest.index], forecast.period)})`} value={<Money value={forecast.lowest.closing} />} />
@@ -391,7 +380,7 @@ export function CashFlowForecastView({ organisationId }: { organisationId: strin
             </div>
             {forecast.firstBelowZero !== null ? (
               <Notice tone="warning">
-                The balance goes below zero in {periodLabel(forecast.periods[forecast.firstBelowZero], forecast.period)} ({formatMoney(forecast.periods[forecast.firstBelowZero].closing)}).
+                <strong>Cash shortfall expected in {periodLabel(forecast.periods[forecast.firstBelowZero], forecast.period)}</strong> ({formatMoney(forecast.periods[forecast.firstBelowZero].closing)}). Its money in and out are in the table below.
               </Notice>
             ) : null}
             {forecast.excluded.length > 0 ? (
@@ -400,6 +389,34 @@ export function CashFlowForecastView({ organisationId }: { organisationId: strin
                 {forecast.excluded.map((entry) => `${entry.label}: ${entry.reason}`).join("; ")}. Add a rate in Accounting › Exchange rates.
               </Notice>
             ) : null}
+            <CashFlowChart forecast={forecast} labelOf={(index) => periodLabel(forecast.periods[index], forecast.period)} />
+            <details className={ui.collapsible}>
+              <summary>
+                What&apos;s in it: {forecast.accounts.length} of {forecast.availableAccounts.length || forecast.accounts.length} bank {forecast.availableAccounts.length === 1 ? "account" : "accounts"}
+              </summary>
+              <p className={ui.muted}>
+                Open invoices and bills on their due dates, repeating invoices and bills, unpaid expense claims, and the forecast items and account averages
+                further down{forecast.includeOrders ? ", with sales and purchase orders" : ""}{forecast.includeDrafts ? ", with drafts" : ""}.
+              </p>
+              {forecast.availableAccounts.length > 0 ? (
+                <div className={ui.choiceList} aria-label="Bank accounts">
+                  {forecast.availableAccounts.map((account) => (
+                    <label key={account.id} className={ui.checkbox}>
+                      <input
+                        type="checkbox"
+                        checked={chosen.includes(account.id)}
+                        onChange={(event) => {
+                          const next = event.target.checked ? [...chosen, account.id] : chosen.filter((id) => id !== account.id);
+                          if (next.length > 0) setAccountIds(next);
+                        }}
+                      />{" "}
+                      {account.code} {account.name}
+                      {account.accountType === "credit_card" ? " (card)" : ""}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </details>
             <ReportExport
               organisationId={organisationId}
               report="cash-flow-forecast"
@@ -471,8 +488,12 @@ export function CashFlowForecastView({ organisationId }: { organisationId: strin
           canEdit={can("bookkeeper")}
         />
       ) : null}
-      <ForecastItems organisationId={organisationId} canEdit={can("bookkeeper")} onChanged={loaded.reload} />
-      <AccountAverages organisationId={organisationId} canEdit={can("bookkeeper")} onChanged={loaded.reload} />
+      {/* The assumptions, out of the way until wanted (#323 finding 5); they still feed every figure above. */}
+      <details className={ui.collapsible}>
+        <summary>Assumptions: forecast items and account averages</summary>
+        <ForecastItems organisationId={organisationId} canEdit={can("bookkeeper")} onChanged={loaded.reload} />
+        <AccountAverages organisationId={organisationId} canEdit={can("bookkeeper")} onChanged={loaded.reload} />
+      </details>
     </>
   );
 }

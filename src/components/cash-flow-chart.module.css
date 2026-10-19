@@ -1,0 +1,103 @@
+.figure {
+  margin: 12px 0;
+}
+
+.caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.caption span {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.frame {
+  position: relative;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.zero {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+
+.tick {
+  fill: var(--text-muted);
+  font-size: 12px;
+}
+
+.below {
+  fill: var(--danger-bg);
+  opacity: 0.6;
+}
+
+.line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.low {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.lowNegative {
+  fill: var(--danger-text);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.crosshair {
+  stroke: var(--border-strong);
+  stroke-dasharray: 3 3;
+}
+
+.hit {
+  fill: transparent;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tooltip span {
+  color: var(--text-muted);
+}
