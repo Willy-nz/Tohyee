@@ -1920,6 +1920,30 @@ that something happened.
   accessible HTML table; CSV and Excel exports use the standard report
   export (decision 375).
 
+- **Analytics: database sources** (decisions 602-605, tenant migration
+  0166). Under Analytics › Data sources › Add data source, admins and owners
+  can connect a **Microsoft SQL Server**, **PostgreSQL** or **MySQL**
+  database: server, port (or SQL Server instance), database, user, password
+  and encryption (none, encrypted without checking the certificate, i.e.
+  SQL Server's "trust server certificate", or encrypted and checked). The
+  connection is tested before it's saved; the password is encrypted with
+  the server's key and never shown again, and changing the server, database
+  or user needs it typed again. Then pick a table or view, or write one
+  SELECT query, preview its columns and first 20 rows, confirm each
+  column's type (exact decimals load as Money or Number, dates, date-times
+  in local time, yes/no; binary data isn't loaded), and load it into the
+  organisation's own analytics copy. Database sources reload nightly after
+  04:00 and on demand, with the same load history as files, and don't need
+  an analytics folder. Tohyee only reads: typed queries must be a single
+  SELECT and are checked; PostgreSQL and MySQL queries run in read-only
+  transactions; every query has a time limit (30 seconds for a preview, 10
+  minutes for a load, `TOHYEE_ANALYTICS_DATABASE_SECONDS`), and a source
+  has a row limit (1,000,000 by default, up to 5,000,000) past which the
+  load fails rather than loading part of the data. The screens recommend a
+  read-only database user. Tohyee's own databases can't be connected to.
+  PostgreSQL is tested against a real server; **MySQL and SQL Server are
+  only tested with stand-in drivers and haven't been tried against a real
+  server yet.**
 - **Analytics: calculated values, saved values and templates** (#337,
   decision 597, examples BM1-BM4, tenant migration 0165). A chart can add a
   calculated value, a formula over its other values such as

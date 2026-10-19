@@ -17,7 +17,11 @@ describe("Analytics workspace access and connectors", () => {
     expect(html).toContain("Excel workbook");
     expect(html).toContain("Books and CRM");
     expect(html).toContain("Report emails");
-    expect(html).toContain("Direct connections to Google Sheets, BigQuery and external SQL databases are not available yet");
+    expect(html).toContain("Microsoft SQL Server");
+    expect(html).toContain("PostgreSQL");
+    expect(html).toContain("MySQL");
+    expect(html).toContain("Direct connections to Google Sheets and BigQuery are not available");
+    expect(html).not.toContain("external SQL");
   });
 });
 
