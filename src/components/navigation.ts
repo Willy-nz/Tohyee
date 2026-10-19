@@ -3,8 +3,11 @@ import type { Role } from "@/lib/auth/roles";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. Accounting counts as on unless it's been turned off (MOD2). */
 export type ModuleKey = "accounting" | "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock" | "farming";
-export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
+/** `section`: the sub-heading the link sits under inside its column (#338); links of a section are kept together. */
+export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey; section?: string };
 export type MenuGroup = { heading: string; links: MenuLink[] };
+/** A run of links under one sub-heading (none for a column without sub-headings). */
+export type MenuSection = { heading: string | null; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
 export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
 
@@ -16,6 +19,14 @@ export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?:
  */
 /** Where Shopify and other sales platforms are connected (an Accounting setting). */
 export const SALES_PLATFORMS_HREF = "/operations/settings/sales-platforms";
+
+/** The All settings page (like Xero's Settings page): every setting on one page of cards (decision 580). */
+export const ALL_SETTINGS_HREF = "/operations/settings/all";
+
+/** Puts links under a sub-heading inside a menu column (#338, decision 580). */
+function section(heading: string, links: MenuLink[]): MenuLink[] {
+  return links.map((link) => ({ ...link, section: heading }));
+}
 
 export const MENUS: Menu[] = [
   { label: "Home", href: "/operations", groups: [] },
@@ -44,15 +55,19 @@ export const MENUS: Menu[] = [
       {
         heading: "Customers and items",
         links: [
-          { href: "/operations/contacts?type=customers", label: "Customers" },
-          { href: "/operations/contacts", label: "All contacts" },
-          { href: "/operations/customer-statements", label: "Customer statements" },
-          { href: "/operations/projects", label: "Projects" },
-          { href: "/operations/jobs", label: "Jobs" },
-          { href: "/operations/jobs/calendar", label: "Job calendar" },
-          { href: "/operations/jobs/my-visits", label: "My visits" },
-          { href: "/operations/projects/staff-rates", label: "Staff cost rates" },
-          { href: "/operations/items", label: "Products and services" },
+          ...section("Customers", [
+            { href: "/operations/contacts?type=customers", label: "Customers" },
+            { href: "/operations/contacts", label: "All contacts" },
+            { href: "/operations/customer-statements", label: "Customer statements" },
+            { href: "/operations/items", label: "Products and services" },
+          ]),
+          ...section("Projects and jobs", [
+            { href: "/operations/projects", label: "Projects" },
+            { href: "/operations/jobs", label: "Jobs" },
+            { href: "/operations/jobs/calendar", label: "Job calendar" },
+            { href: "/operations/jobs/my-visits", label: "My visits" },
+            { href: "/operations/projects/staff-rates", label: "Staff cost rates" },
+          ]),
         ],
       },
     ],
@@ -63,14 +78,18 @@ export const MENUS: Menu[] = [
       {
         heading: "Documents",
         links: [
-          { href: "/operations/purchases", label: "Purchases overview" },
-          { href: "/operations/bills", label: "Bills" },
-          { href: "/operations/bills/inbox", label: "Bills inbox" },
-          { href: "/operations/bills?show=awaiting", label: "Awaiting payment" },
-          { href: "/operations/purchase-orders", label: "Purchase orders" },
-          { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
-          { href: "/operations/repeating-bills", label: "Repeating bills" },
-          { href: "/operations/purchases/approvals", label: "Approvals" },
+          ...section("Bills", [
+            { href: "/operations/purchases", label: "Purchases overview" },
+            { href: "/operations/bills", label: "Bills" },
+            { href: "/operations/bills/inbox", label: "Bills inbox" },
+            { href: "/operations/bills?show=awaiting", label: "Awaiting payment" },
+            { href: "/operations/repeating-bills", label: "Repeating bills" },
+            { href: "/operations/purchases/approvals", label: "Approvals" },
+          ]),
+          ...section("Orders and credits", [
+            { href: "/operations/purchase-orders", label: "Purchase orders" },
+            { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
+          ]),
         ],
       },
       {
@@ -108,14 +127,20 @@ export const MENUS: Menu[] = [
       {
         heading: "Pay",
         links: [
-          { href: "/operations/payroll/pay-runs", label: "Pay runs", minRole: "bookkeeper" },
-          { href: "/operations/payroll/rosters", label: "Rosters", minRole: "bookkeeper" },
-          { href: "/operations/payroll/my-shifts", label: "My shifts", minRole: "viewer" },
-          { href: "/operations/payroll/clock-ins", label: "Clock-ins", minRole: "bookkeeper" },
-          { href: "/operations/payroll/timesheets", label: "Timesheets", minRole: "viewer" },
-          { href: "/operations/payroll/leave-requests", label: "Leave requests", minRole: "viewer" },
-          { href: "/operations/payroll/leave", label: "Leave", minRole: "bookkeeper" },
-          { href: "/operations/payroll/ird-payments", label: "IRD payments", minRole: "bookkeeper" },
+          ...section("Pay runs", [
+            { href: "/operations/payroll/pay-runs", label: "Pay runs", minRole: "bookkeeper" },
+            { href: "/operations/payroll/ird-payments", label: "IRD payments", minRole: "bookkeeper" },
+          ]),
+          ...section("Time", [
+            { href: "/operations/payroll/rosters", label: "Rosters", minRole: "bookkeeper" },
+            { href: "/operations/payroll/my-shifts", label: "My shifts", minRole: "viewer" },
+            { href: "/operations/payroll/clock-ins", label: "Clock-ins", minRole: "bookkeeper" },
+            { href: "/operations/payroll/timesheets", label: "Timesheets", minRole: "viewer" },
+          ]),
+          ...section("Leave", [
+            { href: "/operations/payroll/leave-requests", label: "Leave requests", minRole: "viewer" },
+            { href: "/operations/payroll/leave", label: "Leave", minRole: "bookkeeper" },
+          ]),
         ],
       },
       {
@@ -144,17 +169,23 @@ export const MENUS: Menu[] = [
       {
         heading: "Farm",
         links: [
-          { href: "/operations/farming", label: "Farms and paddocks" },
-          { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
-          { href: "/operations/farming/soil", label: "Soil tests" },
-          { href: "/operations/farming/pasture", label: "Pasture and feed" },
-          { href: "/operations/farming/calendar", label: "Farm calendar" },
-          { href: "/operations/farming/benchmarks", label: "Benchmarks" },
-          { href: "/operations/farming/notebook", label: "Farm notebook" },
-          { href: "/operations/farming/apps", label: "Farm apps" },
-          { href: "/operations/ai/workspace", label: "AI dashboards and data" },
-          { href: "/operations/farming/import", label: "Import paddock shapes", minRole: "bookkeeper" },
-          { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+          ...section("Paddocks and soil", [
+            { href: "/operations/farming", label: "Farms and paddocks" },
+            { href: "/operations/farming/soil", label: "Soil tests" },
+            { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
+            { href: "/operations/farming/pasture", label: "Pasture and feed" },
+            { href: "/operations/farming/import", label: "Import paddock shapes", minRole: "bookkeeper" },
+          ]),
+          ...section("Records", [
+            { href: "/operations/farming/calendar", label: "Farm calendar" },
+            { href: "/operations/farming/notebook", label: "Farm notebook" },
+            { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+          ]),
+          ...section("Insights and apps", [
+            { href: "/operations/farming/benchmarks", label: "Benchmarks" },
+            { href: "/operations/ai/workspace", label: "AI dashboards and data" },
+            { href: "/operations/farming/apps", label: "Farm apps" },
+          ]),
         ],
       },
     ],
@@ -165,30 +196,42 @@ export const MENUS: Menu[] = [
       {
         heading: "Financial statements",
         links: [
-          { href: "/operations/reports?report=pnl", label: "Profit and loss" },
-          { href: "/operations/reports?report=bs", label: "Balance sheet" },
-          { href: "/operations/reports?report=tb", label: "Trial balance" },
-          { href: "/operations/reports?report=equity", label: "Changes in equity" },
-          { href: "/operations/reports?report=cashflow", label: "Cash flows" },
-          { href: "/operations/reports?report=transactions", label: "Account transactions" },
-          { href: "/operations/reports?report=journals", label: "Journal report" },
-          { href: "/operations/reports?report=bankrec", label: "Bank reconciliation" },
-          { href: "/operations/reports?report=aged", label: "Aged receivables" },
-          { href: "/operations/reports?report=payables", label: "Aged payables" },
+          ...section("Statements", [
+            { href: "/operations/reports?report=pnl", label: "Profit and loss" },
+            { href: "/operations/reports?report=bs", label: "Balance sheet" },
+            { href: "/operations/reports?report=tb", label: "Trial balance" },
+            { href: "/operations/reports?report=equity", label: "Changes in equity" },
+            { href: "/operations/reports?report=cashflow", label: "Cash flows" },
+          ]),
+          ...section("Detail", [
+            { href: "/operations/reports?report=transactions", label: "Account transactions" },
+            { href: "/operations/reports?report=journals", label: "Journal report" },
+            { href: "/operations/reports?report=bankrec", label: "Bank reconciliation" },
+          ]),
+          ...section("Who owes what", [
+            { href: "/operations/reports?report=aged", label: "Aged receivables" },
+            { href: "/operations/reports?report=payables", label: "Aged payables" },
+          ]),
         ],
       },
       {
         heading: "Business",
         links: [
-          { href: "/operations/reports?report=stock", label: "Stock valuation" },
-          { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
-          { href: "/operations/budgets", label: "Budgets" },
-          { href: "/operations/reports?report=budget", label: "Budget vs actual" },
-          { href: "/operations/reports/cash-flow-forecast", label: "Cash flow forecast" },
-          { href: "/operations/reports/consolidation", label: "Consolidation" },
-          { href: "/operations/fixed-assets/register", label: "Fixed asset register" },
-          { href: "/operations/project-reports/profitability", label: "Project profitability" },
-          { href: "/operations/project-reports/time", label: "Time report" },
+          ...section("Budgets and forecasts", [
+            { href: "/operations/budgets", label: "Budgets" },
+            { href: "/operations/reports?report=budget", label: "Budget vs actual" },
+            { href: "/operations/reports/cash-flow-forecast", label: "Cash flow forecast" },
+          ]),
+          ...section("Sales, stock and assets", [
+            { href: "/operations/reports?report=stock", label: "Stock valuation" },
+            { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
+            { href: "/operations/fixed-assets/register", label: "Fixed asset register" },
+            { href: "/operations/reports/consolidation", label: "Consolidation" },
+          ]),
+          ...section("Projects", [
+            { href: "/operations/project-reports/profitability", label: "Project profitability" },
+            { href: "/operations/project-reports/time", label: "Time report" },
+          ]),
         ],
       },
       {
@@ -216,62 +259,118 @@ export const MENUS: Menu[] = [
       {
         heading: "Ledger",
         links: [
-          { href: "/operations/ledger-journals", label: "Journals" },
-          { href: "/operations/accounts", label: "Chart of accounts" },
-          { href: "/operations/period-close", label: "Period close" },
-          { href: "/operations/reports/accountant-pack", label: "Year-end pack" },
-          { href: "/operations/reports/financial-statements", label: "Financial statements" },
-          // Also under Sales; Jess looked for items here (2 Oct 2026).
-          { href: "/operations/items", label: "Products and services" },
-          { href: "/operations/inventory", label: "Stock" },
+          ...section("Ledger", [
+            { href: "/operations/ledger-journals", label: "Journals" },
+            { href: "/operations/accounts", label: "Chart of accounts" },
+          ]),
+          ...section("Year end", [
+            { href: "/operations/period-close", label: "Period close" },
+            { href: "/operations/reports/accountant-pack", label: "Year-end pack" },
+            { href: "/operations/reports/financial-statements", label: "Financial statements" },
+          ]),
+          // Products and services are also under Sales; Jess looked for them here (2 Oct 2026).
+          ...section("Inventory", [
+            { href: "/operations/items", label: "Products and services" },
+            { href: "/operations/inventory", label: "Stock" },
+          ]),
         ],
       },
       {
         heading: "Assets",
         links: [
-          { href: "/operations/fixed-assets", label: "Fixed assets" },
-          { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },
-          { href: "/operations/livestock", label: "Livestock", module: "livestock" },
-          { href: "/operations/livestock/account-sales", label: "Account sales", module: "livestock" },
-          { href: "/operations/livestock/valuation", label: "Livestock valuation", module: "livestock" },
-          { href: "/operations/livestock/management", label: "Livestock management values", module: "livestock" },
+          ...section("Fixed assets", [
+            { href: "/operations/fixed-assets", label: "Fixed assets" },
+            { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },
+          ]),
+          ...section("Livestock", [
+            { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+            { href: "/operations/livestock/account-sales", label: "Account sales", module: "livestock" },
+            { href: "/operations/livestock/valuation", label: "Livestock valuation", module: "livestock" },
+            { href: "/operations/livestock/management", label: "Livestock management values", module: "livestock" },
+          ]),
         ],
       },
       {
         heading: "Tax and R&D",
         links: [
-          { href: "/operations/gst-return", label: "GST return", module: "gst" },
-          { href: "/operations/gst-audit", label: "GST audit report", module: "gst" },
-          { href: "/operations/tax", label: "Tax codes" },
-          { href: "/operations/income-tax", label: "Income tax", minRole: "admin" },
-          { href: "/operations/rd", label: "R&D activities" },
-          { href: "/operations/rd/costs", label: "Tagged R&D costs" },
-          { href: "/operations/rd/claim", label: "R&D claim report" },
+          ...section("GST", [
+            { href: "/operations/gst-return", label: "GST return", module: "gst" },
+            { href: "/operations/gst-audit", label: "GST audit report", module: "gst" },
+            { href: "/operations/tax", label: "Tax codes" },
+          ]),
+          ...section("Income tax", [{ href: "/operations/income-tax", label: "Income tax", minRole: "admin" }]),
+          ...section("R&D", [
+            { href: "/operations/rd", label: "R&D activities" },
+            { href: "/operations/rd/costs", label: "Tagged R&D costs" },
+            { href: "/operations/rd/claim", label: "R&D claim report" },
+          ]),
         ],
       },
       {
+        // The most used settings; the rest are on the All settings page (SETTINGS, decision 580).
         heading: "Settings",
         links: [
           { href: "/operations/settings", label: "Organisation settings", minRole: "admin" },
           { href: "/operations/members", label: "People and roles", minRole: "admin" },
-          { href: "/operations/settings/customers", label: "Payment terms and customers", minRole: "admin" },
           { href: "/operations/settings/email", label: "Email", minRole: "admin" },
-          { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
-          { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin", module: "reporting" },
-          { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
-          { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/sales-platforms", label: "Sales platforms" },
-          { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
-          { href: "/operations/livestock/settings", label: "Livestock", module: "livestock" },
-          { href: "/operations/settings/bank-files", label: "Bank files", minRole: "bookkeeper" },
-          { href: "/operations/settings/kilometre-rates", label: "Kilometre rates" },
-          { href: "/operations/settings/online-payments", label: "Online payments" },
-          { href: "/operations/settings/approval-rules", label: "Approval rules" },
-          { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
-          { href: "/crm/record-types", label: "CRM record types", minRole: "admin", module: "crm" },
-          { href: "/crm/stages", label: "CRM opportunity stages", minRole: "admin", module: "crm" },
+          { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
+          { href: ALL_SETTINGS_HREF, label: "All settings" },
         ],
       },
+    ],
+  },
+];
+
+/** Every setting, as the All settings page's cards of 2-6 links (decision 580). */
+export const SETTINGS: MenuGroup[] = [
+  {
+    heading: "Organisation",
+    links: [
+      { href: "/operations/settings", label: "Organisation settings", minRole: "admin" },
+      { href: "/operations/modules", label: "Modules", minRole: "admin" },
+      { href: "/operations/settings/email", label: "Email", minRole: "admin" },
+      { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
+    ],
+  },
+  {
+    heading: "People and access",
+    links: [
+      { href: "/operations/members", label: "People and roles", minRole: "admin" },
+      { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
+      { href: "/operations/settings/approval-rules", label: "Approval rules" },
+    ],
+  },
+  {
+    heading: "Sales and payments",
+    links: [
+      { href: "/operations/settings/customers", label: "Payment terms and customers", minRole: "admin" },
+      { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
+      { href: "/operations/settings/sales-platforms", label: "Sales platforms" },
+      { href: "/operations/settings/online-payments", label: "Online payments" },
+    ],
+  },
+  {
+    heading: "Accounting setup",
+    links: [
+      { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin", module: "reporting" },
+      { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
+      { href: "/operations/settings/bank-files", label: "Bank files", minRole: "bookkeeper" },
+      { href: "/operations/settings/kilometre-rates", label: "Kilometre rates" },
+    ],
+  },
+  {
+    heading: "Assets and livestock",
+    links: [
+      { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
+      { href: "/operations/livestock/settings", label: "Livestock", module: "livestock" },
+    ],
+  },
+  {
+    heading: "CRM",
+    links: [
+      { href: "/crm/record-types", label: "CRM record types", minRole: "admin", module: "crm" },
+      { href: "/crm/stages", label: "CRM opportunity stages", minRole: "admin", module: "crm" },
     ],
   },
 ];
@@ -453,6 +552,18 @@ export function isCurrent(pathname: string, search: URLSearchParams, href: strin
   return [...wanted.entries()].every(([key, value]) => search.get(key) === value);
 }
 
+/** A column's links split by their sub-headings, in order; sections left empty by role or module filtering don't appear. */
+export function menuSections(group: MenuGroup): MenuSection[] {
+  const sections: MenuSection[] = [];
+  for (const link of group.links) {
+    const heading = link.section ?? null;
+    const last = sections.at(-1);
+    if (last && last.heading === heading) last.links.push(link);
+    else sections.push({ heading, links: [link] });
+  }
+  return sections;
+}
+
 type Access = { can(role: Role): boolean; modules: Modules | null };
 
 function moduleOn(module: ModuleKey | undefined, modules: Modules | null): boolean {
@@ -482,6 +593,13 @@ export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Ac
     .filter((menu) => menu.href || menu.groups.length > 0);
 }
 
+/** The All settings page's cards someone may see: their role and the organisation's modules decide (decision 580). */
+export function visibleSettings(access: Access): MenuGroup[] {
+  // The page is an Accounting page, so it's not offered while Accounting is off (MOD2).
+  if (access.modules?.accounting === false) return [];
+  return filterGroups(SETTINGS, access);
+}
+
 /** The "+ New" actions someone may start (bookkeepers and up, today). */
 export function visibleNewActions(access: Access): MenuGroup[] {
   if (access.modules?.accounting === false) return [];
@@ -501,7 +619,8 @@ export function destinations(menus: Menu[], newActions: MenuGroup[], extra: Dest
     if (menu.href) all.push({ href: menu.href, label: menu.label, group: menu.label });
     for (const group of menu.groups) {
       for (const link of group.links) {
-        all.push({ href: link.href, label: link.label, group: group.heading === menu.label ? menu.label : `${menu.label} › ${group.heading}` });
+        const column = group.heading === menu.label ? menu.label : `${menu.label} › ${group.heading}`;
+        all.push({ href: link.href, label: link.label, group: link.section && link.section !== group.heading ? `${column} › ${link.section}` : column });
       }
     }
   }

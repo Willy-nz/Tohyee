@@ -36,6 +36,9 @@ that something happened.
   across the top (Contacts under Sales/Purchases; Tax and Accounting under
   Accountant), each opening to its overview, lists and settings; a ☰ menu with
   the same sections on phones, where line editors stack each line's fields.
+  Long columns have grey sub-headings so each group is two to six links, and
+  settings live on an **All settings** page of cards (Accountant › Settings ›
+  All settings) with the five most used left in the menu (#338, decision 580).
   **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
   you; Bills to pay with due-this-week; Next GST return), net profit by month,
   a To do card and recent activity.

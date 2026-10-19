@@ -5353,6 +5353,23 @@ testing) and #154's code signing (later, Jess).
      are used (a plain crop, not AI-restored): the car, shelter, sign and
      fence are left out of the app. Everything else about the watermark
      stays as before. See docs/AORAKI-RESTORATION.md.
+580. **Sub-headings in long menu columns, and an All settings page**
+     (20 October 2026). Issue #338 (Jess, 19 Oct 2026: the Accountant menu
+     was hard to scan). Any top-bar menu column of more than seven links
+     now has small grey sub-headings, one level below the column heading,
+     so each run is two to six links; each sub-heading is a labelled group
+     for screen readers. The Accountant menu follows the issue's grouping,
+     except Account sales, which sits under Livestock rather than Fixed
+     assets because it's the stock agent's livestock sale statement. Sales,
+     Purchases, Payroll, Farm and Reports got the same treatment where a
+     column was long. Settings moved to an **All settings** page of cards,
+     like Xero's Settings page, keeping the same role and module rules;
+     the menu keeps the five most used (Organisation settings, People and
+     roles, Email, Sales platforms, Import and export) and All settings,
+     and the search (Ctrl K) still finds every setting. Links for modules
+     that are off were already hidden (MOD1); a sub-heading left empty
+     disappears with them. R&D has no on/off switch yet, so it still
+     always shows; adding one is a separate change.
 581. **The CRM's top bar, grouped** (20 October 2026). Issue #342 (Jess:
      "There is too much up the top in the CRM"). The 17 tabs become seven,
      using the same dropdown menus as Accounting's top bar: Home, Contacts
