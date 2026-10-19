@@ -25,7 +25,8 @@ export type FarmMail = {
 const TIMEOUT_MS = 30_000;
 const MAX_TEXT = 20_000;
 
-async function getJson<T>(url: string, token: string, headers: Record<string, string> = {}): Promise<T> {
+/** A GET to Gmail or Graph with the mailbox's token (also used by the private copy, src/lib/private-mail). */
+export async function getJson<T>(url: string, token: string, headers: Record<string, string> = {}): Promise<T> {
   let response: Response;
   try {
     response = await providerFetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -91,6 +92,8 @@ export type MailFolder = {
   parentId: string | null;
   /** How many folders deep (0 at the top). */
   depth: number;
+  /** Gmail's Sent, Drafts, Spam and Trash: offered for the private copy only, never read for the farm calendar (#250, decision 615). */
+  privateOnly?: boolean;
 };
 
 /** At most this many folders are listed (more are left out, deepest first). */
@@ -214,6 +217,7 @@ export async function listFolderMailIds(
   after: Date,
   max: number,
   labels: MailFolder[] | null = null,
+  options: { includeSpamTrash?: boolean; graphPageSize?: number } = {},
 ): Promise<FolderListing> {
   const ids: string[] = [];
   let complete = true;
@@ -225,7 +229,7 @@ export async function listFolderMailIds(
       const before = ids.length;
       let pageToken: string | undefined;
       do {
-        const params = new URLSearchParams({ q: `after:${Math.floor(after.getTime() / 1000)}`, labelIds: labelId, maxResults: "500", includeSpamTrash: "false" });
+        const params = new URLSearchParams({ q: `after:${Math.floor(after.getTime() / 1000)}`, labelIds: labelId, maxResults: "500", includeSpamTrash: options.includeSpamTrash ? "true" : "false" });
         if (pageToken) params.set("pageToken", pageToken);
         const page = await getJson<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, token);
         for (const message of page?.messages ?? []) if (!ids.includes(message.id)) ids.push(message.id);
@@ -248,7 +252,7 @@ export async function listFolderMailIds(
   }
   for (const folderId of folderIds) {
     const before = ids.length;
-    const params = new URLSearchParams({ $filter: `receivedDateTime ge ${after.toISOString()}`, $select: "id", $orderby: "receivedDateTime desc", $top: "100" });
+    const params = new URLSearchParams({ $filter: `receivedDateTime ge ${after.toISOString()}`, $select: "id", $orderby: "receivedDateTime desc", $top: String(options.graphPageSize ?? 100) });
     let next: string | undefined = `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(folderId)}/messages?${params}`;
     try {
       while (next && ids.length - before < max) {

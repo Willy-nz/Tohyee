@@ -358,6 +358,12 @@ function UserMenu({ onSignOut }: { onSignOut: () => void }) {
           <Link href="/operations/profile" className={styles.dropdownLink} onClick={close}>
             Profile and two-step sign-in
           </Link>
+          {current?.role === "owner" ? (
+            // An Owner's private copy of their own mail (#250).
+            <Link href="/operations/my-mail" className={styles.dropdownLink} onClick={close}>
+              My mail
+            </Link>
+          ) : null}
           {current && can("admin") ? (
             // Reachable from every app, even with Accounting off (#181, MOD2).
             <Link href="/operations/modules" className={styles.dropdownLink} onClick={close}>
@@ -573,6 +579,11 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
             <Link href="/operations/profile" onClick={close}>
               Profile and two-step sign-in
             </Link>
+            {current?.role === "owner" ? (
+              <Link href="/operations/my-mail" onClick={close}>
+                My mail
+              </Link>
+            ) : null}
             <ThemeSwitch />
             <button type="button" className={styles.linkButton} onClick={onSignOut}>
               Sign out
@@ -698,6 +709,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   const { can, current } = useWorkspace();
   const modules = useModules(current?.id ?? null);
   const reportViewer = current?.role === "report_viewer";
+  const owner = current?.role === "owner";
   // Sales reps and managers have the CRM and their own profile only (decision 491).
   const salesRole = current?.role === "sales_rep" || current?.role === "sales_manager";
   const salesAway = salesRole && app !== "crm" && !pathname.startsWith("/operations/profile");
@@ -726,11 +738,12 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
         ...settings.flatMap((group) => group.links.map((link) => ({ href: link.href, label: link.label, group: `Settings › ${group.heading}` }))),
         { href: AI_LINK.href, label: "AI assistant", group: "AI" },
         { href: "/operations/profile", label: "Profile and two-step sign-in", group: "You" },
+        ...(owner ? [{ href: "/operations/my-mail", label: "My mail", group: "You" }] : []),
         ...(app !== "accounting" && !reportViewer && modules?.accounting !== false ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
         ...(app !== "crm" && modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
         ...(app !== "analytics" && modules?.analytics ? [{ href: "/analytics", label: "Analytics", group: "Apps" }] : []),
       ]),
-    [menus, newActions, settings, app, modules, reportViewer],
+    [menus, newActions, settings, app, modules, reportViewer, owner],
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
 

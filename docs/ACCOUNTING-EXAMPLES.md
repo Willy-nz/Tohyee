@@ -18702,9 +18702,9 @@ her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
   as in FC28 (the board meeting goes; the TB testing in Farm stays and
   isn't read again). Nothing is deleted by the update itself.
 - **FC31 Not included:** reading a folder's emails older than its newest
-  2,000 (FC29); Gmail's other system labels (Starred, Important) as
-  choices; and the private mailbox import (#250), which isn't built yet and
-  should use this same folder choice when it is.
+  2,000 (FC29); and Gmail's other system labels (Starred, Important) as
+  choices. The private mailbox copy (#250) uses this same folder choice
+  (PM14).
 
 Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
 `tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
@@ -18770,3 +18770,104 @@ property.
 Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
+
+## My mail: an Owner's private copy of their own mail (PM1-PM14; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
+
+Not accounting: a private store of an Owner's own email, for them and
+their own AI. Xero and NetSuite keep nothing like it, so the rules are
+Claude's, following #250 as changed by #340 (Jess's mailbox also holds her
+mum's company directorship mail, which must not come into Tohyee at all,
+not even privately, and the folder choice is to be set in one place).
+Decisions 610-617; how it's protected is in `docs/PRIVATE-MAIL.md`.
+Made-up organisation: Kōwhai Dairies, with Jess and Ana (Owners), Mere
+(admin), Sam (bookkeeper, the accountant), Rob (report viewer) and Sid (a
+server admin who's also an admin there). Jess's Gmail has the Inbox, her
+labels **Farm**, **Farm/LIC** and **Directorships**, and Gmail's Sent,
+Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
+
+- **PM1 Turning it on.** Jess opens **My mail** from her user menu (only
+  Owners see it) and connects her Gmail, reading back 365 days. It's the
+  farm calendar's sign-in (read-only, the same sign-in address), and it
+  works with Farming off. The mailbox shows "Not reading: tick folders"
+  and **Keep a private copy of these emails for me and my AI** is ticked.
+  Nothing is read until she ticks a folder: Sync now says so. Mere can't
+  start one ("not found").
+- **PM2 Only what she ticks.** **Choose folders** lists the Inbox and her
+  labels, nested, then, for the private copy only, Sent, Drafts, Spam and
+  Trash. She ticks **Farm**: the soil test results, her reply (also in
+  Sent) and a draft labelled Farm are copied. The board papers in
+  Directorships are never fetched, and nor is the spam. Ticking Spam as
+  well copies the spam at the next sync.
+- **PM3 The first copy.** Nine emails in Farm since 19 Sep, one from 1 Aug
+  (before the read-back date, never copied). Gmail is busy partway: four
+  are copied and kept, and My mail shows the error. The next sync copies
+  the other five; nothing is fetched or kept twice. My mail shows "All 9
+  emails copied", "1 Oct 2026 to 9 Oct 2026", the read-back date and when
+  it last synced. Each sync copies at most 300 emails and 200 MB of
+  attachments, so a big mailbox shows "1,234 of 5,000 emails copied (24%)"
+  and carries on every 15 minutes.
+- **PM4 What isn't copied** is listed under each mailbox: folders not
+  ticked; Gmail's Sent, Drafts, Spam and Trash unless ticked, and archived
+  mail with no label; email before the read-back date; all but the newest
+  10,000 in a bigger folder (with a warning); attachment files over 20 MB
+  and linked Outlook items; pictures and formatting.
+- **PM5 Attachments.** A fertiliser quote in Outlook's Inbox › Farm has
+  Quote 4471.pdf (kept, downloads as the same file), a meeting invite (a
+  linked item: name only, "open it in Outlook") and Plans.zip at 30 MB
+  (too big: name and size only). The mailbox shows "3, 2 not kept".
+- **PM6 Moves, unticking and deleted folders**, as the farm calendar's
+  FC27-FC29. Unticking Directorships deletes at once what was copied only
+  from it. The draft moved out of Farm is gone at the next sync; the board
+  papers labelled Farm as well are copied then. When the Farm label is
+  deleted in Gmail, everything copied from it goes and Farm shows "not
+  found in the mailbox".
+- **PM7 Nobody else.** Ana (an Owner), Mere, Sam, Rob, Sid and someone
+  outside the organisation each get "not found" from every route: the
+  list, connecting her mailbox's folders, the switch, disconnecting, Sync
+  now, Delete my copy, searching, a conversation and an attachment's
+  address. Ana's own My mail is empty. An AI key or a farm app key acting
+  as Jess is refused too. Nothing readable is in the database: no
+  subject, address, word, attachment name or file. The audit trail says
+  "copy started" with no details, and a failed sync's log line names only
+  the organisation.
+- **PM8 Ownership never moves.** Ana makes Jess an admin: Jess can't read
+  her copy now and it isn't synced; Ana still sees nothing. The database
+  refuses to give the copy or its emails another owner. Jess an Owner
+  again: hers again, and the next sync catches up. When Ana removes Jess
+  from the organisation, the connection is deleted (as FC15) and the copy
+  stays, readable by nobody; added back as an Owner, Jess sees it as
+  "Disconnected: not copying", to delete or carry on.
+- **PM9 Searching.** Whole words, every one: "paddock twelve" finds the
+  results and her reply, newest first; "kowhai" and "KŌWHAI dairies" find
+  the results ("Kōwhai" in its text); "p12" finds the attachment's name;
+  "from:results@soillab.example" the lab's email and
+  "to:results@soillab.example" her reply; "olse" finds nothing (not a
+  whole word). Results come 50 at a time with **More**.
+- **PM10 Reading.** Opening her reply shows the conversation oldest first:
+  who it was from and to, the date, the text, the attachments and **Open
+  in your mailbox**.
+- **PM11 Downloading.** Soil results P12.pdf downloads as the same file.
+  It's always a download, never opened inside Tohyee.
+- **PM12 Off and disconnect.** With the switch off, nothing more is copied
+  and what was copied stays. Disconnect deletes the sign-in and folder
+  choice (and the farm calendar's items from it); the copy stays,
+  "Disconnected: not copying". Connecting the same mailbox again carries on
+  the same copy: only the email that arrived since is fetched.
+- **PM13 Delete my copy** deletes every copied email, attachment and search
+  token at once, after a warning that backups made before keep it until
+  they age out (about 12 months). The mailbox and its connection carry on.
+- **PM14 One connection with the farm calendar.** With Farming on, Jess
+  connected the mailbox on the farm calendar, reading Farm. My mail shows
+  the same mailbox and Farm. She turns the copy on and ticks Sent too: the
+  farm calendar's list and mailbox still show only Farm, its check never
+  reads Sent (the herd test Jess sent makes no calendar item), and saving
+  folders on the farm calendar leaves Sent ticked for the copy. A mailbox
+  connected only from My mail isn't on the farm calendar and isn't read
+  for it.
+
+Not included (#250's next parts): filing an attachment into shared data
+(the bills inbox, soil tests) with a preview of what others will see; and
+the AI's private-mail scope (PR 2). Tests:
+`tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14)
+and `tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
+nothing else names the private tables).
