@@ -1,0 +1,100 @@
+.explain {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.row > select,
+.row > input {
+  width: auto;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* A filter joined with "or" sits inside the group it joins: indented, with the accent edge. */
+.orRow {
+  margin-top: -4px;
+  margin-left: 16px;
+  border-left: 3px solid var(--accent);
+}
+
+.row > .join {
+  flex: 0 0 auto;
+  width: auto;
+  font-weight: 600;
+}
+
+.range {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.range > input,
+.range > div {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.range > .count {
+  flex: 0 1 90px;
+}
+
+.picker {
+  position: relative;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.picker > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker > summary::after {
+  content: " ▾";
+  color: var(--text-muted);
+}
+
+.pickerList {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  width: max(100%, 220px);
+  max-width: min(320px, calc(100vw - 32px));
+  max-height: 280px;
+  overflow: auto;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.12));
+}
+
+.add {
+  display: flex;
+  margin-bottom: 4px;
+}
