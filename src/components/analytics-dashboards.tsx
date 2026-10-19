@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -16,8 +17,6 @@ import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics
 import type {
   Aggregate,
   ColumnInfo,
-  Filter,
-  FilterOp,
   Grain,
   Measure,
   PivotColumn,
@@ -34,6 +33,7 @@ import type {
 import { api, apiDownload, errorMessage } from "@/lib/client/api";
 import { DATE_PRESETS, type DatePreset, isDatePreset, matchingPreset, presetRange } from "@/lib/analytics/date-ranges";
 import { booleanText, showValue } from "@/lib/analytics/display";
+import { filterComplete } from "@/lib/analytics/filters";
 import { changeMeasure, fieldLabel, measureLabel, tableDescription, tableLabel } from "@/lib/analytics/labels";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
@@ -62,16 +62,6 @@ const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
   { value: "max", label: "Largest" },
   { value: "count", label: "Count of rows" },
   { value: "count_distinct", label: "Count of different values" },
-];
-
-const OPS: Array<{ value: FilterOp; label: string }> = [
-  { value: "eq", label: "is" },
-  { value: "neq", label: "is not" },
-  { value: "contains", label: "contains" },
-  { value: "gt", label: "more than" },
-  { value: "gte", label: "at least" },
-  { value: "lt", label: "less than" },
-  { value: "lte", label: "at most" },
 ];
 
 const GRAINS: Array<{ value: Grain; label: string }> = [
@@ -1055,8 +1045,6 @@ function TileEditor({
   // A label Tohyee filled in follows the value's column and calculation; a typed one stays (#329).
   const setMeasure = (index: number, patch: Partial<Measure>) =>
     setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? changeMeasure(measure, patch, query.table) : measure)) });
-  const setFilter = (index: number, patch: Partial<Filter>) =>
-    setQuery({ ...query, filters: query.filters.map((filter, at) => (at === index ? { ...filter, ...patch } : filter)) });
   const changeVisual = (next: Visual) => {
     if (next === "pivot") {
       const current = query.groupBy;
@@ -1357,48 +1345,7 @@ function TileEditor({
       </div>
 
       <h3 className={styles.subheading}>Only include rows where</h3>
-      {query.filters.map((filter, index) => (
-        <div key={index} className={styles.measureRow}>
-          <select aria-label={`Filter ${index + 1} column`} value={filter.field} onChange={(event) => setFilter(index, { field: event.target.value })}>
-            {columnOptions(columns)}
-          </select>
-          <select aria-label={`Filter ${index + 1} test`} value={filter.op} onChange={(event) => setFilter(index, { op: event.target.value as FilterOp })}>
-            {OPS.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-          {columns.find((column) => column.name === filter.field)?.type === "BOOLEAN" ? (
-            <select aria-label={`Filter ${index + 1} value`} value={String(filter.value)} onChange={(event) => setFilter(index, { value: event.target.value })}>
-              <option value="">Choose</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
-          ) : (
-            <input
-              aria-label={`Filter ${index + 1} value`}
-              type={isDate(columns.find((column) => column.name === filter.field)?.type ?? "") ? "date" : "text"}
-              value={String(filter.value)}
-              onChange={(event) => setFilter(index, { value: event.target.value })}
-            />
-          )}
-          <Button size="small" variant="danger" onClick={() => setQuery({ ...query, filters: query.filters.filter((_f, at) => at !== index) })}>
-            Remove
-          </Button>
-        </div>
-      ))}
-      <div className={styles.addRow}>
-        <Button
-          size="small"
-          variant="secondary"
-          disabled={!columns.length}
-          onClick={() => setQuery({ ...query, filters: [...query.filters, { field: columns[0].name, op: "eq", value: "" }] })}
-        >
-          Add a filter
-        </Button>
-      </div>
-
+      <TileFilters organisationId={organisationId} table={query.table} columns={columns} filters={query.filters} onChange={(filters) => setQuery({ ...query, filters })} />
 
       <div className={ui.rowButtons}>
         <Button
@@ -1409,7 +1356,7 @@ function TileEditor({
               title: title.trim() || query.measures[0]?.label || "Tile",
               visual,
               width,
-              query: { ...query, filters: query.filters.filter((filter) => String(filter.value).trim() !== "") },
+              query: { ...query, filters: query.filters.filter(filterComplete) },
             })
           }
         >

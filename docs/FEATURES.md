@@ -1879,6 +1879,9 @@ that something happened.
   tooltip), Yes/No columns show Yes and No, and Dates offers presets from
   This month to This financial year (from the balance date) and All time,
   which a dashboard can keep so it moves with the calendar (decision 577).
+  Tile filters also have is one of / is not one of (ticked from the
+  column's values), is blank / is not blank, between, in the last N days
+  or months, this or last financial year, and "or" groups (decision 578).
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
   about 3 seconds. Analytics also copies Tohyee's books and CRM, shares

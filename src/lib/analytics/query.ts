@@ -1,5 +1,9 @@
 import { ValidationError } from "@/lib/errors";
 import { exactAverageSql } from "@/lib/analytics/decimal-sql";
+import { lastDays, lastMonths, presetRange } from "@/lib/analytics/date-ranges";
+import { columnKind, FILTER_OPS, MAX_LAST_DAYS, MAX_LAST_MONTHS, opAllowed, valueKind } from "@/lib/analytics/filters";
+import { cmp, dec } from "@/lib/money/decimal";
+import { todayIsoDate } from "@/lib/dates";
 
 /**
  * A dashboard tile's question, turned into SQL for DuckDB (analytics step 3).
@@ -12,7 +16,23 @@ import { exactAverageSql } from "@/lib/analytics/decimal-sql";
 export type Grain = "day" | "week" | "month" | "quarter" | "year";
 export type PivotGrain = "month" | "quarter" | "year";
 export type Aggregate = "sum" | "avg" | "min" | "max" | "count" | "count_distinct";
-export type FilterOp = "eq" | "neq" | "in" | "contains" | "gt" | "gte" | "lt" | "lte";
+export type FilterOp =
+  | "eq"
+  | "neq"
+  | "in"
+  | "not_in"
+  | "contains"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "between"
+  | "blank"
+  | "not_blank"
+  | "last_days"
+  | "last_months"
+  | "this_financial_year"
+  | "last_financial_year";
 export type Visual = "column" | "bar" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | "table" | "pivot";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
@@ -31,7 +51,17 @@ export type Measure = {
   negate?: boolean;
 };
 
-export type Filter = { field: string; op: FilterOp; value: string | string[] };
+/**
+ * One test on a column. `value` is a list for "is one of" and "is not one of",
+ * [from, to] for "between", a number of days or months for "in the last", and
+ * empty for tests that need nothing. `join: "or"` joins it to the filter
+ * before with OR: filters joined that way form a group that needs only one
+ * of them true, and groups are joined with AND (decision 578).
+ */
+export type Filter = { field: string; op: FilterOp; value: string | string[]; join?: "or" };
+
+/** Today and the balance date, for filters like "in this financial year" (decision 578). */
+export type QueryDates = { today: string; yearEndMonth: number };
 
 export type TileQuery = {
   table: string;
@@ -74,16 +104,26 @@ export type DashboardFilters = {
   to?: string | null;
   /** Slicers: field -> chosen values (applied to tiles whose table has the field). */
   values?: Record<string, string[]>;
+  /** Today and the balance date for relative date filters; set by the server, never taken from a request. */
+  dates?: QueryDates;
 };
 
 export const MAX_ROWS = 5000;
+
+/** Today in the server's time zone with a 31 March balance date, when the caller doesn't say. */
+function todayDates(): QueryDates {
+  return { today: todayIsoDate(), yearEndMonth: 3 };
+}
 export const MAX_PIVOT_CELLS = 2000;
 export const MAX_PIVOT_DRILL_ROWS = 500;
 const GRAINS: Grain[] = ["day", "week", "month", "quarter", "year"];
 const PIVOT_GRAINS: PivotGrain[] = ["month", "quarter", "year"];
 const AGGREGATES: Aggregate[] = ["sum", "avg", "min", "max", "count", "count_distinct"];
-const OPS: FilterOp[] = ["eq", "neq", "in", "contains", "gt", "gte", "lt", "lte"];
+const OPS: readonly FilterOp[] = FILTER_OPS;
+/** The tests Analytics had before decision 578: saved tiles may use them on any column, so they aren't limited by type. */
+const FIRST_OPS: readonly FilterOp[] = ["eq", "neq", "in", "contains", "gt", "gte", "lt", "lte"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const NUMBER = /^-?\d+(\.\d+)?$/;
 
 export function quoteIdentifier(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
@@ -190,14 +230,39 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     const field = column(columns, filter.field, `Filter ${index + 1}`);
     const op = filter.op as FilterOp;
     if (!OPS.includes(op)) throw new ValidationError(`Filter ${index + 1}: choose how to compare.`);
-    if (op === "in") {
-      if (!Array.isArray(filter.value) || filter.value.length === 0 || filter.value.length > 200) {
-        throw new ValidationError(`Filter ${index + 1}: choose between 1 and 200 values.`);
+    const type = columns.get(field)!;
+    if (!FIRST_OPS.includes(op) && !opAllowed(op, type)) throw new ValidationError(`Filter ${index + 1}: that test doesn't work on ${field}.`);
+    const join = index > 0 && filter.join === "or" ? { join: "or" as const } : {};
+    switch (valueKind(op)) {
+      case "none":
+        return { field, op, value: "", ...join };
+      case "list": {
+        if (!Array.isArray(filter.value) || filter.value.length === 0 || filter.value.length > 200) {
+          throw new ValidationError(`Filter ${index + 1}: choose between 1 and 200 values.`);
+        }
+        return { field, op, value: filter.value.map(String), ...join };
       }
-      return { field, op, value: filter.value.map(String) };
+      case "two": {
+        if (!Array.isArray(filter.value) || filter.value.length !== 2 || filter.value.some((value) => typeof value !== "string" || !value.trim())) {
+          throw new ValidationError(`Filter ${index + 1}: enter both ends of the range.`);
+        }
+        const [from, to] = filter.value.map((value) => String(value).trim());
+        const backwards = isDateType(type) ? DATE.test(from) && DATE.test(to) && from > to : NUMBER.test(from) && NUMBER.test(to) && cmp(dec(from), dec(to)) > 0;
+        if (backwards) throw new ValidationError(`Filter ${index + 1}: the first value is after the second.`);
+        return { field, op, value: [from, to], ...join };
+      }
+      case "count": {
+        const most = op === "last_months" ? MAX_LAST_MONTHS : MAX_LAST_DAYS;
+        const count = String(filter.value ?? "").trim();
+        if (!/^\d+$/.test(count) || Number(count) < 1 || Number(count) > most) {
+          throw new ValidationError(`Filter ${index + 1}: enter a whole number from 1 to ${most}.`);
+        }
+        return { field, op, value: String(Number(count)), ...join };
+      }
+      default:
+        if (typeof filter.value !== "string" && typeof filter.value !== "number") throw new ValidationError(`Filter ${index + 1}: enter a value.`);
+        return { field, op, value: String(filter.value), ...join };
     }
-    if (typeof filter.value !== "string" && typeof filter.value !== "number") throw new ValidationError(`Filter ${index + 1}: enter a value.`);
-    return { field, op, value: String(filter.value) };
   });
   if (filters.length > 20) throw new ValidationError("A tile can have up to 20 filters.");
 
@@ -233,6 +298,7 @@ function filterSql(
   param: (value: unknown) => string,
   shiftYears = 0,
 ): string {
+  const dates = dashboard.dates ?? todayDates();
   const q = quoteIdentifier;
   const typed = (field: string, value: string) => {
     const type = types.get(field)!;
@@ -252,21 +318,46 @@ function filterSql(
     return param(value);
   };
   const where: string[] = [];
-  for (const filter of query.filters) {
+  const dateRange = (field: string, range: { from: string | null; to: string | null }) =>
+    `cast(${field} as DATE) between cast(${param(range.from)} as DATE) and cast(${param(range.to)} as DATE)`;
+  const test = (filter: Filter): string => {
     const field = q(filter.field);
+    const text = columnKind(types.get(filter.field)!) === "text";
     switch (filter.op) {
       case "in":
-        where.push(`${field} in (${(filter.value as string[]).map((value) => typed(filter.field, value)).join(", ")})`);
-        break;
+      case "not_in":
+        // Like "is not", "is not one of" leaves out blank rows; "or is blank" keeps them.
+        return `${field} ${filter.op === "in" ? "in" : "not in"} (${(filter.value as string[]).map((value) => typed(filter.field, value)).join(", ")})`;
       case "contains":
-        where.push(`contains(lower(cast(${field} as VARCHAR)), lower(${param(String(filter.value))}))`);
-        break;
+        return `contains(lower(cast(${field} as VARCHAR)), lower(${param(String(filter.value))}))`;
+      case "blank":
+        return text ? `(${field} is null or trim(${field}) = '')` : `${field} is null`;
+      case "not_blank":
+        return text ? `(${field} is not null and trim(${field}) <> '')` : `${field} is not null`;
+      case "between": {
+        const [from, to] = filter.value as string[];
+        return `${field} between ${typed(filter.field, from)} and ${typed(filter.field, to)}`;
+      }
+      case "last_days":
+        return dateRange(field, lastDays(Number(filter.value), dates.today));
+      case "last_months":
+        return dateRange(field, lastMonths(Number(filter.value), dates.today));
+      case "this_financial_year":
+      case "last_financial_year":
+        return dateRange(field, presetRange(filter.op, dates.today, dates.yearEndMonth));
       default: {
-        const symbol = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op];
-        where.push(`${field} ${symbol} ${typed(filter.field, String(filter.value))}`);
+        const symbol = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op as "eq" | "neq" | "gt" | "gte" | "lt" | "lte"];
+        return `${field} ${symbol} ${typed(filter.field, String(filter.value))}`;
       }
     }
-  }
+  };
+  // Filters joined with "or" form a group; the groups are joined with "and" (decision 578).
+  const groups: string[][] = [];
+  query.filters.forEach((filter, index) => {
+    if (index > 0 && filter.join === "or") groups[groups.length - 1].push(test(filter));
+    else groups.push([test(filter)]);
+  });
+  for (const group of groups) where.push(group.length === 1 ? group[0] : `(${group.join(" or ")})`);
   for (const [field, values] of Object.entries(dashboard.values ?? {})) {
     if (!types.has(field) || values.length === 0) continue;
     where.push(`cast(${q(field)} as VARCHAR) in (${values.slice(0, 200).map((value) => param(String(value))).join(", ")})`);

@@ -5385,3 +5385,20 @@ testing) and #154's code signing (later, Jess).
      sent as true and false. "Date range applies to" keeps starting on the
      source's first date (invoice date, bill date, posting date). Not yet
      reviewed.
+578. **More tests for tile filters, and "or"** (20 October 2026). Issue
+     #332. A tile's filters offer the tests that fit the column: is one of
+     and is not one of (ticked from the column's own values, up to 500),
+     is blank and is not blank (empty or spaces-only text counts as
+     blank), between (both ends included) for numbers and dates, and for
+     dates: in the last N days (today and the N-1 days before), in the
+     last N months (this month so far and the N-1 whole months before, as
+     Last 12 months in decision 577), in this financial year and in last
+     financial year (from the balance date). Relative dates are worked out
+     each time the tile runs, from the server's today. Each filter after
+     the first can join the one before with "or": filters joined that way
+     are a group where one passing is enough, and groups are joined with
+     "and" (as Looker Studio's filter clauses work). Like "is not", "is not
+     one of" leaves out blank rows; add "or is blank" to keep them. Filters
+     saved with the earlier tests keep working on any column; the new
+     tests are checked against the column's type. A tile's filters don't
+     move with "and last year" (as before). Not yet reviewed.
