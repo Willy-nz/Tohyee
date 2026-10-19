@@ -1888,6 +1888,13 @@ that something happened.
   accessible HTML table; CSV and Excel exports use the standard report
   export (decision 375).
 
+- **Analytics: richer key figures** (#334, decisions 594-595). A key
+  figure can compare with the previous period (the same length before the
+  dashboard's dates), the same period last year or a target, showing the
+  change as an amount and a percentage with an arrow, Up or Down, and green
+  or red ("Down is good" for costs). An optional trend by month sits under
+  the number, and the number has its own format with words before or
+  after it. Pinned key figures show the same.
 - **Analytics: chart formatting and a second axis** (#331, #333,
   decisions 590-593). The chart panel has a Format section with a live
   preview and Reset to default: colour sets (Tohyee, Tohyee blues, Orange

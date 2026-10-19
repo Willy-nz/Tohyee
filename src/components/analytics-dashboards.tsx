@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
+import { KeyFigureView } from "@/components/analytics/key-figure";
+import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -741,19 +743,7 @@ function TileResult({
   }
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(result.rows, measures[0]?.key ?? "m0") : result.rows;
-  if (tile.visual === "kpi") {
-    const first = measures[0];
-    return (
-      <div className={styles.kpi}>
-        <span className={styles.kpiValue}>{showValue(result.rows[0][first.key], first)}</span>
-        {measures.slice(1).map((column) => (
-          <span key={column.key} className={ui.muted}>
-            {column.label}: {showValue(result.rows[0][column.key], column)}
-          </span>
-        ))}
-      </div>
-    );
-  }
+  if (tile.visual === "kpi") return <KeyFigureView result={result} format={tile.format} />;
   if (!spec) {
     return (
       <div className={ui.tableWrap}>
@@ -1032,6 +1022,14 @@ function TileEditor({
         groupBy: first ? { field: first.field, ...(first.grain ? { grain: first.grain } : {}) } : null,
       });
     }
+    if (visual === "kpi" && next !== "kpi") {
+      // The previous period, a target and the trend belong to key figures.
+      setQuery((current) => ({
+        ...current,
+        sparkline: undefined,
+        measures: current.measures.map((measure) => (measure.compare === "previous_period" ? { ...measure, compare: undefined } : measure)),
+      }));
+    }
     setVisual(next);
   };
 
@@ -1205,7 +1203,12 @@ function TileEditor({
                   setQuery({
                     ...query,
                     groupBy: field ? { field, ...(isDate(type) ? { grain: "month" as Grain } : {}) } : null,
-                    measures: field && isDate(type) ? query.measures : query.measures.map((measure) => ({ ...measure, compare: undefined })),
+                    // Grouped by a date, a value can compare with last year; the previous period and the trend are for one total.
+                    measures: query.measures.map((measure) => ({
+                      ...measure,
+                      compare: field ? (isDate(type) && measure.compare === "previous_year" ? measure.compare : undefined) : measure.compare,
+                    })),
+                    sparkline: field ? undefined : query.sparkline,
                   });
                 }}
               >
@@ -1297,7 +1300,7 @@ function TileEditor({
               round
             </label>
           ) : null}
-          {query.groupBy?.grain ? (
+          {query.groupBy?.grain && !(visual === "kpi" && index === 0) ? (
             <label className={ui.checkbox}>
               <input
                 type="checkbox"
@@ -1362,6 +1365,8 @@ function TileEditor({
         </Button>
       </div>
 
+
+      {visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} /> : null}
 
       <ChartFormatPanel visual={visual} values={tileValueNames(query.measures)} format={format} onChange={setFormat} />
 

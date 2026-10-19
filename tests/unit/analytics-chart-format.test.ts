@@ -53,8 +53,8 @@ describe("chart format settings (#333)", () => {
     expect(() => parseChartFormat({ valueAxis: { min: "10", max: "5" } })).toThrow("maximum");
     expect(() => parseChartFormat({ series: [{ number: { decimals: 7 } }] })).toThrow("0 to 4");
     expect(() => parseChartFormat({ card: { subtitle: "x".repeat(201) } })).toThrow("200");
-    expect(() => parseChartFormat({ kpi: { compare: "target" } })).toThrow("target");
-    expect(parseChartFormat({ kpi: { compare: "target", target: 5000 } })).toEqual({ kpi: { compare: "target", target: "5000" } });
+    expect(() => parseChartFormat({ kpi: { target: "lots" } })).toThrow("Target");
+    expect(parseChartFormat({ kpi: { target: 5000, downIsGood: true } })).toEqual({ kpi: { target: "5000", downIsGood: true } });
   });
 
   it("formats numbers: compact or full, decimals, currency, percent, plain, separators, prefix and suffix", () => {
