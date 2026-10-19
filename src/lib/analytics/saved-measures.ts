@@ -31,7 +31,7 @@ const toMeasure = (row: Row): SavedMeasure => ({
 export async function listMeasures(tx: OrgTx): Promise<SavedMeasure[]> {
   await requireAnalytics(tx);
   const tables = await listTables(tx.organisationId);
-  const result = await tx.query<Row>("select id::text, table_name, name, description, definition, number_format from analytics_measures order by table_name, lower(name), id");
+  const result = await tx.query<Row>("select id::text, table_name, name, description, definition, number_format from analytics_measures order by table_name, lower(name), analytics_measures.id");
   const builtIns = [...tables.entries()].flatMap(([name, columns]) => builtInMeasures(name, columns));
   return [...builtIns, ...result.rows.map(toMeasure)];
 }
