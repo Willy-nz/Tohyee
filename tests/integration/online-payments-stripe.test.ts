@@ -220,6 +220,12 @@ describeWithDatabase("online invoice payments with Stripe (PN1-PN12)", () => {
       printRoute.GET(apiRequest(`/api/documents/print?organisationId=${org}&kind=invoice&id=${inv.id}`, { cookie: cookies.get(user.email) }), noContext);
     const viewed = (await (await print(viewer)).json()) as { document: { payNowUrl: string | null } };
     expect([viewed.document.payNowUrl, stripe.links.length]).toEqual([null, 0]);
+    // Opened from another site (a link there), even a bookkeeper's print makes no link (decision 568).
+    const crossSite = await printRoute.GET(
+      apiRequest(`/api/documents/print?organisationId=${org}&kind=invoice&id=${inv.id}`, { cookie: cookies.get(mere.email), headers: { "sec-fetch-site": "cross-site" } }),
+      noContext,
+    );
+    expect([((await crossSite.json()) as { document: { payNowUrl: string | null } }).document.payNowUrl, stripe.links.length]).toEqual([null, 0]);
     // A bookkeeper printing it does.
     const printed = (await (await print(mere)).json()) as { document: { payNowUrl: string | null } };
     expect(printed.document.payNowUrl).toBe("https://buy.stripe.com/test_1");

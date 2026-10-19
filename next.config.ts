@@ -2,10 +2,15 @@ import type { NextConfig } from "next";
 
 /**
  * The page Content-Security-Policy (issue #144): only Tohyee itself may frame
- * its pages, and no <base> or plugin content. Scripts aren't limited yet: the
- * theme script and Next's own page data are inline, and need a nonce first.
+ * its pages, and no <base> or plugin content. Forms only submit to Tohyee, and
+ * images only come from Tohyee, data:/blob: URLs and LINZ's aerial tiles (the
+ * Farming map, src/lib/farming/geometry.ts), so injected markup can't send
+ * data elsewhere through a form or an image address (decision 568). Scripts
+ * aren't limited yet: the theme script and Next's own page data are inline,
+ * and need a nonce first.
  */
-const PAGE_CONTENT_SECURITY_POLICY = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
+const PAGE_CONTENT_SECURITY_POLICY =
+  "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; img-src 'self' data: blob: https://basemaps.linz.govt.nz";
 
 const nextConfig: NextConfig = {
   output: "standalone",

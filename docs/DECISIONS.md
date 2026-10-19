@@ -5267,3 +5267,15 @@ testing) and #154's code signing (later, Jess).
      a livestock setting rather than the performance report's format
      (decision 532), which covers special purpose and Tier 3 and 4 only.
      LV28, not yet reviewed.
+568. **Reads don't make things when another site started them** (19 October
+     2026). From a review Jess passed on (Gemini's); Jess said do it.
+     Printing, the PDF and the email dialog make an invoice's payment link
+     first (PN2, PPN2). Those are reads (GET), which the cross-site write
+     check (assertSameOrigin) doesn't cover, so now they only make one when
+     the browser says the request came from Tohyee itself or was typed
+     ("same-origin" or "none" in Sec-Fetch-Site, or no header); otherwise
+     they show what already exists. Pages also only submit forms to Tohyee
+     and only load images from Tohyee, data: and blob: addresses and LINZ's
+     aerial tiles. The PDF responses' policy isn't tightened: whether
+     `object-src` or `default-src` limits break the browsers' built-in PDF
+     viewers (and the bills inbox's PDF frame) couldn't be checked here.

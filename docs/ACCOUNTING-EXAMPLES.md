@@ -8757,7 +8757,8 @@ organisation is Aroha Ltd; online payments turned on.
   PDF say "Pay now by card: https://buy.stripe.com/...". Nothing is
   posted; a viewer printing it doesn't make a link.
   Emailing or printing it again uses the same link. A draft invoice, or one
-  with nothing due, gets no link.
+  with nothing due, gets no link. Opened from a link on another website, printing it
+  shows only a link that already exists and makes none (decision 568).
 - **PN3** Kobe Ltd pays by card on 1 Oct 2026 at 10:15. At the next check
   the session is complete and paid, NZD 115.00. Tohyee records a payment
   of **115.00** on INV-0010 dated **1 Oct 2026** into **1050**, reference
