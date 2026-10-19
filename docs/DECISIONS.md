@@ -5279,3 +5279,14 @@ testing) and #154's code signing (later, Jess).
      aerial tiles. The PDF responses' policy isn't tightened: whether
      `object-src` or `default-src` limits break the browsers' built-in PDF
      viewers (and the bills inbox's PDF frame) couldn't be checked here.
+569. **IR10 drawings and dividends leave out year-end clearing journals**
+     (19 October 2026). From the same review (Gemini's); Jess said do it.
+     Boxes 56 and 57 were the net movement on the accounts, so a 31 March
+     journal closing drawings into equity made box 57 blank. A journal
+     that credits a drawings or dividends paid account and debits only
+     equity or current accounts is now treated as clearing, and it and its
+     reversal are left out; anything else counts (ITX69). How Xero's IR10
+     treats this wasn't checked; not yet reviewed. Also noted
+     (no change): depreciation recovered on an asset brought in with an
+     opening ATV assumes the same business-use percentage in earlier years
+     (ITX17).

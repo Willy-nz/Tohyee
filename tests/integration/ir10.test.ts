@@ -108,4 +108,15 @@ describeWithDatabase("income tax: the IR10 financial statements summary", () => 
     const audit = await as((tx) => tx.query<{ n: string }>("select count(*)::text as n from audit_events where event_type = 'income_tax.ir10_account_set'"));
     expect(audit.rows[0].n).toBe("1");
   });
+
+  it("ITX69 box 57 keeps the year's drawings when they're cleared to equity at the year end (decision 569)", async () => {
+    // The accountant closes drawings into owner's equity on 31 March: Dr 3000 / Cr 3100 5,000.00.
+    await journal("2026-03-31", [{ accountCode: "3000", debitAmount: "5000.00" }, { accountCode: "3100", creditAmount: "5000.00" }]);
+    const report = await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }));
+    expect(report.supported && [report.ir10!.boxes[51], report.ir10!.boxes[57]]).toEqual(["120000.00", "5000.00"]);
+    // A drawing taken back (Cr 3100, Dr bank) still reduces it.
+    await journal("2026-03-30", [{ accountCode: "1000", debitAmount: "1000.00" }, { accountCode: "3100", creditAmount: "1000.00" }]);
+    const again = await as((tx) => buildIncomeTax(tx, { incomeYear: 2026, today: "2026-10-16" }));
+    expect(again.supported && again.ir10!.boxes[57]).toBe("4000.00");
+  });
 });

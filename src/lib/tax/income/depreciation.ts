@@ -94,6 +94,8 @@ export function taxDepreciationYears(input: TaxAssetInput, throughYear: number):
       let loss = ZERO_DECIMAL;
       if (input.method !== "not_depreciable") {
         const proceeds = input.disposal!.proceeds;
+        // Recovery is capped at what was claimed, cost less ATV (s EE 49). For an asset brought in with an
+        // opening ATV, that assumes the same business-use percentage in earlier years (ITX17, decision 569).
         if (cmp(proceeds, atv) > 0) recovered = min(sub(proceeds, atv), sub(input.cost, atv));
         else loss = sub(atv, proceeds);
       }
