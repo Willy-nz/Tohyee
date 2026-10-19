@@ -5402,3 +5402,8 @@ testing) and #154's code signing (later, Jess).
      saved with the earlier tests keep working on any column; the new
      tests are checked against the column's type. A tile's filters don't
      move with "and last year" (as before). Not yet reviewed.
+598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
+     Jess supplied a better photo in #339. Only the mountains, sky and lake
+     are used (a plain crop, not AI-restored): the car, shelter, sign and
+     fence are left out of the app. Everything else about the watermark
+     stays as before. See docs/AORAKI-RESTORATION.md.
