@@ -5409,6 +5409,23 @@ testing) and #154's code signing (later, Jess).
      staff or the accountant, and guessing from bookkeeper or viewer would
      be wrong as often as right. Everyone starts with the same cards and
      uses Customise. No card shows payroll figures.
+576. **Analytics shows money and value names the way people read them**
+     (20 October 2026). Issues #328-#330, found building a dashboard.
+     Negative money in Analytics tables, key figures and pivot tables shows
+     its minus first, -$27.00, as Tohyee shows negatives everywhere else
+     (the minus before the figure; no brackets). Charts' tooltips and axes
+     already did. A value's label follows its column and calculation
+     ("Amount", "Average net", "Count of invoices") until someone types
+     their own, which then stays; a label still matching what Tohyee
+     filled in (including the column name and "Rows" that earlier versions
+     used) counts as not typed. "+ Create report" needing two clicks
+     couldn't be made to happen here (tried after leaving a dashboard by
+     the top bar, the logo, Back and a fresh load, with charts, open
+     slicers and a slowed-down browser); two things that could cause it
+     are fixed: Analytics pages no longer swap themselves for "Loading…"
+     while they check Analytics is still on each time they open, and a
+     slicer's list no longer leaves a click listener on the page each time
+     it's opened and closed with its own button. Not yet reviewed.
 598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
      Jess supplied a better photo in #339. Only the mountains, sky and lake
      are used (a plain crop, not AI-restored): the car, shelter, sign and

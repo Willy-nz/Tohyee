@@ -3,7 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -32,7 +32,9 @@ import type {
   Visual,
 } from "@/lib/analytics/query";
 import { api, apiDownload, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
+import { showValue } from "@/lib/analytics/display";
+import { changeMeasure, measureLabel } from "@/lib/analytics/labels";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
 import type { ReportExportData, ReportExportTable } from "@/lib/reports/export-types";
 import styles from "./analytics-dashboards.module.css";
@@ -94,27 +96,19 @@ function heading(label: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** A value from a query, shown the way its column is meant to be read. Never turned into a JS number. */
-function showValue(value: string | null, column: ResultColumn): string {
-  if (value === null) return "";
-  switch (column.format) {
-    case "money":
-      return `$${formatMoney(value)}`;
-    case "number":
-      return formatQuantity(formatMoney(value, 4));
-    case "integer":
-      return formatQuantity(value);
-    case "date":
-      return formatDate(value);
-    default:
-      return value;
-  }
-}
+/**
+ * Organisations seen with Analytics on in this tab. Coming back to a page,
+ * it shows straight away while the setting is checked again, rather than
+ * "Loading…" in place of the page and its buttons (#330).
+ */
+const analyticsSeenOn = new Set<string>();
 
 function RequireAnalytics({ organisationId, children }: { organisationId: string; children: React.ReactNode }) {
   const modules = useModules(organisationId);
   const { can } = useWorkspace();
-  if (!modules) return <p className={ui.muted}>Loading…</p>;
+  if (modules?.analytics) analyticsSeenOn.add(organisationId);
+  if (modules && !modules.analytics) analyticsSeenOn.delete(organisationId);
+  if (!modules) return analyticsSeenOn.has(organisationId) ? <>{children}</> : <p className={ui.muted}>Loading…</p>;
   if (!modules.analytics) {
     return (
       <Notice tone="info">
@@ -563,23 +557,31 @@ function SlicerControl({
 }) {
   const values = useApiData<{ values: string[] }>("/api/analytics/values", { organisationId, dashboardId, table: slicer.table, field: slicer.field });
   const summary = chosen.length === 0 ? "All" : chosen.length === 1 ? chosen[0] : `${chosen.length} chosen`;
+  const menu = useRef<HTMLDetailsElement>(null);
+  const [open, setOpen] = useState(false);
+  // A click elsewhere or Escape closes the list. The listeners go when it closes, however it closes, and with
+  // the page: before, closing it with its own button left one behind on the document for every opening (#330).
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (menu.current && !menu.current.contains(event.target as Node)) menu.current.open = false;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !menu.current) return;
+      menu.current.open = false;
+      menu.current.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
     <div className={styles.slicer}>
       <span className={styles.slicerLabel}>{slicer.label}</span>
-      <details
-        className={styles.slicerMenu}
-        onToggle={(event) => {
-          const menu = event.currentTarget;
-          if (!menu.open) return;
-          const close = (click: MouseEvent) => {
-            if (!menu.contains(click.target as Node)) {
-              menu.open = false;
-              document.removeEventListener("mousedown", close);
-            }
-          };
-          document.addEventListener("mousedown", close);
-        }}
-      >
+      <details ref={menu} className={styles.slicerMenu} onToggle={(event) => setOpen(event.currentTarget.open)}>
         <summary>{summary}</summary>
         <div className={styles.slicerList} role="group" aria-label={slicer.label}>
           {(values.data?.values ?? []).map((value) => (
@@ -960,7 +962,10 @@ function blankQuery(table: TableInfo | undefined): TileQuery {
     table: table?.name ?? "",
     groupBy: date ? { field: date.name, grain: "month" } : text ? { field: text.name } : null,
     pivot: null,
-    measures: money ? [{ label: money.name.replaceAll("_", " "), aggregate: "sum", field: money.name }] : [{ label: "Rows", aggregate: "count" }],
+    measures: [money ? { label: "", aggregate: "sum" as const, field: money.name } : { label: "", aggregate: "count" as const }].map((measure) => ({
+      ...measure,
+      label: measureLabel(measure, table?.name ?? ""),
+    })),
     filters: [],
     dateField: date?.name ?? null,
     sort: { by: "category", direction: "asc" },
@@ -1000,8 +1005,9 @@ function TileEditor({
   const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : [])]);
   const preview = useTileResult(organisationId, query.table ? query : null, filters);
 
+  // A label Tohyee filled in follows the value's column and calculation; a typed one stays (#329).
   const setMeasure = (index: number, patch: Partial<Measure>) =>
-    setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? { ...measure, ...patch } : measure)) });
+    setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? changeMeasure(measure, patch, query.table) : measure)) });
   const setFilter = (index: number, patch: Partial<Filter>) =>
     setQuery({ ...query, filters: query.filters.map((filter, at) => (at === index ? { ...filter, ...patch } : filter)) });
   const changeVisual = (next: Visual) => {
@@ -1315,7 +1321,7 @@ function TileEditor({
           size="small"
           variant="secondary"
           disabled={query.measures.length >= 6}
-          onClick={() => setQuery({ ...query, measures: [...query.measures, { label: "Rows", aggregate: "count" }] })}
+          onClick={() => setQuery({ ...query, measures: [...query.measures, { label: measureLabel({ aggregate: "count" }, query.table), aggregate: "count" }] })}
         >
           Add a value
         </Button>

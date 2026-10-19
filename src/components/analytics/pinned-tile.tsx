@@ -6,30 +6,14 @@ import { Chart } from "@/components/analytics/chart";
 import { Empty, Notice, ui } from "@/components/ui";
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
 import type { Dashboard, Tile } from "@/lib/analytics/dashboards";
-import type { QueryResult, ResultColumn, Visual } from "@/lib/analytics/query";
+import type { QueryResult, Visual } from "@/lib/analytics/query";
 import { ApiError, api, errorMessage } from "@/lib/client/api";
-import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
+import { showValue } from "@/lib/analytics/display";
 import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
 import styles from "./pinned-tile.module.css";
 
 const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut"]);
 const TABLE_ROWS = 4;
-
-function showValue(value: string | null, column: ResultColumn): string {
-  if (value === null) return "";
-  switch (column.format) {
-    case "money":
-      return `$${formatMoney(value)}`;
-    case "number":
-      return formatQuantity(formatMoney(value, 4));
-    case "integer":
-      return formatQuantity(value);
-    case "date":
-      return formatDate(value);
-    default:
-      return value;
-  }
-}
 
 function heading(label: string): string {
   const text = label.replaceAll("_", " ");
