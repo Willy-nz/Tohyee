@@ -17,12 +17,14 @@ function Sparkline({ trend, format }: { trend: TrendPoint[]; format: (value: str
   const numbers = points.flatMap((point) => (point.number === null || !Number.isFinite(point.number) ? [] : [point.number]));
   if (points.length < 2 || numbers.length < 2) return null;
   const width = 160;
-  const height = 36;
+  const height = 40;
+  // Room for the end dot and its ring, so nothing is clipped.
+  const inset = 6;
   const low = Math.min(...numbers);
   const high = Math.max(...numbers);
   const span = high - low || 1;
-  const x = (index: number) => 2 + (index * (width - 4)) / (points.length - 1);
-  const y = (value: number) => height - 3 - ((value - low) * (height - 6)) / span;
+  const x = (index: number) => inset + (index * (width - inset * 2)) / (points.length - 1);
+  const y = (value: number) => height - inset - ((value - low) * (height - inset * 2)) / span;
   const path = points
     .map((point, index) => (point.number === null ? null : `${x(index).toFixed(1)},${y(point.number).toFixed(1)}`))
     .filter(Boolean)
@@ -31,9 +33,10 @@ function Sparkline({ trend, format }: { trend: TrendPoint[]; format: (value: str
   const lastIndex = points.lastIndexOf(last);
   return (
     <div className={styles.sparkline}>
+      {/* The trend in the quiet colour; the latest month in the chart blue, ringed in the card colour. */}
       <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true" focusable="false">
-        <polyline points={path} fill="none" stroke="var(--chart-1)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={x(lastIndex)} cy={y(last.number!)} r="3" fill="var(--chart-1)" />
+        <polyline points={path} className={styles.sparkLine} />
+        <circle cx={x(lastIndex)} cy={y(last.number!)} r="4" className={styles.sparkEnd} />
       </svg>
       <span className={styles.visuallyHidden}>
         By month: {trend.map((point) => `${MONTH.format(new Date(`${point.month}T00:00:00.000Z`))} ${point.value === null ? "none" : format(point.value)}`).join(", ")}

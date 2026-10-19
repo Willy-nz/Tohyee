@@ -136,7 +136,10 @@ function FarmPasture({ organisationId, farm }: { organisationId: string; farm: F
                             <strong>{entry.name}</strong> <span className={ui.muted}>{entry.hectares} ha</span>
                           </td>
                           <td data-label="Cover (kg DM/ha)" className={ui.num}>
-                            <span aria-hidden="true" style={{ display: "inline-block", height: 8, width: `${Math.round((entry.cover / Math.max(...data.cover.wedge.map((row) => row.cover), 1)) * 80)}px`, background: "currentColor", opacity: 0.35, marginRight: 8, borderRadius: 2 }} />
+                            {/* The wedge as bars from one baseline, in the chart blue (decision 600); the number beside it is the value. */}
+                            <span aria-hidden="true" style={{ display: "inline-block", width: 80, height: 8, marginRight: 8, verticalAlign: "middle", textAlign: "left", lineHeight: 0 }}>
+                              <span style={{ display: "inline-block", height: 8, width: `${Math.round((entry.cover / Math.max(...data.cover.wedge.map((row) => row.cover), 1)) * 80)}px`, background: "var(--chart-1)", borderRadius: "0 4px 4px 0" }} />
+                            </span>
                             {kg(entry.cover)}
                           </td>
                           <td data-label="Read">

@@ -12,7 +12,6 @@
 .value {
   font-size: var(--text-2xl);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
@@ -47,6 +46,21 @@
   display: block;
   max-width: 100%;
   height: auto;
+  overflow: visible;
+}
+
+.sparkLine {
+  fill: none;
+  stroke: var(--chart-muted);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sparkEnd {
+  fill: var(--chart-1);
+  stroke: var(--chart-surface);
+  stroke-width: 2;
 }
 
 .visuallyHidden {

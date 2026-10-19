@@ -79,6 +79,8 @@ export function CashFlowChart({ forecast, labelOf }: { forecast: CashFlowForecas
           ))}
           {/* Below zero, shaded so a shortfall isn't colour alone: it's also under the labelled zero line. */}
           <rect x={PAD.left} y={y(0)} width={WIDTH - PAD.left - PAD.right} height={Math.max(0, y(low) - y(0))} className={styles.below} />
+          {/* A light wash between the line and zero, the same as an Analytics area chart. */}
+          <path d={`${path} L${x(values.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`} className={styles.area} />
           <path d={path} className={styles.line} />
           {points.map((point, index) =>
             labelled(index) ? (
@@ -91,7 +93,7 @@ export function CashFlowChart({ forecast, labelOf }: { forecast: CashFlowForecas
           {shown !== null ? (
             <g>
               <line x1={x(shown)} x2={x(shown)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className={styles.crosshair} />
-              <circle cx={x(shown)} cy={y(values[shown])} r={4} className={styles.dot} />
+              <circle cx={x(shown)} cy={y(values[shown])} r={5} className={values[shown] < 0 ? styles.lowNegative : styles.dot} />
             </g>
           ) : null}
           {points.map((point, index) => (
