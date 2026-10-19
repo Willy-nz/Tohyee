@@ -5348,6 +5348,44 @@ testing) and #154's code signing (later, Jess).
      once; making a new one stops the old. It answers "not found" alike
      for a wrong, replaced or turned-off link, a member who has left, or
      Farming turned off, and is limited to 60 requests an hour. FC22, FC23.
+584. **A farm mailbox reads only the folders its member ticks** (20 October
+     2026). Issue #340: Jess's farm mail shares a mailbox with mail for her
+     mum's company directorships, which must not come into Tohyee at all.
+     Each farm mailbox reads only the Outlook folders or Gmail labels its
+     member ticks (Gmail's Inbox and their own labels are offered; Sent,
+     Spam, Trash, Drafts and categories aren't), each with its subfolders
+     if asked, and nothing until at least one is ticked: there's no "whole
+     mailbox" choice. The same read-only scopes list them (gmail.readonly,
+     Mail.Read). Folder names are private like the rest (decision 571):
+     only the member sees them, and audit events give counts only. Tohyee
+     keeps, for each email read, only the ids of the chosen folders it was
+     in. Outlook nests folders; Gmail nests labels by name ("Farm/LIC"), so
+     a label's subfolders are the labels named under it. Neither Xero nor
+     NetSuite reads farm mail, so the rules are Claude's, following #340.
+     FC25, FC26, FC29, tenant migration 0164, not yet reviewed; not tried
+     with a real mailbox.
+585. **What leaves the chosen folders leaves Tohyee** (20 October 2026).
+     Taking a folder off deletes, straight away, every item taken from
+     emails that were only in that folder, shared ones included. An email
+     moved out of the chosen folders (or in a folder deleted in Outlook or
+     Gmail) is dropped at the next check the same way; one moved in is read
+     at the next check if it's no older than the read-back date. A dropped
+     email's effects on other items are undone: a booking it moved or
+     cancelled is back as it was, and an email that only added to an item
+     it made is read again. Privacy comes first here, so an item the member
+     checked or shared goes too when its email leaves. Each check lists the
+     chosen folders' emails back to the read-back date (at most 2,000 per
+     folder, newest first); in a folder with more, only the newest 2,000
+     are read and only emails newer than those can be known to have left.
+     FC27, FC28, FC29.
+586. **Mailboxes connected before folders stop until folders are chosen**
+     (20 October 2026). Migration 0164 can't know which folder each earlier
+     email came from without asking the mailbox, and deleting a member's
+     items in a migration can't be undone, so it deletes nothing: those
+     mailboxes stop being read, the farm calendar says so with Choose
+     folders, and at the first check after folders are chosen anything not
+     in them is removed (FC28). Disconnecting still deletes it all at once.
+     FC30.
 598. **The Home header uses Jess's own Aoraki photo** (20 October 2026).
      Jess supplied a better photo in #339. Only the mountains, sky and lake
      are used (a plain crop, not AI-restored): the car, shelter, sign and

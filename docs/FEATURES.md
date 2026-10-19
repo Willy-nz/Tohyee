@@ -537,8 +537,15 @@ that something happened.
   skipped; sharing chosen items with the whole organisation after a preview
   of exactly what they'll see (never the email or notes); and a private
   calendar link (.ics) for Google, Apple or Outlook to subscribe to, shown
-  once. Not yet: attachments, changing one date of a repeat, repeats read
-  from email wording.
+  once. Since FC25-FC31 (#340, decisions 584-586, tenant migration 0164):
+  only the Outlook folders or Gmail labels the member ticks are read, with
+  their subfolders if asked, and nothing until one is ticked (mailboxes
+  connected earlier stopped until their member chooses); the chosen folders
+  show on the mailbox with Change folders; taking a folder off deletes what
+  was taken from it, and emails moved out of the chosen folders drop at the
+  next check (moved in, they're read). Not yet: attachments, changing one
+  date of a repeat, repeats read from email wording, and the private mailbox
+  import (#250), which should use the same folder choice when it's built.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
