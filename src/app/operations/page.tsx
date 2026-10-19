@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Suspense, useEffect, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { useSearchParams } from "next/navigation";
+import { FarmHomeTiles } from "@/components/home/farm-home";
 import { HomeTiles } from "@/components/home/home";
 import { useApiData } from "@/components/hooks";
-import { Page, PageHeader } from "@/components/ui";
+import { useModules } from "@/components/modules";
+import { Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { financialYearEnd } from "@/lib/financial-year";
 import { formatDate, todayInBrowser } from "@/lib/format";
@@ -12,6 +16,9 @@ import type { OrganisationSettings } from "@/lib/organisations/settings";
 
 function Overview({ organisationId }: { organisationId: string }) {
   const { current, user } = useWorkspace();
+  const modules = useModules(organisationId);
+  // FH1: with Farming on, Home is the farm Home; ?view=business shows the business one.
+  const business = useSearchParams().get("view") === "business";
   const settings = useApiData<{ settings: OrganisationSettings }>(`/api/organisations/${organisationId}/settings`);
   const [greeting, setGreeting] = useState("Welcome");
   useEffect(() => {
@@ -31,7 +38,14 @@ function Overview({ organisationId }: { organisationId: string }) {
         title={`${greeting}, ${user.displayName.trim().split(/\s+/)[0] || user.displayName}`}
         description={<>{current?.displayName}{yearEnd ? ` · Financial year ending ${formatDate(yearEnd)}` : ""}</>}
       />
-      <HomeTiles organisationId={organisationId} />
+      {modules === null ? null : modules.farming && !business ? (
+        <FarmHomeTiles organisationId={organisationId} />
+      ) : (
+        <>
+          {modules.farming ? <p className={ui.muted}><Link href="/operations">Back to the farm Home</Link></p> : null}
+          <HomeTiles organisationId={organisationId} />
+        </>
+      )}
     </>
   );
 }
@@ -39,7 +53,9 @@ function Overview({ organisationId }: { organisationId: string }) {
 export default function OperationsPage() {
   return (
     <Page>
-      <RequireOrganisation>{(organisationId) => <Overview organisationId={organisationId} />}</RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>{(organisationId) => <Overview organisationId={organisationId} />}</RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }
