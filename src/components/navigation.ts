@@ -1,8 +1,8 @@
 import type { Modules } from "@/components/modules";
 import type { Role } from "@/lib/auth/roles";
 
-/** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock" | "farming";
+/** An optional module a menu or link belongs to (example MOD1); shown only while it's on. Accounting counts as on unless it's been turned off (MOD2). */
+export type ModuleKey = "accounting" | "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock" | "farming";
 export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 export type MenuGroup = { heading: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -14,6 +14,9 @@ export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?:
  * Making something new lives in the "+ New" menu (NEW_ACTIONS), not here.
  * Server settings aren't here: they open only on the server computer.
  */
+/** Where Shopify and other sales platforms are connected (an Accounting setting). */
+export const SALES_PLATFORMS_HREF = "/operations/settings/sales-platforms";
+
 export const MENUS: Menu[] = [
   { label: "Home", href: "/operations", groups: [] },
   {
@@ -298,26 +301,91 @@ export const NEW_ACTIONS: MenuGroup[] = [
   },
 ];
 
-/** The CRM's tabs (its own app, under /crm); shown only while the CRM is on (MOD1). */
-export const CRM_MENUS: Menu[] = [
-  { label: "Home", href: "/crm", area: ["/crm"] },
-  { label: "Leads", href: "/crm/leads", area: ["/crm/leads"] },
-  { label: "Campaigns", href: "/crm/campaigns", area: ["/crm/campaigns"] },
-  { label: "Companies", href: "/crm/companies", area: ["/crm/companies"] },
-  { label: "People", href: "/crm/people", area: ["/crm/people"] },
-  { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline", "/crm/opportunities"] },
-  { label: "Forecasts", href: "/crm/forecasts", area: ["/crm/forecasts"] },
-  { label: "Dashboard", href: "/crm/dashboard", area: ["/crm/dashboard"] },
-  { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
-  { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
-  { label: "Teams", href: "/crm/teams", area: ["/crm/teams"] },
-  { label: "Duplicates", href: "/crm/duplicates", area: ["/crm/duplicates"] },
-  { label: "Follow-ups", href: "/crm/follow-ups", area: ["/crm/follow-ups"], minRole: "admin" as const },
-  { label: "Email templates", href: "/crm/email-templates", area: ["/crm/email-templates"], minRole: "admin" as const },
-  { label: "Sequences", href: "/crm/sequences", area: ["/crm/sequences"], minRole: "admin" as const },
-  { label: "Record types", href: "/crm/record-types", area: ["/crm/record-types"], minRole: "admin" as const },
-  { label: "Stages", href: "/crm/stages", area: ["/crm/stages"], minRole: "admin" as const },
-].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));
+/**
+ * The CRM's top bar (its own app, under /crm); shown only while the CRM is on
+ * (MOD1). Routine work up front, the rest under More and Settings, every page
+ * still reachable with the same roles (#342, decision 581).
+ */
+export const CRM_MENUS: Menu[] = (
+  [
+    { label: "Home", href: "/crm", area: ["/crm"], groups: [] },
+    {
+      label: "Contacts",
+      area: ["/crm/companies", "/crm/people"],
+      groups: [
+        {
+          heading: "Contacts",
+          links: [
+            { href: "/crm/companies", label: "Companies" },
+            { href: "/crm/people", label: "People" },
+          ],
+        },
+      ],
+    },
+    {
+      label: "Sales",
+      area: ["/crm/leads", "/crm/pipeline", "/crm/opportunities", "/crm/forecasts"],
+      groups: [
+        {
+          heading: "Sales",
+          links: [
+            { href: "/crm/leads", label: "Leads" },
+            { href: "/crm/pipeline", label: "Pipeline" },
+            { href: "/crm/forecasts", label: "Forecasts" },
+          ],
+        },
+      ],
+    },
+    { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"], groups: [] },
+    { label: "Dashboard", href: "/crm/dashboard", area: ["/crm/dashboard"], groups: [] },
+    {
+      label: "More",
+      area: ["/crm/campaigns", "/crm/mail", "/crm/follow-ups", "/crm/email-templates", "/crm/sequences"],
+      groups: [
+        {
+          heading: "Marketing",
+          links: [
+            { href: "/crm/campaigns", label: "Campaigns" },
+            { href: "/crm/sequences", label: "Sequences", minRole: "admin" },
+            { href: "/crm/follow-ups", label: "Follow-ups", minRole: "admin" },
+          ],
+        },
+        {
+          heading: "Email",
+          links: [
+            { href: "/crm/mail", label: "Email and calendar" },
+            { href: "/crm/email-templates", label: "Email templates", minRole: "admin" },
+          ],
+        },
+      ],
+    },
+    {
+      label: "Settings",
+      area: ["/crm/teams", "/crm/duplicates", "/crm/record-types", "/crm/stages"],
+      groups: [
+        {
+          heading: "Team and data",
+          links: [
+            { href: "/crm/teams", label: "Teams" },
+            { href: "/crm/duplicates", label: "Duplicates" },
+          ],
+        },
+        {
+          heading: "Customise",
+          links: [
+            { href: "/crm/record-types", label: "Record types", minRole: "admin" },
+            { href: "/crm/stages", label: "Stages", minRole: "admin" },
+          ],
+        },
+        {
+          // Shopify's own settings, in Accounting (where its orders post); not a copy (#342).
+          heading: "Integrations",
+          links: [{ href: SALES_PLATFORMS_HREF, label: "Sales platforms (Shopify)", module: "accounting" }],
+        },
+      ],
+    },
+  ] satisfies Menu[]
+).map((menu) => ({ ...menu, module: "crm" as const }));
 
 /** Analytics' tabs (its own app, under /analytics); shown only while Analytics is on (decision 353). */
 export const ANALYTICS_MENUS: Menu[] = [
@@ -387,8 +455,14 @@ export function isCurrent(pathname: string, search: URLSearchParams, href: strin
 
 type Access = { can(role: Role): boolean; modules: Modules | null };
 
+function moduleOn(module: ModuleKey | undefined, modules: Modules | null): boolean {
+  if (!module) return true;
+  if (module === "accounting") return modules !== null && modules.accounting !== false;
+  return Boolean(modules?.[module]);
+}
+
 function linkVisible(link: MenuLink, { can, modules }: Access): boolean {
-  return (!link.minRole || can(link.minRole)) && (!link.module || Boolean(modules?.[link.module]));
+  return (!link.minRole || can(link.minRole)) && moduleOn(link.module, modules);
 }
 
 function filterGroups(groups: MenuGroup[], access: Access): MenuGroup[] {
@@ -402,8 +476,10 @@ export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Ac
   // MOD2: no Accounting menus while it's off.
   if (app === "accounting" && access.modules?.accounting === false) return [];
   return (app === "crm" ? CRM_MENUS : app === "analytics" ? ANALYTICS_MENUS : MENUS)
-    .filter((menu) => (!menu.module || Boolean(access.modules?.[menu.module])) && (!menu.minRole || access.can(menu.minRole)))
-    .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access) }));
+    .filter((menu) => moduleOn(menu.module, access.modules) && (!menu.minRole || access.can(menu.minRole)))
+    .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access) }))
+    // A dropdown left with nothing in it isn't shown.
+    .filter((menu) => menu.href || menu.groups.length > 0);
 }
 
 /** The "+ New" actions someone may start (bookkeepers and up, today). */
