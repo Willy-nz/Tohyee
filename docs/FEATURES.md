@@ -1919,6 +1919,16 @@ that something happened.
   accessible HTML table; CSV and Excel exports use the standard report
   export (decision 375).
 
+- **Analytics: calculated values, saved values and templates** (#337,
+  decision 597, examples BM1-BM4, tenant migration 0165). A chart can add a
+  calculated value, a formula over its other values such as
+  `[Sales] - [Costs]` or `[Sales] / [Units]`, worked out in exact decimals.
+  Any value can be saved on its data source for other charts, and the books
+  copy has built-in values: Sales, Cost of sales, Gross profit, Gross
+  margin %, Other income, Operating expenses, Net profit, Accounts
+  receivable, Accounts payable, Cash in bank and Days to get paid. A new
+  report can start from a template: Business overview, Sales & customers,
+  Profit & loss, CRM pipeline or Farm.
 - **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into

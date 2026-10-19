@@ -86,6 +86,8 @@ export function measureLabel(measure: Pick<Measure, "aggregate" | "field" | "tim
       return `Count of ${tableNoun(table)}`;
     case "count_distinct":
       return of ? `Count of different ${lower}` : "Count of different values";
+    case "formula":
+      return "Calculated";
   }
 }
 

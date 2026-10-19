@@ -5593,3 +5593,26 @@ testing) and #154's code signing (later, Jess).
      open it; the up and down arrows and the Edit button stay as the
      keyboard and touch way to do the same. A dashboard holds up to 40
      tiles (was 24), counting text cards.
+597. **Calculated values, saved values and report templates** (20 October
+     2026, #337; Power BI's measures as the reference, as the issue says).
+     A calculated value is a formula over the chart's other values by name,
+     e.g. `[Sales] - [Costs]` or `[Gross profit] / [Sales]`, with numbers,
+     + - * /, brackets and `days` (the days in the dashboard's dates). It's
+     parsed by Tohyee's own small parser (never run as code) and worked out
+     by DuckDB in exact decimals: dividing goes through whole millionths
+     like averages do (6 places, rounded half up), dividing by zero gives no
+     value, and a value with no rows counts as zero. It's money when it only
+     adds and takes away money. A value can also have its own conditions
+     (only rows where...) and be a balance (everything to the To date,
+     whatever the From date; not with a date grouping). Any value can be
+     saved on its data source under a name (tenant migration 0165,
+     `analytics_measures`) for other charts to add; a chart keeps its own
+     copy, so removing or renaming a saved value doesn't break charts. The
+     books copy has eleven built-in values (BM1-BM4, as Xero does, not yet
+     reviewed), which needed the ledger copy to say which accounts are the
+     receivable and payable control accounts (`system_account`). Creating
+     a report can start from a template (Business overview, Sales &
+     customers, Profit & loss, CRM pipeline, Farm): ordinary tiles over the
+     books copy dated over the last twelve months, offered when the tables
+     they need are copied. Not built: asking the AI to build a dashboard
+     (optional in the issue).

@@ -6,6 +6,8 @@ import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
 import * as queryRoute from "@/app/api/analytics/query/route";
+import * as measureRoute from "@/app/api/analytics/measures/[measureId]/route";
+import * as measuresRoute from "@/app/api/analytics/measures/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import * as tablesRoute from "@/app/api/analytics/tables/route";
@@ -344,6 +346,48 @@ describeWithDatabase("analytics dashboards", () => {
     const tooLong = await patch([{ id: "long", title: "Note", visual: "text", width: "full", text: "x".repeat(2001) }]);
     expect(tooLong.data.error).toMatch(/2,000/);
     await patch([tile]);
+  });
+
+  it("works out calculated values and keeps saved values on the data source (#337)", async () => {
+    const quantity = { label: "Units", aggregate: "sum", field: "quantity" };
+    const sales = { label: "Sales", aggregate: "sum", field: "quantity", times: "unit_price" };
+    const average = { label: "Price per unit", aggregate: "formula", formula: "[Sales] / [Units]" };
+    const answer = await body(
+      await queryRoute.POST(
+        apiRequest("/api/analytics/query", {
+          method: "POST",
+          cookie: viewerCookie,
+          body: { organisationId: ORG, query: { table: "sales", groupBy: { field: "region" }, measures: [quantity, sales, average], filters: [] }, filters: {} },
+        }),
+        noContext,
+      ),
+    );
+    expect(answer.status).toBe(200);
+    // Canterbury: 0.10 / 1; Otago: (10 + 20 + 0.20) / 4 = 7.55, exactly.
+    expect(answer.data.rows).toEqual([
+      { category: "Canterbury", m0: "1.0000", m1: "0.100000", m2: "0.100000" },
+      { category: "Otago", m0: "4.0000", m1: "30.200000", m2: "7.550000" },
+    ]);
+
+    const save = (payload: Record<string, unknown>, user = ownerCookie) =>
+      measuresRoute.POST(apiRequest("/api/analytics/measures", { method: "POST", cookie: user, body: { organisationId: ORG, table: "sales", ...payload } }), noContext);
+    const definition = { kind: "formula", formula: "[Sales] / [Units]", inputs: [{ name: "Sales", aggregate: "sum", field: "quantity", times: "unit_price" }, { name: "Units", aggregate: "sum", field: "quantity" }] };
+    expect((await save({ name: "Price per unit", definition }, viewerCookie)).status).toBe(403);
+    const saved = await body(await save({ name: "Price per unit", definition, number: { decimals: 2 } }));
+    expect(saved.status).toBe(201);
+    expect(saved.data.measure).toMatchObject({ table: "sales", name: "Price per unit", number: { decimals: 2 }, definition: { kind: "formula", formula: "[Sales] / [Units]" } });
+    expect((await body(await save({ name: "price PER unit", definition }))).data.error).toMatch(/already a value called/);
+    expect((await body(await save({ name: "Broken", definition: { kind: "formula", formula: "[Sales] / [Nope]", inputs: definition.inputs } }))).data.error).toMatch(/\[Nope\] isn't one of this chart's values/);
+    expect((await body(await save({ name: "Wrong column", definition: { kind: "base", aggregate: "sum", field: "nope" } }))).status).toBe(400);
+
+    const listed = await body(await measuresRoute.GET(apiRequest(`/api/analytics/measures?organisationId=${ORG}`, { cookie: viewerCookie }), noContext));
+    expect(listed.data.measures.map((measure: { name: string }) => measure.name)).toEqual(["Price per unit"]);
+    const id = saved.data.measure.id;
+    const removed = await measureRoute.DELETE(
+      apiRequest(`/api/analytics/measures/${id}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }),
+      params({ measureId: id }),
+    );
+    expect(removed.status).toBe(200);
   });
 
   it("deletes a dashboard without touching the data", async () => {

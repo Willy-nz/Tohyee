@@ -7,6 +7,7 @@ import * as analyticsRoute from "@/app/api/analytics/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import { runTile } from "@/lib/analytics/dashboards";
 import { readBooks } from "@/lib/analytics/books";
+import { builtInMeasures, measureFromSaved } from "@/lib/analytics/measure-library";
 import { closeAnalytics, queryAnalytics, replaceTohyeeTables, type TableCopy, type TableCopyRow } from "@/lib/analytics/engine";
 import { runDueLoads } from "@/lib/analytics/scheduler";
 import type { SessionUser } from "@/lib/auth/sessions";
@@ -298,5 +299,66 @@ describeWithDatabase("analytics: the books and CRM", () => {
       books: { status: string } | null;
     };
     expect(overview.books?.status).toBe("ok");
+  });
+  it("BM1-BM4: the built-in values give the profit and loss and balances (#337)", async () => {
+    await refresh();
+    const columns = (await queryAnalytics(ORG, "describe tohyee_ledger_lines")).map((row) => ({ name: String(row.column_name), type: String(row.column_type) }));
+    const builtIns = builtInMeasures("tohyee_ledger_lines", columns);
+    expect(builtIns.map((measure) => measure.name)).toEqual([
+      "Sales",
+      "Cost of sales",
+      "Gross profit",
+      "Gross margin %",
+      "Other income",
+      "Operating expenses",
+      "Net profit",
+      "Accounts receivable",
+      "Accounts payable",
+      "Cash in bank",
+      "Days to get paid",
+    ]);
+    // Each value as a key figure on its own (a tile has up to six).
+    const values = async (names: string[], dates: { from: string | null; to: string | null }) => {
+      const answers: Array<[string, string | null]> = [];
+      for (const name of names) {
+        const result = await runTile(
+          ORG,
+          { table: "tohyee_ledger_lines", groupBy: null, measures: [measureFromSaved(builtIns.find((measure) => measure.name === name)!)], filters: [], dateField: "posting_date" },
+          dates,
+        );
+        answers.push([name, result.rows[0].m0]);
+      }
+      return Object.fromEntries(answers);
+    };
+    const profitAndLoss = ["Sales", "Cost of sales", "Gross profit", "Gross margin %", "Other income", "Operating expenses", "Net profit"];
+    // BM1: March to June, as Tohyee's profit and loss for those dates.
+    expect(await values(profitAndLoss, { from: "2026-03-01", to: "2026-06-30" })).toEqual({
+      Sales: "4200.00",
+      "Cost of sales": "700.00",
+      "Gross profit": "3500.000000",
+      "Gross margin %": "0.833333",
+      "Other income": "20.00",
+      "Operating expenses": "350.00",
+      "Net profit": "3170.000000",
+    });
+    // BM2: balances as at 30 June, whatever the From date.
+    const balances = ["Accounts receivable", "Accounts payable", "Cash in bank"];
+    expect(await values(balances, { from: "2026-06-01", to: "2026-06-30" })).toEqual({ "Accounts receivable": null, "Accounts payable": null, "Cash in bank": "8170.00" });
+    // BM3: July, with the invoices (AB6, AB7), the 1 July sale (AB8) and the pay run (AB10).
+    expect(await values(["Sales", "Operating expenses", "Net profit", ...balances, "Days to get paid"], { from: "2026-07-01", to: "2026-07-31" })).toEqual({
+      Sales: "560.00",
+      "Operating expenses": "900.00",
+      "Net profit": "-340.000000",
+      "Accounts receivable": "275.00",
+      "Accounts payable": null,
+      "Cash in bank": "7570.00",
+      "Days to get paid": "15.223214",
+    });
+    // BM4: without both dates there are no days to divide by; a balance with no To date is everything.
+    expect(await values(["Days to get paid", "Cash in bank"], { from: null, to: null })).toEqual({ "Days to get paid": null, "Cash in bank": "7570.00" });
+    // A balance on a chart grouped by month isn't a balance, so it's refused.
+    await expect(
+      runTile(ORG, { table: "tohyee_ledger_lines", groupBy: { field: "posting_date", grain: "month" }, measures: [measureFromSaved(builtIns.find((measure) => measure.name === "Cash in bank")!)], filters: [] }),
+    ).rejects.toThrow("A balance can't be grouped by date");
   });
 });
