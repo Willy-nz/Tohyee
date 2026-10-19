@@ -1,17 +1,22 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import { googleApp, microsoftApp } from "@/lib/crm/mail/service";
 import { exchangeCode, MAIL_PROVIDERS, type MailProvider, mailboxAddress, type ProviderApp, refreshAccess, authorisationUrl } from "@/lib/crm/mail/providers";
 import { parseIsoDate } from "@/lib/dates";
-import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
+import { type Actor, assertOrganisationUsable, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { type FarmMail, FARM_GOOGLE_SCOPES, FARM_MICROSOFT_SCOPES, fetchFarmMail, listFarmMailIds } from "@/lib/farming/mail-providers";
-import { type Arrangement, FARM_MAIL_KINDS, type FarmMailKind, nzDay, readEmail } from "@/lib/farming/mail-rules";
+import { type CalendarItem, CALENDAR_KINDS, type CalendarKind, calendarFeed, type FeedEvent, isRepeatDate, type Repeat, repeatDates, REPEATS, teamView } from "@/lib/farming/calendar-shared";
+import { type Arrangement, type FarmMailKind, nzDay, readEmail } from "@/lib/farming/mail-rules";
+import { RequestLimiter } from "@/lib/ai/limits";
+import { coreQuery } from "@/lib/db/transactions";
 import { listAllOrganisations } from "@/lib/organisations/admin";
-import type { OrganisationRecord } from "@/lib/organisations/registry";
+import { getMembership, getOrganisation, type OrganisationRecord, parseOrganisationId } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
+
+export type { CalendarItem } from "@/lib/farming/calendar-shared";
 
 /*
  * The farm calendar from email (#319; examples FC1-FC16, decisions
@@ -43,33 +48,10 @@ export type FarmMailbox = {
   /** Older history is still being read. */
   readingHistory: boolean;
   items: number;
+  /** Items from it shared with the farm team (they go if it's disconnected). */
+  shared: number;
 };
 
-export type CalendarItem = {
-  id: string;
-  mailboxId: string;
-  kind: FarmMailKind;
-  title: string;
-  date: string | null;
-  startTime: string | null;
-  endTime: string | null;
-  tentative: boolean;
-  change: "new" | "moved" | "cancelled";
-  state: "open" | "moved" | "cancelled" | "dismissed";
-  stateNote: string | null;
-  checkReasons: string[];
-  needsChecking: boolean;
-  checked: boolean;
-  farmId: string | null;
-  farmName: string | null;
-  senderEmail: string;
-  senderName: string | null;
-  subject: string | null;
-  excerpt: string;
-  webLink: string | null;
-  sentAt: string;
-  alsoSeen: number;
-};
 
 function redirectUri(origin: string): string {
   return `${origin.replace(/\/+$/, "")}${FARM_MAIL_CALLBACK_PATH}`;
@@ -196,9 +178,11 @@ export async function listFarmMailboxes(tx: OrgTx): Promise<FarmMailbox[]> {
     last_error: string | null;
     backfill_before: string | null;
     items: number;
+    shared: number;
   }>(
     `select a.id::text, a.provider, a.email, a.history_days, a.default_farm_id::text, a.status, a.last_check_at::text, a.last_error, a.backfill_before::text,
-            (select count(*)::int from farm_calendar_items i where i.account_id = a.id and i.state <> 'dismissed') as items
+            (select count(*)::int from farm_calendar_items i where i.account_id = a.id and i.state <> 'dismissed') as items,
+            (select count(*)::int from farm_calendar_items i where i.account_id = a.id and i.state <> 'dismissed' and i.shared_at is not null) as shared
        from farm_mail_accounts a where a.user_id = $1 order by a.email`,
     [userId],
   );
@@ -213,6 +197,7 @@ export async function listFarmMailboxes(tx: OrgTx): Promise<FarmMailbox[]> {
     lastError: row.last_error,
     readingHistory: row.backfill_before !== null,
     items: row.items,
+    shared: row.shared,
   }));
 }
 
@@ -252,6 +237,10 @@ export async function disconnectMemberFarmMail(organisation: OrganisationRecord,
   return withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
     const ids = await tx.query<{ id: string }>("select id::text from farm_mail_accounts where user_id = $1", [userId]);
     for (const row of ids.rows) await deleteMailbox(tx, row.id);
+    // FC20, FC23: their own items (and so what they shared) and their calendar link go too.
+    await tx.query("update farm_calendar_items set replaced_by = null where user_id = $1", [userId]);
+    await tx.query("delete from farm_calendar_items where user_id = $1", [userId]);
+    await tx.query("delete from farm_calendar_links where user_id = $1", [userId]);
     return ids.rows.length;
   });
 }
@@ -322,8 +311,8 @@ async function farmFor(tx: OrgTx, account: AccountRow, arrangement: Arrangement)
 async function insertItem(tx: OrgTx, account: AccountRow, mail: FarmMail, arrangement: Arrangement, reasons: string[]): Promise<string> {
   const inserted = await tx.query<{ id: string }>(
     `insert into farm_calendar_items (account_id, external_id, thread_id, sent_at, sender_email, sender_name, subject, web_link, kind, title,
-                                      item_date, start_time, end_time, tentative, change, check_reasons, farm_id, excerpt)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) returning id::text`,
+                                      item_date, start_time, end_time, tentative, change, check_reasons, farm_id, excerpt, user_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) returning id::text`,
     [
       account.id,
       mail.externalId,
@@ -343,6 +332,7 @@ async function insertItem(tx: OrgTx, account: AccountRow, mail: FarmMail, arrang
       reasons,
       await farmFor(tx, account, arrangement),
       arrangement.excerpt,
+      account.user_id,
     ],
   );
   return inserted.rows[0].id;
@@ -571,12 +561,14 @@ export function startFarmMailScheduler(): void {
   setTimeout(tick, 3 * 60 * 1000).unref?.();
 }
 
-// The calendar (FC13, FC14) ------------------------------------------------------------------
+// The calendar (FC13, FC14, FC17-FC21) -------------------------------------------------------------
 
 type CalendarRow = {
   id: string;
-  account_id: string;
-  kind: FarmMailKind;
+  user_id: string;
+  source: "email" | "own";
+  account_id: string | null;
+  kind: CalendarKind;
   title: string;
   item_date: string | null;
   start_time: string | null;
@@ -589,29 +581,44 @@ type CalendarRow = {
   checked_at: string | null;
   farm_id: string | null;
   farm_name: string | null;
-  sender_email: string;
+  sender_email: string | null;
   sender_name: string | null;
   subject: string | null;
-  excerpt: string;
+  excerpt: string | null;
   web_link: string | null;
-  sent_at: string;
+  sent_at: string | null;
   also_seen: number;
+  notes: string | null;
+  repeat: Repeat | null;
+  repeat_until: string | null;
+  repeat_skips: string[];
+  shared_at: string | null;
+  shared_by_name: string | null;
+  updated_at: string;
 };
 
-const ITEM_COLUMNS = `i.id::text, i.account_id::text, i.kind, i.title, i.item_date::text, to_char(i.start_time, 'HH24:MI') as start_time,
+const ITEM_COLUMNS = `i.id::text, i.user_id::text, i.source, i.account_id::text, i.kind, i.title, i.item_date::text, to_char(i.start_time, 'HH24:MI') as start_time,
        to_char(i.end_time, 'HH24:MI') as end_time, i.tentative, i.change, i.state, i.state_note, i.check_reasons, i.checked_at::text,
-       i.farm_id::text, f.name as farm_name, i.sender_email, i.sender_name, i.subject, i.excerpt, i.web_link, i.sent_at::text, i.also_seen`;
+       i.farm_id::text, f.name as farm_name, i.sender_email, i.sender_name, i.subject, i.excerpt, i.web_link, i.sent_at::text, i.also_seen,
+       i.notes, i.repeat, i.repeat_until::text, i.repeat_skips::text[] as repeat_skips, i.shared_at::text, i.shared_by_name, i.updated_at::text`;
 
 const NEEDS_CHECKING = "(i.state = 'open' and i.checked_at is null and (i.item_date is null or cardinality(i.check_reasons) > 0))";
 
-function toItem(row: CalendarRow): CalendarItem {
+/** FC21: the member's own items, and what others shared; hidden ones aren't shown. */
+const VISIBLE = "(i.user_id = $1 or i.shared_at is not null) and i.state <> 'dismissed'";
+
+/** One item as `viewer` may see it (FC20): someone else's is only what the team sees. `date` is a repeat's date. */
+function toItem(row: CalendarRow, viewer: string, date: string | null = row.item_date): CalendarItem {
   const needsChecking = row.state === "open" && row.checked_at === null && (row.item_date === null || row.check_reasons.length > 0);
-  return {
+  const item: CalendarItem = {
     id: row.id,
+    key: row.repeat && date ? `${row.id}@${date}` : row.id,
+    source: row.source,
+    mine: true,
     mailboxId: row.account_id,
     kind: row.kind,
     title: row.title,
-    date: row.item_date,
+    date,
     startTime: row.start_time,
     endTime: row.end_time,
     tentative: row.tentative,
@@ -628,9 +635,17 @@ function toItem(row: CalendarRow): CalendarItem {
     subject: row.subject,
     excerpt: row.excerpt,
     webLink: row.web_link,
-    sentAt: new Date(row.sent_at).toISOString(),
+    sentAt: row.sent_at ? new Date(row.sent_at).toISOString() : null,
     alsoSeen: row.also_seen,
+    notes: row.notes,
+    repeat: row.repeat,
+    repeatFrom: row.repeat ? row.item_date : null,
+    repeatUntil: row.repeat_until,
+    repeatSkips: row.repeat_skips,
+    shared: row.shared_at !== null,
+    sharedByName: row.shared_by_name,
   };
+  return row.user_id === viewer ? item : teamView(item, row.shared_by_name);
 }
 
 export type CalendarFilter = { farmId?: unknown; sender?: unknown };
@@ -643,16 +658,36 @@ function filters(input: CalendarFilter, params: unknown[]): string {
     sql += ` and i.farm_id::text = $${params.length}`;
   }
   if (typeof input.sender === "string" && input.sender.trim()) {
+    // Only the member's own items: a shared item's sender isn't theirs to filter by (FC21).
     params.push(input.sender.trim().toLowerCase());
-    sql += ` and lower(i.sender_email) = $${params.length}`;
+    sql += ` and i.user_id = $1 and lower(i.sender_email) = $${params.length}`;
   }
   return sql;
 }
 
+/** Items (and each repeat's dates) from `from` to `to`, as `userId` sees them. */
+async function itemsInRange(tx: OrgTx, userId: string, from: string, to: string, input: CalendarFilter = {}, extra = ""): Promise<CalendarItem[]> {
+  const params: unknown[] = [userId, from, to];
+  const rows = await tx.query<CalendarRow>(
+    `select ${ITEM_COLUMNS} from farm_calendar_items i left join farms f on f.id = i.farm_id
+      where ${VISIBLE} ${extra}
+        and ((i.repeat is null and i.item_date between $2 and $3)
+             or (i.repeat is not null and i.item_date <= $3 and (i.repeat_until is null or i.repeat_until >= $2)))
+        ${filters(input, params)}`,
+    params,
+  );
+  const items: CalendarItem[] = [];
+  for (const row of rows.rows) {
+    if (!row.repeat) items.push(toItem(row, userId));
+    else for (const date of repeatDates(row.item_date!, row.repeat, row.repeat_until, row.repeat_skips, from, to)) items.push(toItem(row, userId, date));
+  }
+  return items.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || (a.startTime ?? "").localeCompare(b.startTime ?? "") || Number(a.id) - Number(b.id));
+}
+
 /**
- * The calendar from `from` to `to` (FC13): the member's own items with a
- * date in the range (dismissed ones aren't shown), and the senders and farms
- * there are to filter by.
+ * The calendar from `from` to `to` (FC13, FC21): the member's own items with
+ * a date in the range and those others shared (dismissed ones aren't
+ * shown), each repeat's dates, and the senders and farms to filter by.
  */
 export async function farmCalendar(
   tx: OrgTx,
@@ -663,50 +698,52 @@ export async function farmCalendar(
   const from = parseIsoDate(input.from, "From");
   const to = parseIsoDate(input.to, "To");
   if (to < from) throw new ValidationError("To can't be before from.");
-  const params: unknown[] = [userId, from, to];
-  const rows = await tx.query<CalendarRow>(
-    `select ${ITEM_COLUMNS} from farm_calendar_items i join farm_mail_accounts a on a.id = i.account_id left join farms f on f.id = i.farm_id
-      where a.user_id = $1 and i.state <> 'dismissed' and i.item_date between $2 and $3 ${filters(input, params)}
-      order by i.item_date, i.start_time nulls first, i.id`,
-    params,
-  );
-  const count = await tx.query<{ n: number }>(
-    `select count(*)::int as n from farm_calendar_items i join farm_mail_accounts a on a.id = i.account_id where a.user_id = $1 and ${NEEDS_CHECKING}`,
-    [userId],
-  );
+  if (Date.parse(to) - Date.parse(from) > 400 * 86_400_000) throw new ValidationError("Show at most a year at a time.");
+  const items = await itemsInRange(tx, userId, from, to, input);
+  const count = await tx.query<{ n: number }>(`select count(*)::int as n from farm_calendar_items i where i.user_id = $1 and ${NEEDS_CHECKING}`, [userId]);
   const senders = await tx.query<{ email: string; name: string | null }>(
     `select distinct on (lower(i.sender_email)) lower(i.sender_email) as email, i.sender_name as name
-       from farm_calendar_items i join farm_mail_accounts a on a.id = i.account_id
-      where a.user_id = $1 and i.state <> 'dismissed' order by lower(i.sender_email), i.sent_at desc`,
+       from farm_calendar_items i
+      where i.user_id = $1 and i.sender_email is not null and i.state <> 'dismissed' order by lower(i.sender_email), i.sent_at desc`,
     [userId],
   );
-  return { items: rows.rows.map(toItem), needsChecking: count.rows[0].n, senders: senders.rows };
+  return { items, needsChecking: count.rows[0].n, senders: senders.rows };
 }
 
-/** Needs checking (FC4, FC6, FC10, FC13): oldest email first. */
+/** Needs checking (FC4, FC6, FC10, FC13): the member's own, oldest email first. */
 export async function itemsToCheck(tx: OrgTx, input: CalendarFilter = {}): Promise<CalendarItem[]> {
   await requireFarming(tx);
-  const params: unknown[] = [requireUser(tx)];
+  const userId = requireUser(tx);
+  const params: unknown[] = [userId];
   const rows = await tx.query<CalendarRow>(
-    `select ${ITEM_COLUMNS} from farm_calendar_items i join farm_mail_accounts a on a.id = i.account_id left join farms f on f.id = i.farm_id
-      where a.user_id = $1 and ${NEEDS_CHECKING} ${filters(input, params)} order by i.sent_at, i.id limit 500`,
+    `select ${ITEM_COLUMNS} from farm_calendar_items i left join farms f on f.id = i.farm_id
+      where i.user_id = $1 and ${NEEDS_CHECKING} ${filters(input, params)} order by i.sent_at, i.id limit 500`,
     params,
   );
-  return rows.rows.map(toItem);
+  return rows.rows.map((row) => toItem(row, userId));
 }
 
+function itemId(idInput: unknown): string {
+  const id = typeof idInput === "string" || typeof idInput === "number" ? String(idInput) : "";
+  if (!/^[1-9][0-9]{0,18}$/.test(id)) throw new NotFoundError("Calendar item not found.");
+  return id;
+}
+
+/** One of the member's own items; someone else's (shared or not) is "not found" to change. */
 async function ownItem(tx: OrgTx, idInput: unknown): Promise<CalendarRow> {
   await requireFarming(tx);
   const userId = requireUser(tx);
-  const id = typeof idInput === "string" || typeof idInput === "number" ? String(idInput) : "";
-  if (!/^[1-9][0-9]{0,18}$/.test(id)) throw new NotFoundError("Calendar item not found.");
   const rows = await tx.query<CalendarRow>(
-    `select ${ITEM_COLUMNS} from farm_calendar_items i join farm_mail_accounts a on a.id = i.account_id left join farms f on f.id = i.farm_id
-      where i.id = $1 and a.user_id = $2 for update of i`,
-    [id, userId],
+    `select ${ITEM_COLUMNS} from farm_calendar_items i left join farms f on f.id = i.farm_id
+      where i.id = $1 and i.user_id = $2 for update of i`,
+    [itemId(idInput), userId],
   );
   if (!rows.rows[0]) throw new NotFoundError("Calendar item not found.");
   return rows.rows[0];
+}
+
+async function ownItemShown(tx: OrgTx, id: string): Promise<CalendarItem> {
+  return toItem(await ownItem(tx, id), requireUser(tx));
 }
 
 function timeOrNull(input: unknown, label: string): string | null {
@@ -715,40 +752,115 @@ function timeOrNull(input: unknown, label: string): string | null {
   return input;
 }
 
-/**
- * FC14: the member corrects (or just confirms) an item: date, times, kind,
- * title, farm. It's then checked, out of Needs checking, and a later email
- * won't move or cancel it.
- */
-export async function checkCalendarItem(
-  tx: OrgTx,
-  idInput: unknown,
-  input: { date?: unknown; startTime?: unknown; endTime?: unknown; kind?: unknown; title?: unknown; farmId?: unknown },
-): Promise<CalendarItem> {
-  const item = await ownItem(tx, idInput);
-  if (item.state !== "open") throw new ConflictError("This item was moved, cancelled or hidden, so it can't be changed.");
-  const date = input.date === undefined ? item.item_date : input.date === null || input.date === "" ? null : parseIsoDate(input.date, "Date");
-  if (!date) throw new ValidationError("Give it a date, or hide it with \"Not a farm arrangement\".");
-  const startTime = input.startTime === undefined ? item.start_time : timeOrNull(input.startTime, "Start");
-  const endTime = input.endTime === undefined ? item.end_time : timeOrNull(input.endTime, "End");
+type ItemInput = {
+  date?: unknown;
+  startTime?: unknown;
+  endTime?: unknown;
+  kind?: unknown;
+  title?: unknown;
+  farmId?: unknown;
+  notes?: unknown;
+  repeat?: unknown;
+  repeatUntil?: unknown;
+};
+
+type ItemValues = {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  kind: CalendarKind;
+  title: string;
+  farmId: string | null;
+  notes: string | null;
+  repeat: Repeat | null;
+  repeatUntil: string | null;
+};
+
+/** The fields as given, or as they were (FC14, FC17, FC18). */
+async function itemValues(tx: OrgTx, input: ItemInput, was: Partial<CalendarRow> = {}): Promise<ItemValues> {
+  const date = input.date === undefined ? (was.item_date ?? null) : input.date === null || input.date === "" ? null : parseIsoDate(input.date, "Date");
+  if (!date) throw new ValidationError(was.source === "email" ? 'Give it a date, or hide it with "Not a farm arrangement".' : "Give it a date.");
+  const startTime = input.startTime === undefined ? (was.start_time ?? null) : timeOrNull(input.startTime, "Start");
+  const endTime = input.endTime === undefined ? (was.end_time ?? null) : timeOrNull(input.endTime, "End");
   if (endTime && !startTime) throw new ValidationError("Give a start time with the end time.");
   if (startTime && endTime && endTime <= startTime) throw new ValidationError("The end has to be after the start.");
-  const kind = input.kind === undefined ? item.kind : requireOneOf(input.kind, "kind", FARM_MAIL_KINDS);
-  const title = input.title === undefined ? item.title : requireString(input.title, "Title", { maxLength: 200 });
-  const farmId = input.farmId === undefined ? item.farm_id : await farmIdOrNull(tx, input.farmId);
-  await tx.query(
-    `update farm_calendar_items set item_date = $2, start_time = $3, end_time = $4, kind = $5, title = $6, farm_id = $7, checked_at = now(), updated_at = now()
-      where id = $1`,
-    [item.id, date, startTime, endTime, kind, title, farmId],
-  );
-  return toItem(await ownItem(tx, item.id));
+  const kind = input.kind === undefined ? (was.kind ?? "other") : requireOneOf(input.kind, "kind", CALENDAR_KINDS);
+  const title = input.title === undefined ? was.title! : requireString(input.title, "What", { maxLength: 200 });
+  const farmId = input.farmId === undefined ? (was.farm_id ?? null) : await farmIdOrNull(tx, input.farmId);
+  const notes = input.notes === undefined ? (was.notes ?? null) : (optionalString(input.notes, "Notes", { maxLength: 2000 }) ?? null);
+  const repeat = input.repeat === undefined ? (was.repeat ?? null) : input.repeat === null || input.repeat === "" ? null : requireOneOf(input.repeat, "repeat", REPEATS);
+  let repeatUntil = input.repeatUntil === undefined ? (was.repeat_until ?? null) : input.repeatUntil === null || input.repeatUntil === "" ? null : parseIsoDate(input.repeatUntil, "Until");
+  if (!repeat) repeatUntil = null;
+  if (repeatUntil && repeatUntil < date) throw new ValidationError("The repeat can't end before it starts.");
+  return { date, startTime, endTime, kind, title, farmId, notes, repeat, repeatUntil };
 }
 
-/** FC14: "Not a farm arrangement" hides an item. */
+/** FC17: an item the member adds. It's theirs, checked, and never in Needs checking. */
+export async function addCalendarItem(tx: OrgTx, input: ItemInput): Promise<CalendarItem> {
+  await requireFarming(tx);
+  const userId = requireUser(tx);
+  if (input.title === undefined) throw new ValidationError("Say what it is.");
+  const values = await itemValues(tx, input, { source: "own" });
+  const inserted = await tx.query<{ id: string }>(
+    `insert into farm_calendar_items (user_id, source, kind, title, item_date, start_time, end_time, farm_id, notes, repeat, repeat_until, checked_at)
+     values ($1, 'own', $2, $3, $4, $5, $6, $7, $8, $9, $10, now()) returning id::text`,
+    [userId, values.kind, values.title, values.date, values.startTime, values.endTime, values.farmId, values.notes, values.repeat, values.repeatUntil],
+  );
+  return ownItemShown(tx, inserted.rows[0].id);
+}
+
+/**
+ * FC14, FC18: the member corrects (or just confirms) an item: date, times,
+ * kind, title, farm, notes, repeat. It's then checked, out of Needs
+ * checking, and a later email won't move or cancel it. For a repeat, it
+ * changes every date (a new date moves its start).
+ */
+export async function checkCalendarItem(tx: OrgTx, idInput: unknown, input: ItemInput): Promise<CalendarItem> {
+  const item = await ownItem(tx, idInput);
+  if (item.state !== "open") throw new ConflictError("This item was moved, cancelled or hidden, so it can't be changed.");
+  const values = await itemValues(tx, input, item);
+  // Skipped dates that are no longer dates of the repeat are dropped.
+  const skips = values.repeat ? item.repeat_skips.filter((skip) => isRepeatDate(values.date, values.repeat!, values.repeatUntil, skip)) : [];
+  await tx.query(
+    `update farm_calendar_items set item_date = $2, start_time = $3, end_time = $4, kind = $5, title = $6, farm_id = $7, notes = $8,
+            repeat = $9, repeat_until = $10, repeat_skips = $11::date[], checked_at = now(), updated_at = now()
+      where id = $1`,
+    [item.id, values.date, values.startTime, values.endTime, values.kind, values.title, values.farmId, values.notes, values.repeat, values.repeatUntil, skips],
+  );
+  return ownItemShown(tx, item.id);
+}
+
+/** FC14: "Not a farm arrangement" hides an item, and stops sharing it. */
 export async function dismissCalendarItem(tx: OrgTx, idInput: unknown): Promise<CalendarItem> {
   const item = await ownItem(tx, idInput);
-  await tx.query("update farm_calendar_items set state = 'dismissed', state_note = 'Not a farm arrangement', updated_at = now() where id = $1", [item.id]);
-  return toItem(await ownItem(tx, item.id));
+  await tx.query("update farm_calendar_items set state = 'dismissed', state_note = 'Not a farm arrangement', shared_at = null, shared_by_name = null, updated_at = now() where id = $1", [
+    item.id,
+  ]);
+  return ownItemShown(tx, item.id);
+}
+
+/** FC17: the member deletes an item they added. Items from email can only be hidden. */
+export async function deleteCalendarItem(tx: OrgTx, idInput: unknown): Promise<void> {
+  const item = await ownItem(tx, idInput);
+  if (item.source !== "own") throw new ConflictError('Items read from email can\'t be deleted: use "Not a farm arrangement" to hide it.');
+  await tx.query("update farm_calendar_items set replaced_by = null where replaced_by = $1", [item.id]);
+  await tx.query("delete from farm_calendar_items where id = $1", [item.id]);
+}
+
+/** FC19: takes one date out of a repeat; the others stay. */
+export async function skipCalendarDate(tx: OrgTx, idInput: unknown, dateInput: unknown): Promise<CalendarItem> {
+  const item = await ownItem(tx, idInput);
+  if (!item.repeat || !item.item_date) throw new ValidationError("Only a repeating item has dates to skip.");
+  if (item.state !== "open") throw new ConflictError("This item was moved, cancelled or hidden, so it can't be changed.");
+  const date = parseIsoDate(dateInput, "Date");
+  if (!isRepeatDate(item.item_date, item.repeat, item.repeat_until, date)) throw new ValidationError("That isn't one of its dates.");
+  if (repeatDates(item.item_date, item.repeat, item.repeat_until, [...item.repeat_skips, date], item.item_date, item.repeat_until ?? date).length === 0 && item.repeat_until) {
+    throw new ValidationError("That's its only date left: delete or hide it instead.");
+  }
+  if (!item.repeat_skips.includes(date)) {
+    await tx.query("update farm_calendar_items set repeat_skips = array_append(repeat_skips, $2::date), checked_at = coalesce(checked_at, now()), updated_at = now() where id = $1", [item.id, date]);
+  }
+  return ownItemShown(tx, item.id);
 }
 
 /** FC14: this item replaces an earlier one, which becomes Moved. */
@@ -764,10 +876,138 @@ export async function replaceCalendarItem(tx: OrgTx, idInput: unknown, replacesI
     item.id,
   ]);
   await tx.query("update farm_calendar_items set checked_at = now(), updated_at = now() where id = $1", [item.id]);
-  return toItem(await ownItem(tx, item.id));
+  return ownItemShown(tx, item.id);
+}
+
+async function memberName(userId: string): Promise<string> {
+  const row = await coreQuery<{ display_name: string | null; email: string }>("select display_name, email from users where id = $1", [userId]);
+  return row.rows[0]?.display_name?.trim() || row.rows[0]?.email || "A member";
+}
+
+/**
+ * FC20: shares an item with everyone in the organisation (or stops). It's
+ * checked by sharing, so only its member changes it. The team sees only
+ * `teamView`, which the screen shows as the preview first.
+ */
+export async function shareCalendarItem(tx: OrgTx, idInput: unknown, share: unknown): Promise<CalendarItem> {
+  const item = await ownItem(tx, idInput);
+  if (share === false) {
+    await tx.query("update farm_calendar_items set shared_at = null, shared_by_name = null, updated_at = now() where id = $1", [item.id]);
+  } else {
+    if (item.state !== "open") throw new ConflictError("Only items still on the calendar can be shared.");
+    if (!item.item_date) throw new ValidationError("Give it a date before sharing it.");
+    await tx.query("update farm_calendar_items set shared_at = now(), shared_by_name = $2, checked_at = coalesce(checked_at, now()), updated_at = now() where id = $1", [
+      item.id,
+      await memberName(item.user_id),
+    ]);
+  }
+  await writeAuditEvent(tx, { eventType: share === false ? "farming.calendar_unshared" : "farming.calendar_shared", entityType: "farm_calendar_item", entityId: item.id, details: {} });
+  return ownItemShown(tx, item.id);
 }
 
 /** Filters for screens: an optional string. */
 export function optionalSender(input: unknown): string | undefined {
   return optionalString(input, "Sender", { maxLength: 320 }) ?? undefined;
+}
+
+// The calendar link (FC22, FC23) ------------------------------------------------------------------
+
+export const CALENDAR_LINK_PATH = "/api/farming/calendar-link";
+const FEED_DAYS_BACK = 60;
+const feedLimiter = new RequestLimiter(60, 60 * 60 * 1000);
+
+const hashToken = (token: string) => createHash("sha256").update(token, "utf8").digest("hex");
+
+export type CalendarLinkStatus = { on: boolean; createdAt: string | null; lastUsedAt: string | null };
+
+export async function calendarLinkStatus(tx: OrgTx): Promise<CalendarLinkStatus> {
+  await requireFarming(tx);
+  const row = await tx.query<{ created_at: string; last_used_at: string | null }>("select created_at::text, last_used_at::text from farm_calendar_links where user_id = $1", [requireUser(tx)]);
+  return { on: Boolean(row.rows[0]), createdAt: row.rows[0]?.created_at ?? null, lastUsedAt: row.rows[0]?.last_used_at ?? null };
+}
+
+/** FC22: a new private link (shown once); any earlier one stops working. */
+export async function makeCalendarLink(tx: OrgTx, origin: string): Promise<CalendarLinkStatus & { url: string }> {
+  await requireFarming(tx);
+  const userId = requireUser(tx);
+  const token = randomBytes(32).toString("base64url");
+  await tx.query(
+    `insert into farm_calendar_links (user_id, token_hash) values ($1, $2)
+     on conflict (user_id) do update set token_hash = excluded.token_hash, created_at = now(), last_used_at = null`,
+    [userId, hashToken(token)],
+  );
+  await writeAuditEvent(tx, { eventType: "farming.calendar_link_made", entityType: "farm_calendar_link", entityId: userId, details: {} });
+  return { ...(await calendarLinkStatus(tx)), url: `${origin.replace(/\/+$/, "")}${CALENDAR_LINK_PATH}/${tx.organisationId}/${token}.ics` };
+}
+
+/** FC23: turns the link off. */
+export async function turnOffCalendarLink(tx: OrgTx): Promise<CalendarLinkStatus> {
+  await requireFarming(tx);
+  await tx.query("delete from farm_calendar_links where user_id = $1", [requireUser(tx)]);
+  await writeAuditEvent(tx, { eventType: "farming.calendar_link_off", entityType: "farm_calendar_link", entityId: tx.actor.userId!, details: {} });
+  return calendarLinkStatus(tx);
+}
+
+/**
+ * FC22, FC23: the calendar link's iCalendar text, or null ("not found")
+ * alike for a wrong, replaced or turned-off link, a member who has left,
+ * Farming off, an organisation that isn't usable, or too many requests.
+ */
+export async function calendarLinkFeed(organisationInput: string, fileInput: string, now = new Date()): Promise<string | null> {
+  const token = /^([A-Za-z0-9_-]{43})\.ics$/.exec(fileInput)?.[1];
+  if (!token) return null;
+  let organisationId: string;
+  try {
+    organisationId = parseOrganisationId(organisationInput);
+  } catch {
+    return null;
+  }
+  const organisation = await getOrganisation(organisationId);
+  if (!organisation) return null;
+  try {
+    assertOrganisationUsable(organisation);
+  } catch {
+    return null;
+  }
+  const hash = hashToken(token);
+  if (!feedLimiter.take(`${organisationId}:${hash}`)) return null;
+  const link = await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
+    const on = await tx.query<{ enabled: boolean }>("select enabled from farming_settings where id = true");
+    if (on.rows[0]?.enabled !== true) return null;
+    return (await tx.query<{ user_id: string }>("select user_id::text from farm_calendar_links where token_hash = $1", [hash])).rows[0] ?? null;
+  });
+  if (!link || !(await getMembership(organisationId, link.user_id))) return null;
+  const name = await memberName(link.user_id);
+  return withOrganisationTransaction(organisation, { userId: link.user_id, email: "calendar-link@tohyee" }, async (tx) => {
+    await tx.query("update farm_calendar_links set last_used_at = now() where user_id = $1", [link.user_id]);
+    const from = new Date(now.getTime() - FEED_DAYS_BACK * 86_400_000).toISOString().slice(0, 10);
+    // Moved ones are left out: their new date is its own item (FC22).
+    const rows = await tx.query<CalendarRow>(
+      `select ${ITEM_COLUMNS} from farm_calendar_items i left join farms f on f.id = i.farm_id
+        where ${VISIBLE} and i.state in ('open', 'cancelled') and i.item_date is not null
+          and ((i.repeat is null and i.item_date >= $2) or (i.repeat is not null and (i.repeat_until is null or i.repeat_until >= $2)))
+        order by i.item_date, i.id`,
+      [link.user_id, from],
+    );
+    const events: FeedEvent[] = rows.rows.map((row) => {
+      const shown = toItem(row, link.user_id);
+      return {
+        uid: `farm-${organisationId}-${row.id}@tohyee`,
+        kind: shown.kind,
+        title: shown.title,
+        date: row.item_date!,
+        startTime: shown.startTime,
+        endTime: shown.endTime,
+        tentative: shown.tentative && !shown.checked,
+        cancelled: row.state === "cancelled",
+        farmName: shown.farmName,
+        sharedByName: shown.mine ? null : shown.sharedByName,
+        repeat: shown.repeat,
+        repeatUntil: shown.repeatUntil,
+        repeatSkips: row.repeat_skips,
+        updatedAt: new Date(row.updated_at).toISOString(),
+      };
+    });
+    return calendarFeed(events, `${name}'s farm calendar`, now);
+  });
 }
