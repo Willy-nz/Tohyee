@@ -4,15 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { Empty, Notice, ui } from "@/components/ui";
-import type { ChartSpec } from "@/lib/analytics/chart-spec";
+import { tileChartSpec } from "@/lib/analytics/tile-chart";
 import type { Dashboard, Tile } from "@/lib/analytics/dashboards";
-import type { QueryResult, ResultColumn, Visual } from "@/lib/analytics/query";
+import type { QueryResult, ResultColumn } from "@/lib/analytics/query";
 import { ApiError, api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
 import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
 import styles from "./pinned-tile.module.css";
 
-const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut"]);
 const TABLE_ROWS = 4;
 
 function showValue(value: string | null, column: ResultColumn): string {
@@ -128,23 +127,8 @@ export function PinnedAnalyticsTile({ organisationId, dashboardId, tileId }: { o
 
 function PinnedTileResult({ tile, result }: { tile: Tile; result: QueryResult }) {
   const measures = useMemo(() => result.columns.filter((column) => column.role === "measure"), [result.columns]);
-  const chart = CHARTS.has(tile.visual) && measures.length > 0;
-  const spec = useMemo<ChartSpec | null>(() => {
-    if (!chart) return null;
-    return {
-      kind: tile.visual as ChartSpec["kind"],
-      category: "category",
-      series: measures.map((column, index) => ({
-        field: column.key,
-        label: column.label,
-        // One axis only, as on the dashboard.
-        ...(tile.visual === "combo" ? { as: index === 0 ? ("bar" as const) : ("line" as const) } : {}),
-      })),
-      valueFormat: measures[0]?.format === "money" ? "money" : "number",
-      currency: "NZD",
-      compact: true,
-    };
-  }, [chart, tile.visual, measures]);
+  // The same chart as on the dashboard (with its format), with small margins.
+  const spec = useMemo(() => tileChartSpec(tile, measures, { compact: true }), [tile, measures]);
 
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   if (tile.visual === "kpi" && measures.length > 0) {

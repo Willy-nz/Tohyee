@@ -5,13 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
+import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import type { ChartSpec } from "@/lib/analytics/chart-spec";
+import type { ChartFormat } from "@/lib/analytics/chart-format";
+import { tileChartSpec, tileValueNames } from "@/lib/analytics/tile-chart";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
 import type {
   Aggregate,
@@ -358,9 +360,12 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       ) : (
         <div className={styles.grid}>
           {dashboard.tiles.map((tile, index) => (
-            <section key={tile.id} className={`${styles.tile} ${tile.width === "full" ? styles.full : ""}`}>
+            <section key={tile.id} className={tileClass(tile)}>
               <div className={styles.tileHeader}>
-                <h2 className={styles.tileTitle}>{tile.title}</h2>
+                <div>
+                  <h2 className={tile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle}>{tile.title}</h2>
+                  {tile.format?.card?.subtitle ? <p className={styles.tileSubtitle}>{tile.format.card.subtitle}</p> : null}
+                </div>
                 {editing ? (
                   <div className={styles.tileTools}>
                     <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, -1)} disabled={busy || index === 0}>
@@ -399,6 +404,16 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       ))}
     </>
   );
+}
+
+function tileClass(tile: Tile): string {
+  const card = tile.format?.card;
+  return [
+    styles.tile,
+    tile.width === "full" ? styles.full : "",
+    card?.background === "tinted" ? styles.tinted : card?.background === "none" ? styles.bare : "",
+    card?.border === false ? styles.borderless : "",
+  ].filter(Boolean).join(" ");
 }
 
 type ReportViewer = { userId: string; email: string; displayName: string; isActive: boolean };
@@ -713,27 +728,13 @@ function TileResult({
   onDrill,
   exportFor,
 }: {
-  tile: Pick<Tile, "title" | "visual">;
+  tile: Pick<Tile, "title" | "visual" | "format">;
   result: QueryResult;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   exportFor?: PivotExportFor;
 }) {
   const measures = result.columns.filter((column) => column.role === "measure");
-  const spec = useMemo<ChartSpec | null>(() => {
-    if (tile.visual === "table" || tile.visual === "pivot") return null;
-    return {
-      kind: tile.visual,
-      category: "category",
-      series: measures.map((column, index) => ({
-        field: column.key,
-        label: column.label,
-        // One axis only: a second scale makes the chart misleading.
-        ...(tile.visual === "combo" ? { as: index === 0 ? ("bar" as const) : ("line" as const) } : {}),
-      })),
-      valueFormat: measures[0]?.format === "money" ? "money" : "number",
-      currency: "NZD",
-    };
-  }, [tile.visual, measures]);
+  const spec = useMemo(() => tileChartSpec(tile, measures), [tile, measures]);
 
   if (tile.visual === "pivot") {
     return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
@@ -992,6 +993,7 @@ function TileEditor({
   const [visual, setVisual] = useState<Visual>(tile?.visual ?? "column");
   const [width, setWidth] = useState<"half" | "full">(tile?.width ?? "half");
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
+  const [format, setFormat] = useState<ChartFormat | undefined>(tile?.format);
   const table = tables.find((entry) => entry.name === query.table);
   const columns = table?.columns ?? [];
   const numbers = columns.filter((column) => isNumber(column.type));
@@ -1054,7 +1056,7 @@ function TileEditor({
         ) : preview.error ? (
           <Notice tone="error">{preview.error}</Notice>
         ) : (
-          <TileResult tile={{ title: title || "Preview", visual }} result={preview.result!} />
+          <TileResult tile={{ title: title || "Preview", visual, format }} result={preview.result!} />
         )}
       </div>
 
@@ -1361,6 +1363,8 @@ function TileEditor({
       </div>
 
 
+      <ChartFormatPanel visual={visual} values={tileValueNames(query.measures)} format={format} onChange={setFormat} />
+
       <div className={ui.rowButtons}>
         <Button
           disabled={saving || !query.table || !preview?.result || Boolean(preview.error)}
@@ -1371,6 +1375,7 @@ function TileEditor({
               visual,
               width,
               query: { ...query, filters: query.filters.filter((filter) => String(filter.value).trim() !== "") },
+              ...(format ? { format } : {}),
             })
           }
         >
