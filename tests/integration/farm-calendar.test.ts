@@ -5,7 +5,15 @@ import { saveMailSettings } from "@/lib/crm/mail/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import {
+  addCalendarItem,
+  calendarLinkFeed,
+  calendarLinkStatus,
   checkCalendarItem,
+  deleteCalendarItem,
+  makeCalendarLink,
+  shareCalendarItem,
+  skipCalendarDate,
+  turnOffCalendarLink,
   checkFarmMailbox,
   claimFarmMailState,
   disconnectFarmMailbox,
@@ -20,6 +28,7 @@ import {
   setMailboxFarm,
   startFarmMailConnect,
 } from "@/lib/farming/calendar";
+import * as linkRoute from "@/app/api/farming/calendar-link/[organisationId]/[file]/route";
 import { saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
 import { getOrganisation } from "@/lib/organisations/registry";
 import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[userId]/route";
@@ -292,5 +301,148 @@ describeWithDatabase("farm calendar from email", () => {
     const [paused] = await w.as(jess, (tx) => listFarmMailboxes(tx));
     expect([paused.status, paused.lastError]).toEqual(["paused", expect.stringContaining("invalid_grant")]);
     await expect(w.as(jess, (tx) => mailboxForCheck(tx, mailbox.id))).rejects.toThrow("paused");
+  });
+  it("FC17 Jess's own item: hers, checked, notes only for her, deleted rather than hidden", async () => {
+    const w = await setup();
+    await expect(w.as(jess, (tx) => addCalendarItem(tx, { title: "Dry off the herd" }))).rejects.toThrow("Give it a date.");
+    const added = await w.as(jess, (tx) =>
+      addCalendarItem(tx, { date: "2027-01-05", title: "Dry off the herd", kind: "other", farmId: w.home.id, notes: "Check the vet's dry cow list first" }),
+    );
+    expect(added).toMatchObject({ source: "own", mine: true, kind: "other", date: "2027-01-05", farmName: "Home farm", checked: true, needsChecking: false, senderEmail: null, notes: "Check the vet's dry cow list first" });
+    expect(await w.as(jess, (tx) => itemsToCheck(tx))).toEqual([]);
+    expect((await w.as(mere, (tx) => farmCalendar(tx, { from: "2027-01-01", to: "2027-01-31" }))).items).toEqual([]);
+    await expect(w.as(mere, (tx) => deleteCalendarItem(tx, added.id))).rejects.toThrow("Calendar item not found.");
+    const changed = await w.as(jess, (tx) => checkCalendarItem(tx, added.id, { date: "2027-01-06", startTime: "06:00" }));
+    expect([changed.date, changed.startTime, changed.notes]).toEqual(["2027-01-06", "06:00", "Check the vet's dry cow list first"]);
+    await w.as(jess, (tx) => deleteCalendarItem(tx, added.id));
+    expect((await w.as(jess, (tx) => farmCalendar(tx, { from: "2027-01-01", to: "2027-01-31" }))).items).toEqual([]);
+    // An item from email is hidden, not deleted.
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z");
+    inbox.push({ id: "m1", threadId: "t1", at: "2026-10-19T10:00:00Z", from: vet, subject: "TB testing", text: "TB testing at the Home farm on Thursday 22 October at 9am." });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T10:30:00Z"));
+    const fromEmail = (await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items[0];
+    await expect(w.as(jess, (tx) => deleteCalendarItem(tx, fromEmail.id))).rejects.toThrow("Not a farm arrangement");
+  });
+
+  it("FC18, FC19 repeats: every 2 weeks until an end date, monthly on the last day, skipping one date, an email item checked", async () => {
+    const w = await setup();
+    const herd = await w.as(jess, (tx) => addCalendarItem(tx, { date: "2026-11-03", title: "Herd test", kind: "animal_health", startTime: "07:00", repeat: "fortnightly", repeatUntil: "2026-12-15" }));
+    expect([herd.key, herd.repeat, herd.repeatFrom]).toEqual([`${herd.id}@2026-11-03`, "fortnightly", "2026-11-03"]);
+    const dates = async () => (await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-01", to: "2027-01-31" }))).items.filter((item) => item.id === herd.id).map((item) => item.date);
+    expect(await dates()).toEqual(["2026-11-03", "2026-11-17", "2026-12-01", "2026-12-15"]);
+    // A week in the middle shows only its own date.
+    expect((await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-11-16", to: "2026-11-22" }))).items.map((item) => [item.title, item.date])).toEqual([["Herd test", "2026-11-17"]]);
+    await expect(w.as(jess, (tx) => skipCalendarDate(tx, herd.id, "2026-11-10"))).rejects.toThrow("isn't one of its dates");
+    await w.as(jess, (tx) => skipCalendarDate(tx, herd.id, "2026-11-17"));
+    expect(await dates()).toEqual(["2026-11-03", "2026-12-01", "2026-12-15"]);
+    // Changing the series changes every date; a skip that's no longer a date goes.
+    await w.as(jess, (tx) => checkCalendarItem(tx, herd.id, { date: "2026-11-04" }));
+    expect(await dates()).toEqual(["2026-11-04", "2026-11-18", "2026-12-02"]);
+    await expect(w.as(jess, (tx) => checkCalendarItem(tx, herd.id, { repeatUntil: "2026-10-01" }))).rejects.toThrow("can't end before it starts");
+    const rates = await w.as(jess, (tx) => addCalendarItem(tx, { date: "2027-01-31", title: "Rates", repeat: "monthly" }));
+    const months = (await w.as(jess, (tx) => farmCalendar(tx, { from: "2027-01-01", to: "2027-04-30" }))).items.filter((item) => item.id === rates.id).map((item) => item.date);
+    expect(months).toEqual(["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30"]);
+    // A repeat set on an item from email checks it.
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z");
+    inbox.push({ id: "m1", threadId: "t1", at: "2026-10-19T10:00:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Truck", text: "Stock truck for the Runoff on Wednesday 21 October, 7am." });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T10:30:00Z"));
+    const truck = (await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items[0];
+    expect(truck.checked).toBe(false);
+    const repeating = await w.as(jess, (tx) => checkCalendarItem(tx, truck.id, { repeat: "weekly" }));
+    expect([repeating.checked, repeating.repeat]).toEqual([true, "weekly"]);
+  });
+
+  it("FC20, FC21 sharing: a preview's worth only, read-only for the team, stopped, and gone when hidden", async () => {
+    const w = await setup();
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z");
+    inbox.push({ id: "m1", threadId: "t1", at: "2026-10-19T10:00:00Z", from: vet, subject: "TB testing", text: "We've booked TB testing at the Home farm for Thursday 22 October at 9am." });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T10:30:00Z"));
+    const tb = (await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items[0];
+    await w.as(jess, (tx) => checkCalendarItem(tx, tb.id, { notes: "Yard at 8.30" }));
+    const shared = await w.as(jess, (tx) => shareCalendarItem(tx, tb.id, true));
+    expect([shared.shared, shared.sharedByName, shared.checked]).toEqual([true, "Jess", true]);
+    expect((await w.as(jess, (tx) => listFarmMailboxes(tx)))[0].shared).toBe(1);
+    // Mere sees the arrangement and who shared it, nothing from the email, and can't change it.
+    const seen = await w.as(mere, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }));
+    expect(seen.items).toHaveLength(1);
+    expect(seen.items[0]).toMatchObject({ title: "TB testing", date: "2026-10-22", startTime: "09:00", farmName: "Home farm", mine: false, shared: true, sharedByName: "Jess" });
+    expect([seen.items[0].senderEmail, seen.items[0].subject, seen.items[0].excerpt, seen.items[0].webLink, seen.items[0].notes, seen.items[0].mailboxId]).toEqual([null, null, null, null, null, null]);
+    expect(JSON.stringify(seen)).not.toMatch(/manukavets|booked|Yard/);
+    expect(seen.senders).toEqual([]);
+    // Filtering by the sender doesn't reveal which shared items came from them.
+    expect((await w.as(mere, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25", sender: "office@manukavets.example" }))).items).toEqual([]);
+    await expect(w.as(mere, (tx) => checkCalendarItem(tx, tb.id, { title: "x" }))).rejects.toThrow("Calendar item not found.");
+    await expect(w.as(mere, (tx) => shareCalendarItem(tx, tb.id, false))).rejects.toThrow("Calendar item not found.");
+    // Jess's changes show to the team; stopping sharing and hiding take it away.
+    await w.as(jess, (tx) => checkCalendarItem(tx, tb.id, { startTime: "10:00" }));
+    expect((await w.as(mere, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items[0].startTime).toBe("10:00");
+    await w.as(jess, (tx) => shareCalendarItem(tx, tb.id, false));
+    expect((await w.as(mere, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items).toEqual([]);
+    await w.as(jess, (tx) => shareCalendarItem(tx, tb.id, true));
+    await w.as(jess, (tx) => dismissCalendarItem(tx, tb.id));
+    expect((await w.as(mere, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items).toEqual([]);
+    // Mere's own added item, shared, is in Jess's calendar as Mere's.
+    const hers = await w.as(mere, (tx) => addCalendarItem(tx, { date: "2026-10-23", title: "Pick up drench", kind: "delivery", notes: "Ring first" }));
+    await w.as(mere, (tx) => shareCalendarItem(tx, hers.id, true));
+    const jessSees = (await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items;
+    expect(jessSees.map((item) => [item.title, item.sharedByName, item.mine, item.notes])).toEqual([["Pick up drench", "Mere", false, null]]);
+  });
+
+  it("FC22, FC23 the calendar link: what the calendar shows, no email content, and when it stops", async () => {
+    const w = await setup();
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z");
+    inbox.push({ id: "m1", threadId: "t1", at: "2026-10-19T10:00:00Z", from: vet, subject: "TB testing", text: "We've booked TB testing at the Home farm for Thursday 22 October at 9am." });
+    inbox.push({ id: "m2", threadId: "t2", at: "2026-10-19T10:05:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Truck", text: "Stock truck for the Runoff on Wednesday 21 October, 7am." });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T10:30:00Z"));
+    inbox.push({ id: "m3", threadId: "t2", at: "2026-10-19T11:00:00Z", from: "Otago Cartage <bookings@otagocartage.example>", subject: "Re: Truck", text: "Sorry, the stock truck is cancelled." });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:30:00Z"));
+    await w.as(jess, (tx) => addCalendarItem(tx, { date: "2026-11-03", title: "Herd test", startTime: "07:00", repeat: "fortnightly", notes: "Secret note" }));
+    const hers = await w.as(mere, (tx) => addCalendarItem(tx, { date: "2026-10-23", title: "Pick up drench" }));
+    await w.as(mere, (tx) => shareCalendarItem(tx, hers.id, true));
+    expect(await w.as(jess, (tx) => calendarLinkStatus(tx))).toMatchObject({ on: false });
+    const link = await w.as(jess, (tx) => makeCalendarLink(tx, "https://tohyee.test/"));
+    expect(link.on).toBe(true);
+    const match = new RegExp(`^https://tohyee\\.test/api/farming/calendar-link/${w.org}/([A-Za-z0-9_-]{43}\\.ics)$`).exec(link.url);
+    expect(match).not.toBeNull();
+    const file = match![1];
+    // Only a hash is kept.
+    const stored = await w.as(jess, (tx) => tx.query<{ token_hash: string }>("select token_hash from farm_calendar_links"));
+    expect(link.url).not.toContain(stored.rows[0].token_hash);
+    const response = await linkRoute.GET(new Request(link.url), { params: Promise.resolve({ organisationId: w.org, file }) });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
+    const feed = (await response.text()).replace(/\r\n /g, "");
+    expect(feed).toContain("X-WR-CALNAME:Jess's farm calendar");
+    expect(feed).toContain("SUMMARY:TB testing");
+    expect(feed).toContain("DTSTART;TZID=Pacific/Auckland:20261022T090000");
+    expect(feed).toMatch(/SUMMARY:Stock truck[\s\S]*?STATUS:CANCELLED/);
+    expect(feed).toContain("RRULE:FREQ=WEEKLY;INTERVAL=2");
+    expect(feed).toContain("SUMMARY:Pick up drench");
+    expect(feed).toContain("Shared by Mere");
+    expect(feed).not.toMatch(/manukavets|booked|otagocartage|Secret note|mail\.google/);
+    expect((await w.as(jess, (tx) => calendarLinkStatus(tx))).lastUsedAt).not.toBeNull();
+    // Wrong, replaced, turned off, Farming off, or left: all "not found".
+    expect(await calendarLinkFeed(w.org, `${"A".repeat(43)}.ics`)).toBeNull();
+    expect(await calendarLinkFeed("no-such-org", file)).toBeNull();
+    const second = await w.as(jess, (tx) => makeCalendarLink(tx, "https://tohyee.test"));
+    expect(await calendarLinkFeed(w.org, file)).toBeNull();
+    const secondFile = second.url.split("/").pop()!;
+    expect(await calendarLinkFeed(w.org, secondFile)).toContain("BEGIN:VCALENDAR");
+    await w.as(jess, (tx) => setFarmingEnabled(tx, { enabled: false }));
+    expect(await calendarLinkFeed(w.org, secondFile)).toBeNull();
+    await w.as(jess, (tx) => setFarmingEnabled(tx, { enabled: true }));
+    await w.as(jess, (tx) => turnOffCalendarLink(tx));
+    expect(await calendarLinkFeed(w.org, secondFile)).toBeNull();
+    const mereLink = await w.as(mere, (tx) => makeCalendarLink(tx, "https://tohyee.test"));
+    const mereFile = mereLink.url.split("/").pop()!;
+    expect(await calendarLinkFeed(w.org, mereFile)).toContain("Pick up drench");
+    const removed = await memberRoute.DELETE(
+      apiRequest(`/api/organisations/${w.org}/members/${mere.id}`, { method: "DELETE", cookie: await sessionCookieFor(jess) }),
+      params({ organisationId: w.org, userId: mere.id }),
+    );
+    expect(removed.status).toBe(200);
+    expect(await calendarLinkFeed(w.org, mereFile)).toBeNull();
+    // Mere's items, shared ones included, went with her.
+    expect((await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-10-19", to: "2026-10-25" }))).items.map((item) => item.title)).toEqual(["Stock truck", "TB testing"]);
   });
 });

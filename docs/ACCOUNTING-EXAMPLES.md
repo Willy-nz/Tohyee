@@ -18422,10 +18422,82 @@ Gmail; times are New Zealand time.
   who leaves the organisation has their farm mailboxes disconnected the
   same way. A mailbox that can't be read three times running is paused
   until it's reconnected.
-- **FC16 Not included yet** (as #319 said): attachments, sharing with the
-  farm team, repeating arrangements, adding items to Google or Outlook
-  calendars, and AI reading. The sender filter is only the sender's
-  address: it doesn't say who the work is for.
+- **FC16 Not included in the first version** (as #319 said): attachments,
+  sharing with the farm team, repeating arrangements, adding items to
+  Google or Outlook calendars, and AI reading. The sender filter is only
+  the sender's address: it doesn't say who the work is for. Sharing,
+  repeats, your own items and a calendar link were added next (FC17-FC24).
 
 Tests: `tests/unit/farm-mail-rules.test.ts` (FC2-FC12) and
 `tests/integration/farm-calendar.test.ts` (FC1, FC7-FC9, FC11, FC13-FC15).
+
+## Farming: the farm calendar's own items, repeats, sharing and calendar link (FC17-FC24; built by Claude 19 Oct 2026 when Jess asked for all four, as Claude's rules, not yet reviewed)
+
+Jess chose these four from the list of what the farm calendar didn't do.
+Xero and NetSuite have nothing like a farm calendar, so the rules are
+Claude's, following common calendar apps where they say so, and Jess's rule
+that mail stays private to the person who connects it. Same organisation
+as FC1: Kōwhai Dairies, farms **Home farm** and **Runoff**, Jess (owner)
+and Mere (admin).
+
+- **FC17 Adding your own item.** **Add an item** asks for a date, what it
+  is, the kind (the six kinds, or **Other**), and optionally start and end
+  times, a farm and notes. Jess adds "Dry off the herd", Other, Tue 5 Jan
+  2027, Home farm, note "Check the vet's dry cow list first". It's marked
+  **Added by you**, is never in Needs checking, and has no sender. The
+  notes are only ever shown to Jess. She can change or delete her own
+  items; items read from email can only be hidden (FC14), as before.
+- **FC18 Repeating.** Any dated item can repeat: **every week**, **every 2
+  weeks**, **every 4 weeks** or **every month**, from its date, until an
+  optional end date. "Herd test" on Tue 3 Nov 2026, every 2 weeks until Tue
+  15 Dec 2026, shows on 3 Nov, 17 Nov, 1 Dec and 15 Dec, each saying
+  "Repeats every 2 weeks". Monthly from Sun 31 Jan 2027 is 31 Jan, Sun 28
+  Feb, Wed 31 Mar, Fri 30 Apr: in a month without that day it's the last
+  day of the month, as Outlook does. Setting a repeat on an item read from
+  email checks it (FC14), so a later email won't move or cancel it.
+  Tohyee doesn't read repeats from an email's wording ("every Tuesday"):
+  Jess sets them.
+- **FC19 Skipping one date.** On the 17 Nov herd test, **Skip this date**
+  takes away that date only; 3 Nov, 1 Dec and 15 Dec stay. Changing the
+  date, time, title, farm or repeat changes every date in the series (a
+  new date moves its start). One date of a series can't be changed on its
+  own: skip it and add an item for the new date.
+- **FC20 Sharing with the farm team.** **Share with the farm team** first
+  shows exactly what everyone in the organisation will see, then shares
+  it once Jess confirms: what it is, the kind, the date and times,
+  tentative, the farm, any repeat, and "Shared by Jess". Never the sender,
+  subject, the email's sentence, the link to the email, her notes or her
+  mailbox. Sharing an item checks it (FC14), so only Jess changes it. Mere
+  sees "TB testing, Thu 22 Oct 9am, Home farm, Shared by Jess" in her own
+  farm calendar, marked **Shared by Jess**, and can't change it. Changes
+  Jess makes show to the team straight away; **Stop sharing**, hiding,
+  deleting, or disconnecting the mailbox it came from (FC15) takes it off
+  their calendars. A member leaving takes their shared items with them.
+- **FC21 Who sees what.** Jess's farm calendar shows her own items (from
+  her mailboxes and the ones she added) and the items others have shared.
+  Admins and owners see only what was shared, like everyone else. The
+  Sender filter applies to items from email; choosing a sender leaves out
+  items without one.
+- **FC22 A calendar link.** **Calendar link** makes a private web address
+  that Google Calendar, Apple Calendar or Outlook can subscribe to
+  ("From URL" or "Subscribe"). It's what Jess's farm calendar shows, from
+  60 days ago onwards, except hidden and moved items: moved ones are
+  replaced by their new date. Cancelled items are sent as cancelled,
+  tentative ones as tentative, repeats as repeats, and each has its title,
+  kind and farm (as the location), at New Zealand time (all day when
+  there's no time). Nothing from the email itself, and no notes, is in it.
+  The link is shown once. Anyone who has it can see these items, so it's
+  treated like a password: **Make a new link** stops the old one, and
+  **Turn off** stops it altogether. The calendar app decides how often it
+  checks; Google Calendar can take several hours, sometimes a day, to show
+  a change. The link only reads: changes made in the calendar app don't
+  come back to Tohyee.
+- **FC23 When the link stops.** It stops when Jess makes a new one or
+  turns it off, leaves the organisation, or Farming is turned off. A
+  stopped or wrong link gets the same "not found" answer either way.
+- **FC24 Still not included:** attachments, changing one date of a repeat
+  on its own (FC19), repeats read from email wording, writing items into
+  Google or Outlook (the link is read-only), and AI reading.
+
+Tests: `tests/integration/farm-calendar.test.ts` (FC17-FC23) and
+`tests/unit/farm-calendar-repeats.test.ts` (FC18, FC22).
