@@ -5,7 +5,8 @@ import type { Dashboard } from "@/lib/analytics/dashboards";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { analyticsTileReference, parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
-import { DASHBOARD_PAGES, MAX_DASHBOARD_TILES } from "@/lib/dashboard/pages";
+import { useModules } from "@/components/modules";
+import { DASHBOARD_PAGES } from "@/lib/dashboard/pages";
 import styles from "./pin-tile-menu.module.css";
 
 type Preference = { hidden: boolean; tiles: string[] };
@@ -26,8 +27,9 @@ export function PinTileMenu({
 }) {
   const reference = analyticsTileReference(dashboardId, tileId);
   const { can } = useWorkspace();
-  // Only pages this person can open (report viewers can't open Home).
-  const pages = DASHBOARD_PAGES.filter((page) => can(page.minimumRole));
+  const modules = useModules(organisationId);
+  // Only pages this person can open (report viewers can't open Home), and the farm Home only with Farming on.
+  const pages = DASHBOARD_PAGES.filter((page) => can(page.minimumRole) && (page.module === null || modules?.[page.module] === true));
   const menu = useRef<HTMLDetailsElement>(null);
   const [preferences, setPreferences] = useState<Record<string, Preference>>({});
   const [dashboards, setDashboards] = useState<Dashboard[] | null>(null);
@@ -145,14 +147,14 @@ export function PinTileMenu({
                   </button>
                 </>
               ) : null}
-              {preference && !pinned && tiles.length < MAX_DASHBOARD_TILES ? (
+              {preference && !pinned && tiles.length < page.maxTiles ? (
                 <button type="button" disabled={busy} onClick={() => void save(page.id, [...tiles, reference])}>
                   Pin to {page.label}
                 </button>
               ) : null}
-              {preference && !pinned && tiles.length >= MAX_DASHBOARD_TILES ? (
+              {preference && !pinned && tiles.length >= page.maxTiles ? (
                 <div className={styles.replacements}>
-                  <span className={styles.muted}>{page.label} shows {MAX_DASHBOARD_TILES} tiles. Pin in place of:</span>
+                  <span className={styles.muted}>{page.label} shows {page.maxTiles} tiles. Pin in place of:</span>
                   {tiles.map((tile, index) => (
                     <button
                       key={`${tile}-${index}`}

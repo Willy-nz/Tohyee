@@ -636,6 +636,8 @@
   }
 
   .stackOnPhone td {
+    /* A stacked cell grows with what's in it (the table's 44px is a row height). */
+    height: auto;
     border: 0;
     padding: 4px 12px;
     text-align: left;
