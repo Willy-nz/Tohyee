@@ -268,6 +268,44 @@ describeWithDatabase("analytics dashboards", () => {
     expect(reset.data.dashboard.tiles[0].format).toBeUndefined();
   });
 
+  it("compares one total with the previous period or last year, with a trend by month (#334)", async () => {
+    const ask = async (query: unknown, filters: unknown) =>
+      body(await queryRoute.POST(apiRequest("/api/analytics/query", { method: "POST", cookie: viewerCookie, body: { organisationId: ORG, query, filters } }), noContext));
+    const total = (compare: string) => ({
+      table: "sales",
+      groupBy: null,
+      measures: [{ label: "Sales", aggregate: "sum", field: "quantity", times: "unit_price", compare }],
+      filters: [],
+      dateField: "order_date",
+      sparkline: true,
+    });
+    const april = await ask(total("previous_period"), { from: "2026-04-01", to: "2026-04-30" });
+    expect(april.status).toBe(200);
+    expect(april.data.columns.map((column: { key: string; label: string }) => [column.key, column.label])).toEqual([
+      ["m0", "Sales"],
+      ["m0_pp", "Sales previous period"],
+    ]);
+    expect(april.data.rows).toEqual([{ m0: "0.200000", m0_pp: "20.100000" }]);
+    expect(april.data.trend).toEqual([{ month: "2026-04-01", value: "0.200000" }]);
+
+    const march = await ask(total("previous_year"), { from: "2026-03-01", to: "2026-03-31" });
+    expect(march.data.rows).toEqual([{ m0: "20.100000", m0_py: "10.000000" }]);
+
+    const year = await ask(total("previous_period"), { from: "2026-01-01", to: "2026-12-31" });
+    expect(year.data.trend).toEqual([
+      { month: "2026-03-01", value: "20.100000" },
+      { month: "2026-04-01", value: "0.200000" },
+    ]);
+
+    // Without the dashboard's dates there's no period to compare with.
+    const allTime = await ask(total("previous_period"), {});
+    expect(allTime.data.rows).toEqual([{ m0: "30.300000", m0_pp: null }]);
+
+    const grouped = await ask({ ...total("previous_period"), groupBy: { field: "region" }, sparkline: false }, {});
+    expect(grouped.status).toBe(400);
+    expect(grouped.data.error).toMatch(/previous period is for one total/);
+  });
+
   it("deletes a dashboard without touching the data", async () => {
     const deleted = await dashboardRoute.DELETE(
       apiRequest(`/api/analytics/dashboards/${dashboardId}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }),

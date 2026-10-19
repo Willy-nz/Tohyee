@@ -5555,3 +5555,25 @@ testing) and #154's code signing (later, Jess).
      donut's total is added exactly). Axes stay short unless turned off;
      tooltips are full. A 100% stacked chart draws each value's share of
      the group, with the amount and share in the tooltip.
+594. **Key figures compare with the previous period, last year or a
+     target** (20 October 2026, #334; Power BI's card and Looker Studio's
+     scorecard as the reference). A key figure is one total, so "and last
+     year" now works without a grouping, and so does "previous period":
+     the same question asked of other dates. The previous period is the
+     same length just before the dashboard's dates; a range of whole
+     months moves back by that many months (October against September,
+     the year to 31 March against the year before), any other range by
+     its number of days. Last year is the same dates a year before, month
+     ends kept. Without both dashboard dates there's nothing to compare
+     with, and the tile says so. A target is a number typed on the tile.
+595. **How a key figure's change is shown** (20 October 2026, #334). The
+     change is the figure less the comparison, and the percentage is the
+     change over the comparison's size (rounded half up to 1 place; none
+     when the comparison is zero), both worked out exactly. An arrow and
+     the word Up or Down show the direction, green when it's good news and
+     red when not; "Down is good" (e.g. expenses) swaps them, so colour is
+     never the only sign. The amount, the percentage or both can be shown.
+     The optional trend underneath is the first value by month for the
+     latest 24 months in the dashboard's dates, also read out as text for
+     screen readers. The number uses the value's format (#333), including
+     words before or after it (e.g. "customers").

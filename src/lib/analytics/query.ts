@@ -4,6 +4,7 @@ import { lastDays, lastMonths, presetRange } from "@/lib/analytics/date-ranges";
 import { columnKind, FILTER_OPS, MAX_LAST_DAYS, MAX_LAST_MONTHS, opAllowed, valueKind } from "@/lib/analytics/filters";
 import { cmp, dec } from "@/lib/money/decimal";
 import { todayIsoDate } from "@/lib/dates";
+import { previousPeriod, previousYear } from "@/lib/analytics/periods";
 
 /**
  * A dashboard tile's question, turned into SQL for DuckDB (analytics step 3).
@@ -45,8 +46,11 @@ export type Measure = {
   field?: string;
   /** Multiplies `field` row by row first, e.g. quantity x unit_price. */
   times?: string;
-  /** Adds the same measure for the same period a year before. */
-  compare?: "previous_year";
+  /**
+   * Adds the same measure for the same period a year before, or (with no
+   * grouping, e.g. a key figure) for the period just before (#334).
+   */
+  compare?: "previous_year" | "previous_period";
   /** Shows it the other way round: each amount negated, e.g. so credits such as sales show as positive (AB2). */
   negate?: boolean;
 };
@@ -74,6 +78,8 @@ export type TileQuery = {
   sort: { by: "category" | "value"; direction: "asc" | "desc" };
   /** Top N (after sorting). */
   limit: number | null;
+  /** With no grouping: the first value by month as well, for a key figure's sparkline (#334). */
+  sparkline?: boolean;
 };
 
 export type ColumnInfo = { name: string; type: string };
@@ -96,7 +102,9 @@ export type PivotData = {
 };
 export type PivotDrillSelection = { depth: number; dimensions: Array<string | null>; pivotValue: string | null; total: boolean };
 export type PivotDrillResult = { columns: ResultColumn[]; rows: Array<Record<string, string | null>>; truncated: boolean };
-export type QueryResult = { columns: ResultColumn[]; rows: Array<Record<string, string | null>>; truncated: boolean; pivot?: PivotData };
+/** A key figure's first value by month (oldest first), for its sparkline. */
+export type TrendPoint = { month: string; value: string | null };
+export type QueryResult = { columns: ResultColumn[]; rows: Array<Record<string, string | null>>; truncated: boolean; pivot?: PivotData; trend?: TrendPoint[] };
 
 /** What a dashboard adds on top of each tile's own filters. */
 export type DashboardFilters = {
@@ -217,10 +225,11 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
       if (aggregate === "count" || aggregate === "count_distinct") throw new ValidationError(`${label}: a count can't be turned the other way round.`);
       result.negate = true;
     }
-    if (measure.compare === "previous_year") {
-      if (pivot) throw new ValidationError(`${label}: a pivot table can't compare with last year.`);
-      if (!groupBy?.grain) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
-      result.compare = "previous_year";
+    if (measure.compare === "previous_year" || measure.compare === "previous_period") {
+      if (pivot) throw new ValidationError(`${label}: a pivot table can't compare with another period.`);
+      if (groupBy && measure.compare === "previous_period") throw new ValidationError(`${label}: comparing with the previous period is for one total.`);
+      if (groupBy && !groupBy.grain) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
+      result.compare = measure.compare;
     }
     return result;
   });
@@ -275,6 +284,12 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
   } else if (pivot) {
     dateField = [...pivot.rows, ...(pivot.column ? [pivot.column] : [])].find((dimension) => dimension.grain)?.field ?? null;
   }
+  if (!groupBy && !pivot && !dateField && measures.some((measure) => measure.compare)) {
+    throw new ValidationError("Comparing with another period needs a date the dashboard's dates apply to.");
+  }
+  if (raw.sparkline === true && (groupBy || pivot || !dateField)) {
+    throw new ValidationError("A trend line is for one total with a date the dashboard's dates apply to.");
+  }
 
   const sortRaw = (raw.sort ?? {}) as Record<string, unknown>;
   const sort: TileQuery["sort"] = {
@@ -286,7 +301,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     limit = Number(raw.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ROWS) throw new ValidationError(`Top N must be a whole number from 1 to ${MAX_ROWS}.`);
   }
-  return { table, groupBy, pivot, measures, filters, dateField, sort, limit };
+  return { table, groupBy, pivot, measures, filters, dateField, sort, limit, ...(raw.sparkline === true ? { sparkline: true } : {}) };
 }
 
 type Built = { sql: string; params: unknown[]; columns: ResultColumn[] };
@@ -386,7 +401,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   };
   const q = quoteIdentifier;
 
-  const conditions = (shiftYears: number) => filterSql(query, types, dashboard, param, shiftYears);
+  const conditions = (shiftYears: number, dates: DashboardFilters = dashboard) => filterSql(query, types, dates, param, shiftYears);
 
   const measureSql = (measure: Measure) => {
     if (measure.aggregate === "count") return measure.field ? `count(${q(measure.field)})` : "count(*)";
@@ -418,10 +433,11 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   }
   query.measures.forEach((measure, index) => {
     columns.push({ key: `m${index}`, label: measure.label, format: measureFormat(measure), role: "measure" });
-    if (measure.compare) columns.push({ key: `m${index}_py`, label: `${measure.label} last year`, format: measureFormat(measure), role: "measure" });
+    if (measure.compare === "previous_year") columns.push({ key: `m${index}_py`, label: `${measure.label} last year`, format: measureFormat(measure), role: "measure" });
+    if (measure.compare === "previous_period") columns.push({ key: `m${index}_pp`, label: `${measure.label} previous period`, format: measureFormat(measure), role: "measure" });
   });
 
-  const select = (shiftYears: number) => {
+  const select = (shiftYears: number, dates: DashboardFilters = dashboard) => {
     const shiftedCategory =
       shiftYears && query.groupBy?.grain
         ? `cast(date_trunc('${query.groupBy.grain}', ${q(query.groupBy.field)} + interval ${shiftYears} year) as DATE)`
@@ -430,7 +446,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       ...(query.groupBy ? [`${shiftedCategory} as category`] : []),
       ...query.measures.map((measure, index) => `${measureSql(measure)} as m${index}`),
     ];
-    return `select ${parts.join(", ")} from ${q(query.table)}${conditions(shiftYears)}${query.groupBy ? " group by all" : ""}`;
+    return `select ${parts.join(", ")} from ${q(query.table)}${conditions(shiftYears, dates)}${query.groupBy ? " group by all" : ""}`;
   };
 
   const order = (alias: string) => {
@@ -448,6 +464,25 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       .join("");
     const current = query.measures.map((_measure, index) => `, current.m${index}`).join("");
     sql = `with current as (${select(0)}), previous as (${select(1)}) select current.category${current}${previous} from current left join previous on previous.category = current.category${order("current.")}${limit}`;
+  } else if (compares) {
+    // One total compared with another date range (decision 594): the same question asked of those dates.
+    const parts: string[] = [];
+    const ctes: string[] = [`current as (${select(0)})`];
+    query.measures.forEach((measure, index) => {
+      parts.push(`current.m${index}`);
+      if (!measure.compare) return;
+      const suffix = measure.compare === "previous_year" ? "py" : "pp";
+      const range = measure.compare === "previous_year" ? previousYear(dashboard.from, dashboard.to) : previousPeriod(dashboard.from, dashboard.to);
+      if (!range) {
+        parts.push(`cast(null as VARCHAR) as m${index}_${suffix}`);
+        return;
+      }
+      const name = `${suffix}${index}`;
+      ctes.push(`${name} as (${select(0, { ...dashboard, from: range.from, to: range.to })})`);
+      parts.push(`${name}.m${index} as m${index}_${suffix}`);
+    });
+    const joined = ctes.map((cte) => cte.slice(0, cte.indexOf(" as ("))).join(" cross join ");
+    sql = `with ${ctes.join(", ")} select ${parts.join(", ")} from ${joined}`;
   } else {
     sql = `${select(0)}${order("")}${limit}`;
   }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
+import { KeyFigureView } from "@/components/analytics/key-figure";
 import { Empty, Notice, ui } from "@/components/ui";
 import { tileChartSpec } from "@/lib/analytics/tile-chart";
 import type { Dashboard, Tile } from "@/lib/analytics/dashboards";
@@ -115,18 +116,7 @@ function PinnedTileResult({ tile, result }: { tile: Tile; result: QueryResult })
   const spec = useMemo(() => tileChartSpec(tile, measures, { compact: true }), [tile, measures]);
 
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
-  if (tile.visual === "kpi" && measures.length > 0) {
-    return (
-      <div className={styles.kpi}>
-        <span className={styles.kpiValue}>{showValue(result.rows[0][measures[0].key], measures[0])}</span>
-        {measures.slice(1).map((column) => (
-          <span key={column.key} className={ui.muted}>
-            {column.label}: {showValue(result.rows[0][column.key], column)}
-          </span>
-        ))}
-      </div>
-    );
-  }
+  if (tile.visual === "kpi" && measures.length > 0) return <KeyFigureView result={result} format={tile.format} compact />;
   if (spec) {
     const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(result.rows, measures[0].key) : result.rows;
     return (

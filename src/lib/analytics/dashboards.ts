@@ -21,6 +21,7 @@ import {
   type QueryResult,
   quoteIdentifier,
   type TileQuery,
+  type TrendPoint,
   type Visual,
 } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
@@ -378,7 +379,27 @@ export async function runTile(organisationId: string, query: unknown, filters: D
   }
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);
   const rows = await runBuiltQuery(organisationId, built.sql, built.params);
-  return { columns: built.columns, rows: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS };
+  const result: QueryResult = { columns: built.columns, rows: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS };
+  if (parsed.sparkline && parsed.dateField) result.trend = await runTrend(organisationId, parsed, tables.get(parsed.table)!, filters);
+  return result;
+}
+
+/** A key figure's first value by month, the latest 24 months in the dashboard's dates, oldest first (#334). */
+async function runTrend(organisationId: string, query: TileQuery, columns: ColumnInfo[], filters: DashboardFilters): Promise<TrendPoint[]> {
+  const built = buildTileSql(
+    {
+      ...query,
+      groupBy: { field: query.dateField!, grain: "month" },
+      measures: [{ ...query.measures[0], compare: undefined }],
+      sort: { by: "category", direction: "desc" },
+      limit: 24,
+      sparkline: undefined,
+    },
+    columns,
+    filters,
+  );
+  const rows = await runBuiltQuery(organisationId, built.sql, built.params);
+  return rows.map((row) => ({ month: row.category ?? "", value: row.m0 ?? null })).reverse();
 }
 
 /** Drill into only the fields used by a saved pivot tile, never the source table itself. */

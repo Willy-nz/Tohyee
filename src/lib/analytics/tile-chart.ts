@@ -33,9 +33,15 @@ export function tileChartSpec(
 
 /**
  * The values a tile shows, in the order its answer has them (a value with
- * "and last year" is followed by its last year's figure). A chart's
+ * "and last year" or a previous period is followed by that figure). A chart's
  * per-value settings are saved in this order.
  */
 export function tileValueNames(measures: Measure[]): string[] {
-  return measures.flatMap((measure) => (measure.compare === "previous_year" ? [measure.label, `${measure.label} last year`] : [measure.label]));
+  return measures.flatMap((measure) =>
+    measure.compare === "previous_year"
+      ? [measure.label, `${measure.label} last year`]
+      : measure.compare === "previous_period"
+        ? [measure.label, `${measure.label} previous period`]
+        : [measure.label],
+  );
 }

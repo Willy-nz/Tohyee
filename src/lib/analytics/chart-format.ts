@@ -74,18 +74,18 @@ export type AxisFormat = {
 export type LegendPosition = "top" | "bottom" | "right";
 export type LabelPosition = "auto" | "inside" | "outside";
 
-export type KpiCompare = "none" | "previous_period" | "previous_year" | "target";
-
-/** Key figure settings (#334). */
+/**
+ * Key figure settings (#334). Comparing with the previous period or last
+ * year is part of the question (the first value's `compare`), since it needs
+ * its own figures; a target is just a number to compare with.
+ */
 export type KpiFormat = {
-  compare?: KpiCompare;
   /** The target, a decimal string (exact). */
   target?: string;
-  /** Show it as an amount, a percentage, or both. */
+  /** Show the change as an amount, a percentage, or both. */
   change?: "both" | "amount" | "percent";
   /** For costs: a fall shows green. */
   downIsGood?: boolean;
-  sparkline?: boolean;
 };
 
 export type ChartFormat = {
@@ -178,15 +178,10 @@ function parseAxis(input: unknown, what: string): AxisFormat | undefined {
 
 export function parseKpiFormat(input: unknown): KpiFormat | undefined {
   const raw = object(input);
-  const compare = oneOf(raw.compare, ["none", "previous_period", "previous_year", "target"] as const, "Compare to");
-  const target = numberText(raw.target, "Target");
-  if (compare === "target" && target === undefined) throw new ValidationError("Enter the target to compare to.");
   return compact({
-    compare,
-    target,
+    target: numberText(raw.target, "Target"),
     change: oneOf(raw.change, ["both", "amount", "percent"] as const, "Show the change as"),
     downIsGood: flag(raw.downIsGood),
-    sparkline: flag(raw.sparkline),
   });
 }
 
