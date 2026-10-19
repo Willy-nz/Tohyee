@@ -62,6 +62,8 @@ describeWithDatabase("analytics database sources (PostgreSQL)", () => {
     data: (await response.json()) as Record<string, any>,
   });
   const port = Number(new URL(testDatabaseUrl || "postgresql://x@localhost:5432/x").port || 5432);
+  // The local server may or may not use TLS (CI's PostgreSQL image doesn't); encrypt when it does.
+  let serverSsl = false;
   const details = { engine: "postgres", host: "localhost", port, database: shopDatabase, username: reader, encryption: "require" };
 
   async function asSuperuser(database: string, sql: string) {
@@ -78,6 +80,11 @@ describeWithDatabase("analytics database sources (PostgreSQL)", () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-analytics-db-it-"));
     process.env.TOHYEE_ANALYTICS_DIR = path.join(root, "data");
     process.env.TOHYEE_SECRET_KEY = "analytics-database-test-secret-key-0123456789";
+    const probe = new pg.Client({ connectionString: testDatabaseUrl });
+    await probe.connect();
+    serverSsl = (await probe.query<{ ssl: string }>("show ssl")).rows[0].ssl === "on";
+    await probe.end();
+    details.encryption = serverSsl ? "require" : "off";
     // A made-up shop database, and a user that can only read it.
     await asSuperuser("postgres", `create database "${shopDatabase}"`);
     await asSuperuser("postgres", `create role "${reader}" login password '${readerPassword}'`);
@@ -162,7 +169,7 @@ describeWithDatabase("analytics database sources (PostgreSQL)", () => {
     expect(missing.status).toBe(400);
     // PostgreSQL checks the password before the database, so either answer is a plain one.
     expect(missing.data.error).toMatch(/no database called|wasn't accepted/);
-    // The local server's certificate is its own, so checking it fails with advice.
+    // The local server's certificate is its own (or it has none), so checking it fails with advice.
     const verify = await body(
       await testRoute.POST(
         apiRequest("/api/analytics/connections/test", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, ...details, encryption: "verify", password: readerPassword } }),
@@ -170,7 +177,7 @@ describeWithDatabase("analytics database sources (PostgreSQL)", () => {
       ),
     );
     expect(verify.status).toBe(400);
-    expect(verify.data.error).toMatch(/certificate couldn't be checked/);
+    expect(verify.data.error).toMatch(serverSsl ? /certificate couldn't be checked/ : /doesn't use encryption/);
     const nothing = await body(
       await testRoute.POST(
         apiRequest("/api/analytics/connections/test", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, ...details, port: 1, password: readerPassword } }),
