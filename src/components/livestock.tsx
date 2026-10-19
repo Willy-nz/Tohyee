@@ -696,7 +696,7 @@ function ValuationView({ organisationId, yearEnd }: { organisationId: string; ye
   const [reason, setReason] = useState("");
   if (preview.error) return <Notice tone="error">{preview.error}</Notice>;
   if (!preview.data) return <p className={ui.muted}>Loading…</p>;
-  const { workings, journal, problems, approved, revaluationTarget } = preview.data.valuation;
+  const { workings, journal, problems, notices, approved, revaluationTarget } = preview.data.valuation;
   const totals = workings.totals;
 
   async function approve() {
@@ -749,11 +749,15 @@ function ValuationView({ organisationId, yearEnd }: { organisationId: string; ye
           </ul>
         </Notice>
       ) : null}
+      {notices.map((notice) => (
+        <Notice key={notice} tone="info">{notice}</Notice>
+      ))}
       <div className={ui.statRow}>
         <Stat label="Opening value" value={<Money value={totals.openingValue} />} />
         <Stat label="Closing value" value={<Money value={totals.closingValue} />} />
         <Stat label="Taxable livestock profit" value={<Money value={totals.taxableProfit} />} />
         <Stat label="Herd scheme revaluation (non-taxable)" value={<Money value={totals.revaluation} />} />
+        {workings.current && workings.current.classes.length > 0 ? <Stat label="Of the closing value, current (held for sale)" value={<Money value={workings.current.closingValue} />} /> : null}
       </div>
       <Card title="Livestock trading statement" description={`${formatDate(workings.yearStart)} to ${formatDate(workings.yearEnd)}, the ${workings.incomeYear - 1}-${String(workings.incomeYear).slice(2)} income year.`}>
         <div className={ui.tableWrap}>
@@ -902,7 +906,7 @@ function ValuationView({ organisationId, yearEnd }: { organisationId: string; ye
 
       <Card
         title="Journal"
-        description={`Posted at ${formatDate(yearEnd)} when approved. The herd scheme revaluation goes to ${revaluationTarget === "reserve" ? "an equity reserve" : "profit and loss, as its own non-taxable line"} (Livestock settings).`}
+        description={`Posted at ${formatDate(yearEnd)} when approved. The herd scheme revaluation goes to ${revaluationTarget === "reserve" ? "an equity reserve" : "profit and loss, as its own non-taxable line"} (Livestock settings). Classes held for sale are moved to the current asset account.`}
       >
         {journal.length === 0 ? (
           <p className={ui.muted}>Nothing to post.</p>
@@ -1021,13 +1025,31 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
       </Card>
       {current.enabled ? (
         <>
-          <Card title="Herd scheme revaluation" description="Where the non-taxable revaluation of opening stock goes (LV12). A change applies to the next valuation approved; approved years aren't re-posted.">
+          <Card
+            title="Reporting basis"
+            description="The basis of the farm's financial statements (LV28). Special purpose (tax basis) statements follow the farm's own stated policy. General purpose statements (NZ IFRS or PBE Standards) put changes in livestock values through profit or loss, and measure livestock at fair value less costs to sell, which Tohyee doesn't work out: the tax values need your accountant's adjustment."
+          >
+            <div className={ui.choiceList} role="radiogroup" aria-label="Reporting basis">
+              {(["special_purpose", "general_purpose"] as const).map((basis) => (
+                <label key={basis}>
+                  <input
+                    type="radio"
+                    disabled={!isAdmin}
+                    checked={current.reportingBasis === basis}
+                    onChange={() => void patch(basis === "general_purpose" ? { reportingBasis: basis, revaluationTarget: "profit_and_loss" } : { reportingBasis: basis }, "Saved.")}
+                  />{" "}
+                  {basis === "special_purpose" ? "Special purpose (tax basis)" : "General purpose (NZ IFRS or PBE Standards)"}
+                </label>
+              ))}
+            </div>
+          </Card>
+          <Card title="Herd scheme revaluation" description="Where the non-taxable revaluation of opening stock goes (LV12). The draft financial statements' livestock note states the choice as the farm's policy. Under general purpose reporting it's always profit and loss. A change applies to the next valuation approved; approved years aren't re-posted.">
             <div className={ui.choiceList} role="radiogroup" aria-label="Herd scheme revaluation">
               {(["profit_and_loss", "reserve"] as const).map((target) => (
                 <label key={target}>
                   <input
                     type="radio"
-                    disabled={!isAdmin}
+                    disabled={!isAdmin || (target === "reserve" && current.reportingBasis === "general_purpose")}
                     checked={current.revaluationTarget === target}
                     onChange={() => void patch({ revaluationTarget: target }, "Saved.")}
                   />{" "}
@@ -1039,6 +1061,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
               {(
                 [
                   ["asset", "assetAccount", "Livestock on hand"],
+                  ["currentAsset", "currentAssetAccount", "Livestock on hand (current, held for sale)"],
                   ["valueChange", "valueChangeAccount", "Change in value"],
                   ["revaluation", "revaluationAccount", "Herd scheme revaluation (profit and loss)"],
                   ["reserve", "reserveAccount", "Revaluation reserve (equity)"],
@@ -1056,6 +1079,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
               ))}
             </div>
           </Card>
+          <ClassReportingCard organisationId={organisationId} settings={current} canEdit={isAdmin} onSaved={settings.reload} />
           <OpeningsCard organisationId={organisationId} canEdit={isAdmin} />
           <ElectionsCard organisationId={organisationId} canEdit={isAdmin} />
           <RatesCard organisationId={organisationId} canEdit={isAdmin} />
@@ -1064,6 +1088,43 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
         </>
       ) : null}
     </>
+  );
+}
+
+/** Current or non-current, per class (LV27, decision 566). */
+function ClassReportingCard({ organisationId, settings, canEdit, onSaved }: { organisationId: string; settings: LivestockSettings; canEdit: boolean; onSaved: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [kind, setKind] = useState<LivestockKind>(LIVESTOCK_KINDS[0]);
+  async function toggle(classCode: string, isCurrent: boolean) {
+    setError(null);
+    try {
+      await api("/api/livestock/class-reporting", { method: "PUT", body: { organisationId, lines: [{ kind, classCode, current: isCurrent }] } });
+      onSaved();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  return (
+    <Card
+      title="Current or non-current"
+      description="Stock held for sale in the normal operating cycle is a current asset; a breeding or milking herd kept is non-current (NZ IAS 1 para 66). Choose for each class. The next valuation approved moves the current classes' closing value to the current account; approved years aren't re-posted."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Field label="Kind">
+        <select value={kind} onChange={(event) => setKind(event.target.value as LivestockKind)}>
+          {LIVESTOCK_KINDS.map((entry) => <option key={entry} value={entry}>{KIND_NAMES[entry]}</option>)}
+        </select>
+      </Field>
+      <p>Tick the classes held for sale (current):</p>
+      <div className={ui.choiceList}>
+        {classesOf(kind).map((entry) => (
+          <label key={entry.code}>
+            <input type="checkbox" disabled={!canEdit} checked={settings.currentClasses.includes(`${kind}.${entry.code}`)} onChange={(event) => void toggle(entry.code, event.target.checked)} />{" "}
+            {entry.name}
+          </label>
+        ))}
+      </div>
+    </Card>
   );
 }
 

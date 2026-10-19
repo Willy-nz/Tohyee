@@ -9,7 +9,7 @@ import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { dec, isZero, parseDecimalInput } from "@/lib/money/decimal";
 import { createAccount } from "@/lib/accounts/service";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
-import { optionalId, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
+import { asRecord, optionalId, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 import { classKey, className, findClass, KIND_NAMES, LIVESTOCK_CLASSES, LIVESTOCK_KINDS, type LivestockKind } from "./classes";
 import { type AgeingStep, ageingSteps, type HerdMovement, lastDate, walkHerd } from "./herd";
 
@@ -44,14 +44,27 @@ export type RationsFor = (typeof RATIONS_FOR)[number];
 
 export type LivestockAccount = { code: string; name: string } | null;
 
+export const REPORTING_BASES = ["special_purpose", "general_purpose"] as const;
+export type ReportingBasis = (typeof REPORTING_BASES)[number];
+
 export type LivestockSettings = {
   enabled: boolean;
   firstYearStart: string | null;
   financialYearEndMonth: number;
-  /** Where the herd scheme revaluation goes (LV12, decision 503): profit and loss, or an equity reserve. */
+  /** Where the herd scheme revaluation goes (LV12, decision 503): profit and loss, or an equity reserve (special purpose only, LV28). */
   revaluationTarget: "profit_and_loss" | "reserve";
+  /**
+   * The financial statements' basis (LV28, decision 567): special purpose (tax basis, the
+   * farm's own stated policy) or general purpose (NZ IFRS or PBE Standards: changes in
+   * value through profit or loss only).
+   */
+  reportingBasis: ReportingBasis;
+  /** Classes held for sale in the normal operating cycle: current assets (LV27, decision 566), as "kind.class". */
+  currentClasses: string[];
   accounts: {
     asset: LivestockAccount;
+    /** Livestock on hand for the classes that are current (LV27). */
+    currentAsset: LivestockAccount;
     valueChange: LivestockAccount;
     revaluation: LivestockAccount;
     reserve: LivestockAccount;
@@ -64,6 +77,7 @@ export type LivestockSettings = {
 /** The accounts LV4 and LV12 post to, made when livestock is first turned on unless the code is already used. */
 const DEFAULT_ACCOUNTS = {
   asset: { column: "asset_account_id", code: "1500", name: "Livestock on hand", type: "non_current_asset", accountClass: "asset" },
+  currentAsset: { column: "current_asset_account_id", code: "1490", name: "Livestock on hand (current)", type: "current_asset", accountClass: "asset" },
   valueChange: { column: "value_change_account_id", code: "5210", name: "Livestock: change in value", type: "direct_costs", accountClass: "expense" },
   revaluation: { column: "revaluation_account_id", code: "7060", name: "Herd scheme revaluation (non-taxable)", type: "other_income", accountClass: "revenue" },
   reserve: { column: "reserve_account_id", code: "3300", name: "Herd scheme revaluation reserve", type: "equity", accountClass: "equity" },
@@ -73,6 +87,7 @@ const DEFAULT_ACCOUNTS = {
 type AccountRole = keyof typeof DEFAULT_ACCOUNTS;
 const ROLE_NAMES: Record<AccountRole, string> = {
   asset: "livestock on hand",
+  currentAsset: "livestock on hand (current)",
   valueChange: "change in value",
   revaluation: "herd scheme revaluation",
   reserve: "revaluation reserve",
@@ -127,7 +142,10 @@ export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings
       enabled: boolean;
       first_year_start: string | null;
       revaluation_target: "profit_and_loss" | "reserve";
+      reporting_basis: ReportingBasis;
       asset_code: string | null;
+      current_code: string | null;
+      current_name: string | null;
       asset_name: string | null;
       value_change_code: string | null;
       value_change_name: string | null;
@@ -140,12 +158,13 @@ export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings
       drawings_code: string | null;
       drawings_name: string | null;
     }>(
-      `select s.enabled, s.first_year_start::text, s.revaluation_target,
-              a.code as asset_code, a.name as asset_name, v.code as value_change_code, v.name as value_change_name,
+      `select s.enabled, s.first_year_start::text, s.revaluation_target, s.reporting_basis,
+              a.code as asset_code, a.name as asset_name, c.code as current_code, c.name as current_name, v.code as value_change_code, v.name as value_change_name,
               r.code as revaluation_code, r.name as revaluation_name, e.code as reserve_code, e.name as reserve_name,
               ra.code as rations_code, ra.name as rations_name, d.code as drawings_code, d.name as drawings_name
          from livestock_settings s
          left join accounts a on a.id = s.asset_account_id
+         left join accounts c on c.id = s.current_asset_account_id
          left join accounts v on v.id = s.value_change_account_id
          left join accounts r on r.id = s.revaluation_account_id
          left join accounts e on e.id = s.reserve_account_id
@@ -156,13 +175,17 @@ export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings
   ).rows[0];
   const organisation = await getOrganisationSettings(tx);
   const account = (code: string | null | undefined, name: string | null | undefined) => (code && name ? { code, name } : null);
+  const current = await tx.query<{ kind: string; class_code: string }>("select kind, class_code from livestock_class_reporting where is_current order by kind, class_code");
   return {
     enabled: row?.enabled ?? false,
     firstYearStart: row?.first_year_start ?? null,
     financialYearEndMonth: organisation.financialYearEndMonth,
     revaluationTarget: row?.revaluation_target ?? "profit_and_loss",
+    reportingBasis: row?.reporting_basis ?? "special_purpose",
+    currentClasses: current.rows.map((entry) => classKey(entry.kind, entry.class_code)),
     accounts: {
       asset: account(row?.asset_code, row?.asset_name),
+      currentAsset: account(row?.current_code, row?.current_name),
       valueChange: account(row?.value_change_code, row?.value_change_name),
       revaluation: account(row?.revaluation_code, row?.revaluation_name),
       reserve: account(row?.reserve_code, row?.reserve_name),
@@ -177,8 +200,8 @@ export async function getLivestockSettings(tx: OrgTx): Promise<LivestockSettings
  * already used for a different kind of account is left for an admin to
  * choose instead.
  */
-async function ensureAccounts(tx: OrgTx): Promise<void> {
-  for (const spec of Object.values(DEFAULT_ACCOUNTS)) {
+async function ensureAccounts(tx: OrgTx, roles: readonly AccountRole[] = ["asset", "valueChange", "revaluation", "reserve", "rationsIncome", "drawings"]): Promise<void> {
+  for (const spec of roles.map((role) => DEFAULT_ACCOUNTS[role])) {
     const set = await tx.query<{ id: string | null }>(`select ${spec.column}::text as id from livestock_settings where id = true`);
     if (set.rows[0]?.id) continue;
     const existing = await tx.query<{ id: string; account_type: string }>("select id::text, account_type from accounts where lower(code) = lower($1)", [spec.code]);
@@ -195,8 +218,8 @@ async function ensureAccounts(tx: OrgTx): Promise<void> {
 async function chooseAccount(tx: OrgTx, role: AccountRole, input: unknown): Promise<void> {
   const spec = DEFAULT_ACCOUNTS[role];
   const code = requireString(input, `The ${ROLE_NAMES[role]} account`, { maxLength: 20 });
-  const row = await tx.query<{ id: string; account_class: string; is_active: boolean; currency_code: string | null; system_key: string | null }>(
-    "select id::text, account_class, is_active, currency_code, system_key from accounts where lower(code) = lower($1)",
+  const row = await tx.query<{ id: string; account_class: string; account_type: string; is_active: boolean; currency_code: string | null; system_key: string | null }>(
+    "select id::text, account_class, account_type, is_active, currency_code, system_key from accounts where lower(code) = lower($1)",
     [code],
   );
   const account = row.rows[0];
@@ -207,6 +230,8 @@ async function chooseAccount(tx: OrgTx, role: AccountRole, input: unknown): Prom
   if (account.account_class !== spec.accountClass) {
     throw new ValidationError(`Account ${code} has to be ${spec.accountClass === "expense" ? "an expense" : spec.accountClass === "asset" ? "an asset" : spec.accountClass === "revenue" ? "an income" : "an equity"} account.`);
   }
+  if (role === "currentAsset" && account.account_type !== "current_asset") throw new ValidationError(`Account ${code} has to be a current asset account.`);
+  if (role === "asset" && account.account_type === "current_asset") throw new ValidationError(`Account ${code} is a current asset account; livestock kept is non-current (LV27).`);
   await tx.query(`update livestock_settings set ${spec.column} = $1 where id = true`, [account.id]);
 }
 
@@ -236,7 +261,9 @@ export async function updateLivestockSettings(
     enabled?: unknown;
     firstYearStart?: unknown;
     revaluationTarget?: unknown;
+    reportingBasis?: unknown;
     assetAccount?: unknown;
+    currentAssetAccount?: unknown;
     valueChangeAccount?: unknown;
     revaluationAccount?: unknown;
     reserveAccount?: unknown;
@@ -264,14 +291,22 @@ export async function updateLivestockSettings(
   if (enabled && !firstYearStart) firstYearStart = financialYearStart(todayIsoDate(), organisation.financialYearEndMonth);
   const revaluationTarget =
     input.revaluationTarget === undefined ? current.revaluationTarget : requireOneOf(input.revaluationTarget, "revaluationTarget", ["profit_and_loss", "reserve"] as const);
-  // A new revaluation target applies from the next valuation approved (LV12); approved years are never re-posted.
+  const reportingBasis = input.reportingBasis === undefined ? current.reportingBasis : requireOneOf(input.reportingBasis, "reportingBasis", REPORTING_BASES);
+  // LV28: under general purpose reporting changes in value go through profit or loss (NZ IAS 41 para 26).
+  if (reportingBasis === "general_purpose" && revaluationTarget === "reserve") {
+    throw new ValidationError(
+      "Under general purpose reporting (NZ IFRS or PBE Standards) changes in livestock values go through profit or loss (NZ IAS 41 para 26), so the herd scheme revaluation can't go to a reserve. Choose profit and loss.",
+    );
+  }
+  // A new revaluation target or basis applies from the next valuation approved (LV12); approved years are never re-posted.
   await tx.query(
-    "update livestock_settings set enabled = $1, first_year_start = $2, revaluation_target = $3, updated_by_email = $4, updated_at = now() where id = true",
-    [enabled, firstYearStart, revaluationTarget, tx.actor.email],
+    "update livestock_settings set enabled = $1, first_year_start = $2, revaluation_target = $3, reporting_basis = $4, updated_by_email = $5, updated_at = now() where id = true",
+    [enabled, firstYearStart, revaluationTarget, reportingBasis, tx.actor.email],
   );
   if (enabled) await ensureAccounts(tx);
   const choices: Array<[AccountRole, unknown]> = [
     ["asset", input.assetAccount],
+    ["currentAsset", input.currentAssetAccount],
     ["valueChange", input.valueChangeAccount],
     ["revaluation", input.revaluationAccount],
     ["reserve", input.reserveAccount],
@@ -284,8 +319,39 @@ export async function updateLivestockSettings(
     eventType: "livestock.settings_updated",
     entityType: "livestock_settings",
     entityId: "1",
-    details: { enabled, firstYearStart, revaluationTarget, accounts: updated.accounts },
+    details: { enabled, firstYearStart, revaluationTarget, reportingBasis, accounts: updated.accounts },
   });
+  return updated;
+}
+
+/**
+ * Which classes are current assets (LV27, decision 566): held for sale in
+ * the normal operating cycle (NZ IAS 1 para 66); the rest, such as a
+ * breeding or milking herd kept, are non-current. Applies from the next
+ * valuation approved, which moves the current classes' closing value to
+ * the current account; approved years aren't re-posted. The current
+ * account (1490) is made when a class is first made current. Admins.
+ */
+export async function setClassReporting(tx: OrgTx, input: { lines: unknown }): Promise<LivestockSettings> {
+  await requireLivestock(tx);
+  const lines = requireArray(input.lines, "lines", 200).map((raw) => {
+    const line = asRecord(raw, "A class");
+    const kind = requireString(line.kind, "kind", { maxLength: 40 });
+    const classCode = requireString(line.classCode, "classCode", { maxLength: 60 });
+    if (!findClass(kind, classCode)) throw new ValidationError(`There's no livestock class ${kind} ${classCode}.`);
+    if (typeof line.current !== "boolean") throw new ValidationError("current must be true or false.");
+    return { kind, classCode, current: line.current };
+  });
+  for (const line of lines) {
+    await tx.query(
+      `insert into livestock_class_reporting (kind, class_code, is_current, updated_by_email) values ($1, $2, $3, $4)
+       on conflict (kind, class_code) do update set is_current = excluded.is_current, updated_by_email = excluded.updated_by_email, updated_at = now()`,
+      [line.kind, line.classCode, line.current, tx.actor.email],
+    );
+  }
+  if (lines.some((line) => line.current)) await ensureAccounts(tx, ["currentAsset"]);
+  const updated = await getLivestockSettings(tx);
+  await writeAuditEvent(tx, { eventType: "livestock.class_reporting_updated", entityType: "livestock_settings", entityId: "1", details: { currentClasses: updated.currentClasses } });
   return updated;
 }
 

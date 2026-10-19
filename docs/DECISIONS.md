@@ -5244,3 +5244,26 @@ testing) and #154's code signing (later, Jess).
      with the checks using the figures with cents (ITX66, ITX68). IRD's
      electronic filing specification wasn't read. Not yet reviewed by an
      accountant.
+566. **Livestock is current or non-current per class** (19 October 2026).
+     #310 item 2: decision 503's answer "non-current asset" for all
+     livestock doesn't fit stock held for sale (NZ IAS 1 para 66). Jess:
+     "Choose per class". Each class is current or non-current, non-current
+     unless chosen (so nothing changes for farms that don't choose). The
+     next valuation approved moves the current classes' closing value
+     (with their high-priced animals) to a current asset account, 1490
+     Livestock on hand (current), made when a class is first made
+     current: the move is that value less what the account already holds.
+     Approved years are never re-posted; a replaced valuation's reversal
+     takes its move back. LV27, tenant migration 0161, not yet reviewed.
+567. **The herd scheme revaluation follows the reporting basis** (19 October
+     2026). #310 item 3; Jess: "Tie it to reporting basis". A livestock
+     setting says whether the farm's statements are special purpose (tax
+     basis, the default) or general purpose (NZ IFRS or PBE Standards).
+     Special purpose keeps LV12's choice, stated as the farm's policy in
+     the draft livestock note. General purpose allows only profit and
+     loss (NZ IAS 41 para 26; enforced in the database too), and the
+     valuation notes that its tax values aren't fair value less costs to
+     sell. Tohyee doesn't measure fair value; the accountant adjusts. It's
+     a livestock setting rather than the performance report's format
+     (decision 532), which covers special purpose and Tier 3 and 4 only.
+     LV28, not yet reviewed.
