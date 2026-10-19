@@ -5348,6 +5348,67 @@ testing) and #154's code signing (later, Jess).
      once; making a new one stops the old. It answers "not found" alike
      for a wrong, replaced or turned-off link, a member who has left, or
      Farming turned off, and is limited to 60 requests an hour. FC22, FC23.
+584. **A farm mailbox reads only the folders its member ticks** (20 October
+     2026). Issue #340: Jess's farm mail shares a mailbox with mail for her
+     mum's company directorships, which must not come into Tohyee at all.
+     Each farm mailbox reads only the Outlook folders or Gmail labels its
+     member ticks (Gmail's Inbox and their own labels are offered; Sent,
+     Spam, Trash, Drafts and categories aren't), each with its subfolders
+     if asked, and nothing until at least one is ticked: there's no "whole
+     mailbox" choice. The same read-only scopes list them (gmail.readonly,
+     Mail.Read). Folder names are private like the rest (decision 571):
+     only the member sees them, and audit events give counts only. Tohyee
+     keeps, for each email read, only the ids of the chosen folders it was
+     in. Outlook nests folders; Gmail nests labels by name ("Farm/LIC"), so
+     a label's subfolders are the labels named under it. Neither Xero nor
+     NetSuite reads farm mail, so the rules are Claude's, following #340.
+     FC25, FC26, FC29, tenant migration 0164, not yet reviewed; not tried
+     with a real mailbox.
+585. **What leaves the chosen folders leaves Tohyee** (20 October 2026).
+     Taking a folder off deletes, straight away, every item taken from
+     emails that were only in that folder, shared ones included. An email
+     moved out of the chosen folders (or in a folder deleted in Outlook or
+     Gmail) is dropped at the next check the same way; one moved in is read
+     at the next check if it's no older than the read-back date. A dropped
+     email's effects on other items are undone: a booking it moved or
+     cancelled is back as it was, and an email that only added to an item
+     it made is read again. Privacy comes first here, so an item the member
+     checked or shared goes too when its email leaves. Each check lists the
+     chosen folders' emails back to the read-back date (at most 2,000 per
+     folder, newest first); in a folder with more, only the newest 2,000
+     are read and only emails newer than those can be known to have left.
+     FC27, FC28, FC29.
+586. **Mailboxes connected before folders stop until folders are chosen**
+     (20 October 2026). Migration 0164 can't know which folder each earlier
+     email came from without asking the mailbox, and deleting a member's
+     items in a migration can't be undone, so it deletes nothing: those
+     mailboxes stop being read, the farm calendar says so with Choose
+     folders, and at the first check after folders are chosen anything not
+     in them is removed (FC28). Disconnecting still deletes it all at once.
+     FC30.
+587. **Farm organisations get a farm Home** (20 October 2026). Issue #341,
+     from Jess. With Farming on, Home is a farm dashboard built from records
+     Tohyee already keeps: the farm calendar (only as the person looking
+     sees it, decision 571), stock, pasture and feed, fertiliser, farm
+     working expenses per unit, a small Money card and the farm notebook.
+     Cards with nothing to show are hidden rather than showing zeros. The
+     business Home is a link away (Business overview). Xero has no farm
+     Home, so it follows Xero's Home for look and the issue for content.
+     FH1-FH6, FH8, not yet reviewed.
+588. **The farm Home is customised like Home** (20 October 2026). It's a
+     second page in the dashboard frame (decision 372): per-person cards,
+     order and Hide, saved in the same preferences, with Analytics tiles
+     pinned alongside (decision 374). It shows up to 10 cards, not Home's
+     4, so each page now has its own limit. Pin to page offers it only when
+     Farming is on. FH7.
+589. **What the farm Home leaves out** (20 October 2026). No card is made
+     up where Tohyee has no records: production and income (milk solids are
+     entered only yearly), FWE against budget, soil tests due (soil tests
+     have no "due" rule on purpose) and income tax due. There are no
+     different default cards per role: Tohyee's roles don't say who is farm
+     staff or the accountant, and guessing from bookkeeper or viewer would
+     be wrong as often as right. Everyone starts with the same cards and
+     uses Customise. No card shows payroll figures.
 576. **Analytics shows money and value names the way people read them**
      (20 October 2026). Issues #328-#330, found building a dashboard.
      Negative money in Analytics tables, key figures and pivot tables shows
@@ -5370,3 +5431,41 @@ testing) and #154's code signing (later, Jess).
      are used (a plain crop, not AI-restored): the car, shelter, sign and
      fence are left out of the app. Everything else about the watermark
      stays as before. See docs/AORAKI-RESTORATION.md.
+580. **Sub-headings in long menu columns, and an All settings page**
+     (20 October 2026). Issue #338 (Jess, 19 Oct 2026: the Accountant menu
+     was hard to scan). Any top-bar menu column of more than seven links
+     now has small grey sub-headings, one level below the column heading,
+     so each run is two to six links; each sub-heading is a labelled group
+     for screen readers. The Accountant menu follows the issue's grouping,
+     except Account sales, which sits under Livestock rather than Fixed
+     assets because it's the stock agent's livestock sale statement. Sales,
+     Purchases, Payroll, Farm and Reports got the same treatment where a
+     column was long. Settings moved to an **All settings** page of cards,
+     like Xero's Settings page, keeping the same role and module rules;
+     the menu keeps the five most used (Organisation settings, People and
+     roles, Email, Sales platforms, Import and export) and All settings,
+     and the search (Ctrl K) still finds every setting. Links for modules
+     that are off were already hidden (MOD1); a sub-heading left empty
+     disappears with them. R&D has no on/off switch yet, so it still
+     always shows; adding one is a separate change.
+581. **The CRM's top bar, grouped** (20 October 2026). Issue #342 (Jess:
+     "There is too much up the top in the CRM"). The 17 tabs become seven,
+     using the same dropdown menus as Accounting's top bar: Home, Contacts
+     (Companies, People), Sales (Leads, Pipeline, Forecasts), Tasks,
+     Dashboard, More (Marketing: Campaigns, Sequences, Follow-ups; Email:
+     Email and calendar, Email templates) and Settings (Team and data:
+     Teams, Duplicates; Customise: Record types, Stages; Integrations).
+     Every page keeps its address and the role it needed; a dropdown with
+     nothing left for someone's role isn't shown. The issue suggested
+     calling the Dashboard tab "Reports"; it stays "Dashboard" because
+     that's the page's title and its only report.
+582. **Shopify from the CRM** (20 October 2026), also #342. CRM › Settings ›
+     Integrations › "Sales platforms (Shopify)" opens the existing Settings
+     › Sales platforms page, which is not copied. It shows while Accounting
+     is on, because Shopify's orders post there and that page is an
+     Accounting page, and never to sales reps and managers (decision 491).
+     CRM Home ends with a short card from the same connections: each
+     connected or paused store with its last sync and last error, or, for
+     an admin with no store connected, "Connect Shopify". Non-admins with
+     no store see nothing, because only admins can connect. The card says
+     the connection hasn't been tried with a real Shopify store yet.
