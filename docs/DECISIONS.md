@@ -3284,13 +3284,16 @@ think is best").
      with that contact (from the aged reports' figures at the date) are
      eliminated from accounts receivable and payable. Marks with an
      organisation outside the group are ignored.
-441. **Eliminations never change profit or net assets**: each eliminated
-     amount is taken off its account, and what the two sides don't agree on
-     (per pair of organisations, intercompany accounts and what's owed each
-     compared on their own) goes back on an "Intercompany differences (check
-     these)" line (in the profit and loss; in the balance sheet as an asset
-     when a debit, a liability when a credit) with a notice naming the
-     amounts (CO9, question 1).
+441. **Automatic eliminations never change profit or net assets**: each
+     eliminated amount is taken off its account, and what the two sides
+     don't agree on (per pair of organisations, intercompany accounts and
+     what's owed each compared on their own) goes back on an "Intercompany
+     differences (check these)" line (in the profit and loss; in the balance
+     sheet as an asset when a debit, a liability when a credit) with a
+     notice naming the amounts (CO9, question 1). This is only the
+     automatic matching: an elimination adjustment (decision 443) can and
+     sometimes must change them, such as unrealised profit in stock (CO12,
+     decision 563). Corrected in #310.
 442. **Earnings follow the group's year** (the parent's year end): current
      year earnings are the translated profit since the group's year start,
      retained earnings (previous years) everything before, whatever each
@@ -5192,3 +5195,12 @@ testing) and #154's code signing (later, Jess).
      them. An OpenAPI 3.1 contract, a guide (docs/FARM-APPS.md) and a
      one-file soil sampling app. New: soil samples taken in the field
      (FA4). Photos aren't taken yet. FA1-FA8, not yet reviewed.
+563. **Unrealised profit is taken out by an adjustment** (19 October 2026).
+     #310 pointed out that decision 441 read as if consolidation never
+     changes profit, which isn't right when one group company sells to
+     another at a profit and the goods (or an asset) are still in the group.
+     Jess: "Fix wording and support it". Decision 441 now says it's only the
+     automatic matching. Tohyee doesn't work out unrealised profit itself
+     (it would need to know what's still on hand and its cost); the
+     accountant types an elimination adjustment, which reduces consolidated
+     profit and the asset (CO12, not yet reviewed).
