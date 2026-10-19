@@ -8,6 +8,7 @@ import { SimilarRecords } from "@/components/crm-similar";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
+import { SalesPlatformsSummary } from "@/components/sales-platforms";
 import {
   CustomFieldInputs,
   CustomValueCell,
@@ -1249,6 +1250,11 @@ export function TasksPage({ organisationId }: { organisationId: string }) {
 export function CrmHomePage({ organisationId }: { organisationId: string }) {
   const home = useApiData<CrmHome>("/api/crm/home", { organisationId });
   const baseCurrency = useBaseCurrency();
+  const modules = useModules(organisationId);
+  const { current } = useWorkspace();
+  // Shopify is an Accounting setting: shown while Accounting is on, never to sales roles (who have the CRM only, decision 491).
+  const salesRole = current?.role === "sales_rep" || current?.role === "sales_manager";
+  const showIntegrations = !salesRole && modules !== null && modules.accounting !== false;
   if (home.error) return <Notice tone="error">{home.error}</Notice>;
   if (!home.data) return <p className={ui.muted}>Loading…</p>;
   const { today, opportunities, totals, tasks, activities } = home.data;
@@ -1361,6 +1367,8 @@ export function CrmHomePage({ organisationId }: { organisationId: string }) {
           })}
         </ol>
       </Card>
+
+      {showIntegrations ? <SalesPlatformsSummary organisationId={organisationId} /> : null}
     </>
   );
 }
