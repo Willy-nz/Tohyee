@@ -42,6 +42,21 @@ export async function authenticateAnyStage(request: Request): Promise<SessionSta
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
+ * Whether a read (GET) may also do the small side effects some reads have,
+ * such as making an invoice's payment link before it's printed (decision
+ * 568). A browser marks a request another site started (a link, a redirect)
+ * as "cross-site" or "same-site"; Tohyee's own pages send "same-origin", and
+ * a typed address or bookmark "none". Without the header (scripts, old
+ * browsers) it's allowed, as the read itself is. Writes are checked by
+ * assertSameOrigin.
+ */
+export function readMayChangeThings(request: Request): boolean {
+  if (!SAFE_METHODS.has(request.method.toUpperCase())) return true;
+  const fetchSite = request.headers.get("sec-fetch-site");
+  return !fetchSite || fetchSite === "same-origin" || fetchSite === "none";
+}
+
+/**
  * Blocks cross-site writes. Session cookies are SameSite=Lax already; this is
  * a second layer that rejects state-changing requests a browser marks as
  * coming from another site.

@@ -20,7 +20,9 @@ describe("security headers", () => {
 
   it.each(["/", "/sign-in", "/sales/invoices", "/crm/companies/42", "/apis", "/api"])("page %s may only be framed by Tohyee", async (pathname) => {
     // 'self', not 'none': the bills inbox shows a PDF in a same-origin iframe.
-    expect((await headersFor(pathname)).get("content-security-policy")).toBe("frame-ancestors 'self'; base-uri 'self'; object-src 'none'");
+    expect((await headersFor(pathname)).get("content-security-policy")).toBe(
+      "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; img-src 'self' data: blob: https://basemaps.linz.govt.nz",
+    );
   });
 
   it("leaves the CSP of /api/ responses to the route, so a stored file's sandbox isn't replaced", async () => {

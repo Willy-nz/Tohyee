@@ -1,4 +1,5 @@
 import { withOrganisation } from "@/lib/api/http";
+import { readMayChangeThings } from "@/lib/auth/guard";
 import { roleAtLeast } from "@/lib/auth/roles";
 import type { Actor } from "@/lib/db/org-transaction";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
@@ -12,6 +13,8 @@ import { refreshInvoicePaymentLink, tryEnsurePaymentLink } from "@/lib/payments/
  */
 export async function linkBeforeSending(request: Request, organisationId: unknown, kind: unknown, invoiceId: unknown): Promise<void> {
   if (kind !== "invoice" || invoiceId == null || invoiceId === "") return;
+  // Opened from another site (a link or redirect there): show what's already made, make nothing (decision 568).
+  if (!readMayChangeThings(request)) return;
   const found = await withOrganisation(request, organisationId, "viewer", async (_tx, { auth, membership }) => ({
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
