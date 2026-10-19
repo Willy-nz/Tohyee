@@ -1115,11 +1115,12 @@ function ClassReportingCard({ organisationId, settings, canEdit, onSaved }: { or
           {LIVESTOCK_KINDS.map((entry) => <option key={entry} value={entry}>{KIND_NAMES[entry]}</option>)}
         </select>
       </Field>
+      <p>Tick the classes held for sale (current):</p>
       <div className={ui.choiceList}>
         {classesOf(kind).map((entry) => (
           <label key={entry.code}>
             <input type="checkbox" disabled={!canEdit} checked={settings.currentClasses.includes(`${kind}.${entry.code}`)} onChange={(event) => void toggle(entry.code, event.target.checked)} />{" "}
-            {entry.name}: current (held for sale)
+            {entry.name}
           </label>
         ))}
       </div>
