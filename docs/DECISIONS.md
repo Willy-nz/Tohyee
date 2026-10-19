@@ -5370,3 +5370,24 @@ testing) and #154's code signing (later, Jess).
      that are off were already hidden (MOD1); a sub-heading left empty
      disappears with them. R&D has no on/off switch yet, so it still
      always shows; adding one is a separate change.
+581. **The CRM's top bar, grouped** (20 October 2026). Issue #342 (Jess:
+     "There is too much up the top in the CRM"). The 17 tabs become seven,
+     using the same dropdown menus as Accounting's top bar: Home, Contacts
+     (Companies, People), Sales (Leads, Pipeline, Forecasts), Tasks,
+     Dashboard, More (Marketing: Campaigns, Sequences, Follow-ups; Email:
+     Email and calendar, Email templates) and Settings (Team and data:
+     Teams, Duplicates; Customise: Record types, Stages; Integrations).
+     Every page keeps its address and the role it needed; a dropdown with
+     nothing left for someone's role isn't shown. The issue suggested
+     calling the Dashboard tab "Reports"; it stays "Dashboard" because
+     that's the page's title and its only report.
+582. **Shopify from the CRM** (20 October 2026), also #342. CRM › Settings ›
+     Integrations › "Sales platforms (Shopify)" opens the existing Settings
+     › Sales platforms page, which is not copied. It shows while Accounting
+     is on, because Shopify's orders post there and that page is an
+     Accounting page, and never to sales reps and managers (decision 491).
+     CRM Home ends with a short card from the same connections: each
+     connected or paused store with its last sync and last error, or, for
+     an admin with no store connected, "Connect Shopify". Non-admins with
+     no store see nothing, because only admins can connect. The card says
+     the connection hasn't been tried with a real Shopify store yet.
