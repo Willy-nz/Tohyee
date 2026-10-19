@@ -54,14 +54,16 @@ describe("analytics chart specs", () => {
       type: "pie",
       data: [{ name: "Auckland", value: 1234.5 }],
     });
-    expect(option.series[0].radius).toEqual(kind === "donut" ? ["45%", "70%"] : ["0%", "70%"]);
+    // A little smaller than the card when labels sit outside, so they fit.
+    expect(option.series[0].radius).toEqual(kind === "donut" ? ["40%", "62%"] : ["0%", "62%"]);
   });
 
   it("gives a compact chart tight margins and hides overlapping axis labels", () => {
     const spec: ChartSpec = { kind: "bar", category: "region", series: [{ field: "sales", label: "Sales" }], valueFormat: "number" };
     const rows = [{ region: "Otago", sales: "1" }];
     const full = toEChartsOption(spec, rows, theme) as { grid?: unknown; xAxis?: { axisLabel?: { hideOverlap?: boolean } } };
-    expect(full.grid).toBeUndefined();
+    // Every chart keeps its axis labels inside the card with small, even margins.
+    expect(full.grid).toMatchObject({ top: 16, left: 4, outerBoundsMode: "same", outerBoundsContain: "all" });
     expect(full.xAxis?.axisLabel?.hideOverlap).toBe(true);
     const compact = toEChartsOption({ ...spec, compact: true }, rows, theme) as { grid?: { top: number; bottom: number } };
     expect(compact.grid).toMatchObject({ top: 8, bottom: 4 });

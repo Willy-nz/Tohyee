@@ -258,7 +258,8 @@ export function makeNumberFormatter(
   if (compactNotation) {
     intl.notation = "compact";
     intl.minimumFractionDigits = 0;
-    intl.maximumFractionDigits = decimals ?? 1;
+    // On an axis, at least one decimal, so close steps (3.5K and 4K) don't both read "4K".
+    intl.maximumFractionDigits = options.axis ? Math.max(decimals ?? 1, 1) : decimals ?? 1;
   } else if (decimals !== undefined) {
     intl.minimumFractionDigits = decimals;
     intl.maximumFractionDigits = decimals;

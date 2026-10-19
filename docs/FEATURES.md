@@ -1891,7 +1891,8 @@ that something happened.
   columns, e.g. quantity x unit price), optional "and last year", filters,
   order and top N. Shown as columns, bars, line, area, columns and line,
   pie, donut, a key figure or a table (ECharts, from PR #94, with the
-  checked series colours `--chart-1` to `--chart-8`). A dashboard has a date
+  checked series colours `--chart-1` to `--chart-8`; every chart in Tohyee
+  shares one theme, `src/lib/charts/theme.ts`, decisions 599-601). A dashboard has a date
   range and slicers (tick boxes) that apply to every tile. Totals stay
   exact (DuckDB decimals, shown from their text); column and value names
   are checked against the table and typed values go in as parameters.
