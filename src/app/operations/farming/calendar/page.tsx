@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function FarmCalendarPage() {
   return (
     <Page>
-      <PageHeader title="Farm calendar" description="Visits, deliveries, contractors and deadlines read from your own email. Only you see your calendar." />
+      <PageHeader title="Farm calendar" description="Visits, deliveries, contractors and deadlines read from your own email, items you add, and what others share with the farm team." />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <FarmCalendarHome key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

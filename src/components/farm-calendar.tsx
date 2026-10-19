@@ -8,8 +8,8 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useConfirm } from "@/components/confirm-dialog";
 import { api, errorMessage } from "@/lib/client/api";
-import type { CalendarItem, FarmMailbox } from "@/lib/farming/calendar";
-import { FARM_MAIL_KIND_LABELS, FARM_MAIL_KINDS, type FarmMailKind } from "@/lib/farming/mail-rules";
+import type { CalendarLinkStatus, FarmMailbox } from "@/lib/farming/calendar";
+import { CALENDAR_KIND_LABELS, CALENDAR_KINDS, type CalendarItem, type CalendarKind, REPEAT_LABELS, REPEATS, type Repeat, teamView } from "@/lib/farming/calendar-shared";
 import type { Farm } from "@/lib/farming/paddocks";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import styles from "./farm-calendar.module.css";
@@ -17,7 +17,9 @@ import styles from "./farm-calendar.module.css";
 /**
  * The farm calendar from email (#319; FC1-FC16): Today, Week, Month and
  * Needs checking, filtered by farm and sender, from the member's own
- * connected mailboxes. Everything here is the signed-in member's own.
+ * connected mailboxes; with items people add, repeats, items shared with
+ * the farm team and a calendar link (FC17-FC23). Everything is the
+ * signed-in member's own, except what others chose to share.
  */
 
 const VIEWS = ["today", "week", "month", "check"] as const;
@@ -58,13 +60,26 @@ function range(view: View, anchor: string): { from: string; to: string; label: s
   return { from: mondayOf(monthStart(anchor)), to: addDays(mondayOf(monthEnd(anchor)), 6), label: monthLabel(anchor) };
 }
 
+const repeatText = (item: CalendarItem) => (item.repeat ? `Repeats ${REPEAT_LABELS[item.repeat]}${item.repeatUntil ? ` until ${formatDate(item.repeatUntil)}` : ""}` : null);
+
 function badges(item: CalendarItem) {
   if (item.state === "moved") return <Badge tone="neutral">{item.stateNote ?? "Moved"}</Badge>;
   if (item.state === "cancelled") return <Badge tone="red">Cancelled</Badge>;
+  if (!item.mine) return <Badge tone="blue">Shared by {item.sharedByName}</Badge>;
   return (
     <>
-      {item.needsChecking ? <Badge tone="amber">Needs checking</Badge> : item.checked ? <Badge tone="green">Checked by you</Badge> : <Badge tone="neutral">From email</Badge>}
+      {item.needsChecking ? (
+        <Badge tone="amber">Needs checking</Badge>
+      ) : item.source === "own" ? (
+        <Badge tone="neutral">Added by you</Badge>
+      ) : item.checked ? (
+        <Badge tone="green">Checked by you</Badge>
+      ) : (
+        <Badge tone="neutral">From email</Badge>
+      )}
+      {item.shared ? <Badge tone="blue">Shared with the team</Badge> : null}
       {item.tentative && !item.checked ? <Badge tone="blue">Tentative</Badge> : null}
+      {item.repeat ? <span>{repeatText(item)}</span> : null}
       {!item.startTime && item.date ? <span>No time given</span> : null}
     </>
   );
@@ -93,7 +108,7 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
   const [farmId, setFarmId] = useState("");
   const [sender, setSender] = useState("");
   const [chosen, setChosen] = useState<CalendarItem | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [open, setOpen] = useState<"mailboxes" | "add" | "link" | null>(null);
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
   const mailboxes = useApiData<{ mailboxes: FarmMailbox[] }>("/api/farming/mail", { organisationId });
   const shown = range(view === "check" ? "week" : view, anchor);
@@ -116,9 +131,9 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
   const active = view === "check" ? toCheck : calendar;
   const items = active.data?.items ?? null;
   // The selection stays while its item still exists, including while the list reloads after a change.
-  const selected = chosen ? (items ? (items.find((item) => item.id === chosen.id) ?? null) : chosen) : null;
-  const selectedId = selected?.id ?? null;
-  const setSelectedId = (id: string | null) => setChosen(id ? (items?.find((item) => item.id === id) ?? null) : null);
+  const selected = chosen ? (items ? (items.find((item) => item.key === chosen.key) ?? items.find((item) => item.id === chosen.id) ?? null) : chosen) : null;
+  const selectedId = selected?.key ?? null;
+  const setSelectedId = (key: string | null) => setChosen(key ? (items?.find((item) => item.key === key) ?? null) : null);
   const problems = (mailboxes.data?.mailboxes ?? []).filter((mailbox) => mailbox.status === "paused" || mailbox.lastError);
   const noMailbox = mailboxes.data !== null && mailboxes.data.mailboxes.length === 0;
   const step = (direction: 1 | -1) => {
@@ -154,11 +169,41 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
             </button>
           ))}
         </div>
-        <Button variant="secondary" size="small" aria-expanded={settingsOpen} aria-controls="farm-mailbox-settings" onClick={() => setSettingsOpen(!settingsOpen)}>
-          Mailbox settings
-        </Button>
+        <div className={ui.rowButtons}>
+          <Button size="small" aria-expanded={open === "add"} aria-controls="farm-calendar-add" onClick={() => setOpen(open === "add" ? null : "add")}>
+            Add an item
+          </Button>
+          <Button variant="secondary" size="small" aria-expanded={open === "link"} aria-controls="farm-calendar-link" onClick={() => setOpen(open === "link" ? null : "link")}>
+            Calendar link
+          </Button>
+          <Button variant="secondary" size="small" aria-expanded={open === "mailboxes"} aria-controls="farm-mailbox-settings" onClick={() => setOpen(open === "mailboxes" ? null : "mailboxes")}>
+            Mailbox settings
+          </Button>
+        </div>
       </div>
-      {settingsOpen || noMailbox ? (
+      {open === "add" ? (
+        <div id="farm-calendar-add">
+          <AddItem
+            organisationId={organisationId}
+            farms={activeFarms}
+            date={view === "today" ? anchor : todayInBrowser()}
+            onClose={() => setOpen(null)}
+            onAdded={(item) => {
+              setOpen(null);
+              if (item.date) setAnchor(item.date);
+              if (view === "check") setView("week");
+              setChosen(item);
+              reload();
+            }}
+          />
+        </div>
+      ) : null}
+      {open === "link" ? (
+        <div id="farm-calendar-link">
+          <CalendarLink organisationId={organisationId} onClose={() => setOpen(null)} />
+        </div>
+      ) : null}
+      {open === "mailboxes" || (noMailbox && open === null) ? (
         <div id="farm-mailbox-settings">
           <Mailboxes organisationId={organisationId} mailboxes={mailboxes.data?.mailboxes ?? null} error={mailboxes.error} farms={activeFarms} onChanged={reload} />
         </div>
@@ -186,7 +231,7 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
           </select>
         </Field>
       </div>
-      <p className={ui.muted}>Private to you: what&apos;s read from your email isn&apos;t shown to anyone else in the organisation.</p>
+      <p className={ui.muted}>Private to you: nobody else in the organisation sees what&apos;s read from your email or what you add, unless you share an item with the farm team.</p>
       <div className={`${styles.layout} ${selected ? styles.hasSelection : ""}`}>
         <div className={styles.schedule}>
           <LoadState result={active as Loaded<{ items: CalendarItem[] }>}>
@@ -203,7 +248,19 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
         </div>
         {selected ? (
           <aside className={styles.detail} aria-label="Selected item">
-            <ItemPanel key={selected.id} organisationId={organisationId} item={selected} farms={activeFarms} others={(calendar.data?.items ?? []).filter((other) => other.id !== selected.id && other.state === "open")} onClose={close} onChanged={reload} />
+            <ItemPanel
+              key={selected.key}
+              organisationId={organisationId}
+              item={selected}
+              farms={activeFarms}
+              others={(calendar.data?.items ?? []).filter((other, index, all) => other.mine && other.id !== selected.id && other.state === "open" && all.findIndex((entry) => entry.id === other.id) === index)}
+              onClose={close}
+              onChanged={reload}
+              onDeleted={() => {
+                setChosen(null);
+                reload();
+              }}
+            />
           </aside>
         ) : null}
       </div>
@@ -214,13 +271,13 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
 function ItemButton({ item, selected, onSelect }: { item: CalendarItem; selected: boolean; onSelect: (id: string) => void }) {
   const classes = [styles.item, styles[item.kind], selected ? styles.selected : "", item.state !== "open" ? styles.faded : "", item.state === "cancelled" ? styles.struck : ""].join(" ");
   return (
-    <button type="button" className={classes} onClick={() => onSelect(item.id)} aria-pressed={selected} data-item-id={item.id}>
+    <button type="button" className={classes} onClick={() => onSelect(item.key)} aria-pressed={selected} data-item-id={item.key}>
       <span className={styles.time}>{timeText(item)}</span>
       <span className={styles.title}>{item.title}</span>
       <span className={styles.meta}>
-        <span>{FARM_MAIL_KIND_LABELS[item.kind]}</span>
+        <span>{CALENDAR_KIND_LABELS[item.kind]}</span>
         {item.farmName ? <span>{item.farmName}</span> : null}
-        <span>Sender: {item.senderName ?? item.senderEmail}</span>
+        {item.senderEmail ? <span>Sender: {item.senderName ?? item.senderEmail}</span> : null}
         {badges(item)}
       </span>
     </button>
@@ -242,7 +299,7 @@ function Agenda({ from, to, items, selectedId, onSelect }: { from: string; to: s
             <h3 className={`${styles.dayHeading} ${day === today ? styles.today : ""}`}>{longDay(day)}{day === today ? " (today)" : ""}</h3>
             {dayItems.length ? (
               <ul className={styles.items}>
-                {dayItems.map((item) => <li key={item.id}><ItemButton item={item} selected={item.id === selectedId} onSelect={onSelect} /></li>)}
+                {dayItems.map((item) => <li key={item.key}><ItemButton item={item} selected={item.key === selectedId} onSelect={onSelect} /></li>)}
               </ul>
             ) : <p className={ui.muted}>Nothing on.</p>}
           </section>
@@ -281,12 +338,12 @@ function MonthGrid({ anchor, from, to, items, selectedId, onSelect }: { anchor: 
                     </div>
                     {dayItems.map((item) => (
                       <button
-                        key={item.id}
+                        key={item.key}
                         type="button"
-                        data-item-id={item.id}
-                        aria-pressed={item.id === selectedId}
-                        className={`${styles.chip} ${styles[item.kind]} ${item.state !== "open" ? styles.faded : ""} ${item.id === selectedId ? styles.selected : ""}`}
-                        onClick={() => onSelect(item.id)}
+                        data-item-id={item.key}
+                        aria-pressed={item.key === selectedId}
+                        className={`${styles.chip} ${styles[item.kind]} ${item.state !== "open" ? styles.faded : ""} ${item.key === selectedId ? styles.selected : ""}`}
+                        onClick={() => onSelect(item.key)}
                         title={`${item.title} (${timeText(item)})`}
                       >
                         {item.startTime ? `${time12(item.startTime)} ` : ""}{item.title}
@@ -311,8 +368,8 @@ function CheckList({ items, selectedId, onSelect }: { items: CalendarItem[]; sel
   return (
     <ul className={styles.items}>
       {items.map((item) => (
-        <li key={item.id}>
-          <ItemButton item={item} selected={item.id === selectedId} onSelect={onSelect} />
+        <li key={item.key}>
+          <ItemButton item={item} selected={item.key === selectedId} onSelect={onSelect} />
           <ul className={styles.reasons}>{item.checkReasons.length ? item.checkReasons.map((reason) => <li key={reason}>{reason}</li>) : <li>No exact date</li>}</ul>
         </li>
       ))}
@@ -320,96 +377,345 @@ function CheckList({ items, selectedId, onSelect }: { items: CalendarItem[]; sel
   );
 }
 
-function ItemPanel({ organisationId, item, farms, others, onClose, onChanged }: { organisationId: string; item: CalendarItem; farms: Farm[]; others: CalendarItem[]; onClose: () => void; onChanged: () => void }) {
-  const [date, setDate] = useState(item.date ?? "");
-  const [startTime, setStartTime] = useState(item.startTime ?? "");
-  const [endTime, setEndTime] = useState(item.endTime ?? "");
-  const [kind, setKind] = useState<FarmMailKind>(item.kind);
-  const [title, setTitle] = useState(item.title);
-  const [farmId, setFarmId] = useState(item.farmId ?? "");
+type ItemFields = { date: string; startTime: string; endTime: string; kind: CalendarKind; title: string; farmId: string; notes: string; repeat: Repeat | ""; repeatUntil: string };
+
+/** The fields people fill in for an item (FC14, FC17, FC18). */
+function ItemFieldset({ value, onChange, farms }: { value: ItemFields; onChange: (next: ItemFields) => void; farms: Farm[] }) {
+  const set = <K extends keyof ItemFields>(key: K, next: ItemFields[K]) => onChange({ ...value, [key]: next });
+  return (
+    <>
+      <div className={ui.grid2}>
+        <Field label="What"><input value={value.title} maxLength={200} required onChange={(event) => set("title", event.target.value)} /></Field>
+        <Field label={value.repeat ? "First date" : "Date"}><DateInput value={value.date} onChange={(event) => set("date", event.target.value)} /></Field>
+        <Field label="Start" hint="Optional"><input type="time" value={value.startTime} onChange={(event) => set("startTime", event.target.value)} /></Field>
+        <Field label="End" hint="Optional"><input type="time" value={value.endTime} onChange={(event) => set("endTime", event.target.value)} /></Field>
+        <Field label="Kind">
+          <select value={value.kind} onChange={(event) => set("kind", event.target.value as CalendarKind)}>
+            {CALENDAR_KINDS.map((entry) => <option key={entry} value={entry}>{CALENDAR_KIND_LABELS[entry]}</option>)}
+          </select>
+        </Field>
+        <Field label="Farm">
+          <select value={value.farmId} onChange={(event) => set("farmId", event.target.value)}>
+            <option value="">No farm</option>
+            {farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Repeats">
+          <select value={value.repeat} onChange={(event) => set("repeat", event.target.value as Repeat | "")}>
+            <option value="">Doesn&apos;t repeat</option>
+            {REPEATS.map((entry) => <option key={entry} value={entry}>{REPEAT_LABELS[entry][0].toUpperCase() + REPEAT_LABELS[entry].slice(1)}</option>)}
+          </select>
+        </Field>
+        {value.repeat ? (
+          <Field label="Until" hint={value.repeat === "monthly" ? "Optional. In shorter months it's the last day." : "Optional"}>
+            <DateInput value={value.repeatUntil} onChange={(event) => set("repeatUntil", event.target.value)} />
+          </Field>
+        ) : null}
+      </div>
+      <Field label="Notes" hint="Only you see these. They're never shared or put in the calendar link.">
+        <textarea rows={2} maxLength={2000} value={value.notes} onChange={(event) => set("notes", event.target.value)} />
+      </Field>
+    </>
+  );
+}
+
+const fieldsBody = (value: ItemFields) => ({
+  date: value.date,
+  startTime: value.startTime,
+  endTime: value.endTime,
+  kind: value.kind,
+  title: value.title,
+  farmId: value.farmId || null,
+  notes: value.notes,
+  repeat: value.repeat || null,
+  repeatUntil: value.repeat ? value.repeatUntil : null,
+});
+
+/** FC20: exactly what the farm team will see, before it's shared. */
+function TeamCard({ item }: { item: CalendarItem }) {
+  return (
+    <div className={styles.preview}>
+      <strong>{item.title}</strong>
+      <span>{CALENDAR_KIND_LABELS[item.kind]}{item.date ? `, ${longDay(item.date)}` : ""}, {timeText(item)}</span>
+      {item.farmName ? <span>{item.farmName}</span> : null}
+      {item.repeat ? <span>{repeatText(item)}</span> : null}
+      {item.tentative && !item.checked ? <span>Tentative</span> : null}
+      <span>{item.sharedByName ? `Shared by ${item.sharedByName}` : "Shared by you (they see your name)"}</span>
+    </div>
+  );
+}
+
+function ItemPanel({
+  organisationId,
+  item,
+  farms,
+  others,
+  onClose,
+  onChanged,
+  onDeleted,
+}: {
+  organisationId: string;
+  item: CalendarItem;
+  farms: Farm[];
+  others: CalendarItem[];
+  onClose: () => void;
+  onChanged: () => void;
+  onDeleted: () => void;
+}) {
+  const confirm = useConfirm();
+  const [fields, setFields] = useState<ItemFields>({
+    date: item.repeatFrom ?? item.date ?? "",
+    startTime: item.startTime ?? "",
+    endTime: item.endTime ?? "",
+    kind: item.kind,
+    title: item.title,
+    farmId: item.farmId ?? "",
+    notes: item.notes ?? "",
+    repeat: item.repeat ?? "",
+    repeatUntil: item.repeatUntil ?? "",
+  });
   const [replacesId, setReplacesId] = useState("");
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const editable = item.state === "open";
+  const editable = item.mine && item.state === "open";
   const panel = useRef<HTMLDivElement>(null);
   // Focus moves to the details when an item is chosen (finding 2); on a phone they replace the schedule.
   useEffect(() => {
     panel.current?.focus({ preventScroll: true });
     panel.current?.scrollIntoView({ block: "nearest" });
   }, []);
-  const patch = async (body: Record<string, unknown>) => {
+  const send = async (work: () => Promise<unknown>, after: () => void = onChanged) => {
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/farming/calendar/${item.id}`, { method: "PATCH", body: { organisationId, ...body } });
-      onChanged();
+      await work();
+      after();
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
   };
+  const patch = (body: Record<string, unknown>) => send(() => api(`/api/farming/calendar/${item.id}`, { method: "PATCH", body: { organisationId, ...body } }));
   const save = (event: FormEvent) => {
     event.preventDefault();
-    void patch({ date, startTime, endTime, kind, title, farmId: farmId || null });
+    void patch(fieldsBody(fields));
   };
+  const remove = async () => {
+    if (!(await confirm(`Delete "${item.title}"${item.repeat ? " and all its dates" : ""}?`, { confirmLabel: "Delete", danger: true }))) return;
+    void send(() => api(`/api/farming/calendar/${item.id}?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" }), onDeleted);
+  };
+  const description = `${CALENDAR_KIND_LABELS[item.kind]}${item.date ? `, ${longDay(item.date)}` : ", no date yet"}${item.startTime ? `, ${timeText(item)}` : ""}`;
   return (
     <div ref={panel} tabIndex={-1} className={styles.panelFocus} aria-label={`${item.title}, details`}>
-    <Button variant="secondary" size="small" className={styles.back} onClick={onClose}>‹ Back to the calendar</Button>
+      <Button variant="secondary" size="small" className={styles.back} onClick={onClose}>‹ Back to the calendar</Button>
+      <Card title={item.title} description={description} actions={<Button variant="secondary" size="small" onClick={onClose}>Close</Button>}>
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {!item.mine ? (
+          <>
+            <p>
+              Shared with the farm team by {item.sharedByName}.{item.farmName ? ` ${item.farmName}.` : ""} {item.repeat ? `${repeatText(item)}.` : ""}
+            </p>
+            <p className={ui.muted}>Only {item.sharedByName} can change it.</p>
+          </>
+        ) : null}
+        {item.mine && item.source === "email" ? (
+          <>
+            <p>
+              From {item.senderName ? `${item.senderName} (${item.senderEmail})` : item.senderEmail}
+              {item.sentAt ? `, ${formatDate(item.sentAt.slice(0, 10))}` : ""}
+              {item.subject ? `: "${item.subject}"` : ""}
+              {item.webLink ? <> · <a href={item.webLink} target="_blank" rel="noreferrer noopener">Open the email</a></> : null}
+            </p>
+            <blockquote className={styles.excerpt}>{item.excerpt}</blockquote>
+          </>
+        ) : null}
+        {item.mine && item.source === "own" ? <p className={ui.muted}>Added by you.</p> : null}
+        {item.checkReasons.length && item.needsChecking ? <ul className={styles.reasons}>{item.checkReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
+        {item.alsoSeen ? <p className={ui.muted}>Also in {item.alsoSeen} later email{item.alsoSeen === 1 ? "" : "s"}.</p> : null}
+        {editable ? (
+          <form onSubmit={save}>
+            {item.repeat ? <p className={ui.muted}>Changes here apply to every date it repeats on.</p> : null}
+            <ItemFieldset value={fields} onChange={setFields} farms={farms} />
+            <div className={ui.actions}>
+              <Button type="submit" disabled={busy}>{item.checked ? "Save" : "Save as checked"}</Button>
+              {item.repeat && item.date ? (
+                <Button variant="secondary" disabled={busy} onClick={() => void patch({ action: "skip", date: item.date })}>
+                  Skip {formatDate(item.date)} only
+                </Button>
+              ) : null}
+              {item.source === "email" ? (
+                <Button variant="secondary" disabled={busy} onClick={() => void patch({ action: "dismiss" })}>Not a farm arrangement</Button>
+              ) : (
+                <Button variant="secondary" disabled={busy} onClick={() => void remove()}>Delete</Button>
+              )}
+            </div>
+            <div className={styles.share}>
+              {item.shared ? (
+                <>
+                  <p><strong>Shared with the farm team.</strong> Everyone in the organisation sees what&apos;s below, and your changes straight away.</p>
+                  <TeamCard item={teamView(item, item.sharedByName)} />
+                  <Button variant="secondary" size="small" disabled={busy} onClick={() => void patch({ action: "unshare" })}>Stop sharing</Button>
+                </>
+              ) : previewing ? (
+                <>
+                  <p><strong>Everyone in the organisation will see this, and nothing more:</strong></p>
+                  <TeamCard item={teamView({ ...item, checked: true }, null)} />
+                  <p className={ui.muted}>Not the sender, subject, the email, its link or your notes. Sharing marks it checked, so a later email won&apos;t change it.</p>
+                  <div className={ui.rowButtons}>
+                    <Button
+                      size="small"
+                      disabled={busy || !item.date}
+                      onClick={() =>
+                        void send(
+                          () => api(`/api/farming/calendar/${item.id}`, { method: "PATCH", body: { organisationId, action: "share" } }),
+                          () => {
+                            setPreviewing(false);
+                            onChanged();
+                          },
+                        )
+                      }
+                    >
+                      Share
+                    </Button>
+                    <Button size="small" variant="secondary" onClick={() => setPreviewing(false)}>Cancel</Button>
+                  </div>
+                </>
+              ) : (
+                <Button variant="secondary" size="small" disabled={busy || !item.date} onClick={() => setPreviewing(true)}>Share with the farm team…</Button>
+              )}
+            </div>
+            {others.length ? (
+              <div className={ui.inlineForm}>
+                <Field label="This replaces" hint="The earlier item is shown as moved.">
+                  <select value={replacesId} onChange={(event) => setReplacesId(event.target.value)}>
+                    <option value="">Choose an item…</option>
+                    {others.map((other) => <option key={other.id} value={other.id}>{other.title}{other.date ? `, ${formatDate(other.date)}` : ""}</option>)}
+                  </select>
+                </Field>
+                <Button variant="secondary" disabled={busy || !replacesId} onClick={() => void patch({ action: "replace", replacesId })}>Replace it</Button>
+              </div>
+            ) : null}
+          </form>
+        ) : item.mine ? (
+          <p className={ui.muted}>{item.state === "dismissed" ? "Hidden: not a farm arrangement." : `${item.stateNote ?? "Changed"}. It can't be edited now.`}</p>
+        ) : null}
+      </Card>
+    </div>
+  );
+}
+
+/** FC17: an item the member adds. */
+function AddItem({ organisationId, farms, date, onClose, onAdded }: { organisationId: string; farms: Farm[]; date: string; onClose: () => void; onAdded: (item: CalendarItem) => void }) {
+  const [fields, setFields] = useState<ItemFields>({ date, startTime: "", endTime: "", kind: "other", title: "", farmId: farms.length === 1 ? farms[0].id : "", notes: "", repeat: "", repeatUntil: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const { item } = await api<{ item: CalendarItem }>("/api/farming/calendar", { method: "POST", body: { organisationId, ...fieldsBody(fields) } });
+      onAdded(item);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Add an item" description="Something not in your email: it's yours alone until you share it." actions={<Button variant="secondary" size="small" onClick={onClose}>Close</Button>}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <form onSubmit={submit}>
+        <ItemFieldset value={fields} onChange={setFields} farms={farms} />
+        <div className={ui.actions}>
+          <Button type="submit" disabled={busy}>Add</Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/** FC22, FC23: a private link for Google, Apple or Outlook to subscribe to. */
+function CalendarLink({ organisationId, onClose }: { organisationId: string; onClose: () => void }) {
+  const confirm = useConfirm();
+  const status = useApiData<{ link: CalendarLinkStatus }>("/api/farming/calendar/link", { organisationId });
+  const [url, setUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const on = status.data?.link.on ?? false;
+  const make = async () => {
+    if (on && !(await confirm("Make a new link? The old one stops working, so calendars using it stop updating.", { confirmLabel: "Make a new link" }))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { link } = await api<{ link: CalendarLinkStatus & { url: string } }>("/api/farming/calendar/link", { method: "POST", body: { organisationId } });
+      setUrl(link.url);
+      setCopied(false);
+      status.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const turnOff = async () => {
+    if (!(await confirm("Turn the calendar link off? Calendars using it stop updating.", { confirmLabel: "Turn off", danger: true }))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/farming/calendar/link?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" });
+      setUrl(null);
+      status.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async () => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setError("Couldn't copy it: select the address and copy it instead.");
+    }
+  };
+  return (
     <Card
-      title={item.title}
-      description={`${FARM_MAIL_KIND_LABELS[item.kind]}${item.date ? `, ${longDay(item.date)}` : ", no date yet"}${item.startTime ? `, ${timeText(item)}` : ""}`}
+      title="Calendar link"
+      description="A private address your phone, Google Calendar, Apple Calendar or Outlook can subscribe to, so these items show there too. It only reads: changes made there don't come back."
       actions={<Button variant="secondary" size="small" onClick={onClose}>Close</Button>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <p>
-        From {item.senderName ? `${item.senderName} (${item.senderEmail})` : item.senderEmail}, {formatDate(item.sentAt.slice(0, 10))}
-        {item.subject ? `: "${item.subject}"` : ""}
-        {item.webLink ? <> · <a href={item.webLink} target="_blank" rel="noreferrer noopener">Open the email</a></> : null}
-      </p>
-      <blockquote className={styles.excerpt}>{item.excerpt}</blockquote>
-      {item.checkReasons.length && item.needsChecking ? <ul className={styles.reasons}>{item.checkReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
-      {item.alsoSeen ? <p className={ui.muted}>Also in {item.alsoSeen} later email{item.alsoSeen === 1 ? "" : "s"}.</p> : null}
-      {editable ? (
-        <form onSubmit={save}>
-          <div className={ui.grid2}>
-            <Field label="Date"><DateInput value={date} onChange={(event) => setDate(event.target.value)} /></Field>
-            <Field label="Start"><input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
-            <Field label="End"><input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
-            <Field label="Kind">
-              <select value={kind} onChange={(event) => setKind(event.target.value as FarmMailKind)}>
-                {FARM_MAIL_KINDS.map((entry) => <option key={entry} value={entry}>{FARM_MAIL_KIND_LABELS[entry]}</option>)}
-              </select>
-            </Field>
-            <Field label="What"><input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></Field>
-            <Field label="Farm">
-              <select value={farmId} onChange={(event) => setFarmId(event.target.value)}>
-                <option value="">No farm</option>
-                {farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className={ui.actions}>
-            <Button type="submit" disabled={busy}>{item.checked ? "Save" : "Save as checked"}</Button>
-            <Button variant="secondary" disabled={busy} onClick={() => void patch({ action: "dismiss" })}>Not a farm arrangement</Button>
-          </div>
-          {others.length ? (
-            <div className={ui.inlineForm}>
-              <Field label="This replaces" hint="The earlier item is shown as moved.">
-                <select value={replacesId} onChange={(event) => setReplacesId(event.target.value)}>
-                  <option value="">Choose an item…</option>
-                  {others.map((other) => <option key={other.id} value={other.id}>{other.title}{other.date ? `, ${formatDate(other.date)}` : ""}</option>)}
-                </select>
-              </Field>
-              <Button variant="secondary" disabled={busy || !replacesId} onClick={() => void patch({ action: "replace", replacesId })}>Replace it</Button>
-            </div>
-          ) : null}
-        </form>
+      {status.error ? <Notice tone="error">Couldn&apos;t load the link: {status.error}</Notice> : null}
+      {url ? (
+        <div className={styles.linkBox}>
+          <Field label="Your calendar link" hint="Shown once. Anyone with it can see these items, so keep it like a password.">
+            <input readOnly value={url} onFocus={(event) => event.currentTarget.select()} />
+          </Field>
+          <Button size="small" onClick={() => void copy()}>{copied ? "Copied" : "Copy"}</Button>
+          <ul className={styles.steps}>
+            <li><strong>Google Calendar</strong> (on a computer): Other calendars, +, From URL, paste it.</li>
+            <li><strong>iPhone</strong>: Settings, Calendar, Accounts, Add Account, Other, Add Subscribed Calendar.</li>
+            <li><strong>Outlook</strong>: Add calendar, Subscribe from web.</li>
+          </ul>
+        </div>
+      ) : status.data ? (
+        <p>{on ? `You have a link, made ${formatDate(status.data.link.createdAt!.slice(0, 10))}${status.data.link.lastUsedAt ? `, last read ${new Date(status.data.link.lastUsedAt).toLocaleString("en-NZ")}` : ", not read yet"}. It's only shown when it's made.` : "You don't have a link."}</p>
       ) : (
-        <p className={ui.muted}>{item.state === "dismissed" ? "Hidden: not a farm arrangement." : `${item.stateNote ?? "Changed"}. It can't be edited now.`}</p>
+        <p className={ui.muted} role="status">Loading…</p>
       )}
+      <p className={ui.muted}>
+        It carries what this calendar shows you from 60 days ago on: titles, kinds, farms and times, never anything from the email or your notes. Calendar apps check it when they choose; Google Calendar can take several hours, sometimes a day, to show a change.
+      </p>
+      <div className={ui.rowButtons}>
+        <Button size="small" disabled={busy || !status.data} onClick={() => void make()}>{on ? "Make a new link" : "Make a link"}</Button>
+        {on ? <Button size="small" variant="secondary" disabled={busy} onClick={() => void turnOff()}>Turn off</Button> : null}
+      </div>
     </Card>
-    </div>
   );
 }
 
@@ -480,7 +786,8 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
                         variant="secondary"
                         disabled={busy}
                         onClick={async () => {
-                          if (!(await confirm(`Disconnect ${mailbox.email}? Everything Tohyee read from it is deleted. The mailbox itself isn't touched.`, { confirmLabel: "Disconnect", danger: true }))) return;
+                          const shared = mailbox.shared ? ` That includes ${mailbox.shared} item${mailbox.shared === 1 ? "" : "s"} you shared with the farm team.` : "";
+                          if (!(await confirm(`Disconnect ${mailbox.email}? Everything Tohyee read from it is deleted.${shared} The mailbox itself isn't touched.`, { confirmLabel: "Disconnect", danger: true }))) return;
                           void act(() => api(`/api/farming/mail/${mailbox.id}?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" }), "Disconnected.");
                         }}
                       >
@@ -516,7 +823,7 @@ function Mailboxes({ organisationId, mailboxes, error, farms, onChanged }: { org
       </form>
       <p className={ui.muted}>
         It uses the Google or Microsoft app an admin set up under <Link href="/operations/settings/email">Settings › Email</Link>, which needs this server&apos;s address followed by <code>/api/farming/mail/callback</code> added to the app&apos;s sign-in (redirect) addresses.
-        Attachments, sharing with the team, repeating arrangements and adding to Google or Outlook calendars aren&apos;t done yet.
+        Attachments aren&apos;t read, and repeats aren&apos;t read from an email&apos;s wording: set them on the item.
       </p>
     </Card>
   );
