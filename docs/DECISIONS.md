@@ -5230,3 +5230,17 @@ testing) and #154's code signing (later, Jess).
      is the organisation's. Finished employees aren't paid sick leave, so
      it doesn't apply to them. HL62, tenant migration 0160, not yet
      reviewed.
+565. **Tax form cents stay dropped, marked unconfirmed** (19 October 2026).
+     #310 item 6 asked for decision 557's rule to be checked field by field.
+     Jess: "Keep dropping cents". What IRD's material says, as read on 17
+     October 2026: the IR4 form prints 30A in whole dollars, and neither
+     the IR4 nor the IR3 guide says whether to round or drop the cents;
+     the IR10 form wasn't checked for it. So the rule is Jess's choice,
+     not a confirmed IRD rule, for every field it covers: IR4 30A and 33B, IR3
+     worksheet box 1 and 39B, and every IR10 box. As built: cents are
+     dropped towards zero (a loss of 12,000.75 is -12,000), tax is worked
+     out on the whole dollars of taxable income, the boxes after 30A (IR4)
+     and box 1 (IR3) keep cents, and each IR10 box drops its own cents
+     with the checks using the figures with cents (ITX66, ITX68). IRD's
+     electronic filing specification wasn't read. Not yet reviewed by an
+     accountant.

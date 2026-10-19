@@ -17984,6 +17984,10 @@ Made-up figures:
   RIT is 0.00; the return refunds the credits.)
 - **ITX53** A loss of 12,000.00 with 5,000.00 paid: **20B, 29 and 30A
   -12,000.00; 30B 0.00; 30J 0.00 credit; 30L 5,000.00 refund.**
+- **ITX68** Cents (decision 557, kept by Jess on 19 Oct 2026, #310 item 6;
+  IRD hasn't confirmed it). Income 100,000.99: **29 100,000.99; 30A
+  100,000.00; 30B 28,000.00.** A loss of 12,000.75: **29 -12,000.75; 30A
+  -12,000.00** (dropped towards zero); 30B 0.00.
 
 Tested in `tests/unit/ir4.test.ts`, and against the workpaper in
 `tests/integration/ir10.test.ts`.
