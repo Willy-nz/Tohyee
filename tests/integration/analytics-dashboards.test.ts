@@ -306,6 +306,46 @@ describeWithDatabase("analytics dashboards", () => {
     expect(grouped.data.error).toMatch(/previous period is for one total/);
   });
 
+  it("lays tiles out in widths and heights, with text cards and copies (#335)", async () => {
+    const patch = async (tiles: unknown[]) =>
+      body(
+        await dashboardRoute.PATCH(
+          apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }),
+          params({ dashboardId }),
+        ),
+      );
+    const saved = await patch([
+      { id: "heading", title: "Sales", visual: "text", width: "full", text: "  Made-up figures.\r\n\r\nSecond paragraph. ", query: { table: "nope" } },
+      { ...tile, width: "quarter", height: "large" },
+      { ...tile, width: "two-thirds", height: "medium" },
+      { ...tile, width: "enormous", height: "huge" },
+    ]);
+    expect(saved.status).toBe(200);
+    const tiles = saved.data.dashboard.tiles;
+    expect(tiles[0]).toEqual({ id: "heading", title: "Sales", visual: "text", width: "full", query: null, text: "Made-up figures.\n\nSecond paragraph." });
+    expect(tiles.slice(1).map((entry: { width: string; height?: string }) => [entry.width, entry.height])).toEqual([
+      ["quarter", "large"],
+      ["two-thirds", undefined],
+      ["half", undefined],
+    ]);
+    // A copy that kept the same id gets its own, so pins and edits find the right one.
+    expect(tiles[1].id).toBe("monthly");
+    expect(new Set(tiles.map((entry: { id: string }) => entry.id)).size).toBe(4);
+
+    // A text card has no question to run.
+    const asked = await queryRoute.POST(
+      apiRequest("/api/analytics/query", { method: "POST", cookie: viewerCookie, body: { organisationId: ORG, dashboardId, tileId: "heading", filters: {} } }),
+      noContext,
+    );
+    expect(asked.status).toBe(400);
+
+    const tooMany = await patch(Array.from({ length: 41 }, (_, index) => ({ id: `n${index}`, title: "Note", visual: "text", width: "quarter" })));
+    expect(tooMany.status).toBe(400);
+    const tooLong = await patch([{ id: "long", title: "Note", visual: "text", width: "full", text: "x".repeat(2001) }]);
+    expect(tooLong.data.error).toMatch(/2,000/);
+    await patch([tile]);
+  });
+
   it("deletes a dashboard without touching the data", async () => {
     const deleted = await dashboardRoute.DELETE(
       apiRequest(`/api/analytics/dashboards/${dashboardId}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }),

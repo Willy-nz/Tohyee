@@ -1919,6 +1919,12 @@ that something happened.
   accessible HTML table; CSV and Excel exports use the standard report
   export (decision 375).
 
+- **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
+  quarter, a third, a half, two-thirds or the full width of a row, and
+  charts Small, Medium or Large. In edit mode, tiles can be dragged into
+  place (the arrows still work from the keyboard), duplicated, or clicked
+  to open, and **+ Add text** adds a heading with notes to split a
+  dashboard into sections. Up to 40 tiles.
 - **Analytics: richer key figures** (#334, decisions 594-595). A key
   figure can compare with the previous period (the same length before the
   dashboard's dates), the same period last year or a target, showing the

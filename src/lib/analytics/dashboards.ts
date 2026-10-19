@@ -4,6 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { parseChartFormat, type ChartFormat } from "@/lib/analytics/chart-format";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
+import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import {
   buildPivotDrillSql,
   buildPivotSql,
@@ -31,12 +32,22 @@ import { getOrganisationSettings } from "@/lib/organisations/settings";
 
 /** Analytics dashboards (step 3): tiles of questions about loaded tables. */
 
+export type { TileHeight, TileWidth } from "@/lib/analytics/layout";
+
+/** A chart or table, or a text card (a heading and notes, no data). */
+export type TileVisual = Visual | "text";
+
 export type Tile = {
   id: string;
   title: string;
-  visual: Visual;
-  width: "half" | "full";
-  query: TileQuery;
+  visual: TileVisual;
+  width: TileWidth;
+  /** Left out: medium. */
+  height?: TileHeight;
+  /** A text card has no question. */
+  query: TileQuery | null;
+  /** A text card's notes (plain text; blank lines start a new paragraph). */
+  text?: string;
   /** How the chart looks (#331, #333); left out, it looks as it always has. */
   format?: ChartFormat;
 };
@@ -70,7 +81,8 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: Visual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text"];
+export const MAX_TILES = 40;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Row = {
@@ -211,12 +223,25 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
 
 function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
   if (!Array.isArray(input)) throw new ValidationError("tiles must be a list.");
-  if (input.length > 24) throw new ValidationError("A dashboard can have up to 24 tiles.");
+  if (input.length > MAX_TILES) throw new ValidationError(`A dashboard can have up to ${MAX_TILES} charts, tables and text cards.`);
+  const seen = new Set<string>();
   return input.map((entry, index) => {
     const tile = (entry ?? {}) as Record<string, unknown>;
     const title = typeof tile.title === "string" && tile.title.trim() ? tile.title.trim().slice(0, 100) : `Tile ${index + 1}`;
-    const visual = tile.visual as Visual;
+    const visual = tile.visual as TileVisual;
     if (!VISUALS.includes(visual)) throw new ValidationError(`${title}: choose how to show it.`);
+    // Each tile keeps its id (pins point at it); a copy with the same id gets a new one.
+    const given = typeof tile.id === "string" && /^[a-z0-9-]{1,40}$/.test(tile.id) ? tile.id : null;
+    const id = given && !seen.has(given) ? given : randomUUID();
+    seen.add(id);
+    const width: TileWidth = TILE_WIDTHS.includes(tile.width as TileWidth) ? (tile.width as TileWidth) : "half";
+    const height = TILE_HEIGHTS.includes(tile.height as TileHeight) && tile.height !== "medium" ? (tile.height as TileHeight) : undefined;
+    if (visual === "text") {
+      if (tile.text !== undefined && tile.text !== null && typeof tile.text !== "string") throw new ValidationError(`${title}: the notes should be text.`);
+      const text = typeof tile.text === "string" ? tile.text.replace(/\r\n/g, "\n").trim() : "";
+      if (text.length > 2000) throw new ValidationError(`${title}: the notes can be up to 2,000 characters.`);
+      return { id, title, visual, width, query: null, ...(text ? { text } : {}) };
+    }
     let query: TileQuery;
     try {
       query = parseTileQuery(tile.query, tables);
@@ -234,10 +259,11 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
       throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
     }
     return {
-      id: typeof tile.id === "string" && /^[a-z0-9-]{1,40}$/.test(tile.id) ? tile.id : randomUUID(),
+      id,
       title,
       visual,
-      width: tile.width === "full" ? "full" : "half",
+      width,
+      ...(height ? { height } : {}),
       query,
       ...(format ? { format } : {}),
     };

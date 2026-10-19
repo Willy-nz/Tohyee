@@ -93,11 +93,17 @@
   box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.12));
 }
 
+/* Twelve columns, so a row can hold quarters, thirds, halves and two-thirds (#335). */
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
 }
+
+.quarter { grid-column: span 3; }
+.third { grid-column: span 4; }
+.half { grid-column: span 6; }
+.twoThirds { grid-column: span 8; }
 
 .tile {
   min-width: 0;
@@ -254,10 +260,13 @@
   font-size: var(--text-base);
 }
 
+@media (max-width: 1000px) {
+  .quarter, .third { grid-column: span 6; }
+  .twoThirds { grid-column: 1 / -1; }
+}
+
 @media (max-width: 800px) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  .quarter, .third, .half, .twoThirds { grid-column: 1 / -1; }
 }
 
 .shareList {
@@ -299,3 +308,12 @@
 .bare { background: transparent; }
 .borderless { border-color: transparent; }
 .visuallyHidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.textTile { background: transparent; border-color: transparent; padding: 8px 4px 0; }
+.textTile .tileTitle { font-size: var(--text-xl); }
+.textBody { color: var(--text-muted); }
+.textBody p { margin: 0 0 8px; white-space: pre-line; }
+.clickToEdit { cursor: pointer; border-radius: 6px; }
+.clickToEdit:hover { outline: 1px dashed var(--border-strong); outline-offset: 4px; }
+.dragHandle { align-self: center; padding: 0 4px; color: var(--text-muted); cursor: grab; font-size: var(--text-lg, 18px); line-height: 1; }
+.dragging { opacity: 0.5; }
+.dropTarget { outline: 2px dashed var(--accent); outline-offset: 2px; }
