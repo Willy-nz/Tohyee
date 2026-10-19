@@ -28,6 +28,17 @@ export function formatMoney(value: string | null | undefined, decimals = 2): str
   return negative && !isZero ? `-${body}` : body;
 }
 
+/**
+ * Money with a currency sign, for screens that show one (Analytics): the
+ * minus comes first, as formatMoney puts it first, so "-27" -> "-$27.00".
+ * Anything that isn't a number is shown as it is.
+ */
+export function formatCurrency(value: string | null | undefined, symbol = "$"): string {
+  const text = formatMoney(value);
+  if (!/^-?[\d,]+(\.\d+)?$/.test(text)) return text;
+  return text.startsWith("-") ? `-${symbol}${text.slice(1)}` : `${symbol}${text}`;
+}
+
 /** Quantities: trims trailing zeros, keeps up to 4 places. */
 export function formatQuantity(value: string | null | undefined): string {
   if (value == null || value === "") return "";

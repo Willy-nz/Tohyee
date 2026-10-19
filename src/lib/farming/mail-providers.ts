@@ -1,5 +1,4 @@
-import { type MailProvider, parseAddressList, type Participant, ProviderError, providerFetch } from "@/lib/crm/mail/providers";
-import { UnavailableError } from "@/lib/errors";
+import { type MailProvider, parseAddressList, type Participant, ProviderError, providerFetch } from "@/lib/crm/mail/providers";import { UnavailableError } from "@/lib/errors";
 
 /*
  * Reading a farm mailbox (#319; FC1, FC9, decision 570): Gmail's API or
@@ -76,32 +75,198 @@ export function gmailText(part: GmailPart | undefined): string {
   return text.slice(0, MAX_TEXT);
 }
 
+// Folders and labels (#340; FC25-FC30, decisions 584-586) ------------------------------------
+
 /**
- * Email ids from `after` up to `before` (null: now), newest first, at most
- * `max`. `complete` says whether that's every email in the window.
+ * A folder (Outlook) or label (Gmail) the member can choose to be read.
+ * Folder names are the member's private metadata, like the mailbox itself
+ * (decision 571).
  */
-export async function listFarmMailIds(provider: MailProvider, token: string, after: Date, before: Date | null, max: number): Promise<{ ids: string[]; complete: boolean }> {
-  const ids: string[] = [];
-  if (provider === "google") {
-    let pageToken: string | undefined;
-    const q = `after:${Math.floor(after.getTime() / 1000)}${before ? ` before:${Math.floor(before.getTime() / 1000)}` : ""}`;
-    do {
-      const params = new URLSearchParams({ q, maxResults: "100", includeSpamTrash: "false" });
-      if (pageToken) params.set("pageToken", pageToken);
-      const page = await getJson<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, token);
-      ids.push(...(page?.messages ?? []).map((message) => message.id));
-      pageToken = page?.nextPageToken;
-    } while (pageToken && ids.length < max);
-    return { ids: ids.slice(0, max), complete: !pageToken && ids.length <= max };
+export type MailFolder = {
+  id: string;
+  /** Its own name ("Farm"). */
+  name: string;
+  /** Its name with its parents' ("Inbox › Farm"; Gmail's own "Farm/LIC"). */
+  path: string;
+  parentId: string | null;
+  /** How many folders deep (0 at the top). */
+  depth: number;
+};
+
+/** At most this many folders are listed (more are left out, deepest first). */
+export const MAX_FOLDERS = 500;
+const MAX_FOLDER_DEPTH = 6;
+
+/**
+ * Gmail's labels as folders: the Inbox and the member's own labels (not
+ * Sent, Spam, Trash, Drafts, categories or the like). A nested label is
+ * named "Farm/LIC" by Gmail, so its parent is the label named "Farm".
+ */
+export function gmailFolders(labels: Array<{ id: string; name: string; type?: string }>): MailFolder[] {
+  const usable = labels.filter((label) => label.id === "INBOX" || label.type === "user");
+  const byName = new Map(usable.map((label) => [label.id === "INBOX" ? "Inbox" : label.name, label.id]));
+  const folders = usable.map((label) => {
+    const path = label.id === "INBOX" ? "Inbox" : label.name;
+    const parts = path.split("/");
+    let parentId: string | null = null;
+    for (let cut = parts.length - 1; cut > 0 && !parentId; cut -= 1) parentId = byName.get(parts.slice(0, cut).join("/")) ?? null;
+    return { id: label.id, name: parts[parts.length - 1] || path, path, parentId, depth: 0 };
+  });
+  return orderFolders(folders);
+}
+
+/** Folders as a tree, parents before their children, each level by name; depth worked out from the parents. */
+export function orderFolders(folders: MailFolder[]): MailFolder[] {
+  const ids = new Set(folders.map((folder) => folder.id));
+  const children = new Map<string | null, MailFolder[]>();
+  for (const folder of folders) {
+    const parent = folder.parentId && ids.has(folder.parentId) ? folder.parentId : null;
+    children.set(parent, [...(children.get(parent) ?? []), folder]);
   }
-  const filter = `receivedDateTime ge ${after.toISOString()}${before ? ` and receivedDateTime lt ${before.toISOString()}` : ""}`;
-  let next: string | undefined = `https://graph.microsoft.com/v1.0/me/messages?${new URLSearchParams({ $filter: filter, $select: "id", $orderby: "receivedDateTime desc", $top: "100" })}`;
-  while (next && ids.length < max) {
-    const page: { value?: Array<{ id: string }>; "@odata.nextLink"?: string } = await getJson(next, token);
-    ids.push(...(page?.value ?? []).map((message) => message.id));
+  // The Inbox first, then by name, as Gmail and Outlook list them.
+  const rank = (folder: MailFolder) => (folder.id === "INBOX" || folder.path.toLowerCase() === "inbox" ? 0 : 1);
+  const ordered: MailFolder[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    const level = [...(children.get(parent) ?? [])].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "en-NZ", { sensitivity: "base" }));
+    for (const folder of level) {
+      ordered.push({ ...folder, parentId: parent, depth });
+      walk(folder.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return ordered;
+}
+
+/** A folder's subfolders, all the way down. */
+export function subfolderIds(folders: MailFolder[], id: string): string[] {
+  const found: string[] = [];
+  const walk = (parent: string) => {
+    for (const folder of folders) {
+      if (folder.parentId === parent && !found.includes(folder.id)) {
+        found.push(folder.id);
+        walk(folder.id);
+      }
+    }
+  };
+  walk(id);
+  return found;
+}
+
+type GraphFolder = { id: string; displayName?: string; parentFolderId?: string; childFolderCount?: number };
+const GRAPH_FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount";
+
+async function graphFolderPages(url: string, token: string): Promise<GraphFolder[]> {
+  const found: GraphFolder[] = [];
+  let next: string | undefined = url;
+  while (next && found.length < MAX_FOLDERS) {
+    const page: { value?: GraphFolder[]; "@odata.nextLink"?: string } = await getJson(next, token);
+    found.push(...(page?.value ?? []));
     next = page?.["@odata.nextLink"];
   }
-  return { ids: ids.slice(0, max), complete: !next && ids.length <= max };
+  return found;
+}
+
+/** Outlook folders under `parentId`, all the way down (at most MAX_FOLDERS). */
+async function graphChildFolders(token: string, parentId: string, parentPath: string, depth: number, into: MailFolder[]): Promise<void> {
+  if (depth > MAX_FOLDER_DEPTH || into.length >= MAX_FOLDERS) return;
+  const params = new URLSearchParams({ $select: GRAPH_FOLDER_SELECT, $top: "100" });
+  const children = await graphFolderPages(`https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?${params}`, token);
+  for (const child of children) {
+    if (into.length >= MAX_FOLDERS) return;
+    const name = child.displayName ?? "(no name)";
+    const path = `${parentPath} › ${name}`;
+    into.push({ id: child.id, name, path, parentId, depth });
+    if ((child.childFolderCount ?? 0) > 0) await graphChildFolders(token, child.id, path, depth + 1, into);
+  }
+}
+
+/** The mailbox's folders (Outlook) or labels (Gmail), parents first. Only names and ids: no email is read. */
+export async function listMailFolders(provider: MailProvider, token: string): Promise<MailFolder[]> {
+  if (provider === "google") {
+    const page = await getJson<{ labels?: Array<{ id: string; name: string; type?: string }> }>("https://gmail.googleapis.com/gmail/v1/users/me/labels", token);
+    return gmailFolders(page?.labels ?? []).slice(0, MAX_FOLDERS);
+  }
+  const params = new URLSearchParams({ $select: GRAPH_FOLDER_SELECT, $top: "100" });
+  const top = await graphFolderPages(`https://graph.microsoft.com/v1.0/me/mailFolders?${params}`, token);
+  const folders: MailFolder[] = [];
+  for (const folder of top) {
+    if (folders.length >= MAX_FOLDERS) break;
+    const name = folder.displayName ?? "(no name)";
+    folders.push({ id: folder.id, name, path: name, parentId: null, depth: 0 });
+    if ((folder.childFolderCount ?? 0) > 0) await graphChildFolders(token, folder.id, name, 1, folders);
+  }
+  return orderFolders(folders);
+}
+
+/** One chosen folder's emails: newest first, at most `max`. `missing` when the folder no longer exists. */
+export type FolderListing = { ids: string[]; complete: boolean; missing: boolean };
+
+/**
+ * Email ids in a chosen folder (and, when asked, its subfolders) received
+ * from `after`, newest first, at most `max` for the folder. For Gmail,
+ * `labels` is the mailbox's current labels (subfolders and whether the
+ * label still exists come from it).
+ */
+export async function listFolderMailIds(
+  provider: MailProvider,
+  token: string,
+  folder: { externalId: string; includeSubfolders: boolean },
+  after: Date,
+  max: number,
+  labels: MailFolder[] | null = null,
+): Promise<FolderListing> {
+  const ids: string[] = [];
+  let complete = true;
+  if (provider === "google") {
+    const current = labels ?? (await listMailFolders(provider, token));
+    if (!current.some((label) => label.id === folder.externalId)) return { ids: [], complete: true, missing: true };
+    const labelIds = [folder.externalId, ...(folder.includeSubfolders ? subfolderIds(current, folder.externalId) : [])];
+    for (const labelId of labelIds) {
+      const before = ids.length;
+      let pageToken: string | undefined;
+      do {
+        const params = new URLSearchParams({ q: `after:${Math.floor(after.getTime() / 1000)}`, labelIds: labelId, maxResults: "500", includeSpamTrash: "false" });
+        if (pageToken) params.set("pageToken", pageToken);
+        const page = await getJson<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, token);
+        for (const message of page?.messages ?? []) if (!ids.includes(message.id)) ids.push(message.id);
+        pageToken = page?.nextPageToken;
+      } while (pageToken && ids.length - before < max);
+      if (pageToken) complete = false;
+    }
+    return { ids, complete, missing: false };
+  }
+  let folderIds = [folder.externalId];
+  if (folder.includeSubfolders) {
+    const below: MailFolder[] = [];
+    try {
+      await graphChildFolders(token, folder.externalId, "", 1, below);
+    } catch (error) {
+      if (error instanceof ProviderError && error.status === 404) return { ids: [], complete: true, missing: true };
+      throw error;
+    }
+    folderIds = [folder.externalId, ...below.map((entry) => entry.id)];
+  }
+  for (const folderId of folderIds) {
+    const before = ids.length;
+    const params = new URLSearchParams({ $filter: `receivedDateTime ge ${after.toISOString()}`, $select: "id", $orderby: "receivedDateTime desc", $top: "100" });
+    let next: string | undefined = `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(folderId)}/messages?${params}`;
+    try {
+      while (next && ids.length - before < max) {
+        const page: { value?: Array<{ id: string }>; "@odata.nextLink"?: string } = await getJson(next, token);
+        for (const message of page?.value ?? []) if (!ids.includes(message.id)) ids.push(message.id);
+        next = page?.["@odata.nextLink"];
+      }
+    } catch (error) {
+      // The chosen folder was deleted (or moved out of reach) in Outlook.
+      if (error instanceof ProviderError && error.status === 404) {
+        if (folderId === folder.externalId) return { ids: [], complete: true, missing: true };
+        continue;
+      }
+      throw error;
+    }
+    if (next) complete = false;
+  }
+  return { ids, complete, missing: false };
 }
 
 /** One email with its plain text, or null when it has no sender. */
