@@ -317,3 +317,9 @@
 .dragHandle { align-self: center; padding: 0 4px; color: var(--text-muted); cursor: grab; font-size: var(--text-lg, 18px); line-height: 1; }
 .dragging { opacity: 0.5; }
 .dropTarget { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin: 12px 0; padding: 0; border: 0; min-width: 0; }
+.templates > legend { font-weight: 600; margin-bottom: 8px; }
+.template { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
+.template:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.template[aria-disabled="true"] { cursor: not-allowed; opacity: 0.7; }
+.template > span { display: grid; gap: 2px; }

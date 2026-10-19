@@ -8,6 +8,7 @@ import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
+import { FormulaField, SavedValuesPicker, SaveValueButton, ValueRules } from "@/components/analytics/saved-values";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -16,6 +17,8 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { ChartFormat } from "@/lib/analytics/chart-format";
 import { tileChartSpec, tileValueNames } from "@/lib/analytics/tile-chart";
+import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
+import { todayIsoDate } from "@/lib/dates";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
 import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, paragraphs, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import type {
@@ -157,6 +160,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [template, setTemplate] = useState<TemplateId | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,9 +168,13 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
     setBusy(true);
     setError(null);
     try {
+      // A template (#337) is an ordinary report filled with tiles, so everything can be changed after.
+      const built = template ? buildTemplate(template, tables.data?.tables ?? [], todayIsoDate("Pacific/Auckland")) : null;
       const { dashboard } = await api<{ dashboard: Dashboard }>("/api/analytics/dashboards", {
         method: "POST",
-        body: { organisationId, name: name.trim() || "Untitled report", tiles: [] },
+        body: built
+          ? { organisationId, name: name.trim() || built.name, description: built.description, settings: built.settings, tiles: built.tiles }
+          : { organisationId, name: name.trim() || "Untitled report", tiles: [] },
       });
       router.push(`/analytics/dashboards/${dashboard.id}?edit=1`);
     } catch (caught) {
@@ -181,9 +189,28 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {creating ? <Card title="Create a report" description="Start with a blank canvas, then add charts, scorecards and pivot tables from your connected data.">
+      {creating ? <Card title="Create a report" description="Start blank or from a ready-made report, then add or change charts, key figures and pivot tables from your connected data.">
         <form onSubmit={(event) => { event.preventDefault(); void create(); }}>
-          <Field label="Report name"><input autoFocus value={name} maxLength={100} placeholder="e.g. Sales and gross profit" onChange={(event) => setName(event.target.value)} /></Field>
+          <Field label="Report name"><input autoFocus value={name} maxLength={100} placeholder={template ? TEMPLATES.find((entry) => entry.id === template)?.name : "e.g. Sales and gross profit"} onChange={(event) => setName(event.target.value)} /></Field>
+          <fieldset className={styles.templates}>
+            <legend>Start from</legend>
+            <label className={styles.template}>
+              <input type="radio" name="template" checked={template === ""} onChange={() => setTemplate("")} />
+              <span><strong>A blank report</strong><span className={ui.muted}>Add charts one at a time.</span></span>
+            </label>
+            {TEMPLATES.map((entry) => {
+              const available = Boolean(tables.data && buildTemplate(entry.id, tables.data.tables, "2026-01-01"));
+              return (
+                <label key={entry.id} className={styles.template} aria-disabled={!available}>
+                  <input type="radio" name="template" disabled={!available} checked={template === entry.id} onChange={() => setTemplate(entry.id)} />
+                  <span>
+                    <strong>{entry.name}</strong>
+                    <span className={ui.muted}>{available ? entry.description : entry.id === "crm" ? "Needs the CRM, copied with the books (Data sources › Refresh now)." : entry.id === "farm" ? "Needs Farming, copied with the books (Data sources › Refresh now)." : "Needs the books copy (Data sources › Refresh now)."}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
           {noTables ? <Notice tone="info">Connect and load a <Link href="/analytics/sources">data source</Link> before adding charts.</Notice> : null}
           <div className={ui.rowButtons}><Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create report"}</Button><Button variant="secondary" disabled={busy} onClick={() => setCreating(false)}>Cancel</Button></div>
         </form>
@@ -1073,6 +1100,7 @@ function TileEditor({
   const [height, setHeight] = useState<TileHeight>(tile?.height ?? "medium");
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
   const [format, setFormat] = useState<ChartFormat | undefined>(tile?.format);
+  const [savedVersion, setSavedVersion] = useState(0);
   const table = tables.find((entry) => entry.name === query.table);
   const columns = table?.columns ?? [];
   const numbers = columns.filter((column) => isNumber(column.type));
@@ -1359,6 +1387,9 @@ function TileEditor({
       {query.measures.map((measure, index) => (
         <div key={index} className={styles.measureRow}>
           <input aria-label={`Value ${index + 1} label`} value={measure.label} maxLength={80} onChange={(event) => setMeasure(index, { label: event.target.value })} />
+          {measure.aggregate === "formula" ? (
+            <FormulaField index={index} measure={measure} siblings={query.measures} onChange={(formula) => setMeasure(index, { formula })} />
+          ) : (
           <select aria-label={`Value ${index + 1} how`} value={measure.aggregate} onChange={(event) => {
               const aggregate = event.target.value as Aggregate;
               setMeasure(index, { aggregate, ...(aggregate === "count" || aggregate === "count_distinct" ? { negate: undefined } : {}) });
@@ -1369,7 +1400,8 @@ function TileEditor({
               </option>
             ))}
           </select>
-          {measure.aggregate !== "count" ? (
+          )}
+          {measure.aggregate !== "count" && measure.aggregate !== "formula" ? (
             <select aria-label={`Value ${index + 1} of`} value={measure.field ?? ""} onChange={(event) => setMeasure(index, { field: event.target.value })}>
               <option value="">Choose a column</option>
               {(["sum", "avg"].includes(measure.aggregate) ? numbers : columns).map((column) => (
@@ -1405,6 +1437,17 @@ function TileEditor({
               and last year
             </label>
           ) : null}
+          <ValueRules measure={measure} />
+          {visual !== "pivot" ? (
+            <SaveValueButton
+              organisationId={organisationId}
+              table={query.table}
+              measure={measure}
+              siblings={query.measures}
+              number={format?.series?.[tileValueNames(query.measures.slice(0, index)).length]?.number}
+              onSaved={() => setSavedVersion((version) => version + 1)}
+            />
+          ) : null}
           <Button size="small" variant="danger" disabled={query.measures.length === 1} onClick={() => setQuery({ ...query, measures: query.measures.filter((_m, at) => at !== index) })}>
             Remove
           </Button>
@@ -1419,7 +1462,44 @@ function TileEditor({
         >
           Add a value
         </Button>
+        {visual !== "pivot" ? (
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={query.measures.length >= 6}
+            onClick={() =>
+              setQuery({
+                ...query,
+                measures: [...query.measures, { label: `Calculated ${query.measures.filter((measure) => measure.aggregate === "formula").length + 1}`, aggregate: "formula", formula: "" }],
+              })
+            }
+          >
+            Add a calculated value
+          </Button>
+        ) : null}
       </div>
+      {visual !== "pivot" && query.table ? (
+        <SavedValuesPicker
+          organisationId={organisationId}
+          table={query.table}
+          version={savedVersion}
+          disabled={query.measures.length >= 6}
+          onAdd={(measure, number) => {
+            // A saved value's label must be its own on this chart, so a formula knows which one it means.
+            const taken = new Set(query.measures.map((entry) => entry.label));
+            let label = measure.label;
+            for (let count = 2; taken.has(label); count += 1) label = `${measure.label} ${count}`;
+            const measures = [...query.measures, { ...measure, label }];
+            setQuery({ ...query, measures });
+            if (number) {
+              const at = tileValueNames(query.measures).length;
+              const series = tileValueNames(measures).map((_name, position) => format?.series?.[position] ?? {});
+              series[at] = { ...series[at], number };
+              setFormat({ ...format, series });
+            }
+          }}
+        />
+      ) : null}
 
       <h3 className={styles.subheading}>Only include rows where</h3>
       {query.filters.map((filter, index) => (

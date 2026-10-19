@@ -132,6 +132,7 @@ export async function readBooks(
     currency_code: string | null;
     foreign_amount: string | null;
     exchange_rate: string | null;
+    system_account: string | null;
     tracking: Record<string, string> | null;
   };
   const ledgerSql =
@@ -152,7 +153,7 @@ export async function readBooks(
             l.line_order, a.code as account_code, a.name as account_name, a.account_class, a.account_type,
             c.name as contact_name, l.description, l.debit_amount::text as debit, l.credit_amount::text as credit,
             (l.debit_amount - l.credit_amount)::text as amount, l.foreign_currency_code as currency_code,
-            l.foreign_amount::text, l.exchange_rate::text, l.tracking
+            l.foreign_amount::text, l.exchange_rate::text, a.system_key as system_account, l.tracking
        from ledger_journal_lines l
        join ledger_journals j on j.id = l.journal_id
        join accounts a on a.id = l.account_id
@@ -180,6 +181,8 @@ export async function readBooks(
       { name: "currency", type: "VARCHAR" },
       { name: "foreign_amount", type: MONEY },
       { name: "exchange_rate", type: RATE },
+      // Which built-in account it is, if any (accounts_receivable, accounts_payable, ...), for the built-in values (#337).
+      { name: "system_account", type: "VARCHAR" },
       ...trackingColumns(look),
     ],
     rows: batches<LedgerRow>(ledgerSql, (row) => {
@@ -204,6 +207,7 @@ export async function readBooks(
         row.currency_code,
         row.foreign_amount,
         row.exchange_rate,
+        row.system_account,
         ...trackingValues(look, row.tracking),
       ];
     }),

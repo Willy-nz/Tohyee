@@ -15638,7 +15638,8 @@ without employee names.
   posting date, journal number, source (invoice, bill, bank, manual journal
   and so on), account code, name, class and type, contact, description,
   tracking (one column per tracking category), debit, credit and `amount`
-  (debit - credit). Lines of pay run journals have no contact and the
+  (debit - credit), and the account's built-in role as `system_account`
+  (#337). Lines of pay run journals have no contact and the
   description "Pay run" (no employee names).
 - **`tohyee_invoices`, `tohyee_invoice_lines`, `tohyee_bills`,
   `tohyee_bill_lines`**: approved and voided documents (never drafts), with
@@ -15693,6 +15694,62 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
 - **AB10** A pay run's wages journal is copied as lines on the wages and
   bank (or wages payable) accounts with no contact and the description
   "Pay run".
+
+## Analytics: built-in values on the books copy (examples BM1-BM4; as Xero does, not yet reviewed)
+
+Issue #337 asked for ready-made values on the books copy so a dashboard is a
+few clicks: Sales, Cost of sales, Gross profit, Gross margin %, Operating
+expenses, Net profit, Accounts receivable, Accounts payable, Cash in bank and
+Days to get paid. Jess hasn't said how each is worked out, so they follow
+the profit and loss Tohyee already has (which follows Xero's: trading
+income, cost of sales, gross profit, other income, operating expenses, net
+profit) and Xero's balance sheet and "average debtors days" (decision 537).
+**As Xero does, not yet reviewed.** They read `tohyee_ledger_lines`, which
+now also copies each account's built-in role as `system_account`
+(accounts_receivable, accounts_payable, ...; blank for ordinary accounts).
+
+**Rules:**
+
+- **Sales**: lines on revenue-type accounts, the other way round (credits
+  positive). **Other income**: other-income-type accounts, the other way
+  round. **Cost of sales**: direct-costs accounts. **Operating expenses**:
+  expense and depreciation accounts.
+- **Gross profit** = Sales - Cost of sales. **Gross margin %** = Gross
+  profit / Sales (shown as a percentage). **Net profit** = Gross profit +
+  Other income - Operating expenses. In these, a value with no lines counts
+  as 0.00.
+- **Accounts receivable** and **Accounts payable** are the balances of the
+  accounts receivable and payable control accounts (payable the other way
+  round, so it shows positive); **Cash in bank** the balance of bank-type
+  accounts. A balance counts every line up to the dashboard's To date,
+  whatever the From date, and can't be grouped by month.
+- **Days to get paid** = Accounts receivable at the To date x the days from
+  From to To / Sales for those dates (receivables over average sales a
+  day). Without both dates it has no value. Receivables include GST and
+  sales don't, as in Xero's figure as it's commonly described; this wasn't
+  checked against Xero itself.
+- Values are exact: divisions to 6 decimal places, rounded half up; dividing
+  by zero gives no value.
+
+Setup: AB's journals (CR1), AB6-AB7's invoices (3 July: I1 115.00 including
+GST to Kobe Ltd; a USD invoice of 160.00; one voided on 5 July), AB8's
+sale of 300.00 on 1 July and AB10's 900.00 pay run on 10 July.
+
+- **BM1** 1 March to 30 June 2026: Sales **4,200.00**, Cost of sales
+  **700.00**, Gross profit **3,500.00**, Gross margin **83.3%** (0.833333),
+  Other income **20.00**, Operating expenses **350.00**, Net profit
+  **3,170.00**, the same as the profit and loss for those dates.
+- **BM2** 1 to 30 June 2026: Cash in bank **8,170.00** (everything to 30 June,
+  as AB5); no receivables or payables.
+- **BM3** July 2026: Sales **560.00** (100.00 + 160.00 + 300.00; the voided
+  invoice nets to nothing), Operating expenses **900.00**, Net profit
+  **-340.00**, Accounts receivable at 31 July **275.00** (115.00 + 160.00),
+  Cash in bank **7,570.00**, Days to get paid 275.00 x 31 / 560.00 =
+  **15.2** (15.223214).
+- **BM4** With no dates: Days to get paid has no value, and Cash in bank is
+  every line (**7,570.00**). Cash in bank grouped by month is refused.
+
+Tested in `tests/integration/analytics-books.test.ts`.
 
 ## Issues #180-#183, 8 Oct 2026 (approved by Jess)
 
