@@ -289,7 +289,7 @@ function ConnectionForm({
             </select>
           </Field>
         </div>
-        <div className={ui.rowButtons} style={{ marginTop: 16 }}>
+        <div className={ui.rowButtons} style={{ marginTop: 16, flexWrap: "wrap" }}>
           <Button type="submit" disabled={busy !== null}>
             {busy === "save" ? "Testing and saving…" : existing ? "Test and save" : "Test and save connection"}
           </Button>
@@ -387,6 +387,16 @@ export function DatabaseSourceSetup({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only once, for the source being changed
   }, []);
 
+  // The columns belong to what was previewed, so switching starts again (a chosen table is previewed again).
+  function switchMode(next: "table" | "query") {
+    if (next === mode) return;
+    setMode(next);
+    setPreview(null);
+    setChoices(null);
+    setError(null);
+    if (next === "table" && picked) void runPreview(picked);
+  }
+
   function change(index: number, patch: Partial<ColumnChoice>) {
     if (!choices) return;
     setChoices(choices.map((column, at) => (at === index ? { ...column, ...patch } : column)));
@@ -437,11 +447,11 @@ export function DatabaseSourceSetup({
       description="Pick a table or view, or write a SELECT query. Check each column's type: anything that's money should be Money, so totals are exact to the cent."
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <div className={ui.rowButtons} role="group" aria-label="What to read" style={{ marginBottom: 12 }}>
-        <Button size="small" variant={mode === "table" ? "primary" : "secondary"} aria-pressed={mode === "table"} onClick={() => setMode("table")}>
+      <div className={ui.rowButtons} role="group" aria-label="What to read" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+        <Button size="small" variant={mode === "table" ? "primary" : "secondary"} aria-pressed={mode === "table"} onClick={() => switchMode("table")}>
           Table or view
         </Button>
-        <Button size="small" variant={mode === "query" ? "primary" : "secondary"} aria-pressed={mode === "query"} onClick={() => setMode("query")}>
+        <Button size="small" variant={mode === "query" ? "primary" : "secondary"} aria-pressed={mode === "query"} onClick={() => switchMode("query")}>
           SQL query
         </Button>
       </div>
@@ -452,7 +462,7 @@ export function DatabaseSourceSetup({
             <Field label="Find a table">
               <input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Name…" />
             </Field>
-            <Field label="Table or view" hint={objects.loading ? "Reading the list…" : `${tables.length} tables, ${views.length} views.`}>
+            <Field label="Table or view" hint={objects.loading ? "Reading the list…" : `${tables.length === 1 ? "1 table" : `${tables.length} tables`}, ${views.length === 1 ? "1 view" : `${views.length} views`}.`}>
               <select
                 value={pickedKey}
                 onChange={(event) => {
@@ -486,7 +496,7 @@ export function DatabaseSourceSetup({
             </Field>
           </div>
           {picked && !preview ? (
-            <div className={ui.rowButtons} style={{ marginTop: 12 }}>
+            <div className={ui.rowButtons} style={{ marginTop: 12, flexWrap: "wrap" }}>
               <Button size="small" variant="secondary" onClick={() => void runPreview(picked)} disabled={previewing}>
                 {previewing ? "Reading…" : "Preview"}
               </Button>
@@ -498,7 +508,7 @@ export function DatabaseSourceSetup({
           <Field label="SELECT query" hint="One SELECT (it may start with WITH). Anything that changes data is refused.">
             <textarea value={query} rows={8} maxLength={20000} spellCheck={false} style={{ fontFamily: "var(--font-mono, monospace)", width: "100%" }} onChange={(event) => setQuery(event.target.value)} />
           </Field>
-          <div className={ui.rowButtons} style={{ marginTop: 12 }}>
+          <div className={ui.rowButtons} style={{ marginTop: 12, flexWrap: "wrap" }}>
             <Button size="small" variant="secondary" onClick={() => void runPreview({ query })} disabled={previewing || !query.trim()}>
               {previewing ? "Running…" : "Preview"}
             </Button>
@@ -600,7 +610,7 @@ export function DatabaseSourceSetup({
           </details>
         </>
       ) : null}
-      <div className={ui.rowButtons} style={{ marginTop: 16 }}>
+      <div className={ui.rowButtons} style={{ marginTop: 16, flexWrap: "wrap" }}>
         <Button onClick={() => void save()} disabled={busy || previewing || !choices || !choices.some((column) => column.include)}>
           {busy ? "Saving and loading…" : existing ? "Save and load" : "Set up and load"}
         </Button>
