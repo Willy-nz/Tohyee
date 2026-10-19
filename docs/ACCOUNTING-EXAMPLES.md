@@ -4285,6 +4285,84 @@ viewers can see it. "Today" is the date in the business time zone
   guessing the period. If the GST return can't be worked out (e.g. a
   standard-rated line at another rate, G9), Home shows why.
 
+### The farm Home (FH1-FH8; built by Claude 20 Oct 2026 from issue #341, Claude's rules, not yet reviewed)
+
+Issue #341: for farm clients, Home should be a farm dashboard. Xero has no
+farm Home, so this follows Xero's Home for look (cards, Customise and Hide)
+and the issue for what's on it. Every figure comes from a record Tohyee
+already keeps; nothing is typed in for the dashboard and nothing posts.
+Made-up farm: **Home block**, paddocks **12** (20 ha) and **14** (15 ha),
+March year end, Jess (owner) and Mere (admin), on Tue 20 Oct 2026.
+
+- **FH1 Which Home.** With Farming on, Home is the farm Home. Otherwise
+  it's the Home above (H1-H4). **Business overview** at the bottom opens
+  that Home for a farm too, with **Back to the farm Home**.
+- **FH2 This week on the farm.** Today and the next six days of the farm
+  calendar, as the person looking sees it (decision 571): Jess's own
+  "Drench the calves, Wed 21 Oct 7am", and Mere's shared "Pick up drench,
+  Thu 22 Oct". Not Mere's own unshared errand, and nothing from Jess's
+  email for Mere. Also "N items need checking" (their own). At most 8 items,
+  open or cancelled (moved and hidden ones aren't shown). It's marked
+  **Private to you**.
+- **FH3 Stock.** With Livestock on: head now by class (the income year's
+  closing so far, from the head count, LV1), largest first. 300 cows less 2
+  deaths is **298**, and 75 R1 heifers in the opening are **75 R2
+  heifers** after ageing on 1 April (**373** head). Also how many movements
+  were recorded this year (**1**), and how many AI-suggested movements are
+  waiting for someone to accept or decline (**1**, linking to Livestock).
+- **FH4 Pasture and feed.** For each active farm with a reading or
+  supplements: the farm's cover today (PF4), **2,300** kg DM/ha
+  (12 at 2,600 and 14 at 1,900, area-weighted), total **80,500** kg DM. The
+  highest and lowest paddocks (the ends of the feed wedge). Growth
+  area-weighted over paddocks whose latest growth (PF2) ended in the last 30
+  days: 12 went from 2,000 on 30 Sep to 2,600 on 10 Oct, **60.0** kg
+  DM/ha/day (14 has one reading, so no growth). Supplements fed this month
+  and last month in kg DM (June's aren't shown).
+- **FH5 Fertiliser and farm performance.** Fertiliser: each active farm's
+  latest plan, its latest version against what was applied (FB6): planned
+  **2.000 t**, applied **2.000 t**; planned **$2,060.00** (product and
+  spreading), spent **$1,560.00** (product at the quoted price, FB4, plus
+  any linked spreading). Farm performance: the last finished season's farm
+  working expenses, and per kg MS, hectare, cow and stock unit where those
+  figures are entered (FK2), against the season before. Wages of
+  $120,000 with 240,000 kg MS and 200 ha: **$0.50/kg MS**, **$600.00/ha**;
+  the year before $100,000 with 200,000 kg MS, **$0.50/kg MS**. It shows
+  only once some expense accounts are grouped as working expenses (FK1).
+- **FH6 Empty cards are hidden.** A card with nothing to show isn't shown,
+  rather than showing zeros: no calendar items or Needs checking; Livestock
+  off or no stock; no readings or supplements; no plan; no working
+  expenses; no notes. Money is hidden when cash, bills, money owed and the
+  GST estimate are all nil. With nothing at all, the farm Home says what to
+  use to fill it.
+- **FH7 Customise and Hide.** As on Home: **Customise** turns cards on or
+  off and moves them up or down, and **Hide** hides the dashboard. It's per
+  person, and saved like Home's (decision 372). The farm Home shows up to
+  10 cards (Home shows 4), so Analytics tiles can be pinned to it with
+  **Pin to page** (offered only when Farming is on). Everyone starts with
+  the same cards in the same order.
+- **FH8 Money and the notebook.** Money: cash in bank, bills to pay (and
+  how many are due this week), money owed to you and the GST estimate,
+  worked out as Home does (H2-H4). The farm notebook: the latest three
+  goals and the latest three other notes. Each card links to its full page
+  (calendar, Livestock, Pasture, fertiliser plan, Farm benchmarks, Banking,
+  notebook).
+
+Not built, as Tohyee has no records for them yet: **production and
+income** (kg MS to date against last season and budget, payout forecast):
+milk solids are only entered once a year for benchmarks. **FWE against
+budget**: budgets aren't grouped as working expenses. **Paddocks with a soil
+test due**: soil tests deliberately have no "due" rule. **Income tax due**
+on the Money card. **Different default cards per role** (owner, farm staff,
+accountant): Tohyee's roles (owner, admin, bookkeeper, viewer) don't say
+who's farm staff and who's the accountant, so everyone starts with the same
+cards and changes them with Customise. No card shows payroll figures (pay
+runs, pay rates or wages per person). Farm performance uses the ledger's
+expense totals, as Farm benchmarks does for any viewer.
+
+Tests: `tests/integration/farm-home.test.ts` (FH1-FH8),
+`tests/unit/dashboard-tiles.test.ts` (FH7) and
+`tests/unit/dashboard-pages.test.ts`.
+
 ## GST return
 
 The GST return is New Zealand's GST101A (boxes 5-15), worked out from
