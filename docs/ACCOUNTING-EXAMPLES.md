@@ -15301,8 +15301,8 @@ bookkeeper role.
   KiwiSaver on it. With LEAVELIAB-2 voided (HL55), LEAVELIAB-3 at 31 Oct
   measures from LEAVELIAB-1: 5,302.89 − 6,327.45 = −1,024.56, so Dr
   Employee entitlements 1,024.56 / Cr Leave expense 1,024.56 (Workshop).
-  Sick, bereavement and family violence leave are never in it (decision
-  188).
+  Bereavement and family violence leave are never in it; sick leave only
+  as assessed (HL62, decision 564), and Hemi has no assessment here.
 - **HL54 Refused or undone (posting).** A posting dated before the last
   one; a posting while any employee's row in the report has a problem
   (it names them); a posting without the two accounts set. A posting is
@@ -15393,6 +15393,32 @@ ESCT 17.5%. His first two weeks (28 Sep-4 Oct, paid 7 Oct; 5-11 Oct, paid
   (no approved pay run's period end or pay date is after 21 Oct). A
   bookkeeper without payroll access, and a viewer, never see it.
 
+- **HL62 Expected sick leave** (decision 564; #310 item 4, Jess: "Fix
+  wording and add it"; not yet reviewed). NZ IAS 19 and PBE IPSAS 39 paras
+  16-17 measure sick leave carried over at the additional amount expected
+  to be paid because of it: the days people are expected to take beyond
+  their new entitlements, not every unused day. Hemi (HL43, 14 days' sick
+  leave, OWP 1,200.00 over 5 days) after his first pay run (HL44):
+  - With no assessment, the report at Sun 11 Oct 2026 is HL52's
+    **6,327.45**, with no sick leave in it.
+  - Refused: 14.5 days ("Hemi has 14 days' sick leave at 11 Oct 2026, so
+    at most that many can be expected to be used from it"); days without a
+    reason; a negative number; anyone without payroll access.
+  - Jess records 2 days from Mon 5 Oct 2026, "Took 12 days in each of the
+    last two years". At 11 Oct: 2 days × 1,200.00 ÷ 5 = **480.00**, so
+    Hemi's total is **6,807.45**, and LEAVELIAB-1 at 11 Oct is Dr Leave
+    expense 6,807.45 / Cr Employee entitlements 6,807.45. The report at 4
+    Oct doesn't include it. The CSV has "Expected sick days" and "Expected
+    sick leave value" columns.
+  - She then records 14 days from Mon 12 Oct ("Surgery booked for
+    November"). Hemi takes a sick day on Wed 14 Oct (paid in the 12-18 Oct
+    pay run), so at Sun 18 Oct he has 13 days and only 13 are counted:
+    **3,120.00**. Recording 0 days from Mon 19 Oct takes it out from then;
+    the reports at earlier dates still show what was assessed for them.
+  - Tohyee doesn't estimate the days. The value is a usual day's pay as for
+    alternative holidays (decision 153), and employer KiwiSaver applies to
+    it as to the rest (decision 190). Assessments are never edited.
+
 ### Not supported yet (refused rather than guessed)
 
 - Anything under the **Employment Leave Act 2026** (from 6 Aug 2028).
@@ -15412,10 +15438,8 @@ ESCT 17.5%. His first two weeks (28 Sep-4 Oct, paid 7 Oct; 5-11 Oct, paid
 - Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
   re-employment within a month (s85).
 - Posting a leave liability to the ledger: **built on 2 Oct 2026**
-  (decisions 177, 182-191, HL52-HL61). Sick leave carried over stays out
-  (decision 188: material only where it can be taken as annual leave,
-  which the Act doesn't allow); an organisation whose agreements allow it
-  journals its own estimate.
+  (decisions 177, 182-191, HL52-HL61). Sick leave carried over is in only
+  as assessed (HL62, decision 564).
 
 ### Decided (Holidays Act leave)
 
@@ -15570,7 +15594,8 @@ Xero (decisions 188-191 in `docs/DECISIONS.md`). What was asked is kept
 under each.
 
 1. **Sick leave carried over: kept out** (decision 188; PBE IPSAS 39 para
-   17). Asked: "Add a typed estimate per organisation, or keep it out?"
+   17). Corrected on 19 Oct 2026 (#310): it's in where assessed (HL62,
+   decision 564). Asked: "Add a typed estimate per organisation, or keep it out?"
 2. **Finished, final pay not yet paid: kept in the report until the final
    pay's pay date** (decision 189; HL53, HL57, HL58). Asked: "Keep finished
    employees in the report until their final pay is approved, or accept

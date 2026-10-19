@@ -471,7 +471,7 @@ function Liability({ organisationId }: { organisationId: string }) {
     <>
     <Card
       title="Leave liability"
-      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays; and, for anyone who has finished but whose final pay isn't paid yet, the holiday pay on finishing on it. Employer KiwiSaver on it is shown for enrolled employees (gross, before ESCT). Sick, bereavement and family violence leave aren't in it: if your agreements let unused sick leave be taken as annual leave, journal your own estimate (decision 188). Post it to the ledger below (decisions 177, 189, 190)."
+      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays; and, for anyone who has finished but whose final pay isn't paid yet, the holiday pay on finishing on it. Employer KiwiSaver on it is shown for enrolled employees (gross, before ESCT). Sick leave carried over is in only where you've assessed how many days people are expected to take beyond their new entitlements (below; decision 564); bereavement and family violence leave aren't in it. Post it to the ledger below (decisions 177, 189, 190)."
       actions={
         <div className={ui.actions}>
           <Field label="As at"><DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>
@@ -484,7 +484,7 @@ function Liability({ organisationId }: { organisationId: string }) {
         <>
           <div className={ui.tableWrap}>
             <table className={ui.stackOnPhone}>
-              <thead><tr><th>Employee</th><th>Department</th><th>Annual holidays</th><th>Value</th><th>Running 8%</th><th>Alternative holidays</th><th>Holiday pay on finishing</th><th>Total</th><th>Employer KiwiSaver</th></tr></thead>
+              <thead><tr><th>Employee</th><th>Department</th><th>Annual holidays</th><th>Value</th><th>Running 8%</th><th>Alternative holidays</th><th>Holiday pay on finishing</th><th>Expected sick leave</th><th>Total</th><th>Employer KiwiSaver</th></tr></thead>
               <tbody>
                 {data.rows.map((row) => (
                   <tr key={row.employeeId}>
@@ -496,6 +496,9 @@ function Liability({ organisationId }: { organisationId: string }) {
                     <td data-label="Alternative holidays" className={ui.num}>{row.alternativeHolidays ? `${row.alternativeHolidays}: ${formatMoney(row.alternativeValue)}` : "—"}</td>
                     <td data-label="Holiday pay on finishing" className={ui.num}>
                       {row.finishDate ? <>{formatMoney(row.holidayPayOnFinishing)}<br /><small>finished {formatDate(row.finishDate)}{row.finalPayDate ? `, paid ${formatDate(row.finalPayDate)}` : ""}</small></> : "—"}
+                    </td>
+                    <td data-label="Expected sick leave" className={ui.num}>
+                      {row.sickExpected ? <>{trim(row.sickDays)} days: {formatMoney(row.sickValue)}<br /><small>from {formatDate(row.sickExpected.effectiveFrom)}{row.sickExpected.reason ? `: ${row.sickExpected.reason}` : ""}</small></> : "—"}
                     </td>
                     <td data-label="Total" className={ui.num}>{formatMoney(row.total)}</td>
                     <td data-label="Employer KiwiSaver" className={ui.num}>{row.kiwiSaverRate ? <>{formatMoney(row.kiwiSaver)}<br /><small>{trim(row.kiwiSaverRate)}%</small></> : "—"}</td>
@@ -509,6 +512,7 @@ function Liability({ organisationId }: { organisationId: string }) {
                   <td className={ui.num}>{formatMoney(data.totals.runningEightPercent)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.alternativeValue)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.holidayPayOnFinishing)}</td>
+                  <td className={ui.num}>{formatMoney(data.totals.sickValue)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.total)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.kiwiSaver)}</td>
                 </tr>
@@ -532,8 +536,69 @@ function Liability({ organisationId }: { organisationId: string }) {
         </>
       ) : report.loading ? <Empty>Loading…</Empty> : null}
     </Card>
+    <ExpectedSickLeave organisationId={organisationId} asAt={asAt} rows={data?.rows ?? []} onChanged={report.reload} />
     <LiabilityPostings organisationId={organisationId} asAt={asAt} total={data && data.rows.every((row) => row.problem === null) ? data.totals.withKiwiSaver : null} onChanged={report.reload} />
     </>
+  );
+}
+
+/**
+ * Sick leave expected to be used from carried-over leave (decision 564;
+ * HL62): an assessment per employee from a date, with the reason. Not every
+ * unused day: only those expected beyond new entitlements.
+ */
+function ExpectedSickLeave({ organisationId, asAt, rows, onChanged }: { organisationId: string; asAt: string; rows: LeaveLiabilityReport["rows"]; onChanged: () => void }) {
+  const people = rows.filter((row) => row.finishDate === null);
+  const [employeeId, setEmployeeId] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(asAt);
+  const [days, setDays] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api("/api/payroll/leave/liability/sick-expectations", {
+        method: "POST",
+        body: { organisationId, idempotencyKey: newIdempotencyKey("sick-expected"), employeeId, effectiveFrom, days, reason },
+      });
+      setMessage({ tone: "success", text: `Saved: ${days} days from ${formatDate(effectiveFrom)}.` });
+      setDays("");
+      setReason("");
+      onChanged();
+    } catch (cause) {
+      setMessage({ tone: "error", text: errorMessage(cause) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card
+      title="Expected sick leave"
+      description="Accounting standards (NZ IAS 19, PBE IPSAS 39) count sick leave carried over only for the extra days people are expected to take because of it, beyond their new entitlements: not every unused day. If that's material for you, record each person's expected days from a date and why; they're valued at a usual day's pay and posted with the rest. Record 0 to take it out. Tohyee doesn't estimate it for you."
+    >
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      <form className={styles.stack} onSubmit={save}>
+        <div className={ui.grid4}>
+          <Field label="Employee">
+            <select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} required>
+              <option value="">Choose…</option>
+              {people.map((row) => <option key={row.employeeId} value={row.employeeId}>{row.name}</option>)}
+            </select>
+          </Field>
+          <Field label="From"><DateInput value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} required /></Field>
+          <Field label="Expected days" hint="Beyond their new entitlements, from the sick leave they have now.">
+            <input inputMode="decimal" value={days} onChange={(event) => setDays(event.target.value)} required />
+          </Field>
+          <Field label="Why" hint="For example, the sick leave they've taken in past years.">
+            <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} />
+          </Field>
+        </div>
+        <div className={ui.actions}><Button type="submit" disabled={busy || !employeeId}>Save</Button></div>
+      </form>
+    </Card>
   );
 }
 

@@ -1542,15 +1542,19 @@ as it returned them, so check them against the PDF (they match NZ IAS 19's
 paragraphs of the same numbers). The examples are **not approved by Jess**.
 
 188. **Sick leave stays out of the liability (question 1), documented, not
-     built.** Para 17: "a sick leave obligation is likely to be material
-     only if there is a formal or informal understanding that unused paid
-     sick leave may be taken as paid annual leave." The Holidays Act 2003
-     doesn't let sick leave be taken as annual holidays, so for most
-     organisations there's no material obligation and nothing to estimate.
-     An organisation whose own agreements do allow it has to journal its
-     own estimate by hand; the liability screen says so. Bereavement and
-     family violence leave don't accumulate (para 13(b): recognised when
-     the absence occurs), so they stay out too.
+     built.** Corrected on 19 October 2026 (#310 item 4; decision 564).
+     The reasoning was wrong: it read para 17's "a sick leave obligation is
+     likely to be material only if there is a formal or informal
+     understanding that unused paid sick leave may be taken as paid annual
+     leave" as the test. Paras 16-17 measure accumulating paid absences at
+     the additional amount expected to be paid because of the unused
+     entitlement carried over, and the standard's own example recognises
+     a liability for sick days expected to be used beyond the new
+     entitlement, with no annual leave conversion. Whether that's material
+     is each organisation's judgement, so Tohyee now takes an assessment
+     (decision 564) rather than leaving it out. Bereavement and family
+     violence leave don't accumulate (para 13(b): recognised when the
+     absence occurs), so they stay out.
 189. **Finished employees stay in the liability until their final pay is
      paid (question 2; HL53, HL57, HL58).** Para 11 recognises the benefits
      expected to be paid for service already given, "after deducting any
@@ -5210,3 +5214,19 @@ testing) and #154's code signing (later, Jess).
      (it would need to know what's still on hand and its cost); the
      accountant types an elimination adjustment, which reduces consolidated
      profit and the asset (CO12, not yet reviewed).
+564. **Expected sick leave in the leave liability** (19 October 2026). #310
+     item 4; Jess: "Fix wording and add it" (decision 188 corrected).
+     Someone with payroll access records, per employee and from a date,
+     the sick days expected to be taken from carried-over leave beyond
+     new entitlements, with a reason (none needed for 0, which takes it
+     out). The latest assessment on or before the report's date applies;
+     it's never more than the employee's sick leave balance at that date,
+     valued at a usual day's pay (ordinary weekly pay ÷ usual days, as
+     alternative holidays, decision 153), and is part of each employee's
+     total, so the employer KiwiSaver (decision 190), the Departments and
+     the posting (decision 177) include it. Refused above the balance on
+     the assessment's date. Assessments are kept, never edited. Tohyee
+     doesn't estimate the days: that judgement (and whether it's material)
+     is the organisation's. Finished employees aren't paid sick leave, so
+     it doesn't apply to them. HL62, tenant migration 0160, not yet
+     reviewed.

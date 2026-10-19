@@ -1763,8 +1763,8 @@ that something happened.
   role). Payroll › Leave › Liability: "Post leave liability" at a date
   makes one journal (LEAVELIAB-n) for the change since the last posting
   not voided: the liability report's total (annual holidays entitled to,
-  the running 8%, untaken alternative holidays; never sick, bereavement
-  or family violence leave) by Department, Dr leave expense / Cr employee
+  the running 8%, untaken alternative holidays, any expected sick leave
+  assessed; never bereavement or family violence leave) by Department, Dr leave expense / Cr employee
   entitlements, or the other way when it falls, tagged with the
   Department, never naming anyone. Leave paid in pay runs still goes to
   wages; the next posting takes the fall. The two accounts are payroll
@@ -1781,8 +1781,12 @@ that something happened.
   truncated to cents) is posted as its own pair of lines, "Employer
   KiwiSaver on leave"; and the home page reminds bookkeepers with payroll
   access to post after each month end with approved pay runs. Sick leave
-  carried over stays out (PBE IPSAS 39 para 17; journal your own estimate
-  if your agreements let it be taken as annual leave).
+  carried over (decision 564, HL62, tenant migration 0160): someone with
+  payroll access can record the days an employee is expected to take
+  beyond their new entitlements, from a date and with a reason (never more
+  than their balance; 0 takes it out); they're valued at a usual day's pay
+  and posted with the rest. Without one, it's not in (NZ IAS 19 and PBE
+  IPSAS 39 paras 16-17). Tohyee doesn't estimate the days.
 - **AI: connect your own AI** (decisions 339-348, core migration 0005). The
   AI page (`/operations/ai`) lets each member make personal access keys for
   the organisation (shown once, stored hashed, at most 10, revocable), each

@@ -21,10 +21,11 @@ import { optionalSource, requireIdempotencyKey } from "@/lib/validation";
  * journal for the change since the last posting not voided: the liability
  * report's total at that date (annual holidays entitled to, the running 8%,
  * untaken alternative holidays and the holiday pay on finishing of anyone
- * finished but not yet paid; decisions 153, 189) less what that posting
+ * finished but not yet paid, and any expected sick leave assessed;
+ * decisions 153, 189, 564) less what that posting
  * left, and the employer KiwiSaver on it as its own line pair (decision 190), Dr leave expense / Cr employee entitlements (or the other way for a
- * fall), by the report's Departments, never naming employees. Sick,
- * bereavement and family violence leave are never in it. A posting is
+ * fall), by the report's Departments, never naming employees.
+ * Bereavement and family violence leave are never in it. A posting is
  * never edited: voiding the latest posts the reversing journal. Payroll
  * access only (the routes need the bookkeeper role too); audited without
  * figures.
