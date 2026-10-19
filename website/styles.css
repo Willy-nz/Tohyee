@@ -585,8 +585,8 @@ h3 {
 }
 .farm-points {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0 40px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px 40px;
   margin-top: 44px;
 }
 .farm-points > div {
@@ -975,7 +975,7 @@ h3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .farm-points {
-    gap: 0 24px;
+    gap: 32px 24px;
   }
 }
 @media (max-width: 860px) {
@@ -1040,6 +1040,7 @@ h3 {
   }
   .farm-points {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
   }
   .farm-points > div + div {
     margin-top: 28px;

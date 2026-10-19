@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-10-19",
+      "title": "Tohyee 0.10.0",
+      "body": "New: income tax from the books (provisional tax, interest, tax depreciation, the imputation credit account and the IR10, IR4 and IR3 boxes, not yet reviewed by an accountant); pasture and feed records; a Farming API for your own apps; a farm calendar from your own email; livestock reporting choices; expected sick leave; and clearer screens.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.10.0"
+    },
+    {
       "date": "2026-10-15",
       "title": "Tohyee 0.9.0",
       "body": "New: Tier 3 and Tier 4 not-for-profit performance reports; price changes across repeating invoices; bring in a year's general ledger from MYOB as history; free and negative lines on invoices and bills; copy last week's roster; and security hardening. Read the notes before updating if you have your own scripts.",

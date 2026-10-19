@@ -1252,7 +1252,7 @@ export function ReconcilePanel({
       <p className={ui.muted}>
         {total} {total === 1 ? "line" : "lines"} to reconcile, oldest first. Reconciling says what each line is: something already
         posted, a payment of invoices or bills, a new bank transaction, or a transfer. A highlighted suggestion is the only match with
-        the exact amount; <strong>OK</strong> reconciles it in one click. Tick several lines to code them to an account all at once.
+        the exact amount; <strong>OK</strong> reconciles it as shown, in one click. <strong>Review</strong> opens a line to match or code it yourself. Tick several lines to code them to an account all at once.
       </p>
       {confident.error ? <Notice tone="error">{confident.error}</Notice> : null}
       {can("bookkeeper") && confident.data ? (
@@ -1407,9 +1407,10 @@ function LineRow({
         </td>
         <InOutCells amount={line.amount} />
         <td style={{ textAlign: "right" }}>
+          {/* "Review" only opens the line; OK (Xero's word) is the one button that reconciles it (#323 finding 3). */}
           {canReconcile ? (
-            <Button size="small" variant={open ? "secondary" : "primary"} onClick={onToggle} aria-expanded={open}>
-              {open ? "Close" : "Reconcile"}
+            <Button size="small" variant="secondary" onClick={onToggle} aria-expanded={open}>
+              {open ? "Close" : "Review"}
             </Button>
           ) : null}
         </td>
