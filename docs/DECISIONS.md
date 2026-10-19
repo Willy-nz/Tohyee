@@ -5348,3 +5348,26 @@ testing) and #154's code signing (later, Jess).
      once; making a new one stops the old. It answers "not found" alike
      for a wrong, replaced or turned-off link, a member who has left, or
      Farming turned off, and is limited to 60 requests an hour. FC22, FC23.
+587. **Farm organisations get a farm Home** (20 October 2026). Issue #341,
+     from Jess. With Farming on, Home is a farm dashboard built from records
+     Tohyee already keeps: the farm calendar (only as the person looking
+     sees it, decision 571), stock, pasture and feed, fertiliser, farm
+     working expenses per unit, a small Money card and the farm notebook.
+     Cards with nothing to show are hidden rather than showing zeros. The
+     business Home is a link away (Business overview). Xero has no farm
+     Home, so it follows Xero's Home for look and the issue for content.
+     FH1-FH6, FH8, not yet reviewed.
+588. **The farm Home is customised like Home** (20 October 2026). It's a
+     second page in the dashboard frame (decision 372): per-person cards,
+     order and Hide, saved in the same preferences, with Analytics tiles
+     pinned alongside (decision 374). It shows up to 10 cards, not Home's
+     4, so each page now has its own limit. Pin to page offers it only when
+     Farming is on. FH7.
+589. **What the farm Home leaves out** (20 October 2026). No card is made
+     up where Tohyee has no records: production and income (milk solids are
+     entered only yearly), FWE against budget, soil tests due (soil tests
+     have no "due" rule on purpose) and income tax due. There are no
+     different default cards per role: Tohyee's roles don't say who is farm
+     staff or the accountant, and guessing from bookkeeper or viewer would
+     be wrong as often as right. Everyone starts with the same cards and
+     uses Customise. No card shows payroll figures.

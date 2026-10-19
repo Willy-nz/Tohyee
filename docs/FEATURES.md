@@ -38,7 +38,16 @@ that something happened.
   the same sections on phones, where line editors stack each line's fields.
   **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
   you; Bills to pay with due-this-week; Next GST return), net profit by month,
-  a To do card and recent activity.
+  a To do card and recent activity. With Farming on, Home is the **farm
+  Home** (#341, FH1-FH8, decisions 587-589): this week on the farm (private to
+  you) and Needs checking, stock by class with AI suggestions waiting,
+  pasture cover, growth and supplements, fertiliser planned against applied,
+  farm working expenses per unit against last season, a small Money card and
+  the farm notebook. Each card links to its page, and empty cards are hidden.
+  Customise turns cards on and off and orders them, per person, with
+  Analytics tiles pinned alongside (up to 10). Not yet: production and
+  income, FWE against budget, soil tests due, and different default cards
+  per role.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.

@@ -2,7 +2,7 @@ import { getDashboardPreference, saveDashboardPreference } from "@/lib/dashboard
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { listDashboards } from "@/lib/analytics/dashboards";
 import { analyticsTileReference, parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
-import { dashboardPage, defaultDashboardTileIds, MAX_DASHBOARD_TILES } from "@/lib/dashboard/pages";
+import { dashboardPage, defaultDashboardTileIds, maxTilesFor } from "@/lib/dashboard/pages";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import type { Role } from "@/lib/auth/roles";
@@ -30,9 +30,9 @@ async function allowedTiles(
 }
 
 /** A save names only tiles that exist and this person may see; anything else is refused rather than dropped. */
-function checkTiles(input: unknown, allowed: readonly string[], analyticsOn: boolean) {
+function checkTiles(input: unknown, allowed: readonly string[], analyticsOn: boolean, maxTiles: number) {
   if (!Array.isArray(input)) return;
-  if (input.length > MAX_DASHBOARD_TILES) throw new ValidationError(`A page shows up to ${MAX_DASHBOARD_TILES} tiles.`);
+  if (input.length > maxTiles) throw new ValidationError(`This page shows up to ${maxTiles} tiles.`);
   const allowedSet = new Set(allowed);
   for (const value of input) {
     if (typeof value !== "string" || !value.startsWith("analytics:")) continue;
@@ -51,7 +51,7 @@ export const GET = route(async (request) => {
   const preference = await withOrganisation(request, params.get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
     const defaults = defaultDashboardTileIds(definition);
     const { allowed } = await allowedTiles(tx, defaults, auth.user.id, membership.role);
-    return getDashboardPreference(tx, { userId: auth.user.id, page, defaultTiles: defaults, allowedTiles: allowed });
+    return getDashboardPreference(tx, { userId: auth.user.id, page, defaultTiles: defaults, allowedTiles: allowed, maxTiles: maxTilesFor(definition) });
   });
   return json(preference);
 });
@@ -64,7 +64,7 @@ export const PUT = route(async (request) => {
   const preference = await withOrganisation(request, body.organisationId, "report_viewer", async (tx, { auth, membership }) => {
     const defaults = defaultDashboardTileIds(definition);
     const { allowed, analyticsOn } = await allowedTiles(tx, defaults, auth.user.id, membership.role);
-    checkTiles(body.tiles, allowed, analyticsOn);
+    checkTiles(body.tiles, allowed, analyticsOn, maxTilesFor(definition));
     return saveDashboardPreference(tx, {
       userId: auth.user.id,
       page,
@@ -72,6 +72,7 @@ export const PUT = route(async (request) => {
       tiles: body.tiles,
       defaultTiles: defaults,
       allowedTiles: allowed,
+      maxTiles: maxTilesFor(definition),
     });
   });
   return json(preference);
