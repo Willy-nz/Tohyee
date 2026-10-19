@@ -105,6 +105,7 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
       twoYearsAgo: null,
       payments: [],
       today: "2026-10-16",
+      extensionOfTime: false,
     });
     expect(schedule.kind).toBe("schedule");
     if (schedule.kind !== "schedule") return;
@@ -115,14 +116,14 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     ]);
     expect(schedule.total).toBe("18551.40");
     // Amounts that don't divide evenly: the last instalment is what's left.
-    const uneven = standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("10000"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16" });
+    const uneven = standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("10000"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16", extensionOfTime: false });
     expect(uneven.kind === "schedule" && uneven.instalments.map((instalment) => instalment.amount)).toEqual(["3500.00", "3500.00", "3500.00"]);
-    const odd = standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("10000.01"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16" });
+    const odd = standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("10000.01"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16", extensionOfTime: false });
     expect(odd.kind === "schedule" && odd.instalments.map((instalment) => instalment.amount)).toEqual(["3500.00", "3500.00", "3500.01"]);
   });
 
-  it("ITX6 last year's return filed late: two years ago plus 10% until it's filed", () => {
-    const base = { year: 2027, instalmentCount: 3 as const, lastYear: { amount: dec("17668"), typed: true }, twoYearsAgo: dec("12000"), today: "2027-02-01" };
+  it("ITX6 last year's return filed late with an extension of time: two years ago plus 10% until it's filed", () => {
+    const base = { year: 2027, instalmentCount: 3 as const, lastYear: { amount: dec("17668"), typed: true }, twoYearsAgo: dec("12000"), today: "2027-02-01", extensionOfTime: true };
     const afterFirst = standardSchedule({
       ...base,
       lastYearFiledOn: "2026-10-10",
@@ -168,21 +169,40 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     expect(afterFirst.kind === "schedule" && afterFirst.instalments[1].basis).toBe("RIT for the 2026 income year: 17,668.00 + 5% = 18,551.40, x 2 ÷ 3 = 12,367.60, less 4,400.00 paid towards the year before 15 Jan 2027");
   });
 
+  it("ITX67 without an extension of time, last year's RIT plus 5% even when its return is filed late", () => {
+    const base = { year: 2027, instalmentCount: 3 as const, twoYearsAgo: dec("12000"), today: "2027-02-01", extensionOfTime: false, payments: [] };
+    const late = standardSchedule({ ...base, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-10-10" });
+    if (late.kind !== "schedule") throw new Error("expected a schedule");
+    expect(late.instalments.map((instalment) => [instalment.amount, instalment.estimate])).toEqual([["6183.80", false], ["6183.80", false], ["6183.80", false]]);
+    expect(late.total).toBe("18551.40");
+    expect(late.notes.join(" ")).toContain("no extension of time");
+    // Not filed yet: Tohyee's estimate of last year's RIT, marked as one on every instalment.
+    const notFiled = standardSchedule({ ...base, lastYear: { amount: dec("17668"), typed: false }, lastYearFiledOn: null });
+    if (notFiled.kind !== "schedule") throw new Error("expected a schedule");
+    expect(notFiled.instalments.map((instalment) => [instalment.amount, instalment.estimate])).toEqual([["6183.80", true], ["6183.80", true], ["6183.80", true]]);
+    expect(notFiled.notes.join(" ")).toContain("Tohyee's estimate");
+    // With no figure for last year at all, it still says so rather than guessing.
+    expect(standardSchedule({ ...base, lastYear: null, lastYearFiledOn: null }).kind).toBe("unknown");
+  });
+
   it("ITX7 six-monthly GST filers pay twice", () => {
-    const schedule = standardSchedule({ year: 2027, instalmentCount: 2, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16" });
+    const schedule = standardSchedule({ year: 2027, instalmentCount: 2, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16", extensionOfTime: false });
     expect(schedule.kind === "schedule" && schedule.instalments.map((instalment) => [instalment.dueDate, instalment.amount])).toEqual([
       ["2026-10-28", "9275.70"],
       ["2027-05-07", "9275.70"],
     ]);
-    const late = standardSchedule({ year: 2027, instalmentCount: 2, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-11-01", twoYearsAgo: dec("12000"), payments: [], today: "2026-11-16" });
+    const late = standardSchedule({ year: 2027, instalmentCount: 2, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-11-01", twoYearsAgo: dec("12000"), payments: [], today: "2026-11-16", extensionOfTime: true });
     expect(late.kind).toBe("unknown");
+    // ITX67: with no extension of time, last year plus 5% applies, so the two instalments can be worked out.
+    const lateNoExtension = standardSchedule({ year: 2027, instalmentCount: 2, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-11-01", twoYearsAgo: dec("12000"), payments: [], today: "2026-11-16", extensionOfTime: false });
+    expect(lateNoExtension.kind === "schedule" && lateNoExtension.instalments.map((instalment) => instalment.amount)).toEqual(["9275.70", "9275.70"]);
   });
 
   it("ITX8 last year's RIT of 5,000 or less means no instalments", () => {
-    const schedule = standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("4800"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16" });
+    const schedule = standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("4800"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16", extensionOfTime: false });
     expect(schedule.kind).toBe("not_provisional");
-    expect(standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("5000"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16" }).kind).toBe("not_provisional");
-    expect(standardSchedule({ year: 2027, instalmentCount: 3, lastYear: null, lastYearFiledOn: null, twoYearsAgo: null, payments: [], today: "2026-10-16" }).kind).toBe("unknown");
+    expect(standardSchedule({ year: 2027, instalmentCount: 3, lastYear: { amount: dec("5000"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, payments: [], today: "2026-10-16", extensionOfTime: false }).kind).toBe("not_provisional");
+    expect(standardSchedule({ year: 2027, instalmentCount: 3, lastYear: null, lastYearFiledOn: null, twoYearsAgo: null, payments: [], today: "2026-10-16", extensionOfTime: false }).kind).toBe("unknown");
   });
 
   it("ITX10 due dates move to the next business day", () => {

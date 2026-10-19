@@ -9476,6 +9476,19 @@ Setup:
   is **1.1000**, so its budget is **4,950.00**. Its actual is 5,600.00 (CO3).
   With Retail's 4000 budget of 18,000.00, the group's 4000 budget is
   **22,950.00** against an actual of **25,600.00**.
+- **CO12** Profit on stock still in the group (#310, Jess: "Fix wording and
+  support it"; not yet reviewed). On 25 Oct 2026 Holdings buys
+  goods for 1,000.00 and sells them to Retail for 1,500.00, paid. Retail
+  still has them (1410) on 31 Oct. 4000, 5000 and 1410 aren't intercompany
+  accounts, so nothing is eliminated automatically: consolidated net profit
+  for October is **8,540.00**, goods for resale **4,500.00** and both sides
+  of the balance sheet **41,950.00**. Jess adds the adjustment "Sale to
+  Retail and the profit in its stock" at 31 Oct: Dr Holdings 4000 1,500.00 /
+  Cr Holdings 5000 1,000.00 / Cr Retail 1410 500.00. Consolidated net profit
+  is now **8,040.00** (current year earnings too), goods for resale
+  **4,000.00** and both sides **41,450.00**: the group's profit and net
+  assets drop by the 500.00 not yet made outside the group. Tohyee doesn't
+  work out unrealised profit itself; the adjustment is typed.
 - **FX1** Holdings (NZD) turns on ECB rates. The ECB's rates for 5 Oct 2026
   are, per EUR, NZD 1.9000 and AUD 1.7000, so Holdings' list gets AUD
   **1.117647** on 5 Oct, from "European Central Bank". A rate Jess typed for
@@ -9486,7 +9499,7 @@ Setup:
   in.
 
 Built (decisions 437-445, core migration 0007, tenant migration 0102).
-Test: `tests/integration/consolidation.test.ts` (CO1-CO11, FX1). AI
+Test: `tests/integration/consolidation.test.ts` (CO1-CO12, FX1). AI
 commentary is item 6 part 3.
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion
@@ -15288,8 +15301,8 @@ bookkeeper role.
   KiwiSaver on it. With LEAVELIAB-2 voided (HL55), LEAVELIAB-3 at 31 Oct
   measures from LEAVELIAB-1: 5,302.89 − 6,327.45 = −1,024.56, so Dr
   Employee entitlements 1,024.56 / Cr Leave expense 1,024.56 (Workshop).
-  Sick, bereavement and family violence leave are never in it (decision
-  188).
+  Bereavement and family violence leave are never in it; sick leave only
+  as assessed (HL62, decision 564), and Hemi has no assessment here.
 - **HL54 Refused or undone (posting).** A posting dated before the last
   one; a posting while any employee's row in the report has a problem
   (it names them); a posting without the two accounts set. A posting is
@@ -15380,6 +15393,32 @@ ESCT 17.5%. His first two weeks (28 Sep-4 Oct, paid 7 Oct; 5-11 Oct, paid
   (no approved pay run's period end or pay date is after 21 Oct). A
   bookkeeper without payroll access, and a viewer, never see it.
 
+- **HL62 Expected sick leave** (decision 564; #310 item 4, Jess: "Fix
+  wording and add it"; not yet reviewed). NZ IAS 19 and PBE IPSAS 39 paras
+  16-17 measure sick leave carried over at the additional amount expected
+  to be paid because of it: the days people are expected to take beyond
+  their new entitlements, not every unused day. Hemi (HL43, 14 days' sick
+  leave, OWP 1,200.00 over 5 days) after his first pay run (HL44):
+  - With no assessment, the report at Sun 11 Oct 2026 is HL52's
+    **6,327.45**, with no sick leave in it.
+  - Refused: 14.5 days ("Hemi has 14 days' sick leave at 11 Oct 2026, so
+    at most that many can be expected to be used from it"); days without a
+    reason; a negative number; anyone without payroll access.
+  - Jess records 2 days from Mon 5 Oct 2026, "Took 12 days in each of the
+    last two years". At 11 Oct: 2 days × 1,200.00 ÷ 5 = **480.00**, so
+    Hemi's total is **6,807.45**, and LEAVELIAB-1 at 11 Oct is Dr Leave
+    expense 6,807.45 / Cr Employee entitlements 6,807.45. The report at 4
+    Oct doesn't include it. The CSV has "Expected sick days" and "Expected
+    sick leave value" columns.
+  - She then records 14 days from Mon 12 Oct ("Surgery booked for
+    November"). Hemi takes a sick day on Wed 14 Oct (paid in the 12-18 Oct
+    pay run), so at Sun 18 Oct he has 13 days and only 13 are counted:
+    **3,120.00**. Recording 0 days from Mon 19 Oct takes it out from then;
+    the reports at earlier dates still show what was assessed for them.
+  - Tohyee doesn't estimate the days. The value is a usual day's pay as for
+    alternative holidays (decision 153), and employer KiwiSaver applies to
+    it as to the rest (decision 190). Assessments are never edited.
+
 ### Not supported yet (refused rather than guessed)
 
 - Anything under the **Employment Leave Act 2026** (from 6 Aug 2028).
@@ -15399,10 +15438,8 @@ ESCT 17.5%. His first two weeks (28 Sep-4 Oct, paid 7 Oct; 5-11 Oct, paid
 - Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
   re-employment within a month (s85).
 - Posting a leave liability to the ledger: **built on 2 Oct 2026**
-  (decisions 177, 182-191, HL52-HL61). Sick leave carried over stays out
-  (decision 188: material only where it can be taken as annual leave,
-  which the Act doesn't allow); an organisation whose agreements allow it
-  journals its own estimate.
+  (decisions 177, 182-191, HL52-HL61). Sick leave carried over is in only
+  as assessed (HL62, decision 564).
 
 ### Decided (Holidays Act leave)
 
@@ -15557,7 +15594,8 @@ Xero (decisions 188-191 in `docs/DECISIONS.md`). What was asked is kept
 under each.
 
 1. **Sick leave carried over: kept out** (decision 188; PBE IPSAS 39 para
-   17). Asked: "Add a typed estimate per organisation, or keep it out?"
+   17). Corrected on 19 Oct 2026 (#310): it's in where assessed (HL62,
+   decision 564). Asked: "Add a typed estimate per organisation, or keep it out?"
 2. **Finished, final pay not yet paid: kept in the report until the final
    pay's pay date** (decision 189; HL53, HL57, HL58). Asked: "Keep finished
    employees in the report until their final pay is approved, or accept
@@ -17477,7 +17515,7 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
   half up to the cent, and the last instalment is what's left, so they add
   up exactly. RIT of 5,000.00 or less last year means no provisional tax (see
   ITX8).
-- **ITX6 Last year's return filed late.** As ITX5, but 2025 RIT was 12,000.00
+- **ITX6 Last year's return filed late, with an extension of time.** As ITX5 (for a taxpayer with a tax agent's extension of time; without one, see ITX67), but 2025 RIT was 12,000.00
   and the 2026 return was filed on 10 Oct 2026 (after the first instalment,
   before the second). Instalment 1: 12,000.00 + 10% = 13,200.00 ÷ 3 =
   **4,400.00**. Instalment 2: 18,551.40 x 2 ÷ 3 = 12,367.60, less what was
@@ -18176,3 +18214,17 @@ touching the accounting core. Nothing in it posts to the books. Tested in
   the soil sampling app in `examples/farm-apps/soil-sampling/`. A breaking
   change gets a new version (`v2`); `v1` keeps working until it's retired
   with notice.
+
+## Income tax (#292, #310): the extension-of-time condition (ITX67; from IRD's "Standard option" page, read 18 Oct 2026; Jess chose 19 Oct 2026)
+
+- **ITX67 No extension of time.** IRD's "Standard option" page: with no
+  extension of time to file, "your provisional tax will be your previous
+  year's RIT plus 5%. This includes if you file your return after any of
+  your provisional tax dates." Tohyee treats the tax agent's extension
+  setting as the extension of time. Without it: Kererū's 2026 RIT
+  17,668.00, its return filed 10 Oct 2026 (after the first instalment):
+  **6,183.80** three times, total **18,551.40**, with a note saying why.
+  Not filed yet: the same from Tohyee's estimate of last year's RIT, every
+  instalment marked as an estimate. Six-monthly GST filers get their two
+  instalments (9,275.70 each) instead of "can't work it out". With an
+  extension, ITX6 is unchanged. Tested in `tests/unit/income-tax-rules.test.ts`.
