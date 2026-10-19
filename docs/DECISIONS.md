@@ -5192,3 +5192,9 @@ testing) and #154's code signing (later, Jess).
      them. An OpenAPI 3.1 contract, a guide (docs/FARM-APPS.md) and a
      one-file soil sampling app. New: soil samples taken in the field
      (FA4). Photos aren't taken yet. FA1-FA8, not yet reviewed.
+562. **Provisional tax: the extension-of-time condition** (19 October 2026).
+     From issue #310; Jess chose "as IRD's page says". Two years ago plus
+     10% applies only with an extension of time to file (Tohyee's tax
+     agent's extension setting); without one, last year's RIT plus 5%
+     applies however late the return is, from Tohyee's estimate until IRD's
+     figure is typed (ITX67). Supersedes the open point in decision 558.

@@ -260,6 +260,11 @@ export function nextYearStandard(rit: Decimal): { option: "S"; amount: string } 
  *   filed late.
  * - `payments`: payments to IRD towards this income year.
  * - `today`: earlier instalments not due yet are assumed paid as worked out.
+ * - `extensionOfTime`: whether the taxpayer has an extension of time to file
+ *   (a tax agent's). Without one, last year's RIT plus 5% applies even when
+ *   last year's return is filed after the instalment dates (IRD, "Standard
+ *   option"; ITX67, Jess 19 Oct 2026); two years ago plus 10% is only for a
+ *   taxpayer with an extension whose return isn't filed yet.
  */
 export function standardSchedule(input: {
   year: number;
@@ -271,6 +276,7 @@ export function standardSchedule(input: {
   today: string;
   /** The balance date's month (default 31 March). */
   endMonth?: number;
+  extensionOfTime: boolean;
 }): ProvisionalSchedule {
   const { year, lastYear, twoYearsAgo } = input;
   const label = (offset: number) => `the ${year - offset} income year`;
@@ -311,13 +317,18 @@ export function standardSchedule(input: {
     amounts.push({ target, due: sub(target, paid), basis: basis(paid), estimate });
   };
 
-  if (filedBy(0)) {
+  if (filedBy(0) || !input.extensionOfTime) {
+    if (!filedBy(0)) {
+      notes.push(
+        `There's no extension of time to file, so the instalments are ${label(1)}'s RIT plus 5% even though its return ${filedOn ? "was filed after the first instalment" : "isn't filed yet"} (IRD, "Standard option").`,
+      );
+    }
     const share = divide(total, dec(String(input.instalmentCount)), 2);
     for (let index = 0; index < dates.length; index += 1) {
       const last = index === dates.length - 1;
       const target = last ? total : mul(share, dec(String(index + 1)));
       const amount = last ? sub(total, mul(share, dec(String(dates.length - 1)))) : share;
-      amounts.push({ target, due: amount, basis: `RIT for ${label(1)}: ${uplifted}, ÷ ${input.instalmentCount}${last ? ", less the other instalments so they add up" : ""}`, estimate: false });
+      amounts.push({ target, due: amount, basis: `RIT for ${label(1)}: ${uplifted}, ÷ ${input.instalmentCount}${last ? ", less the other instalments so they add up" : ""}`, estimate: !lastYear.typed });
     }
   } else if (input.instalmentCount === 2) {
     return {
