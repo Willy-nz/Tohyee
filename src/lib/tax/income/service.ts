@@ -622,6 +622,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     payments: payments.map((payment) => ({ date: payment.paidOn, amount: dec(payment.amount) })),
     today,
     endMonth,
+    extensionOfTime: settings.agentExtension,
   });
 
   // End-of-year tax: this year's RIT less provisional tax (the instalments, or what's been paid if more) (ITX9).
