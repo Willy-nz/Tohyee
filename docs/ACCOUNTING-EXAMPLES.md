@@ -9476,6 +9476,19 @@ Setup:
   is **1.1000**, so its budget is **4,950.00**. Its actual is 5,600.00 (CO3).
   With Retail's 4000 budget of 18,000.00, the group's 4000 budget is
   **22,950.00** against an actual of **25,600.00**.
+- **CO12** Profit on stock still in the group (#310, Jess: "Fix wording and
+  support it"; not yet reviewed). On 25 Oct 2026 Holdings buys
+  goods for 1,000.00 and sells them to Retail for 1,500.00, paid. Retail
+  still has them (1410) on 31 Oct. 4000, 5000 and 1410 aren't intercompany
+  accounts, so nothing is eliminated automatically: consolidated net profit
+  for October is **8,540.00**, goods for resale **4,500.00** and both sides
+  of the balance sheet **41,950.00**. Jess adds the adjustment "Sale to
+  Retail and the profit in its stock" at 31 Oct: Dr Holdings 4000 1,500.00 /
+  Cr Holdings 5000 1,000.00 / Cr Retail 1410 500.00. Consolidated net profit
+  is now **8,040.00** (current year earnings too), goods for resale
+  **4,000.00** and both sides **41,450.00**: the group's profit and net
+  assets drop by the 500.00 not yet made outside the group. Tohyee doesn't
+  work out unrealised profit itself; the adjustment is typed.
 - **FX1** Holdings (NZD) turns on ECB rates. The ECB's rates for 5 Oct 2026
   are, per EUR, NZD 1.9000 and AUD 1.7000, so Holdings' list gets AUD
   **1.117647** on 5 Oct, from "European Central Bank". A rate Jess typed for
@@ -9486,7 +9499,7 @@ Setup:
   in.
 
 Built (decisions 437-445, core migration 0007, tenant migration 0102).
-Test: `tests/integration/consolidation.test.ts` (CO1-CO11, FX1). AI
+Test: `tests/integration/consolidation.test.ts` (CO1-CO12, FX1). AI
 commentary is item 6 part 3.
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion
