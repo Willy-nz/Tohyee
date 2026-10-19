@@ -1954,6 +1954,24 @@ that something happened.
   receivable, Accounts payable, Cash in bank and Days to get paid. A new
   report can start from a template: Business overview, Sales & customers,
   Profit & loss, CRM pipeline or Farm.
+- **Analytics: Google Analytics for websites** (decisions 606-609,
+  examples GA1-GA8, tenant migration 0167). In Data sources › Add data
+  source › Google Analytics, an admin signs in with Google (the
+  organisation's Google app from Settings › Email, read-only Analytics
+  access), chooses a GA4 property, and Tohyee loads five daily tables:
+  website by day (visitors, new visitors, sessions, engaged sessions, page
+  views, engagement rate, key events, revenue), traffic sources (channel,
+  source, medium), pages, countries and devices. 13 months of history by
+  default (1 to 60), nightly and by Refresh now, in the load history.
+  Google's quota limits, a disabled API and an expired sign-in each get a
+  plain message, and a failed load keeps the last copy. Disconnect deletes
+  the sign-in and the loaded tables. A **Website** report template puts
+  visitors, sessions, top pages, channels and devices beside invoiced
+  sales. Setting up: in the Google app's Cloud project, enable the Google
+  Analytics Data API and Admin API, add the `analytics.readonly` scope to
+  the consent screen and `/api/analytics/google/callback` to the redirect
+  URIs; while the app is in Testing, Google ends sign-ins after 7 days.
+  Tested with canned Google responses only, not a real GA4 property.
 - **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into

@@ -14,6 +14,7 @@ import {
   TOHYEE_TABLE_PREFIX,
 } from "@/lib/analytics/engine";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
+import { isGaTable } from "@/lib/analytics/google-analytics-reports";
 import { type DatabaseEngine, parseRowLimit } from "@/lib/analytics/databases/config";
 import { connectionSecret, getConnection, parseQuerySpec, readSourceRows, settingsOf, sourceLabel } from "@/lib/analytics/databases/connections";
 import { rebuildShapedTablesForTable, shapesUsing } from "@/lib/analytics/shaped-tables";
@@ -79,7 +80,7 @@ export async function requireAnalytics(tx: OrgTx): Promise<void> {
   }
 }
 
-type RunRow = {
+export type RunRow = {
   id: string;
   shape_id: string | null;
   source_id: string | null;
@@ -96,10 +97,10 @@ type RunRow = {
   requested_by_email: string | null;
 };
 
-const RUN_COLUMNS =
+export const RUN_COLUMNS =
   "id::text, shaped_table_id::text as shape_id, source_id::text, source_name, table_name, file_name, trigger, status, started_at, finished_at, rows_loaded::text, milliseconds, error, requested_by_email";
 
-function toRun(row: RunRow): LoadRun {
+export function toRun(row: RunRow): LoadRun {
   return {
     id: row.id,
     shapeId: row.shape_id,
@@ -235,6 +236,7 @@ function parseSourceInput(input: Record<string, unknown>, current?: AnalyticsSou
   if (!current && tableName.startsWith(TOHYEE_TABLE_PREFIX)) {
     throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
   }
+  if (!current && isGaTable(tableName)) throw new ValidationError("Table names starting with google_analytics_ are kept for Google Analytics.");
   const fileName = input.fileName === undefined && current ? current.fileName : typeof input.fileName === "string" ? input.fileName.trim() : "";
   if (!fileName || fileName.length > 500) throw new ValidationError("Choose the file.");
   const sheetInput = input.sheetName === undefined ? (current && current.fileName === fileName ? current.sheetName : null) : input.sheetName;
@@ -265,6 +267,7 @@ async function parseDatabaseSourceInput(tx: OrgTx, input: Record<string, unknown
   if (!current && tableName.startsWith(TOHYEE_TABLE_PREFIX)) {
     throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
   }
+  if (!current && isGaTable(tableName)) throw new ValidationError("Table names starting with google_analytics_ are kept for Google Analytics.");
   if (current && input.connectionId !== undefined && String(input.connectionId) !== current.database?.connectionId) {
     throw new ValidationError("A source's database connection can't change. Set up a new source instead.");
   }

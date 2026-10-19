@@ -5,12 +5,13 @@ import type { ColumnInfo, Filter, Measure, TileQuery } from "@/lib/analytics/que
 
 /**
  * Ready-made reports (#337, decision 597): Business overview, Sales and
- * customers, Profit and loss, CRM pipeline and Farm. Each is a dashboard of
+ * customers, Profit and loss, CRM pipeline and Farm; and Website, over the
+ * Google Analytics tables (decision 609). Each is a dashboard of
  * ordinary tiles over the books copy, so everything can be changed after.
  * A template is offered only when the tables it needs are loaded.
  */
 
-export type TemplateId = "overview" | "sales" | "profit" | "crm" | "farm";
+export type TemplateId = "overview" | "sales" | "profit" | "crm" | "farm" | "website";
 export type TableInfo = { name: string; columns: ColumnInfo[] };
 
 export const TEMPLATES: Array<{ id: TemplateId; name: string; description: string; needs: string[] }> = [
@@ -19,6 +20,12 @@ export const TEMPLATES: Array<{ id: TemplateId; name: string; description: strin
   { id: "profit", name: "Profit & loss", description: "Sales, cost of sales, gross and net profit against last year, and the accounts behind them.", needs: ["tohyee_ledger_lines"] },
   { id: "crm", name: "CRM pipeline", description: "Open opportunities by stage and owner, what's expected to close, and won against lost.", needs: ["tohyee_crm_opportunities"] },
   { id: "farm", name: "Farm", description: "Pasture cover, supplements fed and fertiliser applied, by month and paddock.", needs: ["tohyee_farm_pasture_readings", "tohyee_farm_supplements", "tohyee_farm_fertiliser_applications"] },
+  {
+    id: "website",
+    name: "Website",
+    description: "Visitors, sessions and page views from Google Analytics by month, where they came from, top pages and devices, beside invoiced sales.",
+    needs: ["google_analytics_daily", "google_analytics_traffic", "google_analytics_pages", "google_analytics_devices"],
+  },
 ];
 
 function pad(value: number): string {
@@ -180,6 +187,56 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
       format: { donutTotal: true, series: [{ number: { style: "plain", decimals: 0 } }] },
     }));
     tiles.push(tile("Fertiliser by paddock", "bar", "full", question(fertiliser, [{ label: "Tonnes", aggregate: "sum", field: "tonnes" }], { groupBy: { field: "paddock" }, dateField: "applied_on", sort: { by: "value", direction: "desc" }, limit: 15 })));
+  }
+
+  if (id === "website") {
+    // Google Analytics (decision 609): website visits by month, with sales from the books beside them when they're copied.
+    const daily = "google_analytics_daily";
+    const visitors: Measure = { label: "Visitors", aggregate: "sum", field: "active_users" };
+    const sessions: Measure = { label: "Sessions", aggregate: "sum", field: "sessions" };
+    const plain = (suffix: string): ChartFormat => ({ series: [{ number: { style: "plain", decimals: 0, suffix } }] });
+    tiles.push(tile("Website", "text", "full", null, {
+      text: "From Google Analytics, loaded nightly. Visitors are counted each day, so a month's visitors count someone who came on two days twice. Revenue and key events are only there if the website sends them to Google Analytics.",
+    }));
+    tiles.push(tile("Visitors", "kpi", "quarter", question(daily, [{ ...visitors, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: plain("visitors") }));
+    tiles.push(tile("Sessions", "kpi", "quarter", question(daily, [{ ...sessions, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: plain("sessions") }));
+    tiles.push(tile("Page views", "kpi", "quarter", question(daily, [{ label: "Page views", aggregate: "sum", field: "page_views", compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: plain("views") }));
+    tiles.push(
+      tile("Engagement rate", "kpi", "quarter", question(daily, [{ label: "Engagement rate", aggregate: "formula", formula: "[Engaged sessions] / [Sessions]" }, { label: "Engaged sessions", aggregate: "sum", field: "engaged_sessions" }, sessions], { dateField: "date" }), {
+        // The key figure shows the first value; the other two are what it's worked out from.
+        format: { series: [{ number: { style: "percent", decimals: 1 } }, {}, {}] },
+      }),
+    );
+    const salesBeside = byName.has("tohyee_invoices");
+    tiles.push(
+      tile("Visitors and sessions by month", "combo", salesBeside ? "half" : "two-thirds", question(daily, [visitors, sessions], { groupBy: { field: "date", grain: "month" }, dateField: "date" }), {
+        format: { series: [{ as: "bar", number: { style: "plain", decimals: 0 } }, { as: "line", number: { style: "plain", decimals: 0 } }] },
+      }),
+    );
+    if (salesBeside) {
+      tiles.push(
+        tile("Sales by month", "column", "half", question("tohyee_invoices", [{ label: "Sales (excl. GST)", aggregate: "sum", field: "net" }], {
+          groupBy: { field: "invoice_date", grain: "month" },
+          filters: [{ field: "status", op: "eq", value: "approved" }],
+          dateField: "invoice_date",
+        })),
+      );
+    }
+    tiles.push(
+      tile("Sessions by channel", "bar", "third", question("google_analytics_traffic", [sessions], { groupBy: { field: "channel" }, dateField: "date", sort: { by: "value", direction: "desc" }, limit: 8 }), {
+        format: { series: [{ number: { style: "plain", decimals: 0 } }] },
+      }),
+    );
+    tiles.push(
+      tile("Top pages", "bar", "two-thirds", question("google_analytics_pages", [{ label: "Page views", aggregate: "sum", field: "page_views" }], { groupBy: { field: "page_path" }, dateField: "date", sort: { by: "value", direction: "desc" }, limit: 10 }), {
+        format: { series: [{ number: { style: "plain", decimals: 0 } }] },
+      }),
+    );
+    tiles.push(
+      tile("Sessions by device", "donut", "third", question("google_analytics_devices", [sessions], { groupBy: { field: "device" }, dateField: "date", sort: { by: "value", direction: "desc" } }), {
+        format: { donutTotal: true, series: [{ number: { style: "plain", decimals: 0 } }] },
+      }),
+    );
   }
 
   return { name: template.name, description: template.description, settings, tiles };

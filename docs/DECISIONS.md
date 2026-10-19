@@ -5781,3 +5781,70 @@ testing) and #154's code signing (later, Jess).
      Table and column names follow the friendly-name work (#336):
      `dbo.SalesOrders` suggests `sales_orders`, `CustomerName` becomes
      `customer_name`, shown as "Customer name".
+606. **Google Analytics as a data source: signing in and who can**
+     (20 October 2026; Jess asked for "Google analytics for websites to
+     tohyee"; Looker Studio's Google Analytics connector as the reference).
+     An admin or owner signs in with Google through the organisation's own
+     Google app (Settings › Email), on its own return address
+     (`/api/analytics/google/callback`, which the app must list). Tohyee asks
+     only for `analytics.readonly`, plus `openid` and `userinfo.email` to show
+     which Google account connected; a sign-in where the Analytics box was
+     unticked is refused. The sign-in is the organisation's, not the admin's
+     own (unlike farm mail, decision 571): one connection per organisation,
+     its tokens encrypted with TOHYEE_SECRET_KEY, the Google address shown
+     only to admins and owners. Everyone in the organisation sees that it's
+     connected, which property and the last load. After signing in, the admin
+     picks one GA4 property from the Admin API's account summaries (every
+     page); only a property Google lists for that account can be chosen. The
+     help says plainly what an admin sets up in Google Cloud: the Analytics
+     Data and Admin APIs enabled, the scope added to the consent screen, the
+     return address, and that while the app's publishing status is Testing
+     Google ends each sign-in after seven days (Google's "Using OAuth 2.0"
+     page, refresh token expiration), so it has to be connected again until
+     the app is published. Tested against canned Google responses only; it
+     hasn't been tried against a real GA4 property.
+607. **Which Google Analytics data is loaded, and how** (20 October 2026).
+     Five daily reports from the Data API's `runReport`, each its own table
+     with plain names: `google_analytics_daily` (active users, new users,
+     sessions, engaged sessions, page views, engagement rate, key events,
+     revenue), `_traffic` (session channel group, source and medium),
+     `_pages` (page path and title), `_countries` and `_devices`. GA4's
+     current names are used (`keyEvents`, which replaced `conversions` in
+     May 2024; `screenPageViews`; `totalRevenue`). Google's numbers arrive as
+     text and are turned into exact decimals without a binary number:
+     counts as whole numbers, engagement rate to 6 places, key events and
+     revenue to 2 (revenue is in the property's currency, which Google
+     reports and Tohyee shows). Users are counted per day, as Google gives
+     them, so adding days counts a returning visitor more than once; the
+     tables' descriptions say so. Pages are asked for 50,000 rows at a time
+     (offset and limit), each next page starting after the rows that came;
+     a report over 500,000 rows isn't loaded ("load fewer months"). Every
+     report is read before anything is written, then all five tables are
+     swapped in together, so a failed load keeps the last copy. The
+     `google_analytics_` prefix is kept for these tables: CSV sources and
+     shaped tables can't use it.
+608. **History, refreshing and Google's limits** (20 October 2026). 13
+     months by default (this month and the same month last year, whole),
+     1 to 60 adjustable. Loaded nightly after 4am with the other sources
+     (switchable off) and by Refresh now, each load in the load history as
+     "Google Analytics". Google's quota answers (429 / RESOURCE_EXHAUSTED)
+     aren't retried, since its limits are per hour and per day (Google's
+     Data API quotas page): the load fails with a plain message and the
+     next nightly load tries again. 500 and 503 are retried twice after a
+     short wait. A disabled API, an account without access to the property
+     and a refused sign-in each have their own message. When Google refuses
+     the stored sign-in (expired or withdrawn), the connection is marked to
+     connect again and the nightly load leaves it alone until an admin does.
+     Changing the property drops the old property's tables. Disconnecting
+     deletes the tokens and the connection, asks Google to withdraw the
+     sign-in, and drops every `google_analytics_*` table; the load history
+     stays, as when a source is removed, and it's refused while a shaped
+     table is built from the data.
+609. **A Website report template** (20 October 2026). Visitors, sessions,
+     page views and engagement rate (engaged sessions over sessions for the
+     dates chosen, not an average of daily rates) as key figures against the
+     previous period; visitors and sessions by month, beside invoiced sales
+     by month when the books are copied (dashboards chart one table per
+     tile, so they sit side by side rather than on one chart); sessions by
+     channel; top pages; and sessions by device. Offered once Google
+     Analytics has loaded.
