@@ -313,7 +313,7 @@ describeWithDatabase("analytics dashboards", () => {
     await patch([tile]);
   });
 
-  it("saves scatter, histogram and box plot tiles, with a second grouping only where it's used (#376 phase 2)", async () => {
+  it("saves scatter, histogram, box plot, treemap, heat map, calendar and Sankey tiles, with a second grouping only where it's used (#376 phase 2)", async () => {
     const patch = (tiles: unknown[]) =>
       dashboardRoute.PATCH(
         apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }),
@@ -326,6 +326,10 @@ describeWithDatabase("analytics dashboards", () => {
         { ...tile, id: "s", visual: "scatter", query: { ...byRegion, measures: [qty, { label: "Lines", aggregate: "count" }] }, format: { xAxis: { title: "Qty" }, scatter: { trend: true } } },
         { ...tile, id: "h", visual: "histogram", query: byRegion, format: { histogram: { bins: 5 } } },
         { ...tile, id: "x", visual: "boxplot", query: { ...byRegion, breakdown: { field: "order_date", grain: "day" } } },
+        { ...tile, id: "t", visual: "treemap", query: byRegion },
+        { ...tile, id: "m", visual: "heatmap", query: { ...byRegion, breakdown: { field: "order_date", grain: "month" } } },
+        { ...tile, id: "c", visual: "calendar", query: { ...byRegion, groupBy: { field: "order_date", grain: "day" } } },
+        { ...tile, id: "k", visual: "sankey", query: { ...byRegion, breakdown: { field: "order_date", grain: "year" } } },
       ]),
     );
     expect(saved.status).toBe(200);
@@ -341,6 +345,10 @@ describeWithDatabase("analytics dashboards", () => {
       [{ ...tile, visual: "scatter", query: byRegion }, /needs two values/],
       [{ ...tile, visual: "histogram", query: { ...byRegion, measures: [qty, qty] } }, /spread of one value/],
       [{ ...tile, visual: "histogram", query: byRegion, format: { histogram: { bins: 2, width: "1" } } }, /not both/],
+      [{ ...tile, visual: "heatmap", query: byRegion }, /what goes down the side/],
+      [{ ...tile, visual: "sankey", query: byRegion }, /flows to/],
+      [{ ...tile, visual: "calendar", query: { ...byRegion, groupBy: { field: "order_date", grain: "month" } } }, /by day/],
+      [{ ...tile, visual: "treemap", query: { ...byRegion, measures: [qty, qty] } }, /one value/],
     ];
     for (const [entry, message] of refusals) {
       const refused = await body(await patch([entry]));

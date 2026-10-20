@@ -2088,6 +2088,17 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: treemap, heat map, calendar heat map and Sankey** (#376
+  phase 2, decision 680). A **treemap** shows each group as a box sized by
+  its total, optionally split into a second grouping ("Inside each box"),
+  groups in the theme's colours in order. A **heat map** puts the groups
+  across and a second grouping down, each cell coloured on one blue scale
+  (or orange-grey-blue when amounts are both sides of zero), with the
+  scale under it. A **calendar heat map** colours each day of up to the
+  three latest years with data. A **Sankey** diagram shows each group
+  flowing to the values of a second grouping ("Flows to"), widths by
+  total. Totals are added exactly; treemaps and Sankeys leave out amounts
+  of zero or less, which have no size.
 - **Analytics: scatter and bubble, histogram and box plot** (#376 phase 2,
   decisions 678-679). A **scatter** chart puts each group at its first
   value across and its second up; a third value makes it a **bubble**

@@ -52,7 +52,11 @@ export type Visual =
   | "bullet"
   | "scatter"
   | "histogram"
-  | "boxplot";
+  | "boxplot"
+  | "treemap"
+  | "heatmap"
+  | "calendar"
+  | "sankey";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
 export type PivotSpec = { rows: PivotDimension[]; column: PivotDimension | null };

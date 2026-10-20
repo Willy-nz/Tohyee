@@ -163,6 +163,30 @@ export function VisualSettings({ visual, values, format, set }: Props) {
       </Section>
     );
   }
+  if (visual === "heatmap" || visual === "calendar") {
+    return (
+      <Section title={visual === "heatmap" ? "Heat map" : "Calendar heat map"}>
+        <p className={styles.note}>
+          {visual === "heatmap"
+            ? "Each cell is the total for a group (across) and a value of the second grouping (down)."
+            : "Each day is coloured by its total. Up to the three latest years with data are shown, newest first."}{" "}
+          Cells are coloured on one blue scale from light (small) to dark (large); with amounts both below and above zero, orange below and blue above with grey at zero. The scale is under the chart.
+        </p>
+      </Section>
+    );
+  }
+  if (visual === "treemap" || visual === "sankey") {
+    return (
+      <Section title={visual === "treemap" ? "Treemap" : "Sankey"}>
+        <p className={styles.note}>
+          {visual === "treemap"
+            ? "Each box's area is its total, largest first. Only amounts above zero have an area, so others are left out."
+            : "Each group flows to the values of the second grouping; a flow's width is its total. Only amounts above zero can flow."}{" "}
+          Groups take the theme&apos;s colours in order; after the last colour they&apos;re grey. Colour a group yourself under Colours.
+        </p>
+      </Section>
+    );
+  }
   if (visual === "boxplot") {
     return (
       <Section title="Box plot">
