@@ -461,12 +461,13 @@ export const CRM_MENUS: Menu[] = (
     },
     {
       label: "Settings",
-      area: ["/crm/teams", "/crm/duplicates", "/crm/record-types", "/crm/stages"],
+      area: ["/crm/teams", "/crm/reassign", "/crm/duplicates", "/crm/record-types", "/crm/stages"],
       groups: [
         {
           heading: "Team and data",
           links: [
             { href: "/crm/teams", label: "Teams" },
+            { href: "/crm/reassign", label: "Reassign records" },
             { href: "/crm/duplicates", label: "Duplicates" },
           ],
         },

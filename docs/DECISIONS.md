@@ -4080,6 +4080,36 @@ testing) and #154's code signing (later, Jess).
        archives a record, so it needs the bookkeeper role or higher (not
        sales reps or managers).
 
+650. **Bulk reassignment, with a preview** (#216 stage 1's last item; Codex,
+     delegated by owner, 20 October 2026, #360 item 17: bulk reassignment
+     first). Xero has no CRM, so this follows Salesforce's Mass Transfer
+     Records and HubSpot's bulk Assign. CRM › Settings › Reassign records.
+     - **Choose:** from a person, someone who has left, or nobody; to a
+       member who can use the CRM and can sign in; and what kinds. **See
+       what will move** lists every record (up to 2,000 of each kind), and
+       anything can be unticked before **Move**.
+     - **What moves:** leads that aren't converted (a converted lead
+       doesn't change, decision 492); companies they own; open deals, and
+       won and lost ones only when ticked (their wins then count for the new
+       owner on forecasts and the dashboard, which work from the owner as it
+       is now); tasks that aren't done (done tasks stay with whoever did
+       them); and active sequences whose next step tasks go to them. People
+       have no owner (decision 491), so only their open tasks and sequences
+       move. From nobody: unassigned leads, deals and tasks, never
+       companies (most of the books' contacts have no owner).
+     - **Who:** admins, owners and bookkeepers, anyone's; a sales manager
+       only between themselves and the people in their teams (and
+       unassigned leads, which they see); not sales reps or viewers. The
+       same checks run again when moving.
+     - **History:** each record moved gets its own history line ("Moved to
+       someone else with Reassign records", who and when), and the move a
+       line of its own, listed on the page as Recent moves. A record that
+       changed hands, was converted, closed or done after the preview is
+       left alone and counted as skipped, so moving the same list twice
+       moves nothing more. Moving a deal is a change by a person, so it
+       starts a new quiet spell for "a deal goes quiet" (decision 495). No
+       journal, invoice or balance changes, so there's no accounting
+       example.
 495. **Follow-up rules make tasks, once each** (#216 stage 2; Jess 10 Oct
      2026: all four rules, reminders in Tohyee only).
      - **Rules:** admins and owners add them on CRM › Follow-ups. A rule's

@@ -1030,6 +1030,13 @@ that something happened.
   a company or a lead warns about similar companies, people and open leads.
   Merging needs the bookkeeper role or higher; anyone who changes CRM
   records can mark a pair as not duplicates.
+- **CRM bulk reassignment** (decision 650, #216): CRM › Settings ›
+  Reassign records moves leads, companies, open deals (closed ones if
+  ticked), open tasks and active sequences from one person (or someone who
+  has left, or nobody) to another, after listing every record that will
+  move so any can be unticked. Admins and bookkeepers move anyone's; a sales
+  manager only within their teams; reps can't. Each record moved shows it
+  in its history, and the page lists recent moves.
 - **CRM follow-up rules** (decision 495, #216 stage 2): CRM › Follow-ups,
   for admins and owners. Rules make a task for the right person when a new
   lead arrives (its owner, or each sales team manager if nobody owns it), a
