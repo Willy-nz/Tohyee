@@ -2,6 +2,7 @@ import packageJson from "../../../package.json";
 import { AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeededFor } from "@/lib/ai/access-levels";
 import { findAiTool, toolsForLevel } from "@/lib/ai/catalogue";
 import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
+import { privateMailTools } from "@/lib/ai/private-mail-tools";
 import type { CallToolResult, McpServer, ToolContent } from "@/lib/ai/mcp-protocol";
 import { ToolFileAnswer } from "@/lib/ai/tools";
 import type { AiTokenIdentity } from "@/lib/ai/tokens";
@@ -44,21 +45,27 @@ const LEVEL_WORDS = {
  * read-only transaction (decision 342); the others in a normal one, noted as
  * done through the key (decision 348).
  */
-export function mcpServerFor(identity: AiTokenIdentity): McpServer {
+export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?: boolean } = {}): McpServer {
   const organisation = identity.membership.organisation;
   const level = identity.effectiveLevel;
   const roleAllows = (tool: { minRole?: Role }) => !tool.minRole || roleAtLeast(identity.membership.role, tool.minRole);
-  const tools = toolsForLevel(level).filter(roleAllows);
+  // The Owner's own mail, only for a Look only key they gave the private-mail scope (#250, decision 618); checked again on each call.
+  const mailTools = options.privateMail ? privateMailTools(identity) : [];
+  const findTool = (name: unknown) => findAiTool(name) ?? mailTools.find((tool) => tool.name === name) ?? null;
+  const tools = [...toolsForLevel(level).filter(roleAllows), ...mailTools];
   return {
     serverInfo: { name: "tohyee", title: "Tohyee", version: packageJson.version },
     instructions:
       `Access to ${organisation.displayName}'s books in Tohyee, a New Zealand accounting app, ` +
       `as ${identity.user.displayName} (${identity.membership.role}), at the level "${AI_ACCESS_LEVEL_LABELS[level]}". ${LEVEL_WORDS[level]} ` +
       "Call get_organisation first for the base currency, financial year and today's date. " +
-      "Amounts are decimal strings; dates are YYYY-MM-DD. Before changing anything, say what you'll do and check with the person.",
+      "Amounts are decimal strings; dates are YYYY-MM-DD. Before changing anything, say what you'll do and check with the person." +
+      (mailTools.length
+        ? ` You can also search and read ${identity.user.displayName}'s own private mail (search_my_mail, read_my_mail), for them alone: say which email you used, and never pass what's in it to anyone else or into Tohyee.`
+        : ""),
     tools: tools.map((tool) => ({ ...tool, readOnly: tool.readOnly ?? tool.level === "read" })),
     unavailableTool(name) {
-      const tool = findAiTool(name);
+      const tool = findTool(name);
       if (!tool) return null;
       if (!roleAllows(tool)) return `${name} is only for owners and admins; this key's owner isn't one now.`;
       return levelAllows(level, tool.level)
@@ -66,7 +73,7 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
         : `${name} needs an AI key with "${AI_ACCESS_LEVEL_LABELS[tool.level]}" access and ${roleNeededFor(tool.level)}; this key is "${AI_ACCESS_LEVEL_LABELS[level]}".`;
     },
     async callTool(name, args) {
-      const tool = findAiTool(name);
+      const tool = findTool(name);
       // Checked again here: tools/list and tools/call are separate requests.
       if (!tool || !levelAllows(level, tool.level) || !roleAllows(tool)) return text(`This key can't use ${name}.`, true);
       try {
