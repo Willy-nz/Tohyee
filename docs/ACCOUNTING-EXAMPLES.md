@@ -5871,7 +5871,12 @@ tracked products become stock items; the customer's country comes across.
 recorded Shopify-shaped responses and webhooks signed in the tests.
 
 What Shopify says (read on shopify.dev and help.shopify.com, Admin GraphQL
-API version 2026-07, 1 Oct 2026):
+API version 2026-07, 1 Oct 2026; checked again against **2026-10** on
+20 Oct 2026, decision 665: the version is now 2026-10, webhooks are
+subscribed with `uri` instead of the deprecated `callbackUrl`, payout
+transactions are also checked against their `associatedPayout`, and a
+sync stops with what to turn on when Shopify withholds protected customer
+data; nothing else Tohyee reads changed):
 
 - **Connecting a Dev Dashboard app**: the client ID and secret are
   exchanged for a token by `POST https://{shop}.myshopify.com/admin/oauth/access_token`
@@ -6155,7 +6160,8 @@ are New Zealand dates (NZDT, UTC+13).
 
 ### Not supported yet (refused rather than guessed)
 
-- WooCommerce, Square and Stripe.
+- Stripe sales (WooCommerce is built: WC1-WC10; Square was left out by
+  Jess on 20 Oct 2026, decision 667).
 - Copying sale prices from a store whose prices include tax, or whose
   currency isn't the base currency.
 - Addresses (other than the country), stock levels and costs from Shopify;
@@ -6446,7 +6452,10 @@ melts as SPC.
   INV-0003 (BK4). WooCommerce then marks #2003 processing with
   `date_paid`: nothing more is posted.
 - **WC5** A partial refund of WC2: refund 7001 on 2026-10-05T22:00Z,
-  `amount` 23.00, 1 × Large candle (−20.00, tax −3.00). Credit note CN-0001
+  `amount` 23.00, 1 × Large candle (−20.00, tax −3.00). Each refund line
+  is matched to the order line its `_refunded_item_id` names (decision
+  666; the same product on two lines at different prices is refunded from
+  the right one), or by product when it has none. Credit note CN-0001
   on 6 Oct against INV-0001: **Dr 4000 20.00 / Dr 2100 3.00 / Cr 1100
   23.00**, refunded from 1050: **Dr 1100 23.00 / Cr 1050 23.00**. A refund
   whose lines come to 23.00 but `amount` 20.00 posts nothing; the log
@@ -16619,6 +16628,12 @@ Question for Jess: which one next, and is it one Glimmers uses?
 Answered (8 Oct 2026, the suggestion): no new platform yet; first check the
 Shopify connection against Glimmers' real store, the one thing the audit
 found never checked.
+
+Answered again (Codex, delegated by owner, 20 October 2026, #360 item
+18): validate and finish Shopify first (decision 665), then the existing
+WooCommerce gaps (decision 666); Square was to be next, but Jess left it
+out on 20 Oct 2026 because Square doesn't take card payments in New
+Zealand (decision 667). Still not checked against a real store.
 
 ## Livestock (#221), stage 1: rules and first examples (LV1-LV12 approved by Jess, 11 Oct 2026)
 

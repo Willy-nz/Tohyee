@@ -37,3 +37,44 @@ describe("WooCommerce connector (WC1, WC3, WC9)", () => {
     expect(woocommerceConnector.isPing!(headers(good), body)).toBe(false);
   });
 });
+
+describe("WooCommerce refunds' lines (decision 666)", () => {
+  // The same product on two lines (say, one at full price and one on a coupon): only _refunded_item_id says which was refunded.
+  const order = {
+    id: 2020,
+    number: "2020",
+    status: "completed",
+    currency: "NZD",
+    date_created_gmt: "2026-10-02T01:00:00",
+    date_paid_gmt: "2026-10-02T01:00:00",
+    payment_method: "stripe",
+    customer_id: 11,
+    billing: { email: "aroha@manukavets.nz", country: "NZ" },
+    line_items: [
+      { id: 11, product_id: 301, variation_id: 0, sku: "CANDLE-L", name: "Large candle", quantity: 1, subtotal: "20.00", total: "20.00", taxes: [{ id: 1, total: "3.00" }] },
+      { id: 12, product_id: 301, variation_id: 0, sku: "CANDLE-L", name: "Large candle", quantity: 1, subtotal: "20.00", total: "15.00", taxes: [{ id: 1, total: "2.25" }] },
+    ],
+    shipping_lines: [{ id: 13, method_title: "NZ Post", total: "6.00", taxes: [{ id: 1, total: "0.90" }] }],
+    tax_lines: [{ rate_id: 1, rate_percent: 15 }],
+    total: "47.15",
+    refunds: [{ id: 7100, total: "-24.15" }],
+  };
+  const refund = {
+    id: 7100,
+    date_created_gmt: "2026-10-05T22:00:00",
+    amount: "24.15",
+    line_items: [{ id: 95, product_id: 301, variation_id: 0, quantity: -1, total: "-15.00", total_tax: "-2.25", meta_data: [{ id: 1, key: "_refunded_item_id", value: "12" }] }],
+    shipping_lines: [{ id: 96, total: "-6.00", total_tax: "-0.90", meta_data: [{ id: 2, key: "_refunded_item_id", value: "13" }] }],
+  };
+
+  it("matches each refund line to the order line WooCommerce says it refunds", () => {
+    const parsed = wooOrderFrom(order, [refund]);
+    expect(parsed.refunds[0].lines).toEqual([{ lineItemId: "12", quantity: "1", restocked: false, subtotal: "15.00", tax: "2.25" }]);
+    expect(parsed.refunds[0].shipping).toEqual([{ shippingLineId: "13", subtotal: "6.00", tax: "0.90" }]);
+  });
+
+  it("falls back to the product when a refund line doesn't say (older refunds)", () => {
+    const parsed = wooOrderFrom(order, [{ ...refund, line_items: [{ ...refund.line_items[0], meta_data: [] }] }]);
+    expect(parsed.refunds[0].lines[0].lineItemId).toBe("11");
+  });
+});

@@ -6240,6 +6240,7 @@ recorded elsewhere or being built at the same time:
        the next new sales connector. Accounting stays per order, and CRM,
        order and invoice revenue is never counted twice. This is a
        priority, not a claim of provider access.
+     - Later: Jess left Square out on 20 October 2026 (decision 667).
 638. **Practice manager stays unbuilt** (20 October 2026; #360 item 19).
      - **Who decided:** Jess. Her own instruction, "Dont do practice
        manager" (parked since 3 Oct 2026, PR #91), stands over #360 item 19.
@@ -6383,3 +6384,46 @@ recorded elsewhere or being built at the same time:
      keeps them). Per #360, nothing is filed or paid to IRD: Tohyee only
      works out and shows. Credits IRD transfers in from other years or tax
      types aren't their own kind of payment yet.
+665. **Shopify checked against Admin API 2026-10** (20 October 2026;
+     Codex, delegated by owner, 20 October 2026: "validate and finish
+     Shopify first", issue #360 item 18). Without a real store, the
+     connector was read against Shopify's current pages and three things
+     changed: the API version is 2026-10, the latest stable version
+     (shopify.dev/docs/api/usage/versioning; its release notes list no
+     change to anything Tohyee reads except a new `CURRENCY_CONVERSION`
+     balance transaction type, which payouts refuse like any type they
+     don't know); webhooks are subscribed with `uri`, since `callbackUrl`
+     is deprecated (shopify.dev/changelog/consolidate-webhook-graphql-surfaces);
+     and a payout's balance transactions are also checked against their
+     `associatedPayout`, as Shopify's staff suggest, so one that says it
+     belongs to another payout is left out and the payout's total check
+     catches anything missing. When Shopify withholds protected customer
+     data (names, emails, phones, addresses) it answers with an error in an
+     otherwise good reply (shopify.dev/docs/apps/launch/protected-customer-data);
+     the sync stops and says what to turn on in the app's settings rather
+     than matching customers by a blank email. Unchanged after checking:
+     webhook signatures (base64 HMAC-SHA256 of the raw body with the app's
+     secret) and duplicates (by `X-Shopify-Webhook-Id`; `X-Shopify-Event-Id`
+     is shared by different deliveries of one action, so it isn't used),
+     and paging (cursors, `hasNextPage`). Still not tried against a real
+     store.
+666. **WooCommerce refund lines say which order line they refund**
+     (20 October 2026; Codex, delegated by owner, 20 October 2026: "then
+     existing WooCommerce gaps"). A refund line's `_refunded_item_id` meta
+     (shown in WooCommerce's REST API refund example) is the order line it
+     refunds, and refunded shipping has the same. Tohyee used to match a
+     refund line to the first order line with the same product, which is
+     wrong when a product is on two lines at different prices; it now uses
+     `_refunded_item_id`, and the product only when a refund line doesn't
+     have it. The other WooCommerce gaps listed in FEATURES stay as Jess
+     decided on 5 October 2026: surcharges refused for now, and no product
+     or customer sync (email and SKU matching is enough). WooPayments
+     deposits are still reconciled by hand: no documented API for them was
+     found. Refunds of an amount only (no items) are still refused, as for
+     Shopify.
+667. **Square left out** (20 October 2026). Square was built as the next
+     sales connector under the delegated answer in #360 item 18, then left
+     out on Jess's decision of 20 October 2026 ("Leave Square out"):
+     Square doesn't take card payments in New Zealand (its developer docs
+     list Australia, Canada, France, Ireland, Japan, Spain, the UK and the
+     US). None of it was merged. Decisions 668 and 669 are unused.

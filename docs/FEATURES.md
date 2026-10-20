@@ -1354,7 +1354,13 @@ that something happened.
   feed's account, WooPayments into a clearing account); bank-transfer
   orders are invoiced and left owing for the bank feed to match, and voided
   if cancelled unpaid; refunds become credit notes. Customers matched by
-  email, lines by SKU. Surcharges and other currencies are refused.
+  email, lines by SKU. Surcharges and other currencies are refused. A
+  refund line is matched to the order line its `_refunded_item_id` names
+  (decision 666).
+- **Shopify checked against Admin API 2026-10** (decision 665): the
+  version, webhook subscriptions by `uri`, payout transactions checked
+  against their payout, and a plain message when Shopify withholds
+  protected customer data. Still not tried against a real store.
 - **Shopify chargebacks and reserves** (SPC25-SPC31, decisions 447-450,
   tenant migration 0104): a payout's chargebacks go to the chargebacks
   account chosen in the settings (fees to fees), won disputes come back,
@@ -2328,8 +2334,8 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms: Square and Stripe sales, WooCommerce product and
-  customer sync and surcharges, Shopify chargeback holds, customers' addresses and companies,
+- sales platforms: Stripe sales (Square left out by Jess, decision 667),
+  WooCommerce product and customer sync and surcharges, Shopify chargeback holds, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)

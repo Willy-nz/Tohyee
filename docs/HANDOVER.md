@@ -859,8 +859,9 @@ nobody should ask her these again. Each item says where its answer is.
 - The co-op share register (#360 item 15, #327): built in its own PR
   (decisions 630-633, examples CSR1-CSR10). Ledger links and a Fonterra
   share standard calculator are deferred there.
-- Marketplaces: finish Shopify, then WooCommerce's gaps, then Square
-  (decision 637). Farm data: file imports, then Pasture.io, then LIC
+- Marketplaces: finish Shopify, then WooCommerce's gaps (decisions 637,
+  665, 666). Square was left out by Jess on 20 Oct 2026: it doesn't take
+  card payments in New Zealand (decision 667). Farm data: file imports, then Pasture.io, then LIC
   (decision 635). Default dashboards by kind of user (decision 639).
 - **Practice manager stays unbuilt.** Jess's own "Dont do practice
   manager" stands over #360 item 19 (decision 638; parked since 3 Oct
@@ -895,7 +896,7 @@ preference):
   170), and whether to follow its extra pay example 1 or its steps (212
   follows the steps; asking IRD is optional).
 - IRD gateway or myIR filing access; provider terms and access for Akahu,
-  Pasture.io, LIC, Square and any tax-pooling provider (#360 items 3, 6,
+  Pasture.io, LIC and any tax-pooling provider (#360 items 3, 6,
   14, 18).
 - A domain and Cloudflare's written OK for the Tohyee address relay
   (`relay/README.md`).

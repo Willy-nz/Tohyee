@@ -327,3 +327,69 @@ describe("order webhooks (SPC18)", () => {
     expect(shopifyConnector.webhookRecords("refunds/create", { id: 6001, order_id: 5001 })).toEqual({ kind: "order", orderId: "5001" });
   });
 });
+
+describe("Shopify Admin API 2026-10 checks (decision 665)", () => {
+  it("leaves out a balance transaction that says it belongs to another payout", async () => {
+    const { setSalesPlatformFetchForTests } = await import("@/lib/sales-platforms/http");
+    const answers = [
+      { data: { shopifyPaymentsAccount: { payouts: { nodes: [payoutNode({ id: 70001, issuedAt: "2026-10-07T03:00:00Z", status: "PAID", net: "44.62", transactions: [] })], pageInfo: { hasNextPage: false } } } } },
+      {
+        data: {
+          shopifyPaymentsAccount: {
+            balanceTransactions: {
+              nodes: [
+                balanceTransactionNode({ id: 1, type: "CHARGE", amount: "46.00", fee: "1.38", net: "44.62", orderName: "#1001" }, "NZD", 70001),
+                balanceTransactionNode({ id: 2, type: "CHARGE", amount: "23.00", fee: "0.67", net: "22.33", orderName: "#1003" }, "NZD", 70002),
+              ],
+              pageInfo: { hasNextPage: false },
+            },
+          },
+        },
+      },
+    ];
+    setSalesPlatformFetchForTests(async () => new Response(JSON.stringify(answers.shift()), { status: 200, headers: { "content-type": "application/json" } }));
+    try {
+      const context = { storeDomain: "glimmers.myshopify.com", credentials: { accessToken: "shpat_x" }, cachedToken: null, now: new Date() };
+      const result = await shopifyConnector.fetchPayouts(context, { token: "shpat_x", expiresAt: null }, { issuedFrom: "2026-10-01T00:00:00Z", alreadyPosted: () => false });
+      expect(result.payouts[0].transactions.map((t) => t.externalId)).toEqual(["1"]);
+    } finally {
+      setSalesPlatformFetchForTests(null);
+    }
+  });
+
+  it("says what to turn on when Shopify withholds protected customer data", async () => {
+    const { setSalesPlatformFetchForTests } = await import("@/lib/sales-platforms/http");
+    setSalesPlatformFetchForTests(
+      async () =>
+        new Response(JSON.stringify({ data: { customers: { nodes: [{ id: "gid://shopify/Customer/1", defaultEmailAddress: null }] } }, errors: [{ message: "This app is not approved to access the Customer object." }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    try {
+      const context = { storeDomain: "glimmers.myshopify.com", credentials: { accessToken: "shpat_x" }, cachedToken: null, now: new Date() };
+      await expect(
+        shopifyConnector.fetchChanges(context, { token: "shpat_x", expiresAt: null }, { customers: true, products: false, customersSince: null, productsSince: null }),
+      ).rejects.toThrow("turn on access to protected customer data for name, email, phone and address");
+    } finally {
+      setSalesPlatformFetchForTests(null);
+    }
+  });
+
+  it("subscribes webhooks with uri, not the deprecated callbackUrl", async () => {
+    const { setSalesPlatformFetchForTests } = await import("@/lib/sales-platforms/http");
+    const sent: Array<Record<string, unknown>> = [];
+    setSalesPlatformFetchForTests(async (_url, init) => {
+      sent.push(JSON.parse(String(init?.body)).variables.webhookSubscription);
+      return new Response(JSON.stringify({ data: { webhookSubscriptionCreate: { webhookSubscription: { id: `gid://shopify/WebhookSubscription/${sent.length}` }, userErrors: [] } } }), { status: 200 });
+    });
+    try {
+      const context = { storeDomain: "glimmers.myshopify.com", credentials: { accessToken: "shpat_x" }, cachedToken: null, now: new Date() };
+      const ids = await shopifyConnector.registerWebhooks(context, { token: "shpat_x", expiresAt: null }, "https://books.example.nz/hook");
+      expect(ids).toHaveLength(4);
+      expect(sent[0]).toEqual({ uri: "https://books.example.nz/hook", format: "JSON" });
+    } finally {
+      setSalesPlatformFetchForTests(null);
+    }
+  });
+});
