@@ -2088,6 +2088,18 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: scatter and bubble, histogram and box plot** (#376 phase 2,
+  decisions 678-679). A **scatter** chart puts each group at its first
+  value across and its second up; a third value makes it a **bubble**
+  chart (bubble area in proportion), with an optional straight trend line
+  and names by the dots. A **histogram** counts how many groups' value
+  falls in each range: bins chosen automatically (round widths), by number
+  or by width, worked out exactly so a value on an edge is always in the
+  bin it starts. A **box plot** shows the spread of a value: quartiles as
+  a spreadsheet's QUARTILE.INC, whiskers to 1.5 box heights and dots
+  beyond. With "Each box is made of" (a second grouping, e.g. boxes by
+  region made of their customers' totals) there's a box per group;
+  without it, one box of every group's value.
 - **Analytics: waterfall, funnel, gauge and bullet chart** (#376 phase 2,
   decisions 676-677). New chart types in the chart editor. A **waterfall**
   (a P&L bridge) moves a running total up and down group by group, added

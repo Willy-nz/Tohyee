@@ -125,6 +125,52 @@ export function VisualSettings({ visual, values, format, set }: Props) {
       </Section>
     );
   }
+  if (visual === "scatter") {
+    return (
+      <Section title="Scatter or bubble">
+        <p className={styles.note}>
+          Each group is a dot: {values[0] || "the first value"} across, {values[1] || "the second value"} up
+          {values.length > 2 ? `, and ${values[2] || "the third value"} as the bubble's size (its area)` : ". Add a third value to size the dots as bubbles"}.
+        </p>
+        <Check label="Trend line (straight, least squares)" checked={format.scatter?.trend === true} onChange={(checked) => set({ scatter: { trend: checked || undefined } })} />
+      </Section>
+    );
+  }
+  if (visual === "histogram") {
+    const current = format.histogram ?? {};
+    return (
+      <Section title="Histogram">
+        <p className={styles.note}>Counts how many groups&apos; {values[0] || "value"} falls in each range. Group by what each item is, e.g. invoice number, to count those. Each bin starts at its lower edge and goes up to, not including, the next.</p>
+        <Field label="Bins">
+          <select
+            value={current.width !== undefined ? "width" : current.bins !== undefined ? "count" : "auto"}
+            onChange={(event) => set({ histogram: event.target.value === "count" ? { bins: 10 } : event.target.value === "width" ? { width: "100" } : undefined })}
+          >
+            <option value="auto">Automatic</option>
+            <option value="count">A number of bins</option>
+            <option value="width">A bin width</option>
+          </select>
+        </Field>
+        {current.bins !== undefined ? (
+          <Field label="Number of bins" hint="2 to 50; widths are rounded to 1, 2, 2.5 or 5 times 10, 100…">
+            <input type="number" min={2} max={50} value={current.bins} onChange={(event) => {
+              const bins = Number(event.target.value);
+              if (Number.isInteger(bins) && bins >= 2 && bins <= 50) set({ histogram: { bins } });
+            }} />
+          </Field>
+        ) : null}
+        {current.width !== undefined ? <NumberText label="Bin width" hint="e.g. 100 or 0.5" value={current.width} onChange={(width) => set({ histogram: width && Number(width) > 0 ? { width } : undefined })} /> : null}
+      </Section>
+    );
+  }
+  if (visual === "boxplot") {
+    return (
+      <Section title="Box plot">
+        <p className={styles.note}>Each box runs from the lower to the upper quartile with the median across it (quartiles as a spreadsheet&apos;s QUARTILE.INC); the whiskers reach the furthest values within 1.5 times the box&apos;s height, and values beyond are dots.</p>
+        <Check label="Dots for values beyond the whiskers" checked={format.boxplot?.outliers !== false} onChange={(checked) => set({ boxplot: { outliers: checked ? undefined : false } })} />
+      </Section>
+    );
+  }
   return null;
 }
 

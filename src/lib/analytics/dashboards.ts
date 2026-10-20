@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { parseChartFormat, parseVisualDefaults, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { parseChartFormat, parseVisualDefaults, SECOND_GROUPING, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { findTheme } from "@/lib/analytics/themes";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
@@ -89,7 +89,7 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot"];
 /** Charts that can show one total, with no grouping. */
 const UNGROUPED: TileVisual[] = ["table", "kpi", "pivot", "gauge", "bullet"];
 export const MAX_TILES = 40;
@@ -289,6 +289,10 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     if ((visual === "waterfall" || visual === "funnel") && query.measures.length !== 1) throw new ValidationError(`${title}: a ${visual} shows one value.`);
     if (visual === "gauge" && query.groupBy) throw new ValidationError(`${title}: a gauge shows one total, so it can't be grouped.`);
     if ((visual === "gauge" || visual === "bullet") && query.measures.length > 2) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} shows a value and, if you like, a target: up to two values.`);
+    if (query.breakdown && !SECOND_GROUPING[visual]) throw new ValidationError(`${title}: this chart type doesn't use a second grouping.`);
+    if (visual === "scatter" && (query.measures.length < 2 || query.measures.length > 3)) throw new ValidationError(`${title}: a scatter chart needs two values (across and up), and a third for bubble sizes.`);
+    if ((visual === "histogram" || visual === "boxplot") && query.measures.length !== 1) throw new ValidationError(`${title}: a ${visual === "histogram" ? "histogram" : "box plot"} shows the spread of one value.`);
+    if (["scatter", "histogram", "boxplot"].includes(visual) && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: this chart type can't compare with last year.`);
     if ((visual === "gauge" || visual === "bullet") && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} compares with its target, not last year or the previous period.`);
     let format: ChartFormat | undefined;
     try {
