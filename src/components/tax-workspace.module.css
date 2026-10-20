@@ -1,0 +1,9 @@
+.workspace { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 24px; align-items: start; }
+.navigation { display: grid; gap: 4px; position: sticky; top: 80px; }
+.navigation a { padding: 10px 12px; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 550; }
+.navigation a[aria-current="page"] { background: var(--surface); color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+.content { display: grid; gap: 20px; min-width: 0; }
+.review { padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); }
+.review summary { cursor: pointer; font-weight: 550; }
+.review p { margin-top: 8px; max-width: 75ch; }
+@media (max-width: 900px) { .workspace { grid-template-columns: minmax(0, 1fr); } .navigation { position: static; display: flex; flex-wrap: wrap; } }

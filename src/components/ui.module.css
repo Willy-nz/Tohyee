@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  gap: 32px;
+  gap: 24px;
   width: min(1440px, 100%);
   margin-inline: auto;
 }
@@ -77,8 +77,8 @@
 
 .pageTitle {
   font-size: var(--text-2xl);
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 500;
+  font-family: inherit;
+  font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.025em;
 }
@@ -123,6 +123,8 @@
 }
 
 .cardDescription {
+  max-width: 78ch;
+  overflow-wrap: anywhere;
   margin-top: 2px;
   color: var(--text-muted);
   font-size: var(--text-base);
@@ -156,6 +158,7 @@
 }
 
 .field {
+  min-width: 0;
   display: grid;
   gap: 6px;
   align-content: start;
@@ -595,7 +598,7 @@
 .inlineForm {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: baseline;
   gap: 10px;
 }
 
@@ -1167,3 +1170,17 @@
 .collapsible[open] > summary {
   margin-bottom: 12px;
 }
+
+/* #375: align control rows independently of optional help text. */
+.inlineForm > .field { display: flex; flex-direction: column; max-width: 100%; }
+.inlineForm > .field > .fieldLabel { margin-bottom: 0; }
+.inlineForm:has(> .field) { align-items: flex-start; }
+.inlineForm:has(> .field) > :not(.field) { margin-top: calc(1.5 * var(--text-sm) + 6px); }
+.inlineForm > .field > input, .inlineForm > .field > select { min-height: 40px; }
+.inlineForm > .field { flex: 0 1 220px; }
+.inlineForm .fieldLabel { line-height: 1.5; }
+
+.toolbar:has(> .field) { align-items: flex-start; }
+.toolbar:has(> .field) > :not(.field) { margin-top: calc(1.5 * var(--text-sm) + 6px); }
+.toolbar > .field > input, .toolbar > .field > select { min-height: 40px; }
+.toolbar .fieldLabel { line-height: 1.5; }

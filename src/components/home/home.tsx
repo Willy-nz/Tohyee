@@ -89,7 +89,7 @@ export function NextGstTile({ summary }: { summary: HomeSummary }) {
       </div>
       {gst.status !== "ready" ? (
         <>
-          <div className={styles.unavailable}>Unavailable</div>
+          <div className={styles.unavailable}>{gst.status === "none_filed" ? "No return filed yet" : "Position unavailable"}</div>
           <p className={ui.muted}>{gst.status === "none_filed" ? "No filed GST return yet." : gst.message}</p>
         </>
       ) : (
@@ -353,7 +353,8 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
           })}
         </div>
       </PageDashboardFrame>
-      <div className={styles.split}>
+      <div className={`${styles.split} ${styles.actionSplit}`}>
+        <NeedsAttention summary={summary} />
         <section className={styles.tile} aria-label="Net profit by month">
           <div className={styles.tileTitle}>
             <Link href="/operations/reports?report=pnl">Net profit by month</Link>
@@ -365,7 +366,6 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
             rows={chartRows}
           />
         </section>
-        <NeedsAttention summary={summary} />
       </div>
       <div className={styles.split}>
         <RecentActivity summary={summary} />

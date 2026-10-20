@@ -28,7 +28,7 @@ function section(heading: string, links: MenuLink[]): MenuLink[] {
   return links.map((link) => ({ ...link, section: heading }));
 }
 
-export const MENUS: Menu[] = [
+const ORIGINAL_MENUS: Menu[] = [
   { label: "Home", href: "/operations", groups: [] },
   {
     label: "Sales",
@@ -322,6 +322,16 @@ export const MENUS: Menu[] = [
     ],
   },
 ];
+
+/** #375: separate everyday accounting, tax and administration. */
+export const MENUS: Menu[] = ORIGINAL_MENUS.flatMap((menu): Menu[] => {
+  if (menu.label !== "Accountant") return [menu];
+  return [
+    { label: "Accounting", href: "/operations/accounting-tools", area: ["/operations/accounting-tools", "/operations/accounts", "/operations/ledger-journals", "/operations/inventory", "/operations/fixed-assets", "/operations/livestock", "/operations/period-close"], groups: menu.groups.filter((group) => group.heading === "Ledger" || group.heading === "Assets") },
+    { label: "Tax", href: "/operations/tax-workspace", area: ["/operations/tax-workspace", "/operations/income-tax", "/operations/gst-return", "/operations/gst-audit", "/operations/tax", "/operations/rd"], groups: menu.groups.filter((group) => group.heading === "Tax and R&D") },
+    { label: "Settings", href: ALL_SETTINGS_HREF, area: ["/operations/settings", "/operations/members", "/operations/modules"], groups: menu.groups.filter((group) => group.heading === "Settings") },
+  ];
+});
 
 /** Every setting, as the All settings page's cards of 2-6 links (decision 580). */
 export const SETTINGS: MenuGroup[] = [

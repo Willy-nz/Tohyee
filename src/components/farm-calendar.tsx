@@ -188,7 +188,7 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
             Calendar link
           </Button>
           <Button variant="secondary" size="small" aria-expanded={open === "mailboxes"} aria-controls="farm-mailbox-settings" onClick={() => setOpen(open === "mailboxes" ? null : "mailboxes")}>
-            Mailbox settings
+            Manage mailboxes
           </Button>
         </div>
       </div>
@@ -214,7 +214,8 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
           <CalendarLink organisationId={organisationId} onClose={() => setOpen(null)} />
         </div>
       ) : null}
-      {open === "mailboxes" || ((noMailbox || picking) && open === null) ? (
+      {noMailbox && open !== "mailboxes" ? <Notice tone="info">Connect your email under Manage mailboxes to bring farm arrangements into your calendar, or add an item yourself.</Notice> : null}
+      {open === "mailboxes" || (picking && open === null) ? (
         <div id="farm-mailbox-settings">
           <Mailboxes organisationId={organisationId} mailboxes={mailboxes.data?.mailboxes ?? null} error={mailboxes.error} farms={activeFarms} onChanged={reload} picking={picking} onPick={setPicking} />
         </div>
@@ -235,7 +236,7 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
             <option value="none">No farm</option>
           </select>
         </Field>
-        <Field label="Sender" hint="Who the email came from, not who does the work.">
+        <Field label="Email sender">
           <select value={sender} onChange={(event) => setSender(event.target.value)}>
             <option value="">Anyone</option>
             {(calendar.data?.senders ?? []).map((entry) => <option key={entry.email} value={entry.email}>{entry.name ? `${entry.name} (${entry.email})` : entry.email}</option>)}
@@ -952,7 +953,7 @@ function Mailboxes({
         ) : null;
       })()}
       <form className={ui.inlineForm} onSubmit={connect}>
-        <Field label="Connect">
+        <Field label="Email provider">
           <select value={provider} onChange={(event) => setProvider(event.target.value as "google" | "microsoft")}>
             <option value="google">Gmail</option>
             <option value="microsoft">Microsoft 365 or Outlook</option>
@@ -972,7 +973,7 @@ function Mailboxes({
         <Button type="submit" disabled={busy}>Connect</Button>
       </form>
       <p className={ui.muted}>
-        It uses the Google or Microsoft app an admin set up under <Link href="/operations/settings/email">Settings › Email</Link>, which needs this server&apos;s address followed by <code>/api/farming/mail/callback</code> added to the app&apos;s sign-in (redirect) addresses.
+        An administrator sets up the connection under <Link href="/operations/settings/email">Settings › Email</Link>.
         Attachments aren&apos;t read, and repeats aren&apos;t read from an email&apos;s wording: set them on the item.
       </p>
     </Card>

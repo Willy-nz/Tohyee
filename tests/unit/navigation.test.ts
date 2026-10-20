@@ -31,7 +31,7 @@ describe("top bar menus", () => {
   });
 
   it("uses the simplified accounting menus", () => {
-    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Farm", "Reports", "Accountant"]);
+    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Farm", "Reports", "Accounting", "Tax", "Settings"]);
   });
 
   it("shows the Farm menu only while Farming is on (#249)", () => {
@@ -115,39 +115,23 @@ describe("menu sub-headings", () => {
     }
   });
 
-  it("follows the issue's grouping for the Accountant menu", () => {
-    const accountant = visibleMenus("accounting", access("owner", everything)).find((menu) => menu.label === "Accountant")!;
-    const shape = accountant.groups.map((group) => [group.heading, menuSections(group).map((section) => [section.heading, section.links.map((link) => link.label)])]);
-    expect(shape).toEqual([
-      [
-        "Ledger",
-        [
-          ["Ledger", ["Journals", "Chart of accounts"]],
-          ["Year end", ["Period close", "Year-end pack", "Financial statements"]],
-          ["Inventory", ["Products and services", "Stock"]],
-        ],
-      ],
-      [
-        "Assets",
-        [
-          ["Fixed assets", ["Fixed assets", "Depreciation"]],
-          ["Livestock", ["Livestock", "Account sales", "Livestock valuation", "Livestock management values"]],
-        ],
-      ],
-      [
-        "Tax and R&D",
-        [
-          ["GST", ["GST return", "GST audit report", "Tax codes"]],
-          ["Income tax", ["Income tax"]],
-          ["R&D", ["R&D activities", "Tagged R&D costs", "R&D claim report"]],
-        ],
-      ],
-      ["Settings", [[null, ["Organisation settings", "People and roles", "Email", "Sales platforms", "Import and export", "All settings"]]]],
-    ]);
+  it("separates accounting, tax and settings into focused landing pages (#375)", () => {
+    const menus = visibleMenus("accounting", access("owner", everything));
+    const accounting = menus.find((menu) => menu.label === "Accounting")!;
+    expect(accounting.href).toBe("/operations/accounting-tools");
+    expect(accounting.groups.map((group) => group.heading)).toEqual(["Ledger", "Assets"]);
+    const tax = menus.find((menu) => menu.label === "Tax")!;
+    expect(tax.href).toBe("/operations/tax-workspace");
+    expect(tax.groups.flatMap((group) => group.links.map((link) => link.label))).toContain("Income tax");
+    expect(menus.find((menu) => menu.label === "Settings")?.href).toBe(ALL_SETTINGS_HREF);
+    const links = destinations(menus, []);
+    for (const href of ["/operations/period-close", "/operations/fixed-assets/depreciation", "/operations/rd/claim", "/operations/livestock/valuation", "/operations/reports/accountant-pack"]) {
+      expect(links.some((link) => link.href === href)).toBe(true);
+    }
   });
 
   it("drops a section whose module is off, heading and all", () => {
-    const accountant = visibleMenus("accounting", access("owner", { ...everything, livestock: false, gst: false })).find((menu) => menu.label === "Accountant")!;
+    const accountant = { groups: visibleMenus("accounting", access("owner", { ...everything, livestock: false, gst: false })).flatMap((menu) => menu.groups) };
     const headings = accountant.groups.flatMap((group) => menuSections(group).map((section) => section.heading));
     expect(headings).not.toContain("Livestock");
     expect(headings).toContain("GST"); // Tax codes stay without GST registration.
@@ -157,8 +141,8 @@ describe("menu sub-headings", () => {
 
   it("names the sub-heading in the command palette's group", () => {
     const items = destinations(visibleMenus("accounting", access("owner", everything)), []);
-    expect(items.find((item) => item.label === "GST return")?.group).toBe("Accountant › Tax and R&D › GST");
-    expect(items.find((item) => item.label === "Journals")?.group).toBe("Accountant › Ledger");
+    expect(items.find((item) => item.label === "GST return")?.group).toBe("Tax › Tax and R&D › GST");
+    expect(items.find((item) => item.label === "Journals")?.group).toBe("Accounting › Ledger");
   });
 });
 
@@ -195,7 +179,7 @@ describe("All settings page (decision 580)", () => {
       expect(group.links.length, group.heading).toBeGreaterThanOrEqual(2);
       expect(group.links.length, group.heading).toBeLessThanOrEqual(6);
     }
-    const old = MENUS.find((menu) => menu.label === "Accountant")!.groups.find((group) => group.heading === "Settings")!;
+    const old = MENUS.find((menu) => menu.label === "Settings")!.groups.find((group) => group.heading === "Settings")!;
     for (const link of old.links) {
       const card = SETTINGS.flatMap((group) => group.links).find((setting) => setting.href === link.href);
       if (card) expect([card.minRole, card.module]).toEqual([link.minRole, link.module]);
@@ -203,7 +187,7 @@ describe("All settings page (decision 580)", () => {
   });
 
   it("leaves the menu the most used settings and All settings", () => {
-    const viewer = visibleMenus("accounting", access("viewer")).find((menu) => menu.label === "Accountant")!;
+    const viewer = visibleMenus("accounting", access("viewer")).find((menu) => menu.label === "Settings")!;
     expect(viewer.groups.find((group) => group.heading === "Settings")!.links.map((link) => link.href)).toEqual(["/operations/settings/sales-platforms", ALL_SETTINGS_HREF]);
   });
 
@@ -218,7 +202,7 @@ describe("command palette search", () => {
   const items = destinations(visibleMenus("accounting", access("owner")), visibleNewActions(access("owner")));
 
   it("lists every menu destination and + New action", () => {
-    expect(items.some((item) => item.label === "Chart of accounts" && item.group === "Accountant › Ledger")).toBe(true);
+    expect(items.some((item) => item.label === "Chart of accounts" && item.group === "Accounting › Ledger")).toBe(true);
     expect(items.some((item) => item.label === "New invoice" && item.group === "New › Sales")).toBe(true);
     expect(items.some((item) => item.label === "Home" && item.href === "/operations")).toBe(true);
   });
