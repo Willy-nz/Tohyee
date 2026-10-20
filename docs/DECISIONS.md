@@ -6678,3 +6678,20 @@ accounting example is marked not yet reviewed.
      percentiles (interpolated, as a spreadsheet's PERCENTILE.INC) and trends
      are worked out from display numbers: they're positions on a chart,
      never figures in the books.
+674. **Key figure formatting** (20 October 2026, #376 phase 1; Power BI's
+     card and new card visual, Looker Studio's scorecard). The number can be
+     small, medium, large, extra large or an exact size (16-96 pixels; it
+     shrinks to fit a narrow card or phone), any colour, left, centred or
+     right, bold or not, with the value's name above or below it. Its
+     colour can instead come from rules on its value (up to six, "at least",
+     "more than", "at most", "less than" or "exactly" a number, the first
+     match wins), compared exactly in decimals like the change itself, or
+     from the comparison: green when it's good news and red when not, with
+     the arrow and Up or Down still there so colour is never the only
+     sign. An arrow or a dot can sit by the number. The trend underneath
+     can be a line, an area or columns in any colour. "Every value as its
+     own number" shows all the tile's values side by side, each named
+     (Power BI's multi-row card); a value's previous period or last year
+     stays with the first value's change. As with charts, a chosen colour
+     gets a dark version in dark mode (decision 672). The format painter
+     and chart type defaults copy all of this except the target.
