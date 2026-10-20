@@ -1363,7 +1363,13 @@ that something happened.
   feed's account, WooPayments into a clearing account); bank-transfer
   orders are invoiced and left owing for the bank feed to match, and voided
   if cancelled unpaid; refunds become credit notes. Customers matched by
-  email, lines by SKU. Surcharges and other currencies are refused.
+  email, lines by SKU. Surcharges and other currencies are refused. A
+  refund line is matched to the order line its `_refunded_item_id` names
+  (decision 666).
+- **Shopify checked against Admin API 2026-10** (decision 665): the
+  version, webhook subscriptions by `uri`, payout transactions checked
+  against their payout, and a plain message when Shopify withholds
+  protected customer data. Still not tried against a real store.
 - **Shopify chargebacks and reserves** (SPC25-SPC31, decisions 447-450,
   tenant migration 0104): a payout's chargebacks go to the chargebacks
   account chosen in the settings (fees to fees), won disputes come back,
@@ -2177,6 +2183,20 @@ that something happened.
   expected end-of-year tax; and due dates moved to the next business day.
   IRD's figures and payments to IRD are typed in and labelled. Nothing
   posts, files, pays or chooses a provisional tax option.
+- **Provisional tax payments and where they go** (#292; examples
+  ITX6A-ITX6H, decisions 620-623, tenant migration 0170; Codex, delegated by
+  owner (via Will), 20 Oct 2026; not yet reviewed by an accountant). On the
+  Income tax page, each payment to IRD has its bank date and IRD's effective
+  date, and is allocated to an instalment or the end-of-year tax as
+  confirmed by IRD (naming an IRD document), allocated with evidence, or a
+  forecast assumption. Unallocated payments are awaiting reconciliation and
+  count against no instalment. The provisional tax table shows each
+  instalment's amount, what's paid towards it (and how much late), and the
+  cash still needed by its date, with credits carried forward and never a
+  negative demand. An excess towards instalment 1 reduces instalment 2 (no
+  cap). Reallocating needs a reason and keeps the old allocation. A payment
+  from the books whose journal was reversed counts for nothing. Nothing is
+  paid or filed.
 - **Tax depreciation and Investment Boost** (#292 stage 2; examples
   ITX11-ITX18, decision 546, tenant migration 0151; from IRD's pages, not
   yet reviewed): on the Income tax page, each fixed asset gets tax details
@@ -2323,8 +2343,8 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms: Square and Stripe sales, WooCommerce product and
-  customer sync and surcharges, Shopify chargeback holds, customers' addresses and companies,
+- sales platforms: Stripe sales (Square left out by Jess, decision 667),
+  WooCommerce product and customer sync and surcharges, Shopify chargeback holds, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)

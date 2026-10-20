@@ -4,6 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, type Decimal, divide, isNegative, mul, neg, parseDecimalInput, roundHalfUp, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { PAYMENT_REVERSED_SQL } from "@/lib/tax/income/allocations";
 import { incomeYearDates, money, type OnTimeBy, onTimeBy } from "@/lib/tax/income/rules";
 import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
 import { optionalString, requireId, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
@@ -129,7 +130,9 @@ export function icaLedger(movements: Movement[], icaYear: number): Ica {
 async function movements(tx: OrgTx): Promise<Movement[]> {
   const typed = await tx.query<EntryRow>(`select ${COLUMNS} from ica_entries order by entry_date, ica_entries.id`);
   const paid = await tx.query<{ id: string; paid_on: string; amount: string; income_year: number; note: string | null; created_by_email: string | null }>(
-    "select id::text, paid_on::text, amount::text, income_year, note, created_by_email from income_tax_payments order by paid_on, income_tax_payments.id",
+    // A payment counted from the books whose journal was reversed since counts for nothing (ITX6F).
+    `select p.id::text, p.paid_on::text, p.amount::text, p.income_year, p.note, p.created_by_email from income_tax_payments p
+      where not ${PAYMENT_REVERSED_SQL} order by p.paid_on, p.id`,
   );
   return [
     ...typed.rows.map((row) => ({ id: row.id, date: row.entry_date, kind: row.kind, amount: dec(row.amount), dividend: row.dividend_amount ? dec(row.dividend_amount) : null, description: row.description, createdByEmail: row.created_by_email })),

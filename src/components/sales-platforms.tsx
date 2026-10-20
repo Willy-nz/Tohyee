@@ -153,7 +153,8 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
       <Notice tone="info">
         <strong>Before you start:</strong> Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access. In the
         Shopify Dev Dashboard (dev.shopify.com), create an app, give it only the Admin API access scopes <code>read_customers</code> and{" "}
-        <code>read_products</code>, release it and install it on your store, then copy its client ID and secret from the app&apos;s Settings. If your
+        <code>read_products</code>, turn on access to protected customer data (name, email, phone and address), release it and install it on your store, then copy its client ID
+        and secret from the app&apos;s Settings. If your
         store already has a custom app made in the store admin before 2026, you can use its Admin API access token and API secret key instead. Tohyee
         refuses access that can change your store: it only reads.
       </Notice>

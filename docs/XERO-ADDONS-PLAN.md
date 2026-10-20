@@ -44,7 +44,7 @@ PayPal, Shopify, WooCommerce, mailbox or connected AI account yet.**
 | 7 | Deputy | Foundations: employees, leave, timesheets, workforce budgets | Payroll tests | n/a | Stage 9: rosters, shift costs, unavailability, clock in and out |
 | 8 | GoCardless | Direct debit (BECS NZ): authorities through GoCardless's page, collection on the due date with "don't collect this one", payments recorded into a clearing account, failures voided with "Try again", payouts posted with fees | GC1-GC10 | No: no real GoCardless account (a sandbox account would be the first check) | Automatic retry (declined by Jess); the failure's own reason (GoCardless gives it in its events, which Tohyee doesn't read yet); GST on fees (not known) |
 | 9 | Tradify | As ServiceM8 (one jobs workflow for both, stage 8) | - | - | As ServiceM8, plus calendar sync |
-| 10 | A2X | Shopify orders, refunds, payouts, chargebacks, reserves; WooCommerce orders | SPC1-SPC31, WC1-WC10 | No | Stripe sales, Square, Amazon, eBay, Etsy, PayPal sales. Summary posting: declined by Jess, not missing |
+| 10 | A2X | Shopify orders, refunds, payouts, chargebacks, reserves; WooCommerce orders (checked again 20 Oct 2026, decisions 665-666) | SPC1-SPC31, WC1-WC10 | No | Stripe sales, Amazon, eBay, Etsy, PayPal sales. Summary posting: declined by Jess, not missing |
 
 Since #182, an organisation can have several logins per provider; online
 payments use the first Stripe or PayPal login (decision 481), which updates
@@ -134,7 +134,10 @@ phone width).
    sales, Square, Amazon, eBay, Etsy, PayPal. Jess, 5 Oct 2026: no summary
    mode (each order keeps its invoice and a payout matches them);
    chargebacks to a chargebacks account; reserves to a reserve account;
-   WooCommerce next.
+   WooCommerce next. Then (Codex, delegated by owner, 20 Oct 2026, #360
+   item 18) Shopify checked against API 2026-10, the WooCommerce refund
+   gap fixed (decisions 665, 666). Square was left out by Jess the same
+   day: it doesn't take card payments in New Zealand (decision 667).
 8. **Jobs and scheduling inside Projects:** jobs with site address, visits
    on a calendar, time and materials, checklists, photos and signatures,
    invoice from the job, service reminders, Google and Microsoft calendar
