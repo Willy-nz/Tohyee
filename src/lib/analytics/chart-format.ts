@@ -51,16 +51,70 @@ export type NumberFormat = {
   suffix?: string;
 };
 
+export type LineStyle = "solid" | "dashed" | "dotted";
+
 export type SeriesFormat = {
   /** Columns and line: drawn as a column or a line. */
   as?: "bar" | "line";
   /** Columns and line, line and area: which axis it's measured on. */
   axis?: "left" | "right";
   color?: Hue;
+  /** Any colour (#376), over the named one; left out, the theme's. */
+  hex?: string;
   number?: NumberFormat;
+  /** Lines: width in pixels (1-6), style, a step line, and dots (over the chart's own setting). */
+  lineWidth?: number;
+  lineStyle?: LineStyle;
+  step?: boolean;
+  markers?: boolean;
+  /** In the tooltip (the default), left out of it, or only in it (not drawn). */
+  tooltip?: "show" | "hide" | "only";
+  /** A straight trend line (least squares) for this value. */
+  trend?: boolean;
+  /** Carries the trend on for this many groups (1-12): a simple forecast. */
+  forecast?: number;
 };
 
-export type AxisFormat = {
+/** Text styling for a title, subtitle or label. */
+export type TextStyle = {
+  size?: number;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string;
+  align?: "left" | "center" | "right";
+};
+
+export type ReferenceKind = "constant" | "target" | "average" | "median" | "min" | "max" | "percentile" | "band";
+export const REFERENCE_KINDS: ReferenceKind[] = ["constant", "target", "average", "median", "min", "max", "percentile", "band"];
+
+/** A line (or shaded band) across the value axis (#376). */
+export type ReferenceLine = {
+  kind: ReferenceKind;
+  /** Which value it's worked out from (by position; the first when left out). */
+  series?: number;
+  /** A constant or target, or a band's start (a decimal string). */
+  value?: string;
+  /** A band's end. */
+  to?: string;
+  /** 1-99, for a percentile. */
+  percentile?: number;
+  label?: string;
+  color?: string;
+  style?: LineStyle;
+};
+
+/** How an axis's labels look (#376), for both kinds of axis. */
+export type AxisLook = {
+  /** Off hides the axis entirely (labels and line). */
+  show?: boolean;
+  size?: number;
+  color?: string;
+  /** Label rotation in degrees (-90 to 90). */
+  rotate?: number;
+  reverse?: boolean;
+};
+
+export type AxisFormat = AxisLook & {
   title?: string;
   gridlines?: boolean;
   /** Display bounds, as typed numbers (e.g. "0", "1500"). */
@@ -69,9 +123,24 @@ export type AxisFormat = {
   /** On unless turned off: the axis starts at zero. */
   zero?: boolean;
   log?: boolean;
+  /** The axis's own number format, apart from the values' (#376). */
+  number?: NumberFormat;
+  /** The gap between steps, a number (e.g. "500"). */
+  step?: string;
 };
 
-export type LegendPosition = "top" | "bottom" | "right";
+export type CategoryAxisFormat = AxisLook & {
+  title?: string;
+  gridlines?: boolean;
+  /** Show every nth label: 0 shows all, 1 every second, and so on (0-50). */
+  interval?: number;
+  /** For dates: only groups from and to these dates. */
+  from?: string;
+  to?: string;
+};
+
+export type LegendPosition = "top" | "bottom" | "right" | "left" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export const LEGEND_POSITIONS: LegendPosition[] = ["top", "bottom", "right", "left", "top-left", "top-right", "bottom-left", "bottom-right"];
 export type LabelPosition = "auto" | "inside" | "outside";
 
 /**
@@ -88,22 +157,60 @@ export type KpiFormat = {
   downIsGood?: boolean;
 };
 
+export type CardFormat = {
+  showTitle?: boolean;
+  subtitle?: string;
+  background?: "plain" | "tinted" | "none";
+  border?: boolean;
+  /** The title's look (#376), with an optional band of colour behind it. */
+  title?: TextStyle & { background?: string };
+  subtitleStyle?: TextStyle;
+  /** Any background colour, with how solid it is (0-100%). */
+  fill?: string;
+  opacity?: number;
+  borderColor?: string;
+  borderWidth?: number;
+  radius?: number;
+  shadow?: "none" | "soft" | "strong";
+  padding?: number;
+};
+
+export type LabelDensity = "all" | "auto" | "ends";
+
 export type ChartFormat = {
   palette?: PaletteId;
   /** By value, in the tile's value order. */
   series?: SeriesFormat[];
   colorByCategory?: boolean;
+  /** Any colour for chosen groups, by the group's name as shown (#376). */
+  categoryColors?: Array<{ name: string; color: string }>;
   negativeRed?: boolean;
-  labels?: { show?: boolean; position?: LabelPosition };
-  legend?: { show?: "auto" | "show" | "hide"; position?: LegendPosition };
-  categoryAxis?: { title?: string; gridlines?: boolean };
+  labels?: {
+    show?: boolean;
+    position?: LabelPosition;
+    size?: number;
+    color?: string;
+    /** The labels' own number format, apart from the axis and tooltip. */
+    number?: NumberFormat;
+    /** Pie and donut: what each label says. */
+    content?: { category?: boolean; value?: boolean; percent?: boolean };
+    /** Every label, only those with room, or only the first and last. */
+    density?: LabelDensity;
+  };
+  legend?: { show?: "auto" | "show" | "hide"; position?: LegendPosition; size?: number; title?: string };
+  categoryAxis?: CategoryAxisFormat;
   valueAxis?: AxisFormat;
   rightAxis?: AxisFormat;
+  gridlines?: { style?: LineStyle; color?: string };
+  plot?: { background?: string };
+  tooltip?: { show?: boolean; total?: boolean };
+  referenceLines?: ReferenceLine[];
+  bars?: { thickness?: number; gap?: number; rounded?: boolean };
   stack?: "none" | "stacked" | "percent";
   smooth?: boolean;
   markers?: boolean;
   donutTotal?: boolean;
-  card?: { showTitle?: boolean; subtitle?: string; background?: "plain" | "tinted" | "none"; border?: boolean };
+  card?: CardFormat;
   kpi?: KpiFormat;
 };
 
@@ -161,11 +268,60 @@ export function parseNumberFormat(input: unknown, what: string): NumberFormat | 
   });
 }
 
+const HEX_COLOUR = /^#[0-9a-f]{6}$/i;
+
+/** Any colour, as #rrggbb (stored lower case). */
+export function hexColour(value: unknown, what: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !HEX_COLOUR.test(value)) throw new ValidationError(`${what} should be a colour like #1f5fae.`);
+  return value.toLowerCase();
+}
+
+function whole(value: unknown, low: number, high: number, what: string): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const number = typeof value === "string" ? Number(value) : value;
+  if (typeof number !== "number" || !Number.isInteger(number) || number < low || number > high) throw new ValidationError(`${what} should be a whole number from ${low} to ${high}.`);
+  return number;
+}
+
+const DATE_TEXT = /^\d{4}-\d{2}-\d{2}$/;
+
+function dateText(value: unknown, what: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const date = typeof value === "string" && DATE_TEXT.test(value) ? new Date(`${value}T00:00:00Z`) : null;
+  const ok = date !== null && Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  if (!ok) throw new ValidationError(`${what} is a date, YYYY-MM-DD.`);
+  return value as string;
+}
+
+function parseTextStyle(input: unknown, what: string, maxSize = 32): TextStyle | undefined {
+  const raw = object(input);
+  return compact({
+    size: whole(raw.size, 8, maxSize, `${what} size`),
+    bold: flag(raw.bold),
+    italic: flag(raw.italic),
+    color: hexColour(raw.color, `${what} colour`),
+    align: oneOf(raw.align, ["left", "center", "right"] as const, `${what} alignment`),
+  });
+}
+
+function parseAxisLook(raw: Record<string, unknown>, what: string): AxisLook {
+  return {
+    show: flag(raw.show),
+    size: whole(raw.size, 8, 20, `${what} text size`),
+    color: hexColour(raw.color, `${what} text colour`),
+    rotate: whole(raw.rotate, -90, 90, `${what} label rotation`),
+    reverse: flag(raw.reverse),
+  };
+}
+
 function parseAxis(input: unknown, what: string): AxisFormat | undefined {
   const raw = object(input);
   const min = numberText(raw.min, `${what} minimum`);
   const max = numberText(raw.max, `${what} maximum`);
   if (min !== undefined && max !== undefined && Number(min) >= Number(max)) throw new ValidationError(`${what}: the maximum should be more than the minimum.`);
+  const step = numberText(raw.step, `${what} step`);
+  if (step !== undefined && Number(step) <= 0) throw new ValidationError(`${what}: the step should be more than zero.`);
   return compact({
     title: text(raw.title, 60, `${what} title`),
     gridlines: flag(raw.gridlines),
@@ -173,6 +329,95 @@ function parseAxis(input: unknown, what: string): AxisFormat | undefined {
     max,
     zero: flag(raw.zero),
     log: flag(raw.log),
+    ...parseAxisLook(raw, what),
+    number: parseNumberFormat(raw.number, `${what} numbers`),
+    step,
+  });
+}
+
+function parseCategoryAxis(input: unknown): CategoryAxisFormat | undefined {
+  const raw = object(input);
+  const what = "Group axis";
+  const from = dateText(raw.from, `${what} from`);
+  const to = dateText(raw.to, `${what} to`);
+  if (from && to && from > to) throw new ValidationError(`${what}: the to date should be on or after the from date.`);
+  return compact({
+    title: text(raw.title, 60, `${what} title`),
+    gridlines: flag(raw.gridlines),
+    ...parseAxisLook(raw, what),
+    interval: whole(raw.interval, 0, 50, `${what} label interval`),
+    from,
+    to,
+  });
+}
+
+const MAX_REFERENCE_LINES = 8;
+
+function parseReferenceLines(input: unknown): ReferenceLine[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ValidationError("Reference lines should be a list.");
+  if (input.length > MAX_REFERENCE_LINES) throw new ValidationError(`A chart can have up to ${MAX_REFERENCE_LINES} reference lines.`);
+  const lines = input.map((entry, index): ReferenceLine => {
+    const raw = object(entry);
+    const what = `Reference line ${index + 1}`;
+    const kind = oneOf(raw.kind, REFERENCE_KINDS, what);
+    if (!kind) throw new ValidationError(`${what}: choose what kind of line it is.`);
+    const value = numberText(raw.value, `${what} value`);
+    const to = numberText(raw.to, `${what} end`);
+    if ((kind === "constant" || kind === "target" || kind === "band") && value === undefined) throw new ValidationError(`${what}: give it a value.`);
+    if (kind === "band") {
+      if (to === undefined) throw new ValidationError(`${what}: give the band an end.`);
+      if (Number(to) <= Number(value)) throw new ValidationError(`${what}: the band's end should be more than its start.`);
+    }
+    const percentile = whole(raw.percentile, 1, 99, `${what} percentile`);
+    if (kind === "percentile" && percentile === undefined) throw new ValidationError(`${what}: the percentile should be a whole number from 1 to 99.`);
+    return compact({
+      kind,
+      series: whole(raw.series, 0, 11, `${what} value number`),
+      value: kind === "constant" || kind === "target" || kind === "band" ? value : undefined,
+      to: kind === "band" ? to : undefined,
+      percentile: kind === "percentile" ? percentile : undefined,
+      label: text(raw.label, 60, `${what} label`),
+      color: hexColour(raw.color, `${what} colour`),
+      style: oneOf(raw.style, ["solid", "dashed", "dotted"] as const, `${what} style`),
+    }) as ReferenceLine;
+  });
+  return lines.length ? lines : undefined;
+}
+
+function parseCategoryColours(input: unknown): ChartFormat["categoryColors"] {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ValidationError("Group colours should be a list.");
+  if (input.length > 50) throw new ValidationError("A chart can colour up to 50 groups.");
+  const seen = new Set<string>();
+  const list = input.flatMap((entry, index) => {
+    const raw = object(entry);
+    const name = typeof raw.name === "string" ? raw.name.slice(0, 120) : "";
+    const color = hexColour(raw.color, `Group colour ${index + 1}`);
+    if (!name || !color || seen.has(name)) return [];
+    seen.add(name);
+    return [{ name, color }];
+  });
+  return list.length ? list : undefined;
+}
+
+function parseCard(input: unknown): CardFormat | undefined {
+  const card = object(input);
+  const title = object(card.title);
+  return compact({
+    showTitle: flag(card.showTitle),
+    subtitle: text(card.subtitle, 200, "Subtitle"),
+    background: oneOf(card.background, ["plain", "tinted", "none"] as const, "Background"),
+    border: flag(card.border),
+    title: compact({ ...parseTextStyle(card.title, "Title"), background: hexColour(title.background, "Title background") }),
+    subtitleStyle: parseTextStyle(card.subtitleStyle, "Subtitle", 24),
+    fill: hexColour(card.fill, "Card background"),
+    opacity: whole(card.opacity, 0, 100, "Background opacity (0 to 100)"),
+    borderColor: hexColour(card.borderColor, "Border colour"),
+    borderWidth: whole(card.borderWidth, 0, 6, "Border width"),
+    radius: whole(card.radius, 0, 24, "Corner radius"),
+    shadow: oneOf(card.shadow, ["none", "soft", "strong"] as const, "Shadow"),
+    padding: whole(card.padding, 0, 32, "Padding"),
   });
 }
 
@@ -199,38 +444,64 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
         as: oneOf(series.as, ["bar", "line"] as const, what),
         axis: oneOf(series.axis, ["left", "right"] as const, what),
         color: oneOf(series.color, HUES, `${what} colour`),
+        hex: hexColour(series.hex, `${what} colour`),
         number: parseNumberFormat(series.number, what),
+        lineWidth: whole(series.lineWidth, 1, 6, `${what} line width`),
+        lineStyle: oneOf(series.lineStyle, ["solid", "dashed", "dotted"] as const, `${what} line style`),
+        step: flag(series.step),
+        markers: flag(series.markers),
+        tooltip: oneOf(series.tooltip, ["show", "hide", "only"] as const, `${what} tooltip`),
+        trend: flag(series.trend),
+        forecast: whole(series.forecast, 1, 12, `${what} forecast periods`),
       }) ?? {}
     );
   });
   while (seriesList.length && Object.keys(seriesList[seriesList.length - 1]).length === 0) seriesList.pop();
   const labels = object(raw.labels);
+  const content = object(labels.content);
   const legend = object(raw.legend);
-  const categoryAxis = object(raw.categoryAxis);
-  const card = object(raw.card);
+  const gridlines = object(raw.gridlines);
+  const plot = object(raw.plot);
+  const tooltip = object(raw.tooltip);
+  const bars = object(raw.bars);
   return compact({
     palette: oneOf(raw.palette, Object.keys(PALETTES) as PaletteId[], "Colours"),
     series: seriesList.length ? seriesList : undefined,
     colorByCategory: flag(raw.colorByCategory),
+    categoryColors: parseCategoryColours(raw.categoryColors),
     negativeRed: flag(raw.negativeRed),
-    labels: compact({ show: flag(labels.show), position: oneOf(labels.position, ["auto", "inside", "outside"] as const, "Data labels") }),
+    labels: compact({
+      show: flag(labels.show),
+      position: oneOf(labels.position, ["auto", "inside", "outside"] as const, "Data labels"),
+      size: whole(labels.size, 8, 24, "Data label size"),
+      color: hexColour(labels.color, "Data label colour"),
+      number: parseNumberFormat(labels.number, "Data labels"),
+      content: compact({ category: flag(content.category), value: flag(content.value), percent: flag(content.percent) }),
+      density: oneOf(labels.density, ["all", "auto", "ends"] as const, "Label density"),
+    }),
     legend: compact({
       show: oneOf(legend.show, ["auto", "show", "hide"] as const, "Legend"),
-      position: oneOf(legend.position, ["top", "bottom", "right"] as const, "Legend position"),
+      position: oneOf(legend.position, LEGEND_POSITIONS, "Legend position"),
+      size: whole(legend.size, 8, 20, "Legend text size"),
+      title: text(legend.title, 60, "Legend title"),
     }),
-    categoryAxis: compact({ title: text(categoryAxis.title, 60, "Group axis title"), gridlines: flag(categoryAxis.gridlines) }),
+    categoryAxis: parseCategoryAxis(raw.categoryAxis),
     valueAxis: parseAxis(raw.valueAxis, "Value axis"),
     rightAxis: parseAxis(raw.rightAxis, "Right axis"),
+    gridlines: compact({ style: oneOf(gridlines.style, ["solid", "dashed", "dotted"] as const, "Gridline style"), color: hexColour(gridlines.color, "Gridline colour") }),
+    plot: compact({ background: hexColour(plot.background, "Plot area background") }),
+    tooltip: compact({ show: flag(tooltip.show), total: flag(tooltip.total) }),
+    referenceLines: parseReferenceLines(raw.referenceLines),
+    bars: compact({
+      thickness: whole(bars.thickness, 4, 80, "Column thickness"),
+      gap: whole(bars.gap, 0, 90, "Gap between groups"),
+      rounded: flag(bars.rounded),
+    }),
     stack: oneOf(raw.stack, ["none", "stacked", "percent"] as const, "Stacking"),
     smooth: flag(raw.smooth),
     markers: flag(raw.markers),
     donutTotal: flag(raw.donutTotal),
-    card: compact({
-      showTitle: flag(card.showTitle),
-      subtitle: text(card.subtitle, 200, "Subtitle"),
-      background: oneOf(card.background, ["plain", "tinted", "none"] as const, "Background"),
-      border: flag(card.border),
-    }),
+    card: parseCard(raw.card),
     kpi: parseKpiFormat(raw.kpi),
   });
 }
