@@ -57,7 +57,12 @@ export type FarmMailbox = {
   items: number;
   /** Items from it shared with the farm team (they go if it's disconnected). */
   shared: number;
+  /** Its member also keeps a private copy of these emails (#250): disconnecting stops that too. */
+  privateCopy: boolean;
 };
+
+/** Where a mailbox sign-in was started: the farm calendar, or My mail's private copy (#250, decision 610). */
+export type MailboxPurpose = "calendar" | "private";
 
 
 function redirectUri(origin: string): string {
@@ -92,36 +97,57 @@ async function farmIdOrNull(tx: OrgTx, input: unknown): Promise<string | null> {
 // Connecting (FC1) ---------------------------------------------------------------------------
 
 /** The provider's sign-in address, with a one-time state tied to this member, organisation and choices. */
-export async function startFarmMailConnect(tx: OrgTx, input: { provider: unknown; historyDays?: unknown; defaultFarmId?: unknown }, origin: string): Promise<{ url: string }> {
-  await requireFarming(tx);
+export async function startFarmMailConnect(
+  tx: OrgTx,
+  input: { provider: unknown; historyDays?: unknown; defaultFarmId?: unknown },
+  origin: string,
+  purpose: MailboxPurpose = "calendar",
+): Promise<{ url: string }> {
+  // My mail checks its member is an Owner before it gets here (decision 611).
+  if (purpose === "calendar") await requireFarming(tx);
   const userId = requireUser(tx);
   const provider = requireOneOf(input.provider, "provider", MAIL_PROVIDERS);
   if (!secretsAvailable()) throw new UnavailableError("The server has no TOHYEE_SECRET_KEY, so it can't store mailbox tokens.");
   const app = await appFor(tx, provider);
   const days = historyDays(input.historyDays);
-  const farmId = await farmIdOrNull(tx, input.defaultFarmId);
+  const farmId = purpose === "calendar" ? await farmIdOrNull(tx, input.defaultFarmId) : null;
   const state = `${tx.organisationId}.${randomBytes(24).toString("base64url")}`;
   await tx.query("delete from farm_mail_states where created_at < now() - interval '1 day'");
-  await tx.query("insert into farm_mail_states (state, user_id, provider, history_days, default_farm_id) values ($1, $2, $3, $4, $5)", [state, userId, provider, days, farmId]);
+  await tx.query("insert into farm_mail_states (state, user_id, provider, history_days, default_farm_id, purpose) values ($1, $2, $3, $4, $5, $6)", [
+    state,
+    userId,
+    provider,
+    days,
+    farmId,
+    purpose,
+  ]);
   return { url: authorisationUrl(provider, app, redirectUri(origin), state, provider === "google" ? FARM_GOOGLE_SCOPES : FARM_MICROSOFT_SCOPES) };
 }
 
-export type ClaimedFarmState = { provider: MailProvider; historyDays: number; defaultFarmId: string | null; app: ProviderApp };
+export type ClaimedFarmState = { provider: MailProvider; historyDays: number; defaultFarmId: string | null; app: ProviderApp; purpose: MailboxPurpose };
 
 /** Checks the state (unused, under 15 minutes old, the same member) and marks it used, before the code is exchanged. */
 export async function claimFarmMailState(tx: OrgTx, state: string): Promise<ClaimedFarmState> {
-  await requireFarming(tx);
-  const found = await tx.query<{ user_id: string; provider: MailProvider; history_days: number; default_farm_id: string | null; fresh: boolean; used_at: string | null }>(
-    `select user_id, provider, history_days, default_farm_id::text, created_at > now() - make_interval(mins => $2) as fresh, used_at
+  const found = await tx.query<{
+    user_id: string;
+    provider: MailProvider;
+    history_days: number;
+    default_farm_id: string | null;
+    fresh: boolean;
+    used_at: string | null;
+    purpose: MailboxPurpose;
+  }>(
+    `select user_id, provider, history_days, default_farm_id::text, created_at > now() - make_interval(mins => $2) as fresh, used_at, purpose
        from farm_mail_states where state = $1 for update`,
     [state, STATE_MINUTES],
   );
   const row = found.rows[0];
+  if (!row || row.purpose === "calendar") await requireFarming(tx);
   if (!row || row.used_at || !row.fresh || row.user_id !== tx.actor.userId) {
     throw new ValidationError("That sign-in link has expired or was already used. Start connecting again.");
   }
   await tx.query("update farm_mail_states set used_at = now() where state = $1", [state]);
-  return { provider: row.provider, historyDays: row.history_days, defaultFarmId: row.default_farm_id, app: await appFor(tx, row.provider) };
+  return { provider: row.provider, historyDays: row.history_days, defaultFarmId: row.default_farm_id, app: await appFor(tx, row.provider), purpose: row.purpose };
 }
 
 /** Exchanges the code and finds the mailbox's address (network, no transaction). */
@@ -140,6 +166,23 @@ export async function saveFarmMailbox(
   now = new Date(),
 ): Promise<FarmMailbox> {
   await requireFarming(tx);
+  const id = await storeMailboxAccount(tx, claimed, connection, now, true);
+  return (await listFarmMailboxes(tx)).find((mailbox) => mailbox.id === id)!;
+}
+
+/**
+ * Stores a mailbox connection (tokens encrypted) and returns its id. It's
+ * one connection whichever screen it was made from (decision 610): the farm
+ * calendar reads it when `farmCalendar` (or when it was connected there
+ * before); My mail's private copy uses the same one.
+ */
+export async function storeMailboxAccount(
+  tx: OrgTx,
+  claimed: ClaimedFarmState,
+  connection: Awaited<ReturnType<typeof fetchFarmMailConnection>>,
+  now: Date,
+  farmCalendar: boolean,
+): Promise<string> {
   const userId = requireUser(tx);
   const { tokens, email } = connection;
   const existing = await tx.query<{ id: string; user_id: string }>("select id::text, user_id from farm_mail_accounts where provider = $1 and lower(email) = lower($2)", [claimed.provider, email]);
@@ -150,22 +193,24 @@ export async function saveFarmMailbox(
     id = existing.rows[0].id;
     await tx.query(
       `update farm_mail_accounts set refresh_token_ciphertext = $2, access_token_ciphertext = $3, access_token_expires_at = $4,
-              status = 'active', failures = 0, last_error = null, updated_at = now() where id = $1`,
-      [id, ...secrets],
+              status = 'active', failures = 0, last_error = null, farm_calendar = farm_calendar or $5, updated_at = now() where id = $1`,
+      [id, ...secrets, farmCalendar],
     );
+    // A private copy stopped by failed syncs carries on with the new sign-in (decision 614).
+    await tx.query("update private_mail_copies set paused = false, failures = 0, updated_at = now() where account_id = $1 and paused", [id]);
   } else {
     const historyFrom = new Date(now.getTime() - claimed.historyDays * 86_400_000).toISOString();
     const inserted = await tx.query<{ id: string }>(
       `insert into farm_mail_accounts (user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at,
-                                       history_days, history_from, checked_through, backfill_before, default_farm_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10) returning id::text`,
-      [userId, claimed.provider, email, ...secrets, claimed.historyDays, historyFrom, now.toISOString(), claimed.defaultFarmId],
+                                       history_days, history_from, checked_through, backfill_before, default_farm_id, farm_calendar)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11) returning id::text`,
+      [userId, claimed.provider, email, ...secrets, claimed.historyDays, historyFrom, now.toISOString(), claimed.defaultFarmId, farmCalendar],
     );
     id = inserted.rows[0].id;
   }
   // Audited without the address: the mailbox is the member's own (decision 571).
   await writeAuditEvent(tx, { eventType: "farming.mailbox_connected", entityType: "farm_mail_account", entityId: id, details: { provider: claimed.provider } });
-  return (await listFarmMailboxes(tx)).find((mailbox) => mailbox.id === id)!;
+  return id;
 }
 
 // Mailboxes ---------------------------------------------------------------------------------
@@ -186,17 +231,20 @@ export async function listFarmMailboxes(tx: OrgTx): Promise<FarmMailbox[]> {
     backfill_before: string | null;
     items: number;
     shared: number;
+    private_copy: boolean;
   }>(
     `select a.id::text, a.provider, a.email, a.history_days, a.default_farm_id::text, a.status, a.last_check_at::text, a.last_error, a.backfill_before::text,
             (select count(*)::int from farm_calendar_items i where i.account_id = a.id and i.state <> 'dismissed') as items,
-            (select count(*)::int from farm_calendar_items i where i.account_id = a.id and i.state <> 'dismissed' and i.shared_at is not null) as shared
-       from farm_mail_accounts a where a.user_id = $1 order by a.email`,
+            (select count(*)::int from farm_calendar_items i where i.account_id = a.id and i.state <> 'dismissed' and i.shared_at is not null) as shared,
+            exists (select 1 from private_mail_copies c where c.account_id = a.id and c.owner_user_id = a.user_id and c.copying) as private_copy
+       from farm_mail_accounts a where a.user_id = $1 and a.farm_calendar order by a.email`,
     [userId],
   );
+  // Gmail's Sent, Drafts, Spam and Trash are for the private copy only (decision 615).
   const folders = await tx.query<{ id: string; account_id: string; external_id: string; name: string; include_subfolders: boolean; missing: boolean }>(
     `select f.id::text, f.account_id::text, f.external_id, f.name, f.include_subfolders, f.missing
        from farm_mail_folders f join farm_mail_accounts a on a.id = f.account_id
-      where a.user_id = $1 order by lower(f.name), f.id`,
+      where a.user_id = $1 and not f.private_only order by lower(f.name), f.id`,
     [userId],
   );
   const chosen = (accountId: string): ChosenFolder[] =>
@@ -216,6 +264,7 @@ export async function listFarmMailboxes(tx: OrgTx): Promise<FarmMailbox[]> {
     folders: chosen(row.id),
     items: row.items,
     shared: row.shared,
+    privateCopy: row.private_copy,
   }));
 }
 
@@ -224,7 +273,7 @@ async function ownMailbox(tx: OrgTx, idInput: unknown): Promise<string> {
   const userId = requireUser(tx);
   const id = typeof idInput === "string" || typeof idInput === "number" ? String(idInput) : "";
   if (!/^[1-9][0-9]{0,18}$/.test(id)) throw new NotFoundError("Mailbox not found.");
-  const found = await tx.query("select 1 from farm_mail_accounts where id = $1 and user_id = $2", [id, userId]);
+  const found = await tx.query("select 1 from farm_mail_accounts where id = $1 and user_id = $2 and farm_calendar", [id, userId]);
   // Someone else's mailbox is "not found" too: it isn't theirs to know about.
   if (!found.rowCount) throw new NotFoundError("Mailbox not found.");
   return id;
@@ -244,7 +293,12 @@ export async function disconnectFarmMailbox(tx: OrgTx, idInput: unknown): Promis
   return listFarmMailboxes(tx);
 }
 
-async function deleteMailbox(tx: OrgTx, id: string): Promise<void> {
+/**
+ * Deletes a connection: its tokens, its folder choice and what the farm
+ * calendar read. A private copy made from it stays, no longer copying,
+ * until its owner deletes it (decision 616).
+ */
+export async function deleteMailbox(tx: OrgTx, id: string): Promise<void> {
   await tx.query("update farm_calendar_items set replaced_by = null where account_id = $1", [id]);
   await tx.query("delete from farm_mail_accounts where id = $1", [id]);
   await writeAuditEvent(tx, { eventType: "farming.mailbox_disconnected", entityType: "farm_mail_account", entityId: id, details: {} });
@@ -266,7 +320,10 @@ export async function disconnectMemberFarmMail(organisation: OrganisationRecord,
 /** "Check now" for one of the member's own mailboxes. */
 export async function mailboxForCheck(tx: OrgTx, idInput: unknown): Promise<string> {
   const id = await ownMailbox(tx, idInput);
-  const row = await tx.query<{ status: string; folders: number }>("select status, (select count(*)::int from farm_mail_folders f where f.account_id = a.id) as folders from farm_mail_accounts a where id = $1", [id]);
+  const row = await tx.query<{ status: string; folders: number }>(
+    "select status, (select count(*)::int from farm_mail_folders f where f.account_id = a.id and not f.private_only) as folders from farm_mail_accounts a where id = $1",
+    [id],
+  );
   if (row.rows[0].status === "paused") throw new ConflictError("This mailbox is paused after failed checks. Connect it again to start checking.");
   if (row.rows[0].folders === 0) throw new ConflictError("Choose the folders Tohyee reads first: nothing is read until you do.");
   return id;
@@ -291,6 +348,58 @@ export async function mailboxFolderChoices(organisation: OrganisationRecord, acc
   return listMailFolders(account.provider, token);
 }
 
+/** A connection as My mail's private copy reads it (#250): no Farming needed. The caller has checked whose it is. */
+export type MailboxAccess = {
+  id: string;
+  userId: string;
+  provider: MailProvider;
+  email: string;
+  status: "active" | "paused";
+  historyFrom: string;
+  /** Every chosen folder, the private-only ones included. */
+  folders: Array<{ id: string; externalId: string; includeSubfolders: boolean; privateOnly: boolean }>;
+};
+
+async function loadMailboxAccess(organisation: OrganisationRecord, accountId: string) {
+  return withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
+    const found = await tx.query<AccountRow & { status: "active" | "paused" }>(
+      `select id::text, user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at::text,
+              history_from::text, checked_through::text, backfill_before::text, default_farm_id::text, farm_calendar, status
+         from farm_mail_accounts where id = $1`,
+      [accountId],
+    );
+    const account = found.rows[0];
+    if (!account) throw new NotFoundError("Mailbox not found.");
+    const folders = await tx.query<{ id: string; external_id: string; include_subfolders: boolean; private_only: boolean }>(
+      "select id::text, external_id, include_subfolders, private_only from farm_mail_folders where account_id = $1 order by farm_mail_folders.id",
+      [accountId],
+    );
+    return { account, folders: folders.rows, app: await appFor(tx, account.provider) };
+  });
+}
+
+/**
+ * The connection and a working access token, refreshed and stored when it
+ * had expired (network outside any transaction). For My mail's private copy.
+ */
+export async function mailboxAccessToken(organisation: OrganisationRecord, accountId: string, now = new Date()): Promise<{ access: MailboxAccess; token: string }> {
+  const { account, folders, app } = await loadMailboxAccess(organisation, accountId);
+  const { token, refreshed } = await accessToken(account, app, now);
+  if (refreshed) await storeRefreshed(organisation, account.id, refreshed, now);
+  return {
+    token,
+    access: {
+      id: account.id,
+      userId: account.user_id,
+      provider: account.provider,
+      email: account.email,
+      status: account.status,
+      historyFrom: account.history_from,
+      folders: folders.map((folder) => ({ id: folder.id, externalId: folder.external_id, includeSubfolders: folder.include_subfolders, privateOnly: folder.private_only })),
+    },
+  };
+}
+
 /**
  * FC25, FC26, FC27: the folders the mailbox reads, from `available` (as the
  * mailbox listed them just now). A folder taken off stops being read, and
@@ -300,6 +409,17 @@ export async function mailboxFolderChoices(organisation: OrganisationRecord, acc
  */
 export async function chooseMailboxFolders(tx: OrgTx, idInput: unknown, input: unknown, available: MailFolder[]): Promise<FarmMailbox[]> {
   const id = await ownMailbox(tx, idInput);
+  await saveFolderChoice(tx, id, input, available, "calendar");
+  return listFarmMailboxes(tx);
+}
+
+/**
+ * The one folder choice of a connection (#340, #250; decision 610), saved
+ * from the farm calendar ("calendar": Gmail's private-only labels, which it
+ * never offers, are left as they are) or from My mail ("all"). The caller
+ * has checked the connection is the signed-in member's own.
+ */
+export async function saveFolderChoice(tx: OrgTx, id: string, input: unknown, available: MailFolder[], scope: "calendar" | "all"): Promise<void> {
   if (!Array.isArray(input)) throw new ValidationError("Choose the folders to read.");
   if (input.length > MAX_CHOSEN_FOLDERS) throw new ValidationError(`Choose at most ${MAX_CHOSEN_FOLDERS} folders.`);
   const wanted = new Map<string, boolean>();
@@ -308,17 +428,20 @@ export async function chooseMailboxFolders(tx: OrgTx, idInput: unknown, input: u
     if (!externalId || !available.some((folder) => folder.id === externalId)) throw new ValidationError("That folder isn't in the mailbox any more. Open the list again.");
     wanted.set(externalId, entry.includeSubfolders === true);
   }
-  const existing = await tx.query<{ id: string; external_id: string }>("select id::text, external_id from farm_mail_folders where account_id = $1 for update", [id]);
+  const existing = await tx.query<{ id: string; external_id: string }>(
+    `select id::text, external_id from farm_mail_folders where account_id = $1 ${scope === "calendar" ? "and not private_only" : ""} for update`,
+    [id],
+  );
   const removed = existing.rows.filter((row) => !wanted.has(row.external_id)).map((row) => row.id);
   if (removed.length) await removeFolders(tx, id, removed);
   let added = 0;
   for (const [externalId, includeSubfolders] of wanted) {
     const folder = available.find((entry) => entry.id === externalId)!;
     const saved = await tx.query<{ inserted: boolean }>(
-      `insert into farm_mail_folders (account_id, external_id, name, include_subfolders) values ($1, $2, $3, $4)
-       on conflict (account_id, external_id) do update set name = excluded.name, include_subfolders = excluded.include_subfolders, missing = false
+      `insert into farm_mail_folders (account_id, external_id, name, include_subfolders, private_only) values ($1, $2, $3, $4, $5)
+       on conflict (account_id, external_id) do update set name = excluded.name, include_subfolders = excluded.include_subfolders, missing = false, private_only = excluded.private_only
        returning (xmax = 0) as inserted`,
-      [id, externalId, folder.path.slice(0, 500), includeSubfolders],
+      [id, externalId, folder.path.slice(0, 500), includeSubfolders, folder.privateOnly === true],
     );
     if (saved.rows[0].inserted) added += 1;
   }
@@ -326,7 +449,6 @@ export async function chooseMailboxFolders(tx: OrgTx, idInput: unknown, input: u
   if (added) await tx.query("update farm_mail_accounts set backfill_before = coalesce(backfill_before, now()), updated_at = now() where id = $1", [id]);
   // Audited by count only: folder names are private (decision 571).
   await writeAuditEvent(tx, { eventType: "farming.mailbox_folders_chosen", entityType: "farm_mail_account", entityId: id, details: { folders: wanted.size, added, removed: removed.length } });
-  return listFarmMailboxes(tx);
 }
 
 /** FC27: takes folders off a mailbox, deleting what was taken only from them. */
@@ -340,6 +462,16 @@ async function removeFolders(tx: OrgTx, accountId: string, folderIds: string[]):
   // RETURNING gives the new row, so "empty" is after the folders were taken off.
   const gone = emptied.rows.filter((row) => row.empty).map((row) => row.external_id);
   if (gone.length) await dropEmails(tx, accountId, gone);
+  // The private copy forgets them the same way (PM6, decision 614).
+  const copied = await tx.query<{ id: string; empty: boolean }>(
+    `update private_mail_messages m set folder_ids = array(select unnest(m.folder_ids) except select unnest($2::bigint[]))
+       from private_mail_copies c
+      where c.id = m.copy_id and c.account_id = $1 and m.folder_ids && $2::bigint[]
+      returning m.id::text, cardinality(m.folder_ids) = 0 as empty`,
+    [accountId, folderIds],
+  );
+  const uncopied = copied.rows.filter((row) => row.empty).map((row) => row.id);
+  if (uncopied.length) await tx.query("delete from private_mail_messages where id = any($1::bigint[])", [uncopied]);
   await tx.query("delete from farm_mail_folders where account_id = $1 and id = any($2::bigint[])", [accountId, folderIds]);
 }
 
@@ -396,6 +528,7 @@ type AccountRow = {
   checked_through: string;
   backfill_before: string | null;
   default_farm_id: string | null;
+  farm_calendar: boolean;
 };
 
 type ItemRow = { id: string; kind: FarmMailKind; title: string; item_date: string | null; thread_id: string | null; sender_email: string; checked_at: string | null };
@@ -557,13 +690,17 @@ async function loadAccount(organisation: OrganisationRecord, accountId: string, 
     await requireFarming(tx);
     const found = await tx.query<AccountRow>(
       `select id::text, user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext, access_token_expires_at::text,
-              history_from::text, checked_through::text, backfill_before::text, default_farm_id::text
+              history_from::text, checked_through::text, backfill_before::text, default_farm_id::text, farm_calendar
          from farm_mail_accounts where id = $1 ${activeOnly ? "and status = 'active'" : ""}`,
       [accountId],
     );
     const account = found.rows[0];
     if (!account) throw new NotFoundError("Mailbox not found.");
-    const folders = await tx.query<FolderRow>("select id::text, external_id, include_subfolders from farm_mail_folders where account_id = $1 order by farm_mail_folders.id", [accountId]);
+    // The farm calendar never reads Gmail's private-only labels (decision 615).
+    const folders = await tx.query<FolderRow>(
+      "select id::text, external_id, include_subfolders from farm_mail_folders where account_id = $1 and not private_only order by farm_mail_folders.id",
+      [accountId],
+    );
     return { account, folders: folders.rows, app: await appFor(tx, account.provider) };
   });
 }
@@ -578,7 +715,8 @@ async function loadAccount(organisation: OrganisationRecord, accountId: string, 
  */
 export async function checkFarmMailbox(organisation: OrganisationRecord, accountId: string, now = new Date()): Promise<{ read: number; items: number }> {
   const { account, folders, app } = await loadAccount(organisation, accountId, true);
-  if (folders.length === 0) return { read: 0, items: 0 };
+  // A mailbox connected only from My mail isn't read for the farm calendar (decision 610).
+  if (folders.length === 0 || !account.farm_calendar) return { read: 0, items: 0 };
   try {
     const { token, refreshed } = await accessToken(account, app, now);
     // Gmail's labels once a check: which still exist, and their sublabels.
@@ -636,7 +774,7 @@ export async function checkFarmMailbox(organisation: OrganisationRecord, account
     }
     return await withOrganisationTransaction(organisation, FARM_MAIL_ACTOR, async (tx) => {
       // Folders taken off while this check ran don't count.
-      const current = new Set((await tx.query<{ id: string }>("select id::text from farm_mail_folders where account_id = $1", [account.id])).rows.map((row) => row.id));
+      const current = new Set((await tx.query<{ id: string }>("select id::text from farm_mail_folders where account_id = $1 and not private_only", [account.id])).rows.map((row) => row.id));
       const foldersOf = (id: string) => [...(inFolders.get(id) ?? [])].filter((folder) => current.has(folder));
       for (const { folder, listing } of listings) {
         await tx.query("update farm_mail_folders set missing = $2 where id = $1", [folder.id, listing.missing]);
@@ -720,7 +858,7 @@ export async function checkAllFarmMail(): Promise<{ checked: number; failed: num
           return (
             await tx.query<{ id: string }>(
               `select a.id::text from farm_mail_accounts a
-                where a.status = 'active' and exists (select 1 from farm_mail_folders f where f.account_id = a.id)
+                where a.status = 'active' and a.farm_calendar and exists (select 1 from farm_mail_folders f where f.account_id = a.id and not f.private_only)
                 order by a.last_check_at nulls first, a.id`,
             )
           ).rows.map((row) => row.id);
@@ -749,7 +887,12 @@ let timer: NodeJS.Timeout | null = null;
 export function startFarmMailScheduler(): void {
   if (timer) return;
   const tick = () => {
-    checkAllFarmMail().catch((error) => console.warn("[tohyee] Farm mail scheduler:", error));
+    checkAllFarmMail()
+      .catch((error) => console.warn("[tohyee] Farm mail scheduler:", error))
+      // Then the private copies (#250, decision 614), on the same 15 minutes.
+      .then(() => import("@/lib/private-mail/sync"))
+      .then((sync) => sync.syncAllPrivateMail())
+      .catch(() => console.warn("[tohyee] Private mail sync stopped early."));
   };
   timer = setInterval(tick, 15 * 60 * 1000);
   timer.unref?.();

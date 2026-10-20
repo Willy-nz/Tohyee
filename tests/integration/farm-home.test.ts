@@ -5,10 +5,12 @@ import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { setExpenseGroup, setYearFigures } from "@/lib/farming/benchmarks";
+import { createBankAccount } from "@/lib/bank/accounts";
+import { createCashFlowItem } from "@/lib/cash-flow/forecast";
 import { addCalendarItem, shareCalendarItem } from "@/lib/farming/calendar";
 import { createPlan, recordApplication, savePlanVersion, saveProduct } from "@/lib/farming/fertiliser";
 import { farmHome } from "@/lib/farming/home";
-import { addPaddock, saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
+import { addPaddock, listFarms, saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
 import { addReading, addSupplement } from "@/lib/farming/pasture";
 import { addDays, financialYearEnd } from "@/lib/financial-year";
 import { postJournal } from "@/lib/ledger/journals";
@@ -21,6 +23,7 @@ import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabas
 
 const ORG = "farm-home";
 const EMPTY = "farm-home-empty";
+const CASH = "farm-home-cash";
 const TODAY = "2026-10-20";
 
 /** The farm Home (#341; FH1-FH8, not yet reviewed). Made-up farm, people and figures. */
@@ -34,7 +37,7 @@ describeWithDatabase("the farm Home", () => {
     server = await startTestServer();
     jess = await createTestUser("farm-home-jess@example.com", { serverAdmin: true, displayName: "Jess" });
     mere = await createTestUser("farm-home-mere@example.com", { displayName: "Mere" });
-    for (const org of [ORG, EMPTY]) {
+    for (const org of [ORG, EMPTY, CASH]) {
       await createTestOrganisation(jess, org);
       await as(jess, (tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 3 }), org);
       await as(jess, (tx) => setFarmingEnabled(tx, { enabled: true }), org);
@@ -56,6 +59,8 @@ describeWithDatabase("the farm Home", () => {
       fertiliser: null,
       performance: null,
       notebook: null,
+      catchUp: null,
+      seasonCash: null,
     });
   });
 
@@ -191,6 +196,62 @@ describeWithDatabase("the farm Home", () => {
     expect((await put("farm_home", ["no_such_card"])).status).toBe(400);
     // Jess still has the defaults.
     const jessGets = await preferencesRoute.GET(apiRequest(`/api/dashboard-preferences?organisationId=${ORG}&page=farm_home`, { cookie: await sessionCookieFor(jess) }), undefined as never);
-    expect(((await jessGets.json()) as { tiles: string[] }).tiles).toEqual(["farm_calendar", "stock", "pasture", "fertiliser", "performance", "money", "notebook"]);
+    expect(((await jessGets.json()) as { tiles: string[] }).tiles).toEqual(["farm_calendar", "catch_up", "season_cash", "stock", "pasture", "fertiliser", "performance", "money", "notebook"]);
+  });
+
+  it("FH9 records to catch up on: an old farm walk, unmeasured paddocks, the person's own Needs checking", async () => {
+    // From the first test: Home block's latest walk was 10 Oct; on 30 Oct that's 20 days.
+    const later = await as(jess, (tx) => farmHome(tx, { today: "2026-10-30" }));
+    expect(later.catchUp).toEqual(expect.arrayContaining([
+      { kind: "pasture_stale", farmId: expect.any(String), farmName: "Home block", latestReading: "2026-10-10", days: 20 },
+      { kind: "livestock_suggestions", count: 1 },
+    ]));
+    // On 20 Oct it's ten days: not stale.
+    expect((await as(jess, (tx) => farmHome(tx, { today: TODAY }))).catchUp?.some((item) => item.kind === "pasture_stale")).toBe(false);
+    const farm = (await as(jess, (tx) => listFarms(tx))).find((entry) => entry.name === "Home block")!;
+    await as(jess, (tx) => addPaddock(tx, { farmId: farm.id, name: "16", effectiveHa: "10.0", onDate: "2026-07-01" }));
+    const home = await as(jess, (tx) => farmHome(tx, { today: TODAY }));
+    expect(home.catchUp).toEqual(expect.arrayContaining([{ kind: "paddocks_unmeasured", farmId: farm.id, farmName: "Home block", count: 1 }]));
+  });
+
+  it("FH11 private items stay private: a calendar item needing checking shows only on its owner's farm Home", async () => {
+    // An item read from Mere's mail that needs checking (made up here by clearing the check on her own item): hers alone (decision 571).
+    const item = await as(mere, (tx) => addCalendarItem(tx, { date: "2026-10-24", title: "Mere's unchecked note" }));
+    await as(mere, (tx) => tx.query("update farm_calendar_items set checked_at = null, item_date = null where id = $1", [item.id]));
+    const mereHome = await as(mere, (tx) => farmHome(tx, { today: TODAY }));
+    const jessHome = await as(jess, (tx) => farmHome(tx, { today: TODAY }));
+    expect(mereHome.catchUp).toEqual(expect.arrayContaining([{ kind: "calendar_checking", count: 1 }]));
+    expect(jessHome.catchUp?.some((item) => item.kind === "calendar_checking") ?? false).toBe(false);
+    expect(jessHome.calendar?.needsChecking ?? 0).toBe(0);
+    expect(JSON.stringify(jessHome)).not.toContain("Mere's unchecked note");
+    expect(JSON.stringify(jessHome)).not.toContain("Mere's own errand");
+    // Through the route too, as Jess.
+    const response = await homeRoute.GET(apiRequest(`/api/farming/home?organisationId=${ORG}`, { cookie: await sessionCookieFor(jess) }), undefined as never);
+    expect(JSON.stringify(await response.json())).not.toContain("Mere's");
+  });
+
+  it("FH10 cash this season: months gone from the bank, transfers netted out, then the forecast to the season's end", async () => {
+    await as(jess, (tx) => saveFarm(tx, { name: "Cash block" }), CASH);
+    const call = await as(jess, (tx) => createBankAccount(tx, { code: "1010", name: "Call account", accountType: "bank" }), CASH);
+    const journal = (date: string, debit: string, credit: string, amount: string) =>
+      as(jess, (tx) => postJournal(tx, { idempotencyKey: key("sc"), postingDate: date, reference: "Made up", lines: [{ accountCode: debit, debitAmount: amount, creditAmount: "0" }, { accountCode: credit, debitAmount: "0", creditAmount: amount }] }), CASH);
+    await journal("2026-03-15", "1000", "3000", "50000.00");
+    await journal("2026-05-10", "1000", "4000", "30000.00");
+    // A transfer between two bank accounts is neither in nor out.
+    await journal("2026-05-20", "1010", "1000", "20000.00");
+    await journal("2026-10-05", "6310", "1000", "12000.00");
+    // After today: not counted as happened.
+    await journal("2026-10-25", "6310", "1000", "1000.00");
+    await as(jess, (tx) => createCashFlowItem(tx, { direction: "out", description: "Winter feed", amount: "100000.00", date: "2027-01-15" }), CASH);
+    expect(call.accountType).toBe("bank");
+    const cash = (await as(jess, (tx) => farmHome(tx, { today: TODAY }), CASH)).seasonCash!;
+    expect(cash).toMatchObject({ yearStart: "2026-04-01", yearEnd: "2027-03-31", opening: "50000.00", firstBelowZero: "2027-01" });
+    expect(cash.months.map((month) => month.month)).toEqual(["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]);
+    expect(cash.months[0]).toMatchObject({ moneyIn: "0.00", moneyOut: "0.00", closing: "50000.00", forecastClosing: null });
+    expect(cash.months[1]).toMatchObject({ moneyIn: "30000.00", moneyOut: "0.00", closing: "80000.00" });
+    expect(cash.months[6]).toMatchObject({ month: "2026-10", moneyIn: "0.00", moneyOut: "12000.00", closing: "68000.00", forecastClosing: "68000.00" });
+    expect(cash.months[7]).toMatchObject({ moneyIn: null, closing: null, forecastClosing: "68000.00" });
+    expect(cash.months[9]).toMatchObject({ month: "2027-01", forecastOut: "100000.00", forecastClosing: "-32000.00" });
+    expect(cash.lowest).toEqual({ month: "2027-01", closing: "-32000.00" });
   });
 });

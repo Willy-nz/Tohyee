@@ -180,6 +180,7 @@ export const MENUS: Menu[] = [
             { href: "/operations/farming/calendar", label: "Farm calendar" },
             { href: "/operations/farming/notebook", label: "Farm notebook" },
             { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+            { href: "/operations/farming/co-op-shares", label: "Co-op shares" },
           ]),
           ...section("Insights and apps", [
             { href: "/operations/farming/benchmarks", label: "Benchmarks" },
@@ -460,12 +461,13 @@ export const CRM_MENUS: Menu[] = (
     },
     {
       label: "Settings",
-      area: ["/crm/teams", "/crm/duplicates", "/crm/record-types", "/crm/stages"],
+      area: ["/crm/teams", "/crm/reassign", "/crm/duplicates", "/crm/record-types", "/crm/stages"],
       groups: [
         {
           heading: "Team and data",
           links: [
             { href: "/crm/teams", label: "Teams" },
+            { href: "/crm/reassign", label: "Reassign records" },
             { href: "/crm/duplicates", label: "Duplicates" },
           ],
         },

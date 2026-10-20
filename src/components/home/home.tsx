@@ -6,20 +6,27 @@ import { Chart } from "@/components/analytics/chart";
 import { PinnedAnalyticsTile } from "@/components/analytics/pinned-tile";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { DashboardTileSlots, PageDashboardFrame, useDashboardPreferences } from "@/components/page-dashboard";
+import { formatAmounts } from "@/components/crm-home";
+import { useModules } from "@/components/modules";
+import { DashboardTileSlots, PageDashboardFrame, StartingCardsNote, useDashboardPreferences } from "@/components/page-dashboard";
+import { useWorkspace } from "@/components/workspace";
 import { Notice, ui } from "@/components/ui";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { addDays, monthLabel } from "@/lib/financial-year";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
+import { defaultsNote } from "@/lib/dashboard/defaults";
+import { jobsAtAGlance } from "@/lib/dashboard/home-cards";
 import { dashboardPage, defaultDashboardTileIds } from "@/lib/dashboard/pages";
+import type { SalesHome } from "@/lib/crm/sales-home";
+import type { JobSummary, ServiceReminder } from "@/lib/projects/jobs";
 import type { Dashboard } from "@/lib/analytics/dashboards";
 import type { AmountsDue, HomeSummary } from "@/lib/reports/home";
 import { GST_BASIS_LABELS } from "@/lib/tax/categories";
 import styles from "./home.module.css";
 
 const HOME_PAGE = dashboardPage("home")!;
-const HOME_TILES = HOME_PAGE.defaultTiles;
+const HOME_TILES = HOME_PAGE.cards;
 const HOME_DEFAULT_TILE_IDS = defaultDashboardTileIds(HOME_PAGE);
 
 type HomeTileId = (typeof HOME_TILES)[number]["id"];
@@ -113,11 +120,12 @@ function HomeTile({ tile, summary }: { tile: HomeTileId; summary: HomeSummary })
     );
   }
   if (tile === "bills_to_pay") {
+    const week = summary.billsDueThisWeek > 0 ? `${summary.billsDueThisWeek} due this week` : "None due this week";
     return (
       <AmountsDueTile
         title="Bills to pay"
         due={summary.billsToPay}
-        note={summary.billsDueThisWeek > 0 ? `${summary.billsDueThisWeek} due this week` : "None due this week"}
+        note={summary.billsToPay.overdueCount > 0 ? <><span className={styles.bad}><Money value={summary.billsToPay.overdueTotal} /> overdue</span> · {week}</> : week}
         href="/operations/reports?report=payables"
       />
     );
@@ -125,11 +133,57 @@ function HomeTile({ tile, summary }: { tile: HomeTileId; summary: HomeSummary })
   return <NextGstTile summary={summary} />;
 }
 
+/** Jobs (decision 662): open jobs and what's coming up, from Projects' jobs (JV1, JV8). */
+function JobsTile({ organisationId, today }: { organisationId: string; today: string }) {
+  const jobs = useApiData<{ jobs: JobSummary[]; reminders: ServiceReminder[] }>("/api/jobs", { organisationId });
+  const glance = jobs.data ? jobsAtAGlance(jobs.data.jobs, jobs.data.reminders.length, today) : null;
+  return (
+    <section className={styles.tile} aria-label="Jobs">
+      <div className={styles.tileTitle}>
+        <Link href="/operations/jobs">Jobs</Link>
+      </div>
+      {jobs.error ? <p className={ui.muted}>{jobs.error}</p> : !glance ? <p role="status" className={ui.muted}>Loading…</p> : (
+        <>
+          <div className={styles.figure}>{glance.open}</div>
+          <div className={ui.muted}>
+            Open · <Link href="/operations/jobs/calendar">{glance.visitSoon} with a visit this week</Link>
+            {glance.noVisit ? <>, {glance.noVisit} with none booked</> : null}
+            {glance.servicesDue ? <><br /><Link href="/operations/jobs">{glance.servicesDue} {glance.servicesDue === 1 ? "service" : "services"} due</Link></> : null}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Sales pipeline (decision 662): open opportunities and this quarter's win rate, from the CRM Home's figures. */
+function SalesPipelineTile({ organisationId }: { organisationId: string }) {
+  const sales = useApiData<SalesHome>("/api/crm/sales-home", { organisationId });
+  const quarter = sales.data?.conversion.at(-1) ?? null;
+  return (
+    <section className={styles.tile} aria-label="Sales pipeline">
+      <div className={styles.tileTitle}>
+        <Link href="/crm/pipeline">Sales pipeline</Link>
+      </div>
+      {sales.error ? <p className={ui.muted}>{sales.error}</p> : !sales.data ? <p role="status" className={ui.muted}>Loading…</p> : (
+        <>
+          <div className={styles.figure}>{formatAmounts(sales.data.pipeline.totals, sales.data.baseCurrency)}</div>
+          <div className={ui.muted}>
+            {sales.data.pipeline.count} open {sales.data.pipeline.count === 1 ? "opportunity" : "opportunities"}
+            {quarter?.winRate ? <> · <Link href="/crm/dashboard">{quarter.winRate}% won this quarter</Link></> : null}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function NeedsAttention({ summary }: { summary: HomeSummary }) {
   const [showAll, setShowAll] = useState(false);
   const plural = (count: number, one: string, many: string) => (count === 1 ? one : many.replace("#", String(count)));
   const items = [
     { count: summary.owedToYou.overdueCount, text: `${summary.owedToYou.overdueCount} overdue ${summary.owedToYou.overdueCount === 1 ? "invoice" : "invoices"}`, action: "Review invoices", href: "/operations/reports?report=aged" },
+    { count: summary.billsToPay.overdueCount, text: `${summary.billsToPay.overdueCount} overdue ${summary.billsToPay.overdueCount === 1 ? "bill" : "bills"}`, action: "Review overdue bills", href: "/operations/reports?report=payables" },
     { count: summary.toDo.feedsToReconnect, text: plural(summary.toDo.feedsToReconnect, "A bank feed needs reconnecting", "# bank feeds need reconnecting"), action: "Reconnect", href: "/operations/bank-accounts" },
     { count: summary.toDo.paydayFilingsDue, text: plural(summary.toDo.paydayFilingsDue, "A payday filing is due this week", "# payday filings are due this week"), action: "File", href: "/operations/payroll/pay-runs" },
     { count: summary.toDo.accountsToReconcile, text: plural(summary.toDo.accountsToReconcile, "1 bank line to reconcile", "# bank lines to reconcile"), action: "Reconcile", href: "/operations/bank-accounts" },
@@ -242,6 +296,8 @@ export function BankHealth({ organisationId, currency }: { organisationId: strin
 }
 
 export function HomeTiles({ organisationId }: { organisationId: string }) {
+  const { current } = useWorkspace();
+  const modules = useModules(organisationId);
   const home = useHomeSummary(organisationId);
   const dashboard = useDashboardPreferences({ organisationId, page: HOME_PAGE.id, defaultTiles: HOME_DEFAULT_TILE_IDS });
   const pinned = dashboard.tiles.flatMap((tile) => {
@@ -257,7 +313,10 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
       label: tile && source ? `${tile.title} · ${source.name}` : `Analytics tile ${reference.tileId}`,
     };
   });
-  const tileOptions = [...HOME_TILES, ...pinOptions];
+  // Jobs and Sales pipeline are offered once they'd have something to show (decision 662).
+  const jobsExist = useApiData<{ jobs: JobSummary[] }>("/api/jobs", { organisationId }).data?.jobs.length ?? 0;
+  const offered = HOME_TILES.filter((tile) => (tile.id === "jobs" ? jobsExist > 0 || dashboard.tiles.includes("jobs") : tile.id === "sales_pipeline" ? modules?.crm === true || dashboard.tiles.includes("sales_pipeline") : true));
+  const tileOptions = [...offered, ...pinOptions];
   if (home.error) return <Notice tone="error">{home.error}</Notice>;
   const summary = home.data;
   if (!summary) return <div className={styles.loading} role="status" aria-label="Loading financial summary"><span>Loading financial summary…</span><div className={styles.skeleton} /></div>;
@@ -269,19 +328,24 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
         hidden={dashboard.hidden}
         onToggleHidden={() => dashboard.setHidden(!dashboard.hidden)}
         customise={
-          <DashboardTileSlots<string>
-            tiles={dashboard.tiles}
-            options={tileOptions}
-            onChange={(tiles) => dashboard.setTiles(tiles)}
-          />
+          <>
+            <DashboardTileSlots<string>
+              tiles={dashboard.tiles}
+              options={tileOptions}
+              onChange={(tiles) => dashboard.setTiles(tiles)}
+            />
+            <StartingCardsNote note={defaultsNote(HOME_PAGE.id, { role: current?.role ?? "viewer" })} customised={dashboard.customised} saving={dashboard.saving} onReset={() => void dashboard.reset()} />
+          </>
         }
       >
         <div className={styles.grid}>
-          {dashboard.tiles.map((tile) => {
+          {!dashboard.ready ? <div className={styles.skeleton} role="status" aria-label="Loading your tiles" /> : dashboard.tiles.map((tile) => {
             const reference = parseAnalyticsTileReference(tile);
             if (reference) {
               return <PinnedAnalyticsTile key={tile} organisationId={organisationId} dashboardId={reference.dashboardId} tileId={reference.tileId} />;
             }
+            if (tile === "jobs") return <JobsTile key={tile} organisationId={organisationId} today={summary.today} />;
+            if (tile === "sales_pipeline") return modules?.crm ? <SalesPipelineTile key={tile} organisationId={organisationId} /> : null;
             if (HOME_TILES.some((entry) => entry.id === tile)) {
               return <HomeTile key={tile} tile={tile as HomeTileId} summary={summary} />;
             }

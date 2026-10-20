@@ -5,6 +5,7 @@ import { handleMcpMessage, JSON_RPC, type JsonRpcResponse, protocolHeaderAccepte
 import { mcpServerFor } from "@/lib/ai/mcp-server";
 import { bearerAiToken } from "@/lib/ai/token-format";
 import { authenticateAiToken } from "@/lib/ai/tokens";
+import { keyCanReadMail } from "@/lib/private-mail/ai";
 import { sessionMetaFrom } from "@/lib/auth/sessions";
 import { PayloadTooLargeError } from "@/lib/errors";
 
@@ -69,7 +70,8 @@ export const POST = route(async (request) => {
     return reply(rpcError(null, JSON_RPC.PARSE_ERROR, "The request body must be JSON."), 400);
   }
 
-  const server = mcpServerFor(identity);
+  // The mail tools only for a Look only key its Owner gave the private-mail scope (#250, decision 618).
+  const server = mcpServerFor(identity, { privateMail: await keyCanReadMail(identity) });
   if (Array.isArray(message)) {
     // JSON-RPC batches (MCP 2025-03-26 allowed them; later versions don't send them).
     if (message.length === 0 || message.length > 20) {

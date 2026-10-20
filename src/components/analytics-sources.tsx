@@ -13,6 +13,7 @@ import { ReportEmailsCard } from "@/components/analytics-report-emails";
 import { GoogleAnalyticsCard } from "@/components/analytics-google-analytics";
 import { useSearchParams } from "next/navigation";
 import type { ColumnKind, InspectedColumn, SourceFile } from "@/lib/analytics/engine";
+import { tableLabel } from "@/lib/analytics/labels";
 import type { AnalyticsSource, LoadRun } from "@/lib/analytics/sources";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
@@ -292,7 +293,7 @@ function BooksCard({ organisationId, data, onChanged }: { organisationId: string
   return (
     <Card
       title="Books and CRM"
-      description="A copy of this organisation's ledger, invoices, bills, contacts, items and (with the CRM on) opportunities and activities, made every night after 4am. Amounts are as in the ledger (debit less credit); a dashboard value can be shown the other way round. Pay runs are copied without names."
+      description="A copy of this organisation's ledger, invoices, bills, contacts, items and (with the CRM on) its leads, deals, deal products, activities, tasks, campaigns, sequences and sales emails, made every night after 4am. Amounts are as in the ledger (debit less credit); a dashboard value can be shown the other way round. Pay runs are copied without names."
       actions={
         data.canManage ? (
           <Button size="small" onClick={() => void refresh()} disabled={busy}>
@@ -319,7 +320,7 @@ function BooksCard({ organisationId, data, onChanged }: { organisationId: string
           {copied.map((table, index) => (
             <span key={table.name}>
               {index ? ", " : ""}
-              <code>{table.name}</code>
+              <span title={table.name}>{tableLabel(table.name)}</span>
             </span>
           ))}
         </p>
