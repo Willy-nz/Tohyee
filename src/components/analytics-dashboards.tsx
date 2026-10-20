@@ -20,6 +20,8 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { mergeFormats, pasteFormat, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
+import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
+import type { ReportTheme } from "@/lib/charts/report-themes";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
@@ -451,6 +453,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           filters={shown}
           defaults={dashboard.settings.visualDefaults}
           themeClass={themeClass}
+          theme={theme}
           onSetDefault={setVisualDefault}
           onCancel={() => setEditingTile(null)}
           onSave={async (tile) => {
@@ -468,9 +471,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           {dashboard.tiles.map((tile, index) => {
             // Drawn with the report's default for its chart type under its own settings (#376).
             const shownTile = tileWithDefaults(tile, dashboard.settings.visualDefaults);
+            const look = cardStyle(shownTile.format);
             return (
             <section
               key={tile.id}
+              style={look.card}
               className={`${tileClass(shownTile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
               draggable={editing && !busy}
               onDragStart={(event) => {
@@ -497,8 +502,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             >
               <div className={styles.tileHeader}>
                 <div>
-                  <h2 className={shownTile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle}>{tile.title}</h2>
-                  {shownTile.format?.card?.subtitle ? <p className={styles.tileSubtitle}>{shownTile.format.card.subtitle}</p> : null}
+                  <h2 className={shownTile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle} style={shownTile.format?.card?.showTitle === false ? undefined : look.title}>{tile.title}</h2>
+                  {shownTile.format?.card?.subtitle ? <p className={styles.tileSubtitle} style={look.subtitle}>{shownTile.format.card.subtitle}</p> : null}
                 </div>
                 {editing ? (
                   <div className={styles.tileTools}>
@@ -1207,6 +1212,7 @@ function TileEditor({
   onCancel,
   defaults,
   themeClass,
+  theme,
   onSetDefault,
 }: {
   saving: boolean;
@@ -1220,6 +1226,8 @@ function TileEditor({
   defaults?: VisualDefaults;
   /** The report theme's class, so the preview looks like the report. */
   themeClass?: string;
+  /** The report's theme, for checking colours chosen on the chart. */
+  theme?: ReportTheme;
   onSetDefault?: (visual: DefaultableVisual, format: ChartFormat | undefined) => void;
 }) {
   const { can } = useWorkspace();
@@ -1238,6 +1246,8 @@ function TileEditor({
   const pivotRows = query.pivot?.rows ?? [];
   const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : [])]);
   const preview = useTileResult(organisationId, query.table ? query : null, filters);
+  // The preview's groups, for colouring a group and limiting a date axis (#376).
+  const groupValues = preview?.result && query.groupBy ? preview.result.rows.map((row) => row.category) : null;
 
   // A label Tohyee filled in follows the value's column and calculation; a typed one stays (#329).
   const setMeasure = (index: number, patch: Partial<Measure>) =>
@@ -1624,6 +1634,9 @@ function TileEditor({
         onChange={setFormat}
         inherited={defaults?.[visual]}
         onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
+        theme={theme}
+        groups={groupValues ? chartGroupNames(groupValues) : undefined}
+        datedGroups={groupValues ? datedGroups(groupValues) : false}
       />
       {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 

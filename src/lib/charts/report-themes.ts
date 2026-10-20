@@ -1,6 +1,6 @@
 import { ValidationError } from "@/lib/errors";
 import { CHART_TOKENS } from "@/lib/charts/theme";
-import { checkColours, darkStep, isHex, type ColourWarning, type Mode } from "@/lib/charts/colour-check";
+import { adaptForDark, CHECKS, checkColours, contrast, darkStep, deltaE, isHex, type ColourWarning, type Mode } from "@/lib/charts/colour-check";
 
 /**
  * Report themes (issue #376, decision 668). The Tohyee look (decision 599)
@@ -352,4 +352,37 @@ export function parseThemeChoice(input: unknown): string | null {
   if (isBuiltInTheme(input)) return input;
   if (typeof input === "string" && customThemeId(input)) return input;
   throw new ValidationError("Choose a theme from the list.");
+}
+
+/**
+ * Checks for colours chosen on one chart (decision 668: warn, don't block).
+ * `chosen` is each value's own colour or nothing (the theme's). Each chosen
+ * colour is checked against the theme's card in light and dark, and against
+ * its neighbours (chosen or the theme's) for colour-blind and normal vision.
+ */
+export function chosenColourWarnings(chosen: Array<string | undefined>, theme: ReportTheme): string[] {
+  const messages: string[] = [];
+  if (!chosen.some(Boolean)) return messages;
+  for (const mode of ["light", "dark"] as Mode[]) {
+    const colours = theme[mode];
+    const name = mode === "light" ? "Light" : "Dark";
+    // In dark mode a chosen colour is drawn as its dark version (decision 672), so that's what's checked.
+    const drawn = chosen.map((colour) => (colour && mode === "dark" ? adaptForDark(colour, "mark", colours.card) : colour));
+    const resolved = drawn.map((colour, index) => colour ?? colours.series[index % colours.series.length]);
+    drawn.forEach((colour, index) => {
+      if (!colour) return;
+      const ratio = contrast(colour, colours.card);
+      if (ratio < CHECKS.markContrast) messages.push(`${name}: value ${index + 1}'s colour is ${ratio.toFixed(2)}:1 against the card (under 3:1). Show data labels, or choose a stronger colour.`);
+    });
+    for (let index = 0; index + 1 < resolved.length; index += 1) {
+      if (!chosen[index] && !chosen[index + 1]) continue;
+      const a = resolved[index];
+      const b = resolved[index + 1];
+      const blind = Math.min(deltaE(a, b, "protan"), deltaE(a, b, "deutan"));
+      const normal = deltaE(a, b);
+      if (normal < CHECKS.normalFloor) messages.push(`${name}: values ${index + 1} and ${index + 2} look nearly the same (${normal.toFixed(1)}; aim for ${CHECKS.normalFloor} or more).`);
+      else if (blind < CHECKS.cvdTarget) messages.push(`${name}: values ${index + 1} and ${index + 2} are hard to tell apart for colour-blind readers (${blind.toFixed(1)}; aim for ${CHECKS.cvdTarget} or more).`);
+    }
+  }
+  return messages;
 }

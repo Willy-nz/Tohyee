@@ -192,3 +192,34 @@ export function darkStep(hex: string): string {
   const target = Math.min(high - 0.02, Math.max(low + 0.04, l - 0.06));
   return fromOklch(target, Math.max(c, CHECKS.chromaFloor + 0.02), h);
 }
+
+/** Whether a surface is a dark one (the dark theme's card). */
+export function isDarkSurface(hex: string): boolean {
+  return isHex(hex) && oklch(hex).l < 0.5;
+}
+
+/**
+ * A colour chosen on a chart is one hex for both modes, so dark mode gets a
+ * version of it worked out (decision 672), the way themes work dark out from
+ * light: a mark keeps its hue at a dark-mode lightness, a background becomes
+ * a dark tint of its hue, and text that wouldn't read on the dark card is
+ * lightened. A colour that already suits dark mode is left alone.
+ */
+export function adaptForDark(hex: string, role: "mark" | "surface" | "text", darkSurface = "#121925"): string {
+  if (!isHex(hex)) return hex;
+  const { l, c, h } = oklch(hex);
+  if (role === "mark") {
+    const [low, high] = CHECKS.band.dark;
+    return l >= low && l <= high && contrast(hex, darkSurface) >= CHECKS.markContrast ? hex.toLowerCase() : darkStep(hex);
+  }
+  if (role === "surface") {
+    if (l < 0.4) return hex.toLowerCase();
+    return fromOklch(Math.min(0.34, Math.max(0.2, 1.05 - l)), Math.min(c, 0.04), h);
+  }
+  if (contrast(hex, darkSurface) >= CHECKS.textContrast) return hex.toLowerCase();
+  for (let lightness = Math.max(0.75, 1 - l); lightness <= 0.97; lightness += 0.02) {
+    const lighter = fromOklch(lightness, Math.min(c, 0.12), h);
+    if (contrast(lighter, darkSurface) >= CHECKS.textContrast) return lighter;
+  }
+  return "#e4e9f1";
+}

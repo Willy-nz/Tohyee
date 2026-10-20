@@ -6637,3 +6637,44 @@ accounting example is marked not yet reviewed.
      format, which gives them the same format and saves the report, until
      Done pasting. Neither copies a key figure's target: that's a number
      about the data, not how it looks.
+672. **A colour chosen on a chart gets a dark version** (20 October 2026,
+     #376). Power BI and Looker Studio have no dark mode, so a colour typed
+     on a chart is one hex. Tohyee follows the computer's light or dark, so
+     on a dark card each chosen colour is drawn as a dark version worked out
+     the way a theme's dark colours are (decision 668): a mark (a value's or
+     group's colour, a reference line, a border) keeps its hue at a
+     dark-mode lightness unless it already reads there; a background (the
+     card, the plot area, behind the title, gridlines) becomes a dark tint
+     of its hue; text that would be under 4.5:1 on the dark card is
+     lightened. Light mode shows the colour exactly as chosen. Cards use
+     CSS `light-dark()` with both. The colour checks warn about a chosen
+     colour under 3:1 against the card, or too close to its neighbour for
+     colour-blind or normal vision, in light (as chosen) and dark (as drawn).
+673. **Formatting each chart** (20 October 2026, #376 phase 1; Power BI's
+     format pane and Looker Studio's style tab as the reference). New
+     settings, all optional and checked by `parseChartFormat` (unknown
+     dropped, wrong values refused, so saved charts are unchanged): the
+     title's size, weight, italic, colour, alignment and a colour behind it,
+     and the subtitle's; the card's colour and how solid it is, border
+     colour and width, corners, shadow and padding; any colour for a value
+     (over the named colour; Reset goes back to the theme) and for chosen
+     groups (pie, donut, or columns and bars with one value); data labels'
+     size, colour and their own number format, which labels show (all,
+     only where they fit, first and last), and a pie's name, value and
+     percentage in any mix; each axis shown or hidden, text size, colour,
+     angle and reversed, the value axis's own number format and step, the
+     group axis's label interval and, for dates, a from and to date; the
+     legend in any side or corner with its own size and a title; gridlines
+     solid, dashed or dotted in a chosen colour; a plot area colour;
+     tooltips off, a total of the values (added exactly), and each value
+     shown, left out of the tooltip or only in it (then it isn't drawn, so
+     it doesn't stretch the axis); up to 8 reference lines (a fixed value,
+     a target, the average, median, lowest, highest or a percentile of a
+     value, or a shaded band), labelled; a straight trend line per value
+     and a forecast that carries it on for 1 to 12 groups (a least-squares
+     line on the drawn figures, shown dashed, not a forecasting model);
+     column thickness, the gap between groups and square or rounded ends;
+     and each line's width, style, step and dots. Reference lines,
+     percentiles (interpolated, as a spreadsheet's PERCENTILE.INC) and trends
+     are worked out from display numbers: they're positions on a chart,
+     never figures in the books.

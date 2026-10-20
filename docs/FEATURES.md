@@ -2109,6 +2109,23 @@ that something happened.
   from one. "Set as default for columns in this report" (any chart type)
   makes every chart of that type in the report start from that look, and
   **Copy format** / **Paste format** copies a chart's look to others.
+- **Analytics: formatting each chart** (#376 phase 1, decisions 672-673).
+  The Format section now also has: title and subtitle styling (size,
+  weight, italic, colour, alignment, a colour behind the title); the card's
+  colour and transparency, border colour and width, corners, shadow and
+  padding; any colour for a value or a group, with Reset to the theme;
+  data label size, colour, own number format and which labels show (a pie
+  can show its name, value and percentage in any mix); axes shown or
+  hidden, text size, colour, angle, reversed, the value axis's own number
+  format and step, label interval and a date range for the group axis; the
+  legend in any side or corner, with a size and title; dashed or dotted
+  gridlines in a chosen colour and a plot area colour; tooltips off, with a
+  total, and values left out of the tooltip or shown only there; reference
+  lines (a value, target, average, median, lowest, highest, percentile or a
+  shaded band); a trend line and simple forecast per value; column
+  thickness, gaps and square ends; each line's width, style, step and dots.
+  Chosen colours get a dark version in dark mode, and the editor warns
+  when one fails the colour checks.
 - **Analytics: chart formatting and a second axis** (#331, #333,
   decisions 590-593). The chart panel has a Format section with a live
   preview and Reset to default: colour sets (Tohyee, Tohyee blues, Orange
