@@ -15,6 +15,7 @@ import {
 } from "@/lib/analytics/chart-format";
 import { barRadius, echartsBase, MARKS, tooltipHtml, type ChartTheme, type TooltipRow } from "@/lib/charts/theme";
 import { adaptForDark, isDarkSurface } from "@/lib/charts/colour-check";
+import { ruleMatches } from "@/lib/analytics/conditional";
 import { dec, sub, sum, toFixedString, toPlainString } from "@/lib/money/decimal";
 
 export type ChartKind = "bar" | "column" | "line" | "area" | "combo" | "pie" | "donut" | "kpi";
@@ -364,6 +365,7 @@ function forMode(format: ChartFormat, theme: ChartTheme): ChartFormat {
     ...(format.rightAxis ? { rightAxis: axis(format.rightAxis) } : {}),
     ...(format.gridlines?.color ? { gridlines: { ...format.gridlines, color: surface(format.gridlines.color) } } : {}),
     ...(format.plot?.background ? { plot: { background: surface(format.plot.background) } } : {}),
+    ...(format.chartRules ? { chartRules: format.chartRules.map((rule) => ({ ...rule, color: mark(rule.color)! })) } : {}),
     ...(format.referenceLines ? { referenceLines: format.referenceLines.map((line) => (line.color ? { ...line, color: mark(line.color) } : line)) } : {}),
   };
 }
@@ -612,18 +614,25 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
     const colour = seriesColour(index);
     const stacked = isStacked(index);
     const values = rows.map((_row, rowIndex) => valueAt(index, rowIndex));
+    // Colour rules on the chart (#376), e.g. red below a target: compared exactly on the row's own value.
+    const ruled = (rowIndex: number) => {
+      const raw = rows[rowIndex]?.[item.field];
+      if (raw === null || raw === undefined) return undefined;
+      return format.chartRules?.find((rule) => (rule.series === undefined || rule.series === index) && ruleMatches(rule, String(raw)))?.color;
+    };
     const data = values.map((value, rowIndex) => {
-      if (as !== "bar") return value;
+      const ruleColour = format.chartRules ? ruled(rowIndex) : undefined;
+      if (as !== "bar") return ruleColour ? { value, itemStyle: { color: ruleColour } } : value;
       const negative = value !== null && value < 0;
       const red = format.negativeRed && theme.negative && negative;
       const named = groupColours ? groupColour(rowIndex) : undefined;
       const byCategory = categoryColours;
       const end = rounded && (stacked ? (negative ? stackEnds[rowIndex].bottom === index : stackEnds[rowIndex].top === index) : negative);
-      if (!red && !byCategory && !end && !named) return value;
+      if (!red && !byCategory && !end && !named && !ruleColour) return value;
       return {
         value,
         itemStyle: {
-          ...(red || named || byCategory ? { color: red ? theme.negative : named ?? colours[rowIndex] } : {}),
+          ...(ruleColour || red || named || byCategory ? { color: ruleColour ?? (red ? theme.negative : named ?? colours[rowIndex]) } : {}),
           ...(end ? { borderRadius: barRadius(horizontal, negative) } : {}),
         },
       };

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ColourInput } from "@/components/analytics/colour-input";
+import { ChartRuleFields, ConditionalFields, TableStyleFields } from "@/components/analytics/conditional-panel";
 import { Button, Field, Notice, ui } from "@/components/ui";
 import {
   HUE_LABELS,
@@ -47,6 +48,9 @@ type Props = {
   groups?: string[];
   /** Whether the groups are dates (for limiting the axis to a date range). */
   datedGroups?: boolean;
+  /** A table's group column, or a pivot's row fields, by name. */
+  groupName?: string | null;
+  rowFields?: string[];
 };
 
 /** Removes settings left at their default, so Reset and "nothing changed" are the same thing. */
@@ -310,7 +314,7 @@ function ReferenceLines({ values, lines, onChange }: { values: string[]; lines: 
 }
 
 /** The Format section of the chart panel (#331, #333, #376): every change shows in the preview straight away. */
-export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false }: Props) {
+export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [] }: Props) {
   // What the chart shows: the report's default for its type with the tile's own settings over it.
   const current = mergeFormats(inherited, format) ?? {};
   const can = formatOptionsFor(visual);
@@ -338,6 +342,12 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
     return (
       <div className={styles.panel}>
         {heading}
+        <Section title="Table style">
+          <TableStyleFields format={current} set={set} pivot={visual === "pivot"} rowFields={rowFields} />
+        </Section>
+        <Section title="Conditional formatting">
+          <ConditionalFields values={values} format={current} set={set} groupName={visual === "pivot" ? rowFields[0] ?? null : groupName} />
+        </Section>
         <Section title="Title and card">
           <CardFields format={current} set={set} />
         </Section>
@@ -543,6 +553,11 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
               <StyleSelect label="Gridline style" value={current.gridlines?.style} onChange={(style) => set({ gridlines: { ...current.gridlines, style } })} />
               <ColourInput label="Gridline colour" value={current.gridlines?.color} onChange={(color) => set({ gridlines: { ...current.gridlines, color } })} />
               <ColourInput label="Plot area background" value={current.plot?.background} onChange={(background) => set({ plot: { background } })} />
+            </Section>
+          ) : null}
+          {can.cartesian ? (
+            <Section title="Colour rules">
+              <ChartRuleFields values={values} format={current} set={set} />
             </Section>
           ) : null}
           {can.cartesian ? (

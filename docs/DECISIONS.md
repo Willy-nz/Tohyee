@@ -6695,3 +6695,30 @@ accounting example is marked not yet reviewed.
      stays with the first value's change. As with charts, a chosen colour
      gets a dark version in dark mode (decision 672). The format painter
      and chart type defaults copy all of this except the target.
+675. **Conditional formatting and table styles** (20 October 2026, #376
+     phase 1; Power BI's conditional formatting and table/matrix style, as
+     the issue says). In a table or pivot, each value's cells can have
+     their background or text coloured by a two- or three-colour scale
+     (from the column's lowest to highest; the middle colour sits halfway),
+     by rules (up to six, compared exactly in decimals, first match wins)
+     or from a field holding colours (the group column: #rrggbb or a few
+     colour names, anything else left plain). Text on a coloured cell is
+     picked to read on it (white or near-black) unless a text colour was
+     chosen. Data bars grow from zero across the column's range; icons mark
+     the highest, middle and lowest thirds with a different shape as well
+     as colour (arrows, or circle, diamond and square), with the words for
+     screen readers. In a pivot only the detail rows are coloured, and the
+     range comes from them, so subtotals don't flatten the scale. Charts can
+     have colour rules too (columns and dots), e.g. red below a target,
+     for every value or one. Table and pivot style: header background and
+     text colours, banded rows and their colour, gridlines (rows and
+     columns, rows only, none), text size, narrowest column width, wrapping
+     long text, a totals row for tables (totals and counts added exactly;
+     averages, smallest, largest, distinct counts and calculated values left
+     blank, because adding them up would be wrong; "Total of the rows
+     shown" when the table was cut at 5,000 rows), the pivot's grand total
+     on or off, totals bold or shaded, and pivot subtotals per row field
+     level. Colours follow decision 672 in dark mode. Exports are unchanged
+     (they're the figures, not the look). While building this, numbers of
+     a thousand or more in tables were found showing four decimal places
+     (1,203.0000); they now drop the trailing zeros like smaller numbers.

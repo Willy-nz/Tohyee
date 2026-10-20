@@ -12,6 +12,8 @@ import { FormulaField, SavedValuesPicker, SaveValueButton, ValueRules } from "@/
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
+import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
+import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/conditional";
 import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -966,7 +968,7 @@ function TileResult({
   onDrill,
   exportFor,
 }: {
-  tile: Pick<Tile, "title" | "visual" | "format" | "height">;
+  tile: Pick<Tile, "title" | "visual" | "format" | "height"> & { query?: TileQuery | null };
   result: QueryResult;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   exportFor?: PivotExportFor;
@@ -975,7 +977,7 @@ function TileResult({
   const spec = useMemo(() => tileChartSpec(tile, measures), [tile, measures]);
 
   if (tile.visual === "pivot") {
-    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
+    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} format={tile.format} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
   }
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   // Yes/No groups are named Yes and No on the chart too (decision 577).
@@ -984,9 +986,14 @@ function TileResult({
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(named, measures[0]?.key ?? "m0") : named;
   if (tile.visual === "kpi") return <KeyFigureView result={result} format={tile.format} />;
   if (!spec) {
+    // Table styles and conditional formatting (#376), by each value's position among the tile's values.
+    const look = tableLook(tile.format?.table);
+    const ranges = measures.map((column) => columnRange(result.rows.map((row) => row[column.key])));
+    const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
+    const totals = tile.format?.table?.totals ? tableTotals(result.columns, result.rows, aggregates) : null;
     return (
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table className={`${ui.table} ${look.className}`} style={look.style}>
           <thead>
             <tr>
               {result.columns.map((column) => (
@@ -999,14 +1006,30 @@ function TileResult({
           <tbody>
             {result.rows.map((row, index) => (
               <tr key={index}>
-                {result.columns.map((column) => (
-                  <td key={column.key} className={column.role === "measure" ? ui.num : undefined}>
-                    {showValue(row[column.key], column)}
-                  </td>
-                ))}
+                {result.columns.map((column) => {
+                  const valueIndex = measures.indexOf(column);
+                  return valueIndex < 0 ? (
+                    <td key={column.key}>{showValue(row[column.key], column)}</td>
+                  ) : (
+                    <FormattedCell key={column.key} className={ui.num} format={tile.format} valueIndex={valueIndex} value={row[column.key] ?? null} range={ranges[valueIndex]} field={row.category ?? null}>
+                      {showValue(row[column.key], column)}
+                    </FormattedCell>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
+          {totals ? (
+            <tfoot>
+              <tr className={totalRowClass(tile.format?.table, styles.pivotTotal)}>
+                {result.columns.map((column, index) => (
+                  <th key={column.key} scope={index === 0 ? "row" : undefined} className={column.role === "measure" ? ui.num : undefined}>
+                    {index === 0 ? (result.truncated ? "Total of the rows shown" : "Total") : totals[column.key] === null ? "" : showValue(totals[column.key], column)}
+                  </th>
+                ))}
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
         {result.truncated ? <p className={ui.muted}>Showing the first 5,000 rows.</p> : null}
       </div>
@@ -1057,9 +1080,12 @@ export function PivotTable({
   pivot,
   onDrill,
   exportFor,
+  format,
 }: {
   title: string;
   pivot: PivotData;
+  /** Table style and conditional formatting (#376). */
+  format?: ChartFormat;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   /** Where the export comes from; without it (e.g. a preview) there's no export. */
   exportFor?: PivotExportFor;
@@ -1108,6 +1134,12 @@ export function PivotTable({
       `Rows · ${drillTitle}`,
     );
   };
+  const look = tableLook(format?.table);
+  // A value's position among the tile's values, for its conditional formatting.
+  const measureKeys = [...new Set(pivot.columns.map((column) => column.measure.key))];
+  const detailRows = pivot.rows.filter((row) => row.kind === "detail");
+  const ranges = new Map(pivot.columns.map((column) => [column.key, columnRange(detailRows.map((row) => row.cells[column.key] ?? null))]));
+  const shownRows = visiblePivotRows(pivot.rows, format?.table);
   return (
     <div className={styles.pivot}>
       {exportFor ? (
@@ -1118,7 +1150,7 @@ export function PivotTable({
       ) : null}
       {exportError ? <Notice tone="error">{exportError}</Notice> : null}
       <div className={`${ui.tableWrap} ${styles.pivotWrap}`}>
-        <table className={ui.table} aria-label={`${title} pivot table`}>
+        <table className={`${ui.table} ${look.className}`} style={look.style} aria-label={`${title} pivot table`}>
           <caption>{title}</caption>
           <thead>
             {pivot.columnField ? (
@@ -1144,13 +1176,21 @@ export function PivotTable({
             )}
           </thead>
           <tbody>
-            {pivot.rows.map((row) => (
-              <tr key={row.key} className={row.kind !== "detail" ? styles.pivotTotal : undefined}>
+            {shownRows.map((row) => (
+              <tr key={row.key} className={row.kind !== "detail" ? totalRowClass(format?.table, styles.pivotTotal) : undefined}>
                 {pivot.rowFields.map((field, index) => (
                   <th key={field.key} scope="row">{pivotRowLabel(row, index, field)}</th>
                 ))}
                 {pivot.columns.map((column) => (
-                  <td key={column.key} className={ui.num}>
+                  <FormattedCell
+                    key={column.key}
+                    className={ui.num}
+                    format={row.kind === "detail" ? format : undefined}
+                    valueIndex={measureKeys.indexOf(column.measure.key)}
+                    value={row.cells[column.key] ?? null}
+                    range={ranges.get(column.key) ?? null}
+                    field={row.dimensions[0] ?? null}
+                  >
                     {onDrill ? (
                       <button
                         type="button"
@@ -1163,7 +1203,7 @@ export function PivotTable({
                     ) : (
                       showValue(row.cells[column.key] ?? null, column.measure)
                     )}
-                  </td>
+                  </FormattedCell>
                 ))}
               </tr>
             ))}
@@ -1310,7 +1350,7 @@ function TileEditor({
         ) : preview.error ? (
           <Notice tone="error">{preview.error}</Notice>
         ) : (
-          <TileResult tile={{ title: title || "Preview", visual, format: mergeFormats(defaults?.[visual], format), height }} result={preview.result!} />
+          <TileResult tile={{ title: title || "Preview", visual, format: mergeFormats(defaults?.[visual], format), height, query }} result={preview.result!} />
         )}
       </div>
 
@@ -1637,6 +1677,8 @@ function TileEditor({
         theme={theme}
         groups={groupValues ? chartGroupNames(groupValues) : undefined}
         datedGroups={groupValues ? datedGroups(groupValues) : false}
+        groupName={query.groupBy ? fieldLabel(query.groupBy.field) : null}
+        rowFields={(query.pivot?.rows ?? []).map((row) => fieldLabel(row.field))}
       />
       {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 

@@ -13,7 +13,8 @@ export function showValue(value: string | null, column: Pick<ResultColumn, "form
     case "money":
       return formatCurrency(value);
     case "number":
-      return formatQuantity(formatMoney(value, 4));
+      // Rounded to 4 places, then trailing zeros dropped (the grouping commas come off first, or 1,203.0000 stayed as it was).
+      return formatQuantity(formatMoney(value, 4).replaceAll(",", ""));
     case "integer":
       return formatQuantity(value);
     case "date":

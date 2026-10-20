@@ -20,6 +20,9 @@ describe("negative money in Analytics (#328)", () => {
     expect(showValue("-27.00", { format: "money" })).toBe("-$27.00");
     expect(showValue("27.00", { format: "money" })).toBe("$27.00");
     expect(showValue("-3.5000", { format: "number" })).toBe("-3.5");
+    // Over a thousand, too (a table's total of quantities showed 1,203.0000).
+    expect(showValue("1203.0000", { format: "number" })).toBe("1,203");
+    expect(showValue("-12345.67891", { format: "number" })).toBe("-12,345.6789");
     expect(showValue(null, { format: "money" })).toBe("");
   });
 
