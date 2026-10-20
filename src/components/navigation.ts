@@ -180,6 +180,7 @@ export const MENUS: Menu[] = [
             { href: "/operations/farming/calendar", label: "Farm calendar" },
             { href: "/operations/farming/notebook", label: "Farm notebook" },
             { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+            { href: "/operations/farming/co-op-shares", label: "Co-op shares" },
           ]),
           ...section("Insights and apps", [
             { href: "/operations/farming/benchmarks", label: "Benchmarks" },
