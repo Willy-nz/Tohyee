@@ -204,7 +204,60 @@ export function endOfYearTaxDue(year: number, agentExtension: boolean, endMonth 
 // --- Standard provisional tax -----------------------------------------------
 
 export type RitFigure = { amount: Decimal; typed: boolean };
-export type Payment = { date: string; amount: Decimal };
+
+/**
+ * How sure an allocation of a payment to an instalment is (ITX6A-ITX6H,
+ * decision 620): IRD's own record (confirmed), a person's allocation with the
+ * evidence they relied on (evidenced), or an assumption for a forecast, which
+ * is never counted as paid.
+ */
+export const ALLOCATION_STATUSES = ["confirmed", "evidenced", "forecast"] as const;
+export type AllocationStatus = (typeof ALLOCATION_STATUSES)[number];
+export const ALLOCATION_STATUS_LABELS: Record<AllocationStatus, string> = {
+  confirmed: "Confirmed by IRD",
+  evidenced: "Allocated by us, with evidence",
+  forecast: "Forecast assumption",
+};
+/** What an allocation is towards: an instalment (1 to 3) or the year's end-of-year tax. */
+export type AppliesTo = number | "end_of_year";
+export type PaymentAllocation = { appliesTo: AppliesTo; amount: Decimal; status: AllocationStatus };
+/**
+ * A payment (or credit) to IRD towards the income year. `date` is the bank
+ * date; `effectiveOn` is IRD's effective date when known. A payment with no
+ * confirmed or evidenced allocation is awaiting reconciliation and isn't
+ * counted against any instalment (decision 620).
+ */
+export type Payment = { date: string; effectiveOn?: string | null; amount: Decimal; reversed?: boolean; allocations?: PaymentAllocation[] };
+
+const COUNTED: readonly AllocationStatus[] = ["confirmed", "evidenced"];
+
+/**
+ * Each payment's allocations, capped so a payment is never counted for more
+ * than it was (ITX6H): allocations past the payment's amount are cut back, in
+ * order. Reversed payments count for nothing.
+ */
+export function cappedAllocations(payments: readonly Payment[]): Array<PaymentAllocation & { payment: Payment }> {
+  const result: Array<PaymentAllocation & { payment: Payment }> = [];
+  for (const payment of payments) {
+    if (payment.reversed) continue;
+    let left = payment.amount;
+    // Confirmed and evidenced allocations take the payment first, then forecast assumptions.
+    const ordered = [...(payment.allocations ?? [])].sort((a, b) => Number(b.status !== "forecast") - Number(a.status !== "forecast"));
+    for (const allocation of ordered) {
+      if (!isPositive(left)) break;
+      const amount = cmp(allocation.amount, left) > 0 ? left : allocation.amount;
+      if (!isPositive(amount)) continue;
+      result.push({ ...allocation, amount, payment });
+      left = sub(left, amount);
+    }
+  }
+  return result;
+}
+
+/** The date IRD treats a payment as made: its effective date, or the bank date until that's known. */
+export function effectiveDate(payment: Payment): string {
+  return payment.effectiveOn ?? payment.date;
+}
 
 export type Instalment = {
   number: number;
@@ -216,14 +269,45 @@ export type Instalment = {
   ownAmount: string;
   /** The part of `amount` that's an earlier instalment's shortfall, caught up here (ITX6). */
   catchUp: string;
+  /** Allocated to this instalment, confirmed by IRD or evidenced; each payment counted once (ITX6A-ITX6H). */
+  paid: string;
+  /** The part of `paid` whose IRD effective date is after the on-time date (ITX6C). */
+  paidLate: string;
+  /** Allocated to this instalment as a forecast assumption: not counted as paid. */
+  forecastPaid: string;
+  /** Cash still needed by this date: the cumulative target less what's allocated to this and earlier instalments, never below nil. */
+  remaining: string;
+  /** The same, if the forecast assumptions turn out right. */
+  remainingWithForecast: string;
+  /** Paid towards this and earlier instalments beyond the cumulative target: a credit carried forward, never a negative demand. */
+  creditAfter: string;
+  /** Set when `amount` assumes an earlier instalment that isn't due yet is paid as worked out (a forecast assumption). */
+  assumption: string | null;
   /** How the amount was worked out, in words. */
   basis: string;
   /** Uses Tohyee's estimate of last year's RIT rather than IRD's figure. */
   estimate: boolean;
 };
 
+export type ScheduleAllocation = {
+  /** Paid (not reversed), but not confirmed or evidenced against an instalment or end-of-year tax yet. */
+  awaiting: string;
+  /** How many payments have some of their amount awaiting reconciliation. */
+  awaitingCount: number;
+  /** The part of `awaiting` with a forecast assumption about where it goes. */
+  awaitingForecast: string;
+  /** Payments whose journal was reversed: counted nowhere. */
+  reversed: string;
+  /** Allocated to this year's end-of-year tax (confirmed or evidenced). */
+  endOfYear: string;
+  /** Allocated to instalments beyond the cumulative total: a credit, never a negative demand. */
+  credit: string;
+  /** Allocated to an instalment this schedule doesn't have (for example instalment 3 for a six-monthly GST filer). */
+  unmatched: string;
+};
+
 export type ProvisionalSchedule =
-  | { kind: "schedule"; instalments: Instalment[]; total: string; notes: string[] }
+  | { kind: "schedule"; instalments: Instalment[]; total: string; notes: string[]; allocation: ScheduleAllocation }
   | { kind: "not_provisional"; notes: string[] }
   | { kind: "unknown"; notes: string[] };
 
@@ -303,18 +387,33 @@ export function standardSchedule(input: {
   // last one; what's due is the target less what was paid towards the earlier instalments (payments dated before its due
   // date, up to the earlier target), so a shortfall is caught up once. The year's total is the last target, never the sum
   // of what's due (which would count a caught-up shortfall twice).
-  const amounts: Array<{ target: Decimal; due: Decimal; basis: string; estimate: boolean }> = [];
-  const paidBefore = (date: string) => input.payments.filter((payment) => payment.date < date).reduce((sum, payment) => add(sum, payment.amount), ZERO_DECIMAL);
+  // Payments count against an instalment only through a confirmed or evidenced allocation, never by their date alone
+  // (decision 620; IRD applies payments as the taxpayer directs). A payment counts once, up to its amount.
+  const allocations = cappedAllocations(input.payments);
+  const allocated = (appliesTo: AppliesTo, statuses: readonly AllocationStatus[]) =>
+    allocations.filter((entry) => entry.appliesTo === appliesTo && statuses.includes(entry.status)).reduce((sum, entry) => add(sum, entry.amount), ZERO_DECIMAL);
+  const paidFor = (index: number) => allocated(index + 1, COUNTED);
+  const amounts: Array<{ target: Decimal; due: Decimal; basis: string; estimate: boolean; assumption: string | null }> = [];
+  // What's been paid for the earlier instalments, with no cap at their calculated amounts: an excess towards
+  // instalment 1 reduces instalment 2 (IRD's "minus the amount paid for the first payment"; Codex, delegated by owner,
+  // 20 Oct 2026). An earlier instalment that isn't due yet is assumed paid as worked out, and says so.
   const paidTowards = (index: number) => {
-    const earlier = index === 0 ? ZERO_DECIMAL : amounts[index - 1].target;
-    if (!dates.slice(0, index).every((date) => date <= input.today)) return earlier;
-    const actual = paidBefore(dates[index]);
-    return cmp(actual, earlier) < 0 ? actual : earlier;
+    let paid = ZERO_DECIMAL;
+    const assumed: string[] = [];
+    for (let earlier = 0; earlier < index; earlier += 1) {
+      const actual = paidFor(earlier);
+      const worked = amounts[earlier].due;
+      if (dates[earlier] > input.today && cmp(actual, worked) < 0) {
+        paid = add(paid, isNegative(worked) ? ZERO_DECIMAL : worked);
+        assumed.push(`instalment ${earlier + 1} is paid as worked out (${moneyText(worked)})`);
+      } else paid = add(paid, actual);
+    }
+    return { paid, assumption: assumed.length > 0 ? `Assumes ${assumed.join(" and ")}, because it isn't due yet: a forecast, not a payment.` : null };
   };
   const uplifted = `${moneyText(lastYear.amount)} + 5% = ${moneyText(total)}`;
   const push = (target: Decimal, basis: (paid: Decimal) => string, estimate: boolean) => {
-    const paid = paidTowards(amounts.length);
-    amounts.push({ target, due: sub(target, paid), basis: basis(paid), estimate });
+    const { paid, assumption } = paidTowards(amounts.length);
+    amounts.push({ target, due: sub(target, paid), basis: basis(paid), estimate, assumption });
   };
 
   if (filedBy(0) || !input.extensionOfTime) {
@@ -328,7 +427,7 @@ export function standardSchedule(input: {
       const last = index === dates.length - 1;
       const target = last ? total : mul(share, dec(String(index + 1)));
       const amount = last ? sub(total, mul(share, dec(String(dates.length - 1)))) : share;
-      amounts.push({ target, due: amount, basis: `RIT for ${label(1)}: ${uplifted}, ÷ ${input.instalmentCount}${last ? ", less the other instalments so they add up" : ""}`, estimate: !lastYear.typed });
+      amounts.push({ target, due: amount, basis: `RIT for ${label(1)}: ${uplifted}, ÷ ${input.instalmentCount}${last ? ", less the other instalments so they add up" : ""}`, estimate: !lastYear.typed, assumption: null });
     }
   } else if (input.instalmentCount === 2) {
     return {
@@ -347,33 +446,78 @@ export function standardSchedule(input: {
     push(early, () => earlyBasis, false);
     if (filedBy(1)) {
       const twoThirds = divide(mul(total, dec("2")), dec("3"), 2);
-      push(twoThirds, (paid) => `RIT for ${label(1)}: ${uplifted}, x 2 ÷ 3 = ${moneyText(twoThirds)}, less ${moneyText(paid)} paid towards the year before ${shortDate(dates[1])}`, false);
+      push(twoThirds, (paid) => `RIT for ${label(1)}: ${uplifted}, x 2 ÷ 3 = ${moneyText(twoThirds)}, less ${moneyText(paid)} paid for instalment 1`, false);
     } else {
       push(mul(early, dec("2")), (paid) => `${earlyBasis}${cmp(paid, early) < 0 ? `, plus ${moneyText(sub(early, paid))} not paid towards instalment 1` : ""}`, false);
     }
-    push(total, (paid) => `RIT for ${label(1)}: ${uplifted}, less ${moneyText(paid)} paid towards the year before ${shortDate(dates[2])}`, !lastYear.typed);
+    push(total, (paid) => `RIT for ${label(1)}: ${uplifted}, less ${moneyText(paid)} paid for instalments 1 and 2`, !lastYear.typed);
     if (!lastYear.typed) notes.push(`The last instalment uses Tohyee's estimate of the RIT for ${label(1)}; it changes once IRD's figure is typed.`);
   }
 
+  const floor = (value: Decimal) => (isNegative(value) ? ZERO_DECIMAL : value);
+  let paidSoFar = ZERO_DECIMAL;
+  let forecastSoFar = ZERO_DECIMAL;
   const instalments: Instalment[] = amounts.map((entry, index) => {
     const previous = index === 0 ? ZERO_DECIMAL : amounts[index - 1].target;
     const own = sub(entry.target, previous);
-    const due = isNegative(entry.due) ? ZERO_DECIMAL : entry.due;
-    const catchUp = sub(due, isNegative(own) ? ZERO_DECIMAL : own);
+    const due = floor(entry.due);
+    const catchUp = sub(due, floor(own));
+    const dueBy = onTimeBy(dates[index]);
+    const paid = paidFor(index);
+    const forecast = allocated(index + 1, ["forecast"]);
+    const paidLate = allocations
+      .filter((allocation) => allocation.appliesTo === index + 1 && COUNTED.includes(allocation.status) && effectiveDate(allocation.payment) > dueBy.date)
+      .reduce((sum, allocation) => add(sum, allocation.amount), ZERO_DECIMAL);
+    // Remaining cash is cumulative: an excess towards an earlier instalment carries forward as a credit, a shortfall is
+    // still needed, and each payment is counted once (ITX6A-ITX6H).
+    paidSoFar = add(paidSoFar, paid);
+    forecastSoFar = add(forecastSoFar, add(paid, forecast));
     return {
       number: index + 1,
       dueDate: dates[index],
-      onTimeBy: onTimeBy(dates[index]),
+      onTimeBy: dueBy,
       amount: money(due),
-      ownAmount: money(isNegative(own) ? ZERO_DECIMAL : own),
+      ownAmount: money(floor(own)),
       catchUp: money(isPositive(catchUp) ? catchUp : ZERO_DECIMAL),
+      paid: money(paid),
+      paidLate: money(paidLate),
+      forecastPaid: money(forecast),
+      remaining: money(floor(sub(entry.target, paidSoFar))),
+      remainingWithForecast: money(floor(sub(entry.target, forecastSoFar))),
+      creditAfter: money(floor(sub(paidSoFar, entry.target))),
       basis: entry.basis,
       estimate: entry.estimate,
+      assumption: entry.assumption,
     };
   });
   // The year's provisional tax: the last cumulative target, not the sum of what's due (ITX6).
-  const yearTotal = amounts[amounts.length - 1].target;
-  return { kind: "schedule", instalments, total: money(isNegative(yearTotal) ? ZERO_DECIMAL : yearTotal), notes };
+  const yearTotal = floor(amounts[amounts.length - 1].target);
+  const live = input.payments.filter((payment) => !payment.reversed);
+  const countedTotal = allocations.filter((entry) => COUNTED.includes(entry.status)).reduce((sum, entry) => add(sum, entry.amount), ZERO_DECIMAL);
+  const forecastTotal = allocations.filter((entry) => entry.status === "forecast").reduce((sum, entry) => add(sum, entry.amount), ZERO_DECIMAL);
+  const liveTotal = live.reduce((sum, payment) => add(sum, payment.amount), ZERO_DECIMAL);
+  const awaitingCount = live.filter((payment) => {
+    const counted = allocations.filter((entry) => entry.payment === payment && COUNTED.includes(entry.status)).reduce((sum, entry) => add(sum, entry.amount), ZERO_DECIMAL);
+    return cmp(counted, payment.amount) < 0;
+  }).length;
+  const unmatched = allocations
+    .filter((entry) => entry.appliesTo !== "end_of_year" && (typeof entry.appliesTo !== "number" || entry.appliesTo < 1 || entry.appliesTo > dates.length))
+    .reduce((sum, entry) => add(sum, entry.amount), ZERO_DECIMAL);
+  const allocation: ScheduleAllocation = {
+    awaiting: money(sub(liveTotal, countedTotal)),
+    awaitingCount,
+    awaitingForecast: money(forecastTotal),
+    reversed: money(input.payments.filter((payment) => payment.reversed).reduce((sum, payment) => add(sum, payment.amount), ZERO_DECIMAL)),
+    endOfYear: money(allocated("end_of_year", COUNTED)),
+    credit: instalments[instalments.length - 1].creditAfter,
+    unmatched: money(unmatched),
+  };
+  if (awaitingCount > 0) {
+    notes.push(`${moneyText(dec(allocation.awaiting))} paid to IRD is awaiting reconciliation: it isn't counted against an instalment until IRD's allocation is confirmed, or it's allocated with the evidence for it.`);
+  }
+  if (isPositive(dec(allocation.credit))) notes.push(`${moneyText(dec(allocation.credit))} more than the year's provisional tax is allocated to the instalments: it's a credit, not a refund Tohyee has checked.`);
+  if (isPositive(unmatched)) notes.push(`${moneyText(unmatched)} is allocated to an instalment this schedule doesn't have. Allocate it again.`);
+  return { kind: "schedule", instalments, total: money(yearTotal), notes, allocation };
 }
 
 // --- Taxable income ----------------------------------------------------------

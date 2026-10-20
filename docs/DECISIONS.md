@@ -6338,3 +6338,48 @@ recorded elsewhere or being built at the same time:
      preferences go through the CRM's access check, so sales reps and
      managers can keep their own; Home's and the farm Home's still refuse
      them. HD5.
+620. **Provisional tax payments are allocated, not dated into instalments**
+     (Codex, delegated by owner (via Will), 20 October 2026; the 20 Oct
+     comment on #292, section 1). Confirmed excess towards instalment 1
+     reduces what instalment 2 needs: the cap at instalment 1's calculated
+     amount is gone (ITX6, ITX6A: 12,367.60 - 6,000.00 = 6,367.60). A
+     payment counts against an instalment only through an allocation, and
+     its date alone doesn't make it any instalment's (IRD applies payments as
+     the taxpayer directs). Each allocation has a status: confirmed by IRD
+     (it must name an IRD document, so it isn't a status someone just
+     types), allocated by a person with the evidence typed beside it, or a
+     forecast assumption. Payments with neither of the first two are
+     awaiting reconciliation, and the page says how much. Existing payments
+     start awaiting reconciliation: they were never allocated. The year's
+     paid total (end-of-year tax, IR3/IR4) still counts every payment once,
+     whether allocated or not. Examples ITX6A-ITX6H, as delegated, not yet
+     reviewed by an accountant.
+621. **Scheduled, paid, allocated and still needed are kept apart**
+     (Codex, delegated by owner (via Will), 20 October 2026). Each
+     instalment shows its worked-out amount, what's allocated to it (and
+     how much of that was late, by IRD's effective date), and the cash
+     still needed by its date: the cumulative target less what's allocated
+     to it and earlier instalments, never below nil. More than the target is
+     a credit carried forward, never a negative demand. A payment keeps its
+     bank date and gets IRD's effective date once known; until then the
+     bank date stands in and the page says so. Use-of-money interest counts
+     only confirmed and evidenced allocations, from the effective date.
+     Forecast assumptions (including "an earlier instalment not due yet is
+     paid as worked out") are labelled on the instalment and never treated
+     as paid.
+622. **A payment counts once, and a reversed one not at all** (Codex,
+     delegated by owner (via Will), 20 October 2026). Allocations can't add
+     up to more than the payment (checked under a row lock, and again in
+     the rules). A payment counted from the books whose journal is reversed
+     later counts for nothing: not in instalments, the year's total or the
+     imputation credit account, and it can't be allocated. The annual-total
+     fix from 17 Oct 2026 (ITX6: the total is the last cumulative target,
+     not the sum of what's due) stays, with its test.
+623. **Reallocating keeps the history** (Codex, delegated by owner (via
+     Will), 20 October 2026). Changing where a payment goes, or taking an
+     allocation off, needs a reason; the old allocation is kept, marked
+     replaced, with who and when, and the audit log has both. Removing a
+     typed payment still removes its allocations with it (the audit log
+     keeps them). Per #360, nothing is filed or paid to IRD: Tohyee only
+     works out and shows. Credits IRD transfers in from other years or tax
+     types aren't their own kind of payment yet.
