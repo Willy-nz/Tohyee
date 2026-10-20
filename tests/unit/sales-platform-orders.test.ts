@@ -385,8 +385,8 @@ describe("Shopify Admin API 2026-10 checks (decision 665)", () => {
     });
     try {
       const context = { storeDomain: "glimmers.myshopify.com", credentials: { accessToken: "shpat_x" }, cachedToken: null, now: new Date() };
-      const setUp = await shopifyConnector.registerWebhooks(context, { token: "shpat_x", expiresAt: null }, "https://books.example.nz/hook");
-      expect(setUp.ids).toHaveLength(4);
+      const ids = await shopifyConnector.registerWebhooks(context, { token: "shpat_x", expiresAt: null }, "https://books.example.nz/hook");
+      expect(ids).toHaveLength(4);
       expect(sent[0]).toEqual({ uri: "https://books.example.nz/hook", format: "JSON" });
     } finally {
       setSalesPlatformFetchForTests(null);

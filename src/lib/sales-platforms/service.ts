@@ -28,7 +28,6 @@ import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/me
 import { startOfLocalDate } from "@/lib/sales-platforms/orders";
 import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
-import { squareConnector } from "@/lib/sales-platforms/square";
 import { woocommerceConnector } from "@/lib/sales-platforms/woocommerce";
 import {
   ORDER_SCOPE,
@@ -57,7 +56,7 @@ import { asRecord, optionalBoolean, optionalString, requireArray, requireId, req
  * is called with nothing open, and the result is written in a second.
  */
 
-const CONNECTORS: Record<SalesPlatform, SalesPlatformConnector> = { shopify: shopifyConnector, woocommerce: woocommerceConnector, square: squareConnector };
+const CONNECTORS: Record<SalesPlatform, SalesPlatformConnector> = { shopify: shopifyConnector, woocommerce: woocommerceConnector };
 
 /** Who the catch-up sync and webhooks act as (in the audit trail and the sync log). */
 export const SALES_PLATFORM_ACTOR: Actor = { userId: null, email: "sales-platform-sync@tohyee" };
@@ -328,15 +327,12 @@ async function setUpWebhooks(
   const connector = connectorFor(row.platform);
   const address = webhookAddress(origin, organisation.id, row.webhook_key);
   let ids: string[] = [];
-  let signingKey: string | null = null;
   let note: string | null = NO_WEBHOOKS_NOTE;
   let logMessage: string | null = null;
   if (address) {
     try {
       const orders = scopes.includes(ORDER_SCOPE);
-      const setUp = await connector.registerWebhooks(context, token, address, { orders });
-      ids = setUp.ids;
-      signingKey = setUp.signingKey ?? null;
+      ids = await connector.registerWebhooks(context, token, address, { orders });
       note = null;
       const what = !connector.syncsRecords ? "order" : `customer${orders ? ", product and order" : " and product"}`;
       logMessage = `Asked ${label(row.platform)} to send ${what} changes to this server as they happen (${ids.length} webhooks).`;
@@ -353,11 +349,6 @@ async function setUpWebhooks(
       "update sales_platform_connections set webhook_subscription_ids = $2, webhooks_note = $3, updated_at = now() where id = $1",
       [row.id, ids, note?.slice(0, 1000) ?? null],
     );
-    // A platform that chose the signing key (Square, SQ8) signs the address with the body: both are kept, encrypted, with the credentials.
-    if (signingKey) {
-      const credentials = { ...credentialsOf(current), webhookSigningKey: signingKey, webhookUrl: address! };
-      await tx.query("update sales_platform_connections set credentials_ciphertext = $2 where id = $1", [row.id, encryptSecret(JSON.stringify(credentials))]);
-    }
     if (logMessage) await writeLog(tx, row.id, { source: "connection", action: "webhooks", message: logMessage });
     return [];
   });
@@ -407,12 +398,11 @@ export async function connectStore(
     throw refusedAsValidation(error, platform);
   }
 
-  // 3. Save it. A platform whose account is only known from its answer (Square's merchant ID) is kept by that.
-  const storeDomain = store.storeId ?? input.storeDomain;
+  // 3. Save it.
   const webhookKey = randomBytes(32).toString("base64url");
   const [tokenCiphertext, tokenExpiresAt] = tokenColumns(token);
   const row = await withOrganisationTransaction(organisation, actor, async (tx) => {
-    await assertNotConnected(tx, platform, storeDomain);
+    await assertNotConnected(tx, platform, input.storeDomain);
     let inserted;
     try {
       inserted = await tx.query<ConnectionRow>(
@@ -423,7 +413,7 @@ export async function connectStore(
          returning ${COLUMNS}`,
         [
           platform,
-          storeDomain,
+          input.storeDomain,
           store.storeName.slice(0, 255),
           store.currency,
           store.pricesIncludeTax,
@@ -439,26 +429,26 @@ export async function connectStore(
         ],
       );
     } catch (error) {
-      if ((error as { code?: string }).code === "23505") throw new ConflictError(`${storeDomain} is already connected.`);
+      if ((error as { code?: string }).code === "23505") throw new ConflictError(`${input.storeDomain} is already connected.`);
       throw error;
     }
     const saved = inserted.rows[0];
     await writeLog(tx, saved.id, {
       source: "connection",
       action: "connected",
-      message: `Connected ${store.storeName} (${storeDomain}). Its prices are in ${store.currency} and ${store.pricesIncludeTax ? "include" : "exclude"} tax. Syncing customers: ${syncCustomers ? "on" : "off"}; products: ${syncProducts ? "on" : "off"}.`,
+      message: `Connected ${store.storeName} (${input.storeDomain}). Its prices are in ${store.currency} and ${store.pricesIncludeTax ? "include" : "exclude"} tax. Syncing customers: ${syncCustomers ? "on" : "off"}; products: ${syncProducts ? "on" : "off"}.`,
     });
     await writeAuditEvent(tx, {
       eventType: "sales_platform.connected",
       entityType: "sales_platform_connection",
       entityId: saved.id,
-      details: { platform, storeDomain, authMethod: input.authMethod, syncCustomers, syncProducts },
+      details: { platform, storeDomain: input.storeDomain, authMethod: input.authMethod, syncCustomers, syncProducts },
     });
     return saved;
   });
 
   // 4. Webhooks (network again, nothing open).
-  await setUpWebhooks(organisation, actor, row, { ...context, storeDomain }, token, options.webhookOrigin, store.scopes);
+  await setUpWebhooks(organisation, actor, row, context, token, options.webhookOrigin, store.scopes);
   return withOrganisationTransaction(organisation, actor, async (tx) => toConnection(await readConnection(tx, row.id)));
 }
 
@@ -1351,10 +1341,7 @@ function postingContext(tx: OrgTx, apply: ApplyContext, posting: NonNullable<Awa
 
 /** Whether a connection fetches and posts orders: the switch is on and it has a start date (SPC21). */
 const posts = (row: ConnectionRow) => row.post_to_accounts && row.start_date !== null;
-const readsPayouts = (row: ConnectionRow) => {
-  const connector = connectorFor(row.platform);
-  return connector.hasPayouts && (connector.payoutScopes ?? PAYOUT_SCOPES).every((scope) => row.granted_scopes.includes(scope));
-};
+const readsPayouts = (row: ConnectionRow) => connectorFor(row.platform).hasPayouts && PAYOUT_SCOPES.every((scope) => row.granted_scopes.includes(scope));
 
 const NO_PAYOUT_SCOPES = `Payouts aren't brought in: the app hasn't been given ${PAYOUT_SCOPES.join(" and ")}. Add them to the app's access scopes and test the connection, or record payouts by hand.`;
 
@@ -1593,8 +1580,7 @@ export async function receiveWebhook(
   // 2. Check the signature, with nothing open.
   // WooCommerce pings a new webhook's address before sending anything: answered, nothing done.
   if (connector.isPing?.(headers, rawBody)) return { status: 200, message: "Ping received." };
-  const credentials = credentialsOf(row);
-  const delivery = connector.checkWebhook(headers, rawBody, connector.webhookSecret(credentials), row.store_domain, { webhookUrl: credentials.webhookUrl ?? null });
+  const delivery = connector.checkWebhook(headers, rawBody, connector.webhookSecret(credentialsOf(row)), row.store_domain);
   if (!delivery) return REFUSED;
   // Paused while Accounting is off (MOD6): accepted, so the platform doesn't give up on the address, but
   // not recorded, so the catch-up sync brings it in once Accounting is back on.

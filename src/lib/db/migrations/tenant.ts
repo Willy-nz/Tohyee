@@ -16868,18 +16868,4 @@ alter table record_attachments add constraint record_attachments_record_type_che
                          'coop_shareholding'));
 `,
   },
-  {
-    version: "0177",
-    name: "square_sales_platform",
-    sql: `
--- Square as a third sales platform (examples SQ1-SQ10, decisions 667-669).
--- It pays out like Shopify (clearing, payouts and fees accounts) and maps
--- its cash and other tenders like WooCommerce's payment methods, so only
--- the platform lists change.
-alter table sales_platform_connections drop constraint sales_platform_connections_platform_check;
-alter table sales_platform_connections add constraint sales_platform_connections_platform_check check (platform in ('shopify', 'woocommerce', 'square'));
-alter table sales_platform_documents drop constraint sales_platform_documents_platform_check;
-alter table sales_platform_documents add constraint sales_platform_documents_platform_check check (platform in ('shopify', 'woocommerce', 'square'));
-`,
-  },
 ];

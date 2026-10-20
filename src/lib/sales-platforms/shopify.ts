@@ -894,7 +894,7 @@ export const shopifyConnector: SalesPlatformConnector = {
       await shopifyConnector.removeWebhooks(context, token, ids).catch(() => undefined);
       throw error;
     }
-    return { ids };
+    return ids;
   },
 
   async removeWebhooks(context, token, ids) {

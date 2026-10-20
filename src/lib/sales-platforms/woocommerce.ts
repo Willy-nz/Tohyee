@@ -416,7 +416,7 @@ export const woocommerceConnector: SalesPlatformConnector = {
       }
       throw error;
     }
-    return { ids };
+    return ids;
   },
 
   async removeWebhooks(context, token, ids) {

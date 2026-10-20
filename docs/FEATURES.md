@@ -1325,19 +1325,6 @@ that something happened.
   email, lines by SKU. Surcharges and other currencies are refused. A
   refund line is matched to the order line its `_refunded_item_id` names
   (decision 666).
-- **Square orders** (SQ1-SQ10, decisions 667-669, tenant migration 0177;
-  as Xero's Square integration does, not yet reviewed; not tried against
-  a real Square account): connect with the production personal access
-  token of an app in the seller's own Square account. Card sales are
-  invoiced per order with their payment into a Square clearing account,
-  and payouts move the money to the bank with Square's fees, as
-  Shopify's do; cash and other tenders go to the account mapped for them,
-  as WooCommerce's payment methods. Itemised refunds become credit notes.
-  Webhooks are signed over the address and body and handled once each.
-  A Square order whose source is another connected platform is skipped
-  so it isn't posted twice. Tips, service charges, split card and cash
-  payments, gift cards, disputes and reserves are refused. Square doesn't
-  take card payments in New Zealand.
 - **Shopify checked against Admin API 2026-10** (decision 665): the
   version, webhook subscriptions by `uri`, payout transactions checked
   against their payout, and a plain message when Shopify withholds
@@ -2298,9 +2285,8 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms: Stripe sales, WooCommerce product and customer sync
-  and surcharges, Square tips, service charges, split payments, disputes
-  and reserves, Shopify chargeback holds, customers' addresses and companies,
+- sales platforms: Stripe sales (Square left out by Jess, decision 667),
+  WooCommerce product and customer sync and surcharges, Shopify chargeback holds, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)

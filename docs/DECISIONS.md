@@ -6051,6 +6051,86 @@ testing) and #154's code signing (later, Jess).
        Fonterra share standard (minimum shares) calculator, deferred until
        its effective-dated rules are verified; share valuation; and the tax
        treatment of dividends, rebates and retentions.
+
+### Owner-delegated answers (issue #360, 20 October 2026; decisions 634-639)
+
+On 20 Oct 2026 Jess asked Codex to answer all the outstanding questions
+using its judgement, and approved posting the answers for Claude (issue
+#360). These are recorded with the attribution "Codex, delegated by owner,
+20 October 2026". They're product choices. They don't claim an accountant
+signed anything off, a provider was tested, access was bought or the law was
+verified. Jess's own explicit decisions win where they differ. Items
+recorded elsewhere or being built at the same time:
+- Item 7 (ITX6 and RAT1, from the 20 Oct comment on #292): being built.
+- Items 8-10 (private farm mail, #250): being built.
+- Items 11-13 (groups, #200): being built.
+- Item 15 (co-op shares, #327): decisions 630-633, in that PR.
+- Item 17 (CRM next, #216): being built.
+
+634. **Tax: what comes first** (20 October 2026, #292, #201; #360 items
+     1-6).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Order:** the organisation's own tax workspace first, then a
+       permission-aware overview across clients. A full practice manager
+       isn't a prerequisite (see 638). Finish and check IR4, IR3 and IR10
+       first, then trusts, then partnerships and LTCs, each sourced and
+       tested on its own. Company calculations are never run silently for
+       an entity they don't fit.
+     - **Inputs:** imports and reviewable forecasts first: CSV or Excel
+       through mapping and preview; PDFs kept as sources, with any figures
+       read from them needing review. A live IRD connection is a parallel
+       workstream needing IRD's approval, not a blocker.
+     - **Filing and payments:** prepare and export only. No automatic
+       filing, elections, payments or tax-pooling purchases.
+     - **Privacy:** a taxpayer's inputs are private by default and shared
+       with an accountant only by choice. Turning on Tax or group reporting
+       doesn't expose their mailbox or unrelated personal income.
+     - **Tax pooling:** comparisons stay provider-neutral, with dated quotes
+       typed in. No paid partner is chosen and no API is promised.
+     - **Already settled:** the extension-of-time choice (562). Rounding
+       (565) and the narrow sole-trader homekill GST case stay technical
+       checks.
+635. **Farm data providers** (20 October 2026, #249; #360 item 14).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - File imports stay the reliable baseline. For private connectors,
+       Pasture.io comes first, then LIC. No paid aggregator or new weather
+       service without a concrete need, documented terms and actual access.
+       Choosing a default can't stand in for a provider's access or a
+       farmer's consent.
+636. **Pigs and specialist livestock** (20 October 2026, #243; #360 item
+     16).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Pigs stay deferred (decision 508's list leaves them out). Finishing
+       the cattle and sheep workflows and reconciling them with real data
+       comes first. Unsupported transfers, bailments and valuation cases
+       stay refused until their rules and examples are verified. There's no
+       generic fallback valuation.
+637. **Which sales platform next** (20 October 2026, #196; #360 item 18).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Check and finish Shopify first, then WooCommerce's gaps. Square is
+       the next new sales connector. Accounting stays per order, and CRM,
+       order and invoice revenue is never counted twice. This is a
+       priority, not a claim of provider access.
+     - Later: Jess left Square out on 20 October 2026 (decision 667).
+638. **Practice manager stays unbuilt** (20 October 2026; #360 item 19).
+     - **Who decided:** Jess. Her own instruction, "Dont do practice
+       manager" (parked since 3 Oct 2026, PR #91), stands over #360 item 19.
+       Item 19 outlined a first slice (client directory linked to
+       organisations, templated jobs, task owners and deadlines, document
+       requests, then WIP and time billing). That outline is kept in the
+       issue for the history only and isn't built.
+     - Tax's multi-client overview (634) doesn't depend on it.
+639. **Default dashboards** (20 October 2026; #360 item 20).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Owner:** cash, overdue receivables and payables, and work needing
+       attention.
+     - **Sales:** pipeline, conversion and next actions.
+     - **Farming:** today's work, missing or stale records, and a seasonal
+       cash view.
+     - The practice dashboard (jobs and deadlines) isn't built, since
+       practice manager isn't (638).
+     - Existing dashboards are reused, and drilling through to the records
+       comes before adding more tiles.
 665. **Shopify checked against Admin API 2026-10** (20 October 2026;
      Codex, delegated by owner, 20 October 2026: "validate and finish
      Shopify first", issue #360 item 18). Without a real store, the
@@ -6088,76 +6168,9 @@ testing) and #154's code signing (later, Jess).
      deposits are still reconciled by hand: no documented API for them was
      found. Refunds of an amount only (no items) are still refused, as for
      Shopify.
-667. **Square is the third sales platform, connected with a personal
-     access token** (20 October 2026; Codex, delegated by owner, 20 October
-     2026: "Square is my default next new sales connector"). Square's
-     developer docs say a personal access token is for an integration with
-     the seller's own account and is "suitable for production use" there,
-     and the Webhook Subscriptions API needs it
-     (developer.squareup.com/docs/build-basics/access-tokens); OAuth is for
-     apps many sellers install, which would need Tohyee to run a sign-in
-     page and keep refreshing tokens. So, like Shopify's Dev Dashboard app,
-     the seller makes an app in their own Square account and pastes its
-     production token. The token can do anything in the account and can't
-     be limited; Tohyee only reads, stores it encrypted and the screen says
-     so. The account is kept by its merchant ID (lower case), so the same
-     account can't be connected twice. Square-Version 2026-09-16, the
-     version in Square's API reference on 20 October 2026. **Square doesn't
-     take card payments in New Zealand**: its developer docs list
-     Australia, Canada, France, Ireland, Japan, Spain, the UK and the US
-     (developer.squareup.com/docs/international-development), and orders in
-     another currency than the organisation's are refused, as for the other
-     platforms. This is built as the delegated priority; whether any
-     Tohyee organisation can use it is for Jess to say.
-668. **How Square orders are posted** (20 October 2026; examples SQ1-SQ10,
-     "as Xero's Square integration does, not yet reviewed" for where money
-     goes, otherwise Tohyee's Shopify rules). Per order, never a daily
-     summary (Jess, 5 October 2026: no summary mode; Xero's Square
-     integration by Amaka offers a daily summary invoice or one invoice per
-     order, and Tohyee is the second). Card, wallet, Afterpay, ACH and
-     Square gift card tenders go into a Square clearing account (Amaka's
-     "Square Balance", "a clearing account for the Credit Card takings
-     processed through Square"), and payouts move them to the bank with
-     the fees, as Shopify's do (SPC15). Cash and other tenders (including
-     a card on another terminal, such as EFTPOS) go where an admin maps
-     them, as WooCommerce's payment methods (Amaka maps cash to "Square
-     Cash Clearing" and other payments to "Square Other Payments
-     Clearing"); orders wait until the method is mapped. Line amounts come
-     from each line's `total_money` (after discounts), less
-     `total_tax_money` when the order's taxes are added on, because
-     `gross_sales_money` includes inclusive tax in some countries and not
-     others. Lines use the item whose code is the variation's SKU (from the
-     catalog), customers are matched by email, guest orders go to the
-     guest contact. Refunds come from the order's payments' completed
-     refunds; an itemised refund's lines are on its return order (one
-     return order's refunds are one credit note), and a refund of an
-     amount only is refused. Payout entries: CHARGE and REFUND as
-     Shopify's; FEE, PROCESSING_FEE and DEPOSIT_FEE to the fees account;
-     any other type (disputes, reserves, transfers...) refuses the payout
-     for you to record by hand; only PAID payouts are posted. Refused
-     rather than guessed: tips, service charges, cash rounding, exchanges,
-     split payments between card and cash, gift cards, items sold by
-     measure, orders with both inclusive and added-on taxes. Fees carry no
-     GST, as for Shopify; an account in Australia (where Square's fees
-     include GST) would need that checked.
-669. **Square's webhooks, and no revenue twice** (20 October 2026). Tohyee
-     subscribes to order.created, order.updated, payment.created,
-     payment.updated, refund.created and refund.updated; Square's answer
-     has the subscription's signature key, which is kept encrypted with
-     the address it was given. A delivery is taken only when
-     `x-square-hmacsha256-signature` is the base64 HMAC-SHA256, with that
-     key, of that address followed by the raw body, and its merchant is
-     the connected account; its `event_id` stops it being handled twice.
-     Each event only says which order changed: the order is read again
-     from Square (a return order brings in the order it returns from), and
-     the catch-up sync also reads refunds changed since the last sync,
-     since a refund may not change its sale order. Revenue is never posted
-     twice: each platform order is remembered by platform, account and ID
-     (as before), and a Square order whose source is another platform
-     connected in the same organisation (e.g. WooCommerce, when a store's
-     orders are paid through Square) is skipped and logged, since that
-     platform brings it in. Square's source name for such orders is our
-     assumption and hasn't been seen on a real account. What Tohyee can't
-     tell: a sale already invoiced in Tohyee (from a CRM opportunity, say)
-     and then rung up again at Square's point of sale is a second order;
-     the help says to record such a payment against the invoice instead.
+667. **Square left out** (20 October 2026). Square was built as the next
+     sales connector under the delegated answer in #360 item 18, then left
+     out on Jess's decision of 20 October 2026 ("Leave Square out"):
+     Square doesn't take card payments in New Zealand (its developer docs
+     list Australia, Canada, France, Ireland, Japan, Spain, the UK and the
+     US). None of it was merged. Decisions 668 and 669 are unused.

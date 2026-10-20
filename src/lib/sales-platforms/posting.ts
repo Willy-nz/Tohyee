@@ -24,7 +24,7 @@ import {
   planPayout,
   planRefund,
 } from "@/lib/sales-platforms/orders";
-import { PLATFORM_FEATURES, SALES_PLATFORM_LABELS, type SalesPlatform, type SyncResult } from "@/lib/sales-platforms/types";
+import { SALES_PLATFORM_LABELS, type SalesPlatform, type SyncResult } from "@/lib/sales-platforms/types";
 import { isOverseas } from "@/lib/tax/exports";
 
 /**
@@ -52,7 +52,7 @@ export type Posting = PostingRules & {
   clearingAccountCode: string | null;
   payoutAccountCode: string | null;
   feesAccountCode: string | null;
-  /** WooCommerce (WC2-WC8) and Square (SQ5): where each payment method's money goes; null when the platform uses the clearing account. */
+  /** WooCommerce (WC2-WC8): where each payment method's money goes; null when the platform uses the clearing account. */
   paymentMethods: Map<string, { accountCode: string | null; leftOwing: boolean }> | null;
   /** Where disputed amounts go, and the bank account Shopify's reserve sits in (SPC25-SPC31); null until chosen. */
   chargebacksAccountCode: string | null;
@@ -111,9 +111,8 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     [connectionId],
   );
   const row = found.rows[0];
-  const features = row ? PLATFORM_FEATURES[row.platform] : null;
-  const usesPaymentMethods = features?.paymentMethods === true;
-  if (!row || !features || !row.post_to_accounts || !row.start_date || (features.payouts && !row.clearing_account_id)) return null;
+  const usesPaymentMethods = row?.platform === "woocommerce";
+  if (!row || !row.post_to_accounts || !row.start_date || (!usesPaymentMethods && !row.clearing_account_id)) return null;
   const methods = usesPaymentMethods
     ? await tx.query<{ method: string; code: string | null; left_owing: boolean }>(
         `select m.method, a.code, m.left_owing from sales_platform_payment_methods m left join accounts a on a.id = m.account_id where m.connection_id = $1`,
@@ -279,8 +278,8 @@ const platformLabel = (posting: Posting) => SALES_PLATFORM_LABELS[posting.platfo
 /** The items linked to the order's variants (SPC17). */
 async function linkedItems(tx: OrgTx, posting: Posting, variantIds: string[]): Promise<Map<string, LinkedItem>> {
   if (variantIds.length === 0) return new Map();
-  if (!PLATFORM_FEATURES[posting.platform].syncsRecords) {
-    // WooCommerce and Square lines carry their SKU in place of a variant: the active item with that code (Jess, 5 Oct 2026; SQ4).
+  if (posting.platform === "woocommerce") {
+    // WooCommerce lines carry their SKU in place of a variant: the active item with that code (Jess, 5 Oct 2026).
     const found = await tx.query<{ code: string; id: string; item_type: string; income_code: string | null }>(
       `select i.code, i.id, i.item_type, a.code as income_code from items i left join accounts a on a.id = i.income_account_id
         where i.is_active and lower(i.code) = any($1::text[])`,
@@ -331,10 +330,6 @@ async function paymentTarget(tx: OrgTx, posting: Posting, order: PlatformOrder):
   if (!posting.paymentMethods) return { ok: true, accountCode: posting.clearingAccountCode, leftOwing: false };
   const method = order.paymentMethod;
   if (!method) return { ok: false, message: `${order.name} has no payment method, so Tohyee can't tell where its money went.` };
-  // Square's card payments: into the Square balance (the clearing account), paid out with the fees (SQ2).
-  if (method.clearing) {
-    return posting.clearingAccountCode ? { ok: true, accountCode: posting.clearingAccountCode, leftOwing: false } : { ok: false, message: `Choose a clearing account in the ${platformLabel(posting)} settings.` };
-  }
   await tx.query(
     `insert into sales_platform_payment_methods (connection_id, method, title) values ($1, $2, $3)
      on conflict (connection_id, method) do update set title = coalesce(excluded.title, sales_platform_payment_methods.title)
@@ -346,22 +341,6 @@ async function paymentTarget(tx: OrgTx, posting: Posting, order: PlatformOrder):
     return { ok: false, message: `Choose where ${method.id}${method.title ? ` (${method.title})` : ""} payments go in the ${platformLabel(posting)} settings.` };
   }
   return { ok: true, accountCode: mapped.accountCode, leftOwing: mapped.leftOwing };
-}
-
-/**
- * The other connected platform an order came from, by its source name
- * (Square's `source.name`, e.g. "WooCommerce"), or null. Only a platform
- * connected (and not disconnected) in this organisation counts.
- */
-async function postedElsewhere(tx: OrgTx, posting: Posting, order: PlatformOrder): Promise<string | null> {
-  const source = order.sourceName?.toLowerCase() ?? "";
-  if (!source) return null;
-  for (const [platform, name] of Object.entries(SALES_PLATFORM_LABELS) as Array<[SalesPlatform, string]>) {
-    if (platform === posting.platform || !source.includes(name.toLowerCase())) continue;
-    const connected = await tx.query("select 1 from sales_platform_connections where platform = $1 and status <> 'disconnected' limit 1", [platform]);
-    if (connected.rowCount) return name;
-  }
-  return null;
 }
 
 /** WooCommerce statuses of an order that's been placed and is waiting to be paid by bank transfer or similar (WC4). */
@@ -402,19 +381,6 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
   };
 
   if (!doc || doc.sales_order_id === null) {
-    // An order another connected platform sends to Square (e.g. a WooCommerce order paid through Square) is posted
-    // from that platform, so its revenue isn't in the books twice (SQ9).
-    const elsewhere = await postedElsewhere(tx, posting, order);
-    if (elsewhere) {
-      await settle();
-      await log(tx, context, {
-        action: "skipped",
-        recordKind: kind,
-        externalId: id,
-        message: `${order.name} came from ${elsewhere}, which is connected too; it's brought in from there, so it isn't posted twice.`,
-      });
-      return;
-    }
     if (Date.parse(order.processedAt) < Date.parse(posting.startInstant)) {
       await settle();
       await log(tx, context, {
@@ -773,7 +739,7 @@ export type PayoutOutcome = "posted" | "done" | "waiting" | "refused" | "failed"
  */
 export async function postPayout(tx: OrgTx, context: PostingContext, payout: PlatformPayout): Promise<PayoutOutcome> {
   const given = context.posting;
-  // Only Shopify and Square pay out, through the clearing account.
+  // Only Shopify pays out, through its clearing account.
   if (!given.clearingAccountId || !given.clearingAccountCode || !given.payoutAccountCode || !given.feesAccountCode) return "done";
   const posting = {
     ...given,
@@ -790,7 +756,7 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
     return "done";
   }
   if (payout.status !== "PAID") return "waiting";
-  const plan = planPayout(payout, posting.baseCurrency, platformLabel(posting));
+  const plan = planPayout(payout, posting.baseCurrency);
   if (!plan.ok) {
     await refused(tx, context, "payout", id, plan.reason);
     return "refused";

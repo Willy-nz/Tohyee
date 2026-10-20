@@ -3,8 +3,8 @@ import type { SalesPlatform } from "@/lib/sales-platforms/types";
 
 /**
  * The connector framework (examples SPC1-SPC23): what Tohyee needs from each
- * sales platform: Shopify, WooCommerce and Square so far; Stripe sales would
- * be another connector. Connectors only talk to the platform; the
+ * sales platform. Shopify is the first; WooCommerce, Square and Stripe would
+ * each be another connector. Connectors only talk to the platform; the
  * service decides what happens in Tohyee, and network calls never happen
  * inside a database transaction.
  */
@@ -41,12 +41,6 @@ export type StoreInfo = {
   pricesIncludeTax: boolean;
   /** The access scopes the store gave the app. */
   scopes: string[];
-  /**
-   * The store's own ID when it isn't the address typed in (Square: the
-   * seller's merchant ID, lower case). Kept as the connection's store, so
-   * the same account can't be connected twice.
-   */
-  storeId?: string;
 };
 
 export type AccessToken = { token: string; expiresAt: string | null };
@@ -144,15 +138,8 @@ export type PlatformOrder = {
   /** The total before returns, with taxes and discounts (Shopify's totalPriceSet). */
   total: string;
   customer: PlatformCustomer | null;
-  /**
-   * WooCommerce: the payment method the customer chose (WC2-WC8). Square:
-   * the tender type (cash, other...), or `clearing` for card payments, which
-   * Square pays out (SQ2, SQ5). Null for Shopify, whose money goes through
-   * the clearing account.
-   */
-  paymentMethod?: { id: string; title: string | null; clearing?: boolean } | null;
-  /** The app or channel the order came from (Square's source name), to skip orders another connected platform posts (SQ9). */
-  sourceName?: string | null;
+  /** WooCommerce: the payment method the customer chose (WC2-WC8); null for Shopify, whose money goes through the clearing account. */
+  paymentMethod?: { id: string; title: string | null } | null;
   billingCountry: string | null;
   lines: PlatformOrderLine[];
   shipping: PlatformShippingLine[];
@@ -210,9 +197,6 @@ export type WebhookRecords =
   /** An order changed or was refunded: the order is fetched again from the platform. */
   | { kind: "order"; orderId: string };
 
-/** The webhooks a platform was asked to send: their IDs, and the key it signs them with when it chose one (Square, SQ8). */
-export type WebhookSetup = { ids: string[]; signingKey?: string };
-
 export type ConnectInput = {
   storeDomain: string;
   authMethod: string;
@@ -221,10 +205,8 @@ export type ConnectInput = {
 
 export interface SalesPlatformConnector {
   readonly platform: SalesPlatform;
-  /** Whether the platform pays out itself (Shopify Payments, Square); WooCommerce doesn't (WC6). */
+  /** Whether the platform pays out itself (Shopify Payments); WooCommerce doesn't (WC6). */
   readonly hasPayouts: boolean;
-  /** The scopes payouts need (Shopify's payout scopes when not given); none for Square, whose token reads everything. */
-  readonly payoutScopes?: readonly string[];
   /** Whether orders' money goes where their payment method is mapped (WooCommerce) rather than to the clearing account. */
   readonly usesPaymentMethods: boolean;
   /** Whether it can sync customers and products (Shopify's stage 1); WooCommerce matches by email and SKU instead. */
@@ -246,23 +228,15 @@ export interface SalesPlatformConnector {
   /** Payouts issued since `issuedFrom` with their balance transactions (SPC15). Network. */
   fetchPayouts(context: ConnectorContext, token: AccessToken, request: PayoutsRequest): Promise<PayoutsResult>;
   /** Subscribes the platform's webhooks to `callbackUrl` (order topics too when `orders`); returns their IDs. Network. */
-  registerWebhooks(context: ConnectorContext, token: AccessToken, callbackUrl: string, options?: { orders?: boolean }): Promise<WebhookSetup>;
+  registerWebhooks(context: ConnectorContext, token: AccessToken, callbackUrl: string, options?: { orders?: boolean }): Promise<string[]>;
   removeWebhooks(context: ConnectorContext, token: AccessToken, ids: readonly string[]): Promise<void>;
   /** The secret the platform signs webhooks with. */
   webhookSecret(credentials: Record<string, string>): string;
   /**
    * Checks a webhook delivery's signature against the raw body before
    * anything else. Null when it fails or isn't for this store.
-   * `webhookUrl` is the address the webhooks were set up with (Square signs
-   * it with the body).
    */
-  checkWebhook(
-    headers: Headers,
-    rawBody: Buffer,
-    secret: string,
-    storeDomain: string,
-    options?: { webhookUrl?: string | null },
-  ): { deliveryId: string; topic: string } | null;
+  checkWebhook(headers: Headers, rawBody: Buffer, secret: string, storeDomain: string): { deliveryId: string; topic: string } | null;
   /** The records in a verified delivery, or null for a topic Tohyee doesn't handle. */
   webhookRecords(topic: string, body: unknown): WebhookRecords | null;
 }

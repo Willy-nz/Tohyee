@@ -9,7 +9,7 @@ export default function SalesPlatformsSettingsPage() {
     <Page>
       <PageHeader
         title="Sales platforms"
-        description="Bring orders from Shopify, WooCommerce or Square into Tohyee, by a sync every 15 minutes and as they change. Admins connect stores; everyone can read the sync log."
+        description="Bring a Shopify store's customers and products into Tohyee, by a sync every 15 minutes and as they change. Admins connect stores; everyone can read the sync log."
       />
       <RequireOrganisation>{(organisationId) => <SalesPlatformsManager key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
