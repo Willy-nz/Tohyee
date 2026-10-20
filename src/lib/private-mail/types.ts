@@ -27,6 +27,8 @@ export type CopyState = {
   attachments: number;
   /** Attachments whose files weren't kept (too big, or linked Outlook items). */
   attachmentsNotKept: number;
+  /** Emails deleted in Gmail or Outlook since they were copied: kept here, marked (decision 616). */
+  deletedAtSource: number;
 };
 
 export type MyMailbox = {
@@ -59,6 +61,8 @@ export type MailHit = {
   subject: string | null;
   snippet: string;
   attachmentCount: number;
+  /** Deleted (or in the bin) in Gmail or Outlook; the copy keeps it. */
+  deletedInMailbox: boolean;
 };
 
 export type MailAttachmentInfo = { id: string; name: string; contentType: string; size: number; inline: boolean; kept: boolean; notKept: "too_big" | "linked" | null };
@@ -74,6 +78,7 @@ export type MailMessage = {
   text: string;
   webLink: string | null;
   attachments: MailAttachmentInfo[];
+  deletedInMailbox: boolean;
 };
 
 export type MailThread = { copyId: string; mailbox: string; messages: MailMessage[] };
@@ -89,7 +94,7 @@ export function copyExclusions(provider: MailProvider): string[] {
     "In a folder with more than 10,000 emails in the read-back window, all but the newest 10,000.",
     "The files of attachments over 20 MB (their name and size are kept) and of linked Outlook items.",
     "Pictures and formatting: each email is kept as its text.",
-    "Email the mailbox no longer has, or never let Tohyee read: nothing is claimed beyond what was copied.",
+    "Email the mailbox never let Tohyee read: nothing is claimed beyond what was copied. Email deleted in the mailbox after it was copied stays in your copy, marked as deleted there.",
   ];
 }
 

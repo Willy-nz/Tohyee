@@ -40,7 +40,7 @@ export function privateMailTools(identity: Pick<AiTokenIdentity, "tokenId" | "ac
         const owner = await mailOwnerForKey(tx, identity);
         const found = await searchMyMail(tx, owner, { query: args.query, limit: args.limit, before: args.before });
         return {
-          emails: found.hits.map((hit) => ({ messageId: hit.id, sentAt: hit.sentAt, from: who(hit.from), subject: hit.subject, snippet: hit.snippet, attachments: hit.attachmentCount, cite: cite(hit) })),
+          emails: found.hits.map((hit) => ({ messageId: hit.id, sentAt: hit.sentAt, from: who(hit.from), subject: hit.subject, snippet: hit.snippet, attachments: hit.attachmentCount, deletedInMailbox: hit.deletedInMailbox, cite: cite(hit) })),
           more: found.more,
         };
       },
@@ -67,6 +67,7 @@ export function privateMailTools(identity: Pick<AiTokenIdentity, "tokenId" | "ac
             text: message.text.length > MAX_TEXT ? `${message.text.slice(0, MAX_TEXT)}… (cut short)` : message.text,
             attachments: message.attachments.map((file) => ({ name: file.name, size: file.size, kept: file.kept })),
             link: message.webLink,
+            deletedInMailbox: message.deletedInMailbox,
             cite: cite(message),
           })),
         };

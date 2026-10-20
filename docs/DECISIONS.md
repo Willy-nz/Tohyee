@@ -5913,16 +5913,23 @@ testing) and #154's code signing (later, Jess).
      to 300 emails and 200 MB of attachments not copied yet, each committed
      on its own (so an interrupted first copy carries on where it stopped,
      and an email is never copied twice), then drops emails that left the
-     ticked folders and takes copies of emails moved in, as decision 585
-     does for the farm calendar. Unticking a folder deletes at once what
-     was copied only from it. Syncs run every 15 minutes after the farm
+     ticked folders to another folder and copies emails moved in, as
+     decision 585 does for the farm calendar; an email deleted in the
+     mailbox is kept (decision 616). Unticking a folder deletes at once
+     what was copied only from it. Syncs run every 15 minutes after the farm
      calendar's checks (TOHYEE_FARM_MAIL_SCHEDULER=off stops both), and on
      Sync now. Three failed syncs in a row stop it until it's switched
      off and on or the mailbox is connected again. My mail shows progress ("1,234 of 5,000 emails
      copied"), the dates copied, the read-back date, the last sync and the
      last error. PM3, PM6.
-615. **What isn't copied, shown on My mail** (20 October 2026). Folders not
-     ticked; Gmail's Sent, Drafts, Spam and Trash unless ticked (they're
+615. **What isn't copied, shown on My mail** (20 October 2026; drafts,
+     junk and trash by Codex, delegated by owner, 20 October 2026, #360
+     item 8: "exclude drafts, junk/spam and trash by default, show
+     exclusions clearly and allow explicit opt-in"; #360's "import sent and
+     archived mail by default" gives way to Jess's own #340: only ticked
+     folders are read). Folders not ticked; Gmail's Sent, Drafts, Spam and
+     Trash unless ticked (a draft or binned email carrying a ticked label
+     isn't copied either, unless Drafts or Trash is ticked) (they're
      offered on My mail only, marked "for your private copy only", and the
      farm calendar never reads them, even when ticked; Outlook's are
      ordinary folders, as they already were for the farm calendar); Gmail
@@ -5931,16 +5938,29 @@ testing) and #154's code signing (later, Jess).
      attachment files over 20 MB and linked Outlook items (their name and
      size are kept); pictures and formatting. Nothing is claimed beyond
      what was copied. PM2, PM4, PM5.
-616. **Off, disconnect and delete are three things** (20 October 2026).
-     Switching the copy off stops copying and keeps it. Disconnecting
-     deletes the tokens and folder choice (and the farm calendar's items,
-     as FC15) and keeps the copy, not copying; connecting the same mailbox
-     again carries on the same copy. Delete my copy deletes every email,
-     attachment and search token at once, leaving the connection. Backups
-     made before keep the copy (encrypted) until they age out: the newest
-     of each of 14 days and the first of each of 12 months, so about 12
-     months. PM12, PM13.
-617. **Nothing about the mail leaves the copy** (20 October 2026). The audit
+616. **Off, disconnect and delete are three things; the copy is an
+     archive** (20 October 2026; Codex, delegated by owner, 20 October
+     2026, #360 item 9). Switching the copy off stops copying and keeps
+     it. Disconnecting stops syncing (it deletes the tokens and folder
+     choice, and the farm calendar's items as FC15) and keeps the imported
+     history, not copying; connecting the same mailbox again carries on the
+     same history. **Delete imported history** is the separate, explicit
+     step: every email, attachment and search token goes at once, leaving
+     the connection. Backups made before keep it (encrypted) until they age
+     out: the newest of each of 14 days and the first of each of 12 months,
+     so about 12 months; My mail says so rather than promising it's gone
+     from every backup. An email deleted in Gmail or Outlook (gone, or in
+     Gmail's Trash or Outlook's Deleted Items) is kept and shown "deleted in
+     the mailbox", as #360 asks, and explained on My mail beside Connect; one
+     moved to a folder that isn't ticked is removed, and unticking a folder
+     still deletes what came from it, as Jess's #340 says. Telling the two
+     apart takes one read of the email's ids (at most 300 a sync). Nothing
+     is ever changed in the mailbox. PM6, PM12, PM13.
+617. **Nothing about the mail leaves the copy** (20 October 2026; the
+     store choice matches Codex, delegated by owner, 20 October 2026, #360
+     item 10: an owner-specific private store and index in the existing
+     PostgreSQL, no bodies or summaries in shared analytics, no extra SQL
+     server, no claim of protection from a hostile host operator). The audit
      trail records only that a copy was started, stopped or deleted, with
      no details; the farm calendar's events stay as they were (counts of
      folders, no names). A failed sync logs only the organisation. Nothing

@@ -109,11 +109,17 @@ a recovery design first; it isn't built.
 ## Disconnecting, deleting and backups
 
 - **Keep a private copy** off: copying stops; what was copied stays.
-- **Disconnect**: the mailbox's tokens and folder choice are deleted (and
-  what the farm calendar read from it). The copy stays, not copying, until
-  deleted. Connecting the same mailbox again carries on the same copy.
-- **Delete my copy**: every copied email, attachment and search digest is
-  deleted at once. PostgreSQL reclaims the space in time (vacuum).
+- **Disconnect**: syncing stops; the mailbox's tokens and folder choice are
+  deleted (and what the farm calendar read from it). The imported history
+  stays, not copying, until deleted. Connecting the same mailbox again
+  carries on the same history.
+- **Deleted in Gmail or Outlook**: the copy is an archive, so an email
+  deleted in the mailbox (or put in its Trash or Deleted Items) stays,
+  marked "deleted in the mailbox". An email moved to a folder that isn't
+  ticked, or in a folder that's unticked, is removed from the copy.
+- **Delete imported history**: every copied email, attachment and search
+  digest is deleted at once. PostgreSQL reclaims the space in time
+  (vacuum).
 - **Backups**: an organisation backup made before the deletion still holds
   the copy (encrypted as above, and its key encrypted with the server's
   key, so the backup and `TOHYEE_SECRET_KEY` together can read it). Backups

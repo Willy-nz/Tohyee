@@ -5,7 +5,7 @@ import { listAllOrganisations } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { isActiveOwner } from "@/lib/private-mail/access";
 import { copyKeys, type CopyKeys, emailTokens, seal, sealJson, threadKey } from "@/lib/private-mail/crypto";
-import { fetchPrivateAttachment, fetchPrivateMail, listPrivateFolders, MAX_ATTACHMENT_BYTES, type PrivateMail, decodeBase64Url } from "@/lib/private-mail/providers";
+import { decodeBase64Url, deletedItemsFolderId, fetchPrivateAttachment, fetchPrivateMail, listPrivateFolders, MAX_ATTACHMENT_BYTES, type PrivateMail, privateMailWhereabouts } from "@/lib/private-mail/providers";
 import type { AttachmentMeta, Envelope } from "@/lib/private-mail/store";
 import { secretsAvailable } from "@/lib/secrets";
 
@@ -15,8 +15,9 @@ import { secretsAvailable } from "@/lib/secrets";
  * date (newest first, at most 10,000 per folder), copies the ones not yet
  * copied (at most 300 emails and 200 MB of attachments a sync, newest
  * first, each committed as it's copied, so an interrupted first copy
- * carries on where it stopped and never copies an email twice), and drops
- * emails that left the ticked folders (decision 585's rules). It runs every
+ * carries on where it stopped and never copies an email twice), drops
+ * emails moved out of the ticked folders (decision 585's rules), and keeps
+ * emails deleted in the mailbox, marked so (decision 616). It runs every
  * 15 minutes with the farm calendar's checks, and on "Sync now". Only
  * while the copy's owner is an Owner with an active login (PM8): otherwise
  * it's left alone, unread and uncopied. The server log never names the
@@ -33,7 +34,7 @@ type CopyRow = { id: string; owner_user_id: string; account_id: string | null; c
 
 const syncing = new Set<string>();
 
-export type SyncResult = { copied: number; removed: number; skipped?: "not_copying" | "suspended" | "no_folders" | "busy" };
+export type SyncResult = { copied: number; removed: number; deletedInMailbox?: number; skipped?: "not_copying" | "suspended" | "no_folders" | "busy" };
 
 async function loadCopy(organisation: OrganisationRecord, copyId: string): Promise<CopyRow | null> {
   return withOrganisationTransaction(organisation, PRIVATE_MAIL_ACTOR, async (tx) => {
@@ -139,16 +140,22 @@ export async function syncPrivateCopy(organisation: OrganisationRecord, copyId: 
   }
 }
 
+/** Emails left behind that are checked in one sync, to tell "deleted in the mailbox" from "moved out" (decision 616). */
+export const MAX_WHEREABOUTS_PER_SYNC = 300;
+
 async function copyNow(organisation: OrganisationRecord, copy: CopyRow, now: Date): Promise<SyncResult> {
   const { access, token } = await mailboxAccessToken(organisation, copy.account_id!, now);
   // The connection is the owner's own; anything else is never read.
   if (access.userId !== copy.owner_user_id) return { copied: 0, removed: 0, skipped: "not_copying" };
   if (!access.folders.length) return { copied: 0, removed: 0, skipped: "no_folders" };
   const keys = copyKeys(copy.id, copy.data_key_ciphertext);
-  const labels: MailFolder[] | null = access.provider === "google" ? await listPrivateFolders(access.provider, token) : null;
+  const google = access.provider === "google";
+  // Drafts, Spam and Trash only when ticked (decision 615): a draft carrying a ticked label isn't copied otherwise.
+  const draftsTicked = google && access.folders.some((folder) => folder.externalId === "DRAFT");
+  const labels: MailFolder[] | null = google ? await listPrivateFolders(access.provider, token) : null;
   const listings: Array<{ folderId: string; listing: FolderListing }> = [];
   for (const folder of access.folders) {
-    const spamTrash = access.provider === "google" && (folder.externalId === "SPAM" || folder.externalId === "TRASH");
+    const spamTrash = google && (folder.externalId === "SPAM" || folder.externalId === "TRASH");
     const listing = await listFolderMailIds(
       access.provider,
       token,
@@ -156,7 +163,7 @@ async function copyNow(organisation: OrganisationRecord, copy: CopyRow, now: Dat
       new Date(access.historyFrom),
       MAX_PRIVATE_IDS_PER_FOLDER,
       labels,
-      { includeSpamTrash: spamTrash, graphPageSize: 500 },
+      { includeSpamTrash: spamTrash, graphPageSize: 500, gmailExclude: google && !draftsTicked ? "-in:drafts" : undefined },
     );
     listings.push({ folderId: folder.id, listing });
   }
@@ -175,6 +182,7 @@ async function copyNow(organisation: OrganisationRecord, copy: CopyRow, now: Dat
     if (fetched >= MAX_COPY_PER_SYNC || bytes >= MAX_ATTACHMENT_BYTES_PER_SYNC) break;
     fetched += 1;
     const mail = await fetchPrivateMail(access.provider, token, id, access.email);
+    if (mail.draft && !draftsTicked) continue;
     const files = new Map<string, Buffer>();
     for (const attachment of mail.attachments) {
       if (attachment.notKept) continue;
@@ -189,16 +197,50 @@ async function copyNow(organisation: OrganisationRecord, copy: CopyRow, now: Dat
     }
     if (await storeMail(organisation, copy, keys, mail, [...(inFolders.get(id) ?? [])], files)) copied += 1;
   }
-  return withOrganisationTransaction(organisation, PRIVATE_MAIL_ACTOR, async (tx) => finishSync(tx, copy, listings, inFolders, stored, now, copied));
+  /*
+   * Emails copied before and not in the ticked folders now (PM6). When a
+   * folder had more than could be listed, only emails newer than the
+   * oldest listed one copied (less a day) can be known to have left.
+   */
+  let leftAfter: string | null = null;
+  let leftNone = false;
+  for (const { listing } of listings) {
+    if (listing.complete) continue;
+    const dates = listing.ids.map((id) => stored.get(id)).filter((date): date is string => Boolean(date));
+    if (!dates.length) {
+      leftNone = true;
+      continue;
+    }
+    const oldest = new Date(new Date(dates.reduce((a, b) => (a < b ? a : b))).getTime() + 86_400_000).toISOString();
+    if (leftAfter === null || oldest > leftAfter) leftAfter = oldest;
+  }
+  const left = leftNone
+    ? []
+    : await withOrganisationTransaction(organisation, PRIVATE_MAIL_ACTOR, async (tx) =>
+        (
+          await tx.query<{ external_id: string }>(
+            `select external_id from private_mail_messages
+              where copy_id = $1 and source_deleted_at is null and not (external_id = any($2::text[])) and ($3::timestamptz is null or sent_at > $3::timestamptz)
+              order by sent_at desc limit $4`,
+            [copy.id, listed, leftAfter, MAX_WHEREABOUTS_PER_SYNC],
+          )
+        ).rows.map((row) => row.external_id),
+      );
+  // Deleted in the mailbox (or in its bin): kept, marked. Moved to a folder that isn't ticked: removed.
+  const deletedItems = left.length ? await deletedItemsFolderId(access.provider, token) : null;
+  const whereabouts = new Map<string, "deleted" | "elsewhere">();
+  for (const id of left) whereabouts.set(id, await privateMailWhereabouts(access.provider, token, id, deletedItems));
+  return withOrganisationTransaction(organisation, PRIVATE_MAIL_ACTOR, async (tx) => finishSync(tx, copy, listings, inFolders, stored, whereabouts, now, copied));
 }
 
-/** PM6, PM7: folder moves and deletions, as the farm calendar does them (decision 585), and what the sync found. */
+/** PM6, PM7: what the sync found about folders, emails moved out and emails deleted in the mailbox (decisions 585, 616). */
 async function finishSync(
   tx: OrgTx,
   copy: CopyRow,
   listings: Array<{ folderId: string; listing: FolderListing }>,
   inFolders: Map<string, Set<string>>,
   stored: Map<string, string>,
+  whereabouts: Map<string, "deleted" | "elsewhere">,
   now: Date,
   copied: number,
 ): Promise<SyncResult> {
@@ -209,40 +251,27 @@ async function finishSync(
     if (current.has(folderId)) await tx.query("update farm_mail_folders set missing = $2 where id = $1", [folderId, listing.missing]);
   }
   const listed = [...inFolders.keys()];
-  // When a folder had more than could be listed, only emails newer than the
-  // oldest listed one copied (less a day) can be known to have left.
-  let dropAfter: string | null = null;
-  let dropNone = false;
-  for (const { listing } of listings) {
-    if (listing.complete) continue;
-    const dates = listing.ids.map((id) => stored.get(id)).filter((date): date is string => Boolean(date));
-    if (!dates.length) {
-      dropNone = true;
-      continue;
-    }
-    const oldest = new Date(new Date(dates.reduce((a, b) => (a < b ? a : b))).getTime() + 86_400_000).toISOString();
-    if (dropAfter === null || oldest > dropAfter) dropAfter = oldest;
-  }
-  let removed = 0;
-  if (!dropNone) {
-    const gone = await tx.query(
-      `delete from private_mail_messages
-        where copy_id = $1 and not (external_id = any($2::text[])) and ($3::timestamptz is null or sent_at > $3::timestamptz)`,
-      [copy.id, listed, dropAfter],
-    );
-    removed = gone.rowCount ?? 0;
+  const moved = [...whereabouts].filter(([, where]) => where === "elsewhere").map(([id]) => id);
+  const deleted = [...whereabouts].filter(([, where]) => where === "deleted").map(([id]) => id);
+  const gone = moved.length ? await tx.query("delete from private_mail_messages where copy_id = $1 and external_id = any($2::text[])", [copy.id, moved]) : { rowCount: 0 };
+  if (deleted.length) {
+    await tx.query("update private_mail_messages set source_deleted_at = $3 where copy_id = $1 and external_id = any($2::text[]) and source_deleted_at is null", [copy.id, deleted, now.toISOString()]);
   }
   for (const id of listed) {
     if (!stored.has(id)) continue;
     const folders = [...(inFolders.get(id) ?? [])].filter((folder) => current.has(folder));
-    await tx.query("update private_mail_messages set folder_ids = $3::bigint[] where copy_id = $1 and external_id = $2 and folder_ids <> $3::bigint[]", [copy.id, id, folders]);
+    // Back in a ticked folder (taken out of the bin, say): not deleted any more.
+    await tx.query(
+      "update private_mail_messages set folder_ids = $3::bigint[], source_deleted_at = null where copy_id = $1 and external_id = $2 and (folder_ids <> $3::bigint[] or source_deleted_at is not null)",
+      [copy.id, id, folders],
+    );
   }
   await tx.query(
     `update private_mail_copies set listed_count = $2, listing_capped = $3, last_sync_at = $4, last_success_at = $4, last_error = null, failures = 0, updated_at = now()
       where id = $1`,
     [copy.id, listed.length, listings.some(({ listing }) => !listing.complete), now.toISOString()],
   );
-  return { copied, removed };
+  return { copied, removed: gone.rowCount ?? 0, ...(deleted.length ? { deletedInMailbox: deleted.length } : {}) };
 }
 
 let running = false;

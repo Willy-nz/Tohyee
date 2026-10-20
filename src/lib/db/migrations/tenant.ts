@@ -16712,6 +16712,9 @@ create table private_mail_messages (
   size_bytes integer not null default 0,
   attachment_count integer not null default 0,
   search_tokens text[] not null default '{}',
+  -- Deleted (or put in the bin) in Gmail or Outlook: the copy keeps it, marked so
+  -- (decision 616, Codex, delegated by owner, 20 October 2026).
+  source_deleted_at timestamptz,
   created_at timestamptz not null default now(),
   unique (copy_id, external_id)
 );
