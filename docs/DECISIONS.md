@@ -5994,6 +5994,142 @@ testing) and #154's code signing (later, Jess).
      can't stop an AI service outside Tohyee from keeping what it was told:
      that's between the Owner and their AI provider, and My mail says the
      key is for the Owner's own AI only.
+630. **A co-op share register for farms** (20 October 2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026 (issue
+       #360, item 15). Examples CSR1-CSR10 aren't reviewed yet.
+     - **What it is:** Farm > Co-op shares. One holding per co-op and share
+       class (case doesn't matter), each with its movements and its
+       dividends, rebates and retentions as the co-op's statements show
+       them. Tables `coop_shareholdings`, `coop_share_movements` and
+       `coop_share_distributions` (tenant migration 0172). It's factual:
+       Tohyee adds up what was entered; it doesn't value shares, post to
+       the ledger or work out what a co-op requires. Farming must be on.
+       Viewers read; bookkeepers and up change it.
+     - **Mistakes:** entries are removed, never deleted or edited, and the
+       history keeps them. A holding can be removed only once it has no
+       entries.
+631. **Share movements, opening and closing** (20 October 2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Kinds:** brought forward, bought or issued for payment, issued
+       without payment (bonus shares, shares for a rebate or retention),
+       sold/surrendered/redeemed, and adjustment. Quantities and values are
+       entered as positive numbers; a sale is stored negative. An
+       adjustment takes signed numbers.
+     - **Opening and closing:** opening is everything dated before the
+       financial year; closing is opening plus the year's movements. Values
+       are as entered (usually cost), to the cent; quantities to 4 places,
+       summed only within a holding.
+     - **Brought forward:** one per holding, dated on or before every other
+       movement, so a register can start from last year's accounts.
+     - **Never below nothing:** after every change the running quantity and
+       value, in date order over all movements, must stay at or above zero,
+       so a sale beyond the holding, or removing a purchase a later sale
+       relies on, is refused.
+632. **Dividends, rebates, retentions and source statements** (20 October
+     2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Apart:** dividends, rebates and retentions are separate kinds with
+       separate totals, and none of them changes the shares' value. Only
+       dividends carry imputation credits. A rebate paid in shares is a
+       rebate plus a separate "issued without payment" movement; the two
+       aren't linked, so Tohyee doesn't decide how a rebate splits between
+       cash, shares and retention.
+     - **Statements:** each movement and payment names its source: a
+       reference, a file on the holding (the existing record files, record
+       type `coop_shareholding`), or both. One of them is required. Only the
+       holding's own current files can be chosen.
+633. **The register in the year-end pack; what's left out** (20 October
+     2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **In the pack:** when farming is on and there's a holding, the
+       year-end pack has `Co-op shares.csv` (a shares table and a dividends,
+       rebates and retentions table, with totals) and a `Co-op share
+       statements` folder with the files the year's entries name, each
+       name starting with its file number. Removed files aren't included.
+     - **Not built:** ledger links and proposed postings (they need their
+       own worked examples and tests first, as #360 item 15 says); a
+       Fonterra share standard (minimum shares) calculator, deferred until
+       its effective-dated rules are verified; share valuation; and the tax
+       treatment of dividends, rebates and retentions.
+
+### Owner-delegated answers (issue #360, 20 October 2026; decisions 634-639)
+
+On 20 Oct 2026 Jess asked Codex to answer all the outstanding questions
+using its judgement, and approved posting the answers for Claude (issue
+#360). These are recorded with the attribution "Codex, delegated by owner,
+20 October 2026". They're product choices. They don't claim an accountant
+signed anything off, a provider was tested, access was bought or the law was
+verified. Jess's own explicit decisions win where they differ. Items
+recorded elsewhere or being built at the same time:
+- Item 7 (ITX6 and RAT1, from the 20 Oct comment on #292): being built.
+- Items 8-10 (private farm mail, #250): being built.
+- Items 11-13 (groups, #200): being built.
+- Item 15 (co-op shares, #327): decisions 630-633, in that PR.
+- Item 17 (CRM next, #216): being built.
+
+634. **Tax: what comes first** (20 October 2026, #292, #201; #360 items
+     1-6).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Order:** the organisation's own tax workspace first, then a
+       permission-aware overview across clients. A full practice manager
+       isn't a prerequisite (see 638). Finish and check IR4, IR3 and IR10
+       first, then trusts, then partnerships and LTCs, each sourced and
+       tested on its own. Company calculations are never run silently for
+       an entity they don't fit.
+     - **Inputs:** imports and reviewable forecasts first: CSV or Excel
+       through mapping and preview; PDFs kept as sources, with any figures
+       read from them needing review. A live IRD connection is a parallel
+       workstream needing IRD's approval, not a blocker.
+     - **Filing and payments:** prepare and export only. No automatic
+       filing, elections, payments or tax-pooling purchases.
+     - **Privacy:** a taxpayer's inputs are private by default and shared
+       with an accountant only by choice. Turning on Tax or group reporting
+       doesn't expose their mailbox or unrelated personal income.
+     - **Tax pooling:** comparisons stay provider-neutral, with dated quotes
+       typed in. No paid partner is chosen and no API is promised.
+     - **Already settled:** the extension-of-time choice (562). Rounding
+       (565) and the narrow sole-trader homekill GST case stay technical
+       checks.
+635. **Farm data providers** (20 October 2026, #249; #360 item 14).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - File imports stay the reliable baseline. For private connectors,
+       Pasture.io comes first, then LIC. No paid aggregator or new weather
+       service without a concrete need, documented terms and actual access.
+       Choosing a default can't stand in for a provider's access or a
+       farmer's consent.
+636. **Pigs and specialist livestock** (20 October 2026, #243; #360 item
+     16).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Pigs stay deferred (decision 508's list leaves them out). Finishing
+       the cattle and sheep workflows and reconciling them with real data
+       comes first. Unsupported transfers, bailments and valuation cases
+       stay refused until their rules and examples are verified. There's no
+       generic fallback valuation.
+637. **Which sales platform next** (20 October 2026, #196; #360 item 18).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Check and finish Shopify first, then WooCommerce's gaps. Square is
+       the next new sales connector. Accounting stays per order, and CRM,
+       order and invoice revenue is never counted twice. This is a
+       priority, not a claim of provider access.
+638. **Practice manager stays unbuilt** (20 October 2026; #360 item 19).
+     - **Who decided:** Jess. Her own instruction, "Dont do practice
+       manager" (parked since 3 Oct 2026, PR #91), stands over #360 item 19.
+       Item 19 outlined a first slice (client directory linked to
+       organisations, templated jobs, task owners and deadlines, document
+       requests, then WIP and time billing). That outline is kept in the
+       issue for the history only and isn't built.
+     - Tax's multi-client overview (634) doesn't depend on it.
+639. **Default dashboards** (20 October 2026; #360 item 20).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Owner:** cash, overdue receivables and payables, and work needing
+       attention.
+     - **Sales:** pipeline, conversion and next actions.
+     - **Farming:** today's work, missing or stale records, and a seasonal
+       cash view.
+     - The practice dashboard (jobs and deadlines) isn't built, since
+       practice manager isn't (638).
+     - Existing dashboards are reused, and drilling through to the records
+       comes before adding more tiles.
 
 ### Group workspace (decisions 640-647)
 
