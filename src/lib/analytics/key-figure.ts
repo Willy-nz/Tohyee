@@ -1,4 +1,5 @@
-import type { ChartFormat, KpiRule } from "@/lib/analytics/chart-format";
+import type { ChartFormat } from "@/lib/analytics/chart-format";
+import { ruleMatches } from "@/lib/analytics/conditional";
 import type { QueryResult, ResultColumn, TrendPoint } from "@/lib/analytics/query";
 import { abs, cmp, dec, divide, isZero, mul, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 
@@ -48,16 +49,6 @@ export function keyFigure(result: QueryResult, format?: ChartFormat): KeyFigure 
   return { column: first, value, comparison, change: toFixedString(change, Math.max(current.scale, previous.scale)), percent, direction, good, others };
 }
 
-/** Whether a rule matches, compared exactly in decimals (#376). */
-function matches(rule: KpiRule, value: string): boolean {
-  const order = cmp(dec(value), dec(rule.value));
-  if (rule.op === ">=") return order >= 0;
-  if (rule.op === ">") return order > 0;
-  if (rule.op === "<=") return order <= 0;
-  if (rule.op === "<") return order < 0;
-  return order === 0;
-}
-
 /**
  * The number's colour (#376): the first matching rule's, "good" or "bad"
  * by the comparison, a fixed colour, or null for the theme's text colour.
@@ -68,7 +59,7 @@ export function figureColour(figure: KeyFigure, format: ChartFormat | undefined)
   const kpi = format?.kpi;
   if (kpi?.colorBy === "rules") {
     if (figure.value === null) return null;
-    return kpi.rules?.find((rule) => matches(rule, figure.value!))?.color ?? null;
+    return kpi.rules?.find((rule) => ruleMatches(rule, figure.value!))?.color ?? null;
   }
   if (kpi?.colorBy === "change") return figure.good === null ? null : figure.good ? "good" : "bad";
   return kpi?.color ?? null;

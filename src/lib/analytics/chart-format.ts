@@ -233,6 +233,49 @@ export type ChartFormat = {
   donutTotal?: boolean;
   card?: CardFormat;
   kpi?: KpiFormat;
+  /** Table and pivot cells coloured by a scale, rules or a field (#376). */
+  conditional?: ConditionalFormat[];
+  /** A bar in the cell behind each value. */
+  dataBars?: Array<{ value: number; color?: string }>;
+  /** An icon by each value: high, middle or low third of the column. */
+  icons?: Array<{ value: number; set: IconSet }>;
+  /** Columns, bars and dots coloured by rules, e.g. red below a target. */
+  chartRules?: Array<KpiRule & { series?: number }>;
+  /** How a table or pivot looks. */
+  table?: TableStyle;
+};
+
+export type IconSet = "arrows" | "shapes";
+
+/** Colour a value's cells (by its position among the tile's values). */
+export type ConditionalFormat = {
+  value: number;
+  apply: "background" | "font";
+  by: "scale" | "rules" | "field";
+  /** A two- or three-colour scale from the column's lowest to highest. */
+  low?: string;
+  mid?: string;
+  high?: string;
+  rules?: KpiRule[];
+  /** A field holding colours: the group column, or a value by position. */
+  field?: "category" | number;
+};
+
+export type TableStyle = {
+  headerBackground?: string;
+  headerColor?: string;
+  banded?: boolean;
+  bandColor?: string;
+  gridlines?: "all" | "rows" | "none";
+  fontSize?: number;
+  /** The narrowest a column gets, in pixels. */
+  columnWidth?: number;
+  wrap?: boolean;
+  /** A totals row (tables) or the grand total (pivots; on unless turned off). */
+  totals?: boolean;
+  totalsStyle?: "bold" | "shaded";
+  /** Pivot subtotal levels to leave out (1 is the first row field). */
+  subtotalsOff?: number[];
 };
 
 const NUMBER_TEXT = /^-?\d{1,15}(\.\d{1,6})?$/;
@@ -459,6 +502,83 @@ function parseKpiRules(input: unknown): KpiRule[] | undefined {
   return rules.length ? rules : undefined;
 }
 
+function parseConditional(input: unknown): ConditionalFormat[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ValidationError("Conditional formats should be a list.");
+  if (input.length > 10) throw new ValidationError("A table can have up to 10 conditional formats.");
+  const list = input.map((entry, index): ConditionalFormat => {
+    const raw = object(entry);
+    const what = `Conditional format ${index + 1}`;
+    const value = whole(raw.value, 0, 11, `${what} value`);
+    const apply = oneOf(raw.apply, ["background", "font"] as const, what);
+    const by = oneOf(raw.by, ["scale", "rules", "field"] as const, what);
+    if (value === undefined || !apply || !by) throw new ValidationError(`${what}: choose the value, what to colour and how.`);
+    if (by === "scale") {
+      const low = hexColour(raw.low, `${what} lowest colour`);
+      const high = hexColour(raw.high, `${what} highest colour`);
+      if (!low || !high) throw new ValidationError(`${what}: a colour scale needs at least two colours.`);
+      return compact({ value, apply, by, low, mid: hexColour(raw.mid, `${what} middle colour`), high }) as ConditionalFormat;
+    }
+    if (by === "rules") {
+      const rules = parseKpiRules(raw.rules);
+      if (!rules) throw new ValidationError(`${what}: add at least one rule.`);
+      return { value, apply, by, rules };
+    }
+    const field = raw.field === "category" ? "category" : whole(raw.field, 0, 11, `${what} field`);
+    if (field === undefined) throw new ValidationError(`${what}: choose the field that holds the colours.`);
+    return { value, apply, by, field };
+  });
+  return list.length ? list : undefined;
+}
+
+function parseTableStyle(input: unknown): TableStyle | undefined {
+  const raw = object(input);
+  let subtotalsOff: number[] | undefined;
+  if (raw.subtotalsOff !== undefined && raw.subtotalsOff !== null) {
+    if (!Array.isArray(raw.subtotalsOff)) throw new ValidationError("Subtotals should be a list of levels.");
+    subtotalsOff = [...new Set(raw.subtotalsOff.map((level) => {
+      const number = whole(level, 1, 4, "Subtotal level");
+      if (number === undefined) throw new ValidationError("Subtotal level should be a whole number from 1 to 4.");
+      return number;
+    }))].sort();
+    if (!subtotalsOff.length) subtotalsOff = undefined;
+  }
+  return compact({
+    headerBackground: hexColour(raw.headerBackground, "Header background"),
+    headerColor: hexColour(raw.headerColor, "Header text colour"),
+    banded: flag(raw.banded),
+    bandColor: hexColour(raw.bandColor, "Band colour"),
+    gridlines: oneOf(raw.gridlines, ["all", "rows", "none"] as const, "Table gridlines"),
+    fontSize: whole(raw.fontSize, 10, 18, "Table text size"),
+    columnWidth: whole(raw.columnWidth, 60, 400, "Column width"),
+    wrap: flag(raw.wrap),
+    totals: flag(raw.totals),
+    totalsStyle: oneOf(raw.totalsStyle, ["bold", "shaded"] as const, "Totals style"),
+    subtotalsOff,
+  });
+}
+
+function parseValueList<T extends { value: number }>(input: unknown, what: string, item: (raw: Record<string, unknown>, label: string) => Omit<T, "value">): T[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ValidationError(`${what} should be a list.`);
+  if (input.length > 12) throw new ValidationError(`${what}: up to 12.`);
+  const list = input.map((entry, index) => {
+    const raw = object(entry);
+    const label = `${what} ${index + 1}`;
+    const value = whole(raw.value, 0, 11, `${label} value`);
+    if (value === undefined) throw new ValidationError(`${label}: choose the value.`);
+    return { value, ...item(raw, label) } as T;
+  });
+  return list.length ? list : undefined;
+}
+
+function parseChartRules(input: unknown): Array<KpiRule & { series?: number }> | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ValidationError("Chart colour rules should be a list.");
+  const rules = parseKpiRules(input);
+  return rules?.map((rule, index) => compact({ ...rule, series: whole(object(input[index]).series, 0, 11, `Colour rule ${index + 1} value`) }) as KpiRule & { series?: number });
+}
+
 export function parseKpiFormat(input: unknown): KpiFormat | undefined {
   const raw = object(input);
   return compact({
@@ -553,6 +673,15 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     donutTotal: flag(raw.donutTotal),
     card: parseCard(raw.card),
     kpi: parseKpiFormat(raw.kpi),
+    conditional: parseConditional(raw.conditional),
+    dataBars: parseValueList<{ value: number; color?: string }>(raw.dataBars, "Data bar", (entry, label) => compact({ color: hexColour(entry.color, `${label} colour`) }) ?? {}),
+    icons: parseValueList<{ value: number; set: IconSet }>(raw.icons, "Icon set", (entry, label) => {
+      const set = oneOf(entry.set, ["arrows", "shapes"] as const, label);
+      if (!set) throw new ValidationError(`${label}: choose the icons.`);
+      return { set };
+    }),
+    chartRules: parseChartRules(raw.chartRules),
+    table: parseTableStyle(raw.table),
   });
 }
 

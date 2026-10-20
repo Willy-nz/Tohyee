@@ -2102,6 +2102,14 @@ that something happened.
   or red ("Down is good" for costs). An optional trend by month sits under
   the number, and the number has its own format with words before or
   after it. Pinned key figures show the same.
+- **Analytics: conditional formatting and table styles** (#376 phase 1,
+  decision 675). Tables and pivots can colour each value's cells (background
+  or text) by a two- or three-colour scale, rules (e.g. red below zero) or a
+  field holding colours, and show data bars and icons (arrows or shapes).
+  Charts can colour columns and dots by rules, e.g. red below a target.
+  Table and pivot style: header colours, banded rows, gridlines, text size,
+  column width, word wrap, a totals row (added exactly) or the grand total,
+  totals bold or shaded, and subtotals per level.
 - **Analytics: report themes, chart type defaults and the format painter**
   (#376 phase 1, decisions 668-671, tenant migration 0176). In a report's
   edit mode, **Theme** chooses the report's look: Tohyee (the default, and

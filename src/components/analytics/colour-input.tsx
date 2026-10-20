@@ -16,6 +16,7 @@ export function ColourInput({
   placeholder,
   onChange,
   resetLabel = "Reset to theme",
+  emptyText = "Theme",
 }: {
   label: string;
   value: string | undefined;
@@ -23,6 +24,8 @@ export function ColourInput({
   placeholder?: string;
   onChange: (value: string | undefined) => void;
   resetLabel?: string;
+  /** What the hex box says when no colour is chosen. */
+  emptyText?: string;
 }) {
   const id = useId();
   // What's being typed; the saved colour shows again once the box loses focus.
@@ -39,7 +42,7 @@ export function ColourInput({
           className={styles.hexBox}
           value={draft ?? value ?? ""}
           onBlur={() => setDraft(null)}
-          placeholder="Theme"
+          placeholder={emptyText}
           maxLength={7}
           spellCheck={false}
           onChange={(event) => {
