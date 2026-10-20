@@ -131,6 +131,7 @@ describeWithDatabase("ledger", () => {
         "audit_events",
         "conversion_balance_lines",
         "conversion_balances",
+        "group_report_snapshots",
         "inventory_movements",
         "ledger_foreign_opening_balances",
         "ledger_fx_revaluation_documents",

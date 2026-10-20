@@ -8,11 +8,13 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { ReportCommentary } from "@/components/report-commentary";
 import { ReportExport } from "@/components/reports/report-export";
+import { GroupCustomersTab, GroupMembershipCard, GroupWorkspaceTab } from "@/components/group-workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import type { BudgetRate, RateOverride } from "@/lib/consolidation/groups";
 import type { IntercompanySettings } from "@/lib/consolidation/intercompany";
+import type { ReportSnapshot, ReportSnapshotList } from "@/lib/consolidation/snapshots";
 import type { ConsolidatedBudgetVsActual, ConsolidatedReport, ConsolidationAdjustment, ConsolidationGroup, MonthRates } from "@/lib/consolidation/types";
 import type { Contact } from "@/lib/contacts/service";
 import type { EcbSettings } from "@/lib/fx/ecb";
@@ -26,12 +28,15 @@ import { formatDate, formatDateTime, formatMoney, todayInBrowser } from "@/lib/f
  */
 
 const TABS = [
+  ["workspace", "Workspace"],
   ["profit_and_loss", "Profit and loss"],
   ["balance_sheet", "Balance sheet"],
   ["budget_vs_actual", "Budget vs actual"],
   ["rates", "Rates"],
   ["adjustments", "Adjustments"],
   ["intercompany", "Intercompany"],
+  ["customers", "Customers"],
+  ["saved", "Saved reports"],
   ["settings", "Group"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -234,6 +239,16 @@ function Reports({ group, kind, canEdit }: { group: ConsolidationGroup; kind: "p
   const report = loaded.data?.report;
   const title = kind === "balance_sheet" ? "Consolidated balance sheet" : "Consolidated profit and loss";
   const period = kind === "balance_sheet" ? `As at ${formatDate(to)}` : `${formatDate(from)} to ${formatDate(to)}`;
+  const [savedMessage, setSavedMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const saveCopy = async () => {
+    setSavedMessage(null);
+    try {
+      await api(`/api/consolidation/groups/${group.id}/snapshots`, { method: "POST", body: kind === "balance_sheet" ? { report: kind, asAt: to } : { report: kind, from, to } });
+      setSavedMessage({ tone: "success", text: "Saved, with the organisations in it. It's on the Saved reports tab." });
+    } catch (caught) {
+      setSavedMessage({ tone: "error", text: errorMessage(caught) });
+    }
+  };
   return (
     <>
       <Card
@@ -273,6 +288,14 @@ function Reports({ group, kind, canEdit }: { group: ConsolidationGroup; kind: "p
               filters={[`In ${report.currencyCode}; the group's year starts ${formatDate(report.yearStart)}`]}
               tables={[{ id: `consolidated-${kind}` }]}
             />
+            {canEdit ? (
+              <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+                <Button variant="secondary" onClick={() => void saveCopy()}>
+                  Save a copy
+                </Button>
+              </div>
+            ) : null}
+            {savedMessage ? <Notice tone={savedMessage.tone}>{savedMessage.text}</Notice> : null}
             <ReportTable report={report} id={`consolidated-${kind}`} showOwn={showOwn} />
           </>
         ) : null}
@@ -717,6 +740,69 @@ function MemberIntercompany({ group, organisationId, name, canEdit }: { group: C
   );
 }
 
+/** Saved copies of consolidated reports (decision 645), each with the organisations it used. */
+function SavedReports({ group }: { group: ConsolidationGroup }) {
+  const loaded = useApiData<ReportSnapshotList>(`/api/consolidation/groups/${group.id}/snapshots`);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = useApiData<{ snapshot: ReportSnapshot }>(openId ? `/api/consolidation/groups/${group.id}/snapshots/${openId}` : null);
+  const label = (kind: string) => (kind === "balance_sheet" ? "Balance sheet" : "Profit and loss");
+  return (
+    <>
+      <Card title="Saved reports" description="Copies of consolidated reports as they were when saved. They keep the organisations they used, even after the group changes. Shown only to people who can see every organisation in them.">
+        {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
+        {loaded.data && loaded.data.hidden > 0 ? <Notice tone="warning">{loaded.data.hidden} saved report(s) include an organisation you can&apos;t see, so they aren&apos;t shown.</Notice> : null}
+        {loaded.data && loaded.data.snapshots.length === 0 ? <Empty>No saved reports. Use Save a copy on the Profit and loss or Balance sheet tab.</Empty> : null}
+        {loaded.data && loaded.data.snapshots.length > 0 ? (
+          <div className={ui.tableWrap}>
+            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+              <thead>
+                <tr>
+                  <th>Report</th>
+                  <th>Period</th>
+                  <th>Organisations</th>
+                  <th>Saved</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {loaded.data.snapshots.map((snapshot) => (
+                  <tr key={snapshot.id}>
+                    <td data-label="Report">{label(snapshot.report)}</td>
+                    <td data-label="Period">{snapshot.from ? `${formatDate(snapshot.from)} to ${formatDate(snapshot.to)}` : `As at ${formatDate(snapshot.to)}`}</td>
+                    <td data-label="Organisations">{snapshot.members.map((member) => member.name).join(", ")}</td>
+                    <td data-label="Saved">
+                      {formatDateTime(snapshot.savedAt)} by {snapshot.savedByEmail}
+                    </td>
+                    <td data-label="Open">
+                      <Button variant="secondary" size="small" onClick={() => setOpenId(snapshot.id)} aria-label={`Open ${label(snapshot.report)} saved ${formatDateTime(snapshot.savedAt)}`}>
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Card>
+      {openId ? (
+        <Card title={opened.data ? `${label(opened.data.snapshot.report)}, saved ${formatDateTime(opened.data.snapshot.savedAt)}` : "Saved report"} actions={<Button variant="secondary" onClick={() => setOpenId(null)}>Close</Button>}>
+          {opened.error ? <Notice tone="error">{opened.error}</Notice> : null}
+          {opened.data ? (
+            <>
+              <p className={ui.muted}>
+                As saved by {opened.data.snapshot.savedByEmail} from {opened.data.snapshot.groupName} (version {opened.data.snapshot.groupVersion}), in {opened.data.snapshot.currencyCode}. Members:{" "}
+                {opened.data.snapshot.members.map((member) => `${member.name} (${member.effectiveFrom || member.effectiveTo ? `${member.effectiveFrom ?? "start"} to ${member.effectiveTo ?? "now"}` : "always"})`).join(", ")}.
+              </p>
+              <ReportTable report={opened.data.snapshot.body} id={`saved-${openId}`} showOwn={false} />
+            </>
+          ) : null}
+        </Card>
+      ) : null}
+    </>
+  );
+}
+
 function GroupSettings({ detail, onChanged }: { detail: GroupDetail; onChanged: () => void }) {
   const { group } = detail;
   const { organisations } = useWorkspace();
@@ -777,7 +863,7 @@ function GroupSettings({ detail, onChanged }: { detail: GroupDetail; onChanged: 
 export function ConsolidationGroupView({ groupId }: { groupId: string }) {
   const { organisations } = useWorkspace();
   const loaded = useApiData<GroupDetail>(`/api/consolidation/groups/${groupId}`);
-  const [tab, setTab] = useState<Tab>("profit_and_loss");
+  const [tab, setTab] = useState<Tab>("workspace");
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
   const detail = loaded.data;
@@ -801,7 +887,15 @@ export function ConsolidationGroupView({ groupId }: { groupId: string }) {
             <MemberIntercompany key={member.organisationId} group={detail.group} organisationId={member.organisationId} name={member.name} canEdit={["admin", "owner"].includes(roleIn(member.organisationId) ?? "")} />
           ))
         : null}
-      {tab === "settings" ? <GroupSettings detail={detail} onChanged={loaded.reload} /> : null}
+      {tab === "workspace" ? <GroupWorkspaceTab group={detail.group} /> : null}
+      {tab === "customers" ? <GroupCustomersTab group={detail.group} canEdit={everyAtLeast(["bookkeeper", "admin", "owner"])} canAdmin={everyAtLeast(["admin", "owner"])} /> : null}
+      {tab === "saved" ? <SavedReports group={detail.group} /> : null}
+      {tab === "settings" ? (
+        <>
+          <GroupSettings detail={detail} onChanged={loaded.reload} />
+          <GroupMembershipCard key={detail.group.version} group={detail.group} canAdmin={everyAtLeast(["admin", "owner"])} onChanged={loaded.reload} />
+        </>
+      ) : null}
     </>
   );
 }

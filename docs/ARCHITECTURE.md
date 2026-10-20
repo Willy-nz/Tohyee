@@ -54,6 +54,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bill_inbox_mailboxes, bill_inbox_mail_seen   mailbox folders read into the inbox (IMAP password encrypted) and the messages each place has given
 ├─ mileage_rates          IRD kilometre rates per income year and vehicle type (tier 1 and tier 2)
 ├─ intercompany_accounts, intercompany_contacts   accounts and contacts with another consolidation member (CO2)
+├─ group_customers, group_customer_links, group_stage_mappings, group_report_snapshots   a consolidation group's own records, in its steward's database only (decisions 641-645)
 ├─ ecb_rate_settings      whether ECB rates come in, extra currencies and the last check (FX1)
 ├─ cash_flow_items, cash_flow_account_averages   forecast items and the accounts forecast from their average (CF4, CF6)
 ├─ approval_rules, approval_rule_steps, approval_step_approvers   approval rules per document type: conditions, ordered steps, approvers (AW1)
@@ -1129,6 +1130,40 @@ Enforced by the app (and covered by tests):
   ledger by account and day, translates it with the parent's exchange rates
   list, and eliminates. ECB rates (`src/lib/fx/ecb.ts`) fetch the ECB's file
   outside any transaction and add rates in one.
+- Group workspace (`src/lib/consolidation/`, decisions 640-647, #200):
+  membership dates on `consolidation_group_members` (core migration 0015;
+  `membership.ts` has the date rules, `report.ts`'s `groupOn` picks the
+  members on a report's date); the steward's records (`group_customers`,
+  `group_customer_links`, `group_stage_mappings`,
+  `group_report_snapshots`, tenant migration 0173) in the steward
+  organisation's own database through `steward.ts`; `customers.ts`,
+  `stage-mappings.ts`, `snapshots.ts`; and `workspace.ts`, which reads each
+  member's database read-only as the signed-in person, reuses
+  `consolidatedProfitAndLoss` for the books, and keeps each person's
+  result for a minute in `workspace-cache.ts` (keyed by their memberships,
+  the group's version and member dates; dropped on any group change).
+  `workspace-figures.ts` holds the currency and stage rules (browser-safe).
+  Core keeps only the registry facts (members, dates, which member is
+  steward); the consolidation rates, adjustments and commentary already in
+  core (decisions 438, 446) stay there until they're moved (below).
+- **Moving a group's records** (decision 646): not done. The plan, with a
+  dry run in `move-plan.ts` tested by `tests/integration/group-workspace.test.ts`:
+  1. a new tenant migration makes steward tables with the same columns and
+     checks as `consolidation_rate_overrides`, `consolidation_budget_rates`,
+     `consolidation_adjustments`, `consolidation_adjustment_lines` and
+     `consolidation_commentaries`;
+  2. with the group read-only, copy each row to the steward in one
+     transaction there;
+  3. compare row counts and checksums (as the dry run does) and stop on any
+     difference;
+  4. switch the group to read from the steward in one core transaction;
+  5. keep the core rows, unread, until the steward's backup has been
+     restored once; only a later migration removes them;
+  6. a change of steward repeats 2-4 between the two organisations.
+  Already, every read checks links against the group's members in the
+  registry and reads each contact from its own organisation, so after a
+  restore or move a link to an organisation that left is shown as such
+  (or hidden) and one whose contact is gone shows "contact not found".
 - Report commentary (`src/lib/commentary/`, decision 446): the forecast's
   in `report_commentaries` in each organisation (tenant migration 0103), a
   group's in `consolidation_commentaries` in the core database (core

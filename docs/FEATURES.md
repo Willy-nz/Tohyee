@@ -600,6 +600,26 @@ that something happened.
   Elimination adjustments (including unrealised profit in stock, typed by
   the accountant), changed rates, budget exchange rates and a
   consolidated budget vs actual. Seen only by people in every member.
+- **Group workspace** (#200 stage 1; decisions 640-647, CO13-CO14, core
+  migration 0015, tenant migration 0173), the first tab of a consolidation
+  group: the members on a date, the consolidated revenue and net profit for
+  the year to date (from the existing consolidated profit and loss), each
+  member's share and what its customers owe, the CRM pipeline per currency
+  (translated into the group's currency only when asked, with the rate
+  shown) and by stage, and linked customers. Members have first and last
+  days, and reports include the members in the group on their date
+  (refusing dates that cross a join or leave). Customers are linked across
+  organisations by a person, never merged; stages that differ need a
+  person's mapping. Save a copy keeps a consolidated report with the
+  members it used. A steward member keeps these records in its own
+  database. Missing modules or unreadable members are named, so a partial
+  result never passes for the whole group. Says that a group isn't a tax
+  group. Not yet: a group selector that stays across modules, group
+  analytics datasets and dashboards, group CRM lists and search, exports of
+  the workspace, account mappings between different charts, nested groups,
+  ownership and minority interest, acquisitions and disposals, moving the
+  existing core records to the steward (planned and dry-run tested only,
+  decision 646), and Projects, Inventory, Payroll and Tax summaries.
 - **Exchange rates from the European Central Bank** (FX1, decision 437):
   turned on per organisation, each working day's ECB rates are added to the
   exchange rates list for the currencies in use; typed rates stay.

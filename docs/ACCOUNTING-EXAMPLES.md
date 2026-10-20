@@ -9698,6 +9698,30 @@ Setup:
   **4,000.00** and both sides **41,450.00**: the group's profit and net
   assets drop by the 500.00 not yet made outside the group. Tohyee doesn't
   work out unrealised profit itself; the adjustment is typed.
+- **CO13** A member leaves the group (#200, decision 640; Codex, delegated
+  by owner, 20 October 2026; not yet reviewed). Xero has no groups and
+  NetSuite's handling of a subsidiary that's sold is part of its own
+  acquisition and disposal setup, so Tohyee refuses rather than guessing. Kowhai Pty Ltd sells its business and leaves the group after
+  30 Sep 2026: Jess sets its last day to 30 Sep. The consolidated balance
+  sheet at **30 Sep 2026** still has three columns (Holdings, Pty, Retail);
+  at **31 Oct 2026** it has two (Holdings, Retail), and none of Pty's
+  balances are in it. October's profit and loss (1 Oct to 31 Oct) is Holdings
+  and Retail only. A profit and loss for **1 Apr to 31 Oct 2026** is refused:
+  "Kowhai Pty Ltd left the group after 2026-09-30. Tohyee doesn't split an
+  organisation's results at the day it joined or left, so choose dates on
+  one side of that." The same happens for a member that joins part-way. A
+  balance sheet Jess saved at 31 Oct before setting the date keeps all three
+  organisations and its figures as they were. Groups with no dates are
+  unchanged. Tohyee doesn't do acquisition or disposal accounting (gain on
+  sale, pre-acquisition equity); those need their own example.
+- **CO14** The group's CRM pipeline in one currency (#200, decision 644; not
+  yet reviewed). Open opportunities: Holdings NZD 2,400.00 and Retail NZD
+  1,000.00 (both at 10%), Pty AUD 1,250.50 (10%). The workspace shows
+  **NZD 3,400.00** (weighted 340.00) and **AUD 1,250.50** (weighted 125.05)
+  on separate lines. Choosing "Also translated into NZD" at 31 Oct 2026, with
+  the parent's AUD rate 1.15 that day: 1,250.50 × 1.15 = 1,438.075, rounded
+  to **1,438.08**, plus 3,400.00 = **NZD 4,838.08**, labelled with the rate
+  and its date. It isn't posted or used in any report.
 - **FX1** Holdings (NZD) turns on ECB rates. The ECB's rates for 5 Oct 2026
   are, per EUR, NZD 1.9000 and AUD 1.7000, so Holdings' list gets AUD
   **1.117647** on 5 Oct, from "European Central Bank". A rate Jess typed for
@@ -9708,7 +9732,10 @@ Setup:
   in.
 
 Built (decisions 437-445, core migration 0007, tenant migration 0102).
-Test: `tests/integration/consolidation.test.ts` (CO1-CO12, FX1). AI
+Test: `tests/integration/consolidation.test.ts` (CO1-CO12, FX1);
+`tests/integration/group-workspace.test.ts` and
+`tests/unit/group-workspace.test.ts` (CO13, CO14; the tests use the
+same dates and numbers with a made-up Harakeke group). AI
 commentary is item 6 part 3.
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion

@@ -6458,3 +6458,109 @@ recorded elsewhere or being built at the same time:
      in the year, so it isn't counted again in the yearly amount. Voiding
      such a movement still reverses its journal. The year's head count beside
      the adjustment is for information only: the amount is the accountant's.
+
+### Group workspace (decisions 640-647)
+
+From #200 stage 1, with the owner-delegated answers in #360 items 11-13
+(Codex, delegated by owner, 20 October 2026). Where those answers left a
+detail open, NetSuite OneWorld is the reference (Xero has no groups); the
+accounting example is marked not yet reviewed.
+
+640. **Members have dates** (20 October 2026; Codex, delegated by owner).
+     Each stay of an organisation in a consolidation group has a first day
+     and a last day, both included (blank: from the start, still in). Core
+     migration 0015. Taking an organisation out on the Group tab ends its
+     stay yesterday rather than deleting it; putting it back starts a new
+     stay today; stays never overlap. An admin of every member can set the
+     dates. The parent has no dates (it's in every report), and the steward
+     (decision 641) can't be given a last day. A consolidated report
+     includes the members in the group on its date (the balance sheet's
+     as-at date, the profit and loss's end date). A profit and loss or
+     budget vs actual whose dates cross a day a member joined or left is
+     refused and names the dates (CO13): Tohyee doesn't split a member's
+     results at that day, since that's acquisition and disposal accounting,
+     which isn't built. To see a group you must be a member of every
+     organisation that hasn't left; a report dated while a since-departed
+     member was in also needs you to see that one, or it's refused. Groups
+     with no dates (all existing ones) behave exactly as before.
+641. **A steward keeps the group's new records** (20 October 2026; Codex,
+     delegated by owner). Each group names a member, the parent unless
+     changed, whose own database holds the group's business records:
+     customer links, stage mappings and saved reports (tenant migration
+     0173). The core database only records which organisation is the
+     steward. This settles the conflict #200 found between the agent
+     instructions ("core never holds accounting data") and decisions 438
+     and 446 (consolidation rates, adjustments and commentary are in core):
+     those existing records stay in core for now, as documented, and
+     nothing new goes there. Changing steward is refused while the steward
+     holds any of the group's records, because moving them isn't built
+     (decision 646). The steward can't leave the group while it's steward.
+642. **Customers are linked by a person, never merged** (20 October 2026;
+     Codex, delegated by owner; NetSuite's shared customers without
+     merging). A group customer links one contact in each of two or more
+     members; a bookkeeper or above of every member makes or changes it. A
+     contact is in at most one group customer per group. Each contact stays
+     its own record in its own organisation and nothing about it changes.
+     Tohyee never links contacts because their names or emails match, and
+     doesn't suggest links: the person searches each organisation and picks.
+     Names are read from each member when shown, never copied to the
+     steward. Unlinking keeps the link with who unlinked it. A link to an
+     organisation that has left is shown as such and left out of totals; if
+     the person can't see that organisation it's hidden and counted.
+643. **Different stages need a person's mapping** (20 October 2026; Codex,
+     delegated by owner). The workspace combines the pipeline by stage only
+     when every stage in use either has a mapping (which group stage it
+     counts as, chosen by an admin of every member) or has the same key,
+     name and type in every member with the CRM on and no mapping anywhere.
+     Otherwise it lists the unmapped stages and shows no combined stage
+     figures. Mappings change nothing in any organisation. Accounts are
+     still combined by code (decision 443); mapping different charts of
+     accounts isn't built.
+644. **CRM amounts stay in their currency** (20 October 2026; Codex,
+     delegated by owner). Pipeline and what linked customers owe are added
+     up per currency, the group's first, never across currencies (as MC68).
+     The person can choose "Also translated into" the group's currency: each
+     currency's total times the consolidation's current rate on the date
+     (decision 439: the parent's exchange rates list, or a month's changed
+     current rate), rounded half up to cents, then added; the figure always
+     shows its label and the rates used, and a currency with no rate is left
+     out and named. It's not an accounting figure. Pipeline is open
+     opportunities now (the CRM keeps no past amounts).
+645. **The workspace, who sees it, and its copies** (20 October 2026; Codex,
+     delegated by owner). Reports, Consolidation, a group, Workspace (the
+     first tab): the members on a date with their dates, the consolidated
+     revenue and net profit for the group's year to date (the existing
+     consolidated profit and loss, unchanged, so it reconciles to that tab),
+     each member's share, what each member's customers owe (its own
+     currency), the pipeline per currency and by stage, and linked
+     customers. Each member's part is read from its own database as the
+     signed-in person. A member with the CRM or Accounting off, or one that
+     can't be read, is named in a "Not everything in the group is included"
+     notice, so a partial result never passes for the whole group. Each
+     person's result is kept for up to a minute as a copy keyed by who they
+     are, when each of their memberships was made and their role in every
+     member, the group's version and the members' dates; access is checked
+     before any copy is used, and every change to the group, its members,
+     steward, customer links or stage mappings drops the group's copies.
+     Saved reports (Save a copy on the profit and loss and balance sheet;
+     bookkeepers of every member) keep the figures, the members with their
+     dates, the group's version and who saved it, in the steward's database,
+     append-only. They're shown only to someone who can see the group and
+     every organisation in the saved report, so they survive a member
+     leaving, with their provenance, but disappear for anyone who loses
+     access to one of their organisations.
+646. **Moving existing consolidation records: a plan, tested, not done**
+     (20 October 2026; Codex, delegated by owner: "record and test a
+     migration plan before moving anything"). `src/lib/consolidation/move-plan.ts`
+     reads a group's rows in core (rate overrides, budget rates, adjustments
+     and their lines, commentaries), maps each to the steward table it would
+     go to and back, and checks the row counts and checksums agree. It
+     writes nothing. The steps are in docs/ARCHITECTURE.md ("Moving a
+     group's records"). The move itself, and changing steward when records
+     exist, wait for a separate decision.
+647. **Flat groups, not tax groups** (20 October 2026; Codex, delegated by
+     owner). Groups have no sub-groups, and choosing members implies no
+     ownership percentage, minority interest, acquisition or disposal
+     accounting (decision 445: wholly owned members only). Being in a group
+     isn't a tax consolidation election or a GST group: the workspace and
+     the group's settings say so, and no tax figure is combined.
