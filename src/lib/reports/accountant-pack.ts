@@ -1,4 +1,5 @@
 import { listBankAccounts } from "@/lib/bank/accounts";
+import { coopShareSchedule, hasCoopShareRegister, scheduleSourceFiles } from "@/lib/farming/coop-shares";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
@@ -24,6 +25,8 @@ import { createZip, type ZipEntry } from "@/lib/zip/write";
  * - The financial statements with notes (PDF)
  * - General ledger: every account's transactions for the year (CSV)
  * - Bank reconciliation as at the year end, one PDF per bank and card account
+ * - For a farm with a co-op share register, the register for the year (CSV)
+ *   and the statements its entries name (#327, CSR9)
  * - A read-me listing them
  * Nothing is posted or changed.
  */
@@ -279,8 +282,61 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
     );
   }
 
+  const coopFiles: string[] = [];
+  if (await hasCoopShareRegister(tx)) {
+    const register = await coopShareSchedule(tx, { yearEnd });
+    const source = (entry: { sourceReference: string | null; file: { fileName: string; removed: boolean } | null }) =>
+      text([entry.sourceReference, entry.file ? `${entry.file.fileName}${entry.file.removed ? " (removed)" : ""}` : null].filter(Boolean).join("; "));
+    const shareRows: ReportExportRow[] = [];
+    const paidRows: ReportExportRow[] = [];
+    for (const holding of register.holdings) {
+      const name = [text(holding.coopName), text(holding.shareClass)];
+      shareRows.push(row([...name, text(nzDate(yearStart)), text("Opening"), amount(holding.opening.quantity), amount(holding.opening.value), text("")], "section"));
+      for (const movement of holding.movements) {
+        shareRows.push(row([...name, text(nzDate(movement.date)), text(movement.kindLabel), amount(movement.quantity), amount(movement.value), source(movement)]));
+      }
+      shareRows.push(row([...name, text(nzDate(yearEnd)), text("Closing"), amount(holding.closing.quantity), amount(holding.closing.value), text("")], "total"));
+      for (const paid of holding.distributions) {
+        paidRows.push(row([...name, text(nzDate(paid.date)), text(paid.kindLabel), amount(paid.amount), paid.imputationCredits === null ? text("") : amount(paid.imputationCredits), source(paid)]));
+      }
+    }
+    const totals = register.totals;
+    add(
+      "Co-op shares.csv",
+      reportCsv(
+        data("coop-share-register", "Co-op share register", period, [
+          {
+            title: "Shares",
+            columns: ["Co-op", "Share class", "Date", "Movement", "Quantity", "Value", "Source statement"],
+            rows: [
+              ...shareRows,
+              row([text(""), text(""), text(""), text("Total opening value"), text(""), amount(totals.openingValue), text("")], "total"),
+              row([text(""), text(""), text(""), text("Total closing value"), text(""), amount(totals.closingValue), text("")], "total"),
+            ],
+          },
+          {
+            title: "Dividends, rebates and retentions",
+            columns: ["Co-op", "Share class", "Date", "Kind", "Amount", "Imputation credits", "Source statement"],
+            rows: [
+              ...paidRows,
+              row([text(""), text(""), text(""), text("Total dividends"), amount(totals.dividends), amount(totals.imputationCredits), text("")], "total"),
+              row([text(""), text(""), text(""), text("Total rebates"), amount(totals.rebates), text(""), text("")], "total"),
+              row([text(""), text(""), text(""), text("Total retentions"), amount(totals.retentions), text(""), text("")], "total"),
+            ],
+          },
+        ]),
+      ),
+    );
+    coopFiles.push("Co-op shares.csv");
+    for (const file of await scheduleSourceFiles(tx, register)) {
+      const name = `Co-op share statements/${file.id} ${safeName(file.fileName)}`;
+      add(name, file.content);
+      coopFiles.push(name);
+    }
+  }
+
   add("Financial statements.pdf", (await yearEndReportPdf(tx, { yearEnd }, now)).bytes);
-  const files = ["Financial statements.pdf", "Trial balance.csv", "Profit and loss.csv", "Balance sheet.csv", "Changes in equity.csv", "Cash flows.csv", "General ledger.csv", ...bankFiles];
+  const files = ["Financial statements.pdf", "Trial balance.csv", "Profit and loss.csv", "Balance sheet.csv", "Changes in equity.csv", "Cash flows.csv", "General ledger.csv", ...bankFiles, ...coopFiles];
   add(
     "Read me.txt",
     [
@@ -298,6 +354,12 @@ export async function buildAccountantPack(tx: OrgTx, input: { yearEnd: unknown }
       ...(bankFiles.length > 0
         ? ["- Bank reconciliation PDFs: for each bank and credit card account as at the year end."]
         : ["- No bank or credit card accounts, so no bank reconciliations."]),
+      ...(coopFiles.length > 0
+        ? [
+            "- Co-op shares.csv: the co-op share register for the year: each co-op and share class's opening quantity and value, the year's movements, the closing quantity and value, and the dividends, rebates and retentions apart. Figures are as entered from the co-ops' statements; nothing is posted or valued by Tohyee.",
+            ...(coopFiles.length > 1 ? ["- Co-op share statements folder: the statements the year's entries name."] : []),
+          ]
+        : []),
       "",
       "Amounts are in the organisation's currency unless a file says otherwise.",
     ].join("\r\n"),

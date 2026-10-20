@@ -4,6 +4,10 @@ Where Tohyee is up to, and what's left to do. This is for Jess and for the
 next person or coding agent picking the work up. Read `AGENTS.md` and
 `.github/copilot-instructions.md` first; they still apply.
 
+**20 Oct 2026:** the old "Open questions for Jess" are reconciled to their
+answers, and what's left is sorted into implementation, research, external
+access and real-world validation: see "What's left, by kind" (issue #360).
+
 ## Start here (end of the 1-2 Oct 2026 Claude session)
 
 Wound up at Jess's request on Fri 2 Oct 2026, 12:30 NZ time, because usage
@@ -132,7 +136,8 @@ everything from any accounting system by file, no Xero connection.
 
 **Open questions still listed in the docs** (each section's "Questions for
 Jess"): mostly agree-or-change calls; the payroll ones are after PF9, TS11,
-PREP8, WB7, XP14 and the HL section.
+PREP8, WB7, XP14 and the HL section. (20 Oct 2026: all decided since; see "What's left, by
+kind".)
 
 ## Where things stand
 
@@ -767,12 +772,17 @@ To do:
       through `src/lib/money/decimal.ts`; IRD/XRB figures stored as dated
       data with sources; new tenant migrations numbered after 0050.
 - [ ] Check the questions each PR lists for Jess, and answer or decide them.
+      (20 Oct 2026: decided under decisions 537 and 634-639; what remains is
+      in "What's left, by kind".)
 - [ ] Holidays Act leave was planned in #60 but only clearly specified parts
       should be built; expect it to be partly refused. (Built in P8 on
       `claude/payroll-p8-leave`, with the refusals listed there; review and
       merge it, and decide the leave questions.)
 
 ## Things only Jess (or her computer) can do
+
+(20 Oct 2026: kept for the history. Each item is now under "What's left, by
+kind" below as external access, research or real-world validation.)
 
 - [ ] **The legal texts still missing.** Everything asked for is now in
       `docs/sources/` (ERA s 130 and tax "working day" added 2 Oct 2026),
@@ -811,127 +821,193 @@ To do:
       books, and bank reconciliation.
 - [ ] Release 0.3.1 (or later) when ready.
 
-## Open questions for Jess
+## What's left, by kind (reconciled 20 October 2026)
 
-Each "Questions for Jess" list in `docs/ACCOUNTING-EXAMPLES.md` has the full
-wording. Still open:
+The old "Open questions for Jess" list below was stale (issue #360): almost
+every item had a later answer in `docs/DECISIONS.md` or
+`docs/ACCOUNTING-EXAMPLES.md`. Jess asked on 2 Oct 2026 for the lists to be
+decided by law, then NetSuite, then Xero (decisions 192-327). On 15 Oct 2026
+she said to follow Xero or NetSuite until a real person says otherwise
+(decision 537). On 20 Oct 2026 she delegated the remaining choices to Codex
+(issue #360 and the 20 Oct comment on #292; decisions 634-639). What's left
+isn't a set of questions for Jess. It's work, split into four kinds, and
+nobody should ask her these again. Each item says where its answer is.
+
+**Implementation** (decided; needs worked examples, tests and building):
+- Extra-pay pay runs on their own and a higher tax rate on request
+  (decisions 218, 219).
+- GST on foreign-currency spend and receive money (multi-currency
+  question 1; not built). Opening unpresented bank items as opening
+  transactions (decision 313: later). An optional RBNZ rate source beside
+  the ECB rates (decision 437 built ECB rates).
+- Workforce budget on-costs: holiday pay, ACC levies, overtime (decision
+  209: later). Project time rounding as a setting (297). Balance sheet
+  budgets (289).
+- RDTI feedstock (decision 222) and RD22's reallocation of a posted pay to
+  a late timesheet (decision 198 lists it).
+- Tax: the organisation's own tax workspace first, then a multi-client
+  overview; finish IR4/IR3/IR10, then trusts, then partnerships/LTCs;
+  imports and reviewable forecasts first; prepare and export only
+  (decision 634). ITX6 (provisional tax payments) and RAT1 (GST on rations)
+  are **being built** now from the #292 comment of 20 Oct 2026; see that
+  PR.
+- Private farm mail history, retention and the privacy boundary (#360
+  items 8-10, #250): **being built**.
+- Flat groups, linked customers and group storage (#360 items 11-13,
+  #200): **being built**.
+- CRM workflow completeness (#360 item 17, #216): **being built**.
+- The co-op share register (#360 item 15, #327): built in its own PR
+  (decisions 630-633, examples CSR1-CSR10). Ledger links and a Fonterra
+  share standard calculator are deferred there.
+- Marketplaces: finish Shopify, then WooCommerce's gaps, then Square
+  (decision 637). Farm data: file imports, then Pasture.io, then LIC
+  (decision 635). Default dashboards by kind of user (decision 639).
+- **Practice manager stays unbuilt.** Jess's own "Dont do practice
+  manager" stands over #360 item 19 (decision 638; parked since 3 Oct
+  2026, PR #91).
+
+**Research** (read the source, then write the example; no owner choice):
+- Payments basis, part-paid foreign sales: which rate. Read IRD's guidance
+  (decision 307; refused until then).
+- Whether a USD tax invoice must also show its GST in NZD. Read the GST Act
+  (decision 306 is unverified).
+- The reverse charge on imported services: when IRD applies it (decision
+  311; refused until then).
+- Back pay over periods with leave: the law doesn't say whether a
+  backdated rise changes holiday pay already paid (decisions 171, 216;
+  refused).
+- How Xero handles a change of GST filing frequency, before deciding
+  whether to let IRD's start date be entered. Until then the changeover is
+  worked out from the setting (GP2).
+- RAT1's narrow case (GST valuation and timing for a sole trader's own
+  homekill) and tax-form rounding under decision 565: technical checks,
+  not preferences (#360 item 7).
+- The rule that moves a tax payment due on a non-working day (decision
+  250), and MBIE's Employment Leave Act guidance when it's published (Nov
+  2026 to Jan 2027).
+- Fonterra's share standard rules over time, before any calculator (#327).
+- Sources read only through the summarising fetch tool: check the quoted
+  figures against the real pages.
+
+**External access** (needs an account, a provider, IRD or money; not a
+preference):
+- IRD: how recovering advance holiday pay over the 8% is taxed (decision
+  170), and whether to follow its extra pay example 1 or its steps (212
+  follows the steps; asking IRD is optional).
+- IRD gateway or myIR filing access; provider terms and access for Akahu,
+  Pasture.io, LIC, Square and any tax-pooling provider (#360 items 3, 6,
+  14, 18).
+- A domain and Cloudflare's written OK for the Tohyee address relay
+  (`relay/README.md`).
+- A code-signing certificate. Installer signing stays deferred until one
+  exists; no purchase is authorised (#154, #360).
+- 2028 public holidays once Employment NZ publishes them (decision 179;
+  then add them to `public-holiday-dates.ts`; Matariki is Fri 14 Jul 2028).
+
+**Real-world validation** (try it for real; don't claim it passed until
+someone has):
+- A real Windows computer: TohyeeSetup, the server app, updates, OneDrive
+  backups, Connect to Cloudflare and Tailscale, Docker Desktop (#153).
+- Akahu with a real app, including the credit card balance sign (#147).
+- Email sending and mail sync with real Microsoft and Google accounts.
+- A payday filing file through myIR's "Check your employment information
+  file" service (decision 265).
+- AI keys with Claude Desktop, Claude.ai or ChatGPT themselves.
+- Clicking through screens that no one has opened in a browser.
+- An accountant's review of the worked examples. Delegated answers don't
+  make an example reviewed: keep the "not yet reviewed" marks (#360).
+
+Also settled, so not to be reopened (#360): jobs JV1-JV9 (decision 510:
+hours confirmed, materials leave stock on the invoice, reminders in Tohyee,
+one-way calendar file); rosters RS1-RS8 (decisions 511, 512, 518: no
+location, exact minutes, wages plus employer KiwiSaver, shared-device PINs,
+weekly area budget typed); livestock (decisions 503-509, with the later
+reporting-basis and class qualifications in 566 and 567).
+
+## Open questions for Jess (as listed until 20 October 2026, with their answers)
+
+Kept for the history. Each item now says what answered it. Each "Questions
+for Jess" list in `docs/ACCOUNTING-EXAMPLES.md` has the full wording; all of
+them are marked "decided".
 
 **Multi-currency**
 - Foreign sales on the **payments basis**: count a part payment at the
-  invoice's rate or the payment's rate? (NetSuite's help doesn't say; refused
-  for now.)
-- **Refunds** of foreign credit treated like payments (refund rate against the
-  credit's rate, difference to 7020): OK?
-- **Stock on a foreign bill** valued at the bill's rate, never adjusted at
-  payment: OK?
-- A **free daily exchange rate feed** (e.g. RBNZ) into the rates list, or keep
-  typing and pasting rates?
-- Revaluation: round each document to cents on its own (as built)? Allow
-  revaluing again before the last one reverses (refused now; NetSuite allows
-  it from the earlier rate)?
-- Should a printed USD tax invoice also show its GST in NZD?
-- Build the **reverse charge** on imported services, or GST on foreign spend
-  and receive money?
+  invoice's rate or the payment's rate? → Still refused (decision 307).
+  Research, above.
+- **Refunds** of foreign credit treated like payments: OK? → Kept (309).
+- **Stock on a foreign bill** valued at the bill's rate: OK? → Kept (310).
+- A **free daily exchange rate feed**? → Daily ECB rates were built (437,
+  FX1, Jess 5 Oct 2026), replacing 308's "later".
+- Revaluation: round each document to cents on its own? Revalue again
+  before the last one reverses? → Per document, as built (multi-currency
+  question 4); one revaluation at a time, and revaluations can be voided
+  (469, 470, Jess approved FXB12-FXB14).
+- Should a printed USD tax invoice also show its GST in NZD? → USD only
+  (306, unverified). Research, above.
+- Build the **reverse charge**, or GST on foreign spend and receive money?
+  → Reverse charge stays refused (311, exports question 3). GST on foreign
+  spend and receive money: implementation, above.
 
 **Projects and CRM** (foreign currency)
-- Chargeable expenses on a foreign project, and at which rate?
-- Should a customer's currency be changeable while its projects or
-  opportunities are empty or lost?
-- Is refusing projects in currencies without cents (JPY, XPF) needed?
+- Chargeable expenses on a foreign project? → Foreign projects are costs
+  only (302).
+- Customer's currency changeable while projects or opportunities are empty?
+  → No, fixed once it has one (304).
+- Refuse projects in currencies without cents? → Yes (305).
 
 **Tax codes**
-- Should drafts and repeating templates also stop a code's "Available on"
-  from changing (now only defaults and settings do)?
-- Should invoices and bills brought in from existing books be checked against
-  "Available on"?
+- Should drafts and repeating templates stop "Available on" from changing?
+  → No: they're refused when next saved or made (TAO section, TAO9, TAO11),
+  as built following NetSuite (exports question 5).
+- Check invoices and bills brought in from existing books against
+  "Available on"? → No: they record the old system's documents (TAO "Not
+  supported yet").
 
 **GST**
-- When the GST filing frequency changes, IRD sets the date the new frequency
-  starts. Should Tohyee let you enter IRD's start date rather than working out
-  the changeover itself?
+- Enter IRD's start date when the filing frequency changes? → The
+  changeover is worked out from the setting (GP2). Research, above.
 
-**Bringing in existing books**
-- Is a 0.05 rounding allowance on GST in open invoices and bills right?
-- Bank opening balance as the ledger balance, with unpresented items entered
-  as opening transactions (as in Xero)?
-- Matching the old system's control accounts by name and re-coding: wanted?
-- Contacts without customer/supplier columns default to both?
+**Bringing in existing books** → All kept: 0.05 rounding (312), the bank
+opening balance as the ledger balance (313), control accounts matched by
+name and re-coded (314), contacts without columns are both (315).
 
-**Year end and period close**
-- Can a bookkeeper close a month when every check passes, or only owners and
-  admins?
+**Year end and period close** → A bookkeeper can close a month when every
+check passes (316).
 
-**RDTI claim report** (R3, under RD42)
-- Part-time R&D staff now earn credit from approved timesheets (P9, TS5);
-  without a timesheet only 100% R&D allocations count. OK?
-- Reimbursements on pay runs aren't counted anywhere: let them be tagged as
-  materials later?
-- Feedstock: record the output's value at year end so the part over it can
-  be claimed?
-- Exports keep the summary figures, not the file: keep the CSV too, for
-  people with payroll access only?
+**RDTI claim report** → Decisions 220-223: timesheet credit as built;
+reimbursements stay out; feedstock not built (implementation, above);
+exports keep the summary figures.
 
-**Timesheets** (P9, under TS11)
-- Monday-to-Sunday weeks, or timesheets per pay period as Xero does?
-- Viewers fill in their own timesheets: OK, or a "time only" role?
-- Approvers can't change hours (NetSuite) but reject; or let them correct
-  and approve (Xero)?
-- Part-covered pay periods split by calendar days: or working days?
-- Hourly pay from timesheets only when the whole period is covered, Ordinary
-  time only: should extra hours become overtime?
-- Should approved project hours also become project time (to invoice)?
-- Build the reallocation of a posted pay to a late timesheet (RD22)?
+**Timesheets** → Decisions 192-198: the first day of the week is a setting;
+viewers keep filling in their own; approvers can't change hours; calendar
+days; ordinary time only; project hours not automatic; late timesheets
+listed (RD22's reallocation is implementation, above).
 
-**Payroll reports** (P10, under PREP8)
-- FTE's standard week: 40 hours typed on the report; save one per
-  organisation (or pay group)?
-- Salaried staff count 1.0000 FTE (assumed): record their usual hours?
-- FTE capped at 1 (45 hours = 1.0000): OK?
-- Reimbursements left out of labour cost: agreed?
-- Reports by pay date only: labour cost by period worked too?
-- Pay runs approved before P9 show "R&D activity not recorded": work it out
-  from the allocation they used, as the R&D claim does?
-- Exports audited without figures: need a second permission too?
+**Payroll reports** → Decisions 199-205: standard week per organisation;
+salaried hours from the usual week; FTE capped at 1; reimbursements out;
+pay date only; "Not recorded" stays; no second permission.
 
-**Workforce budgets** (P11, end of the WB section)
-- Part months: count a line starting mid-month by days?
-- Follow later pay rate changes on the employee automatically?
-- KiwiSaver employer minimum after 2026-27: a planned rate change, or typed?
-- Budget on-costs too (holiday pay, ACC levies, overtime)?
-- A "number of people" on a position line?
-- Compare actuals by pay date (as now) or by period worked?
+**Workforce budgets** → Decisions 206-211: whole months; no automatic rate
+follow; KiwiSaver as typed; on-costs later (implementation, above); one
+line per person; actuals by pay date.
 
-**Posting the leave liability** (end of the HL section): the four
-questions were decided on 2 Oct 2026 (decisions 188-191) and built.
+**Posting the leave liability**: decided 2 Oct 2026 (decisions 188-191)
+and built.
 
-**Holidays Act leave** (P8): the 14 leave build questions were decided on
-2 Oct 2026 at Jess's request (decisions 168-181, "Decided (leave build)" at
-the end of the HL section). Still for Jess or IRD:
-- Advance holiday pay over the 8% on leaving (decision 170): ask IRD how
-  recovering it is taxed (less gross pay, or after tax; same or a later
-  tax year). Refused until then.
-- Back pay over periods with leave (decision 171): the law doesn't say
-  whether a backdated rise changes holiday pay already paid. Refused.
-- 2028's public holidays (decision 179): add them when Employment NZ
-  publishes them, before any pay period touching 2028.
+**Holidays Act leave** (P8): decided 2 Oct 2026 (168-181). The three left
+for IRD or the law are now under External access (advance holiday pay,
+170; 2028 public holidays, 179) and Research (back pay over leave, 171).
 
-**Extra pays, back pay and final pays** (P12, end of the XP section)
-- IRD's example 1 is a cent off its own steps ($10,366.39 vs $10,366.40):
-  ask IRD, or follow the example?
-- Short four-week windows (a new weekly employee's bonus) are refused: use
-  IRD's "other circumstances" rule (× 13), or annualise the pays there are?
-- A bonus on a final pay without a termination item: end-of-employment
-  rule, or let the person running pay choose?
-- Holiday pay on finishing typed until P8: enough, or should final pays
-  wait for P8? (Since P8 Tohyee works it out where it keeps the leave.)
-- Back pay for periods with holiday pay is refused: pay the ordinary time
-  and flag the holiday pay instead?
-- Hourly leavers start at 0 hours (starters get the full period): agreed?
-- Separate extra-pay pay runs, and a higher rate on request: needed?
+**Extra pays, back pay and final pays** → Decisions 212-219: IRD's steps,
+not its example; short windows use IRD's "other circumstances" rule
+(built); a bonus on a final pay without a termination item stays refused;
+holiday pay on finishing as built; back pay over holiday pay periods stays
+refused; hourly leavers as built; separate extra-pay runs and a higher
+rate on request are implementation, above.
 
-**Older lists still open** (see each section): repeating bills, quotes and
-repeating invoices and printed documents, purchase orders, stock transfers,
-budgets, expense claims, fixed assets, projects.
+**Older lists** (repeating bills, quotes, repeating invoices and printed
+documents, purchase orders, stock transfers, budgets, expense claims, fixed
+assets, projects) → Decided 2 Oct 2026, decisions 270-305.
 
 ## How things are done (practical notes)
 

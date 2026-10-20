@@ -166,6 +166,8 @@ that something happened.
     (CSV)
   - a bank reconciliation for each bank and credit card account as at the
     year end (PDF)
+  - for a farm with co-op shares, the co-op share register for the year
+    (CSV) and the statements its entries name (#327, CSR9)
   - a read-me
   The figures come from the same report functions as the screens. Nothing
   is posted.
@@ -582,9 +584,12 @@ that something happened.
   accountants, server admins and app keys included, gets "not found", and
   ownership never moves. Encrypted in the database with a key of its own,
   wrapped with the server's key; docs/PRIVATE-MAIL.md says what that does
-  and doesn't protect against. Off, Disconnect (keeps the history) and Delete imported history
-  are separate. Not yet: the AI's private-mail scope, and filing an attachment
-  into shared data with a preview.
+  and doesn't protect against. Off, Disconnect (keeps the history) and
+  Delete imported history are separate. Since PM15-PM19 (decisions 618,
+  619, tenant migration 0169): the Owner can let their own Look only AI
+  keys search and read it over MCP (search_my_mail, read_my_mail), citing
+  each email; no other key is offered the tools. Not yet: filing an
+  attachment into shared data with a preview.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
@@ -1036,6 +1041,13 @@ that something happened.
   a company or a lead warns about similar companies, people and open leads.
   Merging needs the bookkeeper role or higher; anyone who changes CRM
   records can mark a pair as not duplicates.
+- **CRM bulk reassignment** (decision 650, #216): CRM › Settings ›
+  Reassign records moves leads, companies, open deals (closed ones if
+  ticked), open tasks and active sequences from one person (or someone who
+  has left, or nobody) to another, after listing every record that will
+  move so any can be unticked. Admins and bookkeepers move anyone's; a sales
+  manager only within their teams; reps can't. Each record moved shows it
+  in its history, and the page lists recent moves.
 - **CRM follow-up rules** (decision 495, #216 stage 2): CRM › Follow-ups,
   for admins and owners. Rules make a task for the right person when a new
   lead arrives (its owner, or each sales team manager if nobody owns it), a
@@ -1539,6 +1551,24 @@ that something happened.
   paddocks are warned about. **Importing** also reads KML and KMZ (Google
   Earth) and zipped shapefiles. Shapes in NZTM2000 are converted, and
   other projections are refused with a plain message.
+- **Co-op shares** (Farm, Co-op shares; #327, decisions 630-633, tenant
+  migration 0172, examples CSR1-CSR10, not yet reviewed). A register of
+  the farm's shares in co-ops (Fonterra, Ballance, Ravensdown, Silver Fern
+  Farms and the like), one line per co-op and share class.
+  - **What's kept:** each movement (brought forward, bought, issued
+    without payment, sold or surrendered, adjustment) with its date,
+    quantity, value and source statement; and each dividend (with
+    imputation credits), rebate and retention, kept apart from the shares
+    and from each other.
+  - **The register for a year:** each holding's opening quantity and
+    value, the year's movements, the closing quantity and value, and the
+    year's dividends, rebates and retentions. A holding can never go below
+    no shares or no value.
+  - **Statements:** the co-op's statements are files on the holding, and
+    each entry names its statement, its file, or both.
+  - **Year-end pack:** the register and the year's statements go in it.
+  - **Not built:** ledger links or proposed postings, a Fonterra share
+    standard calculator, and share valuation.
 - **Soil tests** (Farm, Soil tests; #249 stage 2, decision 516, tenant
   migration 0136).
   - **What's kept:** each test is a sample on a paddock and date, with

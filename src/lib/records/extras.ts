@@ -36,6 +36,7 @@ const RECORD_TABLES: Record<RecordType, { table: string; label: string }> = {
   livestock_election: { table: "livestock_elections", label: "Livestock election" },
   project_visit: { table: "project_visits", label: "Visit" },
   soil_test: { table: "soil_tests", label: "Soil test" },
+  coop_shareholding: { table: "coop_shareholdings", label: "Co-op shareholding" },
 };
 
 /**
@@ -63,6 +64,7 @@ const RELATED_EVENTS: Record<RecordType, { entityTypes: string[]; detailKeys: st
   livestock_election: null,
   project_visit: null,
   soil_test: null,
+  coop_shareholding: null,
 };
 
 /** The record type named in a URL (e.g. "invoice"), and the record's id, which must exist (NF14). */
@@ -73,7 +75,7 @@ export async function resolveRecord(
 ): Promise<{ recordType: RecordType; recordId: string }> {
   const recordType = typeof slugInput === "string" ? recordTypeFromSlug(slugInput) : null;
   if (!recordType) {
-    throw new ValidationError("Notes and files can only be added to journals, invoices, bills, credit notes, supplier credit notes, contacts, expense claims, fixed assets, livestock elections, visits and soil tests.");
+    throw new ValidationError("Notes and files can only be added to journals, invoices, bills, credit notes, supplier credit notes, contacts, expense claims, fixed assets, livestock elections, visits, soil tests and co-op shareholdings.");
   }
   const recordId = requireId(recordIdInput, "recordId");
   const { table, label } = RECORD_TABLES[recordType];
@@ -211,6 +213,8 @@ function summarise(eventType: string, details: Record<string, unknown>): string 
   switch (eventType) {
     case "note.added":
       return "Note added";
+    case "crm.reassigned":
+      return "Moved to someone else with Reassign records";
     case "note.edited":
       return "Note edited";
     case "note.deleted":
