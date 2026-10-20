@@ -75,7 +75,8 @@ what you can use; developer and server setup instructions follow it.
 | **Analytics** | SQL Server, PostgreSQL, MySQL and Google Analytics as data sources; chart formatting and a second axis; key figures with comparisons; flexible layouts; calculated values and templates. |
 | **Every graph** | One clean look in light and dark, checked for colour-blind readers. |
 | **CRM** | A shorter top bar, moving records between reps, replies as follow-ups, account plans and renewal reminders. |
-| **Tax** (not yet reviewed by an accountant) | Provisional tax payments allocated to instalments, with an excess towards instalment 1 counting in full. |
+| **Tax** (not yet reviewed by an accountant) | Provisional tax payments allocated to instalments, with an excess towards instalment 1 counting in full, and homekill as one yearly adjustment. |
+| **Groups** | Membership dates, a group workspace and saved consolidated reports. |
 
 ## New in 0.10.0: income tax
 
