@@ -26,6 +26,7 @@ const APPEND_ONLY_TABLES = [
   "payroll_cost_allocations",
   "payroll_cost_allocation_lines",
   "payroll_ird_payment_lines",
+  "group_report_snapshots",
 ];
 
 function quoteRole(role: string): string {

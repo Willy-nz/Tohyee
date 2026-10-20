@@ -5,7 +5,14 @@
 
 export type RateKind = "current" | "average" | "historical";
 
-export type ConsolidationMember = { organisationId: string; name: string; currencyCode: string };
+export type ConsolidationMember = {
+  organisationId: string;
+  name: string;
+  currencyCode: string;
+  /** The first day in the group (null: from the start) and the last (null: still in it); decision 640. */
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+};
 
 export type ConsolidationGroup = {
   id: string;
@@ -14,8 +21,15 @@ export type ConsolidationGroup = {
   parentOrganisationId: string;
   currencyCode: string;
   version: number;
-  /** The parent first. */
+  /**
+   * The parent first. On a group, the members that haven't left (in it now
+   * or joining later); on a report, the members in the group on its date.
+   */
   members: ConsolidationMember[];
+  /** Earlier stays that have ended (decision 640). */
+  formerMembers: ConsolidationMember[];
+  /** The member whose database holds the group's customer links, stage mappings and saved reports (decision 641); the parent unless changed. */
+  stewardOrganisationId: string;
   createdByEmail: string;
   createdAt: string;
   updatedAt: string;

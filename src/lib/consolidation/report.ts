@@ -2,7 +2,7 @@ import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { RECEIVABLES_SQL } from "@/lib/customers/service";
 import { todayIsoDate, parseIsoDate, parseOptionalIsoDate } from "@/lib/dates";
 import { type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
-import { ValidationError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { financialYearStart } from "@/lib/financial-year";
 import { formatDate, formatMoney } from "@/lib/format";
 import { listedRates } from "@/lib/fx/rates";
@@ -10,13 +10,16 @@ import { add, dec, type Decimal, divide, isNegative, isZero, mul, neg, sub, toFi
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { PAYABLES_SQL } from "@/lib/reports/aged-payables";
 import { financialYearEndMonth } from "@/lib/reports/financial";
-import { type GroupUser, listAdjustments, listBudgetRates, listRateOverrides, requireGroup } from "@/lib/consolidation/groups";
+import { type GroupUser, listAdjustments, listBudgetRates, listRateOverrides, requireGroup, rolesOf } from "@/lib/consolidation/groups";
+import { membersOn, periodCrossesMembership } from "@/lib/consolidation/membership";
+import { roleAtLeast } from "@/lib/auth/roles";
 import type {
   ConsolidatedBudgetVsActual,
   ConsolidatedLine,
   ConsolidatedReport,
   ConsolidatedSection,
   ConsolidationGroup,
+  ConsolidationMember,
   MonthRates,
   RateKind,
 } from "@/lib/consolidation/types";
@@ -175,15 +178,50 @@ class Translator {
 }
 
 type Loaded = {
+  /** On the report's date: only the members in the group then. */
   group: ConsolidationGroup;
+  /** Every stay of every organisation in the group, for the date checks. */
+  periods: ConsolidationMember[];
   members: Member[];
   translators: Map<string, Translator>;
   parent: Member;
   yearEndMonth: number;
 };
 
+/**
+ * The group as it was on `asAt` (decision 640): the members in it that day,
+ * parent first. Someone who can see the group now must also be able to see
+ * any organisation that has since left, or the report is refused.
+ */
+export async function groupOn(user: GroupUser, groupId: unknown, asAt: string): Promise<{ group: ConsolidationGroup; periods: ConsolidationMember[]; current: ConsolidationGroup }> {
+  const current = await requireGroup(user, groupId);
+  const periods = [...current.members, ...current.formerMembers];
+  const onDate = membersOn(periods, asAt);
+  if (!onDate.some((member) => member.organisationId === current.parentOrganisationId)) throw new ValidationError("The parent isn't in the group on that date.");
+  const roles = await rolesOf(user.id);
+  for (const member of onDate) {
+    if (current.members.some((item) => item.organisationId === member.organisationId)) continue;
+    const role = roles.get(member.organisationId);
+    if (!role || role === "report_viewer" || !roleAtLeast(role, "viewer")) {
+      throw new ForbiddenError(`You can't see every organisation that was in the group on ${formatDate(asAt)}, so this report can't be shown to you.`);
+    }
+  }
+  const others = onDate
+    .filter((member) => member.organisationId !== current.parentOrganisationId)
+    .sort((a, b) => a.name.localeCompare(b.name, "en-NZ") || a.organisationId.localeCompare(b.organisationId));
+  const members = [...onDate.filter((member) => member.organisationId === current.parentOrganisationId), ...others];
+  return { group: { ...current, members }, periods, current };
+}
+
+/** Refuses a report whose dates cross the day a member joined or left (example CO13). */
+function refuseCrossing(loaded: Loaded, from: string, to: string): void {
+  const names = new Map(loaded.periods.map((period) => [period.organisationId, period.name]));
+  const problem = periodCrossesMembership(loaded.periods, from, to, (id) => names.get(id) ?? id);
+  if (problem) throw new ValidationError(problem);
+}
+
 async function load(user: GroupUser, groupId: unknown, asAt: string, withBudget = false): Promise<Loaded> {
-  const group = await requireGroup(user, groupId);
+  const { group, periods } = await groupOn(user, groupId, asAt);
   const records: OrganisationRecord[] = [];
   for (const member of group.members) records.push((await getOrganisation(member.organisationId))!);
   const members = await Promise.all(records.map((record) => loadMember(record, user, asAt, withBudget)));
@@ -201,7 +239,7 @@ async function load(user: GroupUser, groupId: unknown, asAt: string, withBudget 
     const own = new Map(overrides.filter((entry) => entry.currencyCode === member.currency).map((entry) => [`${entry.month}|${entry.kind}`, entry.rate]));
     translators.set(member.record.id, new Translator(member, group.currencyCode, parentRecord.displayName, lists.get(member.currency) ?? [], own));
   }
-  return { group, members, translators, parent: members.find((member) => member.record.id === group.parentOrganisationId)!, yearEndMonth };
+  return { group, periods, members, translators, parent: members.find((member) => member.record.id === group.parentOrganisationId)!, yearEndMonth };
 }
 
 function refuseMissing(loaded: Loaded): void {
@@ -332,6 +370,7 @@ export async function consolidatedProfitAndLoss(user: GroupUser, groupId: unknow
   const yearStart = financialYearStart(to, loaded.yearEndMonth);
   const from = input.from == null || input.from === "" ? yearStart : parseIsoDate(input.from, "from");
   if (from > to) throw new ValidationError("'from' must be on or before 'to'.");
+  refuseCrossing(loaded, from, to);
   const perOrg: Signed = new Map();
   const own: Signed = new Map();
   const elims = new Map<string, Decimal>();
