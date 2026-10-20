@@ -18770,3 +18770,92 @@ property.
 Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
+
+## Farming (#327): the co-op share register (CSR1-CSR10; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+From the answer to item 15 in issue #360: a factual register and
+reconciliation first, with no automated Fonterra minimum-share
+calculator. Built by Claude on 20 Oct 2026. The prefix is CSR because CS1-CS3
+are custom segments. Nothing here posts to the ledger: the register holds what
+the co-ops' statements say, adds it up and checks it never goes below
+nothing. Tested in `tests/integration/coop-shares.test.ts`.
+
+**Setup.** A farming organisation whose financial year ends 31 May. The
+year is 1 Jun 2025 to 31 May 2026. Two holdings:
+
+| Date | Holding | Entry | Shares | Value | Source statement |
+|---|---|---|---:|---:|---|
+| 31 May 2025 | Fonterra co-operative shares | Brought forward | 120,000 | 660,000.00 | 2025 financial statements |
+| 15 Sep 2025 | Fonterra co-operative shares | Bought | 10,000 | 55,800.00 | Share purchase confirmation |
+| 20 Mar 2026 | Fonterra co-operative shares | Sold (entered as 5,000 and 27,500.00) | -5,000 | -27,500.00 | Share surrender statement |
+| 31 May 2025 | Ravensdown ordinary shares | Brought forward | 2,000 | 2,000.00 | 2025 financial statements |
+| 30 Sep 2025 | Ravensdown ordinary shares | Issued without payment | 1,500 | 1,500.00 | Rebate statement Sep 2025 |
+
+Payments, kept apart from the shares:
+
+| Date | Holding | Kind | Amount | Imputation credits |
+|---|---|---|---:|---:|
+| 15 Oct 2025 | Fonterra | Dividend | 18,000.00 | 7,000.00 |
+| 15 Apr 2026 | Fonterra | Dividend | 12,000.00 | 4,666.67 |
+| 30 Sep 2025 | Ravensdown | Rebate | 4,500.00 | |
+| 30 Sep 2025 | Ravensdown | Retention | 750.00 | |
+
+- **CSR1 A holding.** One per co-op and share class (Fonterra co-operative
+  shares; Ravensdown ordinary shares). A second active "fonterra /
+  CO-OPERATIVE SHARES" is refused (case doesn't matter). Farming must be on.
+  Bookkeepers and up add and remove; viewers read.
+- **CSR2 Opening.** The opening quantity and value are everything dated
+  before the year starts. Fonterra opens the year at 120,000 shares and
+  660,000.00; Ravensdown at 2,000 and 2,000.00. A brought-forward balance is
+  how a register starts: one per holding, dated on or before every other
+  movement (a second one, or a purchase dated before it, is refused). Date
+  it the day before the first year entered, so it's that year's opening.
+- **CSR3 Movements and closing.** The year's movements are listed with
+  date, type, quantity, value and source statement. A sale is entered as
+  positive numbers and shown negative. Closing is opening plus the year's
+  movements: Fonterra 120,000 + 10,000 - 5,000 = 125,000 shares and
+  660,000.00 + 55,800.00 - 27,500.00 = 688,300.00. Ravensdown 3,500 and
+  3,500.00. In total, opening value 662,000.00 and closing value 691,800.00.
+  A purchase on 10 Jun 2026 isn't in this year's closing, and next year
+  opens at this year's closing (Fonterra 125,000 and 688,300.00). Quantities
+  are summed only within a holding, never across co-ops.
+- **CSR4 Never below nothing.** Selling 130,000 Fonterra shares on 1 Aug
+  2025 is refused (it holds 120,000 then). So is a sale whose value would
+  take the holding's value below nothing. Removing a purchase that a later
+  sale relies on is refused the same way. The check runs in date order over
+  every movement, not just the year shown.
+- **CSR5 Source statements.** Every movement and payment names its source:
+  a reference ("Fonterra dividend statement Oct 2025"), a file attached to
+  the holding (stored as the holding's files, like any record's), or both.
+  With neither, it's refused. A file from another holding, or one that's
+  been removed, can't be chosen. A file removed later still shows its name,
+  marked removed.
+- **CSR6 Dividends, rebates and retentions apart.** Each is its own kind
+  and total, and none changes the shares' value. For the year: dividends
+  30,000.00 with imputation credits 11,666.67; rebates 4,500.00; retentions
+  750.00. Imputation credits are only on dividends: on a rebate they're
+  refused. An amount must be above zero.
+- **CSR7 A rebate paid in shares.** Ravensdown's 4,500.00 rebate is a
+  rebate; the 1,500 shares it issued are a separate "issued without
+  payment" movement at the value the statement shows (1,500.00). They're
+  entered separately and not linked, so the register doesn't decide how the
+  rebate is split between cash, shares and retention. That's the co-op's
+  statement and the accountant's call.
+- **CSR8 Mistakes.** A movement or payment entered by mistake is removed;
+  it's kept in the history but drops out of the register. A holding can
+  only be removed when it has no movements or payments left. Once removed,
+  the same co-op and class can be added again.
+- **CSR9 In the year-end pack.** When farming is on and there's a holding,
+  the year-end pack has "Co-op shares.csv": a Shares table (each holding's
+  opening, the year's movements, closing, then total opening and closing
+  value) and a "Dividends, rebates and retentions" table (each payment, with
+  totals for each kind). The files that the year's entries name are in a
+  "Co-op share statements" folder, each name starting with its file number
+  so two statements with the same name don't clash. A removed file isn't
+  included. No farming, or no holdings: neither is in the pack.
+- **CSR10 Not built.** No ledger links or proposed postings (they need
+  their own worked examples and tests first, #360 item 15). No calculator
+  for how many Fonterra shares a farm must hold (the share standard): its
+  rules have changed over time and aren't verified, so it's deferred. Tohyee
+  doesn't value shares (values are as entered, usually cost) or work out
+  the tax on dividends, rebates or retentions.
