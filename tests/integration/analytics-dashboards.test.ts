@@ -270,6 +270,49 @@ describeWithDatabase("analytics dashboards", () => {
     expect(reset.data.dashboard.tiles[0].format).toBeUndefined();
   });
 
+  it("saves waterfall, funnel, gauge and bullet tiles, and refuses ones that can't be drawn (#376 phase 2)", async () => {
+    const patch = (tiles: unknown[]) =>
+      dashboardRoute.PATCH(
+        apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }),
+        params({ dashboardId }),
+      );
+    const byRegion = { ...tile.query, groupBy: { field: "region" }, measures: [{ label: "Qty", aggregate: "sum", field: "quantity" }] };
+    const oneTotal = { ...byRegion, groupBy: null, measures: [{ label: "Qty", aggregate: "sum", field: "quantity" }, { label: "Budget", aggregate: "count" }] };
+    const saved = await body(
+      await patch([
+        { ...tile, id: "w", visual: "waterfall", query: byRegion, format: { waterfall: { totalLabel: "All regions", madeUp: 1 } } },
+        { ...tile, id: "f", visual: "funnel", query: byRegion, format: { funnel: { percent: "previous" } } },
+        { ...tile, id: "g", visual: "gauge", query: oneTotal, format: { gauge: { max: "10" } } },
+        { ...tile, id: "b", visual: "bullet", query: { ...byRegion, measures: oneTotal.measures }, format: { bullet: { bands: [50, 90] } } },
+      ]),
+    );
+    expect(saved.status).toBe(200);
+    expect(saved.data.dashboard.tiles.map((entry: { visual: string }) => entry.visual)).toEqual(["waterfall", "funnel", "gauge", "bullet"]);
+    expect(saved.data.dashboard.tiles[0].format).toEqual({ waterfall: { totalLabel: "All regions" } });
+
+    // The gauge's one total and its target come back from the saved tile.
+    const answer = await body(
+      await queryRoute.POST(apiRequest("/api/analytics/query", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, dashboardId, tileId: "g", filters: {} } })),
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.data.rows).toHaveLength(1);
+    expect(Object.keys(answer.data.rows[0]).sort()).toEqual(["m0", "m1"]);
+
+    const refusals: Array<[unknown, RegExp]> = [
+      [{ ...tile, visual: "gauge", query: { ...byRegion } }, /a gauge shows one total/],
+      [{ ...tile, visual: "waterfall", query: { ...byRegion, measures: oneTotal.measures } }, /a waterfall shows one value/],
+      [{ ...tile, visual: "bullet", query: { ...byRegion, measures: [...oneTotal.measures, { label: "More", aggregate: "count" }] } }, /up to two values/],
+      [{ ...tile, visual: "funnel", query: { ...byRegion, groupBy: null } }, /needs something to group by/],
+      [{ ...tile, visual: "bullet", query: byRegion, format: { bullet: { bands: [90, 50] } } }, /should go up/],
+    ];
+    for (const [entry, message] of refusals) {
+      const refused = await body(await patch([entry]));
+      expect(refused.status).toBe(400);
+      expect(refused.data.error).toMatch(message);
+    }
+    await patch([tile]);
+  });
+
   it("compares one total with the previous period or last year, with a trend by month (#334)", async () => {
     const ask = async (query: unknown, filters: unknown) =>
       body(await queryRoute.POST(apiRequest("/api/analytics/query", { method: "POST", cookie: viewerCookie, body: { organisationId: ORG, query, filters } }), noContext));
