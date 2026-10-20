@@ -37,8 +37,12 @@ import { requireOneOf, requireString } from "@/lib/validation";
  *   POST to /admin/oauth/access_token (the client credentials grant, which
  *   only works for a store in the app's own Shopify organisation):
  *   https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant
- * - The Admin GraphQL API, version 2026-07:
- *   https://shopify.dev/docs/api/admin-graphql/2026-07
+ * - The Admin GraphQL API, version 2026-10, the latest stable version on
+ *   20 Oct 2026 (decision 665; https://shopify.dev/docs/api/usage/versioning,
+ *   https://shopify.dev/changelog/release-notes/2026-10). Its release notes
+ *   list no change to anything Tohyee reads, except a new CURRENCY_CONVERSION
+ *   balance transaction type, which payouts refuse like any type they don't
+ *   know.
  * - Read-only scopes (https://shopify.dev/docs/api/usage/access-scopes):
  *   read_customers and read_products always; read_orders for orders, their
  *   transactions and refunds (the last 60 days only, without
@@ -46,16 +50,23 @@ import { requireOneOf, requireString } from "@/lib/validation";
  *   read_shopify_payments_accounts for payouts and balance transactions.
  * - Webhooks are signed with the app's secret: X-Shopify-Hmac-SHA256 is the
  *   base64 HMAC-SHA256 of the raw body
- *   (https://shopify.dev/docs/apps/build/webhooks/subscribe/https).
+ *   (https://shopify.dev/docs/apps/build/webhooks/verify-deliveries), and a
+ *   repeated delivery has the same X-Shopify-Webhook-Id
+ *   (https://shopify.dev/docs/apps/build/webhooks/ignore-duplicates).
+ *   Subscriptions give the address as `uri`: `callbackUrl` is deprecated
+ *   (https://shopify.dev/changelog/consolidate-webhook-graphql-surfaces).
+ * - Customers' names, emails, phones and addresses are protected customer
+ *   data: an app without access gets them redacted, with an error, in an
+ *   otherwise good answer (https://shopify.dev/docs/apps/launch/protected-customer-data).
  */
-export const SHOPIFY_API_VERSION = "2026-07";
+export const SHOPIFY_API_VERSION = "2026-10";
 export const SHOPIFY_SCOPES = ["read_customers", "read_products"] as const;
 /** Needed to bring orders into the accounts (decision 52). */
 export const SHOPIFY_ORDER_SCOPES = ["read_orders"] as const;
 /** Needed for Shopify Payments payouts; without them payouts are left out and the log says so. */
 export const SHOPIFY_PAYOUT_SCOPES = ["read_shopify_payments_payouts", "read_shopify_payments_accounts"] as const;
 const WEBHOOK_TOPICS = ["CUSTOMERS_CREATE", "CUSTOMERS_UPDATE", "PRODUCTS_CREATE", "PRODUCTS_UPDATE"] as const;
-// https://shopify.dev/docs/api/admin-graphql/2026-07/enums/WebhookSubscriptionTopic (all need read_orders).
+// https://shopify.dev/docs/api/admin-graphql/2026-10/enums/WebhookSubscriptionTopic (all need read_orders).
 const ORDER_WEBHOOK_TOPICS = ["ORDERS_CREATE", "ORDERS_UPDATED", "ORDERS_PAID", "ORDERS_CANCELLED", "REFUNDS_CREATE"] as const;
 const ORDER_TOPICS = ["orders/create", "orders/updated", "orders/paid", "orders/cancelled"];
 
@@ -318,7 +329,7 @@ function refund(raw: Record<string, unknown>): PlatformRefund {
 
 /**
  * An order from the Admin GraphQL API (Order, LineItem, ShippingLine,
- * OrderTransaction, Refund: https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Order).
+ * OrderTransaction, Refund: https://shopify.dev/docs/api/admin-graphql/2026-10/objects/Order).
  */
 export function shopifyOrderFromGraphql(node: unknown): PlatformOrder {
   const n = record(node);
@@ -380,7 +391,7 @@ const moneyOf = (value: unknown): string => {
   return raw !== null && /^-?\d+(\.\d+)?$/.test(raw) ? toPlainString(dec(raw)) : "0";
 };
 
-/** A balance transaction (https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShopifyPaymentsBalanceTransaction). */
+/** A balance transaction (https://shopify.dev/docs/api/admin-graphql/2026-10/objects/ShopifyPaymentsBalanceTransaction). */
 export function shopifyBalanceTransactionFromGraphql(node: unknown): PlatformBalanceTransaction {
   const n = record(node);
   return {
@@ -396,7 +407,7 @@ export function shopifyBalanceTransactionFromGraphql(node: unknown): PlatformBal
   };
 }
 
-/** A payout (https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShopifyPaymentsPayout), without its transactions. */
+/** A payout (https://shopify.dev/docs/api/admin-graphql/2026-10/objects/ShopifyPaymentsPayout), without its transactions. */
 export function shopifyPayoutFromGraphql(node: unknown): PlatformPayout {
   const n = record(node);
   const issuedAt = timestamp(n.issuedAt);
@@ -489,10 +500,23 @@ async function graphql(storeDomain: string, token: AccessToken, query: string, v
     }
     if (Array.isArray(body.errors) && body.errors.length > 0) {
       const messages = body.errors.map((e) => text(record(e).message) ?? "unknown error").join("; ");
+      if (/not approved to access/i.test(messages)) throw new PlatformError(200, protectedDataMessage(storeDomain, messages));
       throw new PlatformError(200, `${storeDomain} said: ${messages}`);
     }
     return record(body.data);
   }
+}
+
+/**
+ * Shopify redacts customers' names, emails, phones and addresses for an app
+ * without protected customer data access, with "This app is not approved to
+ * access the Customer object" in an otherwise good answer
+ * (https://shopify.dev/docs/apps/launch/protected-customer-data). Customers
+ * matched by a blank email would be wrong, so the sync stops and says what
+ * to turn on (decision 665).
+ */
+export function protectedDataMessage(storeDomain: string, messages: string): string {
+  return `${storeDomain} said: ${messages}. Shopify only gives customers' names, emails, phones and addresses to an app with access to protected customer data. In the app's settings in Shopify (the Dev Dashboard, or the store admin's app settings for an older custom app), turn on access to protected customer data for name, email, phone and address, then sync again.`;
 }
 
 function userErrors(result: Record<string, unknown>): string | null {
@@ -597,7 +621,7 @@ const PAYOUTS_QUERY = `query TohyeePayouts($first: Int!, $after: String, $query:
 const BALANCE_TRANSACTIONS_QUERY = `query TohyeePayoutTransactions($first: Int!, $after: String, $query: String) {
   shopifyPaymentsAccount {
     balanceTransactions(first: $first, after: $after, query: $query) {
-      nodes { id type test adjustmentReason amount { amount currencyCode } fee { amount } net { amount } associatedOrder { name } }
+      nodes { id type test adjustmentReason amount { amount currencyCode } fee { amount } net { amount } associatedOrder { name } associatedPayout { id } }
       pageInfo { hasNextPage endCursor }
     }
   }
@@ -637,7 +661,14 @@ async function fetchOneOrder(storeDomain: string, token: AccessToken, orderId: s
   return shopifyOrderFromGraphql({ ...order, refunds });
 }
 
-/** All of a payout's balance transactions (payments_transfer_id is the payout's ID). */
+/**
+ * All of a payout's balance transactions. `payments_transfer_id` (the
+ * payout's ID) is a documented filter of balanceTransactions, but Shopify's
+ * staff also suggest checking each one's associatedPayout
+ * (https://community.shopify.dev/t/balance-transactions-by-payout-id/20934),
+ * so a transaction that says it belongs to another payout is left out and
+ * the payout's own total check catches anything missing (decision 665).
+ */
 async function payoutTransactions(storeDomain: string, token: AccessToken, payout: PlatformPayout): Promise<PlatformPayout> {
   const transactions: PlatformBalanceTransaction[] = [];
   let after: string | null = null;
@@ -648,7 +679,11 @@ async function payoutTransactions(storeDomain: string, token: AccessToken, payou
       query: `payments_transfer_id:${payout.externalId}`,
     });
     const connection = record(record(data.shopifyPaymentsAccount).balanceTransactions);
-    transactions.push(...nodesOf(connection).map(shopifyBalanceTransactionFromGraphql));
+    for (const node of nodesOf(connection)) {
+      const owner = text(record(node.associatedPayout).id);
+      if (owner && shopifyId(owner, "payout") !== payout.externalId) continue;
+      transactions.push(shopifyBalanceTransactionFromGraphql(node));
+    }
     const info = record(connection.pageInfo);
     if (info.hasNextPage !== true || !text(info.endCursor)) return { ...payout, transactions };
     after = text(info.endCursor);
@@ -846,7 +881,8 @@ export const shopifyConnector: SalesPlatformConnector = {
     const ids: string[] = [];
     try {
       for (const topic of [...WEBHOOK_TOPICS, ...(options.orders ? ORDER_WEBHOOK_TOPICS : [])]) {
-        const data = await graphql(context.storeDomain, token, WEBHOOK_CREATE, { topic, webhookSubscription: { callbackUrl, format: "JSON" } });
+        // `uri`, not the deprecated `callbackUrl` (2025-10 onwards).
+        const data = await graphql(context.storeDomain, token, WEBHOOK_CREATE, { topic, webhookSubscription: { uri: callbackUrl, format: "JSON" } });
         const result = record(data.webhookSubscriptionCreate);
         const problem = userErrors(result);
         if (problem) throw new PlatformError(200, `${context.storeDomain} didn't accept the ${topic} webhook: ${problem}`);

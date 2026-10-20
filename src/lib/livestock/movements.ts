@@ -16,9 +16,11 @@ import { type AgeingStep, ageingSteps, type HerdMovement, lastDate, walkHerd } f
 /*
  * Livestock movements and head counts (#221 stage 2; examples LV1-LV3,
  * decision 503). Births, deaths and ageing change head counts only (LV8),
- * and the year-end valuation (stage 3) turns them into values. The one
- * posting here is the owner's rations (RAT1): income at market value,
- * Dr drawings, Cr rations income.
+ * and the year-end valuation (stage 3) turns them into values. Nothing here
+ * posts: the owner's rations (homekill) are head counts, and the accountant
+ * enters one adjustment for the year (rations-adjustments.ts; RAT1, RAT5,
+ * Jess 20 Oct 2026). Rations journals posted per event before then are kept
+ * and reversed if their movement is voided (RAT9).
  */
 
 export const MOVEMENT_TYPES = ["birth", "purchase", "sale", "death", "missing", "found", "reclass", "transfer", "arrival", "departure", "rations"] as const;
@@ -38,7 +40,7 @@ export const MOVEMENT_LABELS: Readonly<Record<MovementType, string>> = {
   rations: "Killed for rations",
 };
 
-/** Whose rations (RAT1, RAT2): the owner's are income at market value; staff rations post nothing. */
+/** Whose rations (RAT1, RAT2): neither posts; the owner's are valued once a year by the accountant (RAT5). */
 export const RATIONS_FOR = ["owner", "staff"] as const;
 export type RationsFor = (typeof RATIONS_FOR)[number];
 
@@ -600,12 +602,14 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   let amount: string | null = null;
   if (movementType === "purchase" || movementType === "sale") {
     amount = amountGiven ? parseDecimalInput(input.amount, "Amount", { maxScale: 2, allowZero: true }) : null;
-  } else if (rationsFor === "owner") {
-    // Income at market value (RAT1), so the value is needed.
-    if (!amountGiven) throw new ValidationError("Enter the market value of the owner's rations (excluding GST). It's income at market value.");
-    amount = parseDecimalInput(input.amount, "Market value", { maxScale: 2 });
   } else if (amountGiven) {
-    throw new ValidationError(rationsFor === "staff" ? "Staff rations have no value to enter: nothing is posted, and the lower closing stock is the cost." : "Only purchases, sales and the owner's rations have an amount.");
+    throw new ValidationError(
+      rationsFor === "staff"
+        ? "Staff rations have no value to enter: nothing is posted, and the lower closing stock is the cost."
+        : rationsFor === "owner"
+          ? "The owner's rations aren't valued one by one: the accountant enters one homekill adjustment for the year."
+          : "Only purchases and sales have an amount.",
+    );
   }
   const salesInvoiceLineId = optionalId(input.salesInvoiceLineId, "salesInvoiceLineId");
   const billLineId = optionalId(input.billLineId, "billLineId");
@@ -640,7 +644,6 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   await assertYearOpen(tx, settings, movementDate);
   if (salesInvoiceLineId) await assertDocumentLine(tx, "invoice", salesInvoiceLineId);
   if (billLineId) await assertDocumentLine(tx, "bill", billLineId);
-  const rationsAccounts = rationsFor === "owner" ? await requireRationsAccounts(tx) : null;
 
   await lockLivestock(tx);
   let id: string;
@@ -683,24 +686,6 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     throw error;
   }
   await assertNoNegative(tx);
-  if (rationsAccounts && amount) {
-    const journal = await postJournalBody(
-      tx,
-      "livestock_rations",
-      id,
-      parseJournalBody(tx, {
-        postingDate: movementDate,
-        reference: `RATIONS-${id}`,
-        description: `${head} ${definition.name.toLowerCase()} killed for the owner's rations, at market value`,
-        lines: [
-          { accountCode: rationsAccounts.drawings, debitAmount: amount, creditAmount: "0" },
-          { accountCode: rationsAccounts.income, debitAmount: "0", creditAmount: amount },
-        ],
-      }),
-      { origin: "livestock_rations" },
-    );
-    await tx.query("update livestock_movements set journal_id = $2 where id = $1", [id, journal.journal.id]);
-  }
   await writeAuditEvent(tx, {
     eventType: "livestock.movement_recorded",
     entityType: "livestock_movement",
@@ -710,8 +695,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   return { created: true, movement: await getMovement(tx, id) };
 }
 
-/** The owner's rations accounts, made if they aren't set yet (RAT1). */
-async function requireRationsAccounts(tx: OrgTx): Promise<{ income: string; drawings: string }> {
+/** The owner's rations accounts, made if they aren't set yet (RAT5). */
+export async function requireRationsAccounts(tx: OrgTx): Promise<{ income: string; drawings: string }> {
   await ensureAccounts(tx);
   const { accounts } = await getLivestockSettings(tx);
   if (!accounts.rationsIncome || !accounts.drawings) {

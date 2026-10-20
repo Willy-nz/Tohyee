@@ -10,6 +10,7 @@ import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { homeKindFor } from "@/lib/dashboard/defaults";
 import { financialYearEnd } from "@/lib/financial-year";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
@@ -17,8 +18,9 @@ import type { OrganisationSettings } from "@/lib/organisations/settings";
 function Overview({ organisationId }: { organisationId: string }) {
   const { current, user } = useWorkspace();
   const modules = useModules(organisationId);
-  // FH1: with Farming on, Home is the farm Home; ?view=business shows the business one.
+  // FH1, decision 660: with Farming on, Home is the farm Home; ?view=business shows the business one.
   const business = useSearchParams().get("view") === "business";
+  const farmHome = modules !== null && current !== null && homeKindFor({ role: current.role, farming: modules.farming === true }) === "farming";
   const settings = useApiData<{ settings: OrganisationSettings }>(`/api/organisations/${organisationId}/settings`);
   const [greeting, setGreeting] = useState("Welcome");
   useEffect(() => {
@@ -38,7 +40,7 @@ function Overview({ organisationId }: { organisationId: string }) {
         title={`${greeting}, ${user.displayName.trim().split(/\s+/)[0] || user.displayName}`}
         description={<>{current?.displayName}{yearEnd ? ` · Financial year ending ${formatDate(yearEnd)}` : ""}</>}
       />
-      {modules === null ? null : modules.farming && !business ? (
+      {modules === null ? null : farmHome && !business ? (
         <FarmHomeTiles organisationId={organisationId} />
       ) : (
         <>

@@ -70,10 +70,11 @@ export const GST_EVENT_TYPES = [
   "expense_claim_voided",
   "expense_claim_payment",
   "expense_claim_payment_voided",
+  "rations_adjustment",
 ] as const;
 export type GstEventType = (typeof GST_EVENT_TYPES)[number];
 
-export type GstDocumentType = "sales_invoice" | "sales_credit_note" | "bill" | "supplier_credit_note" | "bank_transaction" | "expense_claim";
+export type GstDocumentType = "sales_invoice" | "sales_credit_note" | "bill" | "supplier_credit_note" | "bank_transaction" | "expense_claim" | "livestock_rations";
 export type GstLineBox = "5" | "6" | "11";
 
 /** One document line in a GST event, with the boxes it counts in (none when it's left out). */
@@ -307,6 +308,12 @@ with events as (
     from bank_transactions t
    where t.status = 'voided' and t.void_date between $1 and $2
   union all
+  -- The owner's rations (homekill) yearly adjustment with GST counts on its date on every basis (RAT6, RAT7). A voided
+  -- one drops out, so one voided after its period is filed is taken back off as a late claim (RAT8).
+  select 'sales', 'rations_adjustment', r.adjustment_date, 1, 'livestock_rations', r.id, null, null
+    from livestock_rations_adjustments r
+   where r.gst_applies and r.voided_at is null and r.adjustment_date between $1 and $2
+  union all
   ${SETTLEMENTS_SQL}
 ),
 documents as (
@@ -323,6 +330,8 @@ documents as (
   select 'bank_transaction', id, coalesce(reference, 'BT-' || id), reference, contact_id, null, null, null from bank_transactions
   union all
   select 'expense_claim', id, 'CLAIM-' || id, null, null, claimant_email, null, null from expense_claims
+  union all
+  select 'livestock_rations', id, 'HOMEKILL-' || year_end, null, null, 'Owner (homekill)', null, null from livestock_rations_adjustments
 ),
 -- Foreign-currency documents count at their base amounts: each line converted
 -- at the document's rate, as at the time of supply (GST Act s 77; MC13).
@@ -351,6 +360,10 @@ document_lines as (
   select 'expense_claim', claim_id, line_order, supplier_name || ': ' || description, tax_code_id, tax_rate, net_amount,
          tax_amount
     from expense_claim_receipts
+  union all
+  select 'livestock_rations', id, 1, 'Owner''s rations (homekill) for the year: ' || reason, tax_code_id, 0.15::numeric, net_amount, gst_amount
+    from livestock_rations_adjustments
+   where gst_applies
 )
 select e.side, e.event_type, e.event_date, e.sign, e.settlement_id::text,
        -- A foreign-currency document's settlement is its share of the document's base amount.
@@ -387,6 +400,7 @@ const DOCUMENT_LABELS: Record<GstDocumentType, string> = {
   supplier_credit_note: "supplier credit note",
   bank_transaction: "bank transaction",
   expense_claim: "expense claim",
+  livestock_rations: "homekill adjustment",
 };
 
 function toLine(

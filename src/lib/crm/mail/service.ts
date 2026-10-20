@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
+import { noticeReplies } from "@/lib/crm/replies";
 import { crmEnabled, requireCrm } from "@/lib/crm/switch";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
@@ -30,7 +31,7 @@ import { requireOneOf } from "@/lib/validation";
  * CRM email and calendar sync (examples MAIL1-MAIL9), after Twenty's
  * connected accounts: each member connects their own Gmail or Microsoft 365
  * mailbox, and only emails and meetings with a person or company the CRM
- * knows are kept (subject, a short preview and who/when; never full bodies
+ * knows, or a lead that isn't converted (decision 651), are kept (subject, a short preview and who/when; never full bodies
  * or attachments). Network calls happen outside database transactions.
  */
 export const CALLBACK_PATH = "/api/crm/mail/callback";
@@ -376,30 +377,41 @@ export async function disconnect(tx: OrgTx, idInput: unknown, isAdmin: boolean):
 // ---------------------------------------------------------------------------
 // Syncing (MAIL3-MAIL5, MAIL8, MAIL9)
 
-type Known = { people: Map<string, { personId: string; contactId: string | null }[]>; contacts: Map<string, string[]> };
+type Known = {
+  people: Map<string, { personId: string; contactId: string | null }[]>;
+  contacts: Map<string, string[]>;
+  /** Leads that aren't converted (decision 651): their emails are kept too, linked to the lead. */
+  leads: Map<string, string[]>;
+};
+export type ParticipantLink = { personId: string | null; contactId: string | null; leadId: string | null };
 
 async function knownAddresses(tx: OrgTx): Promise<Known> {
   const people = await tx.query<{ id: string; contact_id: string | null; email: string }>(
     "select id, contact_id, lower(email) as email from crm_people where email is not null",
   );
   const contacts = await tx.query<{ id: string; email: string }>("select id, lower(email) as email from contacts where email is not null");
-  const known: Known = { people: new Map(), contacts: new Map() };
+  const leads = await tx.query<{ id: string; email: string }>(
+    "select id::text, lower(email) as email from crm_leads where email is not null and status <> 'converted' order by crm_leads.id",
+  );
+  const known: Known = { people: new Map(), contacts: new Map(), leads: new Map() };
   for (const row of people.rows) known.people.set(row.email, [...(known.people.get(row.email) ?? []), { personId: row.id, contactId: row.contact_id }]);
   for (const row of contacts.rows) known.contacts.set(row.email, [...(known.contacts.get(row.email) ?? []), row.id]);
+  for (const row of leads.rows) known.leads.set(row.email, [...(known.leads.get(row.email) ?? []), row.id]);
   return known;
 }
 
-/** The people and companies among the participants, not counting the mailbox's owner; each once. */
-export function matchParticipants(known: Known, participants: Participant[], ownAddress: string): Array<{ personId: string | null; contactId: string | null }> {
-  const links = new Map<string, { personId: string | null; contactId: string | null }>();
+/** The people, companies and open leads among the participants, not counting the mailbox's owner; each once. */
+export function matchParticipants(known: Known, participants: Participant[], ownAddress: string): ParticipantLink[] {
+  const links = new Map<string, ParticipantLink>();
   const own = ownAddress.toLowerCase();
   for (const participant of participants) {
     const email = participant.email.toLowerCase();
     if (email === own) continue;
-    for (const person of known.people.get(email) ?? []) links.set(`p${person.personId}`, { personId: person.personId, contactId: person.contactId });
+    for (const person of known.people.get(email) ?? []) links.set(`p${person.personId}`, { personId: person.personId, contactId: person.contactId, leadId: null });
     for (const contactId of known.contacts.get(email) ?? []) {
-      if (![...links.values()].some((link) => link.contactId === contactId)) links.set(`c${contactId}`, { personId: null, contactId });
+      if (![...links.values()].some((link) => link.contactId === contactId)) links.set(`c${contactId}`, { personId: null, contactId, leadId: null });
     }
+    for (const leadId of known.leads.get(email) ?? []) links.set(`l${leadId}`, { personId: null, contactId: null, leadId });
   }
   return [...links.values()];
 }
@@ -514,7 +526,7 @@ export async function syncAccount(organisation: OrganisationRecord, accountId: s
         if (!id) continue;
         keptMessages += 1;
         for (const link of links) {
-          await tx.query("insert into crm_participant_links (message_id, person_id, contact_id) values ($1, $2, $3)", [id, link.personId, link.contactId]);
+          await tx.query("insert into crm_participant_links (message_id, person_id, contact_id, lead_id) values ($1, $2, $3, $4)", [id, link.personId, link.contactId, link.leadId]);
         }
       }
       for (const event of events) {
@@ -533,7 +545,18 @@ export async function syncAccount(organisation: OrganisationRecord, accountId: s
         if (inserted) keptMeetings += 1;
         await tx.query("delete from crm_participant_links where event_id = $1", [id]);
         for (const link of links) {
-          await tx.query("insert into crm_participant_links (event_id, person_id, contact_id) values ($1, $2, $3)", [id, link.personId, link.contactId]);
+          await tx.query("insert into crm_participant_links (event_id, person_id, contact_id, lead_id) values ($1, $2, $3, $4)", [id, link.personId, link.contactId, link.leadId]);
+        }
+      }
+      if (keptMessages > 0) {
+        // A reply to a sales email or sequence becomes a task for its owner straight away (decision 651).
+        await tx.query("savepoint notice_replies");
+        try {
+          await noticeReplies(tx);
+          await tx.query("release savepoint notice_replies");
+        } catch (caught) {
+          await tx.query("rollback to savepoint notice_replies");
+          console.warn("[tohyee] Noticing replies after mail sync:", caught instanceof Error ? caught.message : caught);
         }
       }
       const newest = messages.reduce((max, m) => (m.sentAt > max ? m.sentAt : max), account.messages_synced_until ?? since.toISOString());
@@ -656,13 +679,14 @@ export type SyncedMeeting = {
   private: boolean;
 };
 
-/** A company's (or person's) synced emails and meetings, hidden to "(private)" where the mailbox's owner chose so and it isn't the viewer's. */
+/** A company's, person's or lead's synced emails and meetings, hidden to "(private)" where the mailbox's owner chose so and it isn't the viewer's. */
 export async function syncedFor(
   tx: OrgTx,
-  target: { contactId?: string | null; personId?: string | null },
+  target: { contactId?: string | null; personId?: string | null; leadId?: string | null },
 ): Promise<{ emails: SyncedEmail[]; meetings: SyncedMeeting[] }> {
-  const params = [target.contactId ?? null, target.personId ?? null, tx.actor.userId ?? ""];
-  const where = `(($1::bigint is not null and (l.contact_id = $1 or p.contact_id = $1)) or ($2::bigint is not null and l.person_id = $2))`;
+  const params = [target.contactId ?? null, target.personId ?? null, tx.actor.userId ?? "", target.leadId ?? null];
+  const where = `(($1::bigint is not null and (l.contact_id = $1 or p.contact_id = $1)) or ($2::bigint is not null and l.person_id = $2)
+                  or ($4::bigint is not null and l.lead_id = $4))`;
   const emails = await tx.query<{
     id: string;
     direction: "sent" | "received";

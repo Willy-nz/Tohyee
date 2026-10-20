@@ -1,8 +1,10 @@
-import { getDashboardPreference, saveDashboardPreference } from "@/lib/dashboard/preferences";
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { getDashboardPreference, resetDashboardPreference, saveDashboardPreference } from "@/lib/dashboard/preferences";
+import { json, readJson, route, searchParams, withCrm, withOrganisation } from "@/lib/api/http";
+import type { AuthContext } from "@/lib/auth/guard";
 import { listDashboards } from "@/lib/analytics/dashboards";
 import { analyticsTileReference, parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
-import { dashboardPage, defaultDashboardTileIds, maxTilesFor } from "@/lib/dashboard/pages";
+import { defaultTilesFor, homeKindFor, type HomeContext, type HomeKind } from "@/lib/dashboard/defaults";
+import { dashboardCardIds, dashboardPage, type DashboardPage, maxTilesFor } from "@/lib/dashboard/pages";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import type { Role } from "@/lib/auth/roles";
@@ -43,29 +45,70 @@ function checkTiles(input: unknown, allowed: readonly string[], analyticsOn: boo
   }
 }
 
+/** What decision 660 goes by: the person's role and the organisation's modules and records. */
+async function homeContext(tx: OrgTx, role: Role): Promise<HomeContext> {
+  const settings = await tx.query<{ accounting_enabled: boolean; crm_enabled: boolean; gst_registered: boolean; farming_enabled: boolean; has_jobs: boolean }>(
+    `select s.accounting_enabled, s.crm_enabled, s.gst_registered,
+            coalesce((select enabled from farming_settings where id = true), false) as farming_enabled,
+            exists (select 1 from projects where is_job) as has_jobs
+       from organisation_settings s where s.id = true`,
+  );
+  const row = settings.rows[0];
+  return {
+    role,
+    farming: row?.accounting_enabled === true && row.farming_enabled === true,
+    crm: row?.crm_enabled === true,
+    gstRegistered: row?.gst_registered === true,
+    hasJobs: row?.has_jobs === true,
+  };
+}
+
+/**
+ * The page's work in a transaction: the CRM's Home through `withCrm`, so
+ * sales reps and managers can keep their own (decision 491); the others need
+ * report viewer or up, as before.
+ */
+function onPage<T>(
+  request: Request,
+  organisationId: unknown,
+  definition: DashboardPage,
+  work: (tx: OrgTx, context: { auth: AuthContext; role: Role }) => Promise<T>,
+): Promise<T> {
+  if (definition.module === "crm") return withCrm(request, organisationId, "read", (tx, { auth, membership }) => work(tx, { auth, role: membership.role }));
+  return withOrganisation(request, organisationId, "report_viewer", (tx, { auth, membership }) => work(tx, { auth, role: membership.role }));
+}
+
+async function startingTiles(tx: OrgTx, page: DashboardPage, role: Role): Promise<{ defaults: string[]; kind: HomeKind }> {
+  const context = await homeContext(tx, role);
+  return { defaults: defaultTilesFor(page.id, context), kind: homeKindFor(context) };
+}
+
+/** GET ?organisationId=&page=: the person's tiles (their own, or the starting ones for them, decision 660) and whether they're hidden. */
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const page = params.get("page") ?? "";
   const definition = dashboardPage(page);
   if (!definition) return json({ error: "Unknown dashboard page." }, { status: 404 });
-  const preference = await withOrganisation(request, params.get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
-    const defaults = defaultDashboardTileIds(definition);
-    const { allowed } = await allowedTiles(tx, defaults, auth.user.id, membership.role);
-    return getDashboardPreference(tx, { userId: auth.user.id, page, defaultTiles: defaults, allowedTiles: allowed, maxTiles: maxTilesFor(definition) });
+  const preference = await onPage(request, params.get("organisationId"), definition, async (tx, { auth, role }) => {
+    const { defaults, kind } = await startingTiles(tx, definition, role);
+    const { allowed } = await allowedTiles(tx, dashboardCardIds(definition), auth.user.id, role);
+    const saved = await getDashboardPreference(tx, { userId: auth.user.id, page, defaultTiles: defaults, allowedTiles: allowed, maxTiles: maxTilesFor(definition) });
+    return { ...saved, kind, defaultTiles: defaults };
   });
   return json(preference);
 });
 
+/** PUT { organisationId, page, hidden, tiles }: saves the person's own choice, which then always wins over the starting cards. */
 export const PUT = route(async (request) => {
   const body = await readJson(request);
   const page = typeof body.page === "string" ? body.page : "";
   const definition = dashboardPage(page);
   if (!definition) return json({ error: "Unknown dashboard page." }, { status: 404 });
-  const preference = await withOrganisation(request, body.organisationId, "report_viewer", async (tx, { auth, membership }) => {
-    const defaults = defaultDashboardTileIds(definition);
-    const { allowed, analyticsOn } = await allowedTiles(tx, defaults, auth.user.id, membership.role);
+  const preference = await onPage(request, body.organisationId, definition, async (tx, { auth, role }) => {
+    const { defaults, kind } = await startingTiles(tx, definition, role);
+    const { allowed, analyticsOn } = await allowedTiles(tx, dashboardCardIds(definition), auth.user.id, role);
     checkTiles(body.tiles, allowed, analyticsOn, maxTilesFor(definition));
-    return saveDashboardPreference(tx, {
+    const saved = await saveDashboardPreference(tx, {
       userId: auth.user.id,
       page,
       hidden: body.hidden,
@@ -74,6 +117,21 @@ export const PUT = route(async (request) => {
       allowedTiles: allowed,
       maxTiles: maxTilesFor(definition),
     });
+    return { ...saved, kind, defaultTiles: defaults };
+  });
+  return json(preference);
+});
+
+/** DELETE ?organisationId=&page=: back to the starting cards for this person (decision 660). */
+export const DELETE = route(async (request) => {
+  const params = searchParams(request);
+  const page = params.get("page") ?? "";
+  const definition = dashboardPage(page);
+  if (!definition) return json({ error: "Unknown dashboard page." }, { status: 404 });
+  const preference = await onPage(request, params.get("organisationId"), definition, async (tx, { auth, role }) => {
+    await resetDashboardPreference(tx, { userId: auth.user.id, page });
+    const { defaults, kind } = await startingTiles(tx, definition, role);
+    return { hidden: false, tiles: defaults, customised: false, kind, defaultTiles: defaults };
   });
   return json(preference);
 });

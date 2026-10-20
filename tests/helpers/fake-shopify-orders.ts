@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 
 /**
  * Shopify-shaped records for examples SPC11-SPC23, and a pretend store that
- * serves them the way the Admin GraphQL API (2026-07) and the client
+ * serves them the way the Admin GraphQL API (2026-10) and the client
  * credentials grant do. The shapes follow shopify.dev's reference pages
  * (Order, LineItem, ShippingLine, OrderTransaction, Refund,
  * ShopifyPaymentsPayout, ShopifyPaymentsBalanceTransaction); none of it was
@@ -186,7 +186,7 @@ export function payoutNode(p: PayoutFixture) {
   };
 }
 
-export function balanceTransactionNode(t: BalanceTransactionFixture, currency = "NZD") {
+export function balanceTransactionNode(t: BalanceTransactionFixture, currency = "NZD", payoutId: number | null = null) {
   return {
     id: gid("ShopifyPaymentsBalanceTransaction", t.id),
     type: t.type,
@@ -196,6 +196,7 @@ export function balanceTransactionNode(t: BalanceTransactionFixture, currency = 
     fee: { amount: t.fee },
     net: { amount: t.net },
     associatedOrder: t.orderName ? { name: t.orderName } : null,
+    associatedPayout: payoutId === null ? null : { id: gid("ShopifyPaymentsPayout", payoutId) },
   };
 }
 
@@ -476,7 +477,7 @@ export function fakeShopifyStore(state: StoreState) {
       state.tokens.push(token);
       return json({ access_token: token, scope: state.scopes.join(","), expires_in: 86399 });
     }
-    if (url.pathname !== "/admin/api/2026-07/graphql.json" || init?.method !== "POST") return json({ errors: "Not Found" }, 404);
+    if (url.pathname !== "/admin/api/2026-10/graphql.json" || init?.method !== "POST") return json({ errors: "Not Found" }, 404);
     if (!state.tokens.includes(new Headers(init?.headers).get("x-shopify-access-token") ?? "")) {
       return json({ errors: "[API] Invalid API key or access token (unrecognized login or wrong password)" }, 401);
     }
@@ -494,7 +495,7 @@ export function fakeShopifyStore(state: StoreState) {
     if (query.includes("webhookSubscriptionCreate")) {
       webhookCounter += 1;
       const id = `gid://shopify/WebhookSubscription/${webhookCounter}`;
-      state.webhooks.push({ id, topic: variables.topic, callbackUrl: variables.webhookSubscription.callbackUrl });
+      state.webhooks.push({ id, topic: variables.topic, callbackUrl: variables.webhookSubscription.uri });
       return json({ data: { webhookSubscriptionCreate: { webhookSubscription: { id }, userErrors: [] } } });
     }
     if (query.includes("webhookSubscriptionDelete")) {
@@ -578,7 +579,7 @@ export function fakeShopifyStore(state: StoreState) {
       const payout = state.payouts.find((p) => p.id === id);
       const result = page(payout?.transactions ?? []);
       return json({
-        data: { shopifyPaymentsAccount: { balanceTransactions: { nodes: result.nodes.map((t) => balanceTransactionNode(t)), pageInfo: result.pageInfo } } },
+        data: { shopifyPaymentsAccount: { balanceTransactions: { nodes: result.nodes.map((t) => balanceTransactionNode(t, "NZD", id)), pageInfo: result.pageInfo } } },
       });
     }
     return json({ errors: [{ message: `unexpected query ${query.slice(0, 60)}` }] });
@@ -599,7 +600,7 @@ export function signedWebhook(
       "content-type": "application/json",
       "x-shopify-topic": topic,
       "x-shopify-shop-domain": DOMAIN,
-      "x-shopify-api-version": "2026-07",
+      "x-shopify-api-version": "2026-10",
       "x-shopify-webhook-id": options.id,
       "x-shopify-triggered-at": "2026-10-02T01:31:00Z",
       "x-shopify-hmac-sha256": createHmac("sha256", options.secret ?? CLIENT_SECRET).update(body, "utf8").digest("base64"),

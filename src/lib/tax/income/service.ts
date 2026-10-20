@@ -11,6 +11,7 @@ import { buildIca, type Ica } from "@/lib/tax/income/ica";
 import { ir3Return, type Ir3Return } from "@/lib/tax/income/ir3";
 import { ir4Return, type Ir4Return } from "@/lib/tax/income/ir4";
 import { buildIr10, type Ir10 } from "@/lib/tax/income/ir10";
+import { allocationsFor, appliesToNumber, PAYMENT_REVERSED_SQL, type TaxAllocation } from "@/lib/tax/income/allocations";
 import { type InterestPeriod, requirements, underpaymentInterest } from "@/lib/tax/income/uomi";
 import {
   EXPENSE_TREATMENTS,
@@ -27,6 +28,9 @@ import {
   type OnTimeBy,
   onTimeBy,
   type ProvisionalSchedule,
+  cappedAllocations,
+  effectiveDate,
+  type Payment,
   standardSchedule,
   TAXPAYER_TYPES,
   type TaxpayerType,
@@ -313,16 +317,52 @@ export async function saveIncomeTaxYear(
 // --- Typed adjustments and payments -----------------------------------------
 
 export type TaxAdjustment = { id: string; incomeYear: number; description: string; amount: string; createdByEmail: string | null; createdAt: string };
-export type TaxPayment = { id: string; incomeYear: number; paidOn: string; amount: string; note: string | null; createdByEmail: string | null; createdAt: string };
+export type TaxPayment = {
+  id: string;
+  incomeYear: number;
+  /** The bank date. */
+  paidOn: string;
+  /** IRD's effective date, once known (ITX6C). */
+  irdEffectiveOn: string | null;
+  amount: string;
+  note: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+  /** Counted from the books, and that journal was reversed since: counts for nothing (ITX6F). */
+  reversed: boolean;
+  /** Where it goes now (ITX6A-ITX6H). */
+  allocations: TaxAllocation[];
+  /** Allocations replaced or taken off, with the reasons. */
+  replacedAllocations: TaxAllocation[];
+  /** Not confirmed or evidenced against an instalment or the end-of-year tax: awaiting reconciliation. */
+  awaiting: string;
+};
 
 type AdjustmentRow = { id: string; request_hash: string; income_year: number; description: string; amount: string; created_by_email: string | null; created_at: string };
-type PaymentRow = { id: string; request_hash: string; income_year: number; paid_on: string; amount: string; note: string | null; created_by_email: string | null; created_at: string };
+type PaymentRow = { id: string; request_hash: string; income_year: number; paid_on: string; ird_effective_on: string | null; amount: string; note: string | null; created_by_email: string | null; created_at: string };
 
 const toAdjustment = (row: AdjustmentRow): TaxAdjustment => ({ id: row.id, incomeYear: row.income_year, description: row.description, amount: row.amount, createdByEmail: row.created_by_email, createdAt: new Date(row.created_at).toISOString() });
-const toPayment = (row: PaymentRow): TaxPayment => ({ id: row.id, incomeYear: row.income_year, paidOn: row.paid_on, amount: row.amount, note: row.note, createdByEmail: row.created_by_email, createdAt: new Date(row.created_at).toISOString() });
+const toPayment = (row: PaymentRow, reversed = false, allocations: TaxAllocation[] = []): TaxPayment => {
+  const current = allocations.filter((entry) => entry.paymentId === row.id && !entry.replaced);
+  const counted = current.filter((entry) => entry.status !== "forecast").reduce((total, entry) => add(total, dec(entry.amount)), ZERO_DECIMAL);
+  return {
+    id: row.id,
+    incomeYear: row.income_year,
+    paidOn: row.paid_on,
+    irdEffectiveOn: row.ird_effective_on,
+    amount: row.amount,
+    note: row.note,
+    createdByEmail: row.created_by_email,
+    createdAt: new Date(row.created_at).toISOString(),
+    reversed,
+    allocations: current,
+    replacedAllocations: allocations.filter((entry) => entry.paymentId === row.id && entry.replaced),
+    awaiting: money(reversed ? ZERO_DECIMAL : sub(dec(row.amount), counted)),
+  };
+};
 
 const ADJUSTMENT_COLUMNS = "id::text, request_hash, income_year, description, amount::text, created_by_email, created_at";
-const PAYMENT_COLUMNS = "id::text, request_hash, income_year, paid_on::text, amount::text, note, created_by_email, created_at";
+const PAYMENT_COLUMNS = "id::text, request_hash, income_year, paid_on::text, ird_effective_on::text, amount::text, note, created_by_email, created_at";
 
 export async function listAdjustments(tx: OrgTx, incomeYear: number): Promise<TaxAdjustment[]> {
   const result = await tx.query<AdjustmentRow>(`select ${ADJUSTMENT_COLUMNS} from income_tax_adjustments where income_year = $1 order by income_tax_adjustments.id`, [incomeYear]);
@@ -330,8 +370,25 @@ export async function listAdjustments(tx: OrgTx, incomeYear: number): Promise<Ta
 }
 
 export async function listPayments(tx: OrgTx, incomeYear: number): Promise<TaxPayment[]> {
-  const result = await tx.query<PaymentRow>(`select ${PAYMENT_COLUMNS} from income_tax_payments where income_year = $1 order by paid_on, income_tax_payments.id`, [incomeYear]);
-  return result.rows.map(toPayment);
+  const result = await tx.query<PaymentRow & { reversed: boolean }>(
+    `select p.id::text, p.request_hash, p.income_year, p.paid_on::text, p.ird_effective_on::text, p.amount::text, p.note, p.created_by_email, p.created_at,
+            ${PAYMENT_REVERSED_SQL} as reversed
+       from income_tax_payments p where p.income_year = $1 order by p.paid_on, p.id`,
+    [incomeYear],
+  );
+  const allocations = await allocationsFor(tx, result.rows.map((row) => row.id));
+  return result.rows.map((row) => toPayment(row, row.reversed, allocations));
+}
+
+/** A payment as the provisional tax rules see it: bank and effective dates, and its current allocations (ITX6A-ITX6H). */
+export function ruleItem(payment: TaxPayment): Payment {
+  return {
+    date: payment.paidOn,
+    effectiveOn: payment.irdEffectiveOn,
+    amount: dec(payment.amount),
+    reversed: payment.reversed,
+    allocations: payment.allocations.map((entry) => ({ appliesTo: appliesToNumber(entry.appliesTo), amount: dec(entry.amount), status: entry.status })),
+  };
 }
 
 /** A typed adjustment to taxable income: positive adds, negative takes off (ITX3). */
@@ -365,13 +422,14 @@ export async function removeAdjustment(tx: OrgTx, idInput: unknown): Promise<voi
 }
 
 /** A payment made to IRD towards an income year's tax, typed in (ITX6, ITX9). */
-export async function addPayment(tx: OrgTx, input: { idempotencyKey: unknown; incomeYear: unknown; paidOn: unknown; amount: unknown; note?: unknown }): Promise<{ created: boolean; payment: TaxPayment }> {
+export async function addPayment(tx: OrgTx, input: { idempotencyKey: unknown; incomeYear: unknown; paidOn: unknown; amount: unknown; note?: unknown; irdEffectiveOn?: unknown }): Promise<{ created: boolean; payment: TaxPayment }> {
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const incomeYear = requireIncomeYear(input.incomeYear);
   const paidOn = parseIsoDate(input.paidOn, "paidOn");
   const amount = parseDecimalInput(input.amount, "amount", { maxScale: 2 });
   const note = optionalString(input.note, "note", { maxLength: 200 });
-  const hash = requestHash("income_tax_payment", { incomeYear, paidOn, amount, note });
+  const irdEffectiveOn = input.irdEffectiveOn == null || input.irdEffectiveOn === "" ? null : parseIsoDate(input.irdEffectiveOn, "irdEffectiveOn");
+  const hash = requestHash("income_tax_payment", { incomeYear, paidOn, amount, note, ...(irdEffectiveOn ? { irdEffectiveOn } : {}) });
   const existing = await tx.query<PaymentRow>(`select ${PAYMENT_COLUMNS} from income_tax_payments where idempotency_key = $1`, [idempotencyKey]);
   if (existing.rows[0]) {
     assertSameRequest(existing.rows[0].request_hash, hash, "income tax payment");
@@ -381,12 +439,12 @@ export async function addPayment(tx: OrgTx, input: { idempotencyKey: unknown; in
     throw new ValidationError(`A payment on ${paidOn} is too early to be towards the ${incomeYear} income year.`);
   }
   const inserted = await tx.query<PaymentRow>(
-    `insert into income_tax_payments (idempotency_key, request_hash, income_year, paid_on, amount, note, created_by_email)
-     values ($1, $2, $3, $4, $5::numeric, $6, $7) returning ${PAYMENT_COLUMNS}`,
-    [idempotencyKey, hash, incomeYear, paidOn, amount, note, tx.actor.email],
+    `insert into income_tax_payments (idempotency_key, request_hash, income_year, paid_on, amount, note, created_by_email, ird_effective_on)
+     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8) returning ${PAYMENT_COLUMNS}`,
+    [idempotencyKey, hash, incomeYear, paidOn, amount, note, tx.actor.email, irdEffectiveOn],
   );
   const payment = toPayment(inserted.rows[0]);
-  await writeAuditEvent(tx, { eventType: "income_tax.payment_added", entityType: "income_tax_payment", entityId: payment.id, details: { incomeYear, paidOn, amount, note } });
+  await writeAuditEvent(tx, { eventType: "income_tax.payment_added", entityType: "income_tax_payment", entityId: payment.id, details: { incomeYear, paidOn, amount, note, irdEffectiveOn } });
   return { created: true, payment };
 }
 
@@ -561,8 +619,9 @@ async function estimatedRit(tx: OrgTx, type: TaxpayerType, year: number, today: 
   return result ? dec(result.rit) : null;
 }
 
+/** Payments towards the year, each once; a reversed one counts for nothing (ITX6F). */
 function sumPayments(payments: TaxPayment[]): Decimal {
-  return payments.reduce((total, payment) => add(total, dec(payment.amount)), ZERO_DECIMAL);
+  return payments.filter((payment) => !payment.reversed).reduce((total, payment) => add(total, dec(payment.amount)), ZERO_DECIMAL);
 }
 
 /** The income tax workspace for an income year (ITX1-ITX10). */
@@ -619,7 +678,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     lastYear,
     lastYearFiledOn: lastTyped.returnFiledOn,
     twoYearsAgo: twoYearsAgo === null ? null : dec(twoYearsAgo),
-    payments: payments.map((payment) => ({ date: payment.paidOn, amount: dec(payment.amount) })),
+    payments: payments.map(ruleItem),
     today,
     endMonth,
     extensionOfTime: settings.agentExtension,
@@ -662,12 +721,27 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
     instalments: provisional.kind === "schedule" ? provisional.instalments.map((entry) => ({ due: entry.onTimeBy.date, amount: dec(entry.ownAmount) })) : null,
     endOfYearDue: endOfYear.onTimeBy?.date ?? null,
   });
-  const paidSoFar = payments.map((payment) => ({ date: payment.paidOn, amount: dec(payment.amount) }));
+  // Interest counts what's confirmed or evidenced as paid towards this year, from IRD's effective date (the bank date
+  // until that's known). Payments awaiting reconciliation and forecast assumptions aren't counted (decision 621).
+  const paidSoFar = cappedAllocations(payments.map(ruleItem))
+    .filter((entry) => entry.status !== "forecast")
+    .map((entry) => ({ date: effectiveDate(entry.payment), amount: entry.amount }));
   const soFar = underpaymentInterest({ requirements: due, payments: paidSoFar.filter((payment) => payment.date <= today), asAt: today, today });
   let ifPaidOnTime: string | null = null;
   if (endOfYear.onTimeBy) {
     const endDate = endOfYear.onTimeBy.date;
-    const scheduled = provisional.kind === "schedule" ? provisional.instalments.filter((entry) => entry.onTimeBy.date > today).map((entry) => ({ date: entry.onTimeBy.date, amount: dec(entry.amount) })) : [];
+    // The cash still needed by each later instalment, paid on its date.
+    const scheduled: Array<{ date: string; amount: Decimal }> = [];
+    if (provisional.kind === "schedule") {
+      let planned = ZERO_DECIMAL;
+      for (const entry of provisional.instalments.filter((instalment) => instalment.onTimeBy.date > today)) {
+        const more = sub(dec(entry.remaining), planned);
+        if (isPositive(more)) {
+          scheduled.push({ date: entry.onTimeBy.date, amount: more });
+          planned = add(planned, more);
+        }
+      }
+    }
     const planned = [...paidSoFar, ...scheduled];
     const rest = sub(interestRit, planned.reduce((sum, payment) => add(sum, payment.amount), ZERO_DECIMAL));
     if (isPositive(rest)) planned.push({ date: endDate, amount: rest });
@@ -726,6 +800,7 @@ export async function buildIncomeTax(tx: OrgTx, input: { incomeYear?: unknown; t
       ? "With RIT under 60,000.00 on the standard option, IRD charges or pays interest only from the day after the end-of-year tax date. The interest shown is an estimate; IRD works out what it charges."
       : "With RIT of 60,000.00 or more, IRD can charge interest from the day after the last instalment on any shortfall (and earlier if an instalment is paid late or short). The interest shown is an estimate; IRD works out what it charges.",
   );
+  if (payments.some((payment) => !payment.reversed && !payment.irdEffectiveOn)) notes.push("Some payments have no IRD effective date yet, so their bank date stands in for interest and lateness.");
   if (dueDates.some((entry) => !entry.onTimeBy.holidaysChecked)) notes.push("Some dates are in years not on Tohyee's public holiday list, so only weekends move them.");
   notes.push("Regional anniversary days aren't checked.");
 

@@ -164,6 +164,11 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.11.0 ready to publish from main** (20 Oct 2026): `package.json` says
+  0.11.0 and the notes cover #339-#372. Jess publishes the release "Tohyee
+  0.11.0" on main with tag `v0.11.0` and pastes in `docs/releases/0.11.0.md`.
+  Not in it yet: the yearly homekill adjustment (#371) and the group
+  workspace (#368), still being built.
 - **0.10.0 ready to publish from main** (19 Oct 2026): `package.json` says
   0.10.0 and the notes cover #289-#325 (income tax, pasture and feed, the
   Farming API, the farm calendar, livestock reporting, expected sick leave,
@@ -859,8 +864,9 @@ nobody should ask her these again. Each item says where its answer is.
 - The co-op share register (#360 item 15, #327): built in its own PR
   (decisions 630-633, examples CSR1-CSR10). Ledger links and a Fonterra
   share standard calculator are deferred there.
-- Marketplaces: finish Shopify, then WooCommerce's gaps, then Square
-  (decision 637). Farm data: file imports, then Pasture.io, then LIC
+- Marketplaces: finish Shopify, then WooCommerce's gaps (decisions 637,
+  665, 666). Square was left out by Jess on 20 Oct 2026: it doesn't take
+  card payments in New Zealand (decision 667). Farm data: file imports, then Pasture.io, then LIC
   (decision 635). Default dashboards by kind of user (decision 639).
 - **Practice manager stays unbuilt.** Jess's own "Dont do practice
   manager" stands over #360 item 19 (decision 638; parked since 3 Oct
@@ -895,7 +901,7 @@ preference):
   170), and whether to follow its extra pay example 1 or its steps (212
   follows the steps; asking IRD is optional).
 - IRD gateway or myIR filing access; provider terms and access for Akahu,
-  Pasture.io, LIC, Square and any tax-pooling provider (#360 items 3, 6,
+  Pasture.io, LIC and any tax-pooling provider (#360 items 3, 6,
   14, 18).
 - A domain and Cloudflare's written OK for the Tohyee address relay
   (`relay/README.md`).

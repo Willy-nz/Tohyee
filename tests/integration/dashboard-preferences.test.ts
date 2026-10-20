@@ -46,6 +46,7 @@ describeWithDatabase("dashboard preferences", () => {
     expect(await asUserA((tx) => getDashboardPreference(tx, { userId: userA.id, page: "home", defaultTiles: defaults }))).toEqual({
       hidden: false,
       tiles: [...defaults],
+      customised: false,
     });
 
     await asUserA((tx) =>
@@ -61,18 +62,21 @@ describeWithDatabase("dashboard preferences", () => {
     expect(await asUserA((tx) => getDashboardPreference(tx, { userId: userA.id, page: "home", defaultTiles: defaults }))).toEqual({
       hidden: true,
       tiles: ["next_gst_return", "cash_in_bank", "bills_to_pay", "owed_to_you"],
+      customised: true,
     });
 
     // Another page for the same person is independent.
     expect(await asUserA((tx) => getDashboardPreference(tx, { userId: userA.id, page: "sales", defaultTiles: defaults }))).toEqual({
       hidden: false,
       tiles: [...defaults],
+      customised: false,
     });
 
     // Another person isn't affected.
     expect(await asUserB((tx) => getDashboardPreference(tx, { userId: userB.id, page: "home", defaultTiles: defaults }))).toEqual({
       hidden: false,
       tiles: [...defaults],
+      customised: false,
     });
   });
 });

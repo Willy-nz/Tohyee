@@ -211,16 +211,19 @@ export function wooOrderFrom(raw: unknown, refundsRaw: unknown[] = []): Platform
   });
   const paid = paidAt !== null && ["processing", "completed", "refunded"].includes(status);
   const method = text(order.payment_method);
+  const orderLines = list(order.line_items).map(record);
   const refunds: PlatformRefund[] = refundsRaw.map((refundRaw) => {
     const refund = record(refundRaw);
     const at = gmt(refund.date_created_gmt);
     const refundLines: PlatformRefund["lines"] = [];
     for (const rawLine of list(refund.line_items)) {
       const line = record(rawLine);
-      // Refund lines say which product they are, not which order line: the order line with the same product and variation.
-      const match = list(order.line_items)
-        .map(record)
-        .find((candidate) => text(candidate.product_id) === text(line.product_id) && text(candidate.variation_id) === text(line.variation_id));
+      // The order line it refunds: WooCommerce keeps it in the refund line's `_refunded_item_id` (decision 666); without
+      // it, the order line with the same product and variation (the only way before, wrong when a product is on two lines).
+      const refundedId = refundedItemId(line);
+      const match = refundedId
+        ? orderLines.find((candidate) => text(candidate.id) === refundedId)
+        : orderLines.find((candidate) => text(candidate.product_id) === text(line.product_id) && text(candidate.variation_id) === text(line.variation_id));
       refundLines.push({
         lineItemId: match ? (text(match.id) ?? "") : `missing-${text(line.id) ?? "?"}`,
         quantity: absolute(text(line.quantity) ?? "0"),
@@ -231,7 +234,7 @@ export function wooOrderFrom(raw: unknown, refundsRaw: unknown[] = []): Platform
     }
     const refundShipping = list(refund.shipping_lines).map((rawLine) => {
       const line = record(rawLine);
-      return { shippingLineId: null, subtotal: absolute(money(line.total)), tax: absolute(money(line.total_tax)) };
+      return { shippingLineId: refundedItemId(line), subtotal: absolute(money(line.total)), tax: absolute(money(line.total_tax)) };
     });
     return {
       externalId: text(refund.id) ?? "",
@@ -271,6 +274,19 @@ export function wooOrderFrom(raw: unknown, refundsRaw: unknown[] = []): Platform
     incomplete: surcharges ? "has a surcharge (a fee line); surcharges aren't supported yet, so record it by hand." : refundsRaw.length >= REFUNDS_PER_ORDER ? "has more refunds than Tohyee reads." : null,
     paymentMethod: method ? { id: method, title: text(order.payment_method_title) } : null,
   };
+}
+
+/**
+ * The order line a refund line refunds: WooCommerce stores it as the refund
+ * line's `_refunded_item_id` meta (shown in the REST API's refund example,
+ * https://developer.woocommerce.com/docs/apis/rest-api/v3/order-refunds/).
+ */
+function refundedItemId(line: Json): string | null {
+  for (const raw of list(line.meta_data)) {
+    const meta = record(raw);
+    if (meta.key === "_refunded_item_id") return text(meta.value);
+  }
+  return null;
 }
 
 async function refundsOf(storeDomain: string, token: AccessToken, order: Json): Promise<unknown[]> {

@@ -60,7 +60,7 @@ type ShopState = {
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-/** A pretend Shopify store: the Admin GraphQL API (2026-07) and the client credentials grant, shaped like Shopify's responses. */
+/** A pretend Shopify store: the Admin GraphQL API (2026-10) and the client credentials grant, shaped like Shopify's responses. */
 function fakeShopify(state: ShopState) {
   let webhookCounter = 0;
   return async (input: string, init?: RequestInit) => {
@@ -77,7 +77,7 @@ function fakeShopify(state: ShopState) {
       }
       return json({ access_token: TOKEN, scope: state.scopes.join(","), expires_in: 86399 });
     }
-    if (url.pathname !== "/admin/api/2026-07/graphql.json" || init?.method !== "POST") return json({ errors: "Not Found" }, 404);
+    if (url.pathname !== "/admin/api/2026-10/graphql.json" || init?.method !== "POST") return json({ errors: "Not Found" }, 404);
     const headers = new Headers(init?.headers);
     if (headers.get("x-shopify-access-token") !== TOKEN) {
       return json({ errors: "[API] Invalid API key or access token (unrecognized login or wrong password)" }, 401);
@@ -94,13 +94,13 @@ function fakeShopify(state: ShopState) {
       return { nodes, pageInfo: { hasNextPage: end < rows.length, endCursor: String(end) } };
     };
     if (query.includes("webhookSubscriptionCreate")) {
-      const taken = state.webhooks.some((hook) => hook.topic === variables.topic && hook.callbackUrl === variables.webhookSubscription.callbackUrl);
+      const taken = state.webhooks.some((hook) => hook.topic === variables.topic && hook.callbackUrl === variables.webhookSubscription.uri);
       if (taken || variables.topic === state.rejectTopic) {
-        return json({ data: { webhookSubscriptionCreate: { webhookSubscription: null, userErrors: [{ field: ["callbackUrl"], message: "Address for this topic has already been taken" }] } } });
+        return json({ data: { webhookSubscriptionCreate: { webhookSubscription: null, userErrors: [{ field: ["uri"], message: "Address for this topic has already been taken" }] } } });
       }
       webhookCounter += 1;
       const id = `gid://shopify/WebhookSubscription/${webhookCounter}`;
-      state.webhooks.push({ id, topic: variables.topic, callbackUrl: variables.webhookSubscription.callbackUrl });
+      state.webhooks.push({ id, topic: variables.topic, callbackUrl: variables.webhookSubscription.uri });
       state.calls.push(`webhook:${variables.topic}`);
       return json({ data: { webhookSubscriptionCreate: { webhookSubscription: { id }, userErrors: [] } } });
     }
@@ -181,7 +181,7 @@ function webhook(
     "content-type": "application/json",
     "x-shopify-topic": topic,
     "x-shopify-shop-domain": options.domain ?? DOMAIN,
-    "x-shopify-api-version": "2026-07",
+    "x-shopify-api-version": "2026-10",
     "x-shopify-webhook-id": options.id ?? key("wh"),
     "x-shopify-triggered-at": "2026-10-01T00:00:00Z",
   };
