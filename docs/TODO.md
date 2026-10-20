@@ -1,8 +1,16 @@
 # Owner's to-do list
 
 Changes the project owner (Jess) has asked for, newest list first. Coding
-agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
-"to confirm" needs an answer from Jess before it's built; ask rather than guess.
+agents: these come before the "Next" list in docs/FEATURES.md.
+
+Anything marked "to confirm" below is from before 15 Oct 2026. Since then,
+behaviour questions follow Xero or NetSuite until a real person says
+otherwise (decision 537), and on 20 Oct 2026 Jess delegated the remaining
+choices to Codex (issue #360, decisions 634-639). So don't stop to ask Jess;
+check the item's note below and `docs/HANDOVER.md` ("What's left, by kind")
+for whether it's implementation, research, external access or real-world
+validation. Jess's own explicit decisions still win, for example "Dont do
+practice manager".
 
 ## Project review of 4 October 2026 (issues #130-#158)
 
@@ -50,7 +58,21 @@ Where each concern stands (6 Oct 2026, for 0.7.0):
 
 Jess (3 Oct 2026): "eventually we will need practice manager software, tax
 and the analytics", alongside CRM and Accounting. She chose to **add them to
-the plan only for now** (no screen changes yet). Each becomes its own app in
+the plan only for now** (no screen changes yet).
+
+Where these stand (20 Oct 2026):
+- **Practice manager: not to be built.** Jess said "Dont do practice
+  manager" (parked 3 Oct 2026, PR #91). That stands over #360 item 19,
+  which outlined a first slice (decision 638). The outline below is kept
+  for the history only.
+- **Tax:** built in stages under #292 (IR4, IR3, IR10, provisional tax and
+  more; examples ITX1 onward). The order and scope are now decision 634
+  (#360 items 1-6): the organisation's own tax workspace first, prepare and
+  export only, no automatic filing. ITX6 and RAT1 are being built from the
+  20 Oct comment on #292.
+- **Analytics:** built (decisions 353 onward; `docs/ANALYTICS-REVIEW.md`,
+  `docs/ANALYTICS-STUDIO.md`). The default dashboards are decision 639
+  (#360 item 20). Each becomes its own app in
 the top-left switcher beside Accounting and CRM when it's built, and each
 starts with worked examples and decisions, like payroll. Details below are a
 first outline to confirm with Jess, not decided.
@@ -75,19 +97,24 @@ first outline to confirm with Jess, not decided.
    IR4, IR6, IR7/IR7P, IR10 financial statements summary), provisional tax,
    FBT and related filings, each from IRD's current forms and guides.
    Decide with Jess which comes first and whether filing goes to IRD
-   (gateway services) or is prepared for filing in myIR.
+   (gateway services) or is prepared for filing in myIR. (Decided: prepare
+   and export first; IRD connection is a parallel workstream needing IRD's
+   access, decision 634.)
 3. **Analytics** as its own app (the "Advanced reporting" module from 29
    Sep 2026 grows into it): dashboards and key figures over time, trends,
    cash flow forecast, comparisons across periods, tracking categories and
    (for practices) across client organisations; custom reports and budgets
-   move here from Reporting. To confirm with Jess which dashboards matter
-   most.
+   move here from Reporting. (Which dashboards matter most: decision 639.)
 
 ## List of 2 October 2026
 
 Items 1-3 noticed by Jess using the Windows server app on the evening of 1
 Oct 2026; items 4 and 5 asked for the same day ("needs to be ERP level
 features"). Not looked into yet: find the cause before changing anything.
+
+(20 Oct 2026: items 1 and 3 were fixed; what's left of them is real-world
+validation on Jess's own computer, not a question. Items 4 and 5 are
+implementation: decided by Jess, waiting for worked examples and building.)
 
 1. **Glitching between screens.** The program on the computer "kind of
    glitches" when moving between screens. Seen on Jess's server on 2 Oct
@@ -148,6 +175,10 @@ return, bank account. The sums were right throughout (invoice 3 x 120 +
 GST = 414; depreciation 2,500 x 50% / 12 = 104.17; the balance sheet
 balanced). Jess asked for them all to be done (2 Oct 2026, evening): done
 the same night for 0.4.0 (decisions 333-338), except where noted.
+
+(20 Oct 2026: the "to confirm" notes in this list were settled by the
+choices made in decisions 333-338. Item 12, watching the server app's
+screens, is real-world validation.)
 
 1. **(Done: default terms, decision 333.) Due date is required but often blank.** With no payment terms on the
    customer or supplier, the invoice and bill due dates stay empty and
