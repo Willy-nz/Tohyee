@@ -1009,8 +1009,9 @@ that something happened.
   for admins and owners. Rules make a task for the right person when a new
   lead arrives (its owner, or each sales team manager if nobody owns it), a
   deal reaches a chosen stage (its owner, due N days later), an open deal
-  goes quiet for N days (a reminder for its owner, once per quiet spell), or
-  a task is N days overdue (the assignee's team manager). Rules are checked
+  goes quiet for N days (a reminder for its owner, once per quiet spell),
+  a task is N days overdue (the assignee's team manager), or a renewal is N
+  days away (the deal's owner, decision 654). Rules are checked
   every 15 minutes or with Run now, and the page lists what each run did.
   Each event makes its task once, even if a check runs twice. Reminders stay
   in Tohyee; nothing is emailed.
@@ -1055,6 +1056,12 @@ that something happened.
   Make quote turns them into a draft quote, New revision replaces the open
   one, and accepting the quote wins the deal and links its invoice or
   sales order.
+- **CRM account plans and renewals** (decisions 653-654, #216 stage 4): a
+  company's Related tab has an account plan (where things stand, goals with
+  target dates, the part each of its people plays in buying, plus its
+  renewals, open deals and open tasks as next steps). A deal and its
+  products can have renewal dates, and a follow-up rule reminds the deal's
+  owner N days before, once per deal and date.
 - **Livestock: movements and head counts** (#221 stage 2, decision 504,
   LV1-LV3): dairy cattle, beef cattle and sheep by IRD's NAMV classes.
   - **Starting:** livestock is a module, turned on in Settings › Modules
