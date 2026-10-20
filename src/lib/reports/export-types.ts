@@ -10,6 +10,7 @@ export const REPORT_EXPORTS = [
   "cash-flow-statement",
   "changes-in-equity",
   "consolidated-balance-sheet",
+  "coop-share-register",
   "consolidated-profit-and-loss",
   "customer-statement",
   "farm-benchmarks",

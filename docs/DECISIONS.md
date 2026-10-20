@@ -4080,6 +4080,36 @@ testing) and #154's code signing (later, Jess).
        archives a record, so it needs the bookkeeper role or higher (not
        sales reps or managers).
 
+650. **Bulk reassignment, with a preview** (#216 stage 1's last item; Codex,
+     delegated by owner, 20 October 2026, #360 item 17: bulk reassignment
+     first). Xero has no CRM, so this follows Salesforce's Mass Transfer
+     Records and HubSpot's bulk Assign. CRM › Settings › Reassign records.
+     - **Choose:** from a person, someone who has left, or nobody; to a
+       member who can use the CRM and can sign in; and what kinds. **See
+       what will move** lists every record (up to 2,000 of each kind), and
+       anything can be unticked before **Move**.
+     - **What moves:** leads that aren't converted (a converted lead
+       doesn't change, decision 492); companies they own; open deals, and
+       won and lost ones only when ticked (their wins then count for the new
+       owner on forecasts and the dashboard, which work from the owner as it
+       is now); tasks that aren't done (done tasks stay with whoever did
+       them); and active sequences whose next step tasks go to them. People
+       have no owner (decision 491), so only their open tasks and sequences
+       move. From nobody: unassigned leads, deals and tasks, never
+       companies (most of the books' contacts have no owner).
+     - **Who:** admins, owners and bookkeepers, anyone's; a sales manager
+       only between themselves and the people in their teams (and
+       unassigned leads, which they see); not sales reps or viewers. The
+       same checks run again when moving.
+     - **History:** each record moved gets its own history line ("Moved to
+       someone else with Reassign records", who and when), and the move a
+       line of its own, listed on the page as Recent moves. A record that
+       changed hands, was converted, closed or done after the preview is
+       left alone and counted as skipped, so moving the same list twice
+       moves nothing more. Moving a deal is a change by a person, so it
+       starts a new quiet spell for "a deal goes quiet" (decision 495). No
+       journal, invoice or balance changes, so there's no accounting
+       example.
 495. **Follow-up rules make tasks, once each** (#216 stage 2; Jess 10 Oct
      2026: all four rules, reminders in Tohyee only).
      - **Rules:** admins and owners add them on CRM › Follow-ups. A rule's
@@ -4170,6 +4200,39 @@ testing) and #154's code signing (later, Jess).
      - **Merging people** (decision 494) moves their sequences; if both are
        in the same one, the merged-away person's is stopped.
 
+651. **A reply from a lead or person becomes a follow-up task** (#216; Codex,
+     delegated by owner, 20 October 2026, #360 item 17: lead/reply handling;
+     examples MAIL10, RPL1-RPL5, not yet reviewed). Xero has no CRM;
+     HubSpot and Salesforce both unenrol someone who replies and tell the
+     owner, so the owner gets a task (reminders stay in Tohyee, decision
+     495). Already there and kept: sequences stop on a reply (decision 497)
+     and campaign members become "responded" (decision 498).
+     - **Leads' emails are kept:** mail sync now also keeps emails and
+       meetings with a lead that isn't converted, linked to the lead and
+       shown on its page, under the same mailbox privacy (MAIL7). Until now a
+       lead's reply was only noticed through a lead mailbox (decision 498's
+       note). Converting the lead links them to its new person and company.
+     - **What's a reply:** an email from their address (synced from a
+       member's mailbox, or for a lead into a lead mailbox) after a sales
+       email went to them from Tohyee in the 30 days before, or while
+       they're in a sequence (on a deal: its point of contact).
+     - **The task:** "Reply from <name>: <subject>", due today, for the
+       lead's owner, else whoever sent the email or added them to the
+       sequence (on a deal, its owner). Someone who has left or can't use the
+       CRM isn't given it; it's then unassigned. The subject is left out
+       when the mailbox shows only that something happened, unless the task
+       is for that mailbox's own member.
+     - **Once:** one task per sales email or sequence answered, so a thread
+       going back and forth makes one; a new email and a new reply make
+       another. Each reply is kept as handled (unique, in the task's
+       transaction), so checking twice never makes two. Checked straight
+       after each mail sync and with the follow-up rules every 15 minutes.
+     - **Not flooding:** replies synced before this version, and replies
+       received over 7 days ago, are left alone.
+     - Nothing is sent: outbound sequences stay person-confirmed (decision
+       497). The lead's status doesn't change by itself.
+     - **Not checked against real services:** Gmail and Microsoft 365, as
+       for decisions 493 and 496; tested with pretend providers only.
 498. **Campaigns: one source each, costs for reports only** (#216 stage 2;
      Jess 10 Oct 2026: one source campaign; budget and cost; members added
      by hand, in bulk, by a form or mailbox, or by an import; added, sent,
@@ -4189,7 +4252,8 @@ testing) and #154's code signing (later, Jess).
        mailbox), or when they came in through the campaign's form or
        mailbox. Anyone can set it by hand. A lead's reply is only noticed
        through a lead mailbox, because mail sync keeps only emails with
-       people and companies (MAIL3). Merging two people in the same
+       people and companies (MAIL3); since decision 651 it keeps leads'
+       too. Merging two people in the same
        campaign keeps one membership.
      - **Costs:** budget and actual cost are typed in, in the base
        currency, for the report: cost per lead (cost ÷ leads it was the
@@ -5434,7 +5498,9 @@ testing) and #154's code signing (later, Jess).
      different default cards per role: Tohyee's roles don't say who is farm
      staff or the accountant, and guessing from bookkeeper or viewer would
      be wrong as often as right. Everyone starts with the same cards and
-     uses Customise. No card shows payroll figures.
+     uses Customise. No card shows payroll figures. (Starting cards by kind
+     of person are now decision 660; on the farm Home everyone still starts
+     the same.)
 576. **Analytics shows money and value names the way people read them**
      (20 October 2026). Issues #328-#330, found building a dashboard.
      Negative money in Analytics tables, key figures and pivot tables shows
@@ -5874,3 +5940,364 @@ testing) and #154's code signing (later, Jess).
      tile, so they sit side by side rather than on one chart); sessions by
      channel; top pages; and sessions by device. Offered once Google
      Analytics has loaded.
+610. **A private copy of an Owner's mail uses the farm calendar's
+     connection** (20 October 2026). Issue #250, with #340 (Jess: her
+     mailbox also holds her mum's company directorship mail, which "must
+     not come into Tohyee at all — not even privately", and the folder
+     choice should be "one place to set it"). So #250's "import all
+     folders" is overridden: My mail (the user menu, Owners only) reads
+     only the Outlook folders or Gmail labels ticked on the mailbox's one
+     folder choice, and nothing until one is ticked. A mailbox is one
+     connection whichever screen made it (one sign-in address,
+     /api/farming/mail/callback, one set of tokens, one choice), with an
+     Owner-only switch, "Keep a private copy of these emails for me and my
+     AI". A second, separate connection was considered and turned down: it
+     would mean a second folder choice to keep right, which is how
+     directorship mail could get in. My mail works in every organisation,
+     Farming on or not. A mailbox connected from My mail isn't read for
+     the farm calendar unless it's connected there too; the farm calendar
+     otherwise works exactly as before. Neither Xero nor NetSuite keeps
+     people's mail, so the rules are Claude's. PM1, PM2, PM14, tenant
+     migration 0168, not yet reviewed; not tried with a real mailbox.
+611. **Only the Owner who turned it on can read their copy, through one
+     door** (20 October 2026). Every listing, search, conversation,
+     attachment, folder list, switch, sync and deletion goes through one
+     access layer (src/lib/private-mail/access.ts) that reads the person's
+     role from the server's own records at that moment and limits every
+     query to rows with their owner_user_id. Everyone else gets "not
+     found", the same as for nothing: admins, other Owners, accountants,
+     report viewers, server admins (who see organisations only as
+     members), farm app keys and AI keys (until #250 part 2's scope). The
+     owner never changes: the database refuses it, and a role change,
+     handover or restore gives nobody else access. An owner who stops being
+     an Owner, leaves or has their login turned off can't read it, and it
+     isn't synced, until they're an Owner again; leaving deletes the
+     connection as it does for the farm calendar (FC15), and the copy stays
+     unread until they delete it. PM7, PM8.
+612. **The mail is encrypted with a key of its own** (20 October 2026).
+     Each copy has a random 256-bit key, stored only encrypted with the
+     server's TOHYEE_SECRET_KEY (src/lib/secrets.ts). Subjects, people,
+     snippets, links, text, attachment names and files are encrypted with
+     it (AES-256-GCM, each value tied to its copy, kind and email). Plain:
+     the provider's ids, dates, sizes, attachment counts and folder ids,
+     for duplicates, order and coverage. Emails are kept as text (HTML is
+     turned into text, as the farm calendar does), so nothing from an
+     email runs in Tohyee; attachments are only ever downloaded, never
+     shown in Tohyee's pages. docs/PRIVATE-MAIL.md says plainly that
+     whoever controls the server, its code and its key can read the mail:
+     this protects from other Tohyee users and from a copy of the database
+     alone, and isn't end-to-end.
+613. **Search uses keyed word tokens** (20 October 2026). Each email's
+     words (subject, people, text, attachment names; lower case, accents
+     off, 2-40 letters or digits, at most 4,000) are stored as HMAC-SHA256
+     digests with the copy's key, in an indexed array; a search finds
+     emails with every word, plus from:address and to:address. Whole words
+     only, no suggestions, and the words are sent in a POST so they're
+     never in an address or a proxy's log. Someone with the database alone
+     can see which emails share a word and how often a digest appears, not
+     the words (docs/PRIVATE-MAIL.md). Chosen over full-text search in
+     PostgreSQL, which would keep the words readable in the index.
+614. **Copying: the read-back window, resumable, no duplicates, the farm
+     calendar's move rules** (20 October 2026). The copy reads back to the
+     mailbox's read-back date (30-365 days before it was connected). Each
+     sync lists the ticked folders' emails back to then (newest first, at
+     most 10,000 per folder, saying so when a folder has more), copies up
+     to 300 emails and 200 MB of attachments not copied yet, each committed
+     on its own (so an interrupted first copy carries on where it stopped,
+     and an email is never copied twice), then drops emails that left the
+     ticked folders to another folder and copies emails moved in, as
+     decision 585 does for the farm calendar; an email deleted in the
+     mailbox is kept (decision 616). Unticking a folder deletes at once
+     what was copied only from it. Syncs run every 15 minutes after the farm
+     calendar's checks (TOHYEE_FARM_MAIL_SCHEDULER=off stops both), and on
+     Sync now. Three failed syncs in a row stop it until it's switched
+     off and on or the mailbox is connected again. My mail shows progress ("1,234 of 5,000 emails
+     copied"), the dates copied, the read-back date, the last sync and the
+     last error. PM3, PM6.
+615. **What isn't copied, shown on My mail** (20 October 2026; drafts,
+     junk and trash by Codex, delegated by owner, 20 October 2026, #360
+     item 8: "exclude drafts, junk/spam and trash by default, show
+     exclusions clearly and allow explicit opt-in"; #360's "import sent and
+     archived mail by default" gives way to Jess's own #340: only ticked
+     folders are read). Folders not ticked; Gmail's Sent, Drafts, Spam and
+     Trash unless ticked (a draft or binned email carrying a ticked label
+     isn't copied either, unless Drafts or Trash is ticked) (they're
+     offered on My mail only, marked "for your private copy only", and the
+     farm calendar never reads them, even when ticked; Outlook's are
+     ordinary folders, as they already were for the farm calendar); Gmail
+     mail with no label (archived), which no label holds; email older than
+     the read-back date; all but the newest 10,000 in a bigger folder;
+     attachment files over 20 MB and linked Outlook items (their name and
+     size are kept); pictures and formatting. Nothing is claimed beyond
+     what was copied. PM2, PM4, PM5.
+616. **Off, disconnect and delete are three things; the copy is an
+     archive** (20 October 2026; Codex, delegated by owner, 20 October
+     2026, #360 item 9). Switching the copy off stops copying and keeps
+     it. Disconnecting stops syncing (it deletes the tokens and folder
+     choice, and the farm calendar's items as FC15) and keeps the imported
+     history, not copying; connecting the same mailbox again carries on the
+     same history. **Delete imported history** is the separate, explicit
+     step: every email, attachment and search token goes at once, leaving
+     the connection. Backups made before keep it (encrypted) until they age
+     out: the newest of each of 14 days and the first of each of 12 months,
+     so about 12 months; My mail says so rather than promising it's gone
+     from every backup. An email deleted in Gmail or Outlook (gone, or in
+     Gmail's Trash or Outlook's Deleted Items) is kept and shown "deleted in
+     the mailbox", as #360 asks, and explained on My mail beside Connect; one
+     moved to a folder that isn't ticked is removed, and unticking a folder
+     still deletes what came from it, as Jess's #340 says. Telling the two
+     apart takes one read of the email's ids (at most 300 a sync). Nothing
+     is ever changed in the mailbox. PM6, PM12, PM13.
+617. **Nothing about the mail leaves the copy** (20 October 2026; the
+     store choice matches Codex, delegated by owner, 20 October 2026, #360
+     item 10: an owner-specific private store and index in the existing
+     PostgreSQL, no bodies or summaries in shared analytics, no extra SQL
+     server, no claim of protection from a hostile host operator). The audit
+     trail records only that a copy was started, stopped or deleted, with
+     no details; the farm calendar's events stay as they were (counts of
+     folders, no names). A failed sync logs only the organisation. Nothing
+     goes to notifications, Analytics or DuckDB, general search, reports or
+     exports, and a test checks no other part of Tohyee names the private
+     tables. Filing an attachment into shared data (the bills inbox, soil
+     tests), with a preview of what becomes visible, is #250's next part
+     and isn't built. PM7.
+618. **The AI reads an Owner's mail only through their own Look only key**
+     (20 October 2026). #250 part 2: "a private-mail scope that only the
+     owner's own key can be given". On My mail (Your AI) the copy's Owner
+     ticks which of their own working AI keys in this organisation may
+     search and read it; nobody can tick anyone else's (another Owner's
+     key is "not found"), and only Look only keys can have it, so an AI
+     reading the mail can't write anything from it into Tohyee's shared
+     records (its calls run read-only). The scope is kept in the
+     organisation's database (tenant migration 0169, private_mail_ai_keys:
+     the key's id and its Owner), not on the key, so no core migration was
+     needed. The MCP server offers search_my_mail and read_my_mail only to
+     such a key while its Owner is an Owner; other keys don't learn the
+     tools exist ("Unknown tool"), and every call goes through the same
+     access layer as My mail (decision 611), which checks the scope again.
+     Revoking the key, taking the tick off or the Owner losing the role
+     stops it at once. Answers cite each email (subject, sender, date, My
+     mail message id) and the server tells the AI to say which it used and
+     never pass it on. Tohyee has no shared AI conversations, so there's
+     nowhere else for an answer to be kept. PM15-PM19, not yet reviewed.
+619. **What the AI tools don't do** (20 October 2026). They give the text
+     and attachment names, not attachment files; they don't file anything
+     into shared data (that's #250's next part, with a preview); and they
+     can't stop an AI service outside Tohyee from keeping what it was told:
+     that's between the Owner and their AI provider, and My mail says the
+     key is for the Owner's own AI only.
+630. **A co-op share register for farms** (20 October 2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026 (issue
+       #360, item 15). Examples CSR1-CSR10 aren't reviewed yet.
+     - **What it is:** Farm > Co-op shares. One holding per co-op and share
+       class (case doesn't matter), each with its movements and its
+       dividends, rebates and retentions as the co-op's statements show
+       them. Tables `coop_shareholdings`, `coop_share_movements` and
+       `coop_share_distributions` (tenant migration 0172). It's factual:
+       Tohyee adds up what was entered; it doesn't value shares, post to
+       the ledger or work out what a co-op requires. Farming must be on.
+       Viewers read; bookkeepers and up change it.
+     - **Mistakes:** entries are removed, never deleted or edited, and the
+       history keeps them. A holding can be removed only once it has no
+       entries.
+631. **Share movements, opening and closing** (20 October 2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Kinds:** brought forward, bought or issued for payment, issued
+       without payment (bonus shares, shares for a rebate or retention),
+       sold/surrendered/redeemed, and adjustment. Quantities and values are
+       entered as positive numbers; a sale is stored negative. An
+       adjustment takes signed numbers.
+     - **Opening and closing:** opening is everything dated before the
+       financial year; closing is opening plus the year's movements. Values
+       are as entered (usually cost), to the cent; quantities to 4 places,
+       summed only within a holding.
+     - **Brought forward:** one per holding, dated on or before every other
+       movement, so a register can start from last year's accounts.
+     - **Never below nothing:** after every change the running quantity and
+       value, in date order over all movements, must stay at or above zero,
+       so a sale beyond the holding, or removing a purchase a later sale
+       relies on, is refused.
+632. **Dividends, rebates, retentions and source statements** (20 October
+     2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Apart:** dividends, rebates and retentions are separate kinds with
+       separate totals, and none of them changes the shares' value. Only
+       dividends carry imputation credits. A rebate paid in shares is a
+       rebate plus a separate "issued without payment" movement; the two
+       aren't linked, so Tohyee doesn't decide how a rebate splits between
+       cash, shares and retention.
+     - **Statements:** each movement and payment names its source: a
+       reference, a file on the holding (the existing record files, record
+       type `coop_shareholding`), or both. One of them is required. Only the
+       holding's own current files can be chosen.
+633. **The register in the year-end pack; what's left out** (20 October
+     2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **In the pack:** when farming is on and there's a holding, the
+       year-end pack has `Co-op shares.csv` (a shares table and a dividends,
+       rebates and retentions table, with totals) and a `Co-op share
+       statements` folder with the files the year's entries name, each
+       name starting with its file number. Removed files aren't included.
+     - **Not built:** ledger links and proposed postings (they need their
+       own worked examples and tests first, as #360 item 15 says); a
+       Fonterra share standard (minimum shares) calculator, deferred until
+       its effective-dated rules are verified; share valuation; and the tax
+       treatment of dividends, rebates and retentions.
+
+### Owner-delegated answers (issue #360, 20 October 2026; decisions 634-639)
+
+On 20 Oct 2026 Jess asked Codex to answer all the outstanding questions
+using its judgement, and approved posting the answers for Claude (issue
+#360). These are recorded with the attribution "Codex, delegated by owner,
+20 October 2026". They're product choices. They don't claim an accountant
+signed anything off, a provider was tested, access was bought or the law was
+verified. Jess's own explicit decisions win where they differ. Items
+recorded elsewhere or being built at the same time:
+- Item 7 (ITX6 and RAT1, from the 20 Oct comment on #292): being built.
+- Items 8-10 (private farm mail, #250): being built.
+- Items 11-13 (groups, #200): being built.
+- Item 15 (co-op shares, #327): decisions 630-633, in that PR.
+- Item 17 (CRM next, #216): being built.
+
+634. **Tax: what comes first** (20 October 2026, #292, #201; #360 items
+     1-6).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Order:** the organisation's own tax workspace first, then a
+       permission-aware overview across clients. A full practice manager
+       isn't a prerequisite (see 638). Finish and check IR4, IR3 and IR10
+       first, then trusts, then partnerships and LTCs, each sourced and
+       tested on its own. Company calculations are never run silently for
+       an entity they don't fit.
+     - **Inputs:** imports and reviewable forecasts first: CSV or Excel
+       through mapping and preview; PDFs kept as sources, with any figures
+       read from them needing review. A live IRD connection is a parallel
+       workstream needing IRD's approval, not a blocker.
+     - **Filing and payments:** prepare and export only. No automatic
+       filing, elections, payments or tax-pooling purchases.
+     - **Privacy:** a taxpayer's inputs are private by default and shared
+       with an accountant only by choice. Turning on Tax or group reporting
+       doesn't expose their mailbox or unrelated personal income.
+     - **Tax pooling:** comparisons stay provider-neutral, with dated quotes
+       typed in. No paid partner is chosen and no API is promised.
+     - **Already settled:** the extension-of-time choice (562). Rounding
+       (565) and the narrow sole-trader homekill GST case stay technical
+       checks.
+635. **Farm data providers** (20 October 2026, #249; #360 item 14).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - File imports stay the reliable baseline. For private connectors,
+       Pasture.io comes first, then LIC. No paid aggregator or new weather
+       service without a concrete need, documented terms and actual access.
+       Choosing a default can't stand in for a provider's access or a
+       farmer's consent.
+636. **Pigs and specialist livestock** (20 October 2026, #243; #360 item
+     16).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Pigs stay deferred (decision 508's list leaves them out). Finishing
+       the cattle and sheep workflows and reconciling them with real data
+       comes first. Unsupported transfers, bailments and valuation cases
+       stay refused until their rules and examples are verified. There's no
+       generic fallback valuation.
+637. **Which sales platform next** (20 October 2026, #196; #360 item 18).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Check and finish Shopify first, then WooCommerce's gaps. Square is
+       the next new sales connector. Accounting stays per order, and CRM,
+       order and invoice revenue is never counted twice. This is a
+       priority, not a claim of provider access.
+638. **Practice manager stays unbuilt** (20 October 2026; #360 item 19).
+     - **Who decided:** Jess. Her own instruction, "Dont do practice
+       manager" (parked since 3 Oct 2026, PR #91), stands over #360 item 19.
+       Item 19 outlined a first slice (client directory linked to
+       organisations, templated jobs, task owners and deadlines, document
+       requests, then WIP and time billing). That outline is kept in the
+       issue for the history only and isn't built.
+     - Tax's multi-client overview (634) doesn't depend on it.
+639. **Default dashboards** (20 October 2026; #360 item 20).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Owner:** cash, overdue receivables and payables, and work needing
+       attention.
+     - **Sales:** pipeline, conversion and next actions.
+     - **Farming:** today's work, missing or stale records, and a seasonal
+       cash view.
+     - The practice dashboard (jobs and deadlines) isn't built, since
+       practice manager isn't (638).
+     - Existing dashboards are reused, and drilling through to the records
+       comes before adding more tiles.
+660. **Which dashboard and cards a person starts with** (20 October 2026;
+     #360 item 20, Codex, delegated by owner, 20 October 2026). Tohyee's
+     roles don't say who is "sales" or "farm staff", so the default goes by
+     what Tohyee does know: the person's role and the organisation's modules
+     and records (`homeKindFor` and `defaultTilesFor` in
+     `src/lib/dashboard/defaults.ts`). A **sales rep or manager** (decision
+     491) gets the sales dashboard, the CRM's Home, as they only have the
+     CRM. Otherwise **Farming on** gives the farm Home (FH1), for every role,
+     since the roles still can't tell farm staff from the accountant
+     (decision 589). Everyone else gets the **owner's** Home. Within a page:
+     Home starts with Cash in bank, Owed to you and Bills to pay, then Next
+     GST return when registered for GST; when not, Jobs if any project is a
+     job, else Sales pipeline if the CRM is on. The farm Home starts with
+     today's work, records to catch up on and the season's cash, then the
+     farm's records. The CRM Home starts a sales rep on their next actions
+     and own opportunities, and a manager (and anyone else) on the pipeline
+     and conversion. **A person's own choice always wins**: the starting
+     cards are used only until they save their own in Customise, which says
+     where the starting cards came from and offers **Go back to the starting
+     cards** (removing their saved choice). Practice manager dashboards
+     aren't built (Jess: "Dont do practice manager"). Xero's Home is one
+     layout for everyone and Power BI and Looker Studio have no per-role
+     starting dashboards, so this is our own rule. HD1-HD5, not yet reviewed.
+661. **The owner's Home shows overdue both ways** (20 October 2026; #360
+     item 20, Codex, delegated by owner, 20 October 2026). Bills to pay shows
+     the overdue amount in red beside the bills due this week, as Owed to you
+     already shows overdue invoices, and Needs attention lists overdue bills
+     (to Aged payables) as it lists overdue invoices (to Aged receivables).
+     Each opens the report with the documents behind it; no new tiles. HD2.
+662. **The CRM Home is a sales dashboard; Home can show jobs and sales**
+     (20 October 2026; #360 item 20, Codex, delegated by owner, 20 October
+     2026). The CRM Home gets the dashboard frame (decision 372): six cards,
+     per person, up to 8 with Customise and Hide. **Pipeline**: open
+     opportunities by stage, with count, amount per currency and longest in
+     stage, linking to the pipeline and the sales dashboard's drill-through.
+     **Conversion**: last and this quarter of the financial year, leads
+     converted of those added, won of those closed and the amount won
+     (definitions as decision 500). **Next actions**: the person's own tasks
+     due today or before, their open opportunities past the expected close
+     date, and their open ones with no task still to do, five of each with
+     the count, each linking to its record. Then the CRM's own three
+     (CRM10). A rep or manager sees only their own (or their teams')
+     pipeline and conversion (decision 491); next actions are always the
+     person's own. Opportunity names on My open opportunities now link to
+     the opportunity. Home offers two more tiles: **Jobs** (open jobs, those
+     with a visit in the next seven days, those with none booked, and
+     services due; offered once there's a job) and **Sales pipeline** (the
+     open amount and this quarter's win rate; offered with the CRM on).
+     SD1-SD6, not yet reviewed.
+663. **The farm Home's today's work, records to catch up on and the
+     season's cash** (20 October 2026; #360 item 20, Codex, delegated by
+     owner, 20 October 2026). This week on the farm says "Nothing on today"
+     when today is empty, so today's work comes first. **Records to catch up
+     on** lists what's missing or out of date, each with the page that fixes
+     it: a farm walk more than 14 days old (only for a farm that has
+     readings, so farms that don't do farm walks aren't nagged; DairyNZ
+     suggests weekly walks in spring, so two weeks is generous); paddocks
+     with no cover reading on such a farm; a finished season with farm
+     working expenses but none of kg MS, hectares, cows or stock units;
+     bank lines to reconcile and feeds to reconnect (out-of-date books make
+     the cash view wrong); AI-suggested stock movements waiting; and the
+     person's own calendar items needing checking (decision 571: never
+     anyone else's). **Cash this season** is the financial year month by
+     month: money in and out of the active bank accounts (credit cards left
+     out, as Cash in bank does) from the ledger up to today, each journal
+     netted first so a transfer between two bank accounts is neither; the
+     balance at each month's end; then the cash flow forecast's (CF1-CF9)
+     month ends to the season's end, with the lowest expected balance and
+     the first month expected below zero. It links to the cash flow
+     forecast. The season is the financial year (dairy farms usually end
+     theirs on 31 May, the season's end). FH9-FH11, not yet reviewed.
+664. **The dashboard preferences API** (20 October 2026). GET and PUT also
+     return the person's starting cards for the page (`defaultTiles`), their
+     kind (`owner`, `sales` or `farming`) and whether the tiles are their
+     own (`customised`); DELETE removes their saved choice. Every card a page
+     offers can be saved, not only its starting ones. The CRM Home's
+     preferences go through the CRM's access check, so sales reps and
+     managers can keep their own; Home's and the farm Home's still refuse
+     them. HD5.

@@ -47,6 +47,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/crm-replies.test.ts` (MAIL10, RPL1-RPL5, not yet
+  reviewed) and
   `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
   `tests/integration/sales-platform-orders.test.ts` (SPC11-SPC23, not yet
   approved) and
@@ -4338,8 +4340,8 @@ March year end, Jess (owner) and Mere (admin), on Tue 20 Oct 2026.
   off and moves them up or down, and **Hide** hides the dashboard. It's per
   person, and saved like Home's (decision 372). The farm Home shows up to
   10 cards (Home shows 4), so Analytics tiles can be pinned to it with
-  **Pin to page** (offered only when Farming is on). Everyone starts with
-  the same cards in the same order.
+  **Pin to page** (offered only when Farming is on). Everyone on a farm
+  starts with the same cards in the same order (HD3).
 - **FH8 Money and the notebook.** Money: cash in bank, bills to pay (and
   how many are due this week), money owed to you and the GST estimate,
   worked out as Home does (H2-H4). The farm notebook: the latest three
@@ -4352,16 +4354,108 @@ income** (kg MS to date against last season and budget, payout forecast):
 milk solids are only entered once a year for benchmarks. **FWE against
 budget**: budgets aren't grouped as working expenses. **Paddocks with a soil
 test due**: soil tests deliberately have no "due" rule. **Income tax due**
-on the Money card. **Different default cards per role** (owner, farm staff,
+on the Money card. **Different farm cards per role** (owner, farm staff,
 accountant): Tohyee's roles (owner, admin, bookkeeper, viewer) don't say
-who's farm staff and who's the accountant, so everyone starts with the same
-cards and changes them with Customise. No card shows payroll figures (pay
+who's farm staff and who's the accountant, so everyone on a farm starts with
+the same cards (HD3) and changes them with Customise. No card shows payroll figures (pay
 runs, pay rates or wages per person). Farm performance uses the ledger's
 expense totals, as Farm benchmarks does for any viewer.
 
-Tests: `tests/integration/farm-home.test.ts` (FH1-FH8),
+Added 20 Oct 2026 (#360 item 20, Codex, delegated by owner; decision 663,
+not yet reviewed), same farm and date:
+
+- **FH9 Records to catch up on.** What's missing or out of date, each with
+  the page that fixes it. Home block's latest walk was 10 Oct: on 20 Oct
+  that's 10 days, fine; on **30 Oct** it's **20 days**, more than 14, so
+  "Home block: last farm walk 10 Oct 2026, 20 days ago" (Add readings). A
+  new paddock **16** with no reading: "1 paddock has no cover reading". A
+  farm with no readings at all isn't listed (it may not do farm walks). Also
+  a finished season with working expenses but none of kg MS, hectares, cows
+  or stock units; bank lines to reconcile; feeds to reconnect; the **1**
+  AI-suggested stock movement waiting; and the person's own calendar items
+  needing checking.
+- **FH10 Cash this season.** A made-up farm with a March year end and two
+  bank accounts (1000 and a call account 1010). $50,000 in on 15 Mar 2026,
+  so the season (1 Apr 2026 - 31 Mar 2027) opens at **$50,000**. Milk
+  income $30,000 on 10 May; $20,000 moved from 1000 to 1010 on 20 May
+  (netted in its journal, so neither in nor out); fertiliser $12,000 on
+  5 Oct; $1,000 dated 25 Oct (after today, not yet counted). Month ends:
+  April **$50,000**, May **$80,000** (in $30,000), ... October so far out
+  **$12,000**, **$68,000**. Then the cash flow forecast: a $100,000 winter
+  feed item on 15 Jan 2027 takes January's month end to **-$32,000**, the
+  lowest expected, and the first month below zero is **January**. Credit
+  cards are left out, as Cash in bank does. Nothing in the bank, moved or
+  expected hides the card (FH6).
+- **FH11 Private items stay private.** A calendar item of Mere's that
+  needs checking counts on Mere's records to catch up on (1) and never on
+  Jess's, through the screen's figures or the route (decision 571).
+
+Tests: `tests/integration/farm-home.test.ts` (FH1-FH11),
 `tests/unit/dashboard-tiles.test.ts` (FH7) and
 `tests/unit/dashboard-pages.test.ts`.
+
+### Starting dashboards by kind of person (HD1-HD5; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+Issue #360 item 20: default dashboards for the owner, sales and farming
+(not the practice manager: Jess, "Dont do practice manager"). Tohyee's
+roles don't say who's sales or farm staff, so the rule goes by what Tohyee
+knows (decision 660). Xero's Home is one layout for everyone, so this is
+our own rule. Made-up people: Jess (owner), Vic (viewer), Ruby and Otto
+(sales reps).
+
+- **HD1 Which dashboard.** A sales rep or manager gets the CRM's Home (the
+  sales dashboard), even with Farming on; with Farming on everyone else gets
+  the farm Home; otherwise the owner's Home. Ruby's Home's and farm Home's
+  preferences are refused (403).
+- **HD2 Home's tiles.** Cash in bank, Owed to you, Bills to pay, then Next
+  GST return when registered for GST. Not registered: Jobs if any project
+  is a job, else Sales pipeline with the CRM on, else still the GST card.
+  Bills to pay shows overdue bills in red, and Needs attention lists them
+  (decision 661).
+- **HD3 The farm Home's cards.** This week on the farm, Records to catch up
+  on and Cash this season first, then stock, pasture, fertiliser, farm
+  performance, money and the notebook, for every role.
+- **HD4 The CRM Home's cards.** Ruby (a rep) starts with Next actions and
+  her own opportunities; a manager, and Jess, with Pipeline and Conversion.
+- **HD5 Your own choice wins.** Jess saves Bills, Cash, Owed, GST on Home.
+  When GST registration is turned off, Vic starts with Sales pipeline
+  (the CRM is on) but Jess keeps her four. Customise says the starting
+  cards' rule, and **Go back to the starting cards** removes Jess's choice,
+  so she gets Sales pipeline too. Ruby's saved CRM Home is hers alone; Otto
+  keeps the starting cards.
+
+Tests: `tests/unit/dashboard-defaults.test.ts` (HD1-HD4) and
+`tests/integration/home-defaults.test.ts` (HD2, HD4, HD5).
+
+### The CRM Home as a sales dashboard (SD1-SD6; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+Decision 662. Ruby and Otto are sales reps; Jess is the owner. Harbour Vets
+is a made-up prospect. Today is the day the test runs.
+
+- **SD1 Pipeline.** Open opportunities by stage: Ruby's Keyrings ($600,
+  Proposal) and Collars ($400, Meeting) are **2** for **$1,000**; Jess sees
+  Otto's tags ($900) as well: **3** for **$1,900**. Each stage links to the
+  pipeline; the sales dashboard shows the opportunities behind each figure.
+  Amounts in other currencies are listed beside, never added.
+- **SD2 Conversion.** Last and this quarter of the financial year: leads
+  converted of those added, won of those closed (win rate) and the amount
+  won, defined as the sales dashboard does (decision 500).
+- **SD3 Next actions: tasks.** Ruby's "Chase the PO" on Keyrings, due
+  yesterday, is listed as overdue and links to Keyrings. Otto's task due
+  today is his alone.
+- **SD4 Next actions: opportunities.** Keyrings' close date was 3 days ago:
+  **past its close date**. Collars has no task still to do: **no next
+  step**. Jess owns none, so she has no next actions. Five of each are
+  listed, with the count.
+- **SD5 Customise.** As the farm Home: cards on or off and up or down, per
+  person, up to 8, and Hide.
+- **SD6 Home's Jobs and Sales pipeline tiles.** Jobs: open jobs (not
+  closed), those whose next visit is in the next seven days, those with
+  none booked, and services due (JV8). Sales pipeline: SD1's open amount
+  and this quarter's win rate.
+
+Tests: `tests/integration/home-defaults.test.ts` (SD1, SD3, SD4) and
+`tests/unit/dashboard-defaults.test.ts` (SD6 Jobs).
 
 ## GST return
 
@@ -5572,6 +5666,33 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+### Leads' emails and replies (MAIL10, RPL1-RPL5; decision 651)
+
+Codex, delegated by owner, 20 October 2026 (#360 item 17), as HubSpot and
+Salesforce do (Xero has no CRM); not yet reviewed by Jess. Nothing is
+posted, so these have no amounts. Tested in
+`tests/integration/crm-replies.test.ts`.
+
+- **MAIL10** Aroha Ngata is a lead (aroha@example.nz, Ruby's) and not a
+  person yet. Her email "Paw prints?" to Jess is kept and linked to the lead
+  and shows on the lead's page; a newsletter still isn't kept. Converting
+  the lead links the email to the new person too, and her next email is
+  matched to the person, not the converted lead.
+- **RPL1** Ruby emails Aroha "Your quote" from Tohyee; Aroha's "Re: Your
+  quote" comes back through Jess's mailbox. Ruby gets one task, due today:
+  "Reply from Aroha Ngata: Re: Your quote".
+- **RPL2** The check running again makes nothing more, nor does Aroha's
+  second email in the thread. After Ruby emails "Samples" and Aroha replies
+  again, there's a second task.
+- **RPL3** Tama (a person at Harbour Vets) is in Ruby's "Clinic intro"
+  sequence. His reply makes Ruby a task "Reply from Tama" (no subject,
+  because Jess's mailbox shows only that something happened), and the
+  sequence stops with "They replied."
+- **RPL4** An email into a lead mailbox from Aroha after Ruby emailed her
+  "Hello" makes the task "Reply from Aroha Ngata: Re: Hello".
+- **RPL5** No task for a reply to an email sent over 30 days earlier, a
+  reply received over 7 days ago, or one synced before this version.
 
 ## Sales platform connections (examples not yet approved by Jess)
 
@@ -18719,9 +18840,9 @@ her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
   as in FC28 (the board meeting goes; the TB testing in Farm stays and
   isn't read again). Nothing is deleted by the update itself.
 - **FC31 Not included:** reading a folder's emails older than its newest
-  2,000 (FC29); Gmail's other system labels (Starred, Important) as
-  choices; and the private mailbox import (#250), which isn't built yet and
-  should use this same folder choice when it is.
+  2,000 (FC29); and Gmail's other system labels (Starred, Important) as
+  choices. The private mailbox copy (#250) uses this same folder choice
+  (PM14).
 
 Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
 `tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
@@ -18787,3 +18908,224 @@ property.
 Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
+
+## My mail: an Owner's private copy of their own mail (PM1-PM19; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
+
+Not accounting: a private store of an Owner's own email, for them and
+their own AI. Xero and NetSuite keep nothing like it, so the rules are
+Claude's, following #250 as changed by #340 (Jess's mailbox also holds her
+mum's company directorship mail, which must not come into Tohyee at all,
+not even privately, and the folder choice is to be set in one place).
+Decisions 610-617; how it's protected is in `docs/PRIVATE-MAIL.md`.
+Made-up organisation: Kōwhai Dairies, with Jess and Ana (Owners), Mere
+(admin), Sam (bookkeeper, the accountant), Rob (report viewer) and Sid (a
+server admin who's also an admin there). Jess's Gmail has the Inbox, her
+labels **Farm**, **Farm/LIC** and **Directorships**, and Gmail's Sent,
+Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
+
+- **PM1 Turning it on.** Jess opens **My mail** from her user menu (only
+  Owners see it) and connects her Gmail, reading back 365 days. It's the
+  farm calendar's sign-in (read-only, the same sign-in address), and it
+  works with Farming off. The mailbox shows "Not reading: tick folders"
+  and **Keep a private copy of these emails for me and my AI** is ticked.
+  Nothing is read until she ticks a folder: Sync now says so. Mere can't
+  start one ("not found").
+- **PM2 Only what she ticks.** **Choose folders** lists the Inbox and her
+  labels, nested, then, for the private copy only, Sent, Drafts, Spam and
+  Trash. She ticks **Farm**: the soil test results, her reply (also in
+  Sent) are copied. The board papers in Directorships are never fetched,
+  and nor are the spam or a draft labelled Farm: drafts, spam and trash
+  are left out unless ticked. Ticking Spam and Drafts as well copies them
+  at the next sync.
+- **PM3 The first copy.** Nine emails in Farm since 19 Sep, one from 1 Aug
+  (before the read-back date, never copied). Gmail is busy partway: four
+  are copied and kept, and My mail shows the error. The next sync copies
+  the other five; nothing is fetched or kept twice. My mail shows "All 9
+  emails copied", "1 Oct 2026 to 9 Oct 2026", the read-back date and when
+  it last synced. Each sync copies at most 300 emails and 200 MB of
+  attachments, so a big mailbox shows "1,234 of 5,000 emails copied (24%)"
+  and carries on every 15 minutes.
+- **PM4 What isn't copied** is listed under each mailbox: folders not
+  ticked; Gmail's Sent, Drafts, Spam and Trash unless ticked, and archived
+  mail with no label; email before the read-back date; all but the newest
+  10,000 in a bigger folder (with a warning); attachment files over 20 MB
+  and linked Outlook items; pictures and formatting.
+- **PM5 Attachments.** A fertiliser quote in Outlook's Inbox › Farm has
+  Quote 4471.pdf (kept, downloads as the same file), a meeting invite (a
+  linked item: name only, "open it in Outlook") and Plans.zip at 30 MB
+  (too big: name and size only). The mailbox shows "3, 2 not kept".
+- **PM6 Moves, unticking and deleting in the mailbox.** Unticking
+  Directorships deletes at once what was copied only from it (as FC27).
+  Her reply taken out of Farm (left only in Sent) is removed at the next
+  sync; the board papers labelled Farm as well are copied then (as FC28).
+  When she deletes the soil results in Gmail for good, and puts the lime
+  recommendation in Trash, the next sync keeps both, shown "Deleted in
+  Gmail; kept here", and the mailbox shows "Deleted in the mailbox, kept
+  here: 2". Taking the lime recommendation out of Trash clears the mark.
+  In Outlook, an email moved to Deleted Items is kept and marked; one moved
+  to Board papers (not ticked) is removed. Unticking Farm still deletes
+  everything from it, marked or not.
+- **PM7 Nobody else.** Ana (an Owner), Mere, Sam, Rob, Sid and someone
+  outside the organisation each get "not found" from every route: the
+  list, connecting her mailbox's folders, the switch, disconnecting, Sync
+  now, Delete imported history, searching, a conversation and an attachment's
+  address. Ana's own My mail is empty. An AI key or a farm app key acting
+  as Jess is refused too. Nothing readable is in the database: no
+  subject, address, word, attachment name or file. The audit trail says
+  "copy started" with no details, and a failed sync's log line names only
+  the organisation.
+- **PM8 Ownership never moves.** Ana makes Jess an admin: Jess can't read
+  her copy now and it isn't synced; Ana still sees nothing. The database
+  refuses to give the copy or its emails another owner. Jess an Owner
+  again: hers again, and the next sync catches up. When Ana removes Jess
+  from the organisation, the connection is deleted (as FC15) and the copy
+  stays, readable by nobody; added back as an Owner, Jess sees it as
+  "Disconnected: not copying", to delete or carry on.
+- **PM9 Searching.** Whole words, every one: "paddock twelve" finds the
+  results and her reply, newest first; "kowhai" and "KŌWHAI dairies" find
+  the results ("Kōwhai" in its text); "p12" finds the attachment's name;
+  "from:results@soillab.example" the lab's email and
+  "to:results@soillab.example" her reply; "olse" finds nothing (not a
+  whole word). Results come 50 at a time with **More**.
+- **PM10 Reading.** Opening her reply shows the conversation oldest first:
+  who it was from and to, the date, the text, the attachments and **Open
+  in your mailbox**.
+- **PM11 Downloading.** Soil results P12.pdf downloads as the same file.
+  It's always a download, never opened inside Tohyee.
+- **PM12 Off and disconnect.** With the switch off, nothing more is copied
+  and what was copied stays. Disconnect stops syncing: it deletes the
+  sign-in and folder choice (and the farm calendar's items from it) and
+  keeps the imported history,
+  "Disconnected: not copying". Connecting the same mailbox again carries on
+  the same copy: only the email that arrived since is fetched.
+- **PM13 Delete imported history** deletes every copied email, attachment
+  and search token at once, after a warning that backups made before keep
+  it, encrypted, until they age out (about 12 months). The mailbox and its
+  connection carry on.
+- **PM14 One connection with the farm calendar.** With Farming on, Jess
+  connected the mailbox on the farm calendar, reading Farm. My mail shows
+  the same mailbox and Farm. She turns the copy on and ticks Sent too: the
+  farm calendar's list and mailbox still show only Farm, its check never
+  reads Sent (the herd test Jess sent makes no calendar item), and saving
+  folders on the farm calendar leaves Sent ticked for the copy. A mailbox
+  connected only from My mail isn't on the farm calendar and isn't read
+  for it.
+
+- **PM15 Giving her AI the scope.** Jess has two AI keys here: "Claude for
+  my mail" (Look only) and "Claude for the books" (Make and post). On My
+  mail, Your AI, she ticks "Claude for my mail". "Claude for the books"
+  can't be ticked: only Look only keys can, so nothing from her mail can be
+  written into Tohyee. The audit trail notes the key was allowed, with no
+  details.
+- **PM16 Nobody else's key.** Jess can't tick Ana's key, Ana (an Owner)
+  can't tick Jess's, and Mere (an admin) gets "not found" for the list.
+- **PM17 Asking her AI.** Jess's AI calls search_my_mail with "olsen
+  paddock" and gets the soil test email with "Email "Soil test results
+  paddock twelve" from Soil Lab <results@soillab.example>, 2026-10-10 (My
+  mail message 1)", then read_my_mail gives its text, "The Olsen P for
+  paddock twelve is 32." The directorship email was never copied, so
+  there's nothing of it to find. Her Make and post key, Ana's key and
+  Mere's key aren't offered the tools ("Unknown tool"). When Ana gives her
+  own key the scope, it finds only Ana's own mail (none), and Jess's email
+  is "not found".
+- **PM18 Stopping.** When Jess is made an admin, her key loses the mail
+  tools at once; made an Owner again, it has them again. Taking the tick
+  off stops them for good.
+- **PM19 It only looks.** The key with the scope has no write tools, and
+  its mail tools run read-only.
+
+Not included (#250's next part): filing an attachment into shared data
+(the bills inbox, soil tests) with a preview of what others will see; and
+attachment files through the AI (it gets their names). Tests:
+`tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14),
+`tests/integration/private-mail-ai.test.ts` (PM15-PM19)
+and `tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
+nothing else names the private tables).
+## Farming (#327): the co-op share register (CSR1-CSR10; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+From the answer to item 15 in issue #360: a factual register and
+reconciliation first, with no automated Fonterra minimum-share
+calculator. Built by Claude on 20 Oct 2026. The prefix is CSR because CS1-CS3
+are custom segments. Nothing here posts to the ledger: the register holds what
+the co-ops' statements say, adds it up and checks it never goes below
+nothing. Tested in `tests/integration/coop-shares.test.ts`.
+
+**Setup.** A farming organisation whose financial year ends 31 May. The
+year is 1 Jun 2025 to 31 May 2026. Two holdings:
+
+| Date | Holding | Entry | Shares | Value | Source statement |
+|---|---|---|---:|---:|---|
+| 31 May 2025 | Fonterra co-operative shares | Brought forward | 120,000 | 660,000.00 | 2025 financial statements |
+| 15 Sep 2025 | Fonterra co-operative shares | Bought | 10,000 | 55,800.00 | Share purchase confirmation |
+| 20 Mar 2026 | Fonterra co-operative shares | Sold (entered as 5,000 and 27,500.00) | -5,000 | -27,500.00 | Share surrender statement |
+| 31 May 2025 | Ravensdown ordinary shares | Brought forward | 2,000 | 2,000.00 | 2025 financial statements |
+| 30 Sep 2025 | Ravensdown ordinary shares | Issued without payment | 1,500 | 1,500.00 | Rebate statement Sep 2025 |
+
+Payments, kept apart from the shares:
+
+| Date | Holding | Kind | Amount | Imputation credits |
+|---|---|---|---:|---:|
+| 15 Oct 2025 | Fonterra | Dividend | 18,000.00 | 7,000.00 |
+| 15 Apr 2026 | Fonterra | Dividend | 12,000.00 | 4,666.67 |
+| 30 Sep 2025 | Ravensdown | Rebate | 4,500.00 | |
+| 30 Sep 2025 | Ravensdown | Retention | 750.00 | |
+
+- **CSR1 A holding.** One per co-op and share class (Fonterra co-operative
+  shares; Ravensdown ordinary shares). A second active "fonterra /
+  CO-OPERATIVE SHARES" is refused (case doesn't matter). Farming must be on.
+  Bookkeepers and up add and remove; viewers read.
+- **CSR2 Opening.** The opening quantity and value are everything dated
+  before the year starts. Fonterra opens the year at 120,000 shares and
+  660,000.00; Ravensdown at 2,000 and 2,000.00. A brought-forward balance is
+  how a register starts: one per holding, dated on or before every other
+  movement (a second one, or a purchase dated before it, is refused). Date
+  it the day before the first year entered, so it's that year's opening.
+- **CSR3 Movements and closing.** The year's movements are listed with
+  date, type, quantity, value and source statement. A sale is entered as
+  positive numbers and shown negative. Closing is opening plus the year's
+  movements: Fonterra 120,000 + 10,000 - 5,000 = 125,000 shares and
+  660,000.00 + 55,800.00 - 27,500.00 = 688,300.00. Ravensdown 3,500 and
+  3,500.00. In total, opening value 662,000.00 and closing value 691,800.00.
+  A purchase on 10 Jun 2026 isn't in this year's closing, and next year
+  opens at this year's closing (Fonterra 125,000 and 688,300.00). Quantities
+  are summed only within a holding, never across co-ops.
+- **CSR4 Never below nothing.** Selling 130,000 Fonterra shares on 1 Aug
+  2025 is refused (it holds 120,000 then). So is a sale whose value would
+  take the holding's value below nothing. Removing a purchase that a later
+  sale relies on is refused the same way. The check runs in date order over
+  every movement, not just the year shown.
+- **CSR5 Source statements.** Every movement and payment names its source:
+  a reference ("Fonterra dividend statement Oct 2025"), a file attached to
+  the holding (stored as the holding's files, like any record's), or both.
+  With neither, it's refused. A file from another holding, or one that's
+  been removed, can't be chosen. A file removed later still shows its name,
+  marked removed.
+- **CSR6 Dividends, rebates and retentions apart.** Each is its own kind
+  and total, and none changes the shares' value. For the year: dividends
+  30,000.00 with imputation credits 11,666.67; rebates 4,500.00; retentions
+  750.00. Imputation credits are only on dividends: on a rebate they're
+  refused. An amount must be above zero.
+- **CSR7 A rebate paid in shares.** Ravensdown's 4,500.00 rebate is a
+  rebate; the 1,500 shares it issued are a separate "issued without
+  payment" movement at the value the statement shows (1,500.00). They're
+  entered separately and not linked, so the register doesn't decide how the
+  rebate is split between cash, shares and retention. That's the co-op's
+  statement and the accountant's call.
+- **CSR8 Mistakes.** A movement or payment entered by mistake is removed;
+  it's kept in the history but drops out of the register. A holding can
+  only be removed when it has no movements or payments left. Once removed,
+  the same co-op and class can be added again.
+- **CSR9 In the year-end pack.** When farming is on and there's a holding,
+  the year-end pack has "Co-op shares.csv": a Shares table (each holding's
+  opening, the year's movements, closing, then total opening and closing
+  value) and a "Dividends, rebates and retentions" table (each payment, with
+  totals for each kind). The files that the year's entries name are in a
+  "Co-op share statements" folder, each name starting with its file number
+  so two statements with the same name don't clash. A removed file isn't
+  included. No farming, or no holdings: neither is in the pack.
+- **CSR10 Not built.** No ledger links or proposed postings (they need
+  their own worked examples and tests first, #360 item 15). No calculator
+  for how many Fonterra shares a farm must hold (the share standard): its
+  rules have changed over time and aren't verified, so it's deferred. Tohyee
+  doesn't value shares (values are as entered, usually cost) or work out
+  the tax on dividends, rebates or retentions.

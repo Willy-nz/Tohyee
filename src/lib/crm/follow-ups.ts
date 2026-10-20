@@ -1,6 +1,7 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { createTask } from "@/lib/crm/service";
 import { refreshCampaignMembers } from "@/lib/crm/campaigns";
+import { noticeReplies } from "@/lib/crm/replies";
 import { advanceSequences } from "@/lib/crm/sequences";
 import { listStages } from "@/lib/crm/stages";
 import { crmEnabled, requireCrm } from "@/lib/crm/switch";
@@ -453,13 +454,15 @@ export async function runDueFollowUpRules(organisations?: Organisation[]): Promi
                     exists (select 1 from crm_campaign_members where status <> 'responded') as members`,
           );
           const { rules, enrolments, members } = any.rows[0];
+          // Replies to sales emails and sequences become a task for the owner (decision 651), before sequences stop for them.
+          const fromReplies = await noticeReplies(tx);
           // Campaign members who were emailed or replied (decision 498).
           if (members) await refreshCampaignMembers(tx);
-          if (!rules && !enrolments) return null;
+          if (!rules && !enrolments) return fromReplies.tasksCreated > 0 ? fromReplies : null;
           const fromRules = rules ? await runFollowUpRules(tx) : { tasksCreated: 0, skipped: 0 };
           // Sequences' steps (decision 497) are moved on in the same check.
           const fromSequences = enrolments ? await advanceSequences(tx) : { tasksCreated: 0 };
-          return { tasksCreated: fromRules.tasksCreated + fromSequences.tasksCreated };
+          return { tasksCreated: fromReplies.tasksCreated + fromRules.tasksCreated + fromSequences.tasksCreated };
         });
         if (done) {
           total.organisations += 1;

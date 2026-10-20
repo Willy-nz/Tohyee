@@ -3,7 +3,8 @@ import { ValidationError } from "@/lib/errors";
 import { MAX_DASHBOARD_TILES } from "@/lib/dashboard/pages";
 import { parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
 
-export type DashboardPreference = { hidden: boolean; tiles: string[] };
+/** `customised` is whether the person has saved their own choice; until then the tiles are their starting ones (decision 660). */
+export type DashboardPreference = { hidden: boolean; tiles: string[]; customised: boolean };
 
 function parseTiles(raw: unknown, allowed: readonly string[]): string[] {
   if (!Array.isArray(raw)) return [];
@@ -22,9 +23,9 @@ export async function getDashboardPreference(
     [input.userId, input.page],
   );
   const row = result.rows[0];
-  if (!row) return { hidden: false, tiles: [...input.defaultTiles] };
+  if (!row) return { hidden: false, tiles: [...input.defaultTiles], customised: false };
   const tiles = parseTiles(row.tiles, allowedTiles);
-  return { hidden: row.hidden, tiles: tiles.length > 0 ? tiles.slice(0, maxTiles) : [...input.defaultTiles] };
+  return { hidden: row.hidden, tiles: tiles.length > 0 ? tiles.slice(0, maxTiles) : [...input.defaultTiles], customised: true };
 }
 
 /** Most pins kept while hidden, so a saved row can't grow without end. */
@@ -89,5 +90,10 @@ export async function saveDashboardPreference(
             set hidden = excluded.hidden, tiles = excluded.tiles, updated_at = now()`,
     [input.userId, input.page, input.hidden, JSON.stringify(stored)],
   );
-  return { hidden: input.hidden, tiles };
+  return { hidden: input.hidden, tiles, customised: true };
+}
+
+/** Back to the starting cards: the person's saved choice for the page is removed (decision 660). */
+export async function resetDashboardPreference(tx: OrgTx, input: { userId: string; page: string }): Promise<void> {
+  await tx.query("delete from dashboard_preferences where user_id = $1 and page = $2", [input.userId, input.page]);
 }
