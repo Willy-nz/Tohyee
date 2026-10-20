@@ -16936,4 +16936,92 @@ alter table record_attachments add constraint record_attachments_record_type_che
                          'coop_shareholding'));
 `,
   },
+  {
+    version: "0174",
+    name: "crm_lead_replies",
+    sql: `
+-- Replies from leads (decision 651, #216, #360 item 17). Mail sync also
+-- keeps emails with leads that aren't converted (until now only known people
+-- and companies, MAIL3), linked to the lead; converting the lead links them
+-- to its new person and company too.
+alter table crm_participant_links add column lead_id bigint references crm_leads(id);
+alter table crm_participant_links drop constraint crm_participant_links_check1;
+alter table crm_participant_links add constraint crm_participant_links_target
+  check (person_id is not null or contact_id is not null or lead_id is not null);
+create index crm_participant_links_lead_idx on crm_participant_links (lead_id) where lead_id is not null;
+
+-- A reply to a sales email or sequence becomes one follow-up task for the
+-- record's owner. One row per reply handled (unique), made in the same
+-- transaction as its task, so a check that runs twice never makes a second.
+create table crm_reply_follow_ups (
+  id bigserial primary key,
+  reply_key text not null unique,
+  message_id bigint references crm_messages(id) on delete set null,
+  activity_id bigint references crm_activities(id),
+  lead_id bigint references crm_leads(id),
+  person_id bigint references crm_people(id),
+  replied_at timestamptz not null,
+  task_id bigint references crm_tasks(id),
+  outcome text not null check (outcome in ('task_created', 'skipped')),
+  detail text,
+  created_at timestamptz not null default now(),
+  check (num_nonnulls(lead_id, person_id) = 1)
+);
+create index crm_reply_follow_ups_lead on crm_reply_follow_ups (lead_id, replied_at) where lead_id is not null;
+create index crm_reply_follow_ups_person on crm_reply_follow_ups (person_id, replied_at) where person_id is not null;
+
+-- Replies synced from before this version are left alone, so upgrading
+-- doesn't make a pile of tasks at once.
+create table crm_reply_handling (
+  id boolean primary key default true check (id),
+  started_at timestamptz not null default now()
+);
+insert into crm_reply_handling (id) values (true);
+`,
+  },
+  {
+    version: "0175",
+    name: "crm_account_plans_and_renewals",
+    sql: `
+-- Account plans and renewal reminders (decisions 653-654, #216 stage 4;
+-- #360 item 17), after Salesforce's account plans and HubSpot's buying
+-- roles. One plan per company: where things stand, its goals, and the
+-- part each of its people plays. The next steps are the company's tasks.
+create table crm_account_plans (
+  contact_id bigint primary key references contacts(id),
+  summary text check (summary is null or length(summary) <= 4000),
+  updated_by_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table crm_account_plan_goals (
+  id bigserial primary key,
+  contact_id bigint not null references crm_account_plans(contact_id),
+  position integer not null check (position between 1 and 50),
+  title text not null check (length(title) between 1 and 200),
+  target_date date,
+  status text not null default 'open' check (status in ('open', 'achieved', 'dropped')),
+  unique (contact_id, position)
+);
+
+create table crm_account_plan_people (
+  person_id bigint primary key references crm_people(id),
+  contact_id bigint not null references crm_account_plans(contact_id),
+  role text not null check (role in ('decision_maker', 'budget_holder', 'champion', 'influencer', 'user', 'blocker', 'other')),
+  note text check (note is null or length(note) <= 300)
+);
+create index crm_account_plan_people_contact on crm_account_plan_people (contact_id);
+
+-- Renewal dates on a deal and on its product lines (CRM only; nothing in the books).
+alter table crm_opportunities add column renewal_date date;
+alter table crm_opportunity_lines add column renewal_date date;
+create index crm_opportunities_renewal on crm_opportunities (renewal_date) where renewal_date is not null;
+
+-- A follow-up rule that reminds the deal's owner N days before a renewal.
+alter table crm_follow_up_rules drop constraint crm_follow_up_rules_kind_check;
+alter table crm_follow_up_rules add constraint crm_follow_up_rules_kind_check
+  check (kind in ('lead_arrives', 'deal_stage', 'deal_quiet', 'task_overdue', 'renewal_due'));
+`,
+  },
 ];

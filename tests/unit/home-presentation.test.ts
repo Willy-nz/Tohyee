@@ -47,7 +47,11 @@ describe("Home presentation preserves financial meaning", () => {
     expect(html).toContain("Needs attention");
     expect(html).not.toContain("To do");
     expect(html.match(/5 bank lines to reconcile/g)).toHaveLength(1);
-    expect(html).toContain("8 Oct 2026 – 14 Oct 2026");
+    // Overdue bills come straight after overdue invoices (decision 661), so bills due this week and drafts are under View all.
+    expect(html.indexOf("1 overdue invoice")).toBeLessThan(html.indexOf("1 overdue bill"));
+    expect(html.indexOf("1 overdue bill")).toBeLessThan(html.indexOf("bank feed"));
+    expect(html).toContain("Review overdue bills");
+    expect(html).not.toContain("8 Oct 2026 – 14 Oct 2026");
     expect(html).toContain("View all");
     expect(html).not.toContain("2 drafts to approve");
     expect(html.indexOf("overdue invoice")).toBeLessThan(html.indexOf("bank lines to reconcile"));
@@ -55,7 +59,7 @@ describe("Home presentation preserves financial meaning", () => {
 
   it("uses the up-to-date empty state when there are no actions", () => {
     const html = renderToStaticMarkup(createElement(NeedsAttention, { summary: {
-      ...summary, owedToYou: { ...summary.owedToYou, overdueCount: 0 }, billsDueThisWeek: 0,
+      ...summary, owedToYou: { ...summary.owedToYou, overdueCount: 0 }, billsToPay: { ...summary.billsToPay, overdueCount: 0 }, billsDueThisWeek: 0,
       toDo: { paydayFilingsDue: 0, accountsToReconcile: 0, feedsToReconnect: 0, draftsToApprove: 0 },
     } }));
     expect(html).toContain("You&#x27;re up to date.");

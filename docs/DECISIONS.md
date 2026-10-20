@@ -4080,6 +4080,36 @@ testing) and #154's code signing (later, Jess).
        archives a record, so it needs the bookkeeper role or higher (not
        sales reps or managers).
 
+650. **Bulk reassignment, with a preview** (#216 stage 1's last item; Codex,
+     delegated by owner, 20 October 2026, #360 item 17: bulk reassignment
+     first). Xero has no CRM, so this follows Salesforce's Mass Transfer
+     Records and HubSpot's bulk Assign. CRM › Settings › Reassign records.
+     - **Choose:** from a person, someone who has left, or nobody; to a
+       member who can use the CRM and can sign in; and what kinds. **See
+       what will move** lists every record (up to 2,000 of each kind), and
+       anything can be unticked before **Move**.
+     - **What moves:** leads that aren't converted (a converted lead
+       doesn't change, decision 492); companies they own; open deals, and
+       won and lost ones only when ticked (their wins then count for the new
+       owner on forecasts and the dashboard, which work from the owner as it
+       is now); tasks that aren't done (done tasks stay with whoever did
+       them); and active sequences whose next step tasks go to them. People
+       have no owner (decision 491), so only their open tasks and sequences
+       move. From nobody: unassigned leads, deals and tasks, never
+       companies (most of the books' contacts have no owner).
+     - **Who:** admins, owners and bookkeepers, anyone's; a sales manager
+       only between themselves and the people in their teams (and
+       unassigned leads, which they see); not sales reps or viewers. The
+       same checks run again when moving.
+     - **History:** each record moved gets its own history line ("Moved to
+       someone else with Reassign records", who and when), and the move a
+       line of its own, listed on the page as Recent moves. A record that
+       changed hands, was converted, closed or done after the preview is
+       left alone and counted as skipped, so moving the same list twice
+       moves nothing more. Moving a deal is a change by a person, so it
+       starts a new quiet spell for "a deal goes quiet" (decision 495). No
+       journal, invoice or balance changes, so there's no accounting
+       example.
 495. **Follow-up rules make tasks, once each** (#216 stage 2; Jess 10 Oct
      2026: all four rules, reminders in Tohyee only).
      - **Rules:** admins and owners add them on CRM › Follow-ups. A rule's
@@ -4170,6 +4200,39 @@ testing) and #154's code signing (later, Jess).
      - **Merging people** (decision 494) moves their sequences; if both are
        in the same one, the merged-away person's is stopped.
 
+651. **A reply from a lead or person becomes a follow-up task** (#216; Codex,
+     delegated by owner, 20 October 2026, #360 item 17: lead/reply handling;
+     examples MAIL10, RPL1-RPL5, not yet reviewed). Xero has no CRM;
+     HubSpot and Salesforce both unenrol someone who replies and tell the
+     owner, so the owner gets a task (reminders stay in Tohyee, decision
+     495). Already there and kept: sequences stop on a reply (decision 497)
+     and campaign members become "responded" (decision 498).
+     - **Leads' emails are kept:** mail sync now also keeps emails and
+       meetings with a lead that isn't converted, linked to the lead and
+       shown on its page, under the same mailbox privacy (MAIL7). Until now a
+       lead's reply was only noticed through a lead mailbox (decision 498's
+       note). Converting the lead links them to its new person and company.
+     - **What's a reply:** an email from their address (synced from a
+       member's mailbox, or for a lead into a lead mailbox) after a sales
+       email went to them from Tohyee in the 30 days before, or while
+       they're in a sequence (on a deal: its point of contact).
+     - **The task:** "Reply from <name>: <subject>", due today, for the
+       lead's owner, else whoever sent the email or added them to the
+       sequence (on a deal, its owner). Someone who has left or can't use the
+       CRM isn't given it; it's then unassigned. The subject is left out
+       when the mailbox shows only that something happened, unless the task
+       is for that mailbox's own member.
+     - **Once:** one task per sales email or sequence answered, so a thread
+       going back and forth makes one; a new email and a new reply make
+       another. Each reply is kept as handled (unique, in the task's
+       transaction), so checking twice never makes two. Checked straight
+       after each mail sync and with the follow-up rules every 15 minutes.
+     - **Not flooding:** replies synced before this version, and replies
+       received over 7 days ago, are left alone.
+     - Nothing is sent: outbound sequences stay person-confirmed (decision
+       497). The lead's status doesn't change by itself.
+     - **Not checked against real services:** Gmail and Microsoft 365, as
+       for decisions 493 and 496; tested with pretend providers only.
 498. **Campaigns: one source each, costs for reports only** (#216 stage 2;
      Jess 10 Oct 2026: one source campaign; budget and cost; members added
      by hand, in bulk, by a form or mailbox, or by an import; added, sent,
@@ -4189,7 +4252,8 @@ testing) and #154's code signing (later, Jess).
        mailbox), or when they came in through the campaign's form or
        mailbox. Anyone can set it by hand. A lead's reply is only noticed
        through a lead mailbox, because mail sync keeps only emails with
-       people and companies (MAIL3). Merging two people in the same
+       people and companies (MAIL3); since decision 651 it keeps leads'
+       too. Merging two people in the same
        campaign keeps one membership.
      - **Costs:** budget and actual cost are typed in, in the base
        currency, for the report: cost per lead (cost ÷ leads it was the
@@ -4252,6 +4316,32 @@ testing) and #154's code signing (later, Jess).
      - Sales reps and managers see only their own (or their teams') figures
        (decision 491). Amounts are never added across currencies. Counts of
        deals open the deals behind them.
+652. **The CRM's reporting tables in Analytics** (#216; Codex, delegated by
+     owner, 20 October 2026, #360 item 17: reporting datasets; example AB11,
+     not yet reviewed). The books and CRM copy (AB1-AB10, decision 367)
+     gains `tohyee_crm_leads`, `tohyee_crm_campaigns`,
+     `tohyee_crm_campaign_members`, `tohyee_crm_sequences`,
+     `tohyee_crm_sequence_enrolments`, `tohyee_crm_sales_emails`,
+     `tohyee_crm_deal_products` and `tohyee_crm_tasks`, each with a plain
+     name and description in Analytics, and two columns more on existing
+     tables (an opportunity's `source_campaign`; an activity's opportunity,
+     lead and person ids). Columns are only added, as AB's rules say.
+     - **As recorded:** rows as they are in the CRM, nothing worked out to
+       match the dashboard (as AB's rules); campaign budget and cost, and
+       deal product amounts, exact (excluding GST, in the deal's currency,
+       never converted, decision 324).
+     - **Left out:** leads' email addresses and phone numbers, and sales
+       emails' addresses, subjects and words. Reports count and group;
+       mailbox content stays out of shared analytics (as #360 item 10 for
+       private mail). Sales emails still being sent aren't copied.
+     - **Who sees them:** as the existing CRM tables. Analytics is for
+       viewers and up, who already see every CRM record (decision 491);
+       sales reps and managers have no Analytics; report viewers see only
+       the dashboards shared with them. Per-owner filtering inside Analytics
+       isn't built, because nobody who reaches it is limited to their own
+       records.
+     - Copied only while the CRM is on (AB9); with Accounting off, only the
+       `tohyee_crm_*` tables.
 501. **Discounts on sales lines** (DS1-DS6; Jess 10 Oct 2026: "add
      discounts to invoices too", sales lines only, examples approved).
      - Invoices, quotes, sales orders, repeating invoices and sales credit
@@ -4299,6 +4389,43 @@ testing) and #154's code signing (later, Jess).
        document, no won stage, or a page layout that won't let it move, the
        deal is left and its history says why.
      - Sales reps and managers see a deal's products but not its quotes.
+653. **Account plans** (#216 stage 4; Codex, delegated by owner, 20 October
+     2026, #360 item 17: account plans and renewal reminders). Xero has
+     nothing like it; this follows Salesforce's account plans (objectives,
+     relationship map, actions) and HubSpot's buying roles. On a company's
+     Related tab (tenant migration 0175).
+     - **One plan per company:** "where things stand" (up to 4,000
+       characters); goals in order (up to 50), each with an optional target
+       date and open, achieved or dropped; and the part each of its people
+       plays (decision maker, budget holder, champion, influencer, user,
+       blocker, other) with a short note.
+     - **Next steps are tasks:** the company's open tasks, with their owner
+       and due date, rather than a second list that wouldn't show on anyone's
+       task list. The plan also shows the company's open deals and renewals
+       in the next year (and the last 30 days).
+     - **Who:** companies are a shared address book (decision 491), so
+       everyone in the CRM sees a company's plan and anyone who can change
+       CRM records can change it; the deals, renewals and tasks on it are
+       only those the person sees. Saving is kept in the company's history.
+     - Not built: Salesforce's SWOT and org-chart drawing, and plans for
+       a group of companies (#200).
+654. **Renewal dates and reminders** (#216 stage 4; same delegation).
+     - **Dates:** a deal and each of its products can have a renewal date,
+       set on the deal's Renewals card by whoever can change the deal, on
+       any deal that isn't lost (renewals mostly follow a win, when the
+       products can no longer change). A product keeps its date when the
+       products are saved again. CRM only: nothing in the books changes, so
+       there's no accounting example; contract or subscription accounting
+       stays separate, as the issue says.
+     - **Reminder:** a fifth follow-up rule (decision 495), "A renewal is
+       coming up": N days before a renewal date (0-365), a task for the
+       deal's owner, once per deal and date (the deal's and its products'
+       on the same date make one task, naming the products). Dates from
+       before the rule was made are ignored; moving a date to next year
+       makes a new reminder when that comes near. A deal with no owner is
+       skipped, with the reason. As HubSpot's renewal-date workflows.
+     - Not built: making the renewal deal itself (Salesforce CPQ's
+       automatic renewal opportunities); Jess can decide later.
 503. **Livestock (#221) stage 1** (Jess 11 Oct 2026). Examples LV1-LV12
      are approved as written.
      - **First release:** dairy cattle, beef cattle and sheep.
@@ -5408,7 +5535,9 @@ testing) and #154's code signing (later, Jess).
      different default cards per role: Tohyee's roles don't say who is farm
      staff or the accountant, and guessing from bookkeeper or viewer would
      be wrong as often as right. Everyone starts with the same cards and
-     uses Customise. No card shows payroll figures.
+     uses Customise. No card shows payroll figures. (Starting cards by kind
+     of person are now decision 660; on the farm Home everyone still starts
+     the same.)
 576. **Analytics shows money and value names the way people read them**
      (20 October 2026). Issues #328-#330, found building a dashboard.
      Negative money in Analytics tables, key figures and pivot tables shows
@@ -6051,6 +6180,164 @@ testing) and #154's code signing (later, Jess).
        Fonterra share standard (minimum shares) calculator, deferred until
        its effective-dated rules are verified; share valuation; and the tax
        treatment of dividends, rebates and retentions.
+
+### Owner-delegated answers (issue #360, 20 October 2026; decisions 634-639)
+
+On 20 Oct 2026 Jess asked Codex to answer all the outstanding questions
+using its judgement, and approved posting the answers for Claude (issue
+#360). These are recorded with the attribution "Codex, delegated by owner,
+20 October 2026". They're product choices. They don't claim an accountant
+signed anything off, a provider was tested, access was bought or the law was
+verified. Jess's own explicit decisions win where they differ. Items
+recorded elsewhere or being built at the same time:
+- Item 7 (ITX6 and RAT1, from the 20 Oct comment on #292): being built.
+- Items 8-10 (private farm mail, #250): being built.
+- Items 11-13 (groups, #200): being built.
+- Item 15 (co-op shares, #327): decisions 630-633, in that PR.
+- Item 17 (CRM next, #216): being built.
+
+634. **Tax: what comes first** (20 October 2026, #292, #201; #360 items
+     1-6).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Order:** the organisation's own tax workspace first, then a
+       permission-aware overview across clients. A full practice manager
+       isn't a prerequisite (see 638). Finish and check IR4, IR3 and IR10
+       first, then trusts, then partnerships and LTCs, each sourced and
+       tested on its own. Company calculations are never run silently for
+       an entity they don't fit.
+     - **Inputs:** imports and reviewable forecasts first: CSV or Excel
+       through mapping and preview; PDFs kept as sources, with any figures
+       read from them needing review. A live IRD connection is a parallel
+       workstream needing IRD's approval, not a blocker.
+     - **Filing and payments:** prepare and export only. No automatic
+       filing, elections, payments or tax-pooling purchases.
+     - **Privacy:** a taxpayer's inputs are private by default and shared
+       with an accountant only by choice. Turning on Tax or group reporting
+       doesn't expose their mailbox or unrelated personal income.
+     - **Tax pooling:** comparisons stay provider-neutral, with dated quotes
+       typed in. No paid partner is chosen and no API is promised.
+     - **Already settled:** the extension-of-time choice (562). Rounding
+       (565) and the narrow sole-trader homekill GST case stay technical
+       checks.
+635. **Farm data providers** (20 October 2026, #249; #360 item 14).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - File imports stay the reliable baseline. For private connectors,
+       Pasture.io comes first, then LIC. No paid aggregator or new weather
+       service without a concrete need, documented terms and actual access.
+       Choosing a default can't stand in for a provider's access or a
+       farmer's consent.
+636. **Pigs and specialist livestock** (20 October 2026, #243; #360 item
+     16).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Pigs stay deferred (decision 508's list leaves them out). Finishing
+       the cattle and sheep workflows and reconciling them with real data
+       comes first. Unsupported transfers, bailments and valuation cases
+       stay refused until their rules and examples are verified. There's no
+       generic fallback valuation.
+637. **Which sales platform next** (20 October 2026, #196; #360 item 18).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - Check and finish Shopify first, then WooCommerce's gaps. Square is
+       the next new sales connector. Accounting stays per order, and CRM,
+       order and invoice revenue is never counted twice. This is a
+       priority, not a claim of provider access.
+638. **Practice manager stays unbuilt** (20 October 2026; #360 item 19).
+     - **Who decided:** Jess. Her own instruction, "Dont do practice
+       manager" (parked since 3 Oct 2026, PR #91), stands over #360 item 19.
+       Item 19 outlined a first slice (client directory linked to
+       organisations, templated jobs, task owners and deadlines, document
+       requests, then WIP and time billing). That outline is kept in the
+       issue for the history only and isn't built.
+     - Tax's multi-client overview (634) doesn't depend on it.
+639. **Default dashboards** (20 October 2026; #360 item 20).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Owner:** cash, overdue receivables and payables, and work needing
+       attention.
+     - **Sales:** pipeline, conversion and next actions.
+     - **Farming:** today's work, missing or stale records, and a seasonal
+       cash view.
+     - The practice dashboard (jobs and deadlines) isn't built, since
+       practice manager isn't (638).
+     - Existing dashboards are reused, and drilling through to the records
+       comes before adding more tiles.
+660. **Which dashboard and cards a person starts with** (20 October 2026;
+     #360 item 20, Codex, delegated by owner, 20 October 2026). Tohyee's
+     roles don't say who is "sales" or "farm staff", so the default goes by
+     what Tohyee does know: the person's role and the organisation's modules
+     and records (`homeKindFor` and `defaultTilesFor` in
+     `src/lib/dashboard/defaults.ts`). A **sales rep or manager** (decision
+     491) gets the sales dashboard, the CRM's Home, as they only have the
+     CRM. Otherwise **Farming on** gives the farm Home (FH1), for every role,
+     since the roles still can't tell farm staff from the accountant
+     (decision 589). Everyone else gets the **owner's** Home. Within a page:
+     Home starts with Cash in bank, Owed to you and Bills to pay, then Next
+     GST return when registered for GST; when not, Jobs if any project is a
+     job, else Sales pipeline if the CRM is on. The farm Home starts with
+     today's work, records to catch up on and the season's cash, then the
+     farm's records. The CRM Home starts a sales rep on their next actions
+     and own opportunities, and a manager (and anyone else) on the pipeline
+     and conversion. **A person's own choice always wins**: the starting
+     cards are used only until they save their own in Customise, which says
+     where the starting cards came from and offers **Go back to the starting
+     cards** (removing their saved choice). Practice manager dashboards
+     aren't built (Jess: "Dont do practice manager"). Xero's Home is one
+     layout for everyone and Power BI and Looker Studio have no per-role
+     starting dashboards, so this is our own rule. HD1-HD5, not yet reviewed.
+661. **The owner's Home shows overdue both ways** (20 October 2026; #360
+     item 20, Codex, delegated by owner, 20 October 2026). Bills to pay shows
+     the overdue amount in red beside the bills due this week, as Owed to you
+     already shows overdue invoices, and Needs attention lists overdue bills
+     (to Aged payables) as it lists overdue invoices (to Aged receivables).
+     Each opens the report with the documents behind it; no new tiles. HD2.
+662. **The CRM Home is a sales dashboard; Home can show jobs and sales**
+     (20 October 2026; #360 item 20, Codex, delegated by owner, 20 October
+     2026). The CRM Home gets the dashboard frame (decision 372): six cards,
+     per person, up to 8 with Customise and Hide. **Pipeline**: open
+     opportunities by stage, with count, amount per currency and longest in
+     stage, linking to the pipeline and the sales dashboard's drill-through.
+     **Conversion**: last and this quarter of the financial year, leads
+     converted of those added, won of those closed and the amount won
+     (definitions as decision 500). **Next actions**: the person's own tasks
+     due today or before, their open opportunities past the expected close
+     date, and their open ones with no task still to do, five of each with
+     the count, each linking to its record. Then the CRM's own three
+     (CRM10). A rep or manager sees only their own (or their teams')
+     pipeline and conversion (decision 491); next actions are always the
+     person's own. Opportunity names on My open opportunities now link to
+     the opportunity. Home offers two more tiles: **Jobs** (open jobs, those
+     with a visit in the next seven days, those with none booked, and
+     services due; offered once there's a job) and **Sales pipeline** (the
+     open amount and this quarter's win rate; offered with the CRM on).
+     SD1-SD6, not yet reviewed.
+663. **The farm Home's today's work, records to catch up on and the
+     season's cash** (20 October 2026; #360 item 20, Codex, delegated by
+     owner, 20 October 2026). This week on the farm says "Nothing on today"
+     when today is empty, so today's work comes first. **Records to catch up
+     on** lists what's missing or out of date, each with the page that fixes
+     it: a farm walk more than 14 days old (only for a farm that has
+     readings, so farms that don't do farm walks aren't nagged; DairyNZ
+     suggests weekly walks in spring, so two weeks is generous); paddocks
+     with no cover reading on such a farm; a finished season with farm
+     working expenses but none of kg MS, hectares, cows or stock units;
+     bank lines to reconcile and feeds to reconnect (out-of-date books make
+     the cash view wrong); AI-suggested stock movements waiting; and the
+     person's own calendar items needing checking (decision 571: never
+     anyone else's). **Cash this season** is the financial year month by
+     month: money in and out of the active bank accounts (credit cards left
+     out, as Cash in bank does) from the ledger up to today, each journal
+     netted first so a transfer between two bank accounts is neither; the
+     balance at each month's end; then the cash flow forecast's (CF1-CF9)
+     month ends to the season's end, with the lowest expected balance and
+     the first month expected below zero. It links to the cash flow
+     forecast. The season is the financial year (dairy farms usually end
+     theirs on 31 May, the season's end). FH9-FH11, not yet reviewed.
+664. **The dashboard preferences API** (20 October 2026). GET and PUT also
+     return the person's starting cards for the page (`defaultTiles`), their
+     kind (`owner`, `sales` or `farming`) and whether the tiles are their
+     own (`customised`); DELETE removes their saved choice. Every card a page
+     offers can be saved, not only its starting ones. The CRM Home's
+     preferences go through the CRM's access check, so sales reps and
+     managers can keep their own; Home's and the farm Home's still refuse
+     them. HD5.
 624. **Owner's rations get an explicit GST assessment** (Codex, delegated by
      owner (via Will), 20 October 2026; the 20 Oct comment on #292,
      section 2). This replaces "no GST is posted" (RAT1). It isn't replaced

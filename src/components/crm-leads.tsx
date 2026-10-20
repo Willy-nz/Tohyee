@@ -14,6 +14,7 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, newIdempotencyKey } from "@/lib/client/api";
+import type { SyncedEmail } from "@/lib/crm/mail/service";
 import type { Activity, Task } from "@/lib/crm/service";
 import { LEAD_SOURCE_LABELS, LEAD_STATUS_LABELS, type Lead, type LeadImportResult } from "@/lib/crm/lead-types";
 import { formatDateTime } from "@/lib/format";
@@ -299,7 +300,7 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
   );
 }
 
-type LeadPage = { lead: Lead; tasks: Task[]; activities: Activity[] };
+type LeadPage = { lead: Lead; tasks: Task[]; activities: Activity[]; emails?: SyncedEmail[] };
 
 function ConvertLead({ organisationId, lead, onDone }: { organisationId: string; lead: Lead; onDone: () => void }) {
   const [opportunity, setOpportunity] = useState(true);
@@ -363,6 +364,7 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
   if (!data.data) return <p className={ui.muted}>Loading…</p>;
   const { lead, tasks, activities } = data.data;
+  const emails = data.data.emails ?? [];
   const editable = canCrm("write") && lead.status !== "converted";
   const patch = (body: Record<string, unknown>) =>
     run(async () => {
@@ -503,7 +505,7 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
           <p className={ui.muted}>Owner: {lead.ownerUserId ? memberName(team, lead.ownerUserId) : "Unassigned"}</p>
         )}
       </Card>
-      <Card title="Activity" description="Calls, meetings and notes about this lead, and its tasks. They stay with it when it's converted.">
+      <Card title="Activity" description="Calls, meetings, notes and emails with this lead, and its tasks. They stay with it when it's converted.">
         {canCrm("write") ? (
           <form
             className={ui.inlineForm}
@@ -524,7 +526,7 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
             </Button>
           </form>
         ) : null}
-        {activities.length === 0 && tasks.length === 0 ? <Empty>Nothing yet.</Empty> : null}
+        {activities.length === 0 && tasks.length === 0 && emails.length === 0 ? <Empty>Nothing yet.</Empty> : null}
         <ul>
           {tasks.map((task) => (
             <li key={`task-${task.id}`}>
@@ -534,6 +536,12 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
           {activities.map((activity) => (
             <li key={`activity-${activity.id}`}>
               {formatDateTime(activity.happenedAt)}: {activity.subject}
+            </li>
+          ))}
+          {emails.map((email) => (
+            <li key={`email-${email.id}`}>
+              {formatDateTime(email.sentAt)}: {email.direction === "received" ? "Email from them" : "Email to them"}: {email.subject ?? "(no subject)"}{" "}
+              <span className={ui.muted}>· {email.mailbox}</span>
             </li>
           ))}
         </ul>
