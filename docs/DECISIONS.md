@@ -5848,6 +5848,152 @@ testing) and #154's code signing (later, Jess).
      tile, so they sit side by side rather than on one chart); sessions by
      channel; top pages; and sessions by device. Offered once Google
      Analytics has loaded.
+610. **A private copy of an Owner's mail uses the farm calendar's
+     connection** (20 October 2026). Issue #250, with #340 (Jess: her
+     mailbox also holds her mum's company directorship mail, which "must
+     not come into Tohyee at all — not even privately", and the folder
+     choice should be "one place to set it"). So #250's "import all
+     folders" is overridden: My mail (the user menu, Owners only) reads
+     only the Outlook folders or Gmail labels ticked on the mailbox's one
+     folder choice, and nothing until one is ticked. A mailbox is one
+     connection whichever screen made it (one sign-in address,
+     /api/farming/mail/callback, one set of tokens, one choice), with an
+     Owner-only switch, "Keep a private copy of these emails for me and my
+     AI". A second, separate connection was considered and turned down: it
+     would mean a second folder choice to keep right, which is how
+     directorship mail could get in. My mail works in every organisation,
+     Farming on or not. A mailbox connected from My mail isn't read for
+     the farm calendar unless it's connected there too; the farm calendar
+     otherwise works exactly as before. Neither Xero nor NetSuite keeps
+     people's mail, so the rules are Claude's. PM1, PM2, PM14, tenant
+     migration 0168, not yet reviewed; not tried with a real mailbox.
+611. **Only the Owner who turned it on can read their copy, through one
+     door** (20 October 2026). Every listing, search, conversation,
+     attachment, folder list, switch, sync and deletion goes through one
+     access layer (src/lib/private-mail/access.ts) that reads the person's
+     role from the server's own records at that moment and limits every
+     query to rows with their owner_user_id. Everyone else gets "not
+     found", the same as for nothing: admins, other Owners, accountants,
+     report viewers, server admins (who see organisations only as
+     members), farm app keys and AI keys (until #250 part 2's scope). The
+     owner never changes: the database refuses it, and a role change,
+     handover or restore gives nobody else access. An owner who stops being
+     an Owner, leaves or has their login turned off can't read it, and it
+     isn't synced, until they're an Owner again; leaving deletes the
+     connection as it does for the farm calendar (FC15), and the copy stays
+     unread until they delete it. PM7, PM8.
+612. **The mail is encrypted with a key of its own** (20 October 2026).
+     Each copy has a random 256-bit key, stored only encrypted with the
+     server's TOHYEE_SECRET_KEY (src/lib/secrets.ts). Subjects, people,
+     snippets, links, text, attachment names and files are encrypted with
+     it (AES-256-GCM, each value tied to its copy, kind and email). Plain:
+     the provider's ids, dates, sizes, attachment counts and folder ids,
+     for duplicates, order and coverage. Emails are kept as text (HTML is
+     turned into text, as the farm calendar does), so nothing from an
+     email runs in Tohyee; attachments are only ever downloaded, never
+     shown in Tohyee's pages. docs/PRIVATE-MAIL.md says plainly that
+     whoever controls the server, its code and its key can read the mail:
+     this protects from other Tohyee users and from a copy of the database
+     alone, and isn't end-to-end.
+613. **Search uses keyed word tokens** (20 October 2026). Each email's
+     words (subject, people, text, attachment names; lower case, accents
+     off, 2-40 letters or digits, at most 4,000) are stored as HMAC-SHA256
+     digests with the copy's key, in an indexed array; a search finds
+     emails with every word, plus from:address and to:address. Whole words
+     only, no suggestions, and the words are sent in a POST so they're
+     never in an address or a proxy's log. Someone with the database alone
+     can see which emails share a word and how often a digest appears, not
+     the words (docs/PRIVATE-MAIL.md). Chosen over full-text search in
+     PostgreSQL, which would keep the words readable in the index.
+614. **Copying: the read-back window, resumable, no duplicates, the farm
+     calendar's move rules** (20 October 2026). The copy reads back to the
+     mailbox's read-back date (30-365 days before it was connected). Each
+     sync lists the ticked folders' emails back to then (newest first, at
+     most 10,000 per folder, saying so when a folder has more), copies up
+     to 300 emails and 200 MB of attachments not copied yet, each committed
+     on its own (so an interrupted first copy carries on where it stopped,
+     and an email is never copied twice), then drops emails that left the
+     ticked folders to another folder and copies emails moved in, as
+     decision 585 does for the farm calendar; an email deleted in the
+     mailbox is kept (decision 616). Unticking a folder deletes at once
+     what was copied only from it. Syncs run every 15 minutes after the farm
+     calendar's checks (TOHYEE_FARM_MAIL_SCHEDULER=off stops both), and on
+     Sync now. Three failed syncs in a row stop it until it's switched
+     off and on or the mailbox is connected again. My mail shows progress ("1,234 of 5,000 emails
+     copied"), the dates copied, the read-back date, the last sync and the
+     last error. PM3, PM6.
+615. **What isn't copied, shown on My mail** (20 October 2026; drafts,
+     junk and trash by Codex, delegated by owner, 20 October 2026, #360
+     item 8: "exclude drafts, junk/spam and trash by default, show
+     exclusions clearly and allow explicit opt-in"; #360's "import sent and
+     archived mail by default" gives way to Jess's own #340: only ticked
+     folders are read). Folders not ticked; Gmail's Sent, Drafts, Spam and
+     Trash unless ticked (a draft or binned email carrying a ticked label
+     isn't copied either, unless Drafts or Trash is ticked) (they're
+     offered on My mail only, marked "for your private copy only", and the
+     farm calendar never reads them, even when ticked; Outlook's are
+     ordinary folders, as they already were for the farm calendar); Gmail
+     mail with no label (archived), which no label holds; email older than
+     the read-back date; all but the newest 10,000 in a bigger folder;
+     attachment files over 20 MB and linked Outlook items (their name and
+     size are kept); pictures and formatting. Nothing is claimed beyond
+     what was copied. PM2, PM4, PM5.
+616. **Off, disconnect and delete are three things; the copy is an
+     archive** (20 October 2026; Codex, delegated by owner, 20 October
+     2026, #360 item 9). Switching the copy off stops copying and keeps
+     it. Disconnecting stops syncing (it deletes the tokens and folder
+     choice, and the farm calendar's items as FC15) and keeps the imported
+     history, not copying; connecting the same mailbox again carries on the
+     same history. **Delete imported history** is the separate, explicit
+     step: every email, attachment and search token goes at once, leaving
+     the connection. Backups made before keep it (encrypted) until they age
+     out: the newest of each of 14 days and the first of each of 12 months,
+     so about 12 months; My mail says so rather than promising it's gone
+     from every backup. An email deleted in Gmail or Outlook (gone, or in
+     Gmail's Trash or Outlook's Deleted Items) is kept and shown "deleted in
+     the mailbox", as #360 asks, and explained on My mail beside Connect; one
+     moved to a folder that isn't ticked is removed, and unticking a folder
+     still deletes what came from it, as Jess's #340 says. Telling the two
+     apart takes one read of the email's ids (at most 300 a sync). Nothing
+     is ever changed in the mailbox. PM6, PM12, PM13.
+617. **Nothing about the mail leaves the copy** (20 October 2026; the
+     store choice matches Codex, delegated by owner, 20 October 2026, #360
+     item 10: an owner-specific private store and index in the existing
+     PostgreSQL, no bodies or summaries in shared analytics, no extra SQL
+     server, no claim of protection from a hostile host operator). The audit
+     trail records only that a copy was started, stopped or deleted, with
+     no details; the farm calendar's events stay as they were (counts of
+     folders, no names). A failed sync logs only the organisation. Nothing
+     goes to notifications, Analytics or DuckDB, general search, reports or
+     exports, and a test checks no other part of Tohyee names the private
+     tables. Filing an attachment into shared data (the bills inbox, soil
+     tests), with a preview of what becomes visible, is #250's next part
+     and isn't built. PM7.
+618. **The AI reads an Owner's mail only through their own Look only key**
+     (20 October 2026). #250 part 2: "a private-mail scope that only the
+     owner's own key can be given". On My mail (Your AI) the copy's Owner
+     ticks which of their own working AI keys in this organisation may
+     search and read it; nobody can tick anyone else's (another Owner's
+     key is "not found"), and only Look only keys can have it, so an AI
+     reading the mail can't write anything from it into Tohyee's shared
+     records (its calls run read-only). The scope is kept in the
+     organisation's database (tenant migration 0169, private_mail_ai_keys:
+     the key's id and its Owner), not on the key, so no core migration was
+     needed. The MCP server offers search_my_mail and read_my_mail only to
+     such a key while its Owner is an Owner; other keys don't learn the
+     tools exist ("Unknown tool"), and every call goes through the same
+     access layer as My mail (decision 611), which checks the scope again.
+     Revoking the key, taking the tick off or the Owner losing the role
+     stops it at once. Answers cite each email (subject, sender, date, My
+     mail message id) and the server tells the AI to say which it used and
+     never pass it on. Tohyee has no shared AI conversations, so there's
+     nowhere else for an answer to be kept. PM15-PM19, not yet reviewed.
+619. **What the AI tools don't do** (20 October 2026). They give the text
+     and attachment names, not attachment files; they don't file anything
+     into shared data (that's #250's next part, with a preview); and they
+     can't stop an AI service outside Tohyee from keeping what it was told:
+     that's between the Owner and their AI provider, and My mail says the
+     key is for the Owner's own AI only.
 665. **Shopify checked against Admin API 2026-10** (20 October 2026;
      Codex, delegated by owner, 20 October 2026: "validate and finish
      Shopify first", issue #360 item 18). Without a real store, the
