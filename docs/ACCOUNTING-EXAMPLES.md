@@ -47,6 +47,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/crm-replies.test.ts` (MAIL10, RPL1-RPL5, not yet
+  reviewed) and
   `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
   `tests/integration/sales-platform-orders.test.ts` (SPC11-SPC23, not yet
   approved) and
@@ -4338,8 +4340,8 @@ March year end, Jess (owner) and Mere (admin), on Tue 20 Oct 2026.
   off and moves them up or down, and **Hide** hides the dashboard. It's per
   person, and saved like Home's (decision 372). The farm Home shows up to
   10 cards (Home shows 4), so Analytics tiles can be pinned to it with
-  **Pin to page** (offered only when Farming is on). Everyone starts with
-  the same cards in the same order.
+  **Pin to page** (offered only when Farming is on). Everyone on a farm
+  starts with the same cards in the same order (HD3).
 - **FH8 Money and the notebook.** Money: cash in bank, bills to pay (and
   how many are due this week), money owed to you and the GST estimate,
   worked out as Home does (H2-H4). The farm notebook: the latest three
@@ -4352,16 +4354,108 @@ income** (kg MS to date against last season and budget, payout forecast):
 milk solids are only entered once a year for benchmarks. **FWE against
 budget**: budgets aren't grouped as working expenses. **Paddocks with a soil
 test due**: soil tests deliberately have no "due" rule. **Income tax due**
-on the Money card. **Different default cards per role** (owner, farm staff,
+on the Money card. **Different farm cards per role** (owner, farm staff,
 accountant): Tohyee's roles (owner, admin, bookkeeper, viewer) don't say
-who's farm staff and who's the accountant, so everyone starts with the same
-cards and changes them with Customise. No card shows payroll figures (pay
+who's farm staff and who's the accountant, so everyone on a farm starts with
+the same cards (HD3) and changes them with Customise. No card shows payroll figures (pay
 runs, pay rates or wages per person). Farm performance uses the ledger's
 expense totals, as Farm benchmarks does for any viewer.
 
-Tests: `tests/integration/farm-home.test.ts` (FH1-FH8),
+Added 20 Oct 2026 (#360 item 20, Codex, delegated by owner; decision 663,
+not yet reviewed), same farm and date:
+
+- **FH9 Records to catch up on.** What's missing or out of date, each with
+  the page that fixes it. Home block's latest walk was 10 Oct: on 20 Oct
+  that's 10 days, fine; on **30 Oct** it's **20 days**, more than 14, so
+  "Home block: last farm walk 10 Oct 2026, 20 days ago" (Add readings). A
+  new paddock **16** with no reading: "1 paddock has no cover reading". A
+  farm with no readings at all isn't listed (it may not do farm walks). Also
+  a finished season with working expenses but none of kg MS, hectares, cows
+  or stock units; bank lines to reconcile; feeds to reconnect; the **1**
+  AI-suggested stock movement waiting; and the person's own calendar items
+  needing checking.
+- **FH10 Cash this season.** A made-up farm with a March year end and two
+  bank accounts (1000 and a call account 1010). $50,000 in on 15 Mar 2026,
+  so the season (1 Apr 2026 - 31 Mar 2027) opens at **$50,000**. Milk
+  income $30,000 on 10 May; $20,000 moved from 1000 to 1010 on 20 May
+  (netted in its journal, so neither in nor out); fertiliser $12,000 on
+  5 Oct; $1,000 dated 25 Oct (after today, not yet counted). Month ends:
+  April **$50,000**, May **$80,000** (in $30,000), ... October so far out
+  **$12,000**, **$68,000**. Then the cash flow forecast: a $100,000 winter
+  feed item on 15 Jan 2027 takes January's month end to **-$32,000**, the
+  lowest expected, and the first month below zero is **January**. Credit
+  cards are left out, as Cash in bank does. Nothing in the bank, moved or
+  expected hides the card (FH6).
+- **FH11 Private items stay private.** A calendar item of Mere's that
+  needs checking counts on Mere's records to catch up on (1) and never on
+  Jess's, through the screen's figures or the route (decision 571).
+
+Tests: `tests/integration/farm-home.test.ts` (FH1-FH11),
 `tests/unit/dashboard-tiles.test.ts` (FH7) and
 `tests/unit/dashboard-pages.test.ts`.
+
+### Starting dashboards by kind of person (HD1-HD5; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+Issue #360 item 20: default dashboards for the owner, sales and farming
+(not the practice manager: Jess, "Dont do practice manager"). Tohyee's
+roles don't say who's sales or farm staff, so the rule goes by what Tohyee
+knows (decision 660). Xero's Home is one layout for everyone, so this is
+our own rule. Made-up people: Jess (owner), Vic (viewer), Ruby and Otto
+(sales reps).
+
+- **HD1 Which dashboard.** A sales rep or manager gets the CRM's Home (the
+  sales dashboard), even with Farming on; with Farming on everyone else gets
+  the farm Home; otherwise the owner's Home. Ruby's Home's and farm Home's
+  preferences are refused (403).
+- **HD2 Home's tiles.** Cash in bank, Owed to you, Bills to pay, then Next
+  GST return when registered for GST. Not registered: Jobs if any project
+  is a job, else Sales pipeline with the CRM on, else still the GST card.
+  Bills to pay shows overdue bills in red, and Needs attention lists them
+  (decision 661).
+- **HD3 The farm Home's cards.** This week on the farm, Records to catch up
+  on and Cash this season first, then stock, pasture, fertiliser, farm
+  performance, money and the notebook, for every role.
+- **HD4 The CRM Home's cards.** Ruby (a rep) starts with Next actions and
+  her own opportunities; a manager, and Jess, with Pipeline and Conversion.
+- **HD5 Your own choice wins.** Jess saves Bills, Cash, Owed, GST on Home.
+  When GST registration is turned off, Vic starts with Sales pipeline
+  (the CRM is on) but Jess keeps her four. Customise says the starting
+  cards' rule, and **Go back to the starting cards** removes Jess's choice,
+  so she gets Sales pipeline too. Ruby's saved CRM Home is hers alone; Otto
+  keeps the starting cards.
+
+Tests: `tests/unit/dashboard-defaults.test.ts` (HD1-HD4) and
+`tests/integration/home-defaults.test.ts` (HD2, HD4, HD5).
+
+### The CRM Home as a sales dashboard (SD1-SD6; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+Decision 662. Ruby and Otto are sales reps; Jess is the owner. Harbour Vets
+is a made-up prospect. Today is the day the test runs.
+
+- **SD1 Pipeline.** Open opportunities by stage: Ruby's Keyrings ($600,
+  Proposal) and Collars ($400, Meeting) are **2** for **$1,000**; Jess sees
+  Otto's tags ($900) as well: **3** for **$1,900**. Each stage links to the
+  pipeline; the sales dashboard shows the opportunities behind each figure.
+  Amounts in other currencies are listed beside, never added.
+- **SD2 Conversion.** Last and this quarter of the financial year: leads
+  converted of those added, won of those closed (win rate) and the amount
+  won, defined as the sales dashboard does (decision 500).
+- **SD3 Next actions: tasks.** Ruby's "Chase the PO" on Keyrings, due
+  yesterday, is listed as overdue and links to Keyrings. Otto's task due
+  today is his alone.
+- **SD4 Next actions: opportunities.** Keyrings' close date was 3 days ago:
+  **past its close date**. Collars has no task still to do: **no next
+  step**. Jess owns none, so she has no next actions. Five of each are
+  listed, with the count.
+- **SD5 Customise.** As the farm Home: cards on or off and up or down, per
+  person, up to 8, and Hide.
+- **SD6 Home's Jobs and Sales pipeline tiles.** Jobs: open jobs (not
+  closed), those whose next visit is in the next seven days, those with
+  none booked, and services due (JV8). Sales pipeline: SD1's open amount
+  and this quarter's win rate.
+
+Tests: `tests/integration/home-defaults.test.ts` (SD1, SD3, SD4) and
+`tests/unit/dashboard-defaults.test.ts` (SD6 Jobs).
 
 ## GST return
 
@@ -5572,6 +5666,33 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+### Leads' emails and replies (MAIL10, RPL1-RPL5; decision 651)
+
+Codex, delegated by owner, 20 October 2026 (#360 item 17), as HubSpot and
+Salesforce do (Xero has no CRM); not yet reviewed by Jess. Nothing is
+posted, so these have no amounts. Tested in
+`tests/integration/crm-replies.test.ts`.
+
+- **MAIL10** Aroha Ngata is a lead (aroha@example.nz, Ruby's) and not a
+  person yet. Her email "Paw prints?" to Jess is kept and linked to the lead
+  and shows on the lead's page; a newsletter still isn't kept. Converting
+  the lead links the email to the new person too, and her next email is
+  matched to the person, not the converted lead.
+- **RPL1** Ruby emails Aroha "Your quote" from Tohyee; Aroha's "Re: Your
+  quote" comes back through Jess's mailbox. Ruby gets one task, due today:
+  "Reply from Aroha Ngata: Re: Your quote".
+- **RPL2** The check running again makes nothing more, nor does Aroha's
+  second email in the thread. After Ruby emails "Samples" and Aroha replies
+  again, there's a second task.
+- **RPL3** Tama (a person at Harbour Vets) is in Ruby's "Clinic intro"
+  sequence. His reply makes Ruby a task "Reply from Tama" (no subject,
+  because Jess's mailbox shows only that something happened), and the
+  sequence stops with "They replied."
+- **RPL4** An email into a lead mailbox from Aroha after Ruby emailed her
+  "Hello" makes the task "Reply from Aroha Ngata: Re: Hello".
+- **RPL5** No task for a reply to an email sent over 30 days earlier, a
+  reply received over 7 days ago, or one synced before this version.
 
 ## Sales platform connections (examples not yet approved by Jess)
 
@@ -15736,7 +15857,8 @@ without employee names.
   and **`tohyee_items`**.
 - With the CRM on: **`tohyee_crm_companies`**, **`tohyee_crm_opportunities`**
   (stage, amount, expected close, owner, won/lost) and
-  **`tohyee_crm_activities`**.
+  **`tohyee_crm_activities`**, and since decision 652 the CRM's reporting
+  tables (AB11).
 - With Farming on (#249, decision 515): **`tohyee_farm_paddocks`**,
   **`tohyee_farm_fertiliser_products`**,
   **`tohyee_farm_fertiliser_plan_lines`**,
@@ -15781,6 +15903,22 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
 - **AB10** A pay run's wages journal is copied as lines on the wages and
   bank (or wages payable) accounts with no contact and the description
   "Pay run".
+- **AB11** (decision 652; Codex, delegated by owner, 20 October 2026, not
+  yet reviewed) With the CRM on, the copy also has
+  **`tohyee_crm_leads`**, **`tohyee_crm_campaigns`**,
+  **`tohyee_crm_campaign_members`**, **`tohyee_crm_sequences`**,
+  **`tohyee_crm_sequence_enrolments`**, **`tohyee_crm_sales_emails`**,
+  **`tohyee_crm_deal_products`** and **`tohyee_crm_tasks`**, and
+  `source_campaign` on opportunities and record ids on activities. The
+  campaign "Pet expo" (budget **800.00**, actual cost **650.50**) is copied
+  exactly; Aroha Ngata's lead is copied as converted with source campaign
+  Pet expo and owner Ruby Rep, without her email or phone, and the deal made
+  from her keeps Pet expo; DS7's lines on "Clinic keyrings" are copied as
+  **450.00** (20 x 25.00 less 10%) and **50.00**, excluding GST, adding to
+  the deal's **500.00**; a sales email is copied with its date and sender
+  but no address, subject or words, and one still sending isn't copied.
+  With Accounting off, only the `tohyee_crm_*` tables are copied. Tested in
+  `tests/integration/analytics-crm-tables.test.ts`.
 
 ## Analytics: built-in values on the books copy (examples BM1-BM4; as Xero does, not yet reviewed)
 
@@ -17738,13 +17876,19 @@ for provisional tax"; "Interest on provisional tax"; IR289 *Provisional tax*
   and the third is 18,551.40 less what was paid before 7 May. Not filed yet:
   the instalments based on two years ago are shown, and the third uses
   Tohyee's own figure for last year's RIT, marked as an estimate. "Paid
-  towards" the earlier instalments is payments for that income year dated
-  before this instalment's due date, up to what the earlier instalments were
-  (so 7,967.60 paid on 14 Jan for instalment 2 isn't counted against it).
+  for" the earlier instalments is what's allocated to them (confirmed by IRD,
+  or by a person with evidence; ITX6A-ITX6H), with no cap at what they were
+  worked out at: 6,000.00 towards instalment 1 makes instalment 2
+  12,367.60 - 6,000.00 = **6,367.60** (changed 20 Oct 2026, as delegated, not
+  yet reviewed by an accountant; it was capped at 4,400.00, giving 7,967.60).
+  A payment's date doesn't decide which instalment it's for: 7,967.60 paid on
+  14 Jan and directed to instalment 2 isn't counted against instalment 1.
   An earlier instalment that's due and unpaid is caught up in the next one:
   with only 4,400.00 paid, instalment 3 is 14,151.40. That 14,151.40 is instalment 3's own 6,183.80 plus the 7,967.60 caught up; the year's provisional tax stays 18,551.40 (it was once added up from what's due, 26,519.00, which counted the shortfall twice and understated end-of-year tax; found in a review on issue #292, 17 Oct 2026). Interest (ITX46) uses each instalment's own share. Filed after the second instalment, instalment 2 also catches up an unpaid instalment 1. Before the earlier
-  instalments are due, they count as paid as worked out. This is our
-  reading of IRD's "minus instalments 1 and 2 paid"; check it.
+  instalments are due, they're assumed paid as worked out, and the
+  instalment says that's a forecast assumption, not a payment. IRD's "minus
+  the amount paid for the first payment" is applied without a cap (Codex,
+  delegated by owner, 20 Oct 2026).
 - **ITX7 Six-monthly GST filers** pay two instalments, **28 Oct and 7 May**:
   18,551.40 ÷ 2 = **9,275.70** each. If last year's return wasn't filed by
   28 Oct, Tohyee says it can't work out the two-instalment schedule yet
@@ -18326,8 +18470,9 @@ IR10 box 58's sign (ITX22), use-of-money interest ÷ 365 with the payment
 day charged (ITX44), $78,100 for the 33% band (ITX54), rounding the
 imputation loss to the cent (ITX59), unused overseas tax lost (ITX60).
 Changed: whole dollars (ITX66) and the end-of-year date for April to
-September balance dates (ITX43). Still for Will: what counts as "paid
-towards" earlier instalments when last year's return is filed late (ITX6).
+September balance dates (ITX43). What counts as "paid towards" earlier
+instalments when last year's return is filed late (ITX6) was answered on 20
+Oct 2026 under Will's delegation (ITX6A-ITX6H).
 The examples not named here are still not yet reviewed.
 
 - **ITX66 Whole dollars.** The cents are dropped (not rounded) from IR4 box
@@ -18339,8 +18484,82 @@ The examples not named here are still not yet reviewed.
 
 ## Income tax (#292): a review on issue #292 (ITX6 follow-up, 18 Oct 2026)
 
-A review comment on issue #292 (17 Oct 2026) found that a late-filed return's schedule counted a caught-up shortfall twice in the year's total; fixed in ITX6. It also said IRD applies provisional tax payments to instalments as the taxpayer directs, so Tohyee's earliest-first, by-date rule is our reading, still for Will (ITX6). And it said that without an extension of time to file, IRD's standard option page has last year's RIT plus 5% apply even when the return is filed after an instalment date. IRD's "Standard option" page (read 18 Oct 2026) says so; its "Work out provisional tax using the standard option" page doesn't mention extensions. Tohyee hasn't changed that yet: a question for Jess or Will.
+A review comment on issue #292 (17 Oct 2026) found that a late-filed return's schedule counted a caught-up shortfall twice in the year's total; fixed in ITX6. It also said IRD applies provisional tax payments to instalments as the taxpayer directs, so Tohyee's earliest-first, by-date rule was our reading; replaced on 20 Oct 2026 by allocations (ITX6A-ITX6H). And it said that without an extension of time to file, IRD's standard option page has last year's RIT plus 5% apply even when the return is filed after an instalment date. IRD's "Standard option" page (read 18 Oct 2026) says so; its "Work out provisional tax using the standard option" page doesn't mention extensions. Tohyee hasn't changed that yet: a question for Jess or Will.
 
+
+## Income tax (#292): provisional tax payments and where they go (ITX6A-ITX6H; Codex, delegated by owner (via Will), 20 Oct 2026; as delegated, not yet reviewed by an accountant)
+
+From the 20 Oct 2026 comment on issue #292, section 1. IRD's standard
+option page subtracts "the amount paid for the first payment" without a cap,
+and IRD applies provisional tax payments to instalments as the taxpayer
+directs. Kererū, 2027 income year: last year's RIT 17,668.00 + 5% =
+18,551.40; with the 2026 return filed late under an extension, instalment 1
+is 4,400.00 and the cumulative target by instalment 2 is 12,367.60 (ITX6).
+On time, each instalment is 6,183.80 (ITX5). Tested in
+`tests/unit/income-tax-rules.test.ts` and
+`tests/integration/income-tax-allocations.test.ts`.
+
+Four things are kept apart: what each instalment is (the **scheduled
+obligation**), what's been **paid** (a bank date, and IRD's effective date
+once known), where each payment is **allocated**, and the **cash still
+needed** by each date. An allocation is one of: **confirmed by IRD** (needs
+the IRD document that shows it, ITX30), **allocated by us with evidence**
+(the evidence is typed with it), or a **forecast assumption** (shown, never
+counted as paid). A payment with none of the first two is **awaiting
+reconciliation** and counts against no instalment. Cash still needed by an
+instalment = its cumulative target less everything allocated to it and the
+earlier instalments, never below nil. Nothing posts.
+
+- **ITX6A Excess towards instalment 1.** Late-filed: 6,000.00 confirmed
+  towards instalment 1 (worked out at 4,400.00). Instalment 2 is 12,367.60 -
+  6,000.00 = **6,367.60** (not 7,967.60), and 6,367.60 is still needed by 15
+  Jan 2027. With 6,367.60 paid towards instalment 2, instalment 3 is
+  18,551.40 - 6,000.00 - 6,367.60 = **6,183.80**, the final balance. The
+  year's total stays **18,551.40**. On time: 8,000.00 towards instalment 1
+  leaves instalment 1 at 6,183.80 with a **1,816.20** credit carried
+  forward, so **4,367.60** is still needed by instalment 2 (12,367.60 -
+  8,000.00).
+- **ITX6B Partial.** On time, 3,000.00 towards instalment 1: still needed
+  **3,183.80** by 28 Aug, **9,367.60** by 15 Jan, **15,551.40** by 7 May.
+  Late-filed: instalment 2 is 12,367.60 - 3,000.00 = **9,367.60**, its own
+  7,967.60 plus 1,400.00 caught up.
+- **ITX6C Late.** 6,183.80 towards instalment 1 with IRD's effective date 10
+  Sep 2026 counts towards instalment 1 and is shown as **6,183.80 late**.
+  Lateness uses IRD's effective date, not the bank date: left the bank 27 Aug,
+  effective 31 Aug, is late. With no effective date typed, the bank date
+  stands in, and the page says so. Interest (ITX44) uses the same dates and
+  only confirmed or evidenced allocations.
+- **ITX6D Same day.** Effective on 28 Aug 2026, the due date: on time. For the
+  2028 year, 28 Aug 2027 is a Saturday, so effective Monday 30 Aug 2027 is on
+  time (ITX10).
+- **ITX6E Directed to instalment 2.** On time, 4,000.00 paid on 20 Aug 2026
+  and directed to instalment 2: instalment 1 still needs **6,183.80**;
+  **8,367.60** is still needed by instalment 2 (12,367.60 - 4,000.00). It
+  isn't relabelled instalment 1. A 6,183.80 payment on 1 Dec 2026 with no
+  allocation is **awaiting reconciliation**: its date doesn't make it either
+  instalment's.
+- **ITX6F Reversals.** A payment counted from the books (ITX39) whose
+  journal is then reversed counts for nothing: instalment 3 goes back to
+  needing **6,183.80**, the year's paid total drops by it, it leaves the
+  imputation credit account, and it can't be allocated.
+- **ITX6G Reallocating.** Moving 500.00 from instalment 3 to the end-of-year
+  tax keeps the old allocation with the reason ("IRD moved it to the 2027
+  end-of-year tax") and who changed it; instalment 3 needs 500.00 more again.
+  Taking an allocation off (with a reason) puts it back to awaiting
+  reconciliation. A forecast assumption of 6,183.80 towards instalment 1
+  leaves 6,183.80 still needed, shown as nil "if the forecast holds".
+- **ITX6H Each payment once.** A 6,000.00 payment can't be allocated for
+  more than 6,000.00 ("Only 0.00 of this 6000.00 payment isn't allocated
+  yet"). Split 6,183.80 to instalment 1 and 3,816.20 to instalment 2, a
+  10,000.00 payment leaves **2,367.60** still needed by instalment 2. 20,000.00
+  allocated across the three instalments leaves nothing needed and a
+  **1,448.60** credit, never a negative demand. The year's total stays
+  18,551.40 (the regression found on 17 Oct 2026, ITX6).
+
+Not built: Tohyee doesn't pay or file anything (#360), doesn't read
+allocations from IRD documents by itself (a person allocates, choosing the
+document), and doesn't record credits IRD transfers in from other tax types
+or years as their own kind of payment.
 ## Farming (#249) stage 4: pasture and feed records (PF1-PF8; chosen by Claude 19 Oct 2026 when Jess said "Yea do those", not yet reviewed)
 
 Records only: nothing here posts to the books, judges whether a cover is
