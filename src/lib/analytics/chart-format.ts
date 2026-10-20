@@ -297,3 +297,85 @@ export function formatOptionsFor(visual: string) {
     kpi: visual === "kpi",
   };
 }
+
+/** The chart types a report can keep a default format for (#376, Power BI's visual defaults). */
+export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot"] as const;
+export type DefaultableVisual = (typeof DEFAULTABLE_VISUALS)[number];
+export type VisualDefaults = Partial<Record<DefaultableVisual, ChartFormat>>;
+
+export const VISUAL_NAMES: Record<DefaultableVisual, string> = {
+  column: "Columns",
+  bar: "Bars",
+  line: "Line",
+  area: "Area",
+  combo: "Columns and line",
+  pie: "Pie",
+  donut: "Donut",
+  kpi: "Key figure",
+  table: "Table",
+  pivot: "Pivot table",
+};
+
+/**
+ * A format to copy to other tiles (the format painter) or keep as a chart
+ * type's default: everything but a key figure's target, which is a number
+ * about the data rather than how it looks.
+ */
+export function painterFormat(format: ChartFormat | undefined): ChartFormat | undefined {
+  if (!format) return undefined;
+  const copy: ChartFormat = { ...format };
+  if (copy.kpi) {
+    const kpi = { ...copy.kpi };
+    delete kpi.target;
+    if (Object.keys(kpi).length) copy.kpi = kpi;
+    else delete copy.kpi;
+  }
+  return Object.keys(copy).length ? copy : undefined;
+}
+
+/** A report's defaults by chart type, each checked like a tile's format (unknown types and settings dropped, wrong values refused). */
+export function parseVisualDefaults(input: unknown): VisualDefaults | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (typeof input !== "object" || Array.isArray(input)) throw new ValidationError("The chart type defaults aren't set up properly.");
+  const raw = input as Record<string, unknown>;
+  const result: VisualDefaults = {};
+  for (const visual of DEFAULTABLE_VISUALS) {
+    if (raw[visual] === undefined) continue;
+    let format: ChartFormat | undefined;
+    try {
+      format = painterFormat(parseChartFormat(raw[visual]));
+    } catch (error) {
+      throw new ValidationError(`Default for ${VISUAL_NAMES[visual]}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (format) result[visual] = format;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+function mergeObjects(base: unknown, own: unknown): unknown {
+  if (own === undefined) return base;
+  if (Array.isArray(base) && Array.isArray(own)) {
+    return Array.from({ length: Math.max(base.length, own.length) }, (_unused, index) => mergeObjects(base[index], own[index]) ?? {});
+  }
+  if (base && own && typeof base === "object" && typeof own === "object" && !Array.isArray(base) && !Array.isArray(own)) {
+    const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+    for (const [key, value] of Object.entries(own as Record<string, unknown>)) result[key] = mergeObjects(result[key], value);
+    return result;
+  }
+  return own;
+}
+
+/** A tile's format over its report's default for its chart type: the tile's own settings win, one by one. */
+export function mergeFormats(base: ChartFormat | undefined, own: ChartFormat | undefined): ChartFormat | undefined {
+  if (!base) return own;
+  if (!own) return base;
+  return mergeObjects(base, own) as ChartFormat;
+}
+
+/** The format painter's paste: the copied format, keeping the target tile's own key figure target. */
+export function pasteFormat(copied: ChartFormat | undefined, target: ChartFormat | undefined): ChartFormat | undefined {
+  const format = painterFormat(copied);
+  const keep = target?.kpi?.target;
+  if (keep === undefined) return format;
+  return { ...format, kpi: { ...format?.kpi, target: keep } };
+}

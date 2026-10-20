@@ -7,6 +7,9 @@ import {
   HUES,
   PALETTES,
   formatOptionsFor,
+  mergeFormats,
+  painterFormat,
+  VISUAL_NAMES,
   type AxisFormat,
   type ChartFormat,
   type Hue,
@@ -23,6 +26,10 @@ type Props = {
   values: string[];
   format: ChartFormat | undefined;
   onChange: (format: ChartFormat | undefined) => void;
+  /** The report's default for this chart type (#376); the tile's own settings go over it. */
+  inherited?: ChartFormat;
+  /** Keeps this look as the report's default for the chart type (undefined clears it). */
+  onSetDefault?: (format: ChartFormat | undefined) => void;
 };
 
 /** Removes settings left at their default, so Reset and "nothing changed" are the same thing. */
@@ -127,10 +134,11 @@ function AxisFields({ name, value, onChange, defaultGridlines }: { name: string;
 }
 
 /** The Format section of the chart panel (#331, #333): every change shows in the preview straight away. */
-export function ChartFormatPanel({ visual, values, format, onChange }: Props) {
-  const current = format ?? {};
+export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault }: Props) {
+  // What the chart shows: the report's default for its type with the tile's own settings over it.
+  const current = mergeFormats(inherited, format) ?? {};
   const can = formatOptionsFor(visual);
-  const set = (patch: Partial<ChartFormat>) => onChange(tidyFormat({ ...current, ...patch }));
+  const set = (patch: Partial<ChartFormat>) => onChange(tidyFormat({ ...format, ...patch }));
   const seriesAt = (index: number): SeriesFormat => current.series?.[index] ?? {};
   const setSeries = (index: number, patch: Partial<SeriesFormat>) => {
     const list = values.map((_name, at) => current.series?.[at] ?? {});
@@ -145,8 +153,9 @@ export function ChartFormatPanel({ visual, values, format, onChange }: Props) {
       <div className={styles.panel}>
         <div className={styles.heading}>
           <h3>Format</h3>
-          <Button size="small" variant="secondary" disabled={!format} onClick={() => onChange(undefined)}>Reset to default</Button>
+          <Button size="small" variant="secondary" disabled={!format} onClick={() => onChange(undefined)} title={inherited ? "Back to this report's default for the chart type" : undefined}>Reset to default</Button>
         </div>
+        <DefaultButtons visual={visual} current={current} inherited={inherited} onSetDefault={onSetDefault} />
         <Section title="Card">
           <CardFields format={current} set={set} />
         </Section>
@@ -158,8 +167,9 @@ export function ChartFormatPanel({ visual, values, format, onChange }: Props) {
     <div className={styles.panel}>
       <div className={styles.heading}>
         <h3>Format</h3>
-        <Button size="small" variant="secondary" disabled={!format} onClick={() => onChange(undefined)}>Reset to default</Button>
+        <Button size="small" variant="secondary" disabled={!format} onClick={() => onChange(undefined)} title={inherited ? "Back to this report's default for the chart type" : undefined}>Reset to default</Button>
       </div>
+      <DefaultButtons visual={visual} current={current} inherited={inherited} onSetDefault={onSetDefault} />
       {!can.kpi ? (
         <Section title="Colours">
           <Field label="Colours" hint={tooManyForBlues ? "Tohyee blues has 4 shades, so this chart uses the full colours." : undefined}>
@@ -302,5 +312,25 @@ function CardFields({ format, set }: { format: ChartFormat; set: (patch: Partial
         <Check label="Border" checked={card.border !== false} onChange={(checked) => set({ card: { ...card, border: checked ? undefined : false } })} />
       </div>
     </>
+  );
+}
+
+/** "Set as default for this chart type in this report" (Power BI's visual defaults, #376). */
+function DefaultButtons({ visual, current, inherited, onSetDefault }: { visual: Visual; current: ChartFormat; inherited?: ChartFormat; onSetDefault?: (format: ChartFormat | undefined) => void }) {
+  if (!onSetDefault) return null;
+  const name = VISUAL_NAMES[visual].toLowerCase();
+  const look = painterFormat(tidyFormat(current));
+  return (
+    <div className={styles.defaults}>
+      <Button size="small" variant="secondary" disabled={!look || JSON.stringify(look) === JSON.stringify(inherited)} onClick={() => onSetDefault(look)}>
+        Set as default for {name} in this report
+      </Button>
+      {inherited ? (
+        <Button size="small" variant="secondary" onClick={() => onSetDefault(undefined)}>
+          Clear the {name} default
+        </Button>
+      ) : null}
+      {inherited ? <p className={styles.note}>This report has a default look for {name} charts; settings here go over it.</p> : null}
+    </div>
   );
 }

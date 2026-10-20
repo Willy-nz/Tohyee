@@ -2095,6 +2095,20 @@ that something happened.
   or red ("Down is good" for costs). An optional trend by month sits under
   the number, and the number has its own format with words before or
   after it. Pinned key figures show the same.
+- **Analytics: report themes, chart type defaults and the format painter**
+  (#376 phase 1, decisions 668-671, tenant migration 0176). In a report's
+  edit mode, **Theme** chooses the report's look: Tohyee (the default, and
+  what every chart outside Analytics keeps), Harbour, Kōwhai, Bush, Bright
+  or Strong contrast (each checked for colour-blind readers in light and
+  dark), or one of the organisation's own. The theme editor sets up to 12
+  chart colours (any hex) for light and dark (or works dark out from
+  light), page and card backgrounds, text colours, a font from a safe
+  list, text sizes, and the cards' corners, border, shadow and padding,
+  with a live preview and colour checks that warn but don't block. Themes
+  are saved for the whole organisation, export to a JSON file and import
+  from one. "Set as default for columns in this report" (any chart type)
+  makes every chart of that type in the report start from that look, and
+  **Copy format** / **Paste format** copies a chart's look to others.
 - **Analytics: chart formatting and a second axis** (#331, #333,
   decisions 590-593). The chart panel has a Format section with a live
   preview and Reset to default: colour sets (Tohyee, Tohyee blues, Orange

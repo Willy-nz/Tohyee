@@ -1,4 +1,4 @@
-import type { ChartFormat } from "@/lib/analytics/chart-format";
+import { mergeFormats, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
 import type { Measure, ResultColumn, Visual } from "@/lib/analytics/query";
 
@@ -44,4 +44,16 @@ export function tileValueNames(measures: Measure[]): string[] {
         ? [measure.label, `${measure.label} previous period`]
         : [measure.label],
   );
+}
+
+/**
+ * A tile as it's drawn: its own format over its report's default for its
+ * chart type (#376), so the dashboard, the editor's preview and pinned tiles
+ * all agree. A tile with no default to use comes back unchanged.
+ */
+export function tileWithDefaults<T extends { visual: string; format?: ChartFormat }>(tile: T, defaults: VisualDefaults | undefined): T {
+  const base = defaults?.[tile.visual as DefaultableVisual];
+  if (!base) return tile;
+  const format = mergeFormats(base, tile.format);
+  return format ? { ...tile, format } : tile;
 }

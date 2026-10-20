@@ -122,6 +122,10 @@ export type ChartTheme = {
   negative?: string;
   /** The page's font, so chart text matches the text around it. */
   font?: string;
+  /** Data labels, legend and tooltip text in pixels (a report theme's; 12 when left out). */
+  labelSize?: number;
+  /** Axis labels in pixels (a report theme's; 12 when left out). */
+  axisSize?: number;
 };
 
 export function chartThemeFromTokens(tokens: ChartTokens, font?: string): ChartTheme {
@@ -148,7 +152,16 @@ export function chartThemeFromTokens(tokens: ChartTokens, font?: string): ChartT
 export function readChartTheme(read: (name: string) => string): ChartTheme {
   const fallback = CHART_TOKENS.light;
   const value = (name: string, otherwise: string) => read(name)?.trim() || otherwise;
-  const font = read("--font")?.trim();
+  // A report theme (decision 668) can set its own font, sizes and 2-12 colours.
+  const font = read("--chart-font")?.trim() || read("--font")?.trim();
+  const size = (name: string) => {
+    const number = Number(read(name)?.trim());
+    return Number.isInteger(number) && number >= 9 && number <= 18 ? number : undefined;
+  };
+  const counted = Number(read("--chart-count")?.trim());
+  const count = Number.isInteger(counted) && counted >= 2 && counted <= 12 ? counted : fallback.series.length;
+  const labelSize = size("--chart-label-size");
+  const axisSize = size("--chart-axis-size");
   return {
     text: value("--chart-text", fallback.text),
     secondaryText: value("--chart-text-secondary", fallback.secondaryText),
@@ -157,10 +170,12 @@ export function readChartTheme(read: (name: string) => string): ChartTheme {
     axis: value("--chart-axis", fallback.axis),
     background: value("--chart-surface", fallback.surface),
     hover: value("--chart-hover", fallback.hover),
-    palette: fallback.series.map((colour, index) => value(`--chart-${index + 1}`, colour)),
+    palette: Array.from({ length: count }, (_unused, index) => value(`--chart-${index + 1}`, fallback.series[index % fallback.series.length])),
     blues: fallback.blues.map((colour, index) => value(`--chart-blues-${index + 1}`, colour)),
     negative: value("--chart-negative", fallback.status.critical),
     ...(font ? { font } : {}),
+    ...(labelSize ? { labelSize } : {}),
+    ...(axisSize ? { axisSize } : {}),
   };
 }
 
@@ -219,11 +234,14 @@ export function tooltipHtml(theme: ChartTheme, heading: string, rows: TooltipRow
 export function echartsBase(theme: ChartTheme) {
   const secondary = theme.secondaryText ?? theme.text;
   const font = theme.font ?? "system-ui, -apple-system, \"Segoe UI\", sans-serif";
+  const labelSize = theme.labelSize ?? 12;
+  const axisSize = theme.axisSize ?? 12;
   return {
     backgroundColor: "transparent",
-    textStyle: { color: theme.text, fontFamily: font, fontSize: 12 },
+    labelSize,
+    textStyle: { color: theme.text, fontFamily: font, fontSize: labelSize },
     legend: {
-      textStyle: { color: secondary, fontSize: 12 },
+      textStyle: { color: secondary, fontSize: labelSize },
       pageTextStyle: { color: theme.mutedText },
       pageIconColor: secondary,
       pageIconInactiveColor: theme.grid,
@@ -236,24 +254,24 @@ export function echartsBase(theme: ChartTheme) {
       borderColor: theme.grid,
       borderWidth: 1,
       padding: [8, 12],
-      textStyle: { color: theme.text, fontSize: 13, fontFamily: font },
+      textStyle: { color: theme.text, fontSize: labelSize + 1, fontFamily: font },
       extraCssText: "border-radius:8px;box-shadow:0 2px 6px rgba(15,23,35,0.08),0 8px 24px rgba(15,23,35,0.12);",
     },
     /** For the value axis: no line, light gridlines, muted labels. */
     valueAxis: {
-      axisLabel: { color: theme.mutedText, fontSize: 12 },
+      axisLabel: { color: theme.mutedText, fontSize: axisSize },
       axisLine: { show: false },
       axisTick: { show: false },
       splitLine: { lineStyle: { color: theme.grid, width: 1, type: "solid" as const } },
     },
     /** For the group axis: a baseline, no ticks, muted labels. */
     categoryAxis: {
-      axisLabel: { color: theme.mutedText, fontSize: 12, hideOverlap: true },
+      axisLabel: { color: theme.mutedText, fontSize: axisSize, hideOverlap: true },
       axisLine: { show: true, lineStyle: { color: theme.axis ?? theme.grid, width: 1 } },
       axisTick: { show: false },
       splitLine: { lineStyle: { color: theme.grid, width: 1, type: "solid" as const } },
     },
-    axisName: { color: theme.mutedText, fontSize: 12 },
+    axisName: { color: theme.mutedText, fontSize: axisSize },
     /** The hover marker: a hairline for lines, a faint band for columns. */
     linePointer: { type: "line" as const, lineStyle: { color: theme.axis ?? theme.grid, width: 1, type: "solid" as const }, z: 0 },
     barPointer: { type: "shadow" as const, shadowStyle: { color: theme.hover ?? "rgba(31, 95, 174, 0.06)" }, z: 0 },

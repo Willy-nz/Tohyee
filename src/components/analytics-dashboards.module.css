@@ -107,10 +107,27 @@
 
 .tile {
   min-width: 0;
+  /* A report theme (decision 668) sets the --report-* variables; without one these are Tohyee's. */
+  padding: var(--report-padding, 16px);
+  border: var(--report-border-width, 1px) solid var(--report-border, var(--border));
+  border-radius: var(--report-radius, var(--radius));
+  background: var(--report-card, var(--surface));
+  box-shadow: var(--report-shadow, none);
+}
+
+/* A report with its own theme: the page behind the cards, and the card's colours for what's inside it. */
+.themed {
   padding: 16px;
-  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--report-page);
+  font-family: var(--report-font, inherit);
+}
+.themed .tile {
+  color: var(--report-text);
+  --surface: var(--report-card);
+  --text: var(--report-text);
+  --text-muted: var(--report-text-muted);
+  --border: var(--report-border);
 }
 
 .full {
@@ -128,7 +145,7 @@
 
 .tileTitle {
   margin: 0;
-  font-size: var(--text-base);
+  font-size: var(--report-title-size, var(--text-base));
   font-weight: 600;
 }
 
@@ -305,11 +322,11 @@
 .header > div:last-child { flex-wrap:wrap; gap:6px; max-width:100%; }
 .tileSubtitle { margin: 2px 0 0; color: var(--text-muted); font-size: var(--text-sm); }
 /* Charts on a shaded card use its colour for the gaps between marks. */
-.tinted { background: var(--surface-sunken); --chart-surface: var(--surface-sunken); }
-.bare { background: transparent; }
+.tinted { background: var(--report-card-tinted, var(--surface-sunken)); --chart-surface: var(--report-card-tinted, var(--surface-sunken)); }
+.bare { background: transparent; box-shadow: none; }
 .borderless { border-color: transparent; }
 .visuallyHidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.textTile { background: transparent; border-color: transparent; padding: 8px 4px 0; }
+.textTile { background: transparent; border-color: transparent; box-shadow: none; padding: 8px 4px 0; }
 .textTile .tileTitle { font-size: var(--text-xl); }
 .textBody { color: var(--text-muted); }
 .textBody p { margin: 0 0 8px; white-space: pre-line; }
@@ -324,3 +341,4 @@
 .template:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .template[aria-disabled="true"] { cursor: not-allowed; opacity: 0.7; }
 .template > span { display: grid; gap: 2px; }
+@media (max-width: 640px) { .themed { padding: 8px; } }
