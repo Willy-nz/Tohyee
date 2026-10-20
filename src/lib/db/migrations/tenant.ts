@@ -16850,6 +16850,9 @@ create index group_report_snapshots_group on group_report_snapshots (group_id, s
 create trigger group_report_snapshots_append_only
   before update or delete on group_report_snapshots
   for each row execute function toeyee_forbid_mutation();
+create trigger group_report_snapshots_no_truncate
+  before truncate on group_report_snapshots
+  for each statement execute function toeyee_forbid_mutation();
 `,
   },
 ];
