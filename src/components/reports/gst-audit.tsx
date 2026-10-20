@@ -48,6 +48,7 @@ const EVENT_LABELS: Record<GstAuditEntry["eventType"], string> = {
   expense_claim_voided: "Expense claim voided",
   expense_claim_payment: "Expense claim paid",
   expense_claim_payment_voided: "Expense claim payment voided",
+  rations_supply: "Livestock rations (taxable supply)",
 };
 
 function EntriesTable({ id, title, entries, total, gst }: { id: string; title: string; entries: GstAuditEntry[]; total: string; gst?: string }) {

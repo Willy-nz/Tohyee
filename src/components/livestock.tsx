@@ -2,7 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { useState } from "react";
+import { type FormEvent, Fragment, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -11,7 +11,9 @@ import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
+import { dec, toFixedString } from "@/lib/money/decimal";
+import { RATIONS_GST_OUTCOME_LABELS, RATIONS_GST_OUTCOMES, RATIONS_GST_STATUS_LABELS, type RationsGstOutcome, type RationsGstStatus, supplyGst } from "@/lib/livestock/rations-gst-rules";
 import { CHATHAM_KINDS, classesOf, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind, NSC_KIND_NAMES } from "@/lib/livestock/classes";
 import type { AgeingPreview, HeadCount, LivestockLocation, LivestockOpening, LivestockSettings, Movement, MovementType } from "@/lib/livestock/movements";
 import type { AccountSale } from "@/lib/livestock/account-sales";
@@ -391,8 +393,75 @@ function HeadCountView({ organisationId, yearEnd }: { organisationId: string; ye
 
 // Movements ------------------------------------------------------------------------
 
+const GST_STATUS_TONES: Record<RationsGstStatus, "neutral" | "blue" | "green" | "amber"> = {
+  not_registered: "neutral",
+  unresolved: "amber",
+  taxable_supply: "green",
+  change_in_use: "green",
+  no_adjustment: "blue",
+};
+
+/** Assesses an owner's rations event for GST, or assesses it again with a reason (RAT5-RAT9). */
+function RationsGstForm({ organisationId, movement, onDone, onCancel }: { organisationId: string; movement: Movement; onDone: () => void; onCancel: () => void }) {
+  const again = movement.gst?.assessmentId != null;
+  const [form, setForm] = useState({ outcome: (movement.gst?.status === "change_in_use" || movement.gst?.status === "no_adjustment" ? movement.gst.status : "taxable_supply") as RationsGstOutcome, basis: "", gstAmount: "", reason: "" });
+  const [error, setError] = useState<string | null>(null);
+  const preview = movement.amount ? supplyGst(dec(movement.amount), movement.amountIncludesGst === true) : null;
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await api(`/api/livestock/movements/${movement.id}/gst`, {
+        method: "POST",
+        body: { organisationId, outcome: form.outcome, basis: form.basis, gstAmount: form.outcome === "change_in_use" ? form.gstAmount : null, reason: again ? form.reason : null },
+      });
+      onDone();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  return (
+    <form className={ui.inlineForm} onSubmit={save} aria-label={`GST for the rations on ${formatDate(movement.movementDate)}`}>
+      <Field label="GST assessment">
+        <select value={form.outcome} onChange={(event) => setForm({ ...form, outcome: event.target.value as RationsGstOutcome })}>
+          {RATIONS_GST_OUTCOMES.map((value) => (
+            <option key={value} value={value}>
+              {RATIONS_GST_OUTCOME_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {form.outcome === "taxable_supply" && preview ? (
+        <p className={ui.muted}>
+          GST {formatMoney(toFixedString(preview.gst, 2))} ({movement.amountIncludesGst ? "3/23 of a value including GST" : "15% of a value excluding GST"}), in the GST return as a sale on {formatDate(movement.movementDate)}.
+        </p>
+      ) : null}
+      {form.outcome === "change_in_use" ? (
+        <Field label="Reviewed GST adjustment" hint="The amount your accountant worked out. It goes in Box 9.">
+          <input inputMode="decimal" value={form.gstAmount} onChange={(event) => setForm({ ...form, gstAmount: event.target.value })} required />
+        </Field>
+      ) : null}
+      <Field label={form.outcome === "no_adjustment" ? "Evidence for no adjustment" : "Basis"} hint="Why this treatment applies, and who reviewed it.">
+        <input value={form.basis} maxLength={500} onChange={(event) => setForm({ ...form, basis: event.target.value })} required />
+      </Field>
+      {again ? (
+        <Field label="Reason for the change">
+          <input value={form.reason} maxLength={500} onChange={(event) => setForm({ ...form, reason: event.target.value })} required />
+        </Field>
+      ) : null}
+      <Button type="submit" variant="secondary">
+        Save GST assessment
+      </Button>
+      <Button type="button" variant="secondary" onClick={onCancel}>
+        Cancel
+      </Button>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+    </form>
+  );
+}
+
 export function LivestockMovements({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
+  const [assessing, setAssessing] = useState<string | null>(null);
   const confirm = useConfirm();
   const settings = useLivestockSettings(organisationId);
   const movements = useApiData<{ movements: Movement[] }>("/api/livestock/movements", { organisationId, includeVoided: "true" });
@@ -407,6 +476,9 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
     amount: "",
     heldFor: "",
     rationsFor: "owner" as "owner" | "staff",
+    rationsRecipient: "",
+    rationsEntity: current?.displayName ?? "",
+    amountIncludesGst: false,
     locationId: "",
     toLocationId: "",
     note: "",
@@ -443,7 +515,12 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       if (form.movementType === "arrival" || form.movementType === "departure") body.heldFor = form.heldFor;
       if (form.movementType === "rations") {
         body.rationsFor = form.rationsFor;
-        if (form.rationsFor === "owner") body.amount = form.amount || null;
+        if (form.rationsFor === "owner") {
+          body.amount = form.amount || null;
+          body.rationsRecipient = form.rationsRecipient;
+          body.rationsEntity = form.rationsEntity;
+          body.amountIncludesGst = form.amountIncludesGst;
+        }
       }
       await api("/api/livestock/movements", { method: "POST", body });
       setMessage(`Recorded: ${MOVEMENT_LABELS[form.movementType].toLowerCase()}, ${form.head} ${classes.find((entry) => entry.code === form.classCode)?.name.toLowerCase()}.`);
@@ -549,15 +626,24 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
               </Field>
             ) : null}
             {form.movementType === "rations" && form.rationsFor === "owner" ? (
-              <Field
-                label="Market value excl. GST"
-                hint="Income at market value, posted Dr owner drawings, Cr rations income. No GST is posted: check that with your accountant."
-              >
-                <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
-              </Field>
+              <>
+                <Field label="Who they went to" hint="For example the owner, a shareholder or a family member.">
+                  <input value={form.rationsRecipient} maxLength={200} onChange={(event) => setForm({ ...form, rationsRecipient: event.target.value })} />
+                </Field>
+                <Field label="From (legal entity)" hint="The business the stock belonged to: the company, partnership or sole trader.">
+                  <input value={form.rationsEntity} maxLength={200} onChange={(event) => setForm({ ...form, rationsEntity: event.target.value })} />
+                </Field>
+                <Field label="Market value" hint="Income at market value: Dr owner drawings or current account, Cr rations income.">
+                  <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+                </Field>
+                <label className={ui.checkbox}>
+                  <input type="checkbox" checked={form.amountIncludesGst} onChange={(event) => setForm({ ...form, amountIncludesGst: event.target.checked })} /> The value includes GST
+                </label>
+                <p className={ui.muted}>If you&apos;re GST-registered, assess the GST from the list below once it&apos;s recorded. Until then it shows as not assessed in the GST return, not as nil.</p>
+              </>
             ) : null}
             {form.movementType === "rations" && form.rationsFor === "staff" ? (
-              <p className={ui.muted}>Nothing is posted for staff rations: the lower closing stock is the cost.</p>
+              <p className={ui.muted}>Nothing is posted for staff rations: the lower closing stock is the cost. Their GST hasn&apos;t been looked at yet.</p>
             ) : null}
             {form.movementType === "arrival" || form.movementType === "departure" ? (
               <Field label="Whose stock">
@@ -617,7 +703,8 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
               </thead>
               <tbody>
                 {movements.data.movements.map((movement) => (
-                  <tr key={movement.id}>
+                  <Fragment key={movement.id}>
+                  <tr>
                     <td data-label="Date">{formatDate(movement.movementDate)}</td>
                     <td data-label="What">
                       {MOVEMENT_LABELS[movement.movementType]} {movement.voided ? <Badge tone="red">Voided</Badge> : null}
@@ -635,7 +722,9 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                     <td data-label="Details">
                       {[
                         movement.heldFor ? `For ${movement.heldFor}` : null,
-                        movement.rationsFor ? (movement.rationsFor === "owner" ? "Owner's rations, posted at market value" : "Staff rations") : null,
+                        movement.rationsFor ? (movement.rationsFor === "owner" ? `Owner's rations, posted at market value${movement.amountIncludesGst ? " (including GST)" : ""}` : "Staff rations") : null,
+                        movement.rationsRecipient ? `To ${movement.rationsRecipient}` : null,
+                        movement.rationsEntity ? `From ${movement.rationsEntity}` : null,
                         movement.locationName,
                         movement.toLocationName ? `to ${movement.toLocationName}` : null,
                         movement.invoiceNumber ? `Invoice ${movement.invoiceNumber}` : null,
@@ -645,8 +734,19 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                       ]
                         .filter(Boolean)
                         .join(" · ")}
+                      {movement.gst ? (
+                        <div>
+                          <Badge tone={GST_STATUS_TONES[movement.gst.status]}>{`GST: ${RATIONS_GST_STATUS_LABELS[movement.gst.status]}${movement.gst.gstAmount ? ` ${formatMoney(movement.gst.gstAmount)}` : ""}`}</Badge>
+                          {movement.gst.basis ? <div className={ui.muted}>{movement.gst.basis}</div> : null}
+                        </div>
+                      ) : null}
                     </td>
                     <td>
+                      {can("bookkeeper") && !movement.voided && movement.gst && movement.gst.status !== "not_registered" && assessing !== movement.id ? (
+                        <Button variant="secondary" size="small" onClick={() => setAssessing(movement.id)}>
+                          {movement.gst.assessmentId ? "Change GST" : "Assess GST"}
+                        </Button>
+                      ) : null}{" "}
                       {can("bookkeeper") && !movement.voided ? (
                         <Button variant="secondary" size="small" onClick={() => void voidOne(movement)}>
                           Void
@@ -654,6 +754,22 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                       ) : null}
                     </td>
                   </tr>
+                  {assessing === movement.id ? (
+                    <tr>
+                      <td colSpan={7}>
+                        <RationsGstForm
+                          organisationId={organisationId}
+                          movement={movement}
+                          onDone={() => {
+                            setAssessing(null);
+                            movements.reload();
+                          }}
+                          onCancel={() => setAssessing(null)}
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

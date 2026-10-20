@@ -51,7 +51,7 @@ const toSuggestion = (row: Row): LivestockSuggestion => ({
   decidedAt: row.decided_at,
 });
 
-const FIELDS = ["movementType", "movementDate", "kind", "classCode", "toClassCode", "head", "amount", "heldFor", "rationsFor", "note"] as const;
+const FIELDS = ["movementType", "movementDate", "kind", "classCode", "toClassCode", "head", "amount", "heldFor", "rationsFor", "rationsRecipient", "rationsEntity", "amountIncludesGst", "note"] as const;
 
 /** Keeps only a movement's own fields: no idempotency key, source, locations or document links (people add those when accepting). */
 function movementFields(raw: unknown, label: string): Record<string, unknown> {

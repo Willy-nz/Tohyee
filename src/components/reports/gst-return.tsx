@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -7,7 +8,7 @@ import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import { cmp, dec, divide, mulDiv, toFixedString } from "@/lib/money/decimal";
 import {
   GST_BOX_KEYS,
@@ -31,6 +32,7 @@ import type {
   GstLateClaim,
   GstReturnLine,
 } from "@/lib/reports/gst-return";
+import type { RationsGstEvent } from "@/lib/livestock/rations-gst";
 import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -45,6 +47,9 @@ type Calculated = GstReturnFigures & {
   filedReturns: FiledGstReturnSummary[];
   basisChange: GstBasisChange | null;
   lateClaims: GstLateClaim[];
+  /** The owner's rations (RAT7, RAT10): Box 9 change-in-use adjustments Tohyee adds, and events not assessed yet. */
+  rationsAdjustments?: GstAdjustment[];
+  rations?: { unresolved: RationsGstEvent[]; noAdjustment: RationsGstEvent[] };
   /** NR6: registration ended in this period, with the fixed assets still held then. */
   registrationEnded?: { until: string; assetsHeld: Array<{ assetNumber: string; name: string; cost: string }> } | null;
 };
@@ -56,6 +61,7 @@ const DOCUMENT_LABELS: Record<GstReturnLine["documentType"], string> = {
   supplier_credit_note: "Supplier credit note",
   bank_transaction: "Bank transaction",
   expense_claim: "Expense claim",
+  livestock_rations: "Livestock rations",
 };
 
 function periodLabel(period: { periodStart: string; periodEnd: string }): string {
@@ -101,6 +107,7 @@ const EVENT_LABELS: Record<GstEventType, string> = {
   expense_claim_voided: "Expense claim voided",
   expense_claim_payment: "Expense claim paid",
   expense_claim_payment_voided: "Expense claim payment voided",
+  rations_supply: "Livestock rations (taxable supply)",
 };
 
 const CATEGORY_LABELS: Record<TaxCategory, string> = {
@@ -802,6 +809,22 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                       .join(", ")}.`}
               </Notice>
             ) : null}
+            {data.rations && data.rations.unresolved.length > 0 ? (
+              <Notice tone="warning">
+                GST not assessed yet for the owner&apos;s rations: these aren&apos;t counted, and aren&apos;t nil either. Assess them under{" "}
+                <Link href="/operations/livestock/movements">Livestock › Movements</Link> before filing.{" "}
+                {data.rations.unresolved
+                  .map((entry) => `${formatDate(entry.date)}, ${entry.head} ${entry.className.toLowerCase()}${entry.recipient ? ` to ${entry.recipient}` : ""}, ${formatMoney(entry.value)}${entry.includesGst ? " including GST" : ""}${entry.inPeriod ? "" : " (an earlier period)"}`)
+                  .join("; ")}
+                .
+              </Notice>
+            ) : null}
+            {data.rations && data.rations.noAdjustment.length > 0 ? (
+              <Notice tone="info">
+                The owner&apos;s rations assessed as no GST adjustment, with the evidence:{" "}
+                {data.rations.noAdjustment.map((entry) => `${formatDate(entry.date)}, ${entry.head} ${entry.className.toLowerCase()}: ${entry.basis}`).join("; ")}.
+              </Notice>
+            ) : null}
             {data.basisChange ? (
               <BasisChangeNotice
                 change={data.basisChange}
@@ -849,6 +872,12 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         title="Adjustments"
         description="GST amounts for Box 9 (debit adjustments, e.g. bad debt recovered) and Box 13 (credit adjustments, e.g. bad debt written off). They're only stored when the return is filed."
       >
+        {data?.rationsAdjustments && data.rationsAdjustments.length > 0 ? (
+          <>
+            <p className={ui.muted}>From the owner&apos;s rations assessed as a change-in-use adjustment (Livestock › Movements). Tohyee adds these; they&apos;re stored with the return when it&apos;s filed.</p>
+            <AdjustmentsTable id="gst-return-rations-adjustments" adjustments={data.rationsAdjustments} />
+          </>
+        ) : null}
         <AdjustmentsTable id="gst-return-adjustments" adjustments={adjustments} onRemove={removeAdjustment} />
         {formError ? <Notice tone="error">{formError}</Notice> : null}
         <form className={ui.inlineForm} onSubmit={(event) => void addAdjustment(event)}>
@@ -886,7 +915,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
 
       {data ? (
         <Card title="What's in the boxes">
-          <BoxDetail figures={data} lines={data.lines} adjustments={data.adjustments} selected={selected} />
+          <BoxDetail figures={data} lines={data.lines} adjustments={[...(data.rationsAdjustments ?? []), ...data.adjustments]} selected={selected} />
         </Card>
       ) : null}
 

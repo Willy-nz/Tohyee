@@ -66,6 +66,8 @@ function hrefFor(type: GstDocumentType, id: string, bankAccounts: Map<string, st
       return bankAccounts.has(id) ? `/operations/bank-accounts/${bankAccounts.get(id)}` : "/operations/bank-accounts";
     case "expense_claim":
       return `/operations/expense-claims/${id}`;
+    case "livestock_rations":
+      return "/operations/livestock/movements";
   }
 }
 

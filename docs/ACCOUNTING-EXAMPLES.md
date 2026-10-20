@@ -16564,22 +16564,32 @@ The same year's movements are used in LV1, LV4 and LV6:
   shown on the farm's head count but not counted in LV1 or valued. Kōwhai's
   own heifers grazing off the farm are counted and valued.
 
-### Killed for rations (#259; chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement, not yet reviewed)
+### Killed for rations (#259; chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement, not yet reviewed; GST from 20 Oct 2026, below)
 
 Inland Revenue's IR3F lists the market value of produce used for private or
 domestic purposes as income, and rations provided for employees as a
-deduction. These examples follow that. GST isn't posted, because Claude
-couldn't confirm the GST treatment; a rural accountant should check it.
-Tested in `tests/integration/livestock-rations.test.ts`.
+deduction. These examples follow that. GST used to be left out of every
+owner's rations event; since 20 Oct 2026 a GST-registered farm assesses each
+one (RAT5-RAT10). Tested in `tests/integration/livestock-rations.test.ts`
+and `tests/unit/rations-gst.test.ts`.
 
 - **RAT1** On 10 Mar 2026 the owner kills 1 mixed-age cow for the house,
-  with a market value of 1,100.00 excluding GST. Tohyee posts Dr 3100
-  Owner drawings **1,100.00**, Cr 7070 Livestock rations (private use)
-  **1,100.00** on 10 Mar 2026. The value has to be entered, and the
-  accounts are made the first time if they aren't set.
+  with a market value of 1,100.00 excluding GST, for Sam (a shareholder),
+  from Made-up Farm Ltd. Each event records its date, class and head, who it
+  went to, the legal entity it came from, the value and whether the value
+  includes GST; all are required. Tohyee posts Dr 3100 Owner drawings
+  **1,100.00**, Cr 7070 Livestock rations (private use) **1,100.00** on 10
+  Mar 2026. On a GST-registered date, its GST is **not assessed yet**
+  (unresolved) until someone assesses it (RAT5-RAT10). It isn't a nil. The
+  accounts are made the first time if they aren't set. Use the owner's
+  account that suits the entity (drawings for a sole trader, a shareholder's
+  or partner's current account otherwise) as the drawings account in
+  Livestock › Settings.
 - **RAT2** On 12 Mar 2026, 2 mixed-age cows are killed for staff rations.
   Nothing is posted and no value is entered: the lower closing stock is the
-  cost, the same as stock used in the business.
+  cost, the same as stock used in the business. Unchanged on 20 Oct 2026:
+  the owner's GST workflow doesn't apply to staff rations, which need their
+  own GST analysis (not done yet).
 - **RAT3** Voiding RAT1 posts the reverse (Dr 7070, Cr 3100, 1,100.00) on
   10 Mar 2026, and the cow is back in the head count. A rations movement
   can't take a class below zero.
@@ -16588,6 +16598,72 @@ Tested in `tests/integration/livestock-rations.test.ts`.
   born + bought - sold - died - rations - missing + found ± class changes ±
   ageing. In the statement of cash flows, the owner's rations are income
   with no cash, so they're taken back out (SCF4).
+
+### Rations GST (RAT5-RAT10; Codex, delegated by owner (via Will), 20 Oct 2026; as delegated, not yet reviewed by an accountant)
+
+From the 20 Oct 2026 comment on issue #292, section 2. Blanket "no GST" is
+replaced by an explicit GST assessment of each owner's rations event on a
+GST-registered farm. It isn't replaced by blanket market-value GST either.
+IRD's "Special supplies" page supports market-value treatment for a taxable
+supply to an associated person who can't claim the GST. A sole trader taking
+their own goods isn't automatically the same, and IRD's change-in-use rules
+have their own conditions. So the assessment is one of:
+
+- **confirmed taxable supply**: GST at 15% of a value excluding GST (3/23 of
+  one including it), counted in the GST return as a sale on the event's date;
+- **confirmed change-in-use adjustment**: a reviewed GST amount, typed with
+  its basis while the sole-trader rule is verified, in Box 9;
+- **evidenced no adjustment**: no GST, with the evidence;
+- **unresolved** until one of those is chosen. It shows in GST return
+  preparation as not assessed, never as a verified nil.
+
+Each assessment needs its basis (who reviewed it, and why). Changing one
+needs a reason, and the old one is kept. There's never an input GST claim
+for the recipient's private use, and no bank movement is assumed. Each event
+is counted on its own, in the GST period its date falls in, once. Filed
+returns are never changed: anything assessed or changed after its period is
+filed is caught up in the next return, and is never postponed to year end
+for convenience. The sole-trader GST valuation and timing is still an open
+technical question.
+
+- **RAT5 A confirmed taxable supply, excluding GST.** RAT1's cow (1,100.00
+  excluding GST, to a shareholder who can't claim the GST) is assessed as a
+  taxable supply. RAT1's journal is reversed and Tohyee posts on 10 Mar
+  2026: Dr 3100 Owner drawings (or the shareholder's current account)
+  **1,265.00**, Cr 7070 Livestock rations **1,100.00**, Cr GST **165.00**.
+  The GST return for March-April 2026 counts it as a sale: **1,265.00** in
+  Box 5, GST **165.00**, under RATIONS-n with Sam as the name.
+- **RAT6 Including GST.** A cow on 5 Apr 2026 valued at 1,100.00 including
+  GST, assessed as a taxable supply as it's recorded, posts one journal: Dr
+  3100 **1,100.00**, Cr 7070 **956.52**, Cr GST **143.48** (1,100.00 x 3/23,
+  rounded to the cent).
+- **RAT7 A change-in-use adjustment.** A cow on 10 Apr 2026 valued at 800.00
+  excluding GST, assessed as a change-in-use adjustment with a reviewed GST
+  of 120.00 ("Reviewed by the accountant on cost, 15 Apr 2026"): Dr 3100
+  **920.00**, Cr 7070 **800.00**, Cr GST **120.00**. The March-April return
+  has a Box 9 adjustment of **120.00**, "Livestock rations change in use: 1
+  mixed-age cows, 2026-04-10 (RATIONS-n)", on top of any typed. With RAT5
+  and RAT6: Box 5 **2,365.00**, Box 9 **120.00**.
+- **RAT8 Assessing again.** RAT7 changed to "no adjustment" needs a reason
+  ("Reviewed again after filing"). Its journal is reversed and posted again
+  on 10 Apr 2026 (Dr 3100 800.00, Cr 7070 800.00, no GST). The old
+  assessment stays, with the reason.
+- **RAT9 Once, and filed returns stay filed.** Filing March-April 2026 keeps
+  its Box 5 2,365.00 and Box 9 120.00, and marks the 120.00 as included. The
+  May-June return doesn't count them again. After RAT8, May-June takes the
+  120.00 back off: a Box 9 adjustment of **-120.00**, "Taken back off
+  (changed after filing)". The filed return still shows 120.00. Voiding
+  RAT6's cow reverses its journal (nothing left on 3100, 7070 or GST), and
+  May-June has a late claim taking its 1,100.00 / 143.48 back off (G late
+  claims, LG1-LG7).
+- **RAT10 Unresolved, and not registered.** A cow on 2 May 2026 valued at
+  1,000.00, not assessed, is listed in May-June's GST preparation as not
+  assessed, and counts in no box. After registration ends on 15 May 2026, a
+  cow on 20 May 2026 is "not GST-registered on that date" and can't be
+  assessed.
+
+Not built: GST on staff rations (RAT2), choosing cost instead of market
+value for a sole trader, and amending a filed return.
 
 ### Herd scheme
 

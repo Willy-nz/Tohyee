@@ -7,11 +7,14 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { dec, isZero, parseDecimalInput } from "@/lib/money/decimal";
+import { getGstRegistration, type GstRegistration, isRegisteredOn } from "@/lib/tax/registration";
 import { createAccount } from "@/lib/accounts/service";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { asRecord, optionalId, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 import { classKey, className, findClass, KIND_NAMES, LIVESTOCK_CLASSES, LIVESTOCK_KINDS, type LivestockKind } from "./classes";
 import { type AgeingStep, ageingSteps, type HerdMovement, lastDate, walkHerd } from "./herd";
+import { assessRationsGst, currentPostingJournal, insertAssessment, parseAssessment, type RationsGst, rationsJournalLines, registeredOn, reverseRationsJournal } from "./rations-gst";
+import { type RationsGstOutcome, rationsPosting } from "./rations-gst-rules";
 
 /*
  * Livestock movements and head counts (#221 stage 2; examples LV1-LV3,
@@ -121,8 +124,14 @@ export type Movement = {
   billReference: string | null;
   /** Rations only: whose. */
   rationsFor: RationsFor | null;
-  /** The owner's rations journal (RAT1). */
+  /** The owner's rations journal as first posted (RAT1). */
   journalId: string | null;
+  /** The owner's rations: who they went to, the legal entity they came from, and whether the value includes GST (RAT1). */
+  rationsRecipient: string | null;
+  rationsEntity: string | null;
+  amountIncludesGst: boolean | null;
+  /** The owner's rations: where the GST stands (RAT5-RAT10). Null for anything else. */
+  gst: RationsGst | null;
   note: string | null;
   createdByEmail: string;
   createdAt: string;
@@ -454,14 +463,17 @@ export async function archiveLocation(tx: OrgTx, idInput: unknown, archived = tr
 const MOVEMENT_COLUMNS = `m.id::text, m.movement_date::text, m.movement_type, m.ownership, m.held_for, m.kind, m.class_code, m.to_class_code, m.head,
   m.amount::text, m.location_id::text, l.name as location_name, m.to_location_id::text, tl.name as to_location_name,
   m.sales_invoice_line_id::text, i.invoice_number, m.bill_line_id::text, b.supplier_invoice_number as bill_reference, m.rations_for, m.journal_id::text, m.note,
-  m.created_by_email, m.created_at::text, m.voided_at is not null as voided, m.void_reason`;
+  m.created_by_email, m.created_at::text, m.voided_at is not null as voided, m.void_reason,
+  m.rations_recipient, m.rations_entity, m.amount_includes_gst, g.id::text as gst_id, g.outcome as gst_outcome, g.gst_amount::text as gst_amount,
+  g.basis as gst_basis, g.assessed_by_email as gst_assessed_by_email, g.assessed_at::text as gst_assessed_at`;
 const MOVEMENT_JOINS = `from livestock_movements m
   left join livestock_locations l on l.id = m.location_id
   left join livestock_locations tl on tl.id = m.to_location_id
   left join sales_invoice_lines il on il.id = m.sales_invoice_line_id
   left join sales_invoices i on i.id = il.invoice_id
   left join bill_lines bl on bl.id = m.bill_line_id
-  left join bills b on b.id = bl.bill_id`;
+  left join bills b on b.id = bl.bill_id
+  left join livestock_rations_gst g on g.movement_id = m.id and g.replaced_at is null`;
 
 type MovementRow = {
   id: string;
@@ -489,9 +501,19 @@ type MovementRow = {
   created_at: string;
   voided: boolean;
   void_reason: string | null;
+  rations_recipient: string | null;
+  rations_entity: string | null;
+  amount_includes_gst: boolean | null;
+  gst_id: string | null;
+  gst_outcome: RationsGstOutcome | null;
+  gst_amount: string | null;
+  gst_basis: string | null;
+  gst_assessed_by_email: string | null;
+  gst_assessed_at: string | null;
 };
 
-function toMovement(row: MovementRow): Movement {
+function toMovement(row: MovementRow, registration: GstRegistration): Movement {
+  const ownersRations = row.movement_type === "rations" && row.rations_for === "owner";
   return {
     id: row.id,
     movementDate: row.movement_date,
@@ -519,6 +541,19 @@ function toMovement(row: MovementRow): Movement {
     createdAt: row.created_at,
     voided: row.voided,
     voidReason: row.void_reason,
+    rationsRecipient: row.rations_recipient,
+    rationsEntity: row.rations_entity,
+    amountIncludesGst: row.amount_includes_gst,
+    gst: ownersRations
+      ? {
+          status: row.gst_outcome ?? (isRegisteredOn(registration, row.movement_date) ? "unresolved" : "not_registered"),
+          assessmentId: row.gst_id,
+          gstAmount: row.gst_amount,
+          basis: row.gst_basis,
+          assessedByEmail: row.gst_assessed_by_email,
+          assessedAt: row.gst_assessed_at,
+        }
+      : null,
   };
 }
 
@@ -526,7 +561,7 @@ export async function getMovement(tx: OrgTx, idInput: unknown): Promise<Movement
   const id = requireId(idInput, "movementId");
   const row = await tx.query<MovementRow>(`select ${MOVEMENT_COLUMNS} ${MOVEMENT_JOINS} where m.id = $1`, [id]);
   if (!row.rows[0]) throw new NotFoundError("Livestock movement not found.");
-  return toMovement(row.rows[0]);
+  return toMovement(row.rows[0], await getGstRegistration(tx));
 }
 
 export async function listMovements(tx: OrgTx, input: { from?: unknown; to?: unknown; includeVoided?: unknown } = {}): Promise<Movement[]> {
@@ -538,7 +573,8 @@ export async function listMovements(tx: OrgTx, input: { from?: unknown; to?: unk
       order by m.movement_date desc, m.id desc limit 5000`,
     [from, to, input.includeVoided === true || input.includeVoided === "true"],
   );
-  return rows.rows.map(toMovement);
+  const registration = await getGstRegistration(tx);
+  return rows.rows.map((row) => toMovement(row, registration));
 }
 
 async function requireLocation(tx: OrgTx, input: unknown, fieldName: string): Promise<string | null> {
@@ -602,7 +638,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     amount = amountGiven ? parseDecimalInput(input.amount, "Amount", { maxScale: 2, allowZero: true }) : null;
   } else if (rationsFor === "owner") {
     // Income at market value (RAT1), so the value is needed.
-    if (!amountGiven) throw new ValidationError("Enter the market value of the owner's rations (excluding GST). It's income at market value.");
+    if (!amountGiven) throw new ValidationError("Enter the market value of the owner's rations, and say whether it includes GST. It's income at market value.");
     amount = parseDecimalInput(input.amount, "Market value", { maxScale: 2 });
   } else if (amountGiven) {
     throw new ValidationError(rationsFor === "staff" ? "Staff rations have no value to enter: nothing is posted, and the lower closing stock is the cost." : "Only purchases, sales and the owner's rations have an amount.");
@@ -612,6 +648,22 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   if (salesInvoiceLineId && movementType !== "sale") throw new ValidationError("Only a sale can be linked to an invoice line.");
   if (billLineId && movementType !== "purchase") throw new ValidationError("Only a purchase can be linked to a bill line.");
   const note = optionalString(input.note, "note", { maxLength: 1000 });
+  // The owner's rations record who they went to, the legal entity they came from, and whether the value includes GST (RAT1).
+  let rationsRecipient: string | null = null;
+  let rationsEntity: string | null = null;
+  let amountIncludesGst: boolean | null = null;
+  if (rationsFor === "owner") {
+    rationsRecipient = requireString(input.rationsRecipient, "Who the rations went to", { maxLength: 200 });
+    rationsEntity = requireString(input.rationsEntity, "The legal entity the rations came from", { maxLength: 200 });
+    if (input.amountIncludesGst !== undefined && input.amountIncludesGst !== null && typeof input.amountIncludesGst !== "boolean") {
+      throw new ValidationError("Say whether the value includes GST (true or false).");
+    }
+    amountIncludesGst = input.amountIncludesGst === true;
+  } else if (input.rationsRecipient || input.rationsEntity || input.amountIncludesGst !== undefined) {
+    throw new ValidationError("Only the owner's rations record a recipient, a legal entity and whether the value includes GST.");
+  }
+  const gstInput = input.gstAssessment && typeof input.gstAssessment === "object" ? (input.gstAssessment as Record<string, unknown>) : null;
+  if (gstInput && rationsFor !== "owner") throw new ValidationError("Only the owner's rations are assessed for GST. Staff rations need their own analysis.");
 
   const hash = requestHash("livestock_movement", {
     movementType,
@@ -628,6 +680,7 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     billLineId,
     rationsFor,
     note,
+    ...(rationsFor === "owner" ? { rationsRecipient, rationsEntity, amountIncludesGst, gstAssessment: gstInput } : {}),
   });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id::text, request_hash from livestock_movements where command_source = $1 and idempotency_key = $2",
@@ -641,6 +694,10 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
   if (salesInvoiceLineId) await assertDocumentLine(tx, "invoice", salesInvoiceLineId);
   if (billLineId) await assertDocumentLine(tx, "bill", billLineId);
   const rationsAccounts = rationsFor === "owner" ? await requireRationsAccounts(tx) : null;
+  // A GST-registered date: the event can be assessed as it's recorded; otherwise it waits, unresolved (RAT10).
+  const registered = rationsFor === "owner" ? await registeredOn(tx, movementDate) : false;
+  if (gstInput && !registered) throw new ValidationError(`This organisation wasn't GST-registered on ${movementDate}, so there's no GST to assess.`);
+  const assessment = gstInput && amount ? await parseAssessment(tx, { outcome: gstInput.outcome, basis: gstInput.basis, gstAmount: gstInput.gstAmount }, amount, amountIncludesGst === true) : null;
 
   await lockLivestock(tx);
   let id: string;
@@ -648,8 +705,8 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
     const row = await tx.query<{ id: string }>(
       `insert into livestock_movements (command_source, idempotency_key, request_hash, movement_date, movement_type, ownership, held_for, kind,
          class_code, to_class_code, head, amount, location_id, to_location_id, sales_invoice_line_id, bill_line_id, note,
-         created_by_user_id, created_by_email, rations_for)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20) returning id::text`,
+         created_by_user_id, created_by_email, rations_for, rations_recipient, rations_entity, amount_includes_gst)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) returning id::text`,
       [
         source,
         idempotencyKey,
@@ -671,6 +728,9 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
         tx.actor.userId,
         tx.actor.email,
         rationsFor,
+        rationsRecipient,
+        rationsEntity,
+        amountIncludesGst,
       ],
     );
     id = row.rows[0].id;
@@ -691,23 +751,36 @@ export async function recordMovement(tx: OrgTx, input: Record<string, unknown>):
       parseJournalBody(tx, {
         postingDate: movementDate,
         reference: `RATIONS-${id}`,
-        description: `${head} ${definition.name.toLowerCase()} killed for the owner's rations, at market value`,
-        lines: [
-          { accountCode: rationsAccounts.drawings, debitAmount: amount, creditAmount: "0" },
-          { accountCode: rationsAccounts.income, debitAmount: "0", creditAmount: amount },
-        ],
+        description: `${head} ${definition.name.toLowerCase()} killed for the owner's rations, at market value${assessment ? ` (${assessment.outcome === "taxable_supply" ? "taxable supply" : assessment.outcome === "change_in_use" ? "change-in-use GST adjustment" : "no GST adjustment"})` : ""}`,
+        // Unresolved, not registered or no adjustment: the value, with no GST. Assessed now: the GST as well (RAT5-RAT7).
+        lines: await rationsJournalLines(tx, rationsAccounts, assessment ? assessment.posting : rationsPosting({ value: dec(amount), includesGst: amountIncludesGst === true, status: "unresolved" })),
       }),
       { origin: "livestock_rations" },
     );
     await tx.query("update livestock_movements set journal_id = $2 where id = $1", [id, journal.journal.id]);
+    if (assessment) await insertAssessment(tx, id, assessment, null);
   }
   await writeAuditEvent(tx, {
     eventType: "livestock.movement_recorded",
     entityType: "livestock_movement",
     entityId: id,
-    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor },
+    details: { movementType, movementDate, kind, classCode, toClassCode, head, heldFor, amount, rationsFor, ...(rationsFor === "owner" ? { rationsRecipient, rationsEntity, amountIncludesGst, gstOutcome: assessment?.outcome ?? null } : {}) },
   });
   return { created: true, movement: await getMovement(tx, id) };
+}
+
+/**
+ * Assesses an owner's rations event for GST, or assesses it again with a
+ * reason (RAT5-RAT9). When the amounts change, the rations journal is
+ * reversed and posted again on the event's date.
+ */
+export async function assessMovementGst(tx: OrgTx, idInput: unknown, input: { outcome: unknown; basis: unknown; gstAmount?: unknown; reason?: unknown }): Promise<Movement> {
+  await requireLivestock(tx);
+  const id = requireId(idInput, "movementId");
+  await lockLivestock(tx);
+  const accounts = await requireRationsAccounts(tx);
+  await assessRationsGst(tx, { movementId: id, ...input }, accounts);
+  return getMovement(tx, id);
 }
 
 /** The owner's rations accounts, made if they aren't set yet (RAT1). */
@@ -738,26 +811,10 @@ export async function voidMovement(tx: OrgTx, idInput: unknown, input: { reason:
   await assertYearOpen(tx, settings, movement.movementDate);
   await lockLivestock(tx);
   let voidJournalId: string | null = null;
-  if (movement.journalId) {
-    // The owner's rations journal is reversed on the movement's date (RAT3).
-    const original = await tx.query<{ account_code: string; debit: string; credit: string }>(
-      `select a.code as account_code, l.debit_amount::text as debit, l.credit_amount::text as credit
-         from ledger_journal_lines l join accounts a on a.id = l.account_id where l.journal_id = $1 order by l.id`,
-      [movement.journalId],
-    );
-    const reversal = await postJournalBody(
-      tx,
-      "livestock_rations:void",
-      movement.id,
-      parseJournalBody(tx, {
-        postingDate: movement.movementDate,
-        reference: `RATIONS-${movement.id}`,
-        description: `Voided: ${reason}`,
-        lines: original.rows.map((line) => ({ accountCode: line.account_code, debitAmount: line.credit, creditAmount: line.debit })),
-      }),
-      { origin: "livestock_rations", relatedJournalId: movement.journalId, correctionKind: "reversal" },
-    );
-    voidJournalId = reversal.journal.id;
+  // The owner's rations journal as it stands now (after any GST assessment) is reversed on the movement's date (RAT3, RAT8).
+  const posted = movement.journalId ? await currentPostingJournal(tx, movement.id, movement.journalId) : null;
+  if (posted) {
+    voidJournalId = await reverseRationsJournal(tx, movement.id, posted, movement.movementDate, `Voided: ${reason}`, "livestock_rations:void", movement.id);
   }
   await tx.query("update livestock_movements set voided_at = now(), voided_by_email = $2, void_reason = $3, void_journal_id = $4 where id = $1", [
     movement.id,
