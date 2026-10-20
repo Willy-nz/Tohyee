@@ -160,7 +160,9 @@ export function chartColours(theme: ChartTheme, format: ChartFormat, count: numb
     if (theme.blues?.length && count <= theme.blues.length) return theme.blues;
     return theme.palette;
   }
-  return PALETTES[id].order.map(hue);
+  // A report theme (decision 668) can have up to 12 colours: the first eight follow the chosen order, the rest come after.
+  if (id === "tohyee") return theme.palette;
+  return [...PALETTES[id].order.map(hue), ...theme.palette.slice(HUES.length)];
 }
 
 function hueColour(theme: ChartTheme, name: Hue | undefined): string | undefined {
@@ -282,7 +284,7 @@ export function toEChartsOption(spec: ChartSpec, rows: ChartRow[], theme: ChartT
         ? {
             show: true,
             color: labels.position === "inside" ? "#ffffff" : secondaryText,
-            fontSize: 12,
+            fontSize: base.labelSize,
             ...(labels.position === "inside" ? { position: "inside" as const } : {}),
             formatter: (params: { name?: string; value?: unknown; percent?: number }) =>
               labels.show
@@ -434,7 +436,7 @@ export function toEChartsOption(spec: ChartSpec, rows: ChartRow[], theme: ChartT
               position: labelPosition,
               // Text wears text colours; inside a fill, white or dark ink, whichever reads.
               color: insideLabels && as === "bar" ? inkOn(colour) : secondaryText,
-              fontSize: 12,
+              fontSize: base.labelSize,
               formatter: (params: { value?: unknown; data?: unknown }) => {
                 const raw = params.value as number | null | undefined;
                 if (raw === null || raw === undefined) return "";

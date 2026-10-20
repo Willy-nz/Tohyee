@@ -1,0 +1,196 @@
+.choices {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.choices > legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.choices > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.choice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.choice > span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.swatches {
+  display: flex;
+  gap: 2px;
+}
+
+.swatches > span {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.hiddenInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.editor {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.fields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.side {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sideHeading {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.group > legend {
+  padding: 0 4px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: 8px;
+  align-items: end;
+}
+
+.seriesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
+  gap: 8px;
+}
+
+.seriesItem {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.seriesItem > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.colourField {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.colourField > input[type="color"] {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.colourField > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview {
+  min-width: 0;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.previewCard {
+  min-width: 0;
+  overflow: hidden;
+  border-style: solid;
+  border-width: 1px;
+}
+
+.list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side {
+    position: static;
+  }
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

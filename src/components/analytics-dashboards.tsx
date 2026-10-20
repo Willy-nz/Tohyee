@@ -10,14 +10,16 @@ import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueRules } from "@/components/analytics/saved-values";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
+import { ThemePanel } from "@/components/analytics/theme-panel";
 import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import type { ChartFormat } from "@/lib/analytics/chart-format";
-import { tileChartSpec, tileValueNames } from "@/lib/analytics/tile-chart";
+import { mergeFormats, pasteFormat, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
@@ -248,6 +250,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [draft, setDraft] = useState<Dashboard | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
   const [sharing, setSharing] = useState(false);
+  const [theming, setTheming] = useState(false);
+  // The format painter (#376): a tile's format, copied to paste on others.
+  const [copied, setCopied] = useState<{ from: string; title: string; format: ChartFormat | undefined } | null>(null);
   const [editingTile, setEditingTile] = useState<Tile | "new" | "new-text" | null>(null);
   // Drag and drop (the arrows do the same from the keyboard).
   const [dragging, setDragging] = useState<number | null>(null);
@@ -291,6 +296,30 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     }
   }
 
+  /** Pastes the copied format on a tile (its key figure target stays its own). */
+  function paste(tile: Tile) {
+    if (!dashboard || !copied) return;
+    const format = pasteFormat(copied.format, tile.format);
+    const tiles = dashboard.tiles.map((entry) => {
+      if (entry.id !== tile.id) return entry;
+      const next = { ...entry };
+      delete next.format;
+      return format ? { ...next, format } : next;
+    });
+    void save({ ...dashboard, tiles });
+  }
+
+  /** Keeps (or with undefined, clears) the report's default look for a chart type. */
+  function setVisualDefault(visual: DefaultableVisual, format: ChartFormat | undefined) {
+    if (!dashboard) return;
+    const defaults: VisualDefaults = { ...dashboard.settings.visualDefaults };
+    if (format) defaults[visual] = format;
+    else delete defaults[visual];
+    const settings = { ...dashboard.settings };
+    delete settings.visualDefaults;
+    setDraft({ ...dashboard, settings: Object.keys(defaults).length ? { ...settings, visualDefaults: defaults } : settings });
+  }
+
   function moveTile(index: number, to: number) {
     if (!dashboard) return;
     const tiles = moveTileTo(dashboard.tiles, index, to);
@@ -301,9 +330,13 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
   const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && editingTile.visual === "text" ? editingTile : null;
   const chartTile = textTile || editingTile === "new-text" ? null : editingTile;
+  // The report's theme (decision 668) is scoped to its tiles and the editor's preview.
+  const theme = reportTheme(dashboard.settings.theme, dashboard.customTheme);
+  const themeScope = `report-theme-${dashboard.id}`;
+  const themeClass = isTohyee(theme) ? themeScope : `${themeScope} ${styles.themed}`;
 
   return (
-    <>
+    <ReportThemeStyle theme={theme} scope={themeScope}>
       <div className={styles.header}>
         <div>
           {editing ? (
@@ -331,6 +364,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
               </Button>
               <Button variant="secondary" onClick={() => setEditingTile("new-text")} disabled={busy || Boolean(editingTile)}>
                 + Add text
+              </Button>
+              <Button variant="secondary" aria-expanded={theming} onClick={() => setTheming(!theming)} disabled={busy}>
+                Theme: {theme.name}
               </Button>
               <Button
                 onClick={async () => {
@@ -372,6 +408,27 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
+      {theming && editing && canEdit ? (
+        <ThemePanel
+          organisationId={organisationId}
+          choice={dashboard.settings.theme}
+          current={theme}
+          onClose={() => setTheming(false)}
+          onChoose={(choice, chosen) => {
+            const settings = { ...dashboard.settings };
+            delete settings.theme;
+            setDraft({ ...dashboard, settings: choice ? { ...settings, theme: choice } : settings, customTheme: choice?.startsWith("custom:") ? chosen : null });
+          }}
+        />
+      ) : null}
+
+      {copied && editing ? (
+        <Notice tone="info">
+          Format copied from {copied.title}. Choose <strong>Paste format</strong> on the tiles to give them the same look.{" "}
+          <Button size="small" variant="secondary" onClick={() => setCopied(null)}>Done pasting</Button>
+        </Notice>
+      ) : null}
+
       {canEdit && textTile ? (
         <TextTileEditor
           key={textTile === "new" ? "new-text" : textTile.id}
@@ -392,6 +449,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           tables={tables.data?.tables ?? []}
           tile={chartTile === "new" ? null : chartTile}
           filters={shown}
+          defaults={dashboard.settings.visualDefaults}
+          themeClass={themeClass}
+          onSetDefault={setVisualDefault}
           onCancel={() => setEditingTile(null)}
           onSave={async (tile) => {
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
@@ -404,11 +464,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       {!editingTile && (dashboard.tiles.length === 0 ? (
         <Empty>{canEdit ? editing ? "Start your report with Add chart. Choose a source, a visual and the fields to show." : "This report is empty. Choose Edit to add a chart." : "No tiles yet."}</Empty>
       ) : (
-        <div className={styles.grid}>
-          {dashboard.tiles.map((tile, index) => (
+        <div className={`${styles.grid} ${themeClass}`}>
+          {dashboard.tiles.map((tile, index) => {
+            // Drawn with the report's default for its chart type under its own settings (#376).
+            const shownTile = tileWithDefaults(tile, dashboard.settings.visualDefaults);
+            return (
             <section
               key={tile.id}
-              className={`${tileClass(tile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
+              className={`${tileClass(shownTile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
               draggable={editing && !busy}
               onDragStart={(event) => {
                 setDragging(index);
@@ -434,8 +497,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             >
               <div className={styles.tileHeader}>
                 <div>
-                  <h2 className={tile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle}>{tile.title}</h2>
-                  {tile.format?.card?.subtitle ? <p className={styles.tileSubtitle}>{tile.format.card.subtitle}</p> : null}
+                  <h2 className={shownTile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle}>{tile.title}</h2>
+                  {shownTile.format?.card?.subtitle ? <p className={styles.tileSubtitle}>{shownTile.format.card.subtitle}</p> : null}
                 </div>
                 {editing ? (
                   <div className={styles.tileTools}>
@@ -455,6 +518,22 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     <Button size="small" variant="secondary" aria-label={`Edit ${tile.title}`} onClick={() => setEditingTile(tile)} disabled={busy}>
                       Edit
                     </Button>
+                    {tile.visual === "text" ? null : copied && copied.from !== tile.id ? (
+                      <Button size="small" variant="secondary" aria-label={`Paste format on ${tile.title}`} onClick={() => paste(tile)} disabled={busy}>
+                        Paste format
+                      </Button>
+                    ) : (
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        aria-label={`Copy the format of ${tile.title}`}
+                        aria-pressed={copied?.from === tile.id}
+                        onClick={() => setCopied(copied?.from === tile.id ? null : { from: tile.id, title: tile.title, format: tile.format })}
+                        disabled={busy}
+                      >
+                        {copied?.from === tile.id ? "Copied" : "Copy format"}
+                      </Button>
+                    )}
                     <Button
                       size="small"
                       variant="secondary"
@@ -488,16 +567,17 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
               )}
             </section>
-          ))}
+            );
+          })}
         </div>
       ))}
-    </>
+    </ReportThemeStyle>
   );
 }
 
@@ -1125,6 +1205,9 @@ function TileEditor({
   filters,
   onSave,
   onCancel,
+  defaults,
+  themeClass,
+  onSetDefault,
 }: {
   saving: boolean;
   organisationId: string;
@@ -1133,6 +1216,11 @@ function TileEditor({
   filters: Filters;
   onSave: (tile: Tile) => void;
   onCancel: () => void;
+  /** The report's default look per chart type (#376). */
+  defaults?: VisualDefaults;
+  /** The report theme's class, so the preview looks like the report. */
+  themeClass?: string;
+  onSetDefault?: (visual: DefaultableVisual, format: ChartFormat | undefined) => void;
 }) {
   const { can } = useWorkspace();
   const [fieldSearch, setFieldSearch] = useState("");
@@ -1206,13 +1294,13 @@ function TileEditor({
       <h3 className={styles.subheading}>
         Preview {preview?.result?.truncated ? <Badge tone="amber">first 5,000 rows</Badge> : null}
       </h3>
-      <div className={styles.preview}>
+      <div className={`${styles.preview} ${themeClass ?? ""}`}>
         {!preview ? (
           <p className={ui.muted}>Working it out…</p>
         ) : preview.error ? (
           <Notice tone="error">{preview.error}</Notice>
         ) : (
-          <TileResult tile={{ title: title || "Preview", visual, format, height }} result={preview.result!} />
+          <TileResult tile={{ title: title || "Preview", visual, format: mergeFormats(defaults?.[visual], format), height }} result={preview.result!} />
         )}
       </div>
 
@@ -1529,7 +1617,15 @@ function TileEditor({
 
       {visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} /> : null}
 
-      <ChartFormatPanel visual={visual} values={tileValueNames(query.measures)} format={format} onChange={setFormat} />
+      <ChartFormatPanel
+        visual={visual}
+        values={tileValueNames(query.measures)}
+        format={format}
+        onChange={setFormat}
+        inherited={defaults?.[visual]}
+        onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
+      />
+      {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 
       <div className={ui.rowButtons}>
         <Button

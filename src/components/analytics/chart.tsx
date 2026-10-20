@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ECharts, EChartsOption } from "echarts";
 import { formatChartValue, toEChartsOption, type ChartSpec, type KpiSummary } from "@/lib/analytics/chart-spec";
 import { CHART_TOKENS, chartThemeFromTokens, readChartTheme, type ChartTheme } from "@/lib/charts/theme";
+import { useReportThemeKey } from "@/components/analytics/report-theme";
 import styles from "./chart.module.css";
 
 type ChartProps = {
@@ -38,6 +39,8 @@ export function Chart({ spec, rows, height }: ChartProps) {
   const chartRef = useRef<ECharts | null>(null);
   const isKpi = spec.kind === "kpi";
   const [theme, setTheme] = useState(DEFAULT_THEME);
+  // A report theme (decision 668) changes the variables the chart reads.
+  const themeKey = useReportThemeKey();
   const option = useMemo(() => toEChartsOption(spec, rows, theme), [spec, rows, theme]);
   const optionRef = useRef(option);
   const title = spec.title || spec.series.map((series) => series.label).join(", ") || "Chart";
@@ -53,7 +56,7 @@ export function Chart({ spec, rows, height }: ChartProps) {
       observer.disconnect();
       media.removeEventListener("change", updateTheme);
     };
-  }, []);
+  }, [themeKey]);
 
   useEffect(() => {
     optionRef.current = option;

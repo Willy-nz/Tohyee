@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { Empty, Notice, ui } from "@/components/ui";
-import { tileChartSpec } from "@/lib/analytics/tile-chart";
+import { tileChartSpec, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import type { Dashboard, Tile } from "@/lib/analytics/dashboards";
 import type { QueryResult } from "@/lib/analytics/query";
 import { ApiError, api, errorMessage } from "@/lib/client/api";
@@ -104,7 +104,8 @@ export function PinnedAnalyticsTile({ organisationId, dashboardId, tileId }: { o
       ) : current.status === "error" ? (
         <Notice tone="error">{current.message}</Notice>
       ) : (
-        <PinnedTileResult tile={current.tile} result={current.result} />
+        // The report's chart type defaults apply here too; its theme doesn't (decision 668: outside Analytics, charts look like Tohyee).
+        <PinnedTileResult tile={tileWithDefaults(current.tile, current.dashboard.settings.visualDefaults)} result={current.result} />
       )}
     </section>
   );
