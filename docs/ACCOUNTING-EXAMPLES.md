@@ -15727,7 +15727,8 @@ without employee names.
   and **`tohyee_items`**.
 - With the CRM on: **`tohyee_crm_companies`**, **`tohyee_crm_opportunities`**
   (stage, amount, expected close, owner, won/lost) and
-  **`tohyee_crm_activities`**.
+  **`tohyee_crm_activities`**, and since decision 652 the CRM's reporting
+  tables (AB11).
 - With Farming on (#249, decision 515): **`tohyee_farm_paddocks`**,
   **`tohyee_farm_fertiliser_products`**,
   **`tohyee_farm_fertiliser_plan_lines`**,
@@ -15772,6 +15773,22 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
 - **AB10** A pay run's wages journal is copied as lines on the wages and
   bank (or wages payable) accounts with no contact and the description
   "Pay run".
+- **AB11** (decision 652; Codex, delegated by owner, 20 October 2026, not
+  yet reviewed) With the CRM on, the copy also has
+  **`tohyee_crm_leads`**, **`tohyee_crm_campaigns`**,
+  **`tohyee_crm_campaign_members`**, **`tohyee_crm_sequences`**,
+  **`tohyee_crm_sequence_enrolments`**, **`tohyee_crm_sales_emails`**,
+  **`tohyee_crm_deal_products`** and **`tohyee_crm_tasks`**, and
+  `source_campaign` on opportunities and record ids on activities. The
+  campaign "Pet expo" (budget **800.00**, actual cost **650.50**) is copied
+  exactly; Aroha Ngata's lead is copied as converted with source campaign
+  Pet expo and owner Ruby Rep, without her email or phone, and the deal made
+  from her keeps Pet expo; DS7's lines on "Clinic keyrings" are copied as
+  **450.00** (20 x 25.00 less 10%) and **50.00**, excluding GST, adding to
+  the deal's **500.00**; a sales email is copied with its date and sender
+  but no address, subject or words, and one still sending isn't copied.
+  With Accounting off, only the `tohyee_crm_*` tables are copied. Tested in
+  `tests/integration/analytics-crm-tables.test.ts`.
 
 ## Analytics: built-in values on the books copy (examples BM1-BM4; as Xero does, not yet reviewed)
 
