@@ -990,8 +990,9 @@ that something happened.
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only unless they allow sending, decision 496;
   through the organisation's own Google or Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
-  emails and meetings with known people and companies (subject and a short
-  preview, never full bodies or attachments) and shows them on timelines,
+  emails and meetings with known people, companies and open leads (subject
+  and a short preview, never full bodies or attachments; leads' since
+  decision 651) and shows them on timelines and lead pages,
   with each mailbox choosing whether the team sees subjects or only that
   something happened (MAIL1-MAIL9).
 - **CRM duplicates** (decision 494, #216): CRM › Duplicates suggests
@@ -1031,6 +1032,12 @@ that something happened.
   they reply, a lead is unqualified or converted, a deal is won or lost, or
   someone stops it; email steps are skipped for people marked "Don't
   email".
+- **CRM replies** (decision 651, #216): when a lead or person replies to a
+  sales email (sent in the 30 days before) or while in a sequence, their
+  owner gets one task, "Reply from …", due today, checked straight after
+  each mail sync; the sequence stops as before. One task per email or
+  sequence answered, never two for the same reply. Tested with pretend
+  Gmail only, not real Gmail or Microsoft 365.
 - **CRM campaigns** (decision 498, #216 stage 2): CRM › Campaigns, for
   events, adverts, emails and the like, with dates, a budget and an actual
   cost (for reports only). Each lead and deal has one source campaign

@@ -4170,6 +4170,39 @@ testing) and #154's code signing (later, Jess).
      - **Merging people** (decision 494) moves their sequences; if both are
        in the same one, the merged-away person's is stopped.
 
+651. **A reply from a lead or person becomes a follow-up task** (#216; Codex,
+     delegated by owner, 20 October 2026, #360 item 17: lead/reply handling;
+     examples MAIL10, RPL1-RPL5, not yet reviewed). Xero has no CRM;
+     HubSpot and Salesforce both unenrol someone who replies and tell the
+     owner, so the owner gets a task (reminders stay in Tohyee, decision
+     495). Already there and kept: sequences stop on a reply (decision 497)
+     and campaign members become "responded" (decision 498).
+     - **Leads' emails are kept:** mail sync now also keeps emails and
+       meetings with a lead that isn't converted, linked to the lead and
+       shown on its page, under the same mailbox privacy (MAIL7). Until now a
+       lead's reply was only noticed through a lead mailbox (decision 498's
+       note). Converting the lead links them to its new person and company.
+     - **What's a reply:** an email from their address (synced from a
+       member's mailbox, or for a lead into a lead mailbox) after a sales
+       email went to them from Tohyee in the 30 days before, or while
+       they're in a sequence (on a deal: its point of contact).
+     - **The task:** "Reply from <name>: <subject>", due today, for the
+       lead's owner, else whoever sent the email or added them to the
+       sequence (on a deal, its owner). Someone who has left or can't use the
+       CRM isn't given it; it's then unassigned. The subject is left out
+       when the mailbox shows only that something happened, unless the task
+       is for that mailbox's own member.
+     - **Once:** one task per sales email or sequence answered, so a thread
+       going back and forth makes one; a new email and a new reply make
+       another. Each reply is kept as handled (unique, in the task's
+       transaction), so checking twice never makes two. Checked straight
+       after each mail sync and with the follow-up rules every 15 minutes.
+     - **Not flooding:** replies synced before this version, and replies
+       received over 7 days ago, are left alone.
+     - Nothing is sent: outbound sequences stay person-confirmed (decision
+       497). The lead's status doesn't change by itself.
+     - **Not checked against real services:** Gmail and Microsoft 365, as
+       for decisions 493 and 496; tested with pretend providers only.
 498. **Campaigns: one source each, costs for reports only** (#216 stage 2;
      Jess 10 Oct 2026: one source campaign; budget and cost; members added
      by hand, in bulk, by a form or mailbox, or by an import; added, sent,
@@ -4189,7 +4222,8 @@ testing) and #154's code signing (later, Jess).
        mailbox), or when they came in through the campaign's form or
        mailbox. Anyone can set it by hand. A lead's reply is only noticed
        through a lead mailbox, because mail sync keeps only emails with
-       people and companies (MAIL3). Merging two people in the same
+       people and companies (MAIL3); since decision 651 it keeps leads'
+       too. Merging two people in the same
        campaign keeps one membership.
      - **Costs:** budget and actual cost are typed in, in the base
        currency, for the report: cost per lead (cost ÷ leads it was the

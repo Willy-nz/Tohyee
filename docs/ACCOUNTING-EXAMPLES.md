@@ -47,6 +47,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/crm-replies.test.ts` (MAIL10, RPL1-RPL5, not yet
+  reviewed) and
   `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
   `tests/integration/sales-platform-orders.test.ts` (SPC11-SPC23, not yet
   approved) and
@@ -5572,6 +5574,33 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+### Leads' emails and replies (MAIL10, RPL1-RPL5; decision 651)
+
+Codex, delegated by owner, 20 October 2026 (#360 item 17), as HubSpot and
+Salesforce do (Xero has no CRM); not yet reviewed by Jess. Nothing is
+posted, so these have no amounts. Tested in
+`tests/integration/crm-replies.test.ts`.
+
+- **MAIL10** Aroha Ngata is a lead (aroha@example.nz, Ruby's) and not a
+  person yet. Her email "Paw prints?" to Jess is kept and linked to the lead
+  and shows on the lead's page; a newsletter still isn't kept. Converting
+  the lead links the email to the new person too, and her next email is
+  matched to the person, not the converted lead.
+- **RPL1** Ruby emails Aroha "Your quote" from Tohyee; Aroha's "Re: Your
+  quote" comes back through Jess's mailbox. Ruby gets one task, due today:
+  "Reply from Aroha Ngata: Re: Your quote".
+- **RPL2** The check running again makes nothing more, nor does Aroha's
+  second email in the thread. After Ruby emails "Samples" and Aroha replies
+  again, there's a second task.
+- **RPL3** Tama (a person at Harbour Vets) is in Ruby's "Clinic intro"
+  sequence. His reply makes Ruby a task "Reply from Tama" (no subject,
+  because Jess's mailbox shows only that something happened), and the
+  sequence stops with "They replied."
+- **RPL4** An email into a lead mailbox from Aroha after Ruby emailed her
+  "Hello" makes the task "Reply from Aroha Ngata: Re: Hello".
+- **RPL5** No task for a reply to an email sent over 30 days earlier, a
+  reply received over 7 days ago, or one synced before this version.
 
 ## Sales platform connections (examples not yet approved by Jess)
 

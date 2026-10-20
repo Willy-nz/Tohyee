@@ -1,10 +1,11 @@
 import { json, readJson, route, searchParams, withCrm } from "@/lib/api/http";
 import { getLead, updateLead } from "@/lib/crm/leads";
+import { syncedFor } from "@/lib/crm/mail/service";
 import { listActivities, listTasks } from "@/lib/crm/service";
 
 type Context = { params: Promise<{ leadId: string }> };
 
-/** A lead with its tasks and activities (decision 492). */
+/** A lead with its tasks and activities (decision 492), and emails with it synced from members' mailboxes (decision 651). */
 export const GET = route<Context>(async (request, context) => {
   const { leadId } = await context.params;
   const result = await withCrm(request, searchParams(request).get("organisationId"), "read", async (tx, { scope }) => {
@@ -13,6 +14,7 @@ export const GET = route<Context>(async (request, context) => {
       lead,
       tasks: await listTasks(tx, { leadId: lead.id, scope }),
       activities: await listActivities(tx, { leadId: lead.id, scope }),
+      emails: (await syncedFor(tx, { leadId: lead.id })).emails,
     };
   });
   return json(result);
