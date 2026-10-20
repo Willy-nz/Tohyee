@@ -25,7 +25,7 @@ function AccountantPack({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Download the pack"
-      description="One ZIP file for your accountant: the trial balance, profit and loss, balance sheet and general ledger for the year (CSV, for Excel), and a bank reconciliation for each bank and credit card account as at the year end (PDF). The figures are the same as the reports on screen. Nothing is posted."
+      description="One ZIP file for your accountant: the trial balance, profit and loss, balance sheet and general ledger for the year (CSV, for Excel), a bank reconciliation for each bank and credit card account as at the year end (PDF), and for a farm with co-op shares, the co-op share register with its statements. The figures are the same as the reports on screen. Nothing is posted."
     >
       <div className={ui.inlineForm}>
         <Field label="Financial year ending" hint="The last day of the year">
