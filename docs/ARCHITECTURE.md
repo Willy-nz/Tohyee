@@ -1316,6 +1316,13 @@ Enforced by the app (and covered by tests):
   The farm calendar checks its own read-only mailboxes on the same
   15-minute rhythm (`src/lib/farming/calendar.ts`, decision 570); turn it
   off with TOHYEE_FARM_MAIL_SCHEDULER=off.
+  An Owner's private mail copy (My mail, #250, decisions 610-617) uses the
+  same connection and folder choice (`farm_mail_accounts`,
+  `farm_mail_folders`) and syncs after the farm calendar's checks. Its
+  rows (`private_mail_copies`, `_messages`, `_attachments`) are encrypted
+  with a per-copy key wrapped by TOHYEE_SECRET_KEY and are only reached
+  through `src/lib/private-mail/access.ts`; `docs/PRIVATE-MAIL.md` is the
+  threat model.
   Sales emails (decision 496) reuse a member's connection once
   `crm_connected_accounts.can_send` is set (a sign-in that also granted
   gmail.send or Mail.Send); `src/lib/crm/sales-email.ts` records each send
