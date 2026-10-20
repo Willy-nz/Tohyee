@@ -155,7 +155,28 @@ export type KpiFormat = {
   change?: "both" | "amount" | "percent";
   /** For costs: a fall shows green. */
   downIsGood?: boolean;
+  /** The number's look (#376): a size or a size in pixels, colour, alignment, weight. */
+  size?: "s" | "m" | "l" | "xl";
+  sizePx?: number;
+  color?: string;
+  align?: "left" | "center" | "right";
+  bold?: boolean;
+  /** The value's name above or below the number (left out: none; the card's title names it). */
+  label?: "none" | "above" | "below";
+  /** Colour the number by rules on its value, or green or red by the comparison. */
+  colorBy?: "none" | "rules" | "change";
+  rules?: KpiRule[];
+  /** An arrow (direction) or a dot (the number's colour) by the number. */
+  icon?: "none" | "arrow" | "dot";
+  /** How the trend underneath is drawn, and its colour. */
+  sparkline?: "line" | "area" | "column";
+  sparkColor?: string;
+  /** Every value as its own number, side by side (Power BI's multi-row card). */
+  multi?: boolean;
 };
+
+/** "If the value is >= 1000, show it green": compared exactly, the first that matches wins. */
+export type KpiRule = { op: ">=" | ">" | "<=" | "<" | "="; value: string; color: string };
 
 export type CardFormat = {
   showTitle?: boolean;
@@ -421,12 +442,41 @@ function parseCard(input: unknown): CardFormat | undefined {
   });
 }
 
+function parseKpiRules(input: unknown): KpiRule[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ValidationError("Colour rules should be a list.");
+  if (input.length > 6) throw new ValidationError("A key figure can have up to 6 colour rules.");
+  const rules = input.map((entry, index): KpiRule => {
+    const raw = object(entry);
+    const what = `Colour rule ${index + 1}`;
+    const op = oneOf(raw.op, [">=", ">", "<=", "<", "="] as const, what);
+    const value = numberText(raw.value, `${what} value`);
+    const color = hexColour(raw.color, `${what} colour`);
+    if (!op || value === undefined) throw new ValidationError(`${what}: choose a comparison and a number.`);
+    if (!color) throw new ValidationError(`${what}: choose a colour.`);
+    return { op, value, color };
+  });
+  return rules.length ? rules : undefined;
+}
+
 export function parseKpiFormat(input: unknown): KpiFormat | undefined {
   const raw = object(input);
   return compact({
     target: numberText(raw.target, "Target"),
     change: oneOf(raw.change, ["both", "amount", "percent"] as const, "Show the change as"),
     downIsGood: flag(raw.downIsGood),
+    size: oneOf(raw.size, ["s", "m", "l", "xl"] as const, "Number size"),
+    sizePx: whole(raw.sizePx, 16, 96, "Number size in pixels (16 to 96)"),
+    color: hexColour(raw.color, "Number colour"),
+    align: oneOf(raw.align, ["left", "center", "right"] as const, "Number alignment"),
+    bold: flag(raw.bold),
+    label: oneOf(raw.label, ["none", "above", "below"] as const, "Value name"),
+    colorBy: oneOf(raw.colorBy, ["none", "rules", "change"] as const, "Colour the number by"),
+    rules: parseKpiRules(raw.rules),
+    icon: oneOf(raw.icon, ["none", "arrow", "dot"] as const, "Icon"),
+    sparkline: oneOf(raw.sparkline, ["line", "area", "column"] as const, "Trend style"),
+    sparkColor: hexColour(raw.sparkColor, "Trend colour"),
+    multi: flag(raw.multi),
   });
 }
 

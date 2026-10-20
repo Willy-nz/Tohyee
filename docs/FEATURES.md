@@ -2088,6 +2088,13 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: key figure formatting** (#376 phase 1, decision 674). Under
+  Key figure › Number style: the number's size (small to extra large, or
+  exact pixels), colour, alignment, weight and the value's name above or
+  below; colour by rules on the value (e.g. green at 1,000 or more) or by
+  the comparison (green for good news, red if not); an arrow or dot by the
+  number; the trend as a line, area or columns in any colour; and every
+  value as its own number in one card.
 - **Analytics: richer key figures** (#334, decisions 594-595). A key
   figure can compare with the previous period (the same length before the
   dashboard's dates), the same period last year or a target, showing the
