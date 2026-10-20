@@ -57,7 +57,7 @@ type AssessmentRow = { id: string; outcome: RationsGstOutcome; gst_amount: strin
 /** The standard-rated (15%) tax code a taxable supply's GST return line uses, preferring GST. */
 async function standardSalesCode(tx: OrgTx): Promise<string> {
   const code = await tx.query<{ id: string }>(
-    "select id::text from tax_codes where category = 'standard' and rate = 0.15 and is_active order by (code = 'GST') desc, id limit 1",
+    "select tax_codes.id::text as id from tax_codes where category = 'standard' and rate = 0.15 and is_active order by (code = 'GST') desc, tax_codes.id limit 1",
   );
   if (!code.rows[0]) throw new ValidationError("There's no active 15% GST tax code to count the supply under. Add one under Settings › Tax codes.");
   return code.rows[0].id;
