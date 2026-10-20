@@ -9,6 +9,7 @@ import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { SalesPlatformsSummary } from "@/components/sales-platforms";
+import { CrmHomeDashboard } from "@/components/crm-home";
 import {
   CustomFieldInputs,
   CustomValueCell,
@@ -1258,116 +1259,123 @@ export function CrmHomePage({ organisationId }: { organisationId: string }) {
   if (home.error) return <Notice tone="error">{home.error}</Notice>;
   if (!home.data) return <p className={ui.muted}>Loading…</p>;
   const { today, opportunities, totals, tasks, activities } = home.data;
+  // The CRM Home's cards (decision 662): the sales ones come from crm-home.tsx, these three from the CRM's own Home (CRM10).
+  const cards: Record<string, ReactNode> = {
+    my_opportunities: (
+        <Card title="My open opportunities" description="Opportunities you own that aren't won or lost, amounts excluding GST." actions={<Link href="/crm/pipeline">Pipeline</Link>}>
+          {opportunities.length === 0 ? (
+            <Empty>You have no open opportunities.</Empty>
+          ) : (
+            <div className={ui.tableWrap}>
+              <table className={ui.table}>
+                <thead>
+                  <tr>
+                    <th>Opportunity</th>
+                    <th>Company</th>
+                    <th>Stage</th>
+                    <th>Closes</th>
+                    <th className={ui.num}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {opportunities.map((opportunity) => (
+                    <tr key={opportunity.id}>
+                      <td><Link href={`/crm/opportunities/${opportunity.id}`}>{opportunity.name}</Link></td>
+                      <td>
+                        <Link href={`/crm/companies/${opportunity.contactId}`}>{opportunity.contactName}</Link>
+                      </td>
+                      <td>
+                        <StageBadge name={opportunity.stageName} type={opportunity.stageType} />
+                      </td>
+                      <td>{opportunity.closeDate ? formatDate(opportunity.closeDate) : ""}</td>
+                      <td className={ui.num}>{amountIn(opportunity.amount, opportunity.currencyCode, baseCurrency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  {totals.map((total) => (
+                    <tr key={total.currencyCode}>
+                      <th colSpan={4}>
+                        Total{totals.length > 1 || total.currencyCode !== baseCurrency ? ` in ${total.currencyCode}` : ""} ({total.count})
+                      </th>
+                      <th className={ui.num}>{amountIn(total.amount, total.currencyCode, baseCurrency)}</th>
+                    </tr>
+                  ))}
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </Card>
+    ),
+    my_tasks: (
+        <Card title="My tasks due" description="Your tasks that aren't done and are due today or earlier." actions={<Link href="/crm/tasks">All my tasks</Link>}>
+          {tasks.length === 0 ? (
+            <Empty>Nothing due.</Empty>
+          ) : (
+            <div className={ui.tableWrap}>
+              <table className={ui.table}>
+                <thead>
+                  <tr>
+                    <th>Task</th>
+                    <th>About</th>
+                    <th>Due</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr key={task.id}>
+                      <td>
+                        {task.title}
+                        {task.body ? <div className={ui.muted}>{task.body}</div> : null}
+                      </td>
+                      <td>
+                        {task.contactId ? <Link href={`/crm/companies/${task.contactId}`}>{task.contactName}</Link> : null}
+                        {[task.personName, task.opportunityName].filter(Boolean).length > 0 ? (
+                          <div className={ui.muted}>{[task.personName, task.opportunityName].filter(Boolean).join(" · ")}</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {task.dueDate ? formatDate(task.dueDate) : ""} {task.dueDate && task.dueDate < today ? <Badge tone="red">Overdue</Badge> : null}
+                      </td>
+                      <td>{TASK_LABELS[task.status]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+    ),
+    recent_activities: (
+        <Card title="Recent activities" description="The latest calls, meetings and notes logged by the team, newest first.">
+          {activities.length === 0 ? <Empty>Nothing logged yet.</Empty> : null}
+          <ol className={ui.crmTimeline}>
+            {activities.map((activity) => {
+              const by = (activity as Activity & { createdByName?: string }).createdByName ?? activity.createdByEmail;
+              return (
+                <li key={activity.id}>
+                  <span className={ui.muted}>{formatDateTime(activity.happenedAt)}</span>
+                  <div>
+                    <Badge>{ACTIVITY_LABELS[activity.kind]}</Badge> <strong>{activity.subject}</strong>
+                  </div>
+                  <div className={ui.muted}>
+                    {activity.contactId ? <Link href={`/crm/companies/${activity.contactId}`}>{activity.contactName}</Link> : null}
+                    {[activity.personName, activity.opportunityName].filter(Boolean).length > 0
+                      ? `${activity.contactId ? " · " : ""}${[activity.personName, activity.opportunityName].filter(Boolean).join(" · ")}`
+                      : null}
+                  </div>
+                  {by ? <div className={ui.muted}>by {by}</div> : null}
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+    ),
+  };
   return (
     <>
-      <Card title="My open opportunities" description="Opportunities you own that aren't won or lost, amounts excluding GST." actions={<Link href="/crm/pipeline">Pipeline</Link>}>
-        {opportunities.length === 0 ? (
-          <Empty>You have no open opportunities.</Empty>
-        ) : (
-          <div className={ui.tableWrap}>
-            <table className={ui.table}>
-              <thead>
-                <tr>
-                  <th>Opportunity</th>
-                  <th>Company</th>
-                  <th>Stage</th>
-                  <th>Closes</th>
-                  <th className={ui.num}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {opportunities.map((opportunity) => (
-                  <tr key={opportunity.id}>
-                    <td>{opportunity.name}</td>
-                    <td>
-                      <Link href={`/crm/companies/${opportunity.contactId}`}>{opportunity.contactName}</Link>
-                    </td>
-                    <td>
-                      <StageBadge name={opportunity.stageName} type={opportunity.stageType} />
-                    </td>
-                    <td>{opportunity.closeDate ? formatDate(opportunity.closeDate) : ""}</td>
-                    <td className={ui.num}>{amountIn(opportunity.amount, opportunity.currencyCode, baseCurrency)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                {totals.map((total) => (
-                  <tr key={total.currencyCode}>
-                    <th colSpan={4}>
-                      Total{totals.length > 1 || total.currencyCode !== baseCurrency ? ` in ${total.currencyCode}` : ""} ({total.count})
-                    </th>
-                    <th className={ui.num}>{amountIn(total.amount, total.currencyCode, baseCurrency)}</th>
-                  </tr>
-                ))}
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <Card title="My tasks due" description="Your tasks that aren't done and are due today or earlier." actions={<Link href="/crm/tasks">All my tasks</Link>}>
-        {tasks.length === 0 ? (
-          <Empty>Nothing due.</Empty>
-        ) : (
-          <div className={ui.tableWrap}>
-            <table className={ui.table}>
-              <thead>
-                <tr>
-                  <th>Task</th>
-                  <th>About</th>
-                  <th>Due</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.id}>
-                    <td>
-                      {task.title}
-                      {task.body ? <div className={ui.muted}>{task.body}</div> : null}
-                    </td>
-                    <td>
-                      {task.contactId ? <Link href={`/crm/companies/${task.contactId}`}>{task.contactName}</Link> : null}
-                      {[task.personName, task.opportunityName].filter(Boolean).length > 0 ? (
-                        <div className={ui.muted}>{[task.personName, task.opportunityName].filter(Boolean).join(" · ")}</div>
-                      ) : null}
-                    </td>
-                    <td>
-                      {task.dueDate ? formatDate(task.dueDate) : ""} {task.dueDate && task.dueDate < today ? <Badge tone="red">Overdue</Badge> : null}
-                    </td>
-                    <td>{TASK_LABELS[task.status]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <Card title="Recent activities" description="The latest calls, meetings and notes logged by the team, newest first.">
-        {activities.length === 0 ? <Empty>Nothing logged yet.</Empty> : null}
-        <ol className={ui.crmTimeline}>
-          {activities.map((activity) => {
-            const by = (activity as Activity & { createdByName?: string }).createdByName ?? activity.createdByEmail;
-            return (
-              <li key={activity.id}>
-                <span className={ui.muted}>{formatDateTime(activity.happenedAt)}</span>
-                <div>
-                  <Badge>{ACTIVITY_LABELS[activity.kind]}</Badge> <strong>{activity.subject}</strong>
-                </div>
-                <div className={ui.muted}>
-                  {activity.contactId ? <Link href={`/crm/companies/${activity.contactId}`}>{activity.contactName}</Link> : null}
-                  {[activity.personName, activity.opportunityName].filter(Boolean).length > 0
-                    ? `${activity.contactId ? " · " : ""}${[activity.personName, activity.opportunityName].filter(Boolean).join(" · ")}`
-                    : null}
-                </div>
-                {by ? <div className={ui.muted}>by {by}</div> : null}
-              </li>
-            );
-          })}
-        </ol>
-      </Card>
-
+      <CrmHomeDashboard organisationId={organisationId} cards={cards} />
       {showIntegrations ? <SalesPlatformsSummary organisationId={organisationId} /> : null}
     </>
   );

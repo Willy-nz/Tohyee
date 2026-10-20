@@ -48,9 +48,19 @@ that something happened.
   farm working expenses per unit against last season, a small Money card and
   the farm notebook. Each card links to its page, and empty cards are hidden.
   Customise turns cards on and off and orders them, per person, with
-  Analytics tiles pinned alongside (up to 10). Not yet: production and
-  income, FWE against budget, soil tests due, and different default cards
-  per role.
+  Analytics tiles pinned alongside (up to 10). It also has **Records to
+  catch up on** (old farm walks, unmeasured paddocks, missing season
+  figures, bank lines to reconcile, stock suggestions and your own calendar
+  items to check) and **Cash this season** (month ends from the bank, then
+  the cash flow forecast to the season's end; FH9-FH11, decision 663). Not
+  yet: production and income, FWE against budget and soil tests due.
+  **Starting dashboards** (#360 item 20, decisions 660-664, HD1-HD5): sales
+  reps and managers start on the CRM Home, farms on the farm Home and
+  everyone else on the owner's Home, each with starting cards for their
+  kind; your own Customise always wins, and **Go back to the starting
+  cards** undoes it. Bills to pay and Needs attention show overdue bills,
+  and Home offers Jobs and Sales pipeline tiles. No practice manager
+  dashboard.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
@@ -156,6 +166,8 @@ that something happened.
     (CSV)
   - a bank reconciliation for each bank and credit card account as at the
     year end (PDF)
+  - for a farm with co-op shares, the co-op share register for the year
+    (CSV) and the statements its entries name (#327, CSR9)
   - a read-me
   The figures come from the same report functions as the screens. Nothing
   is posted.
@@ -553,8 +565,31 @@ that something happened.
   show on the mailbox with Change folders; taking a folder off deletes what
   was taken from it, and emails moved out of the chosen folders drop at the
   next check (moved in, they're read). Not yet: attachments, changing one
-  date of a repeat, repeats read from email wording, and the private mailbox
-  import (#250), which should use the same folder choice when it's built.
+  date of a repeat, and repeats read from email wording. The private copy
+  (My mail, #250) uses the same connection and folder choice.
+- **My mail: a private copy of an Owner's own mail** (user menu › My mail;
+  #250 with #340, PM1-PM14, decisions 610-617, tenant migration 0168, not
+  yet reviewed; not tried with a real mailbox): an Owner of any
+  organisation keeps a copy of their own Gmail or Microsoft mail, from the
+  folders or labels they tick on the farm calendar's one connection and
+  folder choice (nothing until they tick one; drafts, spam and trash only
+  if ticked, and never for the farm calendar), read-only,
+  back to the read-back date. A first copy that resumes, with progress,
+  dates covered, last sync and errors; then a sync every 15 minutes, with
+  emails moved out of the ticked folders dropped and moved in copied;
+  emails deleted in the mailbox are kept, marked (an archive).
+  Search (whole words, from: and to:), conversations, and attachments to
+  download (files over 20 MB keep their name only). Only that Owner can
+  read it, through one access layer: everyone else, admins, other Owners,
+  accountants, server admins and app keys included, gets "not found", and
+  ownership never moves. Encrypted in the database with a key of its own,
+  wrapped with the server's key; docs/PRIVATE-MAIL.md says what that does
+  and doesn't protect against. Off, Disconnect (keeps the history) and
+  Delete imported history are separate. Since PM15-PM19 (decisions 618,
+  619, tenant migration 0169): the Owner can let their own Look only AI
+  keys search and read it over MCP (search_my_mail, read_my_mail), citing
+  each email; no other key is offered the tools. Not yet: filing an
+  attachment into shared data with a preview.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
@@ -882,7 +917,8 @@ that something happened.
   `/crm`. The CRM's **Home** shows the signed-in person's open opportunities
   (with a total per currency), their tasks due today or overdue, and the
   team's ten most recent calls, meetings and notes (CRM10, not yet approved
-  by Jess), and a card for Shopify: connected stores with their last sync
+  by Jess), with **Pipeline**, **Conversion** and **Next actions** cards in a
+  dashboard frame each person can customise (decision 662, SD1-SD6), and a card for Shopify: connected stores with their last sync
   and error, or "Connect Shopify" for an admin; CRM › Settings ›
   Integrations opens Settings › Sales platforms (decision 582). Companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with the organisation's own stages
@@ -1006,6 +1042,13 @@ that something happened.
   a company or a lead warns about similar companies, people and open leads.
   Merging needs the bookkeeper role or higher; anyone who changes CRM
   records can mark a pair as not duplicates.
+- **CRM bulk reassignment** (decision 650, #216): CRM › Settings ›
+  Reassign records moves leads, companies, open deals (closed ones if
+  ticked), open tasks and active sequences from one person (or someone who
+  has left, or nobody) to another, after listing every record that will
+  move so any can be unticked. Admins and bookkeepers move anyone's; a sales
+  manager only within their teams; reps can't. Each record moved shows it
+  in its history, and the page lists recent moves.
 - **CRM follow-up rules** (decision 495, #216 stage 2): CRM › Follow-ups,
   for admins and owners. Rules make a task for the right person when a new
   lead arrives (its owner, or each sales team manager if nobody owns it), a
@@ -1515,6 +1558,24 @@ that something happened.
   paddocks are warned about. **Importing** also reads KML and KMZ (Google
   Earth) and zipped shapefiles. Shapes in NZTM2000 are converted, and
   other projections are refused with a plain message.
+- **Co-op shares** (Farm, Co-op shares; #327, decisions 630-633, tenant
+  migration 0172, examples CSR1-CSR10, not yet reviewed). A register of
+  the farm's shares in co-ops (Fonterra, Ballance, Ravensdown, Silver Fern
+  Farms and the like), one line per co-op and share class.
+  - **What's kept:** each movement (brought forward, bought, issued
+    without payment, sold or surrendered, adjustment) with its date,
+    quantity, value and source statement; and each dividend (with
+    imputation credits), rebate and retention, kept apart from the shares
+    and from each other.
+  - **The register for a year:** each holding's opening quantity and
+    value, the year's movements, the closing quantity and value, and the
+    year's dividends, rebates and retentions. A holding can never go below
+    no shares or no value.
+  - **Statements:** the co-op's statements are files on the holding, and
+    each entry names its statement, its file, or both.
+  - **Year-end pack:** the register and the year's statements go in it.
+  - **Not built:** ledger links or proposed postings, a Fonterra share
+    standard calculator, and share valuation.
 - **Soil tests** (Farm, Soil tests; #249 stage 2, decision 516, tenant
   migration 0136).
   - **What's kept:** each test is a sample on a paddock and date, with
