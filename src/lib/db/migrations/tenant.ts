@@ -16778,6 +16778,74 @@ create index private_mail_ai_keys_owner on private_mail_ai_keys (owner_user_id);
 `,
   },
   {
+    version: "0171",
+    name: "livestock_rations_gst",
+    sql: `
+-- GST on the owner's rations (examples RAT1, RAT5-RAT10, decisions
+-- 624-627). Each owner's rations event records who it went to, the legal
+-- entity it came from, and whether its value includes GST. A GST-registered
+-- farm assesses each one: a confirmed taxable supply, a confirmed
+-- change-in-use adjustment (a reviewed GST amount), or no adjustment with
+-- evidence. No current assessment means unresolved. A new assessment
+-- replaces the last, which is kept with the reason. A taxable supply counts
+-- in the GST return as a sale on the event's date; a change-in-use
+-- adjustment goes in Box 9 of the first return filed for or after its
+-- period, and is taken back off in a later one if it changes after filing.
+alter table livestock_movements
+  add column rations_recipient text check (rations_recipient is null or length(rations_recipient) between 1 and 200),
+  add column rations_entity text check (rations_entity is null or length(rations_entity) between 1 and 200),
+  add column amount_includes_gst boolean;
+create table livestock_rations_gst (
+  id bigserial primary key,
+  movement_id bigint not null references livestock_movements(id),
+  outcome text not null check (outcome in ('taxable_supply', 'change_in_use', 'no_adjustment')),
+  basis text not null check (length(basis) between 1 and 500),
+  net_amount numeric(18, 2) check (net_amount is null or net_amount >= 0),
+  gst_amount numeric(18, 2) check (gst_amount is null or gst_amount > 0),
+  check ((outcome = 'no_adjustment') = (gst_amount is null)),
+  check ((outcome = 'no_adjustment') = (net_amount is null)),
+  tax_code_id bigint references tax_codes(id),
+  check ((outcome = 'taxable_supply') = (tax_code_id is not null)),
+  -- The rations journal this assessment posted, when it changed the amounts.
+  journal_id bigint references ledger_journals(id),
+  -- Change-in-use only: the filed return whose Box 9 has it, and the one that took it back off.
+  included_in_gst_return_id bigint references gst_returns(id),
+  reversal_in_gst_return_id bigint references gst_returns(id),
+  check (outcome = 'change_in_use' or (included_in_gst_return_id is null and reversal_in_gst_return_id is null)),
+  check (reversal_in_gst_return_id is null or included_in_gst_return_id is not null),
+  assessed_by_email text,
+  assessed_at timestamptz not null default now(),
+  replaced_at timestamptz,
+  replaced_by_email text,
+  replaced_reason text check (replaced_reason is null or length(replaced_reason) between 1 and 500),
+  check ((replaced_at is null) = (replaced_reason is null))
+);
+create unique index livestock_rations_gst_current on livestock_rations_gst (movement_id) where replaced_at is null;
+
+-- A taxable rations supply is a GST return line on the sales side, with no
+-- contact (the recipient's name is kept).
+alter table gst_return_lines drop constraint gst_return_lines_event_type_check;
+alter table gst_return_lines add constraint gst_return_lines_event_type_check
+  check (event_type in ('invoice_approved', 'invoice_voided', 'credit_note_approved', 'credit_note_voided',
+                        'bill_approved', 'bill_voided', 'supplier_credit_note_approved', 'supplier_credit_note_voided',
+                        'bank_transaction_posted', 'bank_transaction_voided',
+                        'customer_payment', 'customer_payment_voided',
+                        'credit_note_applied', 'credit_note_application_removed',
+                        'credit_note_refunded', 'credit_note_refund_voided',
+                        'overpayment_applied', 'overpayment_application_removed',
+                        'supplier_payment', 'supplier_payment_voided',
+                        'supplier_credit_note_applied', 'supplier_credit_note_application_removed',
+                        'supplier_credit_note_refunded', 'supplier_credit_note_refund_voided',
+                        'expense_claim_approved', 'expense_claim_voided',
+                        'expense_claim_payment', 'expense_claim_payment_voided',
+                        'rations_supply'));
+alter table gst_return_lines drop constraint gst_return_lines_document_type_check;
+alter table gst_return_lines add constraint gst_return_lines_document_type_check
+  check (document_type in ('sales_invoice', 'sales_credit_note', 'bill', 'supplier_credit_note', 'bank_transaction',
+                           'expense_claim', 'livestock_rations'));
+`,
+  },
+  {
     version: "0172",
     name: "coop_share_register",
     sql: `
@@ -16866,74 +16934,6 @@ alter table record_attachments add constraint record_attachments_record_type_che
   check (record_type in ('ledger_journal', 'sales_invoice', 'bill', 'sales_credit_note', 'supplier_credit_note', 'contact',
                          'expense_claim', 'fixed_asset', 'livestock_election', 'project_visit', 'soil_test',
                          'coop_shareholding'));
-`,
-  },
-  {
-    version: "0171",
-    name: "livestock_rations_gst",
-    sql: `
--- GST on the owner's rations (examples RAT1, RAT5-RAT10, decisions
--- 624-627). Each owner's rations event records who it went to, the legal
--- entity it came from, and whether its value includes GST. A GST-registered
--- farm assesses each one: a confirmed taxable supply, a confirmed
--- change-in-use adjustment (a reviewed GST amount), or no adjustment with
--- evidence. No current assessment means unresolved. A new assessment
--- replaces the last, which is kept with the reason. A taxable supply counts
--- in the GST return as a sale on the event's date; a change-in-use
--- adjustment goes in Box 9 of the first return filed for or after its
--- period, and is taken back off in a later one if it changes after filing.
-alter table livestock_movements
-  add column rations_recipient text check (rations_recipient is null or length(rations_recipient) between 1 and 200),
-  add column rations_entity text check (rations_entity is null or length(rations_entity) between 1 and 200),
-  add column amount_includes_gst boolean;
-create table livestock_rations_gst (
-  id bigserial primary key,
-  movement_id bigint not null references livestock_movements(id),
-  outcome text not null check (outcome in ('taxable_supply', 'change_in_use', 'no_adjustment')),
-  basis text not null check (length(basis) between 1 and 500),
-  net_amount numeric(18, 2) check (net_amount is null or net_amount >= 0),
-  gst_amount numeric(18, 2) check (gst_amount is null or gst_amount > 0),
-  check ((outcome = 'no_adjustment') = (gst_amount is null)),
-  check ((outcome = 'no_adjustment') = (net_amount is null)),
-  tax_code_id bigint references tax_codes(id),
-  check ((outcome = 'taxable_supply') = (tax_code_id is not null)),
-  -- The rations journal this assessment posted, when it changed the amounts.
-  journal_id bigint references ledger_journals(id),
-  -- Change-in-use only: the filed return whose Box 9 has it, and the one that took it back off.
-  included_in_gst_return_id bigint references gst_returns(id),
-  reversal_in_gst_return_id bigint references gst_returns(id),
-  check (outcome = 'change_in_use' or (included_in_gst_return_id is null and reversal_in_gst_return_id is null)),
-  check (reversal_in_gst_return_id is null or included_in_gst_return_id is not null),
-  assessed_by_email text,
-  assessed_at timestamptz not null default now(),
-  replaced_at timestamptz,
-  replaced_by_email text,
-  replaced_reason text check (replaced_reason is null or length(replaced_reason) between 1 and 500),
-  check ((replaced_at is null) = (replaced_reason is null))
-);
-create unique index livestock_rations_gst_current on livestock_rations_gst (movement_id) where replaced_at is null;
-
--- A taxable rations supply is a GST return line on the sales side, with no
--- contact (the recipient's name is kept).
-alter table gst_return_lines drop constraint gst_return_lines_event_type_check;
-alter table gst_return_lines add constraint gst_return_lines_event_type_check
-  check (event_type in ('invoice_approved', 'invoice_voided', 'credit_note_approved', 'credit_note_voided',
-                        'bill_approved', 'bill_voided', 'supplier_credit_note_approved', 'supplier_credit_note_voided',
-                        'bank_transaction_posted', 'bank_transaction_voided',
-                        'customer_payment', 'customer_payment_voided',
-                        'credit_note_applied', 'credit_note_application_removed',
-                        'credit_note_refunded', 'credit_note_refund_voided',
-                        'overpayment_applied', 'overpayment_application_removed',
-                        'supplier_payment', 'supplier_payment_voided',
-                        'supplier_credit_note_applied', 'supplier_credit_note_application_removed',
-                        'supplier_credit_note_refunded', 'supplier_credit_note_refund_voided',
-                        'expense_claim_approved', 'expense_claim_voided',
-                        'expense_claim_payment', 'expense_claim_payment_voided',
-                        'rations_supply'));
-alter table gst_return_lines drop constraint gst_return_lines_document_type_check;
-alter table gst_return_lines add constraint gst_return_lines_document_type_check
-  check (document_type in ('sales_invoice', 'sales_credit_note', 'bill', 'supplier_credit_note', 'bank_transaction',
-                           'expense_claim', 'livestock_rations'));
 `,
   },
 ];
