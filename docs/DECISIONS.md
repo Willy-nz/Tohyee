@@ -5408,7 +5408,9 @@ testing) and #154's code signing (later, Jess).
      different default cards per role: Tohyee's roles don't say who is farm
      staff or the accountant, and guessing from bookkeeper or viewer would
      be wrong as often as right. Everyone starts with the same cards and
-     uses Customise. No card shows payroll figures.
+     uses Customise. No card shows payroll figures. (Starting cards by kind
+     of person are now decision 660; on the farm Home everyone still starts
+     the same.)
 576. **Analytics shows money and value names the way people read them**
      (20 October 2026). Issues #328-#330, found building a dashboard.
      Negative money in Analytics tables, key figures and pivot tables shows
@@ -5848,3 +5850,82 @@ testing) and #154's code signing (later, Jess).
      tile, so they sit side by side rather than on one chart); sessions by
      channel; top pages; and sessions by device. Offered once Google
      Analytics has loaded.
+660. **Which dashboard and cards a person starts with** (20 October 2026;
+     #360 item 20, Codex, delegated by owner, 20 October 2026). Tohyee's
+     roles don't say who is "sales" or "farm staff", so the default goes by
+     what Tohyee does know: the person's role and the organisation's modules
+     and records (`homeKindFor` and `defaultTilesFor` in
+     `src/lib/dashboard/defaults.ts`). A **sales rep or manager** (decision
+     491) gets the sales dashboard, the CRM's Home, as they only have the
+     CRM. Otherwise **Farming on** gives the farm Home (FH1), for every role,
+     since the roles still can't tell farm staff from the accountant
+     (decision 589). Everyone else gets the **owner's** Home. Within a page:
+     Home starts with Cash in bank, Owed to you and Bills to pay, then Next
+     GST return when registered for GST; when not, Jobs if any project is a
+     job, else Sales pipeline if the CRM is on. The farm Home starts with
+     today's work, records to catch up on and the season's cash, then the
+     farm's records. The CRM Home starts a sales rep on their next actions
+     and own opportunities, and a manager (and anyone else) on the pipeline
+     and conversion. **A person's own choice always wins**: the starting
+     cards are used only until they save their own in Customise, which says
+     where the starting cards came from and offers **Go back to the starting
+     cards** (removing their saved choice). Practice manager dashboards
+     aren't built (Jess: "Dont do practice manager"). Xero's Home is one
+     layout for everyone and Power BI and Looker Studio have no per-role
+     starting dashboards, so this is our own rule. HD1-HD5, not yet reviewed.
+661. **The owner's Home shows overdue both ways** (20 October 2026; #360
+     item 20, Codex, delegated by owner, 20 October 2026). Bills to pay shows
+     the overdue amount in red beside the bills due this week, as Owed to you
+     already shows overdue invoices, and Needs attention lists overdue bills
+     (to Aged payables) as it lists overdue invoices (to Aged receivables).
+     Each opens the report with the documents behind it; no new tiles. HD2.
+662. **The CRM Home is a sales dashboard; Home can show jobs and sales**
+     (20 October 2026; #360 item 20, Codex, delegated by owner, 20 October
+     2026). The CRM Home gets the dashboard frame (decision 372): six cards,
+     per person, up to 8 with Customise and Hide. **Pipeline**: open
+     opportunities by stage, with count, amount per currency and longest in
+     stage, linking to the pipeline and the sales dashboard's drill-through.
+     **Conversion**: last and this quarter of the financial year, leads
+     converted of those added, won of those closed and the amount won
+     (definitions as decision 500). **Next actions**: the person's own tasks
+     due today or before, their open opportunities past the expected close
+     date, and their open ones with no task still to do, five of each with
+     the count, each linking to its record. Then the CRM's own three
+     (CRM10). A rep or manager sees only their own (or their teams')
+     pipeline and conversion (decision 491); next actions are always the
+     person's own. Opportunity names on My open opportunities now link to
+     the opportunity. Home offers two more tiles: **Jobs** (open jobs, those
+     with a visit in the next seven days, those with none booked, and
+     services due; offered once there's a job) and **Sales pipeline** (the
+     open amount and this quarter's win rate; offered with the CRM on).
+     SD1-SD6, not yet reviewed.
+663. **The farm Home's today's work, records to catch up on and the
+     season's cash** (20 October 2026; #360 item 20, Codex, delegated by
+     owner, 20 October 2026). This week on the farm says "Nothing on today"
+     when today is empty, so today's work comes first. **Records to catch up
+     on** lists what's missing or out of date, each with the page that fixes
+     it: a farm walk more than 14 days old (only for a farm that has
+     readings, so farms that don't do farm walks aren't nagged; DairyNZ
+     suggests weekly walks in spring, so two weeks is generous); paddocks
+     with no cover reading on such a farm; a finished season with farm
+     working expenses but none of kg MS, hectares, cows or stock units;
+     bank lines to reconcile and feeds to reconnect (out-of-date books make
+     the cash view wrong); AI-suggested stock movements waiting; and the
+     person's own calendar items needing checking (decision 571: never
+     anyone else's). **Cash this season** is the financial year month by
+     month: money in and out of the active bank accounts (credit cards left
+     out, as Cash in bank does) from the ledger up to today, each journal
+     netted first so a transfer between two bank accounts is neither; the
+     balance at each month's end; then the cash flow forecast's (CF1-CF9)
+     month ends to the season's end, with the lowest expected balance and
+     the first month expected below zero. It links to the cash flow
+     forecast. The season is the financial year (dairy farms usually end
+     theirs on 31 May, the season's end). FH9-FH11, not yet reviewed.
+664. **The dashboard preferences API** (20 October 2026). GET and PUT also
+     return the person's starting cards for the page (`defaultTiles`), their
+     kind (`owner`, `sales` or `farming`) and whether the tiles are their
+     own (`customised`); DELETE removes their saved choice. Every card a page
+     offers can be saved, not only its starting ones. The CRM Home's
+     preferences go through the CRM's access check, so sales reps and
+     managers can keep their own; Home's and the farm Home's still refuse
+     them. HD5.
