@@ -5969,3 +5969,28 @@ testing) and #154's code signing (later, Jess).
      tables. Filing an attachment into shared data (the bills inbox, soil
      tests), with a preview of what becomes visible, is #250's next part
      and isn't built. PM7.
+618. **The AI reads an Owner's mail only through their own Look only key**
+     (20 October 2026). #250 part 2: "a private-mail scope that only the
+     owner's own key can be given". On My mail (Your AI) the copy's Owner
+     ticks which of their own working AI keys in this organisation may
+     search and read it; nobody can tick anyone else's (another Owner's
+     key is "not found"), and only Look only keys can have it, so an AI
+     reading the mail can't write anything from it into Tohyee's shared
+     records (its calls run read-only). The scope is kept in the
+     organisation's database (tenant migration 0169, private_mail_ai_keys:
+     the key's id and its Owner), not on the key, so no core migration was
+     needed. The MCP server offers search_my_mail and read_my_mail only to
+     such a key while its Owner is an Owner; other keys don't learn the
+     tools exist ("Unknown tool"), and every call goes through the same
+     access layer as My mail (decision 611), which checks the scope again.
+     Revoking the key, taking the tick off or the Owner losing the role
+     stops it at once. Answers cite each email (subject, sender, date, My
+     mail message id) and the server tells the AI to say which it used and
+     never pass it on. Tohyee has no shared AI conversations, so there's
+     nowhere else for an answer to be kept. PM15-PM19, not yet reviewed.
+619. **What the AI tools don't do** (20 October 2026). They give the text
+     and attachment names, not attachment files; they don't file anything
+     into shared data (that's #250's next part, with a preview); and they
+     can't stop an AI service outside Tohyee from keeping what it was told:
+     that's between the Owner and their AI provider, and My mail says the
+     key is for the Owner's own AI only.
