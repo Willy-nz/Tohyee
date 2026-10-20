@@ -24,6 +24,7 @@ import {
   useTeam,
 } from "@/components/crm";
 import { CampaignPanel } from "@/components/crm-campaigns";
+import { AccountPlanCard, DealRenewals } from "@/components/crm-account-plan";
 import { DealProducts } from "@/components/crm-deal-products";
 import { EmailOptOut, SendEmail } from "@/components/crm-send-email";
 import { SequencePanel } from "@/components/crm-sequences";
@@ -751,6 +752,7 @@ export function CompanyRecordPage({ organisationId, contactId }: { organisationI
       }
       related={
         <>
+          <AccountPlanCard organisationId={organisationId} contactId={contact.id} />
           <RelatedCard
             title="People"
             count={people.length}
@@ -1135,6 +1137,7 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
             ) : null}
           </Card>
           <DealProducts organisationId={organisationId} opportunity={opportunity} onChanged={data.reload} />
+          <DealRenewals organisationId={organisationId} opportunity={opportunity} onChanged={data.reload} />
           <RelatedCard
             title="Invoice"
             count={invoice ? 1 : 0}

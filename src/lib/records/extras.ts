@@ -215,6 +215,8 @@ function summarise(eventType: string, details: Record<string, unknown>): string 
       return "Note added";
     case "crm.reassigned":
       return "Moved to someone else with Reassign records";
+    case "crm.account_plan_saved":
+      return "Account plan changed";
     case "note.edited":
       return "Note edited";
     case "note.deleted":

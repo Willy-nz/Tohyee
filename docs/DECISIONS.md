@@ -4389,6 +4389,43 @@ testing) and #154's code signing (later, Jess).
        document, no won stage, or a page layout that won't let it move, the
        deal is left and its history says why.
      - Sales reps and managers see a deal's products but not its quotes.
+653. **Account plans** (#216 stage 4; Codex, delegated by owner, 20 October
+     2026, #360 item 17: account plans and renewal reminders). Xero has
+     nothing like it; this follows Salesforce's account plans (objectives,
+     relationship map, actions) and HubSpot's buying roles. On a company's
+     Related tab (tenant migration 0175).
+     - **One plan per company:** "where things stand" (up to 4,000
+       characters); goals in order (up to 50), each with an optional target
+       date and open, achieved or dropped; and the part each of its people
+       plays (decision maker, budget holder, champion, influencer, user,
+       blocker, other) with a short note.
+     - **Next steps are tasks:** the company's open tasks, with their owner
+       and due date, rather than a second list that wouldn't show on anyone's
+       task list. The plan also shows the company's open deals and renewals
+       in the next year (and the last 30 days).
+     - **Who:** companies are a shared address book (decision 491), so
+       everyone in the CRM sees a company's plan and anyone who can change
+       CRM records can change it; the deals, renewals and tasks on it are
+       only those the person sees. Saving is kept in the company's history.
+     - Not built: Salesforce's SWOT and org-chart drawing, and plans for
+       a group of companies (#200).
+654. **Renewal dates and reminders** (#216 stage 4; same delegation).
+     - **Dates:** a deal and each of its products can have a renewal date,
+       set on the deal's Renewals card by whoever can change the deal, on
+       any deal that isn't lost (renewals mostly follow a win, when the
+       products can no longer change). A product keeps its date when the
+       products are saved again. CRM only: nothing in the books changes, so
+       there's no accounting example; contract or subscription accounting
+       stays separate, as the issue says.
+     - **Reminder:** a fifth follow-up rule (decision 495), "A renewal is
+       coming up": N days before a renewal date (0-365), a task for the
+       deal's owner, once per deal and date (the deal's and its products'
+       on the same date make one task, naming the products). Dates from
+       before the rule was made are ignored; moving a date to next year
+       makes a new reminder when that comes near. A deal with no owner is
+       skipped, with the reason. As HubSpot's renewal-date workflows.
+     - Not built: making the renewal deal itself (Salesforce CPQ's
+       automatic renewal opportunities); Jess can decide later.
 503. **Livestock (#221) stage 1** (Jess 11 Oct 2026). Examples LV1-LV12
      are approved as written.
      - **First release:** dairy cattle, beef cattle and sheep.

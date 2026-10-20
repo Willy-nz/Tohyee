@@ -34,6 +34,12 @@ const KINDS: Record<FollowUpKind, { label: string; days: string; help: string; m
     help: "A task for the assignee's sales team manager. People who aren't in a team are left alone.",
     minDays: 1,
   },
+  renewal_due: {
+    label: "A renewal is coming up",
+    days: "Days before",
+    help: "A reminder for the deal's owner this many days before a renewal date on the deal or one of its products. Once per deal and date.",
+    minDays: 0,
+  },
 };
 
 type RuleForm = { kind: FollowUpKind; name: string; stageKey: string; days: string; taskTitle: string };
@@ -124,6 +130,8 @@ function describe(rule: FollowUpRule, stageName: (key: string | null) => string)
       return `When an open deal has been quiet for ${rule.days} day${rule.days === 1 ? "" : "s"}: a reminder for its owner.`;
     case "task_overdue":
       return `When a task is ${rule.days} day${rule.days === 1 ? "" : "s"} overdue: a task for the team's manager.`;
+    case "renewal_due":
+      return `${rule.days === 0 ? "On" : `${rule.days} day${rule.days === 1 ? "" : "s"} before`} a renewal date: a reminder for the deal's owner.`;
   }
 }
 
