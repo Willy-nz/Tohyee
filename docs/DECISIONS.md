@@ -6427,3 +6427,34 @@ recorded elsewhere or being built at the same time:
      Square doesn't take card payments in New Zealand (its developer docs
      list Australia, Canada, France, Ireland, Japan, Spain, the UK and the
      US). None of it was merged. Decisions 668 and 669 are unused.
+624. **Homekill is one yearly adjustment by the accountant** (Jess, 20
+     October 2026, on #371: "Home kill the accountant just does a jnl
+     adjustment like 500 bucks"; asked to choose, "One yearly adjustment").
+     This replaces the per-event GST assessment from Codex's 20 Oct
+     recommendation on #292 before it was merged. The owner's rations
+     (homekill) are head counts only and post nothing. Once a year a
+     bookkeeper or above enters the amount they choose, its basis
+     (required), and on a GST-registered date whether GST applies and
+     whether the amount includes it. Examples RAT1, RAT3-RAT10, not yet
+     reviewed. Staff rations (RAT2) are unchanged.
+625. **How the homekill adjustment posts** (Jess, 20 October 2026). Dr
+     owner drawings or current account (the drawings account in Livestock
+     settings), Cr rations income, and Cr GST when GST applies (1,100.00
+     excluding GST: 1,265.00 / 1,100.00 / 165.00; including GST: 143.48 GST,
+     956.52 income), on the balance date or a date in the year. One active
+     adjustment a year: a different amount means voiding it with a reason
+     (reversed on its own date) and entering another. Origin
+     `livestock_rations`, so the cash flow statement treats it as non-cash.
+     No debit to GST and no bank line.
+626. **The homekill adjustment in the GST return** (Jess, 20 October 2026).
+     With GST it's a sales line on its date on every GST basis (Box 5,
+     HOMEKILL-<year end>), so it's in the return for that date's period.
+     Voided after its return is filed, the next return takes it back off
+     through the existing late claims. Filed returns are never rewritten.
+     There's no per-event assessment and no "not assessed" listing.
+627. **Rations posted per event before 20 October 2026** (Jess, 20 October
+     2026). Journals the old RAT1 posted for each owner's rations movement
+     stay as they are. The homekill card shows how much was posted that way
+     in the year, so it isn't counted again in the yearly amount. Voiding
+     such a movement still reverses its journal. The year's head count beside
+     the adjustment is for information only: the amount is the accountant's.

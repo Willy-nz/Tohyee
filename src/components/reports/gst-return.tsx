@@ -56,6 +56,7 @@ const DOCUMENT_LABELS: Record<GstReturnLine["documentType"], string> = {
   supplier_credit_note: "Supplier credit note",
   bank_transaction: "Bank transaction",
   expense_claim: "Expense claim",
+  livestock_rations: "Homekill adjustment",
 };
 
 function periodLabel(period: { periodStart: string; periodEnd: string }): string {
@@ -101,6 +102,7 @@ const EVENT_LABELS: Record<GstEventType, string> = {
   expense_claim_voided: "Expense claim voided",
   expense_claim_payment: "Expense claim paid",
   expense_claim_payment_voided: "Expense claim payment voided",
+  rations_adjustment: "Homekill adjustment (owner's rations)",
 };
 
 const CATEGORY_LABELS: Record<TaxCategory, string> = {

@@ -76,7 +76,7 @@ const SORT: JsonSchema = {
 };
 const MOVEMENT: JsonSchema = {
   type: "object",
-  description: "As for a livestock movement: movementType, movementDate, kind, classCode, head, and where needed toClassCode, amount (excl. GST), heldFor, rationsFor, note.",
+  description: "As for a livestock movement: movementType, movementDate, kind, classCode, head, and where needed toClassCode, amount (purchases and sales only, excl. GST; the owner's rations are valued once a year by the accountant), heldFor, rationsFor, note.",
   properties: {
     movementType: { type: "string", enum: [...MOVEMENT_TYPES] },
     movementDate: DATE,

@@ -2,7 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -11,7 +11,10 @@ import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
+import { dec } from "@/lib/money/decimal";
+import { rationsAdjustmentPosting } from "@/lib/livestock/rations-rules";
+import type { RationsYear } from "@/lib/livestock/rations-adjustments";
 import { CHATHAM_KINDS, classesOf, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind, NSC_KIND_NAMES } from "@/lib/livestock/classes";
 import type { AgeingPreview, HeadCount, LivestockLocation, LivestockOpening, LivestockSettings, Movement, MovementType } from "@/lib/livestock/movements";
 import type { AccountSale } from "@/lib/livestock/account-sales";
@@ -443,7 +446,6 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       if (form.movementType === "arrival" || form.movementType === "departure") body.heldFor = form.heldFor;
       if (form.movementType === "rations") {
         body.rationsFor = form.rationsFor;
-        if (form.rationsFor === "owner") body.amount = form.amount || null;
       }
       await api("/api/livestock/movements", { method: "POST", body });
       setMessage(`Recorded: ${MOVEMENT_LABELS[form.movementType].toLowerCase()}, ${form.head} ${classes.find((entry) => entry.code === form.classCode)?.name.toLowerCase()}.`);
@@ -478,7 +480,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       {message ? <Notice tone="success">{message}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {can("bookkeeper") ? (
-        <Card title="Record a movement" description="Births go into the rising one-year classes. Classes are what each animal will be at balance date. Nothing posts except the owner's rations (at market value): values come from the year-end valuation.">
+        <Card title="Record a movement" description="Births go into the rising one-year classes. Classes are what each animal will be at balance date. Nothing posts: values come from the year-end valuation, and homekill from the accountant's yearly adjustment below.">
           <div className={ui.grid}>
             <Field label="What happened">
               <select value={form.movementType} onChange={(event) => setForm({ ...form, movementType: event.target.value as MovementType })}>
@@ -549,12 +551,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
               </Field>
             ) : null}
             {form.movementType === "rations" && form.rationsFor === "owner" ? (
-              <Field
-                label="Market value excl. GST"
-                hint="Income at market value, posted Dr owner drawings, Cr rations income. No GST is posted: check that with your accountant."
-              >
-                <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
-              </Field>
+              <p className={ui.muted}>Just the head count. Nothing is posted: the accountant enters one homekill adjustment for the year, below.</p>
             ) : null}
             {form.movementType === "rations" && form.rationsFor === "staff" ? (
               <p className={ui.muted}>Nothing is posted for staff rations: the lower closing stock is the cost.</p>
@@ -635,7 +632,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
                     <td data-label="Details">
                       {[
                         movement.heldFor ? `For ${movement.heldFor}` : null,
-                        movement.rationsFor ? (movement.rationsFor === "owner" ? "Owner's rations, posted at market value" : "Staff rations") : null,
+                        movement.rationsFor ? (movement.rationsFor === "owner" ? (movement.journalId ? "Owner's rations, posted at market value (before yearly adjustments)" : "Owner's rations (homekill)") : "Staff rations") : null,
                         movement.locationName,
                         movement.toLocationName ? `to ${movement.toLocationName}` : null,
                         movement.invoiceNumber ? `Invoice ${movement.invoiceNumber}` : null,
@@ -660,7 +657,151 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
           </div>
         ) : null}
       </Card>
+      {can("bookkeeper") ? <HomekillYear organisationId={organisationId} settings={settings.data.settings} onChanged={movements.reload} /> : null}
     </>
+  );
+}
+
+/**
+ * The owner's rations (homekill) as one adjustment a year (RAT5-RAT10; Jess,
+ * 20 Oct 2026). The head count is for information; the amount is the
+ * accountant's.
+ */
+function HomekillYear({ organisationId, settings, onChanged }: { organisationId: string; settings: LivestockSettings; onChanged: () => void }) {
+  const years = yearEnds(settings);
+  const [yearEnd, setYearEnd] = useState(() => defaultYear(years));
+  const loaded = useApiData<{ year: RationsYear }>(yearEnd ? "/api/livestock/rations-adjustments" : null, { organisationId, yearEnd });
+  const [form, setForm] = useState({ adjustmentDate: "", amount: "", reason: "", gstApplies: false, amountIncludesGst: false });
+  const [voidReason, setVoidReason] = useState("");
+  const [key, setKey] = useState(() => newIdempotencyKey("hk"));
+  const [error, setError] = useState<string | null>(null);
+  const year = loaded.data?.year;
+  const preview =
+    form.gstApplies && /^\d+(\.\d{1,2})?$/.test(form.amount.trim()) ? rationsAdjustmentPosting({ amount: dec(form.amount.trim()), gstApplies: true, includesGst: form.amountIncludesGst }) : null;
+  const done = () => {
+    setError(null);
+    setKey(newIdempotencyKey("hk"));
+    setForm({ adjustmentDate: "", amount: "", reason: "", gstApplies: false, amountIncludesGst: false });
+    setVoidReason("");
+    loaded.reload();
+    onChanged();
+  };
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await api("/api/livestock/rations-adjustments", {
+        method: "POST",
+        body: {
+          organisationId,
+          idempotencyKey: key,
+          yearEnd,
+          adjustmentDate: form.adjustmentDate || null,
+          amount: form.amount,
+          reason: form.reason,
+          gstApplies: form.gstApplies,
+          amountIncludesGst: form.gstApplies ? form.amountIncludesGst : null,
+        },
+      });
+      done();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  async function voidIt(event: FormEvent, id: string) {
+    event.preventDefault();
+    try {
+      await api(`/api/livestock/rations-adjustments/${id}/void`, { method: "POST", body: { organisationId, reason: voidReason } });
+      done();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  return (
+    <Card
+      title="Homekill for the year (owner's rations)"
+      description="One adjustment a year, the amount the accountant chooses: Dr owner drawings or current account, Cr rations income, and Cr GST if it applies. The head count is for information."
+    >
+      <YearPicker years={years} value={yearEnd} onChange={setYearEnd} />
+      {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
+      {year ? (
+        <>
+          <div className={ui.grid}>
+            <Stat label="Killed for the owner this year" value={`${year.ownerHead} head`} />
+            <Stat label="Killed for staff (not valued)" value={`${year.staffHead} head`} />
+          </div>
+          {year.postedPerEvent !== "0.00" ? (
+            <Notice tone="warning">
+              {formatMoney(year.postedPerEvent)} of rations income was already posted this year, one animal at a time, before yearly adjustments. It stays posted; leave it out of the adjustment so
+              it isn&apos;t counted twice.
+            </Notice>
+          ) : null}
+          {year.current ? (
+            <>
+              <p>
+                <strong>
+                  <Money value={year.current.amount} />
+                </strong>{" "}
+                on {formatDate(year.current.adjustmentDate)}
+                {year.current.gstApplies ? ` · GST ${formatMoney(year.current.gstAmount)} (${year.current.amountIncludesGst ? "included in the amount" : "on top of the amount"})` : " · No GST"} · {year.current.reason}
+              </p>
+              <form className={ui.inlineForm} onSubmit={(event) => void voidIt(event, year.current!.id)}>
+                <Field label="Reason for voiding" hint="Its journal is reversed on its own date. Then enter the new amount.">
+                  <input value={voidReason} maxLength={500} onChange={(event) => setVoidReason(event.target.value)} required />
+                </Field>
+                <Button type="submit" variant="secondary">
+                  Void adjustment
+                </Button>
+              </form>
+            </>
+          ) : (
+            <form className={ui.inlineForm} onSubmit={(event) => void add(event)}>
+              <Field label="Amount">
+                <input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required />
+              </Field>
+              <Field label="Date" hint={`Leave blank for the balance date, ${formatDate(yearEnd)}.`}>
+                <DateInput value={form.adjustmentDate} onChange={(event) => setForm({ ...form, adjustmentDate: event.target.value })} />
+              </Field>
+              <Field label="Basis" hint="Why this amount, for example how it was worked out.">
+                <input value={form.reason} maxLength={500} onChange={(event) => setForm({ ...form, reason: event.target.value })} required />
+              </Field>
+              {year.gstRegistered ? (
+                <>
+                  <label className={ui.checkbox}>
+                    <input type="checkbox" checked={form.gstApplies} onChange={(event) => setForm({ ...form, gstApplies: event.target.checked })} /> GST applies
+                  </label>
+                  {form.gstApplies ? (
+                    <label className={ui.checkbox}>
+                      <input type="checkbox" checked={form.amountIncludesGst} onChange={(event) => setForm({ ...form, amountIncludesGst: event.target.checked })} /> The amount includes GST
+                    </label>
+                  ) : null}
+                </>
+              ) : (
+                <p className={ui.muted}>Not GST-registered at the balance date, so no GST.</p>
+              )}
+              {preview ? (
+                <p className={ui.muted}>
+                  Posts Dr {formatMoney(preview.drawings)}, Cr rations income {formatMoney(preview.income)}, Cr GST {formatMoney(preview.gst)}; in the GST return for its date.
+                </p>
+              ) : null}
+              <Button type="submit">Post adjustment</Button>
+            </form>
+          )}
+          {year.voided.length > 0 ? (
+            <details>
+              <summary>Voided ({year.voided.length})</summary>
+              <ul>
+                {year.voided.map((entry) => (
+                  <li key={entry.id} className={ui.muted}>
+                    {formatMoney(entry.amount)} on {formatDate(entry.adjustmentDate)}: voided, {entry.voided?.reason}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </>
+      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+    </Card>
   );
 }
 

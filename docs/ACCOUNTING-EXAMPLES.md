@@ -16717,30 +16717,64 @@ The same year's movements are used in LV1, LV4 and LV6:
   shown on the farm's head count but not counted in LV1 or valued. Kōwhai's
   own heifers grazing off the farm are counted and valued.
 
-### Killed for rations (#259; chosen by Claude on 14 Oct 2026 when Jess said to go with its judgement, not yet reviewed)
+### Killed for rations (#259; RAT1-RAT4 chosen by Claude on 14 Oct 2026, not yet reviewed; changed by Jess, 20 October 2026)
 
 Inland Revenue's IR3F lists the market value of produce used for private or
 domestic purposes as income, and rations provided for employees as a
-deduction. These examples follow that. GST isn't posted, because Claude
-couldn't confirm the GST treatment; a rural accountant should check it.
-Tested in `tests/integration/livestock-rations.test.ts`.
+deduction. Jess, 20 Oct 2026: "Home kill the accountant just does a jnl
+adjustment like 500 bucks", and, asked to choose, "One yearly adjustment"
+rather than assessing each animal. So homekill for the owner is counted in
+the herd one animal at a time, and valued once a year by the accountant.
+Tested in `tests/integration/livestock-rations.test.ts` and
+`tests/unit/rations-rules.test.ts`. Not yet reviewed by an accountant.
 
-- **RAT1** On 10 Mar 2026 the owner kills 1 mixed-age cow for the house,
-  with a market value of 1,100.00 excluding GST. Tohyee posts Dr 3100
-  Owner drawings **1,100.00**, Cr 7070 Livestock rations (private use)
-  **1,100.00** on 10 Mar 2026. The value has to be entered, and the
-  accounts are made the first time if they aren't set.
+- **RAT1** On 10 Mar 2026 the owner kills 1 mixed-age cow for the house.
+  It's recorded as rations for the owner: a head count only. Nothing is
+  posted and no value is entered (a value is refused: "the accountant enters
+  one homekill adjustment for the year"). This replaces posting Dr drawings,
+  Cr rations income for each animal (RAT9 covers what was posted that way).
 - **RAT2** On 12 Mar 2026, 2 mixed-age cows are killed for staff rations.
   Nothing is posted and no value is entered: the lower closing stock is the
-  cost, the same as stock used in the business.
-- **RAT3** Voiding RAT1 posts the reverse (Dr 7070, Cr 3100, 1,100.00) on
-  10 Mar 2026, and the cow is back in the head count. A rations movement
-  can't take a class below zero.
+  cost, the same as stock used in the business. Unchanged; GST on staff
+  rations hasn't been looked at.
+- **RAT3** Voiding a homekill movement puts the cow back in the head count
+  and posts nothing. A rations movement can't take a class below zero.
 - **RAT4** Rations have their own column in the LV1 head count: mixed-age
   cows, 300 opening less 3 rations, close at **297**. Closing = opening +
   born + bought - sold - died - rations - missing + found ± class changes ±
-  ageing. In the statement of cash flows, the owner's rations are income
-  with no cash, so they're taken back out (SCF4).
+  ageing. In the statement of cash flows, the yearly adjustment is income
+  with no cash, so it's taken back out (SCF4).
+- **RAT5 One adjustment a year.** For the year ended 31 May 2026, the
+  homekill card shows **1** head killed for the owner and **2** for staff,
+  for information only. The accountant enters **500.00**, with its basis
+  (required), no GST. On the balance date (or a date they choose in the
+  year), Tohyee posts Dr 3100 Owner drawings (or the owner's current account
+  set as the drawings account) **500.00**, Cr 7070 Livestock rations
+  **500.00**. The cash flow statement shows profit 500.00 and "Owner's
+  rations (no cash)" -500.00. A second adjustment for the same year is
+  refused. Bookkeepers and above.
+- **RAT6 With GST, excluding GST.** On a GST-registered date the accountant
+  can say GST applies, and whether the amount includes it. 1,100.00
+  excluding GST on 30 Apr 2026: Dr 3100 **1,265.00**, Cr 7070
+  **1,100.00**, Cr GST **165.00**. The GST return for March-April 2026
+  counts it on 30 Apr 2026 as a sale, HOMEKILL-2026-05-31: **1,265.00** in
+  Box 5, GST **165.00**.
+- **RAT7 Including GST.** 1,100.00 including GST: Dr 3100 **1,100.00**, Cr
+  7070 **956.52**, Cr GST **143.48** (1,100.00 x 3/23, rounded to the cent).
+- **RAT8 A different amount.** The year's adjustment is voided with a
+  reason ("Accountant revised it"), its journal reversed on its own date (Dr
+  7070 500.00, Cr 3100 500.00 on 31 May 2026), and a new one entered. Voided
+  after its GST return is filed (RAT6), the filed return keeps it and the
+  next return takes it back off as a late claim (-1,265.00, GST -165.00;
+  LG1-LG7).
+- **RAT9 Rations posted one at a time before 20 Oct 2026.** They aren't
+  rewritten. The homekill card shows how much rations income was already
+  posted that year that way (900.00 for an old 1 Feb 2026 cow) so the
+  accountant leaves it out of the yearly amount, and voiding one of those
+  movements still reverses its journal.
+- **RAT10 Not GST-registered.** After registration ends on 15 May 2026, an
+  adjustment dated 15 Jun 2026 can't have GST ("wasn't GST-registered"),
+  and posts without it.
 
 ### Herd scheme
 

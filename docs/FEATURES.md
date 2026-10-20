@@ -1127,6 +1127,15 @@ that something happened.
   - **Head count reconciliation:** by class, with ageing netting to zero.
     Year-end counts show any difference as "not explained".
   - **Stock held for others** is shown but never counted.
+  - **Killed for rations** (RAT1-RAT10, decisions 624-627, tenant
+    migration 0171; Jess, 20 Oct 2026, not yet reviewed): homekill for the
+    owner and staff rations are head counts and post nothing. Under
+    Livestock › Movements, the accountant enters one homekill adjustment a
+    year (amount, basis, and GST if it applies on a GST-registered date):
+    Dr drawings or current account, Cr rations income, Cr GST. With GST it's
+    in that date's GST return. The year's head count is shown beside it.
+    Voiding needs a reason. Rations posted per event before 20 Oct 2026
+    stay, and are shown so they aren't counted twice.
   - **Never below zero:** no class is let go below zero on any date.
   - **Year-end valuation** (stage 3, decision 505, LV4-LV12):
     - Herd scheme and national standard cost (mature group averaged). Each
