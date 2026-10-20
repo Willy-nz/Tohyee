@@ -419,6 +419,12 @@ export async function convertLead(
     "update crm_activities set contact_id = coalesce(contact_id, $2), person_id = coalesce(person_id, $3), updated_at = now() where lead_id = $1",
     [lead.id, contactId, personId],
   );
+  // Its synced emails and meetings too (decision 651).
+  await tx.query("update crm_participant_links set person_id = coalesce(person_id, $3), contact_id = coalesce(contact_id, $2) where lead_id = $1", [
+    lead.id,
+    contactId,
+    personId,
+  ]);
   await tx.query(
     `update crm_leads set status = 'converted', converted_at = now(), converted_contact_id = $2, converted_person_id = $3,
             converted_opportunity_id = $4, needs_review = false, updated_at = now()

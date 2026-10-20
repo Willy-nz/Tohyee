@@ -39,6 +39,8 @@ export type DealLine = {
   unitPrice: string;
   discountPercent: string;
   lineAmount: string;
+  /** When this product comes up for renewal (decision 654), if it does. */
+  renewalDate: string | null;
 };
 
 export async function listDealLines(tx: OrgTx, opportunityId: string): Promise<DealLine[]> {
@@ -52,9 +54,10 @@ export async function listDealLines(tx: OrgTx, opportunityId: string): Promise<D
     discount_percent: string;
     line_amount: string;
     currency_code: string;
+    renewal_date: string | null;
   }>(
     `select l.line_order, l.item_id::text, i.code as item_code, l.description, l.quantity::text, l.unit_price::text, l.discount_percent::text,
-            l.line_amount::text, o.currency_code
+            l.line_amount::text, o.currency_code, l.renewal_date::text
        from crm_opportunity_lines l join crm_opportunities o on o.id = l.opportunity_id left join items i on i.id = l.item_id
       where l.opportunity_id = $1 order by l.line_order`,
     [opportunityId],
@@ -68,6 +71,7 @@ export async function listDealLines(tx: OrgTx, opportunityId: string): Promise<D
     unitPrice: toPlainString(dec(row.unit_price)),
     discountPercent: toFixedString(dec(row.discount_percent), 2),
     lineAmount: toFixedString(dec(row.line_amount), currencyMinorUnits(row.currency_code)),
+    renewalDate: row.renewal_date,
   }));
 }
 
@@ -90,7 +94,7 @@ export async function setDealLines(tx: OrgTx, idInput: unknown, input: { lines?:
   const raw = requireArray(input.lines, "lines", MAX_DEAL_LINES);
   const scale = currencyMinorUnits(deal.currencyCode);
   const foreign = deal.currencyCode !== tx.baseCurrency;
-  const lines: Array<Omit<DealLine, "lineOrder" | "itemCode">> = [];
+  const lines: Array<Omit<DealLine, "lineOrder" | "itemCode" | "renewalDate">> = [];
   for (const [index, entry] of raw.entries()) {
     const label = `Line ${index + 1}`;
     if (typeof entry !== "object" || entry === null) throw new ValidationError(`${label} must be an object.`);
@@ -122,12 +126,19 @@ export async function setDealLines(tx: OrgTx, idInput: unknown, input: { lines?:
       lineAmount: toFixedString(discountedLineAmount(quantity, unitPrice, discountPercent, scale), scale),
     });
   }
+  // A product's renewal date (decision 654) stays with it when the lines are saved again.
+  const renewals = new Map(
+    (await tx.query<{ item_id: string | null; description: string; renewal_date: string }>(
+      "select item_id::text, description, renewal_date::text from crm_opportunity_lines where opportunity_id = $1 and renewal_date is not null",
+      [deal.id],
+    )).rows.map((row) => [`${row.item_id ?? ""}|${row.description}`, row.renewal_date]),
+  );
   await tx.query("delete from crm_opportunity_lines where opportunity_id = $1", [deal.id]);
   for (const [index, line] of lines.entries()) {
     await tx.query(
-      `insert into crm_opportunity_lines (opportunity_id, line_order, item_id, description, quantity, unit_price, discount_percent, line_amount)
-       values ($1, $2, $3, $4, $5::numeric, $6::numeric, $7::numeric, $8::numeric)`,
-      [deal.id, index + 1, line.itemId, line.description, line.quantity, line.unitPrice, line.discountPercent, line.lineAmount],
+      `insert into crm_opportunity_lines (opportunity_id, line_order, item_id, description, quantity, unit_price, discount_percent, line_amount, renewal_date)
+       values ($1, $2, $3, $4, $5::numeric, $6::numeric, $7::numeric, $8::numeric, $9)`,
+      [deal.id, index + 1, line.itemId, line.description, line.quantity, line.unitPrice, line.discountPercent, line.lineAmount, renewals.get(`${line.itemId ?? ""}|${line.description}`) ?? null],
     );
   }
   let opportunity = deal;

@@ -48,9 +48,19 @@ that something happened.
   farm working expenses per unit against last season, a small Money card and
   the farm notebook. Each card links to its page, and empty cards are hidden.
   Customise turns cards on and off and orders them, per person, with
-  Analytics tiles pinned alongside (up to 10). Not yet: production and
-  income, FWE against budget, soil tests due, and different default cards
-  per role.
+  Analytics tiles pinned alongside (up to 10). It also has **Records to
+  catch up on** (old farm walks, unmeasured paddocks, missing season
+  figures, bank lines to reconcile, stock suggestions and your own calendar
+  items to check) and **Cash this season** (month ends from the bank, then
+  the cash flow forecast to the season's end; FH9-FH11, decision 663). Not
+  yet: production and income, FWE against budget and soil tests due.
+  **Starting dashboards** (#360 item 20, decisions 660-664, HD1-HD5): sales
+  reps and managers start on the CRM Home, farms on the farm Home and
+  everyone else on the owner's Home, each with starting cards for their
+  kind; your own Customise always wins, and **Go back to the starting
+  cards** undoes it. Bills to pay and Needs attention show overdue bills,
+  and Home offers Jobs and Sales pipeline tiles. No practice manager
+  dashboard.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
@@ -907,7 +917,8 @@ that something happened.
   `/crm`. The CRM's **Home** shows the signed-in person's open opportunities
   (with a total per currency), their tasks due today or overdue, and the
   team's ten most recent calls, meetings and notes (CRM10, not yet approved
-  by Jess), and a card for Shopify: connected stores with their last sync
+  by Jess), with **Pipeline**, **Conversion** and **Next actions** cards in a
+  dashboard frame each person can customise (decision 662, SD1-SD6), and a card for Shopify: connected stores with their last sync
   and error, or "Connect Shopify" for an admin; CRM › Settings ›
   Integrations opens Settings › Sales platforms (decision 582). Companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with the organisation's own stages
@@ -1015,8 +1026,9 @@ that something happened.
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only unless they allow sending, decision 496;
   through the organisation's own Google or Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
-  emails and meetings with known people and companies (subject and a short
-  preview, never full bodies or attachments) and shows them on timelines,
+  emails and meetings with known people, companies and open leads (subject
+  and a short preview, never full bodies or attachments; leads' since
+  decision 651) and shows them on timelines and lead pages,
   with each mailbox choosing whether the team sees subjects or only that
   something happened (MAIL1-MAIL9).
 - **CRM duplicates** (decision 494, #216): CRM › Duplicates suggests
@@ -1030,12 +1042,20 @@ that something happened.
   a company or a lead warns about similar companies, people and open leads.
   Merging needs the bookkeeper role or higher; anyone who changes CRM
   records can mark a pair as not duplicates.
+- **CRM bulk reassignment** (decision 650, #216): CRM › Settings ›
+  Reassign records moves leads, companies, open deals (closed ones if
+  ticked), open tasks and active sequences from one person (or someone who
+  has left, or nobody) to another, after listing every record that will
+  move so any can be unticked. Admins and bookkeepers move anyone's; a sales
+  manager only within their teams; reps can't. Each record moved shows it
+  in its history, and the page lists recent moves.
 - **CRM follow-up rules** (decision 495, #216 stage 2): CRM › Follow-ups,
   for admins and owners. Rules make a task for the right person when a new
   lead arrives (its owner, or each sales team manager if nobody owns it), a
   deal reaches a chosen stage (its owner, due N days later), an open deal
-  goes quiet for N days (a reminder for its owner, once per quiet spell), or
-  a task is N days overdue (the assignee's team manager). Rules are checked
+  goes quiet for N days (a reminder for its owner, once per quiet spell),
+  a task is N days overdue (the assignee's team manager), or a renewal is N
+  days away (the deal's owner, decision 654). Rules are checked
   every 15 minutes or with Run now, and the page lists what each run did.
   Each event makes its task once, even if a check runs twice. Reminders stay
   in Tohyee; nothing is emailed.
@@ -1056,6 +1076,12 @@ that something happened.
   they reply, a lead is unqualified or converted, a deal is won or lost, or
   someone stops it; email steps are skipped for people marked "Don't
   email".
+- **CRM replies** (decision 651, #216): when a lead or person replies to a
+  sales email (sent in the 30 days before) or while in a sequence, their
+  owner gets one task, "Reply from …", due today, checked straight after
+  each mail sync; the sequence stops as before. One task per email or
+  sequence answered, never two for the same reply. Tested with pretend
+  Gmail only, not real Gmail or Microsoft 365.
 - **CRM campaigns** (decision 498, #216 stage 2): CRM › Campaigns, for
   events, adverts, emails and the like, with dates, a budget and an actual
   cost (for reports only). Each lead and deal has one source campaign
@@ -1080,6 +1106,12 @@ that something happened.
   Make quote turns them into a draft quote, New revision replaces the open
   one, and accepting the quote wins the deal and links its invoice or
   sales order.
+- **CRM account plans and renewals** (decisions 653-654, #216 stage 4): a
+  company's Related tab has an account plan (where things stand, goals with
+  target dates, the part each of its people plays in buying, plus its
+  renewals, open deals and open tasks as next steps). A deal and its
+  products can have renewal dates, and a follow-up rule reminds the deal's
+  owner N days before, once per deal and date.
 - **Livestock: movements and head counts** (#221 stage 2, decision 504,
   LV1-LV3): dairy cattle, beef cattle and sheep by IRD's NAMV classes.
   - **Starting:** livestock is a module, turned on in Settings › Modules
@@ -2047,7 +2079,10 @@ that something happened.
   (with the CRM on) companies, opportunities and activities are copied into
   its analytics every night and by Refresh now, as the same data with the
   ledger's signs; dashboard values can be shown the other way round. Pay run
-  lines are copied without names.
+  lines are copied without names. With the CRM on, also leads, campaigns
+  and their members, sequences and enrolments, sales emails (without
+  addresses, subjects or words), deal products and tasks, each with a plain
+  name (decision 652, AB11).
 - **Analytics: sharing with clients** (decision 368, tenant migration 0085,
   core migration 0006). A new "Report viewer" access for clients: they sign
   in like anyone else and see only the Analytics dashboards shared with them

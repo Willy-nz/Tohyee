@@ -47,6 +47,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/crm-replies.test.ts` (MAIL10, RPL1-RPL5, not yet
+  reviewed) and
   `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
   `tests/integration/sales-platform-orders.test.ts` (SPC11-SPC23, not yet
   approved) and
@@ -4338,8 +4340,8 @@ March year end, Jess (owner) and Mere (admin), on Tue 20 Oct 2026.
   off and moves them up or down, and **Hide** hides the dashboard. It's per
   person, and saved like Home's (decision 372). The farm Home shows up to
   10 cards (Home shows 4), so Analytics tiles can be pinned to it with
-  **Pin to page** (offered only when Farming is on). Everyone starts with
-  the same cards in the same order.
+  **Pin to page** (offered only when Farming is on). Everyone on a farm
+  starts with the same cards in the same order (HD3).
 - **FH8 Money and the notebook.** Money: cash in bank, bills to pay (and
   how many are due this week), money owed to you and the GST estimate,
   worked out as Home does (H2-H4). The farm notebook: the latest three
@@ -4352,16 +4354,108 @@ income** (kg MS to date against last season and budget, payout forecast):
 milk solids are only entered once a year for benchmarks. **FWE against
 budget**: budgets aren't grouped as working expenses. **Paddocks with a soil
 test due**: soil tests deliberately have no "due" rule. **Income tax due**
-on the Money card. **Different default cards per role** (owner, farm staff,
+on the Money card. **Different farm cards per role** (owner, farm staff,
 accountant): Tohyee's roles (owner, admin, bookkeeper, viewer) don't say
-who's farm staff and who's the accountant, so everyone starts with the same
-cards and changes them with Customise. No card shows payroll figures (pay
+who's farm staff and who's the accountant, so everyone on a farm starts with
+the same cards (HD3) and changes them with Customise. No card shows payroll figures (pay
 runs, pay rates or wages per person). Farm performance uses the ledger's
 expense totals, as Farm benchmarks does for any viewer.
 
-Tests: `tests/integration/farm-home.test.ts` (FH1-FH8),
+Added 20 Oct 2026 (#360 item 20, Codex, delegated by owner; decision 663,
+not yet reviewed), same farm and date:
+
+- **FH9 Records to catch up on.** What's missing or out of date, each with
+  the page that fixes it. Home block's latest walk was 10 Oct: on 20 Oct
+  that's 10 days, fine; on **30 Oct** it's **20 days**, more than 14, so
+  "Home block: last farm walk 10 Oct 2026, 20 days ago" (Add readings). A
+  new paddock **16** with no reading: "1 paddock has no cover reading". A
+  farm with no readings at all isn't listed (it may not do farm walks). Also
+  a finished season with working expenses but none of kg MS, hectares, cows
+  or stock units; bank lines to reconcile; feeds to reconnect; the **1**
+  AI-suggested stock movement waiting; and the person's own calendar items
+  needing checking.
+- **FH10 Cash this season.** A made-up farm with a March year end and two
+  bank accounts (1000 and a call account 1010). $50,000 in on 15 Mar 2026,
+  so the season (1 Apr 2026 - 31 Mar 2027) opens at **$50,000**. Milk
+  income $30,000 on 10 May; $20,000 moved from 1000 to 1010 on 20 May
+  (netted in its journal, so neither in nor out); fertiliser $12,000 on
+  5 Oct; $1,000 dated 25 Oct (after today, not yet counted). Month ends:
+  April **$50,000**, May **$80,000** (in $30,000), ... October so far out
+  **$12,000**, **$68,000**. Then the cash flow forecast: a $100,000 winter
+  feed item on 15 Jan 2027 takes January's month end to **-$32,000**, the
+  lowest expected, and the first month below zero is **January**. Credit
+  cards are left out, as Cash in bank does. Nothing in the bank, moved or
+  expected hides the card (FH6).
+- **FH11 Private items stay private.** A calendar item of Mere's that
+  needs checking counts on Mere's records to catch up on (1) and never on
+  Jess's, through the screen's figures or the route (decision 571).
+
+Tests: `tests/integration/farm-home.test.ts` (FH1-FH11),
 `tests/unit/dashboard-tiles.test.ts` (FH7) and
 `tests/unit/dashboard-pages.test.ts`.
+
+### Starting dashboards by kind of person (HD1-HD5; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+Issue #360 item 20: default dashboards for the owner, sales and farming
+(not the practice manager: Jess, "Dont do practice manager"). Tohyee's
+roles don't say who's sales or farm staff, so the rule goes by what Tohyee
+knows (decision 660). Xero's Home is one layout for everyone, so this is
+our own rule. Made-up people: Jess (owner), Vic (viewer), Ruby and Otto
+(sales reps).
+
+- **HD1 Which dashboard.** A sales rep or manager gets the CRM's Home (the
+  sales dashboard), even with Farming on; with Farming on everyone else gets
+  the farm Home; otherwise the owner's Home. Ruby's Home's and farm Home's
+  preferences are refused (403).
+- **HD2 Home's tiles.** Cash in bank, Owed to you, Bills to pay, then Next
+  GST return when registered for GST. Not registered: Jobs if any project
+  is a job, else Sales pipeline with the CRM on, else still the GST card.
+  Bills to pay shows overdue bills in red, and Needs attention lists them
+  (decision 661).
+- **HD3 The farm Home's cards.** This week on the farm, Records to catch up
+  on and Cash this season first, then stock, pasture, fertiliser, farm
+  performance, money and the notebook, for every role.
+- **HD4 The CRM Home's cards.** Ruby (a rep) starts with Next actions and
+  her own opportunities; a manager, and Jess, with Pipeline and Conversion.
+- **HD5 Your own choice wins.** Jess saves Bills, Cash, Owed, GST on Home.
+  When GST registration is turned off, Vic starts with Sales pipeline
+  (the CRM is on) but Jess keeps her four. Customise says the starting
+  cards' rule, and **Go back to the starting cards** removes Jess's choice,
+  so she gets Sales pipeline too. Ruby's saved CRM Home is hers alone; Otto
+  keeps the starting cards.
+
+Tests: `tests/unit/dashboard-defaults.test.ts` (HD1-HD4) and
+`tests/integration/home-defaults.test.ts` (HD2, HD4, HD5).
+
+### The CRM Home as a sales dashboard (SD1-SD6; Codex, delegated by owner, 20 October 2026, not yet reviewed)
+
+Decision 662. Ruby and Otto are sales reps; Jess is the owner. Harbour Vets
+is a made-up prospect. Today is the day the test runs.
+
+- **SD1 Pipeline.** Open opportunities by stage: Ruby's Keyrings ($600,
+  Proposal) and Collars ($400, Meeting) are **2** for **$1,000**; Jess sees
+  Otto's tags ($900) as well: **3** for **$1,900**. Each stage links to the
+  pipeline; the sales dashboard shows the opportunities behind each figure.
+  Amounts in other currencies are listed beside, never added.
+- **SD2 Conversion.** Last and this quarter of the financial year: leads
+  converted of those added, won of those closed (win rate) and the amount
+  won, defined as the sales dashboard does (decision 500).
+- **SD3 Next actions: tasks.** Ruby's "Chase the PO" on Keyrings, due
+  yesterday, is listed as overdue and links to Keyrings. Otto's task due
+  today is his alone.
+- **SD4 Next actions: opportunities.** Keyrings' close date was 3 days ago:
+  **past its close date**. Collars has no task still to do: **no next
+  step**. Jess owns none, so she has no next actions. Five of each are
+  listed, with the count.
+- **SD5 Customise.** As the farm Home: cards on or off and up or down, per
+  person, up to 8, and Hide.
+- **SD6 Home's Jobs and Sales pipeline tiles.** Jobs: open jobs (not
+  closed), those whose next visit is in the next seven days, those with
+  none booked, and services due (JV8). Sales pipeline: SD1's open amount
+  and this quarter's win rate.
+
+Tests: `tests/integration/home-defaults.test.ts` (SD1, SD3, SD4) and
+`tests/unit/dashboard-defaults.test.ts` (SD6 Jobs).
 
 ## GST return
 
@@ -5572,6 +5666,33 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+### Leads' emails and replies (MAIL10, RPL1-RPL5; decision 651)
+
+Codex, delegated by owner, 20 October 2026 (#360 item 17), as HubSpot and
+Salesforce do (Xero has no CRM); not yet reviewed by Jess. Nothing is
+posted, so these have no amounts. Tested in
+`tests/integration/crm-replies.test.ts`.
+
+- **MAIL10** Aroha Ngata is a lead (aroha@example.nz, Ruby's) and not a
+  person yet. Her email "Paw prints?" to Jess is kept and linked to the lead
+  and shows on the lead's page; a newsletter still isn't kept. Converting
+  the lead links the email to the new person too, and her next email is
+  matched to the person, not the converted lead.
+- **RPL1** Ruby emails Aroha "Your quote" from Tohyee; Aroha's "Re: Your
+  quote" comes back through Jess's mailbox. Ruby gets one task, due today:
+  "Reply from Aroha Ngata: Re: Your quote".
+- **RPL2** The check running again makes nothing more, nor does Aroha's
+  second email in the thread. After Ruby emails "Samples" and Aroha replies
+  again, there's a second task.
+- **RPL3** Tama (a person at Harbour Vets) is in Ruby's "Clinic intro"
+  sequence. His reply makes Ruby a task "Reply from Tama" (no subject,
+  because Jess's mailbox shows only that something happened), and the
+  sequence stops with "They replied."
+- **RPL4** An email into a lead mailbox from Aroha after Ruby emailed her
+  "Hello" makes the task "Reply from Aroha Ngata: Re: Hello".
+- **RPL5** No task for a reply to an email sent over 30 days earlier, a
+  reply received over 7 days ago, or one synced before this version.
 
 ## Sales platform connections (examples not yet approved by Jess)
 
@@ -15727,7 +15848,8 @@ without employee names.
   and **`tohyee_items`**.
 - With the CRM on: **`tohyee_crm_companies`**, **`tohyee_crm_opportunities`**
   (stage, amount, expected close, owner, won/lost) and
-  **`tohyee_crm_activities`**.
+  **`tohyee_crm_activities`**, and since decision 652 the CRM's reporting
+  tables (AB11).
 - With Farming on (#249, decision 515): **`tohyee_farm_paddocks`**,
   **`tohyee_farm_fertiliser_products`**,
   **`tohyee_farm_fertiliser_plan_lines`**,
@@ -15772,6 +15894,22 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
 - **AB10** A pay run's wages journal is copied as lines on the wages and
   bank (or wages payable) accounts with no contact and the description
   "Pay run".
+- **AB11** (decision 652; Codex, delegated by owner, 20 October 2026, not
+  yet reviewed) With the CRM on, the copy also has
+  **`tohyee_crm_leads`**, **`tohyee_crm_campaigns`**,
+  **`tohyee_crm_campaign_members`**, **`tohyee_crm_sequences`**,
+  **`tohyee_crm_sequence_enrolments`**, **`tohyee_crm_sales_emails`**,
+  **`tohyee_crm_deal_products`** and **`tohyee_crm_tasks`**, and
+  `source_campaign` on opportunities and record ids on activities. The
+  campaign "Pet expo" (budget **800.00**, actual cost **650.50**) is copied
+  exactly; Aroha Ngata's lead is copied as converted with source campaign
+  Pet expo and owner Ruby Rep, without her email or phone, and the deal made
+  from her keeps Pet expo; DS7's lines on "Clinic keyrings" are copied as
+  **450.00** (20 x 25.00 less 10%) and **50.00**, excluding GST, adding to
+  the deal's **500.00**; a sales email is copied with its date and sender
+  but no address, subject or words, and one still sending isn't copied.
+  With Accounting off, only the `tohyee_crm_*` tables are copied. Tested in
+  `tests/integration/analytics-crm-tables.test.ts`.
 
 ## Analytics: built-in values on the books copy (examples BM1-BM4; as Xero does, not yet reviewed)
 

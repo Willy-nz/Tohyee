@@ -1,6 +1,8 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { listRenewals } from "@/lib/crm/account-plans";
 import { createTask } from "@/lib/crm/service";
 import { refreshCampaignMembers } from "@/lib/crm/campaigns";
+import { noticeReplies } from "@/lib/crm/replies";
 import { advanceSequences } from "@/lib/crm/sequences";
 import { listStages } from "@/lib/crm/stages";
 import { crmEnabled, requireCrm } from "@/lib/crm/switch";
@@ -28,6 +30,10 @@ import { optionalString, requireId, requireOneOf, requireString } from "@/lib/va
  * - **task_overdue:** a task `days` or more days overdue gets a task for the
  *   assignee's sales team manager; once per due date. Tasks of people who
  *   aren't in a team (or who manage it) are left alone.
+ * - **renewal_due** (decision 654): `days` before a renewal date on a deal
+ *   that isn't lost (or on one of its products), a task for the deal's
+ *   owner; once per deal and renewal date. Renewal dates from before the
+ *   rule was made are ignored.
  *
  * Reminders stay in Tohyee (tasks and CRM home); nothing is emailed. Rules
  * are checked every 15 minutes and on "Run now". Each run is kept with a key
@@ -35,7 +41,7 @@ import { optionalString, requireId, requireOneOf, requireString } from "@/lib/va
  * so a check that runs twice, or at the same time, never makes a second task.
  */
 
-export const FOLLOW_UP_KINDS = ["lead_arrives", "deal_stage", "deal_quiet", "task_overdue"] as const;
+export const FOLLOW_UP_KINDS = ["lead_arrives", "deal_stage", "deal_quiet", "task_overdue", "renewal_due"] as const;
 export type FollowUpKind = (typeof FOLLOW_UP_KINDS)[number];
 
 export type FollowUpRule = {
@@ -372,6 +378,25 @@ async function planTaskOverdue(tx: OrgTx, rule: FollowUpRule, today: string): Pr
   });
 }
 
+async function planRenewalDue(tx: OrgTx, rule: FollowUpRule, today: string): Promise<Planned[]> {
+  const ruleMade = isoDateAt(new Date(rule.createdAt));
+  const renewals = await listRenewals(tx, { from: ruleMade, to: addDaysIso(today, rule.days) });
+  return renewals.map((renewal) => {
+    const remindOn = addDaysIso(renewal.renewalDate, -rule.days);
+    const what = renewal.what.length > 0 ? ` (${renewal.what.join(", ")})` : "";
+    return {
+      key: `renewal:${renewal.opportunityId}:${renewal.renewalDate}`,
+      title: titled(rule, "Renewal", `${renewal.opportunityName} on ${renewal.renewalDate}`),
+      body: `${renewal.opportunityName}${what} comes up for renewal on ${renewal.renewalDate}.`,
+      dueDate: remindOn > today ? remindOn : today,
+      assignees: [renewal.ownerUserId],
+      opportunityId: renewal.opportunityId,
+      contactId: renewal.contactId,
+      skip: renewal.ownerUserId ? undefined : "The deal has no owner.",
+    };
+  });
+}
+
 export type FollowUpResult = { tasksCreated: number; skipped: number };
 
 /** Runs every active rule once (or one rule). Safe to run again: each event makes its task(s) once. */
@@ -391,7 +416,9 @@ export async function runFollowUpRules(tx: OrgTx, options: { ruleId?: unknown; t
           ? await planDealStage(tx, rule)
           : rule.kind === "deal_quiet"
             ? await planDealQuiet(tx, rule, today)
-            : await planTaskOverdue(tx, rule, today);
+            : rule.kind === "renewal_due"
+              ? await planRenewalDue(tx, rule, today)
+              : await planTaskOverdue(tx, rule, today);
     for (const plan of planned) {
       const claimed = await tx.query<{ id: string }>(
         `insert into crm_follow_up_runs (rule_id, run_key, lead_id, opportunity_id, source_task_id, outcome, detail)
@@ -453,13 +480,15 @@ export async function runDueFollowUpRules(organisations?: Organisation[]): Promi
                     exists (select 1 from crm_campaign_members where status <> 'responded') as members`,
           );
           const { rules, enrolments, members } = any.rows[0];
+          // Replies to sales emails and sequences become a task for the owner (decision 651), before sequences stop for them.
+          const fromReplies = await noticeReplies(tx);
           // Campaign members who were emailed or replied (decision 498).
           if (members) await refreshCampaignMembers(tx);
-          if (!rules && !enrolments) return null;
+          if (!rules && !enrolments) return fromReplies.tasksCreated > 0 ? fromReplies : null;
           const fromRules = rules ? await runFollowUpRules(tx) : { tasksCreated: 0, skipped: 0 };
           // Sequences' steps (decision 497) are moved on in the same check.
           const fromSequences = enrolments ? await advanceSequences(tx) : { tasksCreated: 0 };
-          return { tasksCreated: fromRules.tasksCreated + fromSequences.tasksCreated };
+          return { tasksCreated: fromReplies.tasksCreated + fromRules.tasksCreated + fromSequences.tasksCreated };
         });
         if (done) {
           total.organisations += 1;

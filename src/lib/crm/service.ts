@@ -94,6 +94,8 @@ export type Opportunity = {
   /** The campaign it came from (decision 498): at most one, so what it earns is credited once. */
   sourceCampaignId: string | null;
   sourceCampaignName: string | null;
+  /** When it comes up for renewal (decision 654), set on the deal's Renewals card; CRM only. */
+  renewalDate: string | null;
   ownerUserId: string | null;
   /** In `currencyCode`, the company's currency (MC68), excluding GST. */
   amount: string;
@@ -479,7 +481,8 @@ const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact
     nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text, o.currency_code,
     o.close_date::text, o.stage, s.name as stage_name, s.stage_type, o.probability, o.forecast_category, o.position, o.invoice_id, o.sales_order_id::text, so.so_number as sales_order_number,
     i.invoice_number, o.custom_fields, o.created_at, o.updated_at, o.record_type_id, t.name as record_type_name,
-    o.source_campaign_id::text, (select sc.name from crm_campaigns sc where sc.id = o.source_campaign_id) as source_campaign_name
+    o.source_campaign_id::text, (select sc.name from crm_campaigns sc where sc.id = o.source_campaign_id) as source_campaign_name,
+    o.renewal_date::text
   from crm_opportunities o
   join crm_opportunity_stages s on s.key = o.stage
   join contacts c on c.id = o.contact_id
@@ -489,6 +492,7 @@ const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact
   left join sales_orders so on so.id = o.sales_order_id`;
 
 type OpportunityRow = {
+  renewal_date: string | null;
   source_campaign_id: string | null;
   source_campaign_name: string | null;
   id: string;
@@ -528,6 +532,7 @@ function toOpportunity(row: OpportunityRow): Opportunity {
     pointOfContactName: row.point_of_contact_name,
     sourceCampaignId: row.source_campaign_id,
     sourceCampaignName: row.source_campaign_name,
+    renewalDate: row.renewal_date,
     ownerUserId: row.owner_user_id,
     amount: toFixedString(dec(row.amount), 2),
     currencyCode: row.currency_code,
