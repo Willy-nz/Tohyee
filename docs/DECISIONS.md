@@ -5994,6 +5994,63 @@ testing) and #154's code signing (later, Jess).
      can't stop an AI service outside Tohyee from keeping what it was told:
      that's between the Owner and their AI provider, and My mail says the
      key is for the Owner's own AI only.
+630. **A co-op share register for farms** (20 October 2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026 (issue
+       #360, item 15). Examples CSR1-CSR10 aren't reviewed yet.
+     - **What it is:** Farm > Co-op shares. One holding per co-op and share
+       class (case doesn't matter), each with its movements and its
+       dividends, rebates and retentions as the co-op's statements show
+       them. Tables `coop_shareholdings`, `coop_share_movements` and
+       `coop_share_distributions` (tenant migration 0172). It's factual:
+       Tohyee adds up what was entered; it doesn't value shares, post to
+       the ledger or work out what a co-op requires. Farming must be on.
+       Viewers read; bookkeepers and up change it.
+     - **Mistakes:** entries are removed, never deleted or edited, and the
+       history keeps them. A holding can be removed only once it has no
+       entries.
+631. **Share movements, opening and closing** (20 October 2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Kinds:** brought forward, bought or issued for payment, issued
+       without payment (bonus shares, shares for a rebate or retention),
+       sold/surrendered/redeemed, and adjustment. Quantities and values are
+       entered as positive numbers; a sale is stored negative. An
+       adjustment takes signed numbers.
+     - **Opening and closing:** opening is everything dated before the
+       financial year; closing is opening plus the year's movements. Values
+       are as entered (usually cost), to the cent; quantities to 4 places,
+       summed only within a holding.
+     - **Brought forward:** one per holding, dated on or before every other
+       movement, so a register can start from last year's accounts.
+     - **Never below nothing:** after every change the running quantity and
+       value, in date order over all movements, must stay at or above zero,
+       so a sale beyond the holding, or removing a purchase a later sale
+       relies on, is refused.
+632. **Dividends, rebates, retentions and source statements** (20 October
+     2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **Apart:** dividends, rebates and retentions are separate kinds with
+       separate totals, and none of them changes the shares' value. Only
+       dividends carry imputation credits. A rebate paid in shares is a
+       rebate plus a separate "issued without payment" movement; the two
+       aren't linked, so Tohyee doesn't decide how a rebate splits between
+       cash, shares and retention.
+     - **Statements:** each movement and payment names its source: a
+       reference, a file on the holding (the existing record files, record
+       type `coop_shareholding`), or both. One of them is required. Only the
+       holding's own current files can be chosen.
+633. **The register in the year-end pack; what's left out** (20 October
+     2026, #327).
+     - **Who decided:** Codex, delegated by owner, 20 October 2026.
+     - **In the pack:** when farming is on and there's a holding, the
+       year-end pack has `Co-op shares.csv` (a shares table and a dividends,
+       rebates and retentions table, with totals) and a `Co-op share
+       statements` folder with the files the year's entries name, each
+       name starting with its file number. Removed files aren't included.
+     - **Not built:** ledger links and proposed postings (they need their
+       own worked examples and tests first, as #360 item 15 says); a
+       Fonterra share standard (minimum shares) calculator, deferred until
+       its effective-dated rules are verified; share valuation; and the tax
+       treatment of dividends, rebates and retentions.
 624. **Owner's rations get an explicit GST assessment** (Codex, delegated by
      owner (via Will), 20 October 2026; the 20 Oct comment on #292,
      section 2). This replaces "no GST is posted" (RAT1). It isn't replaced
