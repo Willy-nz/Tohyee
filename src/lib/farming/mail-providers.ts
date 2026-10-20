@@ -217,7 +217,7 @@ export async function listFolderMailIds(
   after: Date,
   max: number,
   labels: MailFolder[] | null = null,
-  options: { includeSpamTrash?: boolean; graphPageSize?: number } = {},
+  options: { includeSpamTrash?: boolean; graphPageSize?: number; gmailExclude?: string } = {},
 ): Promise<FolderListing> {
   const ids: string[] = [];
   let complete = true;
@@ -229,7 +229,7 @@ export async function listFolderMailIds(
       const before = ids.length;
       let pageToken: string | undefined;
       do {
-        const params = new URLSearchParams({ q: `after:${Math.floor(after.getTime() / 1000)}`, labelIds: labelId, maxResults: "500", includeSpamTrash: options.includeSpamTrash ? "true" : "false" });
+        const params = new URLSearchParams({ q: `after:${Math.floor(after.getTime() / 1000)}${options.gmailExclude ? ` ${options.gmailExclude}` : ""}`, labelIds: labelId, maxResults: "500", includeSpamTrash: options.includeSpamTrash ? "true" : "false" });
         if (pageToken) params.set("pageToken", pageToken);
         const page = await getJson<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, token);
         for (const message of page?.messages ?? []) if (!ids.includes(message.id)) ids.push(message.id);

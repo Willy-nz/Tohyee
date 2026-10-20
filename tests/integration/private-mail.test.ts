@@ -120,7 +120,9 @@ describeWithDatabase("private mail copy", () => {
       const after = Number(/after:(\d+)/.exec(url.searchParams.get("q") ?? "")?.[1] ?? 0) * 1000;
       const label = url.searchParams.get("labelIds");
       const spamTrash = url.searchParams.get("includeSpamTrash") === "true";
+      const noDrafts = (url.searchParams.get("q") ?? "").includes("-in:drafts");
       const ids = gmail
+        .filter((mail) => !noDrafts || !mail.labels.includes("DRAFT"))
         .filter((mail) => Date.parse(mail.at) >= after && (!label || mail.labels.includes(label)))
         .filter((mail) => spamTrash || !mail.labels.some((entry) => entry === "SPAM" || entry === "TRASH"))
         .sort((a, b) => b.at.localeCompare(a.at))
@@ -135,11 +137,14 @@ describeWithDatabase("private mail copy", () => {
     const id = decodeURIComponent(url.pathname.split("/").pop() ?? "");
     const mail = gmail.find((entry) => entry.id === id);
     if (!mail) return missing();
+    // Where an email went (decision 616): only its labels.
+    if (url.searchParams.get("format") === "minimal") return reply({ id: mail.id, labelIds: mail.labels });
     if (failOnce.delete(id)) return new Response("busy", { status: 503 });
     fetched.push(id);
     return reply({
       id: mail.id,
       threadId: mail.threadId,
+      labelIds: mail.labels,
       internalDate: String(Date.parse(mail.at)),
       sizeEstimate: mail.text.length,
       payload: {
@@ -167,6 +172,7 @@ describeWithDatabase("private mail copy", () => {
   const graph = (url: URL): Response => {
     const path = decodeURIComponent(url.pathname.replace("/v1.0", ""));
     if (path === "/me") return reply({ mail: "Jess@KowhaiDairies.example", userPrincipalName: "jess@kowhaidairies.example" });
+    if (path === "/me/mailFolders/deleteditems") return reply({ id: "deleted" });
     const shape = (folder: { id: string; displayName: string }) => ({ ...folder, childFolderCount: outlook.folders.filter((child) => child.parentFolderId === folder.id).length });
     if (path === "/me/mailFolders") return reply({ value: outlook.folders.filter((folder) => folder.parentFolderId === null).map(shape) });
     const children = /^\/me\/mailFolders\/([^/]+)\/childFolders$/.exec(path);
@@ -199,6 +205,7 @@ describeWithDatabase("private mail copy", () => {
     const one = /^\/me\/messages\/([^/]+)$/.exec(path);
     const mail = one ? outlook.mail.find((entry) => entry.id === one[1]) : undefined;
     if (!mail) return missing();
+    if (url.searchParams.get("$select") === "id,parentFolderId") return reply({ id: mail.id, parentFolderId: mail.folder });
     fetched.push(mail.id);
     const [, name, address] = /^(.*) <(.*)>$/.exec(mail.from) ?? [null, null, mail.from];
     return reply({
@@ -336,7 +343,7 @@ describeWithDatabase("private mail copy", () => {
     // The scheduler's own actor isn't an owner either.
     await expect(inOrganisation(org, { userId: null, email: "private-mail@tohyee" }, (tx) => MailOwner.of(tx))).rejects.toThrow("Not found.");
     // Nothing was changed by any of it: the copy is still there and copying.
-    expect(await copyOf(w, mailbox.id)).toMatchObject({ copying: true, copied: 3 });
+    expect(await copyOf(w, mailbox.id)).toMatchObject({ copying: true, copied: 2 });
     // And Jess herself gets it all.
     const cookie = await sessionCookieFor(jess);
     const download = await attachmentRoute.GET(apiRequest(`/api/my-mail/attachments/${attachmentId}?organisationId=${org}`, { cookie }), params({ attachmentId }));
@@ -410,13 +417,13 @@ describeWithDatabase("private mail copy", () => {
     const removed = await memberRoute.DELETE(apiRequest(`/api/organisations/${w.org}/members/${jess.id}`, { method: "DELETE", cookie: await sessionCookieFor(ana) }), params({ organisationId: w.org, userId: jess.id }));
     expect(removed.status).toBe(200);
     const left = await w.as(ana, (tx) => tx.query<{ account_id: string | null; copying: boolean; messages: number }>("select account_id::text, copying, (select count(*)::int from private_mail_messages) as messages from private_mail_copies"));
-    expect(left.rows).toEqual([{ account_id: null, copying: true, messages: 4 }]);
+    expect(left.rows).toEqual([{ account_id: null, copying: true, messages: 3 }]);
     await expect(w.as(jess, (tx) => MailOwner.of(tx))).rejects.toThrow("Not found.");
     // Added back as an Owner, Jess finds her copy, not copying, to delete or carry on.
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'owner')", [w.org, jess.id]);
     const back = await w.as(jess, async (tx) => myMail(tx, await owner(tx)));
     expect(back.mailboxes).toEqual([]);
-    expect(back.detached).toMatchObject([{ email: "jess@kowhaidairies.example", copied: 4 }]);
+    expect(back.detached).toMatchObject([{ email: "jess@kowhaidairies.example", copied: 3 }]);
   }, 120_000);
 
   // What it copies ------------------------------------------------------------------------------------
@@ -446,13 +453,12 @@ describeWithDatabase("private mail copy", () => {
       ["SPAM", "Spam", true],
       ["TRASH", "Trash", true],
     ]);
-    // Farm only: the directorship email, the spam and the draft are never fetched.
+    // Farm only: the directorship email, the spam and the draft (labelled Farm too) are never fetched.
     await choose(w, mailbox.id, [{ id: "Label_1" }]);
-    expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:30:00Z"))).toEqual({ copied: 3, removed: 0 });
-    // g5 is a draft but also labelled Farm, so it's in a ticked label; g3 (Directorships) and g4 (Spam) aren't.
-    expect(fetched.sort()).toEqual(["g1", "g2", "g5"]);
-    // Ticking Spam copies spam too.
-    await choose(w, mailbox.id, [{ id: "Label_1" }, { id: "SPAM" }]);
+    expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:30:00Z"))).toEqual({ copied: 2, removed: 0 });
+    expect(fetched.sort()).toEqual(["g1", "g2"]);
+    // Ticking Spam and Drafts copies them too: an explicit opt-in.
+    await choose(w, mailbox.id, [{ id: "Label_1" }, { id: "SPAM" }, { id: "DRAFT" }]);
     await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:45:00Z"));
     expect(fetched.sort()).toEqual(["g1", "g2", "g4", "g5"]);
     expect(writes).toEqual([]);
@@ -483,7 +489,7 @@ describeWithDatabase("private mail copy", () => {
     expect(count.rows[0].count).toBe(9);
     // "Sync now" through the route answers how many were copied.
     const response = await syncRoute.POST(apiRequest(`/api/my-mail/copies/${done.id}/sync`, { method: "POST", cookie: await sessionCookieFor(jess), body: { organisationId: w.org } }), params({ copyId: done.id }));
-    expect(await response.json()).toEqual({ copied: 0, removed: 0 });
+    expect(await response.json()).toEqual({ copied: 0, removed: 0, deletedInMailbox: 0 });
   }, 120_000);
 
   it("PM5 attachments: kept files download; big ones and linked Outlook items keep only their name and size", async () => {
@@ -529,32 +535,66 @@ describeWithDatabase("private mail copy", () => {
     expect(writes).toEqual([]);
   }, 120_000);
 
-  it("PM6 unticking a folder, moving email out and in, and a deleted folder, as the farm calendar does", async () => {
+  it("PM6 unticking a folder and moving email out remove it; deleted in Gmail or Outlook, it's kept and marked", async () => {
     const w = await setup();
     seedGmail();
+    gmail.push({ id: "g6", threadId: "t6", at: "2026-10-15T03:00:00Z", from: lab, subject: "Lime recommendation", text: "Two tonnes of lime for paddock twelve.", labels: ["Label_1"] });
     const mailbox = await connect(w, "2026-10-19T09:00:00Z", { folders: [{ id: "Label_1" }, { id: "Label_3" }] });
     await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:15:00Z"));
-    const subjects = async () => (await w.as(jess, async (tx) => searchMyMail(tx, await owner(tx), {}))).hits.map((hit) => hit.subject).sort();
-    expect(await subjects()).toEqual(["Directorship board papers confidential", "Draft fertiliser order", "Re: Soil test results paddock twelve", "Soil test results paddock twelve"]);
-    // Unticking Directorships deletes what was copied only from it, at once.
+    const hits = async () => (await w.as(jess, async (tx) => searchMyMail(tx, await owner(tx), {}))).hits.map((hit) => [hit.subject, hit.deletedInMailbox]).sort();
+    expect(await hits()).toEqual([
+      ["Directorship board papers confidential", false],
+      ["Lime recommendation", false],
+      ["Re: Soil test results paddock twelve", false],
+      ["Soil test results paddock twelve", false],
+    ]);
+    // Unticking Directorships deletes what was copied only from it, at once (#340).
     await choose(w, mailbox.id, [{ id: "Label_1" }]);
-    expect(await subjects()).toEqual(["Draft fertiliser order", "Re: Soil test results paddock twelve", "Soil test results paddock twelve"]);
-    // Moving the draft out of Farm drops it at the next sync; moving the board papers in copies them.
-    gmail.find((mail) => mail.id === "g5")!.labels = ["DRAFT"];
+    expect((await hits()).map(([subject]) => subject)).toEqual(["Lime recommendation", "Re: Soil test results paddock twelve", "Soil test results paddock twelve"]);
+    // The reply moved out of Farm (to Sent only) is removed at the next sync; the board papers labelled Farm too are copied.
+    gmail.find((mail) => mail.id === "g2")!.labels = ["SENT"];
     gmail.find((mail) => mail.id === "g3")!.labels = ["INBOX", "Label_3", "Label_1"];
     expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:30:00Z"))).toEqual({ copied: 1, removed: 1 });
-    expect(await subjects()).toEqual(["Directorship board papers confidential", "Re: Soil test results paddock twelve", "Soil test results paddock twelve"]);
-    // The Farm label deleted in Gmail: everything from it is dropped, and it's shown as not found.
-    const labels = LABELS.filter((label) => label.id !== "Label_1");
-    setMailFetchForTests(async (input, init) => (new URL(input).pathname.endsWith("/users/me/labels") ? reply({ labels }) : fake(input, init)));
-    try {
-      expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:45:00Z"))).toEqual({ copied: 0, removed: 3 });
-    } finally {
-      setMailFetchForTests(fake);
-    }
-    const after = (await w.as(jess, async (tx) => myMail(tx, await owner(tx)))).mailboxes[0];
-    expect(after.folders).toMatchObject([{ externalId: "Label_1", missing: true }]);
-    expect(after.copy).toMatchObject({ copied: 0 });
+    // Deleted for good in Gmail, or put in its Trash: kept, marked, and Gmail isn't touched.
+    gmail = gmail.filter((mail) => mail.id !== "g1");
+    gmail.find((mail) => mail.id === "g6")!.labels = ["TRASH", "Label_1"];
+    expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:45:00Z"))).toEqual({ copied: 0, removed: 0, deletedInMailbox: 2 });
+    expect(await hits()).toEqual([
+      ["Directorship board papers confidential", false],
+      ["Lime recommendation", true],
+      ["Soil test results paddock twelve", true],
+    ]);
+    expect(await copyOf(w, mailbox.id)).toMatchObject({ copied: 3, deletedAtSource: 2 });
+    // Taken out of the Trash, it's no longer marked.
+    gmail.find((mail) => mail.id === "g6")!.labels = ["Label_1"];
+    await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T10:00:00Z"));
+    expect((await hits()).find(([subject]) => subject === "Lime recommendation")).toEqual(["Lime recommendation", false]);
+    // Unticking Farm still deletes everything from it, marked or not.
+    await choose(w, mailbox.id, []);
+    expect(await hits()).toEqual([]);
+    expect(writes).toEqual([]);
+  }, 120_000);
+
+  it("PM6 Outlook: an email moved to Deleted Items is kept and marked; one moved to another folder is removed", async () => {
+    const w = await setup();
+    outlook.folders = [
+      { id: "inbox", displayName: "Inbox", parentFolderId: null },
+      { id: "farm", displayName: "Farm", parentFolderId: "inbox" },
+      { id: "board", displayName: "Board papers", parentFolderId: "inbox" },
+      { id: "deleted", displayName: "Deleted Items", parentFolderId: null },
+    ];
+    outlook.mail = [
+      { id: "o1", threadId: "c1", at: "2026-10-15T01:00:00Z", from: lab, subject: "Results", text: "Results.", labels: [], folder: "farm" },
+      { id: "o2", threadId: "c2", at: "2026-10-15T02:00:00Z", from: board, subject: "Papers", text: "Papers.", labels: [], folder: "farm" },
+    ];
+    const mailbox = await connect(w, "2026-10-19T09:00:00Z", { provider: "microsoft", folders: [{ id: "farm" }] });
+    await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:15:00Z"));
+    outlook.mail[0].folder = "deleted";
+    outlook.mail[1].folder = "board";
+    expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id, new Date("2026-10-19T09:30:00Z"))).toEqual({ copied: 0, removed: 1, deletedInMailbox: 1 });
+    const left = (await w.as(jess, async (tx) => searchMyMail(tx, await owner(tx), {}))).hits;
+    expect(left.map((hit) => [hit.subject, hit.deletedInMailbox])).toEqual([["Results", true]]);
+    expect(writes).toEqual([]);
   }, 120_000);
 
   it("PM9, PM10 searching whole words, accents, from: and to:, newest first, by page; reading a conversation", async () => {
@@ -574,9 +614,10 @@ describeWithDatabase("private mail copy", () => {
     expect(await search("lime nitrogen")).toEqual([]);
     // Pages of one.
     const first = await w.as(jess, async (tx) => searchMyMail(tx, await owner(tx), { limit: 1 }));
-    expect(first.hits.map((hit) => hit.subject)).toEqual(["Draft fertiliser order"]);
+    expect(first.hits.map((hit) => hit.subject)).toEqual(["Re: Soil test results paddock twelve"]);
     const second = await w.as(jess, async (tx) => searchMyMail(tx, await owner(tx), { limit: 1, before: first.more }));
-    expect(second.hits.map((hit) => hit.subject)).toEqual(["Re: Soil test results paddock twelve"]);
+    expect(second.hits.map((hit) => hit.subject)).toEqual(["Soil test results paddock twelve"]);
+    expect(second.more).toBeNull();
     // A conversation, oldest first, with who it was to and its attachments.
     const thread = await w.as(jess, async (tx) => readMyThread(tx, await owner(tx), second.hits[0].id));
     expect(thread.messages.map((message) => [message.subject, message.from?.email, message.to.map((person) => person.email)])).toEqual([
@@ -598,12 +639,12 @@ describeWithDatabase("private mail copy", () => {
     fetched = [];
     expect(await syncPrivateCopy(w.organisation, mailbox.copy!.id)).toMatchObject({ skipped: "not_copying" });
     expect(fetched).toEqual([]);
-    expect(await copyOf(w, mailbox.id)).toMatchObject({ copying: false, copied: 3 });
+    expect(await copyOf(w, mailbox.id)).toMatchObject({ copying: false, copied: 2 });
     // Disconnect: the tokens go; the copy stays, detached.
     await w.as(jess, async (tx) => disconnectMyMailbox(tx, await owner(tx), mailbox.id));
     const detached = await w.as(jess, async (tx) => myMail(tx, await owner(tx)));
     expect(detached.mailboxes).toEqual([]);
-    expect(detached.detached).toMatchObject([{ id: mailbox.copy!.id, copying: false, copied: 3 }]);
+    expect(detached.detached).toMatchObject([{ id: mailbox.copy!.id, copying: false, copied: 2 }]);
     expect((await w.as(jess, (tx) => tx.query("select 1 from farm_mail_accounts"))).rowCount).toBe(0);
     // Connecting the same mailbox again carries on the same copy: nothing is copied twice.
     const again = await connect(w, "2026-10-19T11:00:00Z");
@@ -659,7 +700,8 @@ describeWithDatabase("private mail copy", () => {
     // The copy has Farm and Sent.
     fetched = [];
     await syncPrivateCopy(w.organisation, (await copyOf(w, farm.id)).id, new Date("2026-10-19T09:20:00Z"));
-    expect(fetched.sort()).toEqual(["g1", "g2", "g5", "v1", "v2"]);
+    // The draft labelled Farm isn't copied (Drafts isn't ticked), though the farm calendar reads it, as before.
+    expect(fetched.sort()).toEqual(["g1", "g2", "v1", "v2"]);
     // Saving folders on the farm calendar leaves Sent ticked for the copy.
     const again = await mailboxFolderChoices(w.organisation, farm.id);
     await w.as(jess, (tx) => chooseMailboxFolders(tx, farm.id, [{ id: "Label_1" }, { id: "INBOX" }], again));

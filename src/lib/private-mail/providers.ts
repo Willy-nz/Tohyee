@@ -1,4 +1,4 @@
-import { type MailProvider, parseAddressList, type Participant } from "@/lib/crm/mail/providers";
+import { type MailProvider, parseAddressList, type Participant, ProviderError } from "@/lib/crm/mail/providers";
 import { getJson, htmlToText, listMailFolders, type MailFolder } from "@/lib/farming/mail-providers";
 
 /*
@@ -58,6 +58,8 @@ export type PrivateMail = {
   webLink: string | null;
   size: number;
   attachments: PrivateAttachment[];
+  /** A Gmail draft (only copied when Drafts is ticked, decision 615). */
+  draft: boolean;
 };
 
 type GmailPart = {
@@ -103,7 +105,7 @@ function gmailBody(payload: GmailPart | undefined): { text: string; attachments:
 /** One email, whole: headers, its text and its attachments' details (not the files). */
 export async function fetchPrivateMail(provider: MailProvider, token: string, id: string, mailbox: string): Promise<PrivateMail & { inlineData: Map<string, string> }> {
   if (provider === "google") {
-    type GmailMessage = { id: string; threadId?: string; internalDate?: string; sizeEstimate?: number; payload?: GmailPart };
+    type GmailMessage = { id: string; threadId?: string; labelIds?: string[]; internalDate?: string; sizeEstimate?: number; payload?: GmailPart };
     const message = await getJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`, token);
     const header = (name: string) => message.payload?.headers?.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value;
     const date = Number(message.internalDate);
@@ -123,6 +125,7 @@ export async function fetchPrivateMail(provider: MailProvider, token: string, id
       webLink: `https://mail.google.com/mail/?authuser=${encodeURIComponent(mailbox)}#all/${encodeURIComponent(message.id)}`,
       size: message.sizeEstimate ?? 0,
       attachments: attachments.map((attachment) => ({ externalId: attachment.externalId, name: attachment.name, contentType: attachment.contentType, size: attachment.size, inline: attachment.inline, notKept: attachment.notKept })),
+      draft: (message.labelIds ?? []).includes("DRAFT"),
       inlineData,
     };
   }
@@ -179,8 +182,39 @@ export async function fetchPrivateMail(provider: MailProvider, token: string, id
     webLink: message.webLink ?? null,
     size: content.length,
     attachments,
+    draft: false,
     inlineData: new Map(),
   };
+}
+
+/**
+ * Where an email that's no longer in the ticked folders went (decision
+ * 616): "deleted" when the mailbox no longer has it or it's in the bin
+ * (Gmail's Trash, Outlook's Deleted Items), else "elsewhere" (moved to a
+ * folder that isn't ticked). Only a GET of the email's ids; nothing changes.
+ */
+export async function privateMailWhereabouts(provider: MailProvider, token: string, id: string, deletedItemsId: string | null): Promise<"deleted" | "elsewhere"> {
+  try {
+    if (provider === "google") {
+      const found = await getJson<{ labelIds?: string[] }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=minimal`, token);
+      return (found?.labelIds ?? []).includes("TRASH") ? "deleted" : "elsewhere";
+    }
+    const found = await getJson<{ parentFolderId?: string }>(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}?${new URLSearchParams({ $select: "id,parentFolderId" })}`, token);
+    return deletedItemsId && found?.parentFolderId === deletedItemsId ? "deleted" : "elsewhere";
+  } catch (error) {
+    if (error instanceof ProviderError && error.status === 404) return "deleted";
+    throw error;
+  }
+}
+
+/** Outlook's Deleted Items folder's id, or null (Gmail has no such folder). */
+export async function deletedItemsFolderId(provider: MailProvider, token: string): Promise<string | null> {
+  if (provider !== "microsoft") return null;
+  try {
+    return (await getJson<{ id?: string }>(`https://graph.microsoft.com/v1.0/me/mailFolders/deleteditems?${new URLSearchParams({ $select: "id" })}`, token))?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** One attachment's file (only when it's kept: not too big, not a linked item). */

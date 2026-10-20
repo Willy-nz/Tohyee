@@ -560,19 +560,20 @@ that something happened.
   yet reviewed; not tried with a real mailbox): an Owner of any
   organisation keeps a copy of their own Gmail or Microsoft mail, from the
   folders or labels they tick on the farm calendar's one connection and
-  folder choice (nothing until they tick one; Gmail's Sent, Drafts, Spam
-  and Trash only if ticked, and never for the farm calendar), read-only,
+  folder choice (nothing until they tick one; drafts, spam and trash only
+  if ticked, and never for the farm calendar), read-only,
   back to the read-back date. A first copy that resumes, with progress,
   dates covered, last sync and errors; then a sync every 15 minutes, with
-  emails moved out of the ticked folders dropped and moved in copied.
+  emails moved out of the ticked folders dropped and moved in copied;
+  emails deleted in the mailbox are kept, marked (an archive).
   Search (whole words, from: and to:), conversations, and attachments to
   download (files over 20 MB keep their name only). Only that Owner can
   read it, through one access layer: everyone else, admins, other Owners,
   accountants, server admins and app keys included, gets "not found", and
   ownership never moves. Encrypted in the database with a key of its own,
   wrapped with the server's key; docs/PRIVATE-MAIL.md says what that does
-  and doesn't protect against. Off, Disconnect and Delete my copy are
-  separate. Not yet: the AI's private-mail scope, and filing an attachment
+  and doesn't protect against. Off, Disconnect (keeps the history) and Delete imported history
+  are separate. Not yet: the AI's private-mail scope, and filing an attachment
   into shared data with a preview.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:

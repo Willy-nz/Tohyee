@@ -18795,9 +18795,10 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
 - **PM2 Only what she ticks.** **Choose folders** lists the Inbox and her
   labels, nested, then, for the private copy only, Sent, Drafts, Spam and
   Trash. She ticks **Farm**: the soil test results, her reply (also in
-  Sent) and a draft labelled Farm are copied. The board papers in
-  Directorships are never fetched, and nor is the spam. Ticking Spam as
-  well copies the spam at the next sync.
+  Sent) are copied. The board papers in Directorships are never fetched,
+  and nor are the spam or a draft labelled Farm: drafts, spam and trash
+  are left out unless ticked. Ticking Spam and Drafts as well copies them
+  at the next sync.
 - **PM3 The first copy.** Nine emails in Farm since 19 Sep, one from 1 Aug
   (before the read-back date, never copied). Gmail is busy partway: four
   are copied and kept, and My mail shows the error. The next sync copies
@@ -18815,16 +18816,21 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
   Quote 4471.pdf (kept, downloads as the same file), a meeting invite (a
   linked item: name only, "open it in Outlook") and Plans.zip at 30 MB
   (too big: name and size only). The mailbox shows "3, 2 not kept".
-- **PM6 Moves, unticking and deleted folders**, as the farm calendar's
-  FC27-FC29. Unticking Directorships deletes at once what was copied only
-  from it. The draft moved out of Farm is gone at the next sync; the board
-  papers labelled Farm as well are copied then. When the Farm label is
-  deleted in Gmail, everything copied from it goes and Farm shows "not
-  found in the mailbox".
+- **PM6 Moves, unticking and deleting in the mailbox.** Unticking
+  Directorships deletes at once what was copied only from it (as FC27).
+  Her reply taken out of Farm (left only in Sent) is removed at the next
+  sync; the board papers labelled Farm as well are copied then (as FC28).
+  When she deletes the soil results in Gmail for good, and puts the lime
+  recommendation in Trash, the next sync keeps both, shown "Deleted in
+  Gmail; kept here", and the mailbox shows "Deleted in the mailbox, kept
+  here: 2". Taking the lime recommendation out of Trash clears the mark.
+  In Outlook, an email moved to Deleted Items is kept and marked; one moved
+  to Board papers (not ticked) is removed. Unticking Farm still deletes
+  everything from it, marked or not.
 - **PM7 Nobody else.** Ana (an Owner), Mere, Sam, Rob, Sid and someone
   outside the organisation each get "not found" from every route: the
   list, connecting her mailbox's folders, the switch, disconnecting, Sync
-  now, Delete my copy, searching, a conversation and an attachment's
+  now, Delete imported history, searching, a conversation and an attachment's
   address. Ana's own My mail is empty. An AI key or a farm app key acting
   as Jess is refused too. Nothing readable is in the database: no
   subject, address, word, attachment name or file. The audit trail says
@@ -18849,13 +18855,15 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
 - **PM11 Downloading.** Soil results P12.pdf downloads as the same file.
   It's always a download, never opened inside Tohyee.
 - **PM12 Off and disconnect.** With the switch off, nothing more is copied
-  and what was copied stays. Disconnect deletes the sign-in and folder
-  choice (and the farm calendar's items from it); the copy stays,
+  and what was copied stays. Disconnect stops syncing: it deletes the
+  sign-in and folder choice (and the farm calendar's items from it) and
+  keeps the imported history,
   "Disconnected: not copying". Connecting the same mailbox again carries on
   the same copy: only the email that arrived since is fetched.
-- **PM13 Delete my copy** deletes every copied email, attachment and search
-  token at once, after a warning that backups made before keep it until
-  they age out (about 12 months). The mailbox and its connection carry on.
+- **PM13 Delete imported history** deletes every copied email, attachment
+  and search token at once, after a warning that backups made before keep
+  it, encrypted, until they age out (about 12 months). The mailbox and its
+  connection carry on.
 - **PM14 One connection with the farm calendar.** With Farming on, Jess
   connected the mailbox on the farm calendar, reading Farm. My mail shows
   the same mailbox and Farm. She turns the copy on and ticks Sent too: the

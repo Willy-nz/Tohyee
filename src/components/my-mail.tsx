@@ -45,7 +45,10 @@ export function MyMailHome({ organisationId, isOwner }: { organisationId: string
       </Card>
     );
   }
-  const copies = [...(mail.data?.mailboxes ?? []).flatMap((mailbox) => (mailbox.copy ? [{ id: mailbox.copy.id, email: mailbox.email }] : [])), ...(mail.data?.detached ?? []).map((copy) => ({ id: copy.id, email: copy.email }))];
+  const copies = [
+    ...(mail.data?.mailboxes ?? []).flatMap((mailbox) => (mailbox.copy ? [{ id: mailbox.copy.id, email: mailbox.email, provider: mailbox.provider }] : [])),
+    ...(mail.data?.detached ?? []).map((copy) => ({ id: copy.id, email: copy.email, provider: copy.provider })),
+  ];
   return (
     <>
       {connected ? <Notice tone="success">Connected {connected}. Tick the folders to copy: nothing is copied until you do.</Notice> : null}
@@ -94,6 +97,12 @@ function CopyFacts({ copy, historyFrom }: { copy: CopyState; historyFrom: string
           {copy.attachmentsNotKept ? `, ${copy.attachmentsNotKept} not kept (too big or linked)` : ""}
         </dd>
       </div>
+      {copy.deletedAtSource ? (
+        <div>
+          <dt>Deleted in the mailbox, kept here</dt>
+          <dd>{copy.deletedAtSource.toLocaleString("en-NZ")}</dd>
+        </div>
+      ) : null}
     </dl>
   );
 }
@@ -145,12 +154,12 @@ function Mailboxes({
   };
   const sync = (copyId: string) =>
     act(async () => {
-      const result = await api<{ copied: number; removed: number }>(`/api/my-mail/copies/${copyId}/sync`, { method: "POST", body: { organisationId } });
-      setMessage({ tone: "success", text: `Synced: ${result.copied} copied${result.removed ? `, ${result.removed} removed` : ""}.` });
+      const result = await api<{ copied: number; removed: number; deletedInMailbox: number }>(`/api/my-mail/copies/${copyId}/sync`, { method: "POST", body: { organisationId } });
+      setMessage({ tone: "success", text: `Synced: ${result.copied} copied${result.removed ? `, ${result.removed} moved out and removed` : ""}${result.deletedInMailbox ? `, ${result.deletedInMailbox} deleted in the mailbox (kept here)` : ""}.` });
     });
   const deleteCopy = async (copyId: string, email: string) => {
-    if (!(await confirm(`Delete your copy of ${email}? Every copied email, attachment and search entry is deleted now. Your mailbox isn't touched. Backups made before now keep it until they're removed (up to 12 months).`, { confirmLabel: "Delete my copy", danger: true }))) return;
-    void act(() => api(`/api/my-mail/copies/${copyId}?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" }), "Your copy was deleted.");
+    if (!(await confirm(`Delete the imported history of ${email}? Every copied email, attachment and search entry is deleted from Tohyee now. Your mailbox isn't touched. Backups made before now still hold it, encrypted, until they're removed (up to about 12 months).`, { confirmLabel: "Delete imported history", danger: true }))) return;
+    void act(() => api(`/api/my-mail/copies/${copyId}?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" }), "The imported history was deleted.");
   };
   return (
     <Card
@@ -249,7 +258,7 @@ function Mailboxes({
               disabled={busy}
               onClick={async () => {
                 const calendar = mailbox.farmCalendar ? " Your farm calendar stops reading it too, and what it read is deleted." : "";
-                const kept = mailbox.copy ? " Your private copy is kept, not copying, until you delete it." : "";
+                const kept = mailbox.copy ? " Your imported history is kept, not copying, until you delete it." : "";
                 if (!(await confirm(`Disconnect ${mailbox.email}? Tohyee stops reading it.${calendar}${kept} The mailbox itself isn't touched.`, { confirmLabel: "Disconnect", danger: true }))) return;
                 void act(() => api(`/api/my-mail/mailboxes/${mailbox.id}?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" }), "Disconnected.");
               }}
@@ -258,7 +267,7 @@ function Mailboxes({
             </Button>
             {mailbox.copy ? (
               <Button size="small" variant="secondary" disabled={busy} onClick={() => void deleteCopy(mailbox.copy!.id, mailbox.email)}>
-                Delete my copy
+                Delete imported history
               </Button>
             ) : null}
           </div>
@@ -271,10 +280,10 @@ function Mailboxes({
             <Badge tone="neutral">Disconnected: not copying</Badge>
           </div>
           <CopyFacts copy={copy} historyFrom={null} />
-          <p className={ui.muted}>Connect this mailbox again to carry on copying into the same copy, or delete it.</p>
+          <p className={ui.muted}>Connect this mailbox again to carry on copying into the same history, or delete it.</p>
           <div className={ui.rowButtons}>
             <Button size="small" variant="secondary" disabled={busy} onClick={() => void deleteCopy(copy.id, copy.email)}>
-              Delete my copy
+              Delete imported history
             </Button>
           </div>
         </section>
@@ -293,6 +302,10 @@ function Mailboxes({
           Connect
         </Button>
       </form>
+      <p className={ui.muted}>
+        Your copy is an archive: an email you delete in Gmail or Outlook stays here, marked &quot;deleted in the mailbox&quot;. Untick a folder, or move an email out of the ticked
+        folders, and it&apos;s taken out of your copy. Disconnecting stops copying and keeps the history; deleting it is a separate step.
+      </p>
       <p className={ui.muted}>
         It&apos;s the same connection as the farm calendar&apos;s (one per mailbox, with one choice of folders), using the Google or Microsoft app an admin set up under Settings › Email.
       </p>
@@ -403,7 +416,7 @@ function FolderPicker({ organisationId, mailbox, onClose, onSaved }: { organisat
 }
 
 /** PM9-PM11: search the copies, read a conversation, download its attachments. */
-function Reader({ organisationId, copies }: { organisationId: string; copies: Array<{ id: string; email: string }> }) {
+function Reader({ organisationId, copies }: { organisationId: string; copies: Array<{ id: string; email: string; provider: "google" | "microsoft" }> }) {
   const [query, setQuery] = useState("");
   const [copyId, setCopyId] = useState("");
   const [asked, setAsked] = useState<{ query: string; copyId: string }>({ query: "", copyId: "" });
@@ -506,6 +519,7 @@ function Reader({ organisationId, copies }: { organisationId: string; copies: Ar
                         {hit.attachmentCount ? ` · ${hit.attachmentCount} attachment${hit.attachmentCount === 1 ? "" : "s"}` : ""}
                       </span>
                       <span className={styles.hitSnippet}>{hit.snippet}</span>
+                      {hit.deletedInMailbox ? <span className={styles.meta}>Deleted in {copies.find((copy) => copy.id === hit.copyId)?.provider === "microsoft" ? "Outlook" : "Gmail"}; kept here</span> : null}
                     </button>
                   </li>
                 ))}
@@ -548,6 +562,11 @@ function Thread({ organisationId, messageId, headingRef, onClose }: { organisati
             {message.cc.length ? <span className={styles.meta}>Cc {message.cc.map(person).join(", ")}</span> : null}
             {message.bcc.length ? <span className={styles.meta}>Bcc {message.bcc.map(person).join(", ")}</span> : null}
           </div>
+          {message.deletedInMailbox ? (
+            <span>
+              <Badge tone="neutral">Deleted in the mailbox; kept in your copy</Badge>
+            </span>
+          ) : null}
           <pre className={styles.body}>{message.text || "(no text)"}</pre>
           {message.attachments.length ? (
             <ul className={styles.files} aria-label="Attachments">

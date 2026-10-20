@@ -14,5 +14,5 @@ export const POST = route<Context>(async (request, context) => {
     id: await copyForSync(tx, await MailOwner.of(tx), copyId),
   }));
   const result = await syncPrivateCopy(organisation, id);
-  return json({ copied: result.copied, removed: result.removed });
+  return json({ copied: result.copied, removed: result.removed, deletedInMailbox: result.deletedInMailbox ?? 0 });
 });

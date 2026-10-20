@@ -69,6 +69,7 @@ type CopyRow = {
   newest: string | null;
   attachments: number;
   not_kept: number;
+  deleted_at_source: number;
 };
 
 const COPY_COLUMNS = `c.id::text, c.account_id::text, c.provider, c.mailbox_email, c.copying, c.paused, c.last_sync_at::text, c.last_success_at::text,
@@ -77,7 +78,8 @@ const COPY_COLUMNS = `c.id::text, c.account_id::text, c.provider, c.mailbox_emai
        (select min(m.sent_at)::text from private_mail_messages m where m.copy_id = c.id) as oldest,
        (select max(m.sent_at)::text from private_mail_messages m where m.copy_id = c.id) as newest,
        (select count(*)::int from private_mail_attachments a where a.copy_id = c.id) as attachments,
-       (select count(*)::int from private_mail_attachments a where a.copy_id = c.id and a.content is null) as not_kept`;
+       (select count(*)::int from private_mail_attachments a where a.copy_id = c.id and a.content is null) as not_kept,
+       (select count(*)::int from private_mail_messages m where m.copy_id = c.id and m.source_deleted_at is not null) as deleted_at_source`;
 
 function toCopy(row: CopyRow): CopyState {
   return {
@@ -94,6 +96,7 @@ function toCopy(row: CopyRow): CopyState {
     newest: iso(row.newest),
     attachments: row.attachments,
     attachmentsNotKept: row.not_kept,
+    deletedAtSource: row.deleted_at_source,
   };
 }
 
@@ -181,7 +184,7 @@ export async function savePrivateMailbox(
  * PM1, PM12: the switch "Keep a private copy of these emails for me and my
  * AI". On makes the copy (with its own key) or carries on the one this
  * mailbox had before it was disconnected; off stops copying and keeps what
- * was copied, until "Delete my copy".
+ * was copied, until "Delete imported history".
  */
 export async function setCopying(tx: OrgTx, owner: MailOwner, accountInput: unknown, on: unknown): Promise<void> {
   const accountId = await ownAccount(tx, owner, accountInput);
@@ -218,7 +221,7 @@ export async function setCopying(tx: OrgTx, owner: MailOwner, accountInput: unkn
 }
 
 /**
- * PM13: "Delete my copy": every copied email, attachment and search token
+ * PM13: "Delete imported history": every copied email, attachment and search token
  * goes now, whether or not the mailbox is still connected. The mailbox
  * isn't touched, and the connection (and the farm calendar) carry on.
  */
@@ -266,7 +269,7 @@ export async function copyForSync(tx: OrgTx, owner: MailOwner, copyInput: unknow
 
 // Reading ------------------------------------------------------------------------------------------
 
-type MessageRow = { id: string; copy_id: string; external_id: string; sent_at: string; envelope: Buffer; attachment_count: number; data_key_ciphertext: string };
+type MessageRow = { id: string; copy_id: string; external_id: string; sent_at: string; envelope: Buffer; attachment_count: number; source_deleted: boolean; data_key_ciphertext: string };
 
 function keysFor(cache: Map<string, CopyKeys>, row: { copy_id: string; data_key_ciphertext: string }): CopyKeys {
   let keys = cache.get(row.copy_id);
@@ -320,7 +323,7 @@ export async function searchMyMail(
   }
   params.push(limit + 1);
   const rows = await tx.query<MessageRow>(
-    `select m.id::text, m.copy_id::text, m.external_id, m.sent_at::text, m.envelope, m.attachment_count, c.data_key_ciphertext
+    `select m.id::text, m.copy_id::text, m.external_id, m.sent_at::text, m.envelope, m.attachment_count, m.source_deleted_at is not null as source_deleted, c.data_key_ciphertext
        from private_mail_messages m join private_mail_copies c on c.id = m.copy_id
       where ${where.join(" and ")}
       order by m.sent_at desc, m.id desc limit $${params.length}`,
@@ -330,7 +333,7 @@ export async function searchMyMail(
   const page = rows.rows.slice(0, limit);
   const hits = page.map((row) => {
     const envelope = openJson<Envelope>(keysFor(cache, row), "envelope", row.external_id, row.envelope);
-    return { id: row.id, copyId: row.copy_id, sentAt: iso(row.sent_at), from: envelope.from, subject: envelope.subject, snippet: envelope.snippet, attachmentCount: row.attachment_count };
+    return { id: row.id, copyId: row.copy_id, sentAt: iso(row.sent_at), from: envelope.from, subject: envelope.subject, snippet: envelope.snippet, attachmentCount: row.attachment_count, deletedInMailbox: row.source_deleted };
   });
   const last = page[page.length - 1];
   return { hits, more: rows.rows.length > limit && last ? `${last.sent_at}|${last.id}` : null };
@@ -346,8 +349,8 @@ export async function readMyThread(tx: OrgTx, owner: MailOwner, messageInput: un
   );
   if (!found.rows[0]) throw notFound();
   const copy = await ownCopy(tx, owner, found.rows[0].copy_id);
-  const rows = await tx.query<{ id: string; external_id: string; sent_at: string; envelope: Buffer; body: Buffer }>(
-    `select id::text, external_id, sent_at::text, envelope, body from private_mail_messages
+  const rows = await tx.query<{ id: string; external_id: string; sent_at: string; envelope: Buffer; body: Buffer; source_deleted: boolean }>(
+    `select id::text, external_id, sent_at::text, envelope, body, source_deleted_at is not null as source_deleted from private_mail_messages
       where copy_id = $1 and owner_user_id = $2 and thread_key = $3 order by sent_at, private_mail_messages.id limit 200`,
     [copy.id, owner.userId, found.rows[0].thread_key],
   );
@@ -376,6 +379,7 @@ export async function readMyThread(tx: OrgTx, owner: MailOwner, messageInput: un
       text: open(copy.keys, "body", row.external_id, row.body).toString("utf8"),
       webLink: envelope.webLink,
       attachments: files,
+      deletedInMailbox: row.source_deleted,
     };
   });
   return { copyId: copy.id, mailbox: copy.email, messages };
