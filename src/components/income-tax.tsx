@@ -531,7 +531,7 @@ function AllocationForm({
   );
 }
 
-function PaymentRow({ organisationId, payment, instalmentCount, documents, onSaved }: { organisationId: string; payment: TaxPayment; instalmentCount: number; documents: IrdDocument[]; onSaved: () => void }) {
+function PaymentRow({ organisationId, payment, instalmentCount, documents, onSaved, onRemove }: { organisationId: string; payment: TaxPayment; instalmentCount: number; documents: IrdDocument[]; onSaved: () => void; onRemove: () => void }) {
   const [editing, setEditing] = useState<"allocate" | "effective" | { replace: TaxAllocation } | { remove: TaxAllocation } | null>(null);
   const [effective, setEffective] = useState(payment.irdEffectiveOn ?? "");
   const [reason, setReason] = useState("");
@@ -549,108 +549,126 @@ function PaymentRow({ organisationId, payment, instalmentCount, documents, onSav
       setStatus({ tone: "error", text: errorMessage(error) });
     }
   }
+  const label = `the ${formatMoney(payment.amount)} payment on ${formatDate(payment.paidOn)}`;
   return (
-    <li>
-      <div>
-        <strong>
-          <Money value={payment.amount} />
-        </strong>{" "}
-        · left the bank {formatDate(payment.paidOn)} · {payment.irdEffectiveOn ? `IRD effective ${formatDate(payment.irdEffectiveOn)}` : <span className={ui.muted}>no IRD effective date yet</span>}
-        {payment.note ? <span className={ui.muted}> · {payment.note}</span> : null}{" "}
-        {payment.reversed ? <Badge tone="red">Reversed in the books: not counted</Badge> : payment.awaiting !== "0.00" ? <Badge tone="amber">{`Awaiting reconciliation ${formatMoney(payment.awaiting)}`}</Badge> : null}
-      </div>
-      {payment.allocations.length > 0 ? (
-        <ul>
+    <>
+      <tr>
+        <td data-label="Payment">
+          <strong>
+            <Money value={payment.amount} />
+          </strong>
+          <div className={ui.muted}>Left the bank {formatDate(payment.paidOn)}</div>
+          <div className={ui.muted}>{payment.irdEffectiveOn ? `IRD effective ${formatDate(payment.irdEffectiveOn)}` : "No IRD effective date yet"}</div>
+          {payment.note ? <div className={ui.muted}>{payment.note}</div> : null}
+        </td>
+        <td data-label="Where it goes">
+          {payment.reversed ? <Badge tone="red">Reversed in the books: not counted</Badge> : null}
           {payment.allocations.map((allocation) => (
-            <li key={allocation.id}>
+            <div key={allocation.id}>
               {APPLIES_TO_LABELS[allocation.appliesTo]} · <Money value={allocation.amount} /> <Badge tone={STATUS_TONES[allocation.status]}>{ALLOCATION_STATUS_LABELS[allocation.status]}</Badge>
-              <span className={ui.muted}>
-                {" "}
-                · {allocation.basis}
+              <div className={ui.muted}>
+                {allocation.basis}
                 {allocation.irdDocumentName ? ` · ${allocation.irdDocumentName}` : ""}
-              </span>{" "}
+              </div>
               {!payment.reversed ? (
-                <>
-                  <button type="button" className={ui.linkButton} onClick={() => setEditing({ replace: allocation })}>
+                <div>
+                  <button type="button" className={ui.linkButton} onClick={() => setEditing({ replace: allocation })} aria-label={`Change where ${formatMoney(allocation.amount)} of ${label} goes`}>
                     Change
                   </button>{" "}
-                  <button type="button" className={ui.linkButton} onClick={() => setEditing({ remove: allocation })}>
+                  <button type="button" className={ui.linkButton} onClick={() => setEditing({ remove: allocation })} aria-label={`Take off the ${formatMoney(allocation.amount)} allocation of ${label}`}>
                     Take off
                   </button>
-                </>
+                </div>
               ) : null}
-            </li>
+            </div>
           ))}
-        </ul>
-      ) : null}
-      {payment.replacedAllocations.length > 0 ? (
-        <details>
-          <summary>Earlier allocations ({payment.replacedAllocations.length})</summary>
-          <ul>
-            {payment.replacedAllocations.map((allocation) => (
-              <li key={allocation.id} className={ui.muted}>
-                {APPLIES_TO_LABELS[allocation.appliesTo]} · {formatMoney(allocation.amount)} · {ALLOCATION_STATUS_LABELS[allocation.status]} · changed {allocation.replaced ? formatDate(allocation.replaced.at.slice(0, 10)) : ""}: {allocation.replaced?.reason}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-      {editing === null && !payment.reversed ? (
-        <div>
-          {payment.awaiting !== "0.00" ? (
-            <button type="button" className={ui.linkButton} onClick={() => setEditing("allocate")}>
-              Allocate
+          {!payment.reversed && payment.awaiting !== "0.00" ? <Badge tone="amber">{`Awaiting reconciliation: ${formatMoney(payment.awaiting)}`}</Badge> : null}
+          {payment.replacedAllocations.length > 0 ? (
+            <details>
+              <summary>Earlier allocations ({payment.replacedAllocations.length})</summary>
+              <ul>
+                {payment.replacedAllocations.map((allocation) => (
+                  <li key={allocation.id} className={ui.muted}>
+                    {APPLIES_TO_LABELS[allocation.appliesTo]} · {formatMoney(allocation.amount)} · {ALLOCATION_STATUS_LABELS[allocation.status]}
+                    {allocation.replaced ? ` · changed ${formatDate(allocation.replaced.at.slice(0, 10))}: ${allocation.replaced.reason}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </td>
+        <td data-label="Actions">
+          {!payment.reversed && payment.awaiting !== "0.00" ? (
+            <div>
+              <button type="button" className={ui.linkButton} onClick={() => setEditing("allocate")} aria-label={`Allocate ${label}`}>
+                Allocate
+              </button>
+            </div>
+          ) : null}
+          {!payment.reversed ? (
+            <div>
+              <button type="button" className={ui.linkButton} onClick={() => setEditing("effective")} aria-label={`IRD effective date for ${label}`}>
+                {payment.irdEffectiveOn ? "Change IRD date" : "Add IRD date"}
+              </button>
+            </div>
+          ) : null}
+          <div>
+            <button type="button" className={ui.linkButton} onClick={onRemove} aria-label={`Remove ${label}`}>
+              Remove
             </button>
-          ) : null}{" "}
-          <button type="button" className={ui.linkButton} onClick={() => setEditing("effective")}>
-            {payment.irdEffectiveOn ? "Change IRD effective date" : "Add IRD effective date"}
-          </button>
-        </div>
+          </div>
+        </td>
+      </tr>
+      {editing !== null || status ? (
+        <tr>
+          <td colSpan={3}>
+            {editing === "allocate" ? <AllocationForm organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={documents} replacing={null} onSaved={done} onCancel={() => setEditing(null)} /> : null}
+            {editing !== null && typeof editing === "object" && "replace" in editing ? (
+              <AllocationForm organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={documents} replacing={editing.replace} onSaved={done} onCancel={() => setEditing(null)} />
+            ) : null}
+            {editing !== null && typeof editing === "object" && "remove" in editing ? (
+              <form
+                className={ui.inlineForm}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run(() => api(`/api/income-tax/allocations/${editing.remove.id}/remove`, { method: "POST", body: { organisationId, reason } }));
+                }}
+              >
+                <Field label="Reason for taking it off">
+                  <input value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} required />
+                </Field>
+                <Button type="submit" variant="secondary">
+                  Take off
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+              </form>
+            ) : null}
+            {editing === "effective" ? (
+              <form
+                className={ui.inlineForm}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run(() => api(`/api/income-tax/payments/${payment.id}`, { method: "PATCH", body: { organisationId, irdEffectiveOn: effective } }));
+                }}
+              >
+                <Field label="IRD effective date" hint="From IRD's statement. Leave blank to use the bank date.">
+                  <DateInput value={effective} onChange={(event) => setEffective(event.target.value)} />
+                </Field>
+                <Button type="submit" variant="secondary">
+                  Save date
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+              </form>
+            ) : null}
+            {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+          </td>
+        </tr>
       ) : null}
-      {editing === "allocate" ? <AllocationForm organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={documents} replacing={null} onSaved={done} onCancel={() => setEditing(null)} /> : null}
-      {editing !== null && typeof editing === "object" && "replace" in editing ? (
-        <AllocationForm organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={documents} replacing={editing.replace} onSaved={done} onCancel={() => setEditing(null)} />
-      ) : null}
-      {editing !== null && typeof editing === "object" && "remove" in editing ? (
-        <form
-          className={ui.inlineForm}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(() => api(`/api/income-tax/allocations/${editing.remove.id}/remove`, { method: "POST", body: { organisationId, reason } }));
-          }}
-        >
-          <Field label="Reason for taking it off">
-            <input value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} required />
-          </Field>
-          <Button type="submit" variant="secondary">
-            Take off
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
-            Cancel
-          </Button>
-        </form>
-      ) : null}
-      {editing === "effective" ? (
-        <form
-          className={ui.inlineForm}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(() => api(`/api/income-tax/payments/${payment.id}`, { method: "PATCH", body: { organisationId, irdEffectiveOn: effective } }));
-          }}
-        >
-          <Field label="IRD effective date" hint="From IRD's statement. Leave blank to use the bank date.">
-            <DateInput value={effective} onChange={(event) => setEffective(event.target.value)} />
-          </Field>
-          <Button type="submit" variant="secondary">
-            Save date
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
-            Cancel
-          </Button>
-        </form>
-      ) : null}
-      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
-    </li>
+    </>
   );
 }
 
@@ -704,23 +722,31 @@ function Payments({ organisationId, incomeYear, payments, total, instalmentCount
       {payments.length === 0 ? (
         <Empty>None typed yet.</Empty>
       ) : (
-        <ul>
-          {payments.map((payment) => (
-            <Fragment key={payment.id}>
-              <PaymentRow organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={docs} onSaved={onSaved} />
-              <li className={ui.muted}>
-                <button type="button" className={ui.linkButton} onClick={() => void remove(payment.id)}>
-                  Remove the {formatMoney(payment.amount)} payment
-                </button>
-              </li>
-            </Fragment>
-          ))}
-          <li>
-            <strong>
-              Total <Money value={total} />
-            </strong>
-          </li>
-        </ul>
+        <div className={ui.tableWrap}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <thead>
+              <tr>
+                <th>Payment</th>
+                <th>Where it goes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((payment) => (
+                <PaymentRow key={payment.id} organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={docs} onSaved={onSaved} onRemove={() => void remove(payment.id)} />
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3}>
+                  <strong>
+                    Total <Money value={total} />
+                  </strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       )}
       <form className={ui.inlineForm} onSubmit={add}>
         <Field label="Left the bank on">
