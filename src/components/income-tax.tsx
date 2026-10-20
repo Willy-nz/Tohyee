@@ -7,13 +7,14 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, personName } from "@/lib/format";
-import { EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_LABELS, TREATMENT_LABELS, type TaxpayerType, type Treatment } from "@/lib/tax/income/rules";
+import { ALLOCATION_STATUS_LABELS, ALLOCATION_STATUSES, type AllocationStatus, EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_LABELS, TREATMENT_LABELS, type TaxpayerType, type Treatment } from "@/lib/tax/income/rules";
 import type { TaxAsset } from "@/lib/tax/income/assets";
 import type { Ir10, Ir10Account } from "@/lib/tax/income/ir10";
 import type { Ica } from "@/lib/tax/income/ica";
 import { IR3_BOX_LABELS, IR3_BOXES } from "@/lib/tax/income/ir3";
 import { IR4_BOX_LABELS, IR4_BOXES } from "@/lib/tax/income/ir4";
 import type { BookPayments as BookPaymentsData } from "@/lib/tax/income/book-payments";
+import { APPLIES_TO, APPLIES_TO_LABELS, type AppliesToKey, type TaxAllocation } from "@/lib/tax/income/allocation-kinds";
 import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
 import { postForm } from "@/components/rd";
 import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
@@ -342,7 +343,7 @@ function YearFigures({ organisationId, incomeYear, type, years, endMonth, onSave
       {report && report.supported ? (
         <>
           <YearForm key={`${year}-${report.typed.version}`} organisationId={organisationId} typed={report.typed} type={type} lastYearExcess={report.lastYearExcessImputation} onSaved={() => { loaded.reload(); onSaved(); }} />
-          <Payments key={`p-${year}`} organisationId={organisationId} incomeYear={year} payments={report.payments} total={report.paidTotal} onSaved={() => { loaded.reload(); onSaved(); }} />
+          <Payments key={`p-${year}`} organisationId={organisationId} incomeYear={year} payments={report.payments} total={report.paidTotal} instalmentCount={report.provisional.kind === "schedule" ? report.provisional.instalments.length : 3} onSaved={() => { loaded.reload(); onSaved(); }} />
         </>
       ) : loaded.error ? (
         <Notice tone="error">{loaded.error}</Notice>
@@ -429,15 +430,255 @@ function YearForm({ organisationId, typed, type, lastYearExcess, onSaved }: { or
   );
 }
 
-function Payments({ organisationId, incomeYear, payments, total, onSaved }: { organisationId: string; incomeYear: number; payments: TaxPayment[]; total: string; onSaved: () => void }) {
-  const [form, setForm] = useState({ paidOn: "", amount: "", note: "" });
+const STATUS_TONES: Record<AllocationStatus, "green" | "blue" | "amber"> = { confirmed: "green", evidenced: "blue", forecast: "amber" };
+
+function appliesToOptions(instalmentCount: number): AppliesToKey[] {
+  return [...APPLIES_TO.filter((key) => key === "end_of_year" || Number(key.slice("instalment_".length)) <= instalmentCount)];
+}
+
+/** Where a payment goes and how sure that is (ITX6A-ITX6H). `replacing` reallocates an existing allocation. */
+function AllocationForm({
+  organisationId,
+  payment,
+  instalmentCount,
+  documents,
+  replacing,
+  onSaved,
+  onCancel,
+}: {
+  organisationId: string;
+  payment: TaxPayment;
+  instalmentCount: number;
+  documents: IrdDocument[];
+  replacing: TaxAllocation | null;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    appliesTo: (replacing?.appliesTo ?? "instalment_1") as AppliesToKey,
+    amount: replacing?.amount ?? payment.awaiting,
+    status: (replacing?.status ?? "evidenced") as AllocationStatus,
+    basis: "",
+    irdDocumentId: "",
+    reason: "",
+  });
+  const [key] = useState(() => newIdempotencyKey("tax-alloc"));
+  const [status, setStatus] = useState<Status>(null);
+  const set = <K extends keyof typeof form>(name: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [name]: value }));
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const body = { organisationId, idempotencyKey: key, appliesTo: form.appliesTo, amount: form.amount, status: form.status, basis: form.basis, irdDocumentId: form.status === "confirmed" ? form.irdDocumentId : null };
+    try {
+      if (replacing) await api(`/api/income-tax/allocations/${replacing.id}/replace`, { method: "POST", body: { ...body, reason: form.reason } });
+      else await api(`/api/income-tax/payments/${payment.id}/allocations`, { method: "POST", body });
+      onSaved();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  const live = documents.filter((document) => !document.removed);
+  return (
+    <form className={ui.inlineForm} onSubmit={save} aria-label={replacing ? "Change where this goes" : "Allocate this payment"}>
+      <Field label="Towards">
+        <select value={form.appliesTo} onChange={(event) => set("appliesTo", event.target.value as AppliesToKey)}>
+          {appliesToOptions(instalmentCount).map((value) => (
+            <option key={value} value={value}>
+              {APPLIES_TO_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Amount">
+        <input inputMode="decimal" value={form.amount} onChange={(event) => set("amount", event.target.value)} required />
+      </Field>
+      <Field label="How sure" hint="Only IRD's own record is confirmed. A forecast assumption is shown but not counted as paid.">
+        <select value={form.status} onChange={(event) => set("status", event.target.value as AllocationStatus)}>
+          {ALLOCATION_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {ALLOCATION_STATUS_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {form.status === "confirmed" ? (
+        <Field label="IRD document" hint={live.length === 0 ? "Add IRD's statement or letter under IRD documents first." : undefined}>
+          <select value={form.irdDocumentId} onChange={(event) => set("irdDocumentId", event.target.value)} required>
+            <option value="">Choose…</option>
+            {live.map((document) => (
+              <option key={document.id} value={document.id}>
+                {document.fileName}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      <Field label={form.status === "forecast" ? "Assumption" : "Evidence"} hint={form.status === "forecast" ? "Why you expect it to go there." : "What shows it goes there, for example the reference it was paid with."}>
+        <input value={form.basis} maxLength={300} onChange={(event) => set("basis", event.target.value)} required />
+      </Field>
+      {replacing ? (
+        <Field label="Reason for the change">
+          <input value={form.reason} maxLength={300} onChange={(event) => set("reason", event.target.value)} required />
+        </Field>
+      ) : null}
+      <Button type="submit" variant="secondary">
+        {replacing ? "Change" : "Allocate"}
+      </Button>
+      <Button type="button" variant="secondary" onClick={onCancel}>
+        Cancel
+      </Button>
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+    </form>
+  );
+}
+
+function PaymentRow({ organisationId, payment, instalmentCount, documents, onSaved }: { organisationId: string; payment: TaxPayment; instalmentCount: number; documents: IrdDocument[]; onSaved: () => void }) {
+  const [editing, setEditing] = useState<"allocate" | "effective" | { replace: TaxAllocation } | { remove: TaxAllocation } | null>(null);
+  const [effective, setEffective] = useState(payment.irdEffectiveOn ?? "");
+  const [reason, setReason] = useState("");
+  const [status, setStatus] = useState<Status>(null);
+  const done = () => {
+    setEditing(null);
+    setStatus(null);
+    onSaved();
+  };
+  async function run(work: () => Promise<unknown>) {
+    try {
+      await work();
+      done();
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+  return (
+    <li>
+      <div>
+        <strong>
+          <Money value={payment.amount} />
+        </strong>{" "}
+        · left the bank {formatDate(payment.paidOn)} · {payment.irdEffectiveOn ? `IRD effective ${formatDate(payment.irdEffectiveOn)}` : <span className={ui.muted}>no IRD effective date yet</span>}
+        {payment.note ? <span className={ui.muted}> · {payment.note}</span> : null}{" "}
+        {payment.reversed ? <Badge tone="red">Reversed in the books: not counted</Badge> : payment.awaiting !== "0.00" ? <Badge tone="amber">{`Awaiting reconciliation ${formatMoney(payment.awaiting)}`}</Badge> : null}
+      </div>
+      {payment.allocations.length > 0 ? (
+        <ul>
+          {payment.allocations.map((allocation) => (
+            <li key={allocation.id}>
+              {APPLIES_TO_LABELS[allocation.appliesTo]} · <Money value={allocation.amount} /> <Badge tone={STATUS_TONES[allocation.status]}>{ALLOCATION_STATUS_LABELS[allocation.status]}</Badge>
+              <span className={ui.muted}>
+                {" "}
+                · {allocation.basis}
+                {allocation.irdDocumentName ? ` · ${allocation.irdDocumentName}` : ""}
+              </span>{" "}
+              {!payment.reversed ? (
+                <>
+                  <button type="button" className={ui.linkButton} onClick={() => setEditing({ replace: allocation })}>
+                    Change
+                  </button>{" "}
+                  <button type="button" className={ui.linkButton} onClick={() => setEditing({ remove: allocation })}>
+                    Take off
+                  </button>
+                </>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {payment.replacedAllocations.length > 0 ? (
+        <details>
+          <summary>Earlier allocations ({payment.replacedAllocations.length})</summary>
+          <ul>
+            {payment.replacedAllocations.map((allocation) => (
+              <li key={allocation.id} className={ui.muted}>
+                {APPLIES_TO_LABELS[allocation.appliesTo]} · {formatMoney(allocation.amount)} · {ALLOCATION_STATUS_LABELS[allocation.status]} · changed {allocation.replaced ? formatDate(allocation.replaced.at.slice(0, 10)) : ""}: {allocation.replaced?.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {editing === null && !payment.reversed ? (
+        <div>
+          {payment.awaiting !== "0.00" ? (
+            <button type="button" className={ui.linkButton} onClick={() => setEditing("allocate")}>
+              Allocate
+            </button>
+          ) : null}{" "}
+          <button type="button" className={ui.linkButton} onClick={() => setEditing("effective")}>
+            {payment.irdEffectiveOn ? "Change IRD effective date" : "Add IRD effective date"}
+          </button>
+        </div>
+      ) : null}
+      {editing === "allocate" ? <AllocationForm organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={documents} replacing={null} onSaved={done} onCancel={() => setEditing(null)} /> : null}
+      {editing !== null && typeof editing === "object" && "replace" in editing ? (
+        <AllocationForm organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={documents} replacing={editing.replace} onSaved={done} onCancel={() => setEditing(null)} />
+      ) : null}
+      {editing !== null && typeof editing === "object" && "remove" in editing ? (
+        <form
+          className={ui.inlineForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => api(`/api/income-tax/allocations/${editing.remove.id}/remove`, { method: "POST", body: { organisationId, reason } }));
+          }}
+        >
+          <Field label="Reason for taking it off">
+            <input value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} required />
+          </Field>
+          <Button type="submit" variant="secondary">
+            Take off
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+            Cancel
+          </Button>
+        </form>
+      ) : null}
+      {editing === "effective" ? (
+        <form
+          className={ui.inlineForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => api(`/api/income-tax/payments/${payment.id}`, { method: "PATCH", body: { organisationId, irdEffectiveOn: effective } }));
+          }}
+        >
+          <Field label="IRD effective date" hint="From IRD's statement. Leave blank to use the bank date.">
+            <DateInput value={effective} onChange={(event) => setEffective(event.target.value)} />
+          </Field>
+          <Button type="submit" variant="secondary">
+            Save date
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+            Cancel
+          </Button>
+        </form>
+      ) : null}
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+    </li>
+  );
+}
+
+function Payments({ organisationId, incomeYear, payments, total, instalmentCount, onSaved }: { organisationId: string; incomeYear: number; payments: TaxPayment[]; total: string; instalmentCount: number; onSaved: () => void }) {
+  const empty = { paidOn: "", irdEffectiveOn: "", amount: "", note: "", appliesTo: "" as AppliesToKey | "", status: "evidenced" as AllocationStatus, basis: "", irdDocumentId: "" };
+  const [form, setForm] = useState(empty);
   const [key, setKey] = useState(() => newIdempotencyKey("tax-pay"));
   const [status, setStatus] = useState<Status>(null);
+  const documents = useApiData<{ documents: IrdDocument[] }>("/api/income-tax/documents", { organisationId });
+  const docs = documents.data?.documents ?? [];
+  const set = <K extends keyof typeof form>(name: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [name]: value }));
   async function add(event: FormEvent) {
     event.preventDefault();
     try {
-      await api("/api/income-tax/payments", { method: "POST", body: { organisationId, idempotencyKey: key, incomeYear, ...form } });
-      setForm({ paidOn: "", amount: "", note: "" });
+      await api("/api/income-tax/payments", {
+        method: "POST",
+        body: {
+          organisationId,
+          idempotencyKey: key,
+          incomeYear,
+          paidOn: form.paidOn,
+          irdEffectiveOn: form.irdEffectiveOn,
+          amount: form.amount,
+          note: form.note,
+          allocation: form.appliesTo ? { appliesTo: form.appliesTo, status: form.status, basis: form.basis, irdDocumentId: form.status === "confirmed" ? form.irdDocumentId : null } : null,
+        },
+      });
+      setForm(empty);
       setKey(newIdempotencyKey("tax-pay"));
       setStatus(null);
       onSaved();
@@ -453,21 +694,26 @@ function Payments({ organisationId, incomeYear, payments, total, onSaved }: { or
       setStatus({ tone: "error", text: errorMessage(error) });
     }
   }
+  const live = docs.filter((document) => !document.removed);
   return (
     <>
       <h3>Payments to IRD towards the {incomeYear} income year</h3>
+      <p className={ui.muted}>
+        A payment counts against an instalment only once it&apos;s allocated: confirmed by IRD, or by you with the evidence. Until then it&apos;s awaiting reconciliation, whatever its date.
+      </p>
       {payments.length === 0 ? (
         <Empty>None typed yet.</Empty>
       ) : (
         <ul>
           {payments.map((payment) => (
-            <li key={payment.id}>
-              {formatDate(payment.paidOn)} · <Money value={payment.amount} />
-              {payment.note ? ` · ${payment.note}` : ""}{" "}
-              <button type="button" className={ui.linkButton} onClick={() => void remove(payment.id)}>
-                Remove
-              </button>
-            </li>
+            <Fragment key={payment.id}>
+              <PaymentRow organisationId={organisationId} payment={payment} instalmentCount={instalmentCount} documents={docs} onSaved={onSaved} />
+              <li className={ui.muted}>
+                <button type="button" className={ui.linkButton} onClick={() => void remove(payment.id)}>
+                  Remove the {formatMoney(payment.amount)} payment
+                </button>
+              </li>
+            </Fragment>
           ))}
           <li>
             <strong>
@@ -477,15 +723,56 @@ function Payments({ organisationId, incomeYear, payments, total, onSaved }: { or
         </ul>
       )}
       <form className={ui.inlineForm} onSubmit={add}>
-        <Field label="Paid on">
-          <DateInput value={form.paidOn} onChange={(event) => setForm((current) => ({ ...current, paidOn: event.target.value }))} required />
+        <Field label="Left the bank on">
+          <DateInput value={form.paidOn} onChange={(event) => set("paidOn", event.target.value)} required />
+        </Field>
+        <Field label="IRD effective date" hint="If you know it.">
+          <DateInput value={form.irdEffectiveOn} onChange={(event) => set("irdEffectiveOn", event.target.value)} />
         </Field>
         <Field label="Amount">
-          <input inputMode="decimal" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} required />
+          <input inputMode="decimal" value={form.amount} onChange={(event) => set("amount", event.target.value)} required />
         </Field>
         <Field label="Note">
-          <input value={form.note} maxLength={200} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} />
+          <input value={form.note} maxLength={200} onChange={(event) => set("note", event.target.value)} />
         </Field>
+        <Field label="Towards">
+          <select value={form.appliesTo} onChange={(event) => set("appliesTo", event.target.value as AppliesToKey | "")}>
+            <option value="">Not allocated yet</option>
+            {appliesToOptions(instalmentCount).map((value) => (
+              <option key={value} value={value}>
+                {APPLIES_TO_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {form.appliesTo ? (
+          <>
+            <Field label="How sure">
+              <select value={form.status} onChange={(event) => set("status", event.target.value as AllocationStatus)}>
+                {ALLOCATION_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {ALLOCATION_STATUS_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {form.status === "confirmed" ? (
+              <Field label="IRD document">
+                <select value={form.irdDocumentId} onChange={(event) => set("irdDocumentId", event.target.value)} required>
+                  <option value="">Choose…</option>
+                  {live.map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {document.fileName}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+            <Field label={form.status === "forecast" ? "Assumption" : "Evidence"}>
+              <input value={form.basis} maxLength={300} onChange={(event) => set("basis", event.target.value)} required />
+            </Field>
+          </>
+        ) : null}
         <Button type="submit" variant="secondary">
           Add payment
         </Button>
@@ -510,6 +797,8 @@ function Provisional({ report }: { report: Supported }) {
                 <th>Instalment</th>
                 <th>Due</th>
                 <th className={ui.num}>Amount</th>
+                <th className={ui.num}>Paid towards it</th>
+                <th className={ui.num}>Still needed by this date</th>
                 <th>How it&apos;s worked out</th>
               </tr>
             </thead>
@@ -525,7 +814,20 @@ function Provisional({ report }: { report: Supported }) {
                     <Money value={instalment.amount} /> {instalment.estimate ? <Badge tone="amber">Estimate</Badge> : null}
                     {instalment.catchUp !== "0.00" ? <div className={ui.muted}>Includes {formatMoney(instalment.catchUp)} not paid towards earlier instalments</div> : null}
                   </td>
-                  <td data-label="How">{instalment.basis}</td>
+                  <td data-label="Paid towards it" className={ui.num}>
+                    <Money value={instalment.paid} />
+                    {instalment.paidLate !== "0.00" ? <div><Badge tone="red">{`${formatMoney(instalment.paidLate)} late`}</Badge></div> : null}
+                    {instalment.forecastPaid !== "0.00" ? <div className={ui.muted}>Plus {formatMoney(instalment.forecastPaid)} assumed (forecast)</div> : null}
+                  </td>
+                  <td data-label="Still needed" className={ui.num}>
+                    <Money value={instalment.remaining} />
+                    {instalment.remainingWithForecast !== instalment.remaining ? <div className={ui.muted}>{formatMoney(instalment.remainingWithForecast)} if the forecast holds</div> : null}
+                    {instalment.creditAfter !== "0.00" ? <div className={ui.muted}>{formatMoney(instalment.creditAfter)} credit carried forward</div> : null}
+                  </td>
+                  <td data-label="How">
+                    {instalment.basis}
+                    {instalment.assumption ? <div className={ui.muted}>{instalment.assumption}</div> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

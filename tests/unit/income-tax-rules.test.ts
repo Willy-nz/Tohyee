@@ -11,8 +11,19 @@ import {
   suggestedIncomeYear,
   taxOn,
   workpaper,
+  type AllocationStatus,
+  type AppliesTo,
+  type Payment,
   type WorkpaperAccount,
 } from "@/lib/tax/income/rules";
+
+/** A payment to IRD: bank date, amount, and (optionally) where it's allocated and how sure that is. */
+const pay = (date: string, amount: string, appliesTo?: AppliesTo, status: AllocationStatus = "confirmed", effectiveOn: string | null = null): Payment => ({
+  date,
+  effectiveOn,
+  amount: dec(amount),
+  allocations: appliesTo === undefined ? [] : [{ appliesTo, amount: dec(amount), status }],
+});
 
 const account = (code: string, name: string, side: "income" | "expense", amount: string, treatment: WorkpaperAccount["treatment"] = "full", businessUsePercent: string | null = null): WorkpaperAccount => ({
   accountId: code,
@@ -127,32 +138,32 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     const afterFirst = standardSchedule({
       ...base,
       lastYearFiledOn: "2026-10-10",
-      payments: [
-        { date: "2026-08-28", amount: dec("4400") },
-        { date: "2027-01-14", amount: dec("7967.60") },
-      ],
+      // The 14 Jan payment is directed to instalment 2: its date alone doesn't make it a payment for instalment 1.
+      payments: [pay("2026-08-28", "4400", 1), pay("2027-01-14", "7967.60", 2)],
     });
     expect(afterFirst.kind === "schedule" && afterFirst.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "7967.60", "6183.80"]);
+    expect(afterFirst.kind === "schedule" && afterFirst.instalments.map((instalment) => instalment.remaining)).toEqual(["0.00", "0.00", "6183.80"]);
     // An instalment that's due and not paid is caught up in the next one.
-    const unpaid = standardSchedule({ ...base, lastYearFiledOn: "2026-10-10", payments: [{ date: "2026-08-28", amount: dec("4400") }] });
+    const unpaid = standardSchedule({ ...base, lastYearFiledOn: "2026-10-10", payments: [pay("2026-08-28", "4400", 1)] });
     expect(unpaid.kind === "schedule" && unpaid.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "7967.60", "14151.40"]);
     // The shortfall is counted once: instalment 3's own share is 6,183.80 and 7,967.60 of it is caught up; the year's total
     // stays 18,551.40 (it was once the sum of what's due, 26,519.00).
     if (unpaid.kind !== "schedule") throw new Error("expected a schedule");
     expect(unpaid.instalments.map((instalment) => [instalment.ownAmount, instalment.catchUp])).toEqual([["4400.00", "0.00"], ["7967.60", "0.00"], ["6183.80", "7967.60"]]);
+    expect(unpaid.instalments.map((instalment) => instalment.remaining)).toEqual(["0.00", "7967.60", "14151.40"]);
     expect(unpaid.total).toBe("18551.40");
     expect(afterFirst.kind === "schedule" && afterFirst.total).toBe("18551.40");
-    // Before the second instalment is due, it's assumed paid as worked out.
-    const early = standardSchedule({ ...base, today: "2026-10-16", lastYearFiledOn: "2026-10-10", payments: [{ date: "2026-08-28", amount: dec("4400") }] });
-    expect(early.kind === "schedule" && early.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "7967.60", "6183.80"]);
+    // Before the second instalment is due, it's assumed paid as worked out, and the schedule says that's an assumption.
+    const early = standardSchedule({ ...base, today: "2026-10-16", lastYearFiledOn: "2026-10-10", payments: [pay("2026-08-28", "4400", 1)] });
+    if (early.kind !== "schedule") throw new Error("expected a schedule");
+    expect(early.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "7967.60", "6183.80"]);
+    expect(early.instalments.map((instalment) => instalment.assumption === null)).toEqual([true, true, false]);
+    expect(early.instalments[2].assumption).toContain("instalment 2 is paid as worked out (7,967.60)");
     const afterSecond = standardSchedule({
       ...base,
       today: "2027-03-01",
       lastYearFiledOn: "2027-02-20",
-      payments: [
-        { date: "2026-08-28", amount: dec("4400") },
-        { date: "2027-01-15", amount: dec("4400") },
-      ],
+      payments: [pay("2026-08-28", "4400", 1), pay("2027-01-15", "4400", 2)],
     });
     expect(afterSecond.kind === "schedule" && afterSecond.instalments.map((instalment) => instalment.amount)).toEqual(["4400.00", "4400.00", "9751.40"]);
     // Not filed yet: the last instalment uses Tohyee's estimate and says so.
@@ -166,7 +177,7 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     const missing = standardSchedule({ ...base, twoYearsAgo: null, lastYearFiledOn: "2026-10-10", payments: [] });
     expect(missing.kind).toBe("unknown");
     expect(missing.notes[0]).toContain("2025 income year plus 10%");
-    expect(afterFirst.kind === "schedule" && afterFirst.instalments[1].basis).toBe("RIT for the 2026 income year: 17,668.00 + 5% = 18,551.40, x 2 ÷ 3 = 12,367.60, less 4,400.00 paid towards the year before 15 Jan 2027");
+    expect(afterFirst.kind === "schedule" && afterFirst.instalments[1].basis).toBe("RIT for the 2026 income year: 17,668.00 + 5% = 18,551.40, x 2 ÷ 3 = 12,367.60, less 4,400.00 paid for instalment 1");
   });
 
   it("ITX67 without an extension of time, last year's RIT plus 5% even when its return is filed late", () => {
@@ -267,5 +278,119 @@ describe("income tax rules (ITX1-ITX10, from IRD's published rules, not yet revi
     expect(endOfYearTaxDue(2026, false, 9)).toBe("2027-02-07");
     expect(endOfYearTaxDue(2027, false, 6)).toBe("2028-02-07");
     expect(suggestedIncomeYear("2026-08-28", 5)).toBeNull();
+  });
+});
+
+describe("provisional tax payments and allocation (ITX6A-ITX6H, as delegated, not yet reviewed by an accountant)", () => {
+  const onTime = { year: 2027, instalmentCount: 3 as const, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-06-20", twoYearsAgo: null, extensionOfTime: false, today: "2027-02-01" };
+  const late = { year: 2027, instalmentCount: 3 as const, lastYear: { amount: dec("17668"), typed: true }, lastYearFiledOn: "2026-10-10", twoYearsAgo: dec("12000"), extensionOfTime: true, today: "2027-02-01" };
+  const schedule = (input: Parameters<typeof standardSchedule>[0]) => {
+    const result = standardSchedule(input);
+    if (result.kind !== "schedule") throw new Error("expected a schedule");
+    return result;
+  };
+  const column = (result: ReturnType<typeof schedule>, key: "amount" | "paid" | "remaining" | "remainingWithForecast" | "creditAfter" | "paidLate" | "forecastPaid") =>
+    result.instalments.map((instalment) => instalment[key]);
+
+  it("ITX6A an excess towards instalment 1 reduces instalment 2, with no cap at instalment 1's amount", () => {
+    // Late-filed return: 6,000.00 confirmed towards instalment 1 (worked out at 4,400.00).
+    const p1 = schedule({ ...late, payments: [pay("2026-08-28", "6000", 1)] });
+    expect(column(p1, "amount")).toEqual(["4400.00", "6367.60", "12551.40"]);
+    // 12,367.60 by instalment 2 less the 6,000.00: 6,367.60 more is needed by 15 Jan 2027 (it was 7,967.60 with the cap).
+    expect(column(p1, "remaining")).toEqual(["0.00", "6367.60", "12551.40"]);
+    expect(column(p1, "creditAfter")).toEqual(["1600.00", "0.00", "0.00"]);
+    const both = schedule({ ...late, payments: [pay("2026-08-28", "6000", 1), pay("2027-01-15", "6367.60", 2)] });
+    expect(column(both, "amount")).toEqual(["4400.00", "6367.60", "6183.80"]);
+    // The final balance: 18,551.40 - 6,000.00 - 6,367.60 = 6,183.80. The year's total stays 18,551.40.
+    expect(column(both, "remaining")).toEqual(["0.00", "0.00", "6183.80"]);
+    expect(both.total).toBe("18551.40");
+    // On time: the instalments stay 6,183.80 each; the 1,816.20 excess is carried as a credit towards instalment 2.
+    const standard = schedule({ ...onTime, payments: [pay("2026-08-28", "8000", 1)] });
+    expect(column(standard, "amount")).toEqual(["6183.80", "6183.80", "6183.80"]);
+    expect(column(standard, "creditAfter")).toEqual(["1816.20", "0.00", "0.00"]);
+    expect(column(standard, "remaining")).toEqual(["0.00", "4367.60", "10551.40"]);
+  });
+
+  it("ITX6B a partial payment leaves the rest still needed, and catches up in a late-filed return's next instalment", () => {
+    const standard = schedule({ ...onTime, payments: [pay("2026-08-28", "3000", 1)] });
+    expect(column(standard, "paid")).toEqual(["3000.00", "0.00", "0.00"]);
+    expect(column(standard, "remaining")).toEqual(["3183.80", "9367.60", "15551.40"]);
+    const filedLate = schedule({ ...late, payments: [pay("2026-08-28", "3000", 1)] });
+    // 12,367.60 - 3,000.00 = 9,367.60: instalment 2's own 7,967.60 plus 1,400.00 caught up.
+    expect(filedLate.instalments[1]).toMatchObject({ amount: "9367.60", ownAmount: "7967.60", catchUp: "1400.00", remaining: "9367.60" });
+  });
+
+  it("ITX6C a late payment counts towards its instalment and is marked late, by IRD's effective date, not the bank date", () => {
+    const lateOne = schedule({ ...onTime, payments: [pay("2026-09-10", "6183.80", 1, "confirmed", "2026-09-10")] });
+    expect(lateOne.instalments[0]).toMatchObject({ paid: "6183.80", paidLate: "6183.80", remaining: "0.00" });
+    // Left the bank on 27 Aug but IRD's effective date is 31 Aug: late.
+    const effective = schedule({ ...onTime, payments: [pay("2026-08-27", "6183.80", 1, "evidenced", "2026-08-31")] });
+    expect(effective.instalments[0].paidLate).toBe("6183.80");
+    // With no effective date yet, the bank date stands in.
+    const bankOnly = schedule({ ...onTime, payments: [pay("2026-08-27", "6183.80", 1, "evidenced")] });
+    expect(bankOnly.instalments[0].paidLate).toBe("0.00");
+  });
+
+  it("ITX6D paid on the due date, or the next business day after a weekend due date, is on time", () => {
+    const sameDay = schedule({ ...onTime, payments: [pay("2026-08-28", "6183.80", 1, "confirmed", "2026-08-28")] });
+    expect(sameDay.instalments[0]).toMatchObject({ paid: "6183.80", paidLate: "0.00", remaining: "0.00" });
+    // 28 Aug 2027 is a Saturday, so the 2028 year's first instalment is on time by Monday 30 Aug 2027.
+    const weekend = schedule({ ...onTime, year: 2028, lastYearFiledOn: "2027-06-20", today: "2027-09-01", payments: [pay("2027-08-30", "6183.80", 1, "confirmed", "2027-08-30")] });
+    expect(weekend.instalments[0]).toMatchObject({ dueDate: "2027-08-28", paidLate: "0.00" });
+    expect(weekend.instalments[0].onTimeBy.date).toBe("2027-08-30");
+  });
+
+  it("ITX6E a payment directed to instalment 2 reduces instalment 2 and isn't relabelled instalment 1", () => {
+    const directed = schedule({ ...onTime, payments: [pay("2026-08-20", "4000", 2)] });
+    expect(column(directed, "paid")).toEqual(["0.00", "4000.00", "0.00"]);
+    expect(column(directed, "remaining")).toEqual(["6183.80", "8367.60", "14551.40"]);
+    // A payment between instalments 1 and 2 with no allocation is awaiting reconciliation: its date doesn't make it either.
+    const between = schedule({ ...onTime, payments: [pay("2026-12-01", "6183.80")] });
+    expect(column(between, "paid")).toEqual(["0.00", "0.00", "0.00"]);
+    expect(between.allocation).toMatchObject({ awaiting: "6183.80", awaitingCount: 1 });
+    expect(between.notes.join(" ")).toContain("awaiting reconciliation");
+  });
+
+  it("ITX6F a reversed payment counts for nothing", () => {
+    const reversed = schedule({ ...onTime, payments: [{ ...pay("2026-08-28", "6183.80", 1), reversed: true }] });
+    expect(column(reversed, "paid")).toEqual(["0.00", "0.00", "0.00"]);
+    expect(column(reversed, "remaining")).toEqual(["6183.80", "12367.60", "18551.40"]);
+    expect(reversed.allocation).toMatchObject({ reversed: "6183.80", awaiting: "0.00", awaitingCount: 0 });
+  });
+
+  it("ITX6G reallocating moves the payment, and forecast assumptions are shown but never counted as paid", () => {
+    const toOne = schedule({ ...onTime, payments: [pay("2026-08-28", "6183.80", 1)] });
+    const toTwo = schedule({ ...onTime, payments: [pay("2026-08-28", "6183.80", 2)] });
+    expect(column(toOne, "remaining")).toEqual(["0.00", "6183.80", "12367.60"]);
+    expect(column(toTwo, "remaining")).toEqual(["6183.80", "6183.80", "12367.60"]);
+    const forecast = schedule({ ...onTime, payments: [pay("2026-08-28", "6183.80", 1, "forecast")] });
+    expect(column(forecast, "paid")).toEqual(["0.00", "0.00", "0.00"]);
+    expect(column(forecast, "forecastPaid")).toEqual(["6183.80", "0.00", "0.00"]);
+    expect(column(forecast, "remaining")).toEqual(["6183.80", "12367.60", "18551.40"]);
+    expect(column(forecast, "remainingWithForecast")).toEqual(["0.00", "6183.80", "12367.60"]);
+    expect(forecast.allocation).toMatchObject({ awaiting: "6183.80", awaitingForecast: "6183.80", awaitingCount: 1 });
+  });
+
+  it("ITX6H each payment counts once, and a surplus is a credit, never a negative demand", () => {
+    // One 6,000.00 payment allocated twice over: only 6,000.00 counts.
+    const twice: Payment = { date: "2026-08-28", amount: dec("6000"), allocations: [{ appliesTo: 1, amount: dec("6000"), status: "confirmed" }, { appliesTo: 2, amount: dec("6000"), status: "confirmed" }] };
+    const once = schedule({ ...onTime, payments: [twice] });
+    expect(column(once, "paid")).toEqual(["6000.00", "0.00", "0.00"]);
+    // Split across two instalments: each part counts where it's allocated.
+    const split: Payment = { date: "2026-08-28", amount: dec("10000"), allocations: [{ appliesTo: 1, amount: dec("6183.80"), status: "confirmed" }, { appliesTo: 2, amount: dec("3816.20"), status: "evidenced" }] };
+    expect(column(schedule({ ...onTime, payments: [split] }), "remaining")).toEqual(["0.00", "2367.60", "8551.40"]);
+    // 20,000.00 allocated to the instalments: nothing more is needed and 1,448.60 is a credit.
+    const surplus = schedule({ ...onTime, payments: [pay("2026-08-28", "6183.80", 1), pay("2027-01-15", "6183.80", 2), pay("2027-05-07", "7632.40", 3)], today: "2027-05-10" });
+    expect(column(surplus, "remaining")).toEqual(["0.00", "0.00", "0.00"]);
+    expect(surplus.allocation.credit).toBe("1448.60");
+    expect(surplus.total).toBe("18551.40");
+    expect(surplus.notes.join(" ")).toContain("1,448.60 more than the year's provisional tax");
+    // End-of-year tax allocations aren't instalment payments.
+    const endOfYear = schedule({ ...onTime, payments: [pay("2027-02-07", "500", "end_of_year")] });
+    expect(endOfYear.allocation.endOfYear).toBe("500.00");
+    expect(column(endOfYear, "paid")).toEqual(["0.00", "0.00", "0.00"]);
+    // An allocation to an instalment the schedule doesn't have (instalment 3 for a six-monthly GST filer).
+    const twoInstalments = schedule({ ...onTime, instalmentCount: 2, payments: [pay("2026-10-28", "9275.70", 3)] });
+    expect(twoInstalments.allocation.unmatched).toBe("9275.70");
   });
 });
