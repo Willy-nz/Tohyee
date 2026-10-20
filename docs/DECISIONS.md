@@ -4316,6 +4316,32 @@ testing) and #154's code signing (later, Jess).
      - Sales reps and managers see only their own (or their teams') figures
        (decision 491). Amounts are never added across currencies. Counts of
        deals open the deals behind them.
+652. **The CRM's reporting tables in Analytics** (#216; Codex, delegated by
+     owner, 20 October 2026, #360 item 17: reporting datasets; example AB11,
+     not yet reviewed). The books and CRM copy (AB1-AB10, decision 367)
+     gains `tohyee_crm_leads`, `tohyee_crm_campaigns`,
+     `tohyee_crm_campaign_members`, `tohyee_crm_sequences`,
+     `tohyee_crm_sequence_enrolments`, `tohyee_crm_sales_emails`,
+     `tohyee_crm_deal_products` and `tohyee_crm_tasks`, each with a plain
+     name and description in Analytics, and two columns more on existing
+     tables (an opportunity's `source_campaign`; an activity's opportunity,
+     lead and person ids). Columns are only added, as AB's rules say.
+     - **As recorded:** rows as they are in the CRM, nothing worked out to
+       match the dashboard (as AB's rules); campaign budget and cost, and
+       deal product amounts, exact (excluding GST, in the deal's currency,
+       never converted, decision 324).
+     - **Left out:** leads' email addresses and phone numbers, and sales
+       emails' addresses, subjects and words. Reports count and group;
+       mailbox content stays out of shared analytics (as #360 item 10 for
+       private mail). Sales emails still being sent aren't copied.
+     - **Who sees them:** as the existing CRM tables. Analytics is for
+       viewers and up, who already see every CRM record (decision 491);
+       sales reps and managers have no Analytics; report viewers see only
+       the dashboards shared with them. Per-owner filtering inside Analytics
+       isn't built, because nobody who reaches it is limited to their own
+       records.
+     - Copied only while the CRM is on (AB9); with Accounting off, only the
+       `tohyee_crm_*` tables.
 501. **Discounts on sales lines** (DS1-DS6; Jess 10 Oct 2026: "add
      discounts to invoices too", sales lines only, examples approved).
      - Invoices, quotes, sales orders, repeating invoices and sales credit

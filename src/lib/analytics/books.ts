@@ -24,6 +24,7 @@ const BOOKS_FILE_NAME = "(this organisation's database)";
 const MONEY = "DECIMAL(18,2)";
 const RATE = "DECIMAL(18,6)";
 const QUANTITY = "DECIMAL(18,4)";
+const PRICE = "DECIMAL(18,4)";
 
 type Lookups = {
   trackingCategories: Array<{ id: string; column: string }>;
@@ -387,7 +388,7 @@ export async function readBooks(
     const opportunities = await tx.query<Record<string, string | null>>(
       `select o.id::text, o.name, c.name as company, o.owner_user_id, o.amount::text, o.currency_code, o.close_date::text,
               coalesce(s.name, o.stage) as stage, s.stage_type, o.probability::text, o.forecast_category,
-              o.created_at::date::text as created_on
+              o.created_at::date::text as created_on, (select k.name from crm_campaigns k where k.id = o.source_campaign_id) as source_campaign
          from crm_opportunities o
          left join contacts c on c.id = o.contact_id
          left join crm_opportunity_stages s on s.key = o.stage
@@ -413,6 +414,7 @@ export async function readBooks(
         row.probability,
         row.forecast_category,
         row.created_on,
+        row.source_campaign,
       ]);
     }
     tables.push({
@@ -430,11 +432,13 @@ export async function readBooks(
         { name: "probability", type: "INTEGER" },
         { name: "forecast_category", type: "VARCHAR" },
         { name: "created_on", type: "DATE" },
+        { name: "source_campaign", type: "VARCHAR" },
       ],
       rows: opportunityRows,
     });
     const activities = await tx.query<Record<string, string | null>>(
-      `select a.kind, a.happened_at::date::text as happened_on, a.subject, c.name as company, o.name as opportunity, a.created_by_email
+      `select a.kind, a.happened_at::date::text as happened_on, a.subject, c.name as company, o.name as opportunity, a.created_by_email,
+              a.opportunity_id::text, a.lead_id::text, a.person_id::text
          from crm_activities a
          left join contacts c on c.id = a.contact_id
          left join crm_opportunities o on o.id = a.opportunity_id
@@ -449,8 +453,21 @@ export async function readBooks(
         { name: "company", type: "VARCHAR" },
         { name: "opportunity", type: "VARCHAR" },
         { name: "by", type: "VARCHAR" },
+        { name: "opportunity_id", type: "BIGINT" },
+        { name: "lead_id", type: "BIGINT" },
+        { name: "person_id", type: "BIGINT" },
       ],
-      rows: activities.rows.map((row) => [row.kind, row.happened_on, row.subject, row.company, row.opportunity, row.created_by_email ? personName(tx, row.created_by_email) : null]),
+      rows: activities.rows.map((row) => [
+        row.kind,
+        row.happened_on,
+        row.subject,
+        row.company,
+        row.opportunity,
+        row.created_by_email ? personName(tx, row.created_by_email) : null,
+        row.opportunity_id,
+        row.lead_id,
+        row.person_id,
+      ]),
     });
     const companies = await tx.query<Record<string, string | null>>(
       `select c.id::text, c.name, c.is_customer::text, c.is_prospect::text, c.billing_country,
@@ -471,6 +488,7 @@ export async function readBooks(
       ],
       rows: companies.rows.map((row) => [row.id, row.name, row.is_customer, row.is_prospect, row.billing_country, row.opportunities]),
     });
+    tables.push(...(await readCrmReportingTables(tx, ownerName)));
   }
   // Farm data while Farming is on (#249); Farming needs Accounting, so it goes with the books.
   tables.push(...(await readFarmTables(tx)));
@@ -574,4 +592,259 @@ export async function refreshBooks(organisation: OrganisationRecord, actor: Acto
     }
   }
   return run;
+}
+
+/**
+ * The CRM's reporting tables (decision 652, #216; #360 item 17): leads,
+ * campaigns and their members, sequences and who's in them, sales emails,
+ * deal products and tasks, copied as they are, like the opportunities.
+ * People's email addresses and phone numbers, and emails' subjects and
+ * words, aren't copied: reports count and group, they don't need them.
+ */
+async function readCrmReportingTables(tx: OrgTx, ownerName: (id: string | null) => string | null): Promise<TableCopy[]> {
+  const tables: TableCopy[] = [];
+  const leads = await tx.query<Record<string, string | null>>(
+    `select l.id::text, coalesce(nullif(concat_ws(' ', l.first_name, l.last_name), ''), l.company_name, 'Lead') as name, l.company_name,
+            l.status, l.source, l.source_detail, l.owner_user_id, k.name as source_campaign, l.created_at::date::text as created_on,
+            l.converted_at::date::text as converted_on, l.unqualified_reason, l.converted_contact_id::text, l.converted_opportunity_id::text,
+            l.needs_review::text
+       from crm_leads l left join crm_campaigns k on k.id = l.source_campaign_id
+      order by l.created_at, l.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_leads",
+    columns: [
+      { name: "lead_id", type: "BIGINT" },
+      { name: "name", type: "VARCHAR" },
+      { name: "company", type: "VARCHAR" },
+      { name: "status", type: "VARCHAR" },
+      { name: "source", type: "VARCHAR" },
+      { name: "source_detail", type: "VARCHAR" },
+      { name: "owner", type: "VARCHAR" },
+      { name: "source_campaign", type: "VARCHAR" },
+      { name: "created_on", type: "DATE" },
+      { name: "converted_on", type: "DATE" },
+      { name: "unqualified_reason", type: "VARCHAR" },
+      { name: "converted_contact_id", type: "BIGINT" },
+      { name: "converted_opportunity_id", type: "BIGINT" },
+      { name: "to_review", type: "BOOLEAN" },
+    ],
+    rows: leads.rows.map((row) => [
+      row.id,
+      row.name,
+      row.company_name,
+      row.status,
+      row.source,
+      row.source_detail,
+      ownerName(row.owner_user_id),
+      row.source_campaign,
+      row.created_on,
+      row.converted_on,
+      row.unqualified_reason,
+      row.converted_contact_id,
+      row.converted_opportunity_id,
+      row.needs_review,
+    ]),
+  });
+
+  const campaigns = await tx.query<Record<string, string | null>>(
+    `select c.id::text, c.name, c.kind, c.status, c.start_date::text, c.end_date::text, c.budget::text, c.actual_cost::text, c.created_at::date::text as created_on
+       from crm_campaigns c order by c.created_at, c.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_campaigns",
+    columns: [
+      { name: "campaign_id", type: "BIGINT" },
+      { name: "name", type: "VARCHAR" },
+      { name: "kind", type: "VARCHAR" },
+      { name: "status", type: "VARCHAR" },
+      { name: "start_date", type: "DATE" },
+      { name: "end_date", type: "DATE" },
+      // Typed in, in the base currency, for reports only (decision 498).
+      { name: "budget", type: MONEY },
+      { name: "actual_cost", type: MONEY },
+      { name: "created_on", type: "DATE" },
+    ],
+    rows: campaigns.rows.map((row) => [row.id, row.name, row.kind, row.status, row.start_date, row.end_date, row.budget, row.actual_cost, row.created_on]),
+  });
+
+  const members = await tx.query<Record<string, string | null>>(
+    `select m.campaign_id::text, c.name as campaign, m.lead_id::text, m.person_id::text, m.status,
+            m.added_at::date::text as added_on, m.responded_at::date::text as responded_on
+       from crm_campaign_members m join crm_campaigns c on c.id = m.campaign_id
+      order by m.added_at, m.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_campaign_members",
+    columns: [
+      { name: "campaign_id", type: "BIGINT" },
+      { name: "campaign", type: "VARCHAR" },
+      { name: "lead_id", type: "BIGINT" },
+      { name: "person_id", type: "BIGINT" },
+      { name: "status", type: "VARCHAR" },
+      { name: "added_on", type: "DATE" },
+      { name: "responded_on", type: "DATE" },
+    ],
+    rows: members.rows.map((row) => [row.campaign_id, row.campaign, row.lead_id, row.person_id, row.status, row.added_on, row.responded_on]),
+  });
+
+  const sequences = await tx.query<Record<string, string | null>>(
+    `select q.id::text, q.name, q.is_active::text, (select count(*) from crm_sequence_steps st where st.sequence_id = q.id)::text as steps
+       from crm_sequences q order by q.created_at, q.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_sequences",
+    columns: [
+      { name: "sequence_id", type: "BIGINT" },
+      { name: "name", type: "VARCHAR" },
+      { name: "active", type: "BOOLEAN" },
+      { name: "steps", type: "INTEGER" },
+    ],
+    rows: sequences.rows.map((row) => [row.id, row.name, row.is_active, row.steps]),
+  });
+
+  const enrolments = await tx.query<Record<string, string | null>>(
+    `select e.id::text, e.sequence_id::text, q.name as sequence,
+            case when e.lead_id is not null then 'lead' when e.person_id is not null then 'person' else 'deal' end as record,
+            e.lead_id::text, e.person_id::text, e.opportunity_id::text, e.assignee_user_id, e.status, e.stop_reason,
+            e.started_on::text, e.ended_at::date::text as ended_on,
+            (select count(*) from crm_sequence_step_runs r where r.enrolment_id = e.id and r.outcome = 'task_created')::text as tasks_made
+       from crm_sequence_enrolments e join crm_sequences q on q.id = e.sequence_id
+      order by e.enrolled_at, e.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_sequence_enrolments",
+    columns: [
+      { name: "enrolment_id", type: "BIGINT" },
+      { name: "sequence_id", type: "BIGINT" },
+      { name: "sequence", type: "VARCHAR" },
+      { name: "record", type: "VARCHAR" },
+      { name: "lead_id", type: "BIGINT" },
+      { name: "person_id", type: "BIGINT" },
+      { name: "opportunity_id", type: "BIGINT" },
+      { name: "assigned_to", type: "VARCHAR" },
+      { name: "status", type: "VARCHAR" },
+      { name: "stop_reason", type: "VARCHAR" },
+      { name: "started_on", type: "DATE" },
+      { name: "ended_on", type: "DATE" },
+      { name: "tasks_made", type: "INTEGER" },
+    ],
+    rows: enrolments.rows.map((row) => [
+      row.id,
+      row.sequence_id,
+      row.sequence,
+      row.record,
+      row.lead_id,
+      row.person_id,
+      row.opportunity_id,
+      ownerName(row.assignee_user_id),
+      row.status,
+      row.stop_reason,
+      row.started_on,
+      row.ended_on,
+      row.tasks_made,
+    ]),
+  });
+
+  // Sales emails: who sent one, when, to which record, and whether it went. No addresses, subjects or words.
+  const emails = await tx.query<Record<string, string | null>>(
+    `select e.id::text, coalesce(e.sent_at, e.created_at)::date::text as sent_on, e.sent_by_user_id, t.name as template, e.status,
+            e.lead_id::text, e.person_id::text, e.contact_id::text, e.opportunity_id::text
+       from crm_sent_emails e left join crm_email_templates t on t.id = e.template_id
+      where e.status <> 'sending'
+      order by coalesce(e.sent_at, e.created_at), e.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_sales_emails",
+    columns: [
+      { name: "email_id", type: "BIGINT" },
+      { name: "sent_on", type: "DATE" },
+      { name: "sent_by", type: "VARCHAR" },
+      { name: "template", type: "VARCHAR" },
+      { name: "status", type: "VARCHAR" },
+      { name: "lead_id", type: "BIGINT" },
+      { name: "person_id", type: "BIGINT" },
+      { name: "contact_id", type: "BIGINT" },
+      { name: "opportunity_id", type: "BIGINT" },
+    ],
+    rows: emails.rows.map((row) => [row.id, row.sent_on, ownerName(row.sent_by_user_id), row.template, row.status, row.lead_id, row.person_id, row.contact_id, row.opportunity_id]),
+  });
+
+  const lines = await tx.query<Record<string, string | null>>(
+    `select l.id::text, l.opportunity_id::text, o.name as opportunity, l.line_order::text, i.code as item_code, i.name as item, l.description,
+            l.quantity::text, l.unit_price::text, l.discount_percent::text, l.line_amount::text, o.currency_code
+       from crm_opportunity_lines l
+       join crm_opportunities o on o.id = l.opportunity_id
+       left join items i on i.id = l.item_id
+      order by l.opportunity_id, l.line_order`,
+  );
+  tables.push({
+    name: "tohyee_crm_deal_products",
+    columns: [
+      { name: "line_id", type: "BIGINT" },
+      { name: "opportunity_id", type: "BIGINT" },
+      { name: "opportunity", type: "VARCHAR" },
+      { name: "line_order", type: "INTEGER" },
+      { name: "item_code", type: "VARCHAR" },
+      { name: "item", type: "VARCHAR" },
+      { name: "description", type: "VARCHAR" },
+      { name: "quantity", type: QUANTITY },
+      { name: "unit_price", type: PRICE },
+      { name: "discount_percent", type: "DECIMAL(5,2)" },
+      // Excluding GST, after the discount, in the deal's currency (DS7).
+      { name: "amount", type: MONEY },
+      { name: "currency", type: "VARCHAR" },
+    ],
+    rows: lines.rows.map((row) => [
+      row.id,
+      row.opportunity_id,
+      row.opportunity,
+      row.line_order,
+      row.item_code,
+      row.item,
+      row.description,
+      row.quantity,
+      row.unit_price,
+      row.discount_percent,
+      row.line_amount,
+      row.currency_code,
+    ]),
+  });
+
+  const tasks = await tx.query<Record<string, string | null>>(
+    `select t.id::text, t.title, t.status, t.due_date::text, t.completed_at::date::text as done_on, t.assignee_user_id, c.name as company,
+            t.opportunity_id::text, t.lead_id::text, t.person_id::text, t.created_at::date::text as created_on
+       from crm_tasks t left join contacts c on c.id = t.contact_id
+      order by t.created_at, t.id`,
+  );
+  tables.push({
+    name: "tohyee_crm_tasks",
+    columns: [
+      { name: "task_id", type: "BIGINT" },
+      { name: "title", type: "VARCHAR" },
+      { name: "status", type: "VARCHAR" },
+      { name: "due_on", type: "DATE" },
+      { name: "done_on", type: "DATE" },
+      { name: "assigned_to", type: "VARCHAR" },
+      { name: "company", type: "VARCHAR" },
+      { name: "opportunity_id", type: "BIGINT" },
+      { name: "lead_id", type: "BIGINT" },
+      { name: "person_id", type: "BIGINT" },
+      { name: "created_on", type: "DATE" },
+    ],
+    rows: tasks.rows.map((row) => [
+      row.id,
+      row.title,
+      row.status,
+      row.due_date,
+      row.done_on,
+      ownerName(row.assignee_user_id),
+      row.company,
+      row.opportunity_id,
+      row.lead_id,
+      row.person_id,
+      row.created_on,
+    ]),
+  });
+  return tables;
 }
