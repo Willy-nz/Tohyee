@@ -270,6 +270,26 @@ export function TableStyleFields({ format, set, pivot, rowFields }: { format: Ch
           ))}
         </fieldset>
       ) : null}
+      {pivot ? (
+        <div className={styles.pair}>
+          <Field label="Rows" hint={table.layout === "stepped" ? "One column, each group's total as its heading, indented by level." : "A column for each row field."}>
+            <select value={table.layout ?? "tabular"} onChange={(event) => setTable({ layout: event.target.value === "stepped" ? "stepped" : undefined })}>
+              <option value="tabular">A column per field</option>
+              <option value="stepped">Stepped (indented)</option>
+            </select>
+          </Field>
+          {rowFields.length > 1 ? (
+            <Field label="Groups open to start with" hint="People can open and close each group, or all of them.">
+              <select value={table.expandTo ?? ""} onChange={(event) => setTable({ expandTo: event.target.value ? Number(event.target.value) : undefined })}>
+                <option value="">All open</option>
+                {rowFields.slice(0, -1).map((name, index) => (
+                  <option key={index} value={index + 1}>{index === 0 ? `Only ${name} listed` : `Down to ${rowFields[index]}`}</option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }
