@@ -16775,6 +16775,9 @@ create table private_mail_ai_keys (
   granted_at timestamptz not null default now()
 );
 create index private_mail_ai_keys_owner on private_mail_ai_keys (owner_user_id);
+`,
+  },
+  {
     version: "0177",
     name: "square_sales_platform",
     sql: `
