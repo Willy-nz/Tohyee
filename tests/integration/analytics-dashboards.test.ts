@@ -292,7 +292,7 @@ describeWithDatabase("analytics dashboards", () => {
 
     // The gauge's one total and its target come back from the saved tile.
     const answer = await body(
-      await queryRoute.POST(apiRequest("/api/analytics/query", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, dashboardId, tileId: "g", filters: {} } })),
+      await queryRoute.POST(apiRequest("/api/analytics/query", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, dashboardId, tileId: "g", filters: {} } }), noContext),
     );
     expect(answer.status).toBe(200);
     expect(answer.data.rows).toHaveLength(1);
