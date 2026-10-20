@@ -6338,45 +6338,34 @@ recorded elsewhere or being built at the same time:
      preferences go through the CRM's access check, so sales reps and
      managers can keep their own; Home's and the farm Home's still refuse
      them. HD5.
-624. **Owner's rations get an explicit GST assessment** (Codex, delegated by
-     owner (via Will), 20 October 2026; the 20 Oct comment on #292,
-     section 2). This replaces "no GST is posted" (RAT1). It isn't replaced
-     with blanket market-value GST either. On a GST-registered date each
-     owner's rations event is unresolved until it's assessed as a confirmed
-     taxable supply (15% of a value excluding GST, 3/23 of one including
-     it), a confirmed change-in-use adjustment (a reviewed GST amount with
-     its basis, while the sole-trader rule is verified), or no adjustment
-     with evidence. Every assessment needs its basis, so it isn't a status
-     someone just types. Each event records its recipient, the legal entity
-     it came from, its value and whether that includes GST. Examples RAT5-RAT10,
-     as delegated, not yet reviewed by an accountant. Staff rations (RAT2)
-     are unchanged and need their own analysis.
-625. **How rations GST posts** (Codex, delegated by owner (via Will), 20
-     October 2026). A taxable supply at 1,100.00 excluding GST posts Dr
-     owner drawings or current account 1,265.00, Cr rations income
-     1,100.00, Cr GST 165.00 (1,100.00 including GST: 143.48 GST, 956.52
-     income). A change-in-use adjustment posts the reviewed GST on top of
-     the value excluding GST. Assessed as it's recorded, it's one journal.
-     Assessed later, or again (with a reason), the rations journal is
-     reversed and posted again on the event's date, so each event always
-     has one current posting. There's no debit to GST (no input tax claim
-     for private use) and no bank line.
-626. **Rations in the GST return, once, without changing filed returns**
-     (Codex, delegated by owner (via Will), 20 October 2026). A taxable
-     supply is a sales line on the event's date on every GST basis (Box 5,
-     with the recipient's name). A new assessment is a new line, so one
-     changed after its period is filed goes through the existing late
-     claims (LG1-LG7). A change-in-use adjustment is a Box 9 adjustment in
-     the return for its period, worked out by Tohyee and stored with the
-     filed return. When it's assessed after its period was filed, it goes
-     in the next return instead. Once filed it's marked so it's never
-     counted again. Changed or voided after filing, the next return takes
-     it back off once. Unresolved events up to the period's end are listed
-     in GST return preparation as not assessed, never as nil. Nothing is
-     moved to year end for convenience.
-627. **Still open** (20 October 2026). The sole-trader GST valuation and
-     timing for homekill (cost or market value, and when) is a technical
-     research task, not a preference for Will to choose. A reviewed
-     change-in-use adjustment is how it's handled meanwhile. Whether IRD
-     wants an associated-person supply in Box 5 (as built) needs the
-     accountant's check. Per #360, nothing is filed or paid to IRD.
+624. **Homekill is one yearly adjustment by the accountant** (Jess, 20
+     October 2026, on #371: "Home kill the accountant just does a jnl
+     adjustment like 500 bucks"; asked to choose, "One yearly adjustment").
+     This replaces the per-event GST assessment from Codex's 20 Oct
+     recommendation on #292 before it was merged. The owner's rations
+     (homekill) are head counts only and post nothing. Once a year a
+     bookkeeper or above enters the amount they choose, its basis
+     (required), and on a GST-registered date whether GST applies and
+     whether the amount includes it. Examples RAT1, RAT3-RAT10, not yet
+     reviewed. Staff rations (RAT2) are unchanged.
+625. **How the homekill adjustment posts** (Jess, 20 October 2026). Dr
+     owner drawings or current account (the drawings account in Livestock
+     settings), Cr rations income, and Cr GST when GST applies (1,100.00
+     excluding GST: 1,265.00 / 1,100.00 / 165.00; including GST: 143.48 GST,
+     956.52 income), on the balance date or a date in the year. One active
+     adjustment a year: a different amount means voiding it with a reason
+     (reversed on its own date) and entering another. Origin
+     `livestock_rations`, so the cash flow statement treats it as non-cash.
+     No debit to GST and no bank line.
+626. **The homekill adjustment in the GST return** (Jess, 20 October 2026).
+     With GST it's a sales line on its date on every GST basis (Box 5,
+     HOMEKILL-<year end>), so it's in the return for that date's period.
+     Voided after its return is filed, the next return takes it back off
+     through the existing late claims. Filed returns are never rewritten.
+     There's no per-event assessment and no "not assessed" listing.
+627. **Rations posted per event before 20 October 2026** (Jess, 20 October
+     2026). Journals the old RAT1 posted for each owner's rations movement
+     stay as they are. The homekill card shows how much was posted that way
+     in the year, so it isn't counted again in the yearly amount. Voiding
+     such a movement still reverses its journal. The year's head count beside
+     the adjustment is for information only: the amount is the accountant's.

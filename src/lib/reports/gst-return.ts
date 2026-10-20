@@ -1,5 +1,4 @@
 import { getGstRegistration } from "@/lib/tax/registration";
-import { markRationsAdjustmentsFiled, rationsForGstReturn } from "@/lib/livestock/rations-gst";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
@@ -71,7 +70,7 @@ export const GST_EVENT_TYPES = [
   "expense_claim_voided",
   "expense_claim_payment",
   "expense_claim_payment_voided",
-  "rations_supply",
+  "rations_adjustment",
 ] as const;
 export type GstEventType = (typeof GST_EVENT_TYPES)[number];
 
@@ -309,11 +308,11 @@ with events as (
     from bank_transactions t
    where t.status = 'voided' and t.void_date between $1 and $2
   union all
-  -- The owner's rations assessed as a taxable supply count on the event's date on every basis (RAT5, RAT6). A new
-  -- assessment is a new document, so one that changes after its period is filed is caught up as a late claim.
-  select 'sales', 'rations_supply', m.movement_date, 1, 'livestock_rations', g.id, null, null
-    from livestock_rations_gst g join livestock_movements m on m.id = g.movement_id
-   where g.outcome = 'taxable_supply' and g.replaced_at is null and m.voided_at is null and m.movement_date between $1 and $2
+  -- The owner's rations (homekill) yearly adjustment with GST counts on its date on every basis (RAT6, RAT7). A voided
+  -- one drops out, so one voided after its period is filed is taken back off as a late claim (RAT8).
+  select 'sales', 'rations_adjustment', r.adjustment_date, 1, 'livestock_rations', r.id, null, null
+    from livestock_rations_adjustments r
+   where r.gst_applies and r.voided_at is null and r.adjustment_date between $1 and $2
   union all
   ${SETTLEMENTS_SQL}
 ),
@@ -332,8 +331,7 @@ documents as (
   union all
   select 'expense_claim', id, 'CLAIM-' || id, null, null, claimant_email, null, null from expense_claims
   union all
-  select 'livestock_rations', g.id, 'RATIONS-' || m.id, null, null, coalesce(m.rations_recipient, 'Owner'), null, null
-    from livestock_rations_gst g join livestock_movements m on m.id = g.movement_id
+  select 'livestock_rations', id, 'HOMEKILL-' || year_end, null, null, 'Owner (homekill)', null, null from livestock_rations_adjustments
 ),
 -- Foreign-currency documents count at their base amounts: each line converted
 -- at the document's rate, as at the time of supply (GST Act s 77; MC13).
@@ -363,10 +361,9 @@ document_lines as (
          tax_amount
     from expense_claim_receipts
   union all
-  select 'livestock_rations', g.id, 1, 'Livestock rations: ' || m.head || ' head killed, supplied at market value', g.tax_code_id,
-         0.15::numeric, g.net_amount, g.gst_amount
-    from livestock_rations_gst g join livestock_movements m on m.id = g.movement_id
-   where g.outcome = 'taxable_supply'
+  select 'livestock_rations', id, 1, 'Owner''s rations (homekill) for the year: ' || reason, tax_code_id, 0.15::numeric, net_amount, gst_amount
+    from livestock_rations_adjustments
+   where gst_applies
 )
 select e.side, e.event_type, e.event_date, e.sign, e.settlement_id::text,
        -- A foreign-currency document's settlement is its share of the document's base amount.
@@ -403,7 +400,7 @@ const DOCUMENT_LABELS: Record<GstDocumentType, string> = {
   supplier_credit_note: "supplier credit note",
   bank_transaction: "bank transaction",
   expense_claim: "expense claim",
-  livestock_rations: "livestock rations",
+  livestock_rations: "homekill adjustment",
 };
 
 function toLine(
@@ -962,9 +959,7 @@ export async function calculateGstReturn(
   const adjustments = parseGstAdjustments(input.adjustments);
   const excluded = parseExcludedLateClaims(input.excludedLateClaims);
   const basis = await gstBasis(tx, { lock: false });
-  // The owner's rations: change-in-use adjustments go in Box 9 on their own; unresolved ones are listed, never nil (RAT7, RAT10).
-  const rations = await rationsForGstReturn(tx, periodStart, periodEnd);
-  const { figures, lines, lateClaims } = await workOutWithLateClaims(tx, basis, periodStart, periodEnd, [...rations.adjustments, ...adjustments], excluded);
+  const { figures, lines, lateClaims } = await workOutWithLateClaims(tx, basis, periodStart, periodEnd, adjustments, excluded);
   return {
     periodStart,
     periodEnd,
@@ -972,10 +967,7 @@ export async function calculateGstReturn(
     basis,
     currencyCode: tx.baseCurrency,
     ...figures,
-    /** The adjustments typed in; the rations ones are in `rationsAdjustments`. */
     adjustments,
-    rationsAdjustments: rations.adjustments,
-    rations: { unresolved: rations.unresolved, noAdjustment: rations.noAdjustment },
     lines,
     /** Lines dated in earlier filed returns' periods that they didn't count (LG1-LG7). */
     lateClaims,
@@ -1207,10 +1199,7 @@ export async function fileGstReturn(
     );
   }
 
-  const rations = await rationsForGstReturn(tx, periodStart, periodEnd);
-  // Stored with the typed ones, rations first, so the filed return keeps exactly what it counted (RAT7).
-  const stored = [...rations.adjustments, ...adjustments];
-  const { figures, lines, lateClaims } = await workOutWithLateClaims(tx, basis, periodStart, periodEnd, stored, excluded);
+  const { figures, lines, lateClaims } = await workOutWithLateClaims(tx, basis, periodStart, periodEnd, adjustments, excluded);
   const reversals = new Set(lateClaims.filter((claim) => claim.reversal).flatMap((claim) => claim.lines));
   const counted = lines
     .filter((line) => line.boxes.length > 0)
@@ -1245,22 +1234,21 @@ export async function fileGstReturn(
       boxes.box15,
       gstOnTransactions.sales,
       gstOnTransactions.purchases,
-      stored.length,
+      adjustments.length,
       counted.length,
       tx.actor.userId,
       tx.actor.email,
     ],
   );
   const id = inserted.rows[0].id;
-  if (stored.length > 0) {
+  if (adjustments.length > 0) {
     await tx.query(
       `insert into gst_return_adjustments (gst_return_id, line_order, box, description, amount)
        select $1, entry.ordinality, entry.value->>'box', entry.value->>'description', (entry.value->>'amount')::numeric
          from jsonb_array_elements($2::jsonb) with ordinality as entry(value, ordinality)`,
-      [id, JSON.stringify(stored)],
+      [id, JSON.stringify(adjustments)],
     );
   }
-  await markRationsAdjustmentsFiled(tx, id, rations);
   if (counted.length > 0) {
     await tx.query(
       `insert into gst_return_lines (gst_return_id, line_order, side, event_type, event_date, document_type,
@@ -1289,7 +1277,7 @@ export async function fileGstReturn(
       periodEnd,
       basis,
       box15: boxes.box15,
-      adjustments: stored.length,
+      adjustments: adjustments.length,
       lines: counted.length,
       ...(lateClaims.length
         ? { lateClaimsIncluded: lateClaims.filter((claim) => claim.included).length, lateClaimsLeftOut: lateClaims.filter((claim) => !claim.included).length }

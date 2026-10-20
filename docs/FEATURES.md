@@ -1127,19 +1127,15 @@ that something happened.
   - **Head count reconciliation:** by class, with ageing netting to zero.
     Year-end counts show any difference as "not explained".
   - **Stock held for others** is shown but never counted.
-  - **Killed for rations** (RAT1-RAT4; GST RAT5-RAT10, decisions
-    624-627, tenant migration 0171; Codex, delegated by owner (via Will),
-    20 Oct 2026, not yet reviewed by an accountant): the owner's rations
-    record the recipient, the legal entity they came from, the market value
-    and whether it includes GST. They're income at market value, Dr
-    drawings or current account, Cr rations income. On a GST-registered
-    date each one is assessed for GST: a confirmed taxable supply (a sale
-    in the GST return on its date), a confirmed change-in-use adjustment (a
-    reviewed amount in Box 9), or no adjustment with evidence. Until then
-    the GST return lists it as not assessed, not nil. Changing an
-    assessment needs a reason and posts again. Filed GST returns are never
-    changed: later changes are caught up in the next one. Staff rations
-    post nothing and aren't assessed yet.
+  - **Killed for rations** (RAT1-RAT10, decisions 624-627, tenant
+    migration 0171; Jess, 20 Oct 2026, not yet reviewed): homekill for the
+    owner and staff rations are head counts and post nothing. Under
+    Livestock › Movements, the accountant enters one homekill adjustment a
+    year (amount, basis, and GST if it applies on a GST-registered date):
+    Dr drawings or current account, Cr rations income, Cr GST. With GST it's
+    in that date's GST return. The year's head count is shown beside it.
+    Voiding needs a reason. Rations posted per event before 20 Oct 2026
+    stay, and are shown so they aren't counted twice.
   - **Never below zero:** no class is let go below zero on any date.
   - **Year-end valuation** (stage 3, decision 505, LV4-LV12):
     - Herd scheme and national standard cost (mature group averaged). Each

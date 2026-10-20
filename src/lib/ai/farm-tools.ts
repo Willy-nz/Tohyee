@@ -76,8 +76,7 @@ const SORT: JsonSchema = {
 };
 const MOVEMENT: JsonSchema = {
   type: "object",
-  description:
-    "As for a livestock movement: movementType, movementDate, kind, classCode, head, and where needed toClassCode, amount (excl. GST, except the owner's rations, which say), heldFor, rationsFor, note. The owner's rations also need rationsRecipient, rationsEntity and amountIncludesGst; a person assesses their GST.",
+  description: "As for a livestock movement: movementType, movementDate, kind, classCode, head, and where needed toClassCode, amount (purchases and sales only, excl. GST; the owner's rations are valued once a year by the accountant), heldFor, rationsFor, note.",
   properties: {
     movementType: { type: "string", enum: [...MOVEMENT_TYPES] },
     movementDate: DATE,
@@ -88,9 +87,6 @@ const MOVEMENT: JsonSchema = {
     amount: { type: "string" },
     heldFor: { type: "string" },
     rationsFor: { type: "string", enum: ["owner", "staff"] },
-    rationsRecipient: { type: "string", description: "The owner's rations: who they went to." },
-    rationsEntity: { type: "string", description: "The owner's rations: the legal entity the stock belonged to." },
-    amountIncludesGst: { type: "boolean", description: "The owner's rations: whether the market value includes GST." },
     note: { type: "string" },
   },
   required: ["movementType", "movementDate", "kind", "classCode", "head"],
