@@ -48,9 +48,19 @@ that something happened.
   farm working expenses per unit against last season, a small Money card and
   the farm notebook. Each card links to its page, and empty cards are hidden.
   Customise turns cards on and off and orders them, per person, with
-  Analytics tiles pinned alongside (up to 10). Not yet: production and
-  income, FWE against budget, soil tests due, and different default cards
-  per role.
+  Analytics tiles pinned alongside (up to 10). It also has **Records to
+  catch up on** (old farm walks, unmeasured paddocks, missing season
+  figures, bank lines to reconcile, stock suggestions and your own calendar
+  items to check) and **Cash this season** (month ends from the bank, then
+  the cash flow forecast to the season's end; FH9-FH11, decision 663). Not
+  yet: production and income, FWE against budget and soil tests due.
+  **Starting dashboards** (#360 item 20, decisions 660-664, HD1-HD5): sales
+  reps and managers start on the CRM Home, farms on the farm Home and
+  everyone else on the owner's Home, each with starting cards for their
+  kind; your own Customise always wins, and **Go back to the starting
+  cards** undoes it. Bills to pay and Needs attention show overdue bills,
+  and Home offers Jobs and Sales pipeline tiles. No practice manager
+  dashboard.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
@@ -907,7 +917,8 @@ that something happened.
   `/crm`. The CRM's **Home** shows the signed-in person's open opportunities
   (with a total per currency), their tasks due today or overdue, and the
   team's ten most recent calls, meetings and notes (CRM10, not yet approved
-  by Jess), and a card for Shopify: connected stores with their last sync
+  by Jess), with **Pipeline**, **Conversion** and **Next actions** cards in a
+  dashboard frame each person can customise (decision 662, SD1-SD6), and a card for Shopify: connected stores with their last sync
   and error, or "Connect Shopify" for an admin; CRM › Settings ›
   Integrations opens Settings › Sales platforms (decision 582). Companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with the organisation's own stages

@@ -5,14 +5,16 @@ import type { ReactNode } from "react";
 import { PinnedAnalyticsTile } from "@/components/analytics/pinned-tile";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { PageDashboardFrame, useDashboardPreferences } from "@/components/page-dashboard";
+import { Chart } from "@/components/analytics/chart";
+import { DashboardCardChooser, PageDashboardFrame, useDashboardPreferences } from "@/components/page-dashboard";
 import { Notice, ui } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import type { Dashboard } from "@/lib/analytics/dashboards";
 import { parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
+import { defaultsNote } from "@/lib/dashboard/defaults";
 import { dashboardPage, defaultDashboardTileIds, maxTilesFor } from "@/lib/dashboard/pages";
-import { moveTile, toggleTile } from "@/lib/dashboard/tiles";
 import { CALENDAR_KIND_LABELS, type CalendarItem } from "@/lib/farming/calendar-shared";
-import type { FarmHome, FarmHomePasture, FarmHomeFertiliser, FarmHomePerformance, FarmHomeStock, FarmHomeCalendar, FarmHomeNotebook } from "@/lib/farming/home";
+import type { FarmHome, FarmHomeCatchUpItem, FarmHomePasture, FarmHomeFertiliser, FarmHomePerformance, FarmHomeSeasonCash, FarmHomeStock, FarmHomeCalendar, FarmHomeNotebook } from "@/lib/farming/home";
 import { formatDate, formatQuantity } from "@/lib/format";
 import type { HomeSummary } from "@/lib/reports/home";
 import { GST_BASIS_LABELS } from "@/lib/tax/categories";
@@ -20,14 +22,14 @@ import homeStyles from "./home.module.css";
 import styles from "./farm-home.module.css";
 
 /*
- * The farm Home (#341; FH1-FH8): Home for organisations with Farming on.
+ * The farm Home (#341; FH1-FH11): Home for organisations with Farming on.
  * Cards come from records Tohyee keeps; a card with nothing to show is
  * hidden rather than showing zeros. Customise turns cards on and off and
  * orders them, per person, and Analytics tiles can be pinned here too.
  */
 
 const PAGE = dashboardPage("farm_home")!;
-const CARDS = PAGE.defaultTiles;
+const CARDS = PAGE.cards;
 const DEFAULT_IDS = defaultDashboardTileIds(PAGE);
 const MAX_TILES = maxTilesFor(PAGE);
 type CardId = (typeof CARDS)[number]["id"];
@@ -68,10 +70,21 @@ function CalendarCard({ data }: { data: FarmHomeCalendar }) {
       {data.items.length === 0 ? (
         <p className={ui.muted}>Nothing on from {shortDay(data.from)} to {shortDay(data.to)}.</p>
       ) : (
+        <>
+          {byDay.has(data.from) ? null : <p className={ui.muted}>Nothing on today.</p>}
+          <Agenda byDay={byDay} from={data.from} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Agenda({ byDay, from }: { byDay: Map<string, CalendarItem[]>; from: string }) {
+  return (
         <ul className={styles.agenda}>
           {[...byDay.entries()].map(([date, items]) => (
             <li key={date}>
-              <span className={styles.day}>{date === data.from ? "Today" : shortDay(date)}</span>
+              <span className={styles.day}>{date === from ? "Today" : shortDay(date)}</span>
               <ul className={styles.dayItems}>
                 {items.map((item) => (
                   <li key={item.key} className={item.state === "cancelled" ? styles.cancelled : undefined}>
@@ -90,8 +103,6 @@ function CalendarCard({ data }: { data: FarmHomeCalendar }) {
             </li>
           ))}
         </ul>
-      )}
-    </Card>
   );
 }
 
@@ -227,6 +238,87 @@ function MoneyCard({ summary }: { summary: HomeSummary }) {
   );
 }
 
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** What a record to catch up on says, and where it's fixed (FH9). */
+export function catchUpLine(item: FarmHomeCatchUpItem): { text: string; action: string; href: string } {
+  switch (item.kind) {
+    case "pasture_stale":
+      return { text: `${item.farmName}: last farm walk ${formatDate(item.latestReading)}, ${item.days} days ago`, action: "Add readings", href: "/operations/farming/pasture" };
+    case "paddocks_unmeasured":
+      return { text: `${item.farmName}: ${plural(item.count, "paddock has", "paddocks have")} no cover reading`, action: "Add readings", href: "/operations/farming/pasture" };
+    case "season_figures":
+      return { text: `No kg MS, hectares, cows or stock units for the year to ${formatDate(item.yearEnd)}`, action: "Enter them", href: "/operations/farming/benchmarks" };
+    case "bank_lines":
+      return { text: `${plural(item.count, "bank line", "bank lines")} to reconcile`, action: "Reconcile", href: "/operations/bank-accounts" };
+    case "bank_feeds":
+      return { text: `${plural(item.count, "bank feed needs", "bank feeds need")} reconnecting`, action: "Reconnect", href: "/operations/bank-accounts" };
+    case "livestock_suggestions":
+      return { text: `${plural(item.count, "suggested stock movement", "suggested stock movements")} to accept or decline`, action: "Review", href: "/operations/livestock" };
+    case "calendar_checking":
+      return { text: `${plural(item.count, "calendar item needs", "calendar items need")} checking`, action: "Check", href: "/operations/farming/calendar" };
+  }
+}
+
+function CatchUpCard({ items }: { items: FarmHomeCatchUpItem[] }) {
+  return (
+    <Card title="Records to catch up on" href="/operations/farming/pasture" linkLabel="Open Pasture">
+      <div className={homeStyles.rows}>
+        {items.map((item, index) => {
+          const line = catchUpLine(item);
+          return (
+            <div key={`${item.kind}-${index}`} className={homeStyles.row}>
+              <span>{line.text}</span>
+              <Link href={line.href}>{line.action}</Link>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function SeasonCashCard({ data }: { data: FarmHomeSeasonCash }) {
+  const rows = data.months.map((month) => ({
+    month: monthName(month.month).slice(0, 3),
+    // This month shows its expected month end only, so the bars aren't stacked on each other.
+    actual: month.forecastClosing === null ? month.closing : null,
+    forecast: month.forecastClosing,
+  }));
+  const now = [...data.months].reverse().find((month) => month.closing !== null);
+  return (
+    <Card title="Cash this season" href="/operations/reports/cash-flow-forecast" linkLabel="Open the cash flow forecast" wide aside={<span className={homeStyles.kind}>{formatDate(data.yearStart)} – {formatDate(data.yearEnd)}</span>}>
+      <p className={ui.muted}>In the bank at each month&apos;s end, then what the books expect. Excludes credit cards.</p>
+      <Chart
+        spec={{ kind: "column", category: "month", stacked: true, series: [{ field: "actual", label: "In the bank" }, { field: "forecast", label: "Expected" }], valueFormat: "money", currency: data.currencyCode, compact: true }}
+        rows={rows}
+        height={200}
+      />
+      <div className={homeStyles.rows}>
+        {now && now.moneyIn !== null ? (
+          <>
+            <div className={homeStyles.row}>
+              <span>{monthName(now.month)} so far: in · out</span>
+              <span><Money value={now.moneyIn} /> · <Money value={now.moneyOut ?? "0.00"} /></span>
+            </div>
+            <div className={homeStyles.row}>
+              <span><Link href="/operations/bank-accounts">In the bank today</Link></span>
+              <span><Money value={now.closing} /></span>
+            </div>
+          </>
+        ) : null}
+        {data.lowest ? (
+          <div className={homeStyles.row}>
+            <span><Link href="/operations/reports/cash-flow-forecast">Lowest expected</Link>, end of {monthName(data.lowest.month)}</span>
+            <span className={data.firstBelowZero ? homeStyles.bad : undefined}><Money value={data.lowest.closing} /></span>
+          </div>
+        ) : null}
+        {data.firstBelowZero ? <p className={styles.attention}>Expected to go below zero in {monthName(data.firstBelowZero)}</p> : null}
+      </div>
+    </Card>
+  );
+}
+
 function NotebookCard({ data }: { data: FarmHomeNotebook }) {
   const list = (notes: FarmHomeNotebook["goals"]) => (
     <ul className={styles.notes}>
@@ -248,6 +340,8 @@ function NotebookCard({ data }: { data: FarmHomeNotebook }) {
 
 /** Whether a card has something to show (FH6): cards without are hidden. */
 export function cardHasData(id: CardId, farm: FarmHome, money: HomeSummary | null): boolean {
+  if (id === "catch_up") return farm.catchUp !== null;
+  if (id === "season_cash") return farm.seasonCash !== null;
   if (id === "farm_calendar") return farm.calendar !== null;
   if (id === "stock") return farm.stock !== null;
   if (id === "pasture") return farm.pasture !== null;
@@ -264,6 +358,8 @@ export function moneyHasData(money: HomeSummary): boolean {
 }
 
 function FarmCard({ id, farm, money }: { id: CardId; farm: FarmHome; money: HomeSummary | null }) {
+  if (id === "catch_up" && farm.catchUp) return <CatchUpCard items={farm.catchUp} />;
+  if (id === "season_cash" && farm.seasonCash) return <SeasonCashCard data={farm.seasonCash} />;
   if (id === "farm_calendar" && farm.calendar) return <CalendarCard data={farm.calendar} />;
   if (id === "stock" && farm.stock) return <StockCard data={farm.stock} />;
   if (id === "pasture" && farm.pasture) return <PastureCard farms={farm.pasture} />;
@@ -274,56 +370,8 @@ function FarmCard({ id, farm, money }: { id: CardId; farm: FarmHome; money: Home
   return null;
 }
 
-function Customise({
-  tiles,
-  options,
-  hasData,
-  saving,
-  onChange,
-}: {
-  tiles: string[];
-  options: Array<{ id: string; label: string }>;
-  hasData: (id: string) => boolean;
-  saving: boolean;
-  onChange: (tiles: string[]) => void;
-}) {
-  const order = options.map((option) => option.id);
-  const shown = tiles.map((id) => options.find((option) => option.id === id) ?? { id, label: id });
-  const hidden = options.filter((option) => !tiles.includes(option.id));
-  return (
-    <div className={styles.customise}>
-      <p className={ui.muted}>Choose the cards on your farm Home and their order. Only you see this choice. Cards with nothing to show yet stay hidden.</p>
-      <ol className={styles.choices} aria-label="Cards shown">
-        {shown.map((option, index) => (
-          <li key={option.id} className={styles.choice}>
-            <label className={ui.checkbox}>
-              <input type="checkbox" checked disabled={saving || tiles.length === 1} onChange={() => onChange(toggleTile(tiles, option.id, false, order, MAX_TILES))} />
-              <span>{option.label}{hasData(option.id) ? "" : " (nothing to show yet)"}</span>
-            </label>
-            <span className={styles.moves}>
-              <button type="button" className={ui.linkButton} disabled={saving || index === 0} onClick={() => onChange(moveTile(tiles, option.id, -1))} aria-label={`Move ${option.label} up`}>Up</button>
-              <button type="button" className={ui.linkButton} disabled={saving || index === shown.length - 1} onClick={() => onChange(moveTile(tiles, option.id, 1))} aria-label={`Move ${option.label} down`}>Down</button>
-            </span>
-          </li>
-        ))}
-      </ol>
-      {hidden.length ? (
-        <fieldset className={styles.hiddenCards}>
-          <legend>Not shown</legend>
-          {hidden.map((option) => (
-            <label key={option.id} className={ui.checkbox}>
-              <input type="checkbox" checked={false} disabled={saving || tiles.length >= MAX_TILES} onChange={() => onChange(toggleTile(tiles, option.id, true, order, MAX_TILES))} />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </fieldset>
-      ) : null}
-      <p className={ui.muted}>Charts from Analytics can be added here with <strong>Pin to page</strong> on a dashboard tile. At most {MAX_TILES} cards.</p>
-    </div>
-  );
-}
-
 export function FarmHomeTiles({ organisationId }: { organisationId: string }) {
+  const { current } = useWorkspace();
   const farm = useApiData<FarmHome>("/api/farming/home", { organisationId });
   const dashboard = useDashboardPreferences({ organisationId, page: PAGE.id, defaultTiles: DEFAULT_IDS });
   const wantsMoney = dashboard.tiles.includes("money");
@@ -350,7 +398,21 @@ export function FarmHomeTiles({ organisationId }: { organisationId: string }) {
       <PageDashboardFrame
         hidden={dashboard.hidden}
         onToggleHidden={() => dashboard.setHidden(!dashboard.hidden)}
-        customise={<Customise tiles={dashboard.tiles} options={[...CARDS, ...pinOptions]} hasData={hasData} saving={dashboard.saving} onChange={(tiles) => dashboard.setTiles(tiles)} />}
+        customise={
+          <DashboardCardChooser
+            tiles={dashboard.tiles}
+            options={[...CARDS, ...pinOptions]}
+            maxTiles={MAX_TILES}
+            hasData={hasData}
+            saving={dashboard.saving}
+            onChange={(tiles) => dashboard.setTiles(tiles)}
+            intro="Choose the cards on your farm Home and their order. Only you see this choice. Cards with nothing to show yet stay hidden."
+            startingNote={defaultsNote(PAGE.id, { role: current?.role ?? "viewer" })}
+            customised={dashboard.customised}
+            onReset={() => void dashboard.reset()}
+            footer={<>Charts from Analytics can be added here with <strong>Pin to page</strong> on a dashboard tile. At most {MAX_TILES} cards.</>}
+          />
+        }
       >
         {visible.length === 0 ? (
           <p className={ui.muted}>
