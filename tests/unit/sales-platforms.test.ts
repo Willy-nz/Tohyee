@@ -41,8 +41,8 @@ describe("Shopify webhook signatures (SPC8)", () => {
 });
 
 describe("Shopify settings", () => {
-  it("uses Admin GraphQL API 2026-07 and read-only scopes", () => {
-    expect(SHOPIFY_API_VERSION).toBe("2026-07");
+  it("uses Admin GraphQL API 2026-10 and read-only scopes", () => {
+    expect(SHOPIFY_API_VERSION).toBe("2026-10");
     expect(SHOPIFY_SCOPES).toEqual(["read_customers", "read_products"]);
   });
 

@@ -435,8 +435,9 @@ const DISPUTES = ["DISPUTE_WITHDRAWAL", "DISPUTE_REVERSAL", "CHARGEBACK_FEE", "C
  * another type or has an unexpected sign, or the balance transactions don't
  * add up to the payout.
  */
-export function planPayout(payout: PlatformPayout, baseCurrency: string): PayoutPlan {
+export function planPayout(payout: PlatformPayout, baseCurrency: string, platformName = "Shopify"): PayoutPlan {
   const what = `Payout ${payout.externalId}`;
+  const fees = platformName === "Shopify" ? "Shopify Payments" : platformName;
   if (payout.direction !== "DEPOSIT") return refuse(`${what} is a ${payout.direction.toLowerCase()} (money taken from the bank); those aren't supported yet.`);
   if (payout.currency !== baseCurrency) return refuse(`${what} is in ${payout.currency}; Tohyee only brings in payouts in ${baseCurrency}.`);
   if (payout.incomplete) return refuse(`${what} has more balance transactions than Tohyee reads.`);
@@ -457,17 +458,17 @@ export function planPayout(payout: PlatformPayout, baseCurrency: string): Payout
   const nets = sum(payout.transactions.map((t) => dec(t.net)));
   if (cmp(nets, net) !== 0) return refuse(`${what}'s transactions come to ${money(nets)} but the payout is ${money(net)}, so nothing was posted.`);
   if (!isPositive(net)) return refuse(`${what} is ${money(net)}; only payouts of more than nothing are posted.`);
-  const fees = sum(payout.transactions.map((t) => dec(t.fee)));
-  if (isNegative(fees)) return refuse(`${what}'s fees come to ${money(fees)} (fees given back); that isn't supported yet.`);
+  const feeTotal = sum(payout.transactions.map((t) => dec(t.fee)));
+  if (isNegative(feeTotal)) return refuse(`${what}'s fees come to ${money(feeTotal)} (fees given back); that isn't supported yet.`);
   const charges: PayoutLine[] = [];
   const receipts: PayoutLine[] = [];
-  if (isPositive(fees)) charges.push({ description: `Shopify Payments fees, payout ${payout.externalId}`, amount: money(fees), account: "fees" });
+  if (isPositive(feeTotal)) charges.push({ description: `${fees} fees, payout ${payout.externalId}`, amount: money(feeTotal), account: "fees" });
   for (const t of payout.transactions.filter((entry) => entry.type === "ADJUSTMENT")) {
     // An adjustment's own fee is already in the fees; its amount is what's left.
     const amount = sub(dec(t.net), sub(ZERO_DECIMAL, dec(t.fee)));
     if (isPositive(amount)) return refuse(`${what} has an adjustment that adds ${money(amount)}; adjustments in Tohyee's favour aren't supported yet.`);
     if (isZero(amount)) continue;
-    charges.push({ description: `Shopify adjustment${t.adjustmentReason ? `: ${t.adjustmentReason}` : ""}, payout ${payout.externalId}`, amount: money(sub(ZERO_DECIMAL, amount)), account: "fees" });
+    charges.push({ description: `${platformName} adjustment${t.adjustmentReason ? `: ${t.adjustmentReason}` : ""}, payout ${payout.externalId}`, amount: money(sub(ZERO_DECIMAL, amount)), account: "fees" });
   }
   const on = (t: PlatformBalanceTransaction) => (t.orderName ? ` on ${t.orderName}` : "");
   for (const t of payout.transactions.filter((entry) => DISPUTES.includes(entry.type))) {

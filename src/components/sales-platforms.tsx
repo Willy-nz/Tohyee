@@ -13,6 +13,7 @@ import type { Contact } from "@/lib/contacts/service";
 import { formatDateTime } from "@/lib/format";
 import {
   AUTH_METHOD_LABELS,
+  PLATFORM_FEATURES,
   SALES_PLATFORM_LABELS,
   SALES_PLATFORMS,
   type SalesPlatform,
@@ -28,9 +29,10 @@ import type { TaxCode } from "@/lib/tax/codes";
 import { useConfirm } from "@/components/confirm-dialog";
 
 /**
- * Settings › Sales platforms (examples SPC1-SPC10): connecting a Shopify
- * store, what to sync, "Sync now", the sync log and disconnecting; and
- * posting orders, refunds and payouts to the accounts (SPC11-SPC24).
+ * Settings › Sales platforms (examples SPC1-SPC10, WC1-WC10, SQ1-SQ10):
+ * connecting a Shopify, WooCommerce or Square store, what to sync, "Sync
+ * now", the sync log and disconnecting; and posting orders, refunds and
+ * payouts to the accounts (SPC11-SPC24).
  * Everyone can read the connections and the log; only admins change
  * anything.
  */
@@ -75,6 +77,7 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
   const [apiSecret, setApiSecret] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [squareToken, setSquareToken] = useState("");
   const [syncCustomers, setSyncCustomers] = useState(true);
   const [syncProducts, setSyncProducts] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -88,14 +91,17 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
       const body =
         platform === "woocommerce"
           ? { organisationId, platform, storeDomain, consumerKey, consumerSecret }
-          : { organisationId, platform, storeDomain, authMethod, ...(authMethod === "access_token" ? { accessToken, apiSecret } : { clientId, clientSecret }), syncCustomers, syncProducts };
+          : platform === "square"
+            ? { organisationId, platform, accessToken: squareToken }
+            : { organisationId, platform, storeDomain, authMethod, ...(authMethod === "access_token" ? { accessToken, apiSecret } : { clientId, clientSecret }), syncCustomers, syncProducts };
       const { connection } = await api<{ connection: SalesPlatformConnection }>("/api/sales-platforms/connections", { method: "POST", body });
       setAccessToken("");
       setApiSecret("");
       setClientSecret("");
       setConsumerSecret("");
+      setSquareToken("");
       onConnected(
-        platform === "woocommerce"
+        !PLATFORM_FEATURES[platform].syncsRecords
           ? `Connected ${connection.storeName ?? connection.storeDomain}. Set up posting to the accounts below to bring its orders in.`
           : `Connected ${connection.storeName ?? connection.storeDomain}. Choose "Sync now" to bring its customers and products in.`,
       );
@@ -117,6 +123,32 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
       </select>
     </Field>
   );
+  if (platform === "square") {
+    return (
+      <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
+        <Notice tone="info">
+          <strong>Before you start:</strong> in the Square Developer Console (developer.squareup.com), make an app in your own Square account and copy
+          its <strong>production</strong> personal access token. Square gives that token full access to your account and it can&apos;t be limited;
+          Tohyee only reads orders, payments, refunds and payouts, and keeps the token encrypted. Square doesn&apos;t take card payments in New Zealand
+          (its developer pages list Australia, Canada, France, Ireland, Japan, Spain, the UK and the US), and orders in another currency than this
+          organisation&apos;s are refused. Each Square order becomes its own invoice, so don&apos;t ring up a sale in Square that&apos;s already
+          invoiced in Tohyee: it would come in as a second sale.
+        </Notice>
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        <div className={ui.grid2}>
+          {platformField}
+          <Field label="Personal access token" hint="Stored encrypted on this server; never shown again.">
+            <input type="password" value={squareToken} onChange={(event) => setSquareToken(event.target.value)} maxLength={500} autoComplete="new-password" required />
+          </Field>
+        </div>
+        <div className={ui.actions}>
+          <Button type="submit" disabled={busy}>
+            {busy ? "Checking with Square…" : "Connect account"}
+          </Button>
+        </div>
+      </form>
+    );
+  }
   if (platform === "woocommerce") {
     return (
       <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
@@ -153,7 +185,8 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
       <Notice tone="info">
         <strong>Before you start:</strong> Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access. In the
         Shopify Dev Dashboard (dev.shopify.com), create an app, give it only the Admin API access scopes <code>read_customers</code> and{" "}
-        <code>read_products</code>, release it and install it on your store, then copy its client ID and secret from the app&apos;s Settings. If your
+        <code>read_products</code>, turn on access to protected customer data (name, email, phone and address), release it and install it on your store, then copy its client ID
+        and secret from the app&apos;s Settings. If your
         store already has a custom app made in the store admin before 2026, you can use its Admin API access token and API secret key instead. Tohyee
         refuses access that can change your store: it only reads.
       </Notice>
@@ -316,7 +349,11 @@ export function ConnectionCard({
       description={
         <>
           {connection.storeDomain} · {AUTH_METHOD_LABELS[connection.authMethod] ?? connection.authMethod}
-          {connection.storeCurrency ? ` · prices in ${connection.storeCurrency}, ${connection.pricesIncludeTax ? "including" : "excluding"} tax` : ""}
+          {connection.storeCurrency
+            ? connection.platform === "square"
+              ? ` · in ${connection.storeCurrency}`
+              : ` · prices in ${connection.storeCurrency}, ${connection.pricesIncludeTax ? "including" : "excluding"} tax`
+            : ""}
         </>
       }
       actions={<Badge tone={status.tone}>{status.text}</Badge>}
@@ -453,8 +490,8 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <Notice tone="warning">
-        This hasn&apos;t been tried against a real Shopify store yet, only against Shopify&apos;s documented responses. Check the first sync&apos;s log
-        carefully. Orders, refunds and payouts are posted only when &quot;Post to the accounts&quot; is on for a store.
+        This hasn&apos;t been tried against a real Shopify, WooCommerce or Square store yet, only against their documented responses. Check the first
+        sync&apos;s log carefully. Orders, refunds and payouts are posted only when &quot;Post to the accounts&quot; is on for a store.
       </Notice>
       {notice ? <Notice tone="success">{notice}</Notice> : null}
       {current.map((connection) => (
@@ -462,8 +499,8 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
       ))}
       {isAdmin ? (
         <Card
-          title={current.length === 0 ? "Connect a Shopify store" : "Connect another Shopify store"}
-          description="Shopify's customers become contacts (as customers) and its products' variants become items, matched to existing ones by email or SKU."
+          title={current.length === 0 ? "Connect a store" : "Connect another store"}
+          description="Shopify, WooCommerce or Square. Customers become contacts (as customers), matched to existing ones by email; order lines use the item with the same SKU."
         >
           <ConnectForm
             organisationId={organisationId}
@@ -527,7 +564,9 @@ function PostingSettings({
     guestContactId: connection.guestContactId ?? "",
     taxCodes: connection.taxCodes.length > 0 ? connection.taxCodes.map((entry) => ({ ...entry })) : [{ rate: "15", taxCode: "" }],
   }));
-  const woo = connection.platform === "woocommerce";
+  const features = PLATFORM_FEATURES[connection.platform];
+  const shop = SALES_PLATFORM_LABELS[connection.platform];
+  const square = connection.platform === "square";
   const list = accounts.data?.accounts ?? [];
   const codes = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive && code.availableOn !== "purchases");
   const customers = (contacts.data?.contacts ?? []).filter((contact) => contact.isCustomer);
@@ -543,7 +582,7 @@ function PostingSettings({
           startDate: form.startDate || null,
           salesAccountCode: form.salesAccountCode || null,
           shippingAccountCode: form.shippingAccountCode || null,
-          ...(woo
+          ...(features.paymentMethods
             ? {
                 paymentMethods: form.paymentMethods.map((entry) => ({
                   method: entry.method,
@@ -551,13 +590,15 @@ function PostingSettings({
                   accountCode: entry.choice === OWING || entry.choice === "" ? null : entry.choice,
                 })),
               }
-            : {
+            : {}),
+          ...(features.payouts
+            ? {
                 clearingAccountCode: form.clearingAccountCode || null,
                 payoutAccountCode: form.payoutAccountCode || null,
                 feesAccountCode: form.feesAccountCode || null,
-                chargebacksAccountCode: form.chargebacksAccountCode || null,
-                reserveAccountCode: form.reserveAccountCode || null,
-              }),
+                ...(square ? {} : { chargebacksAccountCode: form.chargebacksAccountCode || null, reserveAccountCode: form.reserveAccountCode || null }),
+              }
+            : {}),
           untaxedTaxCode: form.untaxedTaxCode || null,
           guestContactId: form.guestContactId || null,
           taxCodes: form.taxCodes.filter((entry) => entry.rate !== "" && entry.taxCode !== ""),
@@ -579,19 +620,19 @@ function PostingSettings({
       <form onSubmit={save} style={{ display: "grid", gap: 12, marginTop: 12 }}>
         <fieldset disabled={!isAdmin || busy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 12 }}>
           <label className={ui.checkbox}>
-            <input type="checkbox" checked={form.postToAccounts} onChange={(event) => set({ postToAccounts: event.target.checked })} /> {woo ? "Post orders and refunds to the accounts" : "Post orders, refunds and payouts to the accounts"}
+            <input type="checkbox" checked={form.postToAccounts} onChange={(event) => set({ postToAccounts: event.target.checked })} /> {features.payouts ? "Post orders, refunds and payouts to the accounts" : "Post orders and refunds to the accounts"}
           </label>
           <div className={ui.grid2}>
             <Field label="Start date" hint="Orders processed before it aren't brought in.">
               <DateInput value={form.startDate} onChange={(event) => set({ startDate: event.target.value })} />
             </Field>
-            {woo ? null : accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds until it pays out.")}
-            {woo ? null : accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank")}
-            {woo ? null : accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense")}
+            {features.payouts ? accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", `A bank account for money ${shop} holds until it pays out.`) : null}
+            {features.payouts ? accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank") : null}
+            {features.payouts ? accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense") : null}
             {accountField("Sales", "salesAccountCode", (account) => account.accountClass === "revenue")}
             {accountField("Shipping", "shippingAccountCode", (account) => account.accountClass === "revenue")}
-            {woo ? null : accountField("Chargebacks", "chargebacksAccountCode", (account) => account.accountClass === "expense", "Disputed amounts Shopify takes back. Needed once a payout has a chargeback.")}
-            {woo ? null : accountField("Reserve", "reserveAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds back. Needed once a payout has a reserve.")}
+            {connection.platform === "shopify" ? accountField("Chargebacks", "chargebacksAccountCode", (account) => account.accountClass === "expense", "Disputed amounts Shopify takes back. Needed once a payout has a chargeback.") : null}
+            {connection.platform === "shopify" ? accountField("Reserve", "reserveAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds back. Needed once a payout has a reserve.") : null}
             <Field label="Tax code for untaxed sales" hint="Zero-rated or exempt; needed when the organisation is GST registered.">
               <select value={form.untaxedTaxCode} onChange={(event) => set({ untaxedTaxCode: event.target.value })}>
                 <option value="">Not chosen</option>
@@ -609,13 +650,13 @@ function PostingSettings({
               </select>
             </Field>
           </div>
-          {woo ? (
+          {features.paymentMethods ? (
             <div style={{ display: "grid", gap: 8 }}>
               <strong>Payment methods</strong>
               <p className={ui.muted} style={{ margin: 0 }}>
-                Where each payment method&apos;s money goes. A card gateway with a bank feed (e.g. Stripe) goes into that account, so the feed&apos;s line
-                matches the payment. Bank transfers are left owing for the bank feed to match. Methods appear here once an order uses them; orders wait
-                until their method is chosen.
+                {square
+                  ? "Card payments go into the clearing account and come out in Square's payouts. Choose where cash and other payments recorded in Square go (a till or cash account, say). Methods appear here once an order uses them; orders wait until their method is chosen."
+                  : "Where each payment method's money goes. A card gateway with a bank feed (e.g. Stripe) goes into that account, so the feed's line matches the payment. Bank transfers are left owing for the bank feed to match. Methods appear here once an order uses them; orders wait until their method is chosen."}
               </p>
               {form.paymentMethods.length === 0 ? <p className={ui.muted}>No orders yet.</p> : null}
               {form.paymentMethods.map((entry, index) => (

@@ -3,12 +3,28 @@
  * with the browser. No server imports here.
  */
 
-export const SALES_PLATFORMS = ["shopify", "woocommerce"] as const;
+export const SALES_PLATFORMS = ["shopify", "woocommerce", "square"] as const;
 export type SalesPlatform = (typeof SALES_PLATFORMS)[number];
 
 export const SALES_PLATFORM_LABELS: Record<SalesPlatform, string> = {
   shopify: "Shopify",
   woocommerce: "WooCommerce",
+  square: "Square",
+};
+
+/**
+ * What each platform does, for the screens and the posting rules:
+ * - payouts: the platform pays out itself (Shopify Payments, Square), so
+ *   there's a clearing account, a payouts account and a fees account;
+ * - paymentMethods: orders' money goes where their payment method is mapped
+ *   (WooCommerce's methods; Square's cash and other tenders, SQ5);
+ * - syncsRecords: customers and products are synced (Shopify only; the
+ *   others match customers by email and lines by SKU).
+ */
+export const PLATFORM_FEATURES: Record<SalesPlatform, { payouts: boolean; paymentMethods: boolean; syncsRecords: boolean }> = {
+  shopify: { payouts: true, paymentMethods: false, syncsRecords: true },
+  woocommerce: { payouts: false, paymentMethods: true, syncsRecords: false },
+  square: { payouts: true, paymentMethods: true, syncsRecords: false },
 };
 
 export const SHOPIFY_AUTH_METHODS = ["access_token", "client_credentials"] as const;
@@ -18,6 +34,7 @@ export const AUTH_METHOD_LABELS: Record<string, string> = {
   access_token: "Admin API access token",
   client_credentials: "Client ID and secret",
   api_key: "REST API key",
+  personal_access_token: "Personal access token",
 };
 
 /**

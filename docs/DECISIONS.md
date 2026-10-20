@@ -5848,3 +5848,113 @@ testing) and #154's code signing (later, Jess).
      tile, so they sit side by side rather than on one chart); sessions by
      channel; top pages; and sessions by device. Offered once Google
      Analytics has loaded.
+665. **Shopify checked against Admin API 2026-10** (20 October 2026;
+     Codex, delegated by owner, 20 October 2026: "validate and finish
+     Shopify first", issue #360 item 18). Without a real store, the
+     connector was read against Shopify's current pages and three things
+     changed: the API version is 2026-10, the latest stable version
+     (shopify.dev/docs/api/usage/versioning; its release notes list no
+     change to anything Tohyee reads except a new `CURRENCY_CONVERSION`
+     balance transaction type, which payouts refuse like any type they
+     don't know); webhooks are subscribed with `uri`, since `callbackUrl`
+     is deprecated (shopify.dev/changelog/consolidate-webhook-graphql-surfaces);
+     and a payout's balance transactions are also checked against their
+     `associatedPayout`, as Shopify's staff suggest, so one that says it
+     belongs to another payout is left out and the payout's total check
+     catches anything missing. When Shopify withholds protected customer
+     data (names, emails, phones, addresses) it answers with an error in an
+     otherwise good reply (shopify.dev/docs/apps/launch/protected-customer-data);
+     the sync stops and says what to turn on in the app's settings rather
+     than matching customers by a blank email. Unchanged after checking:
+     webhook signatures (base64 HMAC-SHA256 of the raw body with the app's
+     secret) and duplicates (by `X-Shopify-Webhook-Id`; `X-Shopify-Event-Id`
+     is shared by different deliveries of one action, so it isn't used),
+     and paging (cursors, `hasNextPage`). Still not tried against a real
+     store.
+666. **WooCommerce refund lines say which order line they refund**
+     (20 October 2026; Codex, delegated by owner, 20 October 2026: "then
+     existing WooCommerce gaps"). A refund line's `_refunded_item_id` meta
+     (shown in WooCommerce's REST API refund example) is the order line it
+     refunds, and refunded shipping has the same. Tohyee used to match a
+     refund line to the first order line with the same product, which is
+     wrong when a product is on two lines at different prices; it now uses
+     `_refunded_item_id`, and the product only when a refund line doesn't
+     have it. The other WooCommerce gaps listed in FEATURES stay as Jess
+     decided on 5 October 2026: surcharges refused for now, and no product
+     or customer sync (email and SKU matching is enough). WooPayments
+     deposits are still reconciled by hand: no documented API for them was
+     found. Refunds of an amount only (no items) are still refused, as for
+     Shopify.
+667. **Square is the third sales platform, connected with a personal
+     access token** (20 October 2026; Codex, delegated by owner, 20 October
+     2026: "Square is my default next new sales connector"). Square's
+     developer docs say a personal access token is for an integration with
+     the seller's own account and is "suitable for production use" there,
+     and the Webhook Subscriptions API needs it
+     (developer.squareup.com/docs/build-basics/access-tokens); OAuth is for
+     apps many sellers install, which would need Tohyee to run a sign-in
+     page and keep refreshing tokens. So, like Shopify's Dev Dashboard app,
+     the seller makes an app in their own Square account and pastes its
+     production token. The token can do anything in the account and can't
+     be limited; Tohyee only reads, stores it encrypted and the screen says
+     so. The account is kept by its merchant ID (lower case), so the same
+     account can't be connected twice. Square-Version 2026-09-16, the
+     version in Square's API reference on 20 October 2026. **Square doesn't
+     take card payments in New Zealand**: its developer docs list
+     Australia, Canada, France, Ireland, Japan, Spain, the UK and the US
+     (developer.squareup.com/docs/international-development), and orders in
+     another currency than the organisation's are refused, as for the other
+     platforms. This is built as the delegated priority; whether any
+     Tohyee organisation can use it is for Jess to say.
+668. **How Square orders are posted** (20 October 2026; examples SQ1-SQ10,
+     "as Xero's Square integration does, not yet reviewed" for where money
+     goes, otherwise Tohyee's Shopify rules). Per order, never a daily
+     summary (Jess, 5 October 2026: no summary mode; Xero's Square
+     integration by Amaka offers a daily summary invoice or one invoice per
+     order, and Tohyee is the second). Card, wallet, Afterpay, ACH and
+     Square gift card tenders go into a Square clearing account (Amaka's
+     "Square Balance", "a clearing account for the Credit Card takings
+     processed through Square"), and payouts move them to the bank with
+     the fees, as Shopify's do (SPC15). Cash and other tenders (including
+     a card on another terminal, such as EFTPOS) go where an admin maps
+     them, as WooCommerce's payment methods (Amaka maps cash to "Square
+     Cash Clearing" and other payments to "Square Other Payments
+     Clearing"); orders wait until the method is mapped. Line amounts come
+     from each line's `total_money` (after discounts), less
+     `total_tax_money` when the order's taxes are added on, because
+     `gross_sales_money` includes inclusive tax in some countries and not
+     others. Lines use the item whose code is the variation's SKU (from the
+     catalog), customers are matched by email, guest orders go to the
+     guest contact. Refunds come from the order's payments' completed
+     refunds; an itemised refund's lines are on its return order (one
+     return order's refunds are one credit note), and a refund of an
+     amount only is refused. Payout entries: CHARGE and REFUND as
+     Shopify's; FEE, PROCESSING_FEE and DEPOSIT_FEE to the fees account;
+     any other type (disputes, reserves, transfers...) refuses the payout
+     for you to record by hand; only PAID payouts are posted. Refused
+     rather than guessed: tips, service charges, cash rounding, exchanges,
+     split payments between card and cash, gift cards, items sold by
+     measure, orders with both inclusive and added-on taxes. Fees carry no
+     GST, as for Shopify; an account in Australia (where Square's fees
+     include GST) would need that checked.
+669. **Square's webhooks, and no revenue twice** (20 October 2026). Tohyee
+     subscribes to order.created, order.updated, payment.created,
+     payment.updated, refund.created and refund.updated; Square's answer
+     has the subscription's signature key, which is kept encrypted with
+     the address it was given. A delivery is taken only when
+     `x-square-hmacsha256-signature` is the base64 HMAC-SHA256, with that
+     key, of that address followed by the raw body, and its merchant is
+     the connected account; its `event_id` stops it being handled twice.
+     Each event only says which order changed: the order is read again
+     from Square (a return order brings in the order it returns from), and
+     the catch-up sync also reads refunds changed since the last sync,
+     since a refund may not change its sale order. Revenue is never posted
+     twice: each platform order is remembered by platform, account and ID
+     (as before), and a Square order whose source is another platform
+     connected in the same organisation (e.g. WooCommerce, when a store's
+     orders are paid through Square) is skipped and logged, since that
+     platform brings it in. Square's source name for such orders is our
+     assumption and hasn't been seen on a real account. What Tohyee can't
+     tell: a sale already invoiced in Tohyee (from a CRM opportunity, say)
+     and then rung up again at Square's point of sale is a second order;
+     the help says to record such a payment against the invoice instead.

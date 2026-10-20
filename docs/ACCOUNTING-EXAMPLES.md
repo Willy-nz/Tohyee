@@ -5750,7 +5750,12 @@ tracked products become stock items; the customer's country comes across.
 recorded Shopify-shaped responses and webhooks signed in the tests.
 
 What Shopify says (read on shopify.dev and help.shopify.com, Admin GraphQL
-API version 2026-07, 1 Oct 2026):
+API version 2026-07, 1 Oct 2026; checked again against **2026-10** on
+20 Oct 2026, decision 665: the version is now 2026-10, webhooks are
+subscribed with `uri` instead of the deprecated `callbackUrl`, payout
+transactions are also checked against their `associatedPayout`, and a
+sync stops with what to turn on when Shopify withholds protected customer
+data; nothing else Tohyee reads changed):
 
 - **Connecting a Dev Dashboard app**: the client ID and secret are
   exchanged for a token by `POST https://{shop}.myshopify.com/admin/oauth/access_token`
@@ -6034,7 +6039,7 @@ are New Zealand dates (NZDT, UTC+13).
 
 ### Not supported yet (refused rather than guessed)
 
-- WooCommerce, Square and Stripe.
+- Stripe sales (WooCommerce and Square are built: WC1-WC10, SQ1-SQ10).
 - Copying sale prices from a store whose prices include tax, or whose
   currency isn't the base currency.
 - Addresses (other than the country), stock levels and costs from Shopify;
@@ -6325,7 +6330,10 @@ melts as SPC.
   INV-0003 (BK4). WooCommerce then marks #2003 processing with
   `date_paid`: nothing more is posted.
 - **WC5** A partial refund of WC2: refund 7001 on 2026-10-05T22:00Z,
-  `amount` 23.00, 1 × Large candle (−20.00, tax −3.00). Credit note CN-0001
+  `amount` 23.00, 1 × Large candle (−20.00, tax −3.00). Each refund line
+  is matched to the order line its `_refunded_item_id` names (decision
+  666; the same product on two lines at different prices is refunded from
+  the right one), or by product when it has none. Credit note CN-0001
   on 6 Oct against INV-0001: **Dr 4000 20.00 / Dr 2100 3.00 / Cr 1100
   23.00**, refunded from 1050: **Dr 1100 23.00 / Cr 1050 23.00**. A refund
   whose lines come to 23.00 but `amount` 20.00 posts nothing; the log
@@ -6369,6 +6377,201 @@ was asked:
 3. **Products:** lines use the Tohyee item whose code is the SKU; there's
    no product or customer sync from WooCommerce like Shopify's stage 1
    (proposed for now). Is that enough?
+
+### Square orders into the accounts (SQ1-SQ10, as Xero's Square integration does, not yet reviewed)
+
+Codex, delegated by owner, 20 October 2026 (#360 item 18): Square is the
+next sales connector, keeping order-level accounting and never posting the
+same revenue twice. **None of this has been tried against a real Square
+account**; the tests use Square-shaped answers written from Square's API
+reference. **Square doesn't take card payments in New Zealand**: its
+developer docs list Australia, Canada, France, Ireland, Japan, Spain, the
+UK and the US
+([international development](https://developer.squareup.com/docs/international-development)).
+The examples use NZD so the numbers compare with SPC and WC; a real
+account in another currency than the organisation's is refused (SQ10).
+
+What Square says (developer.squareup.com, read 20 Oct 2026):
+
+- **Access**: a personal access token "provides unrestricted Square API
+  access to resources in a Square account", is "suitable for production
+  use" for an integration with your own account, and is needed for the
+  Webhook Subscriptions API
+  ([access tokens](https://developer.squareup.com/docs/build-basics/access-tokens)).
+  Production calls go to `https://connect.squareup.com/v2` with
+  `Authorization: Bearer` and `Square-Version` (2026-09-16 in the
+  [SearchOrders reference](https://developer.squareup.com/reference/square/orders-api/search-orders)).
+- **Orders**: `POST /v2/orders/search` needs one to ten `location_ids`,
+  pages by `cursor` (up to 1,000 a page), filters by state (OPEN, DRAFT,
+  COMPLETED, CANCELED) and `updated_at`, and sorts by `UPDATED_AT`
+  ([search orders](https://developer.squareup.com/docs/orders-api/manage-orders/search-orders)).
+  An [Order](https://developer.squareup.com/reference/square/objects/Order)
+  has `line_items`, `taxes` (each INCLUSIVE or ADDITIVE), `service_charges`,
+  `tenders`, `returns`, `rounding_adjustment`, `total_money`,
+  `total_tip_money`, `source` and `customer_id`. A
+  [line item](https://developer.squareup.com/reference/square/objects/OrderLineItem)'s
+  `total_money` is what's collected for it, with `total_tax_money` and
+  `total_discount_money`; `gross_sales_money` deducts inclusive tax in
+  the US, Canada and Japan but not in Europe or Australia, so it isn't
+  used. Amounts are whole cents.
+- **Refunds**: a [PaymentRefund](https://developer.squareup.com/reference/square/objects/PaymentRefund)
+  has a status (PENDING, COMPLETED, REJECTED, FAILED), `amount_money`,
+  `payment_id` and an `order_id` the page doesn't define further; the list
+  can be filtered by `updated_at_begin_time`
+  ([ListPaymentRefunds](https://developer.squareup.com/reference/square/refunds-api/list-payment-refunds)).
+  An itemised refund's lines are on a return order whose `returns` name
+  the sale order (`source_order_id`) and line (`source_line_item_uid`):
+  our reading of the Orders API, not seen on a real account.
+- **Payouts**: SENT, then PAID ("successfully deposited"; it can still
+  turn FAILED) or FAILED; payout entries have a type (CHARGE, REFUND, FEE,
+  and many more), `gross_amount_money`, `fee_amount_money` and
+  `net_amount_money`; the example CHARGE is 150.00 less a 4.65 fee, net
+  145.35, and the REFUND −50.00
+  ([payouts](https://developer.squareup.com/docs/payouts-api/overview),
+  [payout entries](https://developer.squareup.com/docs/payouts-api/list-payout-entries)).
+- **Webhooks**: a subscription made with
+  `POST /v2/webhooks/subscriptions` comes back with its `signature_key`
+  ([webhook subscriptions](https://developer.squareup.com/docs/webhooks/webhook-subscriptions-api));
+  `x-square-hmacsha256-signature` signs the notification URL and the raw
+  body with it ([validate](https://developer.squareup.com/docs/webhooks/step3validate);
+  that the URL comes first with no separator is from
+  [Webhook Relay's write-up](https://webhookrelay.com/verify-square-webhook-signature/)
+  and Square's SDKs, which take the URL and body). Each event has an
+  `event_id`, its `merchant_id` and `data.object`.
+
+What Xero's Square integration does (Amaka's Square + Xero integration,
+[guide](https://amaka.com/help/guide/square/xero/),
+[payment types](https://amaka.com/help/kb/payment-type-mapping/); the
+[Xero app listing](https://apps.xero.com/app/square) describes a daily
+summary): a daily summary invoice, or one invoice per order; card,
+wallet, Afterpay and ACH payments to "Square Balance", "a clearing
+account for the Credit Card takings processed through Square"; cash to
+"Square Cash Clearing"; other payments to "Square Other Payments
+Clearing"; Square's fees to an expense account when Square deposits;
+tips to a liability and surcharges to revenue. Tohyee follows it for
+where money goes, posts per order (Jess: no summary mode), and, as for
+Shopify, refuses tips and surcharges for now.
+
+The rules (decisions 667-669; where Square and Xero are silent, Tohyee's
+Shopify rules SPC11-SPC24):
+
+- **Connecting** (admins): the production personal access token of an
+  app in the seller's own Square account. Tohyee reads the merchant (its
+  business name and currency) and its active locations and checks it can
+  read orders, then stores the token encrypted. The connection is kept by
+  the merchant ID, so the same account can't be connected twice.
+- **Settings** as Shopify's (start date, clearing account, payouts
+  account, fees, sales and shipping accounts, tax rates, untaxed code,
+  guest contact) plus **payment methods** for cash and other tenders, as
+  WooCommerce's. No chargebacks or reserve accounts: Square's disputes and
+  reserves are refused.
+- **Orders** (OPEN, COMPLETED or CANCELED, not drafts) from every active
+  location, changed since the last sync: an approved sales order, then,
+  once Square has completed payments for the whole total, an invoice and
+  its payment. Card-type tenders (card, wallet, Afterpay, ACH, Square
+  account) go into the clearing account; cash and other tenders into the
+  account mapped for them; a split between the two is refused. A
+  cancelled order before payment cancels its sales order (SPC20).
+- **Amounts**: a line's amount is its `total_money` (after discounts) when
+  the order's taxes are inclusive, or `total_money − total_tax_money`
+  when they're added on; the tax code is the one mapped to the tax's
+  percentage. The invoice must come to Square's total.
+- **Lines** use the item whose code is the variation's SKU (read from the
+  catalog), else the sales account with the line's name. **Customers**
+  are matched by email (or added), as Shopify's; an order without one
+  goes to the guest contact, or is refused.
+- **Refunds**: each completed refund of the order's payments; an itemised
+  refund's lines come from its return order (all the refunds of one
+  return order are one credit note), paid back from where the payment
+  went. A refund without returned items is refused.
+- **Payouts**: each PAID payout per location, as SPC15: CHARGE and REFUND
+  entries, each entry's fee to the fees account, and FEE, PROCESSING_FEE
+  and DEPOSIT_FEE entries to the fees account too (no GST); the entries'
+  nets must add up to the payout. Any other entry type refuses the payout.
+- **Never twice**: each Square order, refund and payout is remembered by
+  account and ID; a webhook delivery by its `event_id`; an order whose
+  source is another platform connected in the organisation is skipped.
+
+Setup: Glimmers Ltd, GST registered, NZD (as SPC11). Square account
+MLGLIMMERS01 "Glimmers markets", one location (Otago Farmers Market), GST
+15% inclusive → **GST**, untaxed → **ZERO**. Accounts: **1070 Square
+clearing** (bank, added in set-up), 1000 Business bank account, **1090
+Cash till** (bank), 6020 Bank fees, 4000 Sales. Start date 2026-10-01.
+Items CANDLE-L and MELT-VAN, whose Square variations have those SKUs.
+Customer Aroha Ngata (aroha@manukavets.nz).
+
+- **SQ1** Connecting: a token Square refuses (401) is refused: "Square
+  refused these credentials". The right token is checked (merchant
+  Glimmers markets, NZD, a location, an order search) and stored
+  encrypted; the connection is "mlglimmers01", personal access token, no
+  customer or product sync. With a public address, one webhook
+  subscription for the six order, payment and refund events is made and
+  its signature key kept encrypted with the address. Connecting the same
+  account again is refused: "mlglimmers01 is already connected."
+- **SQ2** A card sale: order **O-2001**, created 2026-10-03T01:00Z, Aroha,
+  2 × Large candle (SKU CANDLE-L), line total **46.00** with inclusive GST
+  **6.00**, card payment P-2001 completed, receipt R2001. Invoice
+  **#R2001** on 3 Oct (tax inclusive), 2 × 23.00 GST: **Dr 1100 46.00 /
+  Cr 4000 40.00 / Cr 2100 6.00**; payment **Dr 1070 46.00 / Cr 1100
+  46.00**. Aroha is added as a customer contact by her email.
+- **SQ3** Tax added on: **O-2003**, 4 Oct, 1 × Large candle, line total
+  **23.00** with an ADDITIVE 15% tax of **3.00**, paid by card. Invoice
+  (tax exclusive) 1 × 20.00 GST: **Dr 1100 23.00 / Cr 4000 20.00 / Cr
+  2100 3.00**; payment into 1070.
+- **SQ4** A discount: **O-2002**, 4 Oct, 3 × Wax melts (SKU MELT-VAN)
+  with a 5.00 discount, line total **22.00**, GST 2.87, paid by card.
+  Invoice lines **2 × 7.33** (GST 1.91) and **1 × 7.34** (GST 0.96), the
+  line's name from Square: **Dr 1100 22.00 / Cr 4000 19.13 / Cr 2100
+  2.87**; payment into 1070.
+- **SQ5** Cash: **O-2004**, 8 Oct, 1 × Large candle 23.00 paid in cash.
+  The first sync posts its sales order and waits: "Choose where cash
+  (Cash) payments go in the Square settings." Cash is mapped to 1090; the
+  next sync invoices it and records the payment **Dr 1090 23.00 / Cr 1100
+  23.00**. **O-2005**, paid 10.00 by card and 13.00 in cash, is refused:
+  "#R2005 was paid in more than one way (card, cash); split payments like
+  that aren't supported yet."
+- **SQ6** An itemised refund: one candle from O-2001 is refunded to the
+  card on 2026-10-05T22:00Z (6 Oct): refund R-1, completed, **23.00**, on
+  return order RO-1, which returns 1 of O-2001's line (23.00, GST 3.00).
+  Credit note against the invoice on 6 Oct: **Dr 4000 20.00 / Dr 2100
+  3.00 / Cr 1100 23.00**; refund **Dr 1100 23.00 / Cr 1070 23.00**. No new
+  sales order for the return order.
+- **SQ7** A payout: **PO-1**, PAID, created 2026-10-07T03:00Z, **66.40**:
+  CHARGE P-2001 46.00 (fee 0.81, net 45.19), CHARGE P-2002 22.00 (fee
+  0.39, net 21.61), CHARGE P-2003 23.00 (fee 0.40, net 22.60), REFUND
+  P-2001 −23.00 (net −23.00); the fees are this example's, not Square's
+  rates. Posted 7 Oct: spend money to Square **Dr 6020 1.60 / Cr 1070
+  1.60** (no GST) and transfer **Dr 1000 66.40 / Cr 1070 66.40**. 1070 is
+  then **0.00** (46.00 + 22.00 + 23.00 − 23.00 − 1.60 − 66.40). **PO-2**,
+  SENT, waits. **PO-3**, PAID with a DISPUTE entry, is refused and logged.
+  A FEE entry of −0.60 in a payout is a line "Square adjustment: Square
+  fee" of 0.60 to 6020.
+- **SQ8** Webhooks: an order.updated event for O-2001, signed with the
+  subscription's key over the address and body, brings it in as SQ2; the
+  same `event_id` again is "Already handled"; a payment.updated event and
+  a catch-up sync add nothing. Signed with another key, for another
+  merchant, or over another address: refused (401), nothing stored.
+- **SQ9** No revenue twice: with WooCommerce connected too, a Square order
+  whose source is "WooCommerce" is skipped: "#R2001 came from
+  WooCommerce, which is connected too; it's brought in from there, so it
+  isn't posted twice." Without WooCommerce connected, the same order is
+  posted as SQ2.
+- **SQ10** Refused (logged, nothing posted): an order in AUD ("#R2010 is
+  in AUD; Tohyee only brings in orders in NZD."); a tip ("#R2011 has a
+  tip; tips aren't supported yet, so record it by hand."); a service
+  charge; a gift card payment (at the invoice, as SPC23); a refund of
+  10.00 with no items returned ("... has no refunded lines ..."); items
+  sold by measure; an order with both inclusive and added-on taxes; a
+  payout whose entries don't add up or include another type.
+
+Built (decisions 667-669, tenant migration 0177). Tests:
+`tests/unit/square.test.ts` and `tests/integration/square-orders.test.ts`.
+
+**Questions for Jess (Square)**, not blocking: (1) Square doesn't take
+card payments in New Zealand; is there an organisation that would use
+it, or should the connector stay hidden until there is? (2) Should cash
+sales recorded in Square come in at all, or only card sales (Xero's
+integration brings both)?
 
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
@@ -16481,6 +16684,12 @@ Question for Jess: which one next, and is it one Glimmers uses?
 Answered (8 Oct 2026, the suggestion): no new platform yet; first check the
 Shopify connection against Glimmers' real store, the one thing the audit
 found never checked.
+
+Answered again (Codex, delegated by owner, 20 October 2026, #360 item
+18): validate and finish Shopify first (decision 665), then the existing
+WooCommerce gaps (decision 666); Square is the next new sales connector
+(SQ1-SQ10, decisions 667-669). Still not checked against a real store or
+account.
 
 ## Livestock (#221), stage 1: rules and first examples (LV1-LV12 approved by Jess, 11 Oct 2026)
 
