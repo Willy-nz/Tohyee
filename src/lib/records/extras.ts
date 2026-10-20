@@ -211,6 +211,8 @@ function summarise(eventType: string, details: Record<string, unknown>): string 
   switch (eventType) {
     case "note.added":
       return "Note added";
+    case "crm.reassigned":
+      return "Moved to someone else with Reassign records";
     case "note.edited":
       return "Note edited";
     case "note.deleted":
