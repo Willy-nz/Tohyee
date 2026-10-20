@@ -1,6 +1,6 @@
 # My mail: who can read a private mail copy
 
-Issue #250; decisions 610-619; examples PM1-PM14. This says plainly what
+Issue #250; decisions 610-619; examples PM1-PM19. This says plainly what
 protects an Owner's private copy of their own mail, and what doesn't.
 
 ## What it is
@@ -25,8 +25,8 @@ folders, switching, syncing, deleting):
   a member they're refused like anyone else);
 - anyone given the organisation later: a new Owner, a handover (decision
   485), a restored copy whose owner is someone else;
-- custom apps (farm app keys) and AI keys, except an AI key its own Owner
-  gave the private-mail scope (#250 part 2);
+- custom apps (farm app keys) and AI keys, except a Look only AI key its
+  own Owner gave the private-mail scope on My mail (decision 618);
 - the copy's own owner once they stop being an Owner, leave the
   organisation or their login is turned off. Their copy is then left
   alone: not readable and not synced. It isn't given to anyone. If they
@@ -44,6 +44,16 @@ Nothing about the mail goes into the audit trail (only "copy started",
 logs only the organisation), notifications, Analytics or DuckDB, general
 search, or reports. A unit test checks that no other part of Tohyee names
 the private tables.
+
+## The Owner's AI
+
+On My mail, the Owner can tick which of their own Look only AI keys may
+search and read the copy over MCP (`search_my_mail`, `read_my_mail`).
+Only their own keys, only Look only (so nothing read can be written into
+Tohyee), and the scope is checked again on every call by the same access
+layer. Other keys aren't offered the tools. Answers cite each email.
+Tohyee can't control what an AI service outside it keeps of what it was
+told: that's between the Owner and their AI provider.
 
 ## How it's stored
 

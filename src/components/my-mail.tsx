@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
+import type { MailAiKey } from "@/lib/private-mail/ai";
 import type { MailFolder } from "@/lib/farming/mail-providers";
 import { type CopyState, copyExclusions, copyProgress, formatBytes, type MailHit, type MailThread, type MyMail, type MyMailbox } from "@/lib/private-mail/types";
 import styles from "./my-mail.module.css";
@@ -55,6 +57,7 @@ export function MyMailHome({ organisationId, isOwner }: { organisationId: string
       {returnedError ? <Notice tone="error">{returnedError}</Notice> : null}
       <Mailboxes organisationId={organisationId} data={mail.data} error={mail.error} onChanged={mail.reload} picking={picking} onPick={setPicking} />
       {copies.length ? <Reader organisationId={organisationId} copies={copies} /> : null}
+      <AiKeys organisationId={organisationId} />
     </>
   );
 }
@@ -595,5 +598,53 @@ function Thread({ organisationId, messageId, headingRef, onClose }: { organisati
         </section>
       ))}
     </article>
+  );
+}
+
+/** PM15, PM16: which of the Owner's own Look only AI keys can search and read this mail. */
+function AiKeys({ organisationId }: { organisationId: string }) {
+  const keys = useApiData<{ keys: MailAiKey[] }>("/api/my-mail/ai-keys", { organisationId });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const change = async (key: MailAiKey, on: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/my-mail/ai-keys", { method: "PUT", body: { organisationId, tokenId: key.id, canReadMail: on } });
+      keys.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card
+      title="Your AI"
+      description="Let one of your own AI keys search and read this mail for you, citing the email it used. Only Look only keys can, so the AI can't copy anything from your mail into Tohyee. Nobody else's key can ever be given it."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {keys.error ? <Notice tone="error">{keys.error}</Notice> : null}
+      {keys.data && !keys.data.keys.length ? (
+        <p className={ui.muted}>
+          You have no AI keys here. Make a Look only key on the <Link href="/operations/ai">AI page</Link>.
+        </p>
+      ) : null}
+      {keys.data?.keys.length ? (
+        <ul className={styles.keyList}>
+          {keys.data.keys.map((key) => (
+            <li key={key.id}>
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={key.canReadMail} disabled={busy || !key.lookOnly} onChange={(event) => void change(key, event.target.checked)} />
+                <span>
+                  {key.name} <small className={styles.meta}>({key.startsWith}…)</small>
+                </span>
+              </label>
+              {!key.lookOnly ? <small className={styles.meta}> Not Look only, so it can&apos;t read your mail.</small> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Card>
   );
 }

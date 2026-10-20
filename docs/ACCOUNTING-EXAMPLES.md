@@ -18798,7 +18798,7 @@ Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
 
-## My mail: an Owner's private copy of their own mail (PM1-PM14; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
+## My mail: an Owner's private copy of their own mail (PM1-PM19; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
 
 Not accounting: a private store of an Owner's own email, for them and
 their own AI. Xero and NetSuite keep nothing like it, so the rules are
@@ -18900,9 +18900,33 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
   connected only from My mail isn't on the farm calendar and isn't read
   for it.
 
-Not included (#250's next parts): filing an attachment into shared data
+- **PM15 Giving her AI the scope.** Jess has two AI keys here: "Claude for
+  my mail" (Look only) and "Claude for the books" (Make and post). On My
+  mail, Your AI, she ticks "Claude for my mail". "Claude for the books"
+  can't be ticked: only Look only keys can, so nothing from her mail can be
+  written into Tohyee. The audit trail notes the key was allowed, with no
+  details.
+- **PM16 Nobody else's key.** Jess can't tick Ana's key, Ana (an Owner)
+  can't tick Jess's, and Mere (an admin) gets "not found" for the list.
+- **PM17 Asking her AI.** Jess's AI calls search_my_mail with "olsen
+  paddock" and gets the soil test email with "Email "Soil test results
+  paddock twelve" from Soil Lab <results@soillab.example>, 2026-10-10 (My
+  mail message 1)", then read_my_mail gives its text, "The Olsen P for
+  paddock twelve is 32." The directorship email was never copied, so
+  there's nothing of it to find. Her Make and post key, Ana's key and
+  Mere's key aren't offered the tools ("Unknown tool"). When Ana gives her
+  own key the scope, it finds only Ana's own mail (none), and Jess's email
+  is "not found".
+- **PM18 Stopping.** When Jess is made an admin, her key loses the mail
+  tools at once; made an Owner again, it has them again. Taking the tick
+  off stops them for good.
+- **PM19 It only looks.** The key with the scope has no write tools, and
+  its mail tools run read-only.
+
+Not included (#250's next part): filing an attachment into shared data
 (the bills inbox, soil tests) with a preview of what others will see; and
-the AI's private-mail scope (PR 2). Tests:
-`tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14)
+attachment files through the AI (it gets their names). Tests:
+`tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14),
+`tests/integration/private-mail-ai.test.ts` (PM15-PM19)
 and `tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
 nothing else names the private tables).
