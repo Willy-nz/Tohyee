@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 19 October 2026:** the latest packaged
-release is [v0.10.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.10.0),
+**Release availability, checked 20 October 2026:** the latest packaged
+release is [v0.11.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.11.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -65,6 +65,17 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.11.0: farm Home, private mail and better Analytics
+
+| Area | What's new |
+| --- | --- |
+| **Farming** | A farm dashboard as Home, a co-op share register, and a farm calendar that reads only the folders you tick, with your own items, repeats, sharing and a calendar link. |
+| **My mail** | A private copy of an owner's own email (only the ticked folders) that only they and their own AI can read. |
+| **Analytics** | SQL Server, PostgreSQL, MySQL and Google Analytics as data sources; chart formatting and a second axis; key figures with comparisons; flexible layouts; calculated values and templates. |
+| **Every graph** | One clean look in light and dark, checked for colour-blind readers. |
+| **CRM** | A shorter top bar, moving records between reps, replies as follow-ups, account plans and renewal reminders. |
+| **Tax** (not yet reviewed by an accountant) | Provisional tax payments allocated to instalments, with an excess towards instalment 1 counting in full. |
 
 ## New in 0.10.0: income tax
 
