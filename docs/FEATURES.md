@@ -572,8 +572,11 @@ that something happened.
   ownership never moves. Encrypted in the database with a key of its own,
   wrapped with the server's key; docs/PRIVATE-MAIL.md says what that does
   and doesn't protect against. Off, Disconnect and Delete my copy are
-  separate. Not yet: the AI's private-mail scope, and filing an attachment
-  into shared data with a preview.
+  separate. Since PM15-PM19 (decisions 618, 619, tenant migration 0169):
+  the Owner can let their own Look only AI keys search and read it over
+  MCP (search_my_mail, read_my_mail), citing each email; no other key is
+  offered the tools. Not yet: filing an attachment into shared data with a
+  preview.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
