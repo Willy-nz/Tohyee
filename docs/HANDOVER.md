@@ -164,6 +164,11 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.11.0 ready to publish from main** (20 Oct 2026): `package.json` says
+  0.11.0 and the notes cover #339-#372. Jess publishes the release "Tohyee
+  0.11.0" on main with tag `v0.11.0` and pastes in `docs/releases/0.11.0.md`.
+  Not in it yet: the yearly homekill adjustment (#371) and the group
+  workspace (#368), still being built.
 - **0.10.0 ready to publish from main** (19 Oct 2026): `package.json` says
   0.10.0 and the notes cover #289-#325 (income tax, pasture and feed, the
   Farming API, the farm calendar, livestock reporting, expected sick leave,
