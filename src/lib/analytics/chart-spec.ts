@@ -18,8 +18,9 @@ import { adaptForDark, isDarkSurface } from "@/lib/charts/colour-check";
 import { ruleMatches } from "@/lib/analytics/conditional";
 import { dec, sub, sum, toFixedString, toPlainString } from "@/lib/money/decimal";
 import { projectionNote, projectionPlan, type ProjectionPlan, type ProjectionSource } from "@/lib/analytics/projection";
+import { EXTRA_KINDS, extraOption, type ChartKit, type ExtraKind } from "@/lib/analytics/chart-visuals";
 
-export type ChartKind = "bar" | "column" | "line" | "area" | "combo" | "pie" | "donut" | "kpi";
+export type ChartKind = "bar" | "column" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | ExtraKind;
 
 export type ChartSeries = {
   field: string;
@@ -58,7 +59,9 @@ type ChartRow = Record<string, string | number | null>;
 
 function validateFields(spec: ChartSpec, rows: ChartRow[]) {
   if (rows.length === 0) return;
-  const fields = [spec.category, ...spec.series.map((series) => series.field)];
+  // A gauge (and a bullet chart with no groups) shows one total, so there's no group column.
+  const grouped = spec.kind !== "gauge" && !(spec.kind === "bullet" && !rows.some((row) => Object.prototype.hasOwnProperty.call(row, spec.category)));
+  const fields = [...(grouped ? [spec.category] : []), ...spec.series.map((series) => series.field)];
   for (const field of fields) {
     if (!rows.every((row) => Object.prototype.hasOwnProperty.call(row, field))) {
       throw new Error(`Chart field "${field}" is missing from the rows.`);
@@ -278,7 +281,8 @@ export function chartRows(spec: ChartSpec, allRows: ChartRow[]): { rows: ChartRo
         return (!from || value >= from) && (!to || value <= to);
       })
     : allRows;
-  const round = spec.kind === "pie" || spec.kind === "donut" || spec.kind === "kpi";
+  // Only columns, bars, lines and areas project; pies, key figures and the extra visuals (waterfall, gauge...) don't.
+  const round = spec.kind === "pie" || spec.kind === "donut" || spec.kind === "kpi" || EXTRA_KINDS.has(spec.kind as ExtraKind);
   const projected = round ? [] : spec.series.flatMap((series, index) => ((format.series?.[index]?.forecast ?? 0) > 0 ? [series] : []));
   if (projected.length === 0) return { rows, projection: null };
   const length = Math.max(...projected.map((series) => format.series?.[spec.series.indexOf(series)]?.forecast ?? 0));
@@ -400,6 +404,9 @@ function forMode(format: ChartFormat, theme: ChartTheme): ChartFormat {
     ...(format.plot?.background ? { plot: { background: surface(format.plot.background) } } : {}),
     ...(format.chartRules ? { chartRules: format.chartRules.map((rule) => ({ ...rule, color: mark(rule.color)! })) } : {}),
     ...(format.referenceLines ? { referenceLines: format.referenceLines.map((line) => (line.color ? { ...line, color: mark(line.color) } : line)) } : {}),
+    ...(format.waterfall
+      ? { waterfall: { ...format.waterfall, increase: mark(format.waterfall.increase), decrease: mark(format.waterfall.decrease), totalColor: mark(format.waterfall.totalColor) } }
+      : {}),
   };
 }
 
@@ -600,6 +607,67 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
     // A plot area colour (#376) behind the marks only.
     ...(format.plot?.background ? { show: true, backgroundColor: format.plot.background, borderWidth: 0 } : {}),
   };
+
+  const gridLine = (fallback: GridLineStyle): GridLineStyle => ({
+    ...fallback,
+    ...(format.gridlines?.color ? { color: format.gridlines.color } : {}),
+    ...(format.gridlines?.style ? { type: format.gridlines.style } : {}),
+  });
+  const categoryFormat = format.categoryAxis ?? {};
+  const categoryAxis = {
+    type: "category" as const,
+    data: categories,
+    ...(categoryFormat.show === false ? { show: false } : {}),
+    ...(categoryFormat.title
+      ? { name: categoryFormat.title, nameLocation: "middle" as const, nameGap: horizontal ? 52 : 32, nameTextStyle: base.axisName }
+      : {}),
+    axisLabel: {
+      ...base.categoryAxis.axisLabel,
+      ...(categoryFormat.size ? { fontSize: categoryFormat.size } : {}),
+      ...(categoryFormat.color ? { color: categoryFormat.color } : {}),
+      ...(categoryFormat.rotate !== undefined ? { rotate: categoryFormat.rotate } : {}),
+      ...(categoryFormat.interval !== undefined ? { interval: categoryFormat.interval } : {}),
+      // Long names on bars are shortened (the tooltip and table have them in full).
+      ...(horizontal ? { width: compact ? 88 : 140, overflow: "truncate" as const } : {}),
+    },
+    axisLine: base.categoryAxis.axisLine,
+    axisTick: base.categoryAxis.axisTick,
+    splitLine: { show: categoryFormat.gridlines ?? false, lineStyle: gridLine(base.categoryAxis.splitLine.lineStyle) },
+  };
+  const axisFormatter = (index: number, settings: AxisFormat | undefined) =>
+    settings?.number
+      ? (value: number | string) => makeNumberFormatter(settings.number, seriesKind(spec, index), { currency: spec.currency, axis: true })(value)
+      : seriesFormatter(spec, index, true);
+  const lines = { lineStyle: gridLine(base.valueAxis.splitLine.lineStyle) };
+
+  if (EXTRA_KINDS.has(spec.kind as ExtraKind)) {
+    const kit: ChartKit = {
+      spec,
+      rows,
+      theme,
+      format,
+      base,
+      categories,
+      common,
+      categoryAxis,
+      valueAxis: (index, settings, options = {}) =>
+        numberAxis(axisFormatter(index, settings), theme, "left", settings ?? {}, { vertical: options.vertical ?? true, compact, ...lines }),
+      fullFormatters,
+      labelFormatters,
+      axisFormatters: spec.series.map((_item, index) => axisFormatter(index, undefined)),
+      seriesColour,
+      groupColour: (rowIndex) => (namedColours.size ? groupColour(rowIndex) : undefined),
+      ruleColour: (index, raw) =>
+        raw === null || raw === undefined || !format.chartRules
+          ? undefined
+          : format.chartRules.find((rule) => (rule.series === undefined || rule.series === index) && ruleMatches(rule, String(raw)))?.color,
+      displayNumber,
+      secondaryText,
+      labelSize,
+      compact,
+    };
+    return extraOption(kit);
+  }
 
   // 100% stacked: each column shows its share of the group's total (positions only; the tooltip gives the amounts).
   const shares = stacking === "percent"
@@ -884,40 +952,9 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
     return tooltipHtml(theme, heading, tooltipRows);
   };
 
-  const gridLine = (fallback: GridLineStyle): GridLineStyle => ({
-    ...fallback,
-    ...(format.gridlines?.color ? { color: format.gridlines.color } : {}),
-    ...(format.gridlines?.style ? { type: format.gridlines.style } : {}),
-  });
-  const categoryFormat = format.categoryAxis ?? {};
-  const categoryAxis = {
-    type: "category" as const,
-    data: categories,
-    ...(categoryFormat.show === false ? { show: false } : {}),
-    ...(categoryFormat.title
-      ? { name: categoryFormat.title, nameLocation: "middle" as const, nameGap: horizontal ? 52 : 32, nameTextStyle: base.axisName }
-      : {}),
-    axisLabel: {
-      ...base.categoryAxis.axisLabel,
-      ...(categoryFormat.size ? { fontSize: categoryFormat.size } : {}),
-      ...(categoryFormat.color ? { color: categoryFormat.color } : {}),
-      ...(categoryFormat.rotate !== undefined ? { rotate: categoryFormat.rotate } : {}),
-      ...(categoryFormat.interval !== undefined ? { interval: categoryFormat.interval } : {}),
-      // Long names on bars are shortened (the tooltip and table have them in full).
-      ...(horizontal ? { width: compact ? 88 : 140, overflow: "truncate" as const } : {}),
-    },
-    axisLine: base.categoryAxis.axisLine,
-    axisTick: base.categoryAxis.axisTick,
-    splitLine: { show: categoryFormat.gridlines ?? false, lineStyle: gridLine(base.categoryAxis.splitLine.lineStyle) },
-  };
   const percentAxis = makeNumberFormatter({ style: "percent", decimals: 0 }, "number");
-  const axisFormatter = (index: number, settings: AxisFormat | undefined) =>
-    settings?.number
-      ? (value: number | string) => makeNumberFormatter(settings.number, seriesKind(spec, index), { currency: spec.currency, axis: true })(value)
-      : seriesFormatter(spec, index, true);
   const leftFormatter = shares ? (value: number | string) => percentAxis(value) : axisFormatter(firstOn("left"), format.valueAxis);
   const leftSettings: AxisFormat = shares ? { ...format.valueAxis, log: false, max: "1", min: undefined, step: undefined } : format.valueAxis ?? {};
-  const lines = { lineStyle: gridLine(base.valueAxis.splitLine.lineStyle) };
   const leftAxis = numberAxis(leftFormatter, theme, "left", leftSettings, { vertical: !horizontal, compact, ...lines });
   return {
     ...common,

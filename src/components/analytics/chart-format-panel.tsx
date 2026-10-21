@@ -30,6 +30,7 @@ import {
 } from "@/lib/analytics/chart-format";
 import type { Visual } from "@/lib/analytics/query";
 import { BUILT_IN_THEMES, chosenColourWarnings, type ReportTheme } from "@/lib/charts/report-themes";
+import { VisualSettings } from "@/components/analytics/visual-settings";
 import styles from "./chart-format-panel.module.css";
 
 type Props = {
@@ -360,7 +361,9 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
     const others = (current.categoryColors ?? []).filter((entry) => entry.name !== name);
     set({ categoryColors: color ? [...others, { name, color }] : others.length ? others : undefined });
   };
-  const groupColoursAllowed = (can.round || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
+  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
+  // Funnels show their labels unless turned off, like pies.
+  const labelsByDefault = can.round || can.funnel;
 
   return (
     <div className={styles.panel}>
@@ -432,7 +435,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   <ColourInput label={`${label}: any colour`} value={series.hex} onChange={(hex) => setSeries(index, { hex })} />
                 </>
               ) : null}
-              {!can.kpi && !can.round ? (
+              {can.cartesian ? (
                 <Field label="In the tooltip">
                   <select aria-label={`${name} in the tooltip`} value={series.tooltip ?? "show"} onChange={(event) => setSeries(index, { tooltip: event.target.value === "show" ? undefined : (event.target.value as "hide" | "only") })}>
                     <option value="show">Shown</option>
@@ -474,11 +477,14 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           );
         })}
       </Section>
+      <VisualSettings visual={visual} values={values} format={current} set={set} />
       {!can.kpi ? (
         <>
+          {can.labels ? (
           <Section title="Data labels">
-            <Check label="Show values on the chart" checked={current.labels?.show ?? can.round} onChange={(checked) => set({ labels: { ...current.labels, show: checked === can.round ? undefined : checked } })} />
+            <Check label="Show values on the chart" checked={current.labels?.show ?? labelsByDefault} onChange={(checked) => set({ labels: { ...current.labels, show: checked === labelsByDefault ? undefined : checked } })} />
             <div className={styles.pair}>
+              {can.round || can.funnel || can.cartesian ? (
               <Field label="Label position">
                 <select value={current.labels?.position ?? "auto"} onChange={(event) => set({ labels: { ...current.labels, position: event.target.value === "auto" ? undefined : (event.target.value as "inside" | "outside") } })}>
                   <option value="auto">Automatic</option>
@@ -486,7 +492,8 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   <option value="outside">Outside</option>
                 </select>
               </Field>
-              {!can.round ? (
+              ) : null}
+              {!can.round && !can.funnel ? (
                 <Field label="Which labels">
                   <select value={current.labels?.density ?? "all"} onChange={(event) => set({ labels: { ...current.labels, density: event.target.value === "all" ? undefined : (event.target.value as "auto" | "ends") } })}>
                     <option value="all">All</option>
@@ -511,6 +518,8 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
               <NumberFields name="Data label" value={current.labels?.number} labels={false} onChange={(number) => set({ labels: { ...current.labels, number } })} />
             </details>
           </Section>
+          ) : null}
+          {can.legend ? (
           <Section title="Legend">
             <div className={styles.pair}>
               <Field label="Legend">
@@ -531,10 +540,11 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
               </Field>
             </div>
           </Section>
-          {can.cartesian ? (
+          ) : null}
+          {can.axes ? (
             <Section title="Axes">
               <fieldset className={styles.group}>
-                <legend>{visual === "bar" ? "Group axis (down the side)" : "Group axis (along the bottom)"}</legend>
+                <legend>{visual === "bar" || visual === "bullet" ? "Group axis (down the side)" : "Group axis (along the bottom)"}</legend>
                 <Field label="Title">
                   <input aria-label="Group axis title" maxLength={60} value={current.categoryAxis?.title ?? ""} onChange={(event) => set({ categoryAxis: { ...current.categoryAxis, title: event.target.value || undefined } })} />
                 </Field>
@@ -556,14 +566,14 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
               {usesRight ? <AxisFields name="Right axis" value={current.rightAxis} defaultGridlines={false} onChange={(rightAxis) => set({ rightAxis })} /> : null}
             </Section>
           ) : null}
-          {can.cartesian ? (
+          {can.axes ? (
             <Section title="Gridlines and plot area">
               <StyleSelect label="Gridline style" value={current.gridlines?.style} onChange={(style) => set({ gridlines: { ...current.gridlines, style } })} />
               <ColourInput label="Gridline colour" value={current.gridlines?.color} onChange={(color) => set({ gridlines: { ...current.gridlines, color } })} />
               <ColourInput label="Plot area background" value={current.plot?.background} onChange={(background) => set({ plot: { background } })} />
             </Section>
           ) : null}
-          {can.cartesian ? (
+          {can.rules ? (
             <Section title="Colour rules">
               <ChartRuleFields values={values} format={current} set={set} />
             </Section>
@@ -576,12 +586,12 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           ) : null}
           <Section title="Tooltip">
             <Check label="Show tooltips" checked={current.tooltip?.show !== false} onChange={(checked) => set({ tooltip: { ...current.tooltip, show: checked ? undefined : false } })} />
-            {!can.round && values.length > 1 ? (
+            {can.cartesian && values.length > 1 ? (
               <Check label="Total of the values" checked={current.tooltip?.total === true} onChange={(checked) => set({ tooltip: { ...current.tooltip, total: checked || undefined } })} />
             ) : null}
             <p className={styles.note}>Each value can be left out of the tooltip, or shown only there, under Values.</p>
           </Section>
-          {can.stack || can.lines || can.donutTotal || can.bars ? (
+          {can.stack || can.lines || can.donutTotal || can.thickness ? (
             <Section title="Chart options">
               {can.stack ? (
                 <Field label="Stacking">
@@ -592,10 +602,10 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </select>
                 </Field>
               ) : null}
-              {can.bars ? (
+              {can.thickness ? (
                 <div className={styles.pair}>
                   <NumberBox label="Column thickness" hint="Most pixels wide, 4 to 80" value={current.bars?.thickness} min={4} max={80} placeholder="24" onChange={(thickness) => set({ bars: { ...current.bars, thickness } })} />
-                  <NumberBox label="Gap between groups" hint="% of each group's space, 0 to 90" value={current.bars?.gap} min={0} max={90} placeholder="40" onChange={(gap) => set({ bars: { ...current.bars, gap } })} />
+                  {can.bars ? <NumberBox label="Gap between groups" hint="% of each group's space, 0 to 90" value={current.bars?.gap} min={0} max={90} placeholder="40" onChange={(gap) => set({ bars: { ...current.bars, gap } })} /> : null}
                   <Check label="Rounded ends" checked={current.bars?.rounded !== false} onChange={(checked) => set({ bars: { ...current.bars, rounded: checked ? undefined : false } })} />
                 </div>
               ) : null}

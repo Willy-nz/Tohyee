@@ -247,6 +247,45 @@ export type ChartFormat = {
   chartRules?: Array<KpiRule & { series?: number }>;
   /** How a table or pivot looks. */
   table?: TableStyle;
+  /** Waterfall: the total bar and the colours for rises, falls and the total (#376 phase 2). */
+  waterfall?: WaterfallFormat;
+  /** Funnel: the percentage each stage shows. */
+  funnel?: FunnelFormat;
+  /** Gauge: its range and a target. */
+  gauge?: GaugeFormat;
+  /** Bullet chart: a target and the shaded bands behind each bar. */
+  bullet?: BulletFormat;
+};
+
+export type WaterfallFormat = {
+  /** A bar for the total at the end; on unless turned off. */
+  total?: boolean;
+  totalLabel?: string;
+  /** Thin lines joining each bar to the next; on unless turned off. */
+  connectors?: boolean;
+  increase?: string;
+  decrease?: string;
+  totalColor?: string;
+};
+
+export type FunnelFormat = {
+  /** Each stage as a share of the first stage (the default), of the stage before, or no share. */
+  percent?: "first" | "previous" | "none";
+};
+
+export type GaugeFormat = {
+  /** The ends of the dial (decimal strings); left out, 0 and twice the value (or the target, if bigger). */
+  min?: string;
+  max?: string;
+  /** A target when the tile has no second value. */
+  target?: string;
+};
+
+export type BulletFormat = {
+  /** A target when the tile has no second value. */
+  target?: string;
+  /** Where the shaded bands change, as percentages of the target (ascending, up to 3); left out, 60 and 80. */
+  bands?: number[];
 };
 
 export type IconSet = "arrows" | "shapes";
@@ -686,7 +725,46 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     }),
     chartRules: parseChartRules(raw.chartRules),
     table: parseTableStyle(raw.table),
+    waterfall: parseWaterfall(raw.waterfall),
+    funnel: compact({ percent: oneOf(object(raw.funnel).percent, ["first", "previous", "none"] as const, "Funnel percentage") }),
+    gauge: parseGauge(raw.gauge),
+    bullet: parseBullet(raw.bullet),
   });
+}
+
+function parseWaterfall(input: unknown): WaterfallFormat | undefined {
+  const raw = object(input);
+  return compact({
+    total: flag(raw.total),
+    totalLabel: text(raw.totalLabel, 40, "Total bar name"),
+    connectors: flag(raw.connectors),
+    increase: hexColour(raw.increase, "Rise colour"),
+    decrease: hexColour(raw.decrease, "Fall colour"),
+    totalColor: hexColour(raw.totalColor, "Total colour"),
+  });
+}
+
+function parseGauge(input: unknown): GaugeFormat | undefined {
+  const raw = object(input);
+  const min = numberText(raw.min, "Gauge minimum");
+  const max = numberText(raw.max, "Gauge maximum");
+  if (min !== undefined && max !== undefined && Number(min) >= Number(max)) throw new ValidationError("Gauge: the maximum should be more than the minimum.");
+  return compact({ min, max, target: numberText(raw.target, "Gauge target") });
+}
+
+function parseBullet(input: unknown): BulletFormat | undefined {
+  const raw = object(input);
+  let bands: number[] | undefined;
+  if (raw.bands !== undefined && raw.bands !== null) {
+    if (!Array.isArray(raw.bands) || raw.bands.length > 3) throw new ValidationError("Bullet bands: up to 3 percentages.");
+    bands = raw.bands.map((entry, index) => {
+      const value = whole(entry, 1, 300, `Bullet band ${index + 1} (% of the target)`);
+      if (value === undefined) throw new ValidationError(`Bullet band ${index + 1}: enter a percentage of the target.`);
+      return value;
+    });
+    if (bands.some((value, index) => index > 0 && value <= bands![index - 1])) throw new ValidationError("Bullet bands should go up, e.g. 60 then 80.");
+  }
+  return compact({ target: numberText(raw.target, "Bullet target"), bands });
 }
 
 /** What kind of number a value column holds (from its query column). */
@@ -749,11 +827,25 @@ export function formatOptionsFor(visual: string) {
     donutTotal: visual === "donut",
     colorByCategory: visual === "column" || visual === "bar",
     kpi: visual === "kpi",
+    /** Has a value axis and a group axis to format (#376 phase 2 visuals included). */
+    axes: ["column", "bar", "line", "area", "combo", "waterfall", "bullet"].includes(visual),
+    /** Colour rules on the marks. */
+    rules: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "funnel", "gauge"].includes(visual),
+    /** Shows a legend. */
+    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet"].includes(visual),
+    /** Column thickness and rounded ends. */
+    thickness: ["column", "bar", "combo", "waterfall", "bullet"].includes(visual),
+    /** Data labels on the marks. */
+    labels: !["kpi", "gauge"].includes(visual),
+    waterfall: visual === "waterfall",
+    funnel: visual === "funnel",
+    gauge: visual === "gauge",
+    bullet: visual === "bullet",
   };
 }
 
 /** The chart types a report can keep a default format for (#376, Power BI's visual defaults). */
-export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot"] as const;
+export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet"] as const;
 export type DefaultableVisual = (typeof DEFAULTABLE_VISUALS)[number];
 export type VisualDefaults = Partial<Record<DefaultableVisual, ChartFormat>>;
 
@@ -768,6 +860,10 @@ export const VISUAL_NAMES: Record<DefaultableVisual, string> = {
   kpi: "Key figure",
   table: "Table",
   pivot: "Pivot table",
+  waterfall: "Waterfall",
+  funnel: "Funnel",
+  gauge: "Gauge",
+  bullet: "Bullet chart",
 };
 
 /**
@@ -783,6 +879,14 @@ export function painterFormat(format: ChartFormat | undefined): ChartFormat | un
     delete kpi.target;
     if (Object.keys(kpi).length) copy.kpi = kpi;
     else delete copy.kpi;
+  }
+  // A gauge's range and target, and a bullet chart's target, are numbers about the data too.
+  delete copy.gauge;
+  if (copy.bullet) {
+    const bullet = { ...copy.bullet };
+    delete bullet.target;
+    if (Object.keys(bullet).length) copy.bullet = bullet;
+    else delete copy.bullet;
   }
   return Object.keys(copy).length ? copy : undefined;
 }
@@ -830,6 +934,9 @@ export function mergeFormats(base: ChartFormat | undefined, own: ChartFormat | u
 export function pasteFormat(copied: ChartFormat | undefined, target: ChartFormat | undefined): ChartFormat | undefined {
   const format = painterFormat(copied);
   const keep = target?.kpi?.target;
-  if (keep === undefined) return format;
-  return { ...format, kpi: { ...format?.kpi, target: keep } };
+  const result: ChartFormat = { ...format };
+  if (keep !== undefined) result.kpi = { ...format?.kpi, target: keep };
+  if (target?.gauge) result.gauge = target.gauge;
+  if (target?.bullet?.target !== undefined) result.bullet = { ...format?.bullet, target: target.bullet.target };
+  return Object.keys(result).length ? result : undefined;
 }
