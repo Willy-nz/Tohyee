@@ -209,7 +209,7 @@ export function parseRows(rows: readonly string[][], mapping: IrdImportMapping, 
     let skipped: string | null = null;
     if (mapping.columns.type) {
       const chosen = mapping.kindValues[valueKey(typeText)];
-      if (chosen === "skip") skipped = `"${typeText || "(blank)"}" rows are left out.`;
+      if (chosen === "skip") skipped = `"${typeText || "(blank)"}" rows are set to be left out.`;
       else if (chosen) kind = chosen;
       else problems.push(`Say what "${typeText || "(blank)"}" rows are.`);
     } else {
@@ -238,7 +238,7 @@ export function parseRows(rows: readonly string[][], mapping: IrdImportMapping, 
         amount = money(abs(creditValue));
       }
     }
-    if (amount === null && problems.length === 0 && !skipped) skipped = "No amount (or nil), so there's nothing to bring in.";
+    if (amount === null && problems.length === 0 && !skipped) skipped = "It has no amount (or nil).";
     const dateText = cell(row, "date");
     const transactionOn = dateText ? parseBankDate(dateText, mapping.dateOrder) : null;
     if (!skipped && !transactionOn) problems.push(dateText ? `Date "${dateText}" isn't a date Tohyee can read.` : "No date.");

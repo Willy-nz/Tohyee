@@ -89,7 +89,7 @@ describe("IRD account file imports: reading and mapping", () => {
     const { rows } = read(FILE_A);
     const parsed = parseRows(rows, MAPPING_A, { fileIncomeYear: null, endMonth: 3 });
     expect(parsed.every((row) => row.problems.length === 0)).toBe(true);
-    expect(parsed[0]).toMatchObject({ row: 3, kind: null, skipped: '"Balance brought forward" rows are left out.' });
+    expect(parsed[0]).toMatchObject({ row: 3, kind: null, skipped: '"Balance brought forward" rows are set to be left out.' });
     expect(parsed.slice(1).map((row) => [row.row, row.kind, row.incomeYear, row.transactionOn, row.direction, row.amount, row.appliesTo])).toEqual([
       [4, "payment", 2027, "2026-08-28", "credit", "6183.80", "instalment_1"],
       [5, "payment", 2027, "2027-01-15", "credit", "6183.80", null],

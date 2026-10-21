@@ -356,7 +356,7 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
                       {row.skipped ? null : directionAmount(row)}
                     </td>
                     <td data-label="Check">
-                      {row.problems.length > 0 ? <Badge tone="red">{row.problems.join(" ")}</Badge> : row.skipped ? <span className={ui.muted}>Left out: {row.skipped}</span> : <Badge tone="green">OK</Badge>}
+                      {row.problems.length > 0 ? <Badge tone="red">{row.problems.join(" ")}</Badge> : row.skipped ? <span className={ui.muted}>Left out. {row.skipped}</span> : <Badge tone="green">OK</Badge>}
                     </td>
                   </tr>
                 ))}
