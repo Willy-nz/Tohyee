@@ -1219,7 +1219,7 @@ function TileResult({
   exportFor?: PivotExportFor;
 }) {
   const measures = result.columns.filter((column) => column.role === "measure");
-  const spec = useMemo(() => tileChartSpec(tile, measures), [tile, measures]);
+  const spec = useMemo(() => tileChartSpec(tile, measures, { query: tile.query, truncated: result.truncated }), [tile, measures, result.truncated]);
 
   if (tile.visual === "pivot") {
     return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} format={tile.format} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
