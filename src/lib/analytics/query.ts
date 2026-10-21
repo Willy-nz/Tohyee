@@ -35,7 +35,7 @@ export type FilterOp =
   | "last_months"
   | "this_financial_year"
   | "last_financial_year";
-export type Visual = "column" | "bar" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | "table" | "pivot";
+export type Visual = "column" | "bar" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | "table" | "pivot" | "waterfall" | "funnel" | "gauge" | "bullet";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
 export type PivotSpec = { rows: PivotDimension[]; column: PivotDimension | null };
