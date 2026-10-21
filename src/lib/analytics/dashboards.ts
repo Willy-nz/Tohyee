@@ -97,7 +97,7 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "image", "shape", "button"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap", "image", "shape", "button"];
 /** Charts that can show one total, with no grouping. */
 const UNGROUPED: TileVisual[] = ["table", "kpi", "pivot", "gauge", "bullet"];
 export const MAX_TILES = 40;
@@ -334,6 +334,10 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     if (["treemap", "heatmap", "calendar", "sankey"].includes(visual) && query.measures.length !== 1) throw new ValidationError(`${title}: this chart type shows one value.`);
     if (visual === "calendar" && query.groupBy?.grain !== "day") throw new ValidationError(`${title}: a calendar heat map is grouped by a date, by day.`);
     if (["treemap", "heatmap", "calendar", "sankey"].includes(visual) && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: this chart type can't compare with last year.`);
+    // Maps (decision 687): a filled map colours each area by one value; a map with points needs a latitude and a longitude, and a third value sizes the points.
+    if (visual === "filledmap" && query.measures.length !== 1) throw new ValidationError(`${title}: a filled map shows one value for each region or district.`);
+    if (visual === "pointmap" && (query.measures.length < 2 || query.measures.length > 3)) throw new ValidationError(`${title}: a map with points needs a latitude and a longitude, and a third value to size the points.`);
+    if ((visual === "filledmap" || visual === "pointmap") && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: a map can't compare with last year.`);
     if ((visual === "histogram" || visual === "boxplot") && query.measures.length !== 1) throw new ValidationError(`${title}: a ${visual === "histogram" ? "histogram" : "box plot"} shows the spread of one value.`);
     if (["scatter", "histogram", "boxplot"].includes(visual) && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: this chart type can't compare with last year.`);
     if ((visual === "gauge" || visual === "bullet") && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} compares with its target, not last year or the previous period.`);

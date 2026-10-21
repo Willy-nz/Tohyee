@@ -25,6 +25,7 @@ import { mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, V
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
 import { calendarHeight, calendarYears } from "@/lib/analytics/chart-relationships";
+import { MAP_ATTRIBUTION, mapNote } from "@/lib/analytics/maps";
 import { additiveValues } from "@/lib/analytics/small-multiples";
 import { SmallMultiplesView } from "@/components/analytics/small-multiples";
 import { useTileResult } from "@/components/analytics/use-tile-result";
@@ -90,6 +91,8 @@ const VISUALS: Array<{ value: Visual; label: string }> = [
   { value: "heatmap", label: "Heat map" },
   { value: "calendar", label: "Calendar heat map" },
   { value: "sankey", label: "Sankey" },
+  { value: "filledmap", label: "Filled map (NZ)" },
+  { value: "pointmap", label: "Map with points (NZ)" },
 ];
 
 const ITEM_NAMES: Record<string, string> = { text: "Text", image: "Image", shape: "Shape", button: "Button" };
@@ -1048,6 +1051,17 @@ function TileResult({
     // Small multiples (#376 phase 2): one small chart for each value of the second grouping.
     return <SmallMultiplesView spec={spec} rows={rows} additive={additiveValues(tile.query.measures)} height={MULTIPLE_HEIGHTS[tile.height ?? "medium"]} />;
   }
+  if (tile.visual === "filledmap" || tile.visual === "pointmap") {
+    // Groups that can't go on the map are named under it (the hidden data table still has every row).
+    const note = mapNote(tile.visual, rows, chartGroupNames(rows.map((row) => row.category)), measures.map((column) => column.key), tile.format?.map?.areas);
+    return (
+      <>
+        <Chart spec={spec} rows={rows} height={CHART_HEIGHTS[tile.height ?? "medium"]} />
+        {note ? <p className={styles.mapNote}>{note}</p> : null}
+        <p className={styles.mapNote}>{MAP_ATTRIBUTION}</p>
+      </>
+    );
+  }
   // A calendar heat map is as tall as the years it shows (up to three).
   const height = tile.visual === "calendar"
     ? Math.max(CHART_HEIGHTS[tile.height ?? "medium"], calendarHeight(calendarYears(rows.map((row) => String(row.category ?? ""))).length))
@@ -1466,6 +1480,30 @@ function TileEditor({
       // A calendar heat map is grouped by a date, by day.
       const date = columns.find((column) => column.name === query.groupBy?.field && isDate(column.type)) ?? columns.find((column) => isDate(column.type));
       if (date) setQuery((current) => ({ ...current, groupBy: { field: date.name, grain: "day" }, breakdown: null, measures: current.measures.map((measure) => ({ ...measure, compare: undefined })) }));
+    }
+    if (next === "filledmap") {
+      // A filled map is grouped by a region or district name: start with a field called that, one value.
+      const area = columns.find((column) => !isNumber(column.type) && /region|district|territor|council|city/i.test(column.name));
+      setQuery((current) => ({
+        ...current,
+        groupBy: area && !current.groupBy ? { field: area.name } : current.groupBy,
+        measures: current.measures.slice(0, 1).map((measure) => ({ ...measure, compare: undefined })),
+      }));
+    }
+    if (next === "pointmap") {
+      // A map with points needs a latitude and a longitude (the average of each group's), then a value to size them.
+      const latitude = columns.find((column) => isNumber(column.type) && /^(lat|latitude)$|latitude/i.test(column.name));
+      const longitude = columns.find((column) => isNumber(column.type) && /^(lon|lng|long|longitude)$|longitude/i.test(column.name));
+      if (latitude && longitude && !(query.measures[0]?.field === latitude.name && query.measures[1]?.field === longitude.name)) {
+        setQuery((current) => ({
+          ...current,
+          measures: [
+            { label: "Latitude", aggregate: "avg", field: latitude.name },
+            { label: "Longitude", aggregate: "avg", field: longitude.name },
+            ...current.measures.filter((measure) => measure.field !== latitude.name && measure.field !== longitude.name).slice(0, 1).map((measure) => ({ ...measure, compare: undefined })),
+          ],
+        }));
+      }
     }
     if (next === "gauge" && query.groupBy) {
       // A gauge shows one total.

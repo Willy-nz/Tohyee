@@ -56,7 +56,9 @@ export type Visual =
   | "treemap"
   | "heatmap"
   | "calendar"
-  | "sankey";
+  | "sankey"
+  | "filledmap"
+  | "pointmap";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
 /** `subColumns` nest under `column` (#376 phase 2, a matrix's column hierarchy); up to two. */
