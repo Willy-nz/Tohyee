@@ -2,6 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
+import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -36,15 +37,14 @@ function useRun() {
   return { busy, error, run };
 }
 
-export function FertiliserHome({ organisationId, planId }: { organisationId: string; planId: string | null }) {
+export function FertiliserHome({ organisationId, planId, farmId = null }: { organisationId: string; planId: string | null; farmId?: string | null }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const [farmId, setFarmId] = useState<string | null>(null);
+  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
-  if (planId) return <PlanView organisationId={organisationId} planId={planId} />;
+  if (planId) return <PlanView key={planId} organisationId={organisationId} planId={planId} farms={farms.data.farms} />;
   const active = farms.data.farms.filter((farm) => farm.isActive);
-  const farm = active.find((entry) => entry.id === farmId) ?? active[0] ?? null;
-  if (!farm) {
+  if (!active.length) {
     return (
       <Empty>
         Add your farm and its paddocks first, under <Link href="/operations/farming">Farms and paddocks</Link>.
@@ -53,16 +53,8 @@ export function FertiliserHome({ organisationId, planId }: { organisationId: str
   }
   return (
     <>
-      {active.length > 1 ? (
-        <div className={ui.tabs} role="tablist" aria-label="Farms">
-          {active.map((entry) => (
-            <button key={entry.id} type="button" role="tab" aria-selected={entry.id === farm.id} className={`${ui.tab} ${entry.id === farm.id ? ui.tabActive : ""}`} onClick={() => setFarmId(entry.id)}>
-              {entry.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <PlanList key={farm.id} organisationId={organisationId} farm={farm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
+      {farm ? <PlanList key={farm.id} organisationId={organisationId} farm={farm} /> : null}
       <Products organisationId={organisationId} />
     </>
   );
@@ -206,7 +198,8 @@ function Products({ organisationId }: { organisationId: string }) {
 
 // One plan ---------------------------------------------------------------------------------------
 
-function PlanView({ organisationId, planId }: { organisationId: string; planId: string }) {
+function PlanView({ organisationId, planId, farms }: { organisationId: string; planId: string; farms: Farm[] }) {
+  const { selectFarm } = useSelectedFarm(organisationId, farms);
   const { can } = useWorkspace();
   const loaded = useApiData<{ report: PlanReport }>(`/api/farming/plans/${planId}`, { organisationId });
   const [report, setReport] = useState<PlanReport | null>(null);
@@ -226,7 +219,7 @@ function PlanView({ organisationId, planId }: { organisationId: string; planId: 
   return (
     <>
       <p>
-        <Link href="/operations/farming/fertiliser">All plans</Link>
+        <Link href="/operations/farming/fertiliser" onClick={() => selectFarm(current.plan.farmId)}>Plans for {farms.find((farm) => farm.id === current.plan.farmId)?.name ?? "this farm"}</Link>
       </p>
       <h2>{current.plan.name}</h2>
       {current.warnings.map((warning) => (

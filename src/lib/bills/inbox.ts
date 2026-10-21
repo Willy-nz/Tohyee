@@ -33,7 +33,8 @@ export type InboxStatus = "waiting" | "made" | "removed";
 export type InboxItem = {
   id: string;
   status: InboxStatus;
-  source: "upload" | "mailbox" | "ai";
+  /** my_mail: filed by an Owner from their private mail (decision 721); nothing of the email is kept. */
+  source: "upload" | "mailbox" | "ai" | "my_mail";
   fileName: string;
   contentType: string;
   byteSize: number;
@@ -41,6 +42,8 @@ export type InboxItem = {
   emailFrom: string | null;
   emailSubject: string | null;
   emailDate: string | null;
+  /** A note the person who filed it chose to share (filed from My mail only). */
+  note: string | null;
   billId: string | null;
   billNumber: string | null;
   billStatus: Bill["status"] | null;
@@ -68,6 +71,7 @@ type ItemRow = {
   email_from: string | null;
   email_subject: string | null;
   email_date: string | null;
+  note: string | null;
   bill_id: string | null;
   bill_number: string | null;
   bill_status: Bill["status"] | null;
@@ -84,7 +88,7 @@ type ItemRow = {
 };
 
 const SELECT = `
-  select i.id::text, i.source, i.file_name, i.content_type, i.byte_size, i.sha256, i.email_from, i.email_subject, i.email_date,
+  select i.id::text, i.source, i.file_name, i.content_type, i.byte_size, i.sha256, i.email_from, i.email_subject, i.email_date, i.note,
          i.bill_id::text, b.supplier_invoice_number as bill_number, b.status as bill_status, c.name as bill_contact_name,
          i.made_by_email, i.made_via, i.made_at, i.removed_at, i.removed_by_email, i.removed_reason, i.created_by_email,
          (select a.details->>'via' from audit_events a where a.entity_type = 'bill_inbox_item' and a.entity_id = i.id::text
@@ -108,6 +112,7 @@ function toItem(row: ItemRow, sameFile: InboxItem["sameFile"]): InboxItem {
     emailFrom: row.email_from,
     emailSubject: row.email_subject,
     emailDate: iso(row.email_date),
+    note: row.note,
     billId: row.bill_id,
     billNumber: row.bill_number,
     billStatus: row.bill_status,
@@ -235,7 +240,9 @@ export type NewInboxItem = {
   fileName: unknown;
   content: Uint8Array;
   /** How it arrived (BI1, BI2, BI4). */
-  via: "upload" | "mailbox" | "ai";
+  via: "upload" | "mailbox" | "ai" | "my_mail";
+  /** A note to share with it (filed from My mail). */
+  note?: string | null;
   mailboxId?: string | null;
   emailFrom?: string | null;
   emailSubject?: string | null;
@@ -260,8 +267,8 @@ export async function addInboxItem(tx: OrgTx, input: NewInboxItem): Promise<{ cr
   }
   const inserted = await tx.query<{ id: string }>(
     `insert into bill_inbox_items (command_source, idempotency_key, request_hash, source, file_name, content_type, byte_size, sha256, content,
-                                   mailbox_id, email_from, email_subject, email_date, created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                                   mailbox_id, email_from, email_subject, email_date, created_by_user_id, created_by_email, note)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      on conflict (command_source, idempotency_key) do nothing
      returning id::text`,
     [
@@ -280,6 +287,7 @@ export async function addInboxItem(tx: OrgTx, input: NewInboxItem): Promise<{ cr
       input.emailDate ?? null,
       tx.actor.userId,
       tx.actor.email,
+      input.note ?? null,
     ],
   );
   if (!inserted.rows[0]) throw new ConflictError("That file is being added by another request. Try again.");

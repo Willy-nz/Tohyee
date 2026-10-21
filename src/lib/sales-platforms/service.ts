@@ -10,7 +10,7 @@ import { ConflictError, HttpError, NotFoundError, UnavailableError, ValidationEr
 import { isCountryCode } from "@/lib/contacts/countries";
 import { ITEM_CODE_PATTERN, createItem, updateItem } from "@/lib/items/service";
 import { cmp, dec, divideTruncated, isPositive, mul, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { type OrganisationRecord, getOrganisation, parseOrganisationId } from "@/lib/organisations/registry";
 import {
@@ -1488,7 +1488,7 @@ export async function syncAllSalesPlatforms(): Promise<{ synced: number; failed:
   let synced = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let ids: string[] = [];
       try {

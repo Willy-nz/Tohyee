@@ -1,3 +1,4 @@
+import type { Role } from "@/lib/auth/roles";
 import { NotFoundError, UnavailableError } from "@/lib/errors";
 import { getOrganisationPool } from "@/lib/db/pools";
 import { type DbClient, withTransaction } from "@/lib/db/transactions";
@@ -13,6 +14,12 @@ export type Actor = {
    * beside the person, so the history shows "Jess via AI key …".
    */
   via?: string;
+  /**
+   * The person's role in this organisation when acting as a member, for rules
+   * that depend on it inside the transaction (which farms they see, decision
+   * 744). Work Tohyee does by itself has no userId and no role.
+   */
+  role?: Role;
 };
 
 /**

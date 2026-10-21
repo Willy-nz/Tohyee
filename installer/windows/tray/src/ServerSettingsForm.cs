@@ -248,12 +248,11 @@ namespace Tohyee.Tray
             try
             {
                 var result = await _app.Api.Get("/api/admin/backups");
-                var keyStatus = J.Obj(result, "keyStatus");
-                if (!J.Bool(keyStatus, "keySet") || J.Str(keyStatus, "savedCopyCheckedAt") != null || _sidebar == null || _sidebar.IsDisposed) return;
+                if (!HomePage.RecoveryKitNeedsSaving(result) || _sidebar == null || _sidebar.IsDisposed) return;
                 if (session != _session || navigations != _navigations || IsDisposed) return;
                 Navigate("backups");
                 MessageBox.Show(this,
-                    "Save a copy of your backup key.\n\nBackups can only be opened with it, so if this computer is lost or rebuilt without a copy, the backups can't be restored. Use \"Show the key\", save it in a password manager, then \"Check my saved copy\".",
+                    "Save the recovery kit.\n\nWithout it, the backups can't be opened on another computer if this one is lost or rebuilt. Use \"Save recovery kit\", keep it in a password manager (not in the backup folder), then \"Check recovery kit\".",
                     "Tohyee", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (ApiException)

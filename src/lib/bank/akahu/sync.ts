@@ -16,7 +16,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { businessTimeZone } from "@/lib/dates";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { abs, dec, neg, toFixedString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { secretsAvailable } from "@/lib/secrets";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 
@@ -171,7 +171,7 @@ export async function syncDueBankFeeds(): Promise<{ synced: number; failed: numb
   let synced = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due: string[] = [];
       try {

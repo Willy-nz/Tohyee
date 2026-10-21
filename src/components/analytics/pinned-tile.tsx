@@ -1,5 +1,6 @@
 "use client";
 
+import { MAP_ATTRIBUTION } from "@/lib/analytics/maps";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
@@ -128,6 +129,7 @@ function PinnedTileResult({ tile, result }: { tile: Tile; result: QueryResult })
     return (
       <div className={styles.chart}>
         <Chart spec={spec} rows={rows} />
+        {tile.visual === "filledmap" || tile.visual === "pointmap" ? <p className={styles.attribution}>{MAP_ATTRIBUTION}</p> : null}
       </div>
     );
   }

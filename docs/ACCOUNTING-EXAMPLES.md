@@ -17631,6 +17631,88 @@ revenue) is 2,000,000.00. Expenses: Wages 6200 120,000.00, Animal health
   dash), never a guess. With no milk solids entered, every per kgMS figure
   is empty.
 
+## Farm-level reporting (#390; FR1-FR8, written by Claude 21 Oct 2026 as Xero does it with tracking categories, not yet reviewed)
+
+Tested in `tests/unit/farm-reporting.test.ts` and
+`tests/integration/farm-reporting.test.ts`. Nothing posts. In Xero a farm
+(or block) is a **tracking category** option, each income and expense line
+is tagged with it, and the profit and loss is run by that category with an
+"Unassigned" column; Xero never shares costs out by itself. Tohyee does the
+same with its own tracking categories (TC1-TC10), which already go onto
+every posted line. Separate legal entities stay separate organisations
+with their own books; this is for several farms in one set of books.
+
+**Setup.** FK's year, 1 Jun 2025 to 31 May 2026, with Advanced features
+on. A tracking category **Farm** has values Home farm, Runoff (with Hill
+block under it) and Head office. Farms **Home farm** and **Runoff**. Milk
+income 4000: 1,500,000.00 tagged Home farm and 500,000.00 tagged Runoff.
+Wages 6200: 80,000.00 Home farm, 30,000.00 Runoff, 10,000.00 Head office
+(the manager, who works across both). Animal health 6400: 24,000.00 Home
+farm, 10,000.00 Runoff and 2,000.00 Hill block. Depreciation 6300
+50,000.00 and interest 6090 30,000.00, untagged. FK1's groups. The
+organisation's figures are FK2's (200 ha, 600 cows, 4,800 su, 240,000 kg
+MS).
+
+- **FR1 Which category says the farm.** Under Farm › Benchmarks, Farm
+  reporting, a bookkeeper chooses the tracking category (needs Advanced
+  features on) and links each farm to one of its values. Values under a
+  farm's value count for that farm (Hill block counts for Runoff). A value
+  can be one farm's only, and can't sit under or above another farm's
+  value (a line would count twice): linking Old block to Home farm or to
+  Runoff › Hill block is refused. An archived value or one from another
+  category can't be chosen. Changing the category unlinks every farm,
+  recorded in the history. With no category, everything is Not allocated.
+- **FR2 A farm's income and expenses** are the year's posted lines on
+  revenue and expense accounts tagged with its value (or one under it).
+  Gross farm revenue, working-expense groups (FK1), farm working expenses
+  and operating surplus are worked out per farm exactly as FK3 does for
+  the organisation.
+- **FR3 Not allocated and the total.** Lines with no Farm tag, or a value
+  no farm is linked to (Head office), are **Not allocated**, in their own
+  column, never spread. The farms and Not allocated add up to the **total**,
+  which is FK3 (and the profit and loss):
+
+  | | Home farm | Runoff | Not allocated | Total |
+  |---|---:|---:|---:|---:|
+  | Gross farm revenue | 1,500,000.00 | 500,000.00 | 0.00 | 2,000,000.00 |
+  | Wages | 80,000.00 | 30,000.00 | 10,000.00 | 120,000.00 |
+  | Animal health | 24,000.00 | 12,000.00 | 0.00 | 36,000.00 |
+  | Farm working expenses | 104,000.00 | 42,000.00 | 10,000.00 | 156,000.00 |
+  | Operating surplus | 1,396,000.00 | 458,000.00 | -10,000.00 | 1,844,000.00 |
+
+  The screen says the 10,000.00 has no farm and that each farm's surplus is
+  before it. Depreciation and interest stay out (FK1).
+- **FR4 Production and headcount per farm.** Each farm's own figures for
+  the year are entered beside it: Home farm 150 ha, 450 peak cows, 3,600
+  su, 180,000 kg MS; Runoff 50 ha, 150 cows, 1,200 su, 60,000 kg MS. A
+  farm's per-unit amounts divide by **its own figures only**: Home farm's
+  working expenses 104,000.00 are 0.58 per kgMS, 693.33 per ha, 231.11 per
+  cow, 28.89 per su; Runoff's operating surplus 458,000.00 is 7.63 per
+  kgMS, 9,160.00 per ha, 3,053.33 per cow, 381.67 per su (rounded half up
+  to the cent, FK3). A farm figure that isn't entered gives a dash (FK4),
+  never the organisation's figure or a share of it. Not allocated has no
+  per-unit amounts. The total column's per-unit amounts are FK3's, from
+  the organisation's figures. Organisation-wide amounts are never divided
+  by one farm's area.
+- **FR5 Sharing out a shared cost** is a journal, as in Xero: Cr 6200
+  10,000.00 (Head office) / Dr 6200 7,500.00 (Home farm) / Dr 6200
+  2,500.00 (Runoff), on 31 May 2026. Wages become Home farm 87,500.00,
+  Runoff 32,500.00, Not allocated 0.00, total still 120,000.00. Tohyee
+  doesn't share costs out by itself (by hectares or anything else).
+- **FR6 Charging between farms** (Runoff grazing Home farm's heifers,
+  20,000.00 agreed) is a journal on one account: Dr 6500 Grazing
+  20,000.00 (Home farm) / Cr 6500 20,000.00 (Runoff). Home farm's grazing
+  is 20,000.00, Runoff's -20,000.00, the total 0.00; with FR5, operating
+  surplus is Home farm 1,368,500.00, Runoff 475,500.00, total 1,844,000.00.
+  The books' totals don't change.
+- **FR7 Which farms show.** Active farms linked to a value, and archived
+  ones only if they have amounts in the year. Active farms that aren't
+  linked are listed as not shown. Lines outside the year aren't counted.
+- **FR8 Not included:** sharing costs out automatically; head counts from
+  Livestock by farm (Livestock's locations aren't farms yet); a balance
+  sheet or cash by farm; Home's money and performance figures by farm
+  (they stay organisation-wide, labelled so).
+
 ## Tier 3 and Tier 4 performance reports (#259; NPR1-NPR10 chosen by Claude on 15 Oct 2026 when Jess said to use judgement, not yet reviewed)
 
 Tested in `tests/integration/performance-reports.test.ts`. From XRB's
@@ -18675,6 +18757,79 @@ in `tests/unit/pasture.test.ts` and `tests/integration/pasture.test.ts`.
   record entered by mistake is removed, and kept for the history. They're
   copied into the analytics database as `tohyee_farm_pasture_readings`,
   `tohyee_farm_grazings` and `tohyee_farm_supplements`.
+- **PF9 All farms compared** (#390, added by Claude 21 Oct 2026, Claude's
+  rule kept to PF3's arithmetic, not yet reviewed; Xero has nothing like it,
+  and it works as a Power BI table with a total row does when the total is
+  recalculated from the rows' detail, not by averaging the rows). Farm ›
+  All farms compared lists each active farm on a date: paddocks, effective
+  and mapped hectares, cover (PF3), the newest and oldest readings used,
+  how many paddocks have no reading or no area, and its latest fertiliser
+  plan with tonnes applied and planned; each links to that farm's records.
+  **Home farm**: A 10.00 ha at 2,500 (15 Oct), B 5.00 ha at 1,900 (20 Oct),
+  C 8.00 ha no reading: **2,300** over 15.00 ha, newest reading 20 Oct.
+  **Runoff**: A 40.00 ha at 2,000 (1 Sep), B 2.00 ha no reading: **2,000**
+  over 40.00 ha, newest 1 Sep, flagged as 51 days old (more than 14 days,
+  as Home's catch-up list). **All 2 farms**: (34,500 + 80,000) ÷ 55.00 =
+  **2,082 kg DM/ha** (not 2,150, the average of the two averages), 114,500
+  kg DM, 2 paddocks with no reading, readings from 1 Sep to 20 Oct, 1 of 2
+  farms not walked in the last 14 days. Areas and fertiliser tonnes are
+  added; farms without a plan are counted. A farm with no readings shows
+  "No readings", never 0. Archived farms aren't included. Money isn't
+  shown: that waits for the farm reporting rules. Tested in
+  `tests/unit/farm-comparison.test.ts` and
+  `tests/integration/farm-comparison.test.ts`.
+
+## Farming: the farms each member works on (FMA1-FMA8; Jess, 21 October 2026: "Yes, assigned farms only"; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/farm-access.test.ts`. Not accounting: who sees
+which farm's records. Xero has no farm records to compare; its nearest rule
+(tracking categories don't limit what a user sees) doesn't apply, because
+Jess asked for the opposite.
+
+**Setup.** Kōwhai Dairies has two farms, **Home farm** and **Runoff**, each
+with a paddock called 1. Jess is the owner, Rangi an admin, Mere a
+bookkeeper working on Home farm, Aroha a bookkeeper (the accountant) given
+all farms, and Tama a viewer not assigned yet.
+
+- **FMA1 Who sees which farms.** Owners and admins see every farm. Viewers,
+  bookkeepers and report viewers see the farms chosen for them under
+  People and roles: "All farms", "Only the farms ticked", or "Not assigned
+  yet". Not assigned yet means **no farms**: the safe default, so a new
+  member doesn't see every property by accident. The screen warns, by
+  name, about anyone not assigned. With fewer than two farms (archived ones
+  count) there's nothing to keep apart and everyone sees the farm. Mere's
+  farm list is Home farm; Tama's is empty; Jess's, Rangi's and Aroha's are
+  both.
+- **FMA2 Choosing.** Only owners and admins choose, and only for viewers,
+  bookkeepers and report viewers ("Owners and admins see every farm" for
+  anyone else). The choice is recorded in the history.
+- **FMA3 Enforced on the server.** Every farm-scoped route refuses another
+  farm's records as "not found", so a farm's existence isn't given away:
+  paddocks, maps and boundaries, boundary imports, soil tests, samples and
+  the soil summary, pasture readings, grazings and supplements, fertiliser
+  plans and applications, and each record's removal. Mere asking for
+  Runoff's paddock 1 gets "Paddock not found"; her own paddock 1 works.
+  She can't add a farm (she couldn't see it). The farm selector on screens
+  is only a convenience.
+- **FMA4 Everywhere else farm records go.** Home's pasture, fertiliser and
+  catch-up cards, the Farming API for apps (a key acts as its owner), and
+  the AI's farm tools give Mere Home farm only.
+- **FMA5 Things that cover every farm** need All farms: the farm notebook
+  (it has no farm on each note) and Analytics' farm tables (`tohyee_farm_*`
+  and tables shaped from them), which hold every farm's records. Mere
+  doesn't see them; Aroha does. A soil test's notes and lab reports go with
+  its farm.
+- **FMA6 The farm calendar.** Members' own calendars stay private (FC1,
+  decision 571). An item someone shares with the team shows for Mere only
+  if it's for Home farm or has no farm. She can't put her own items under
+  Runoff.
+- **FMA7 Leaving.** A member who leaves the organisation loses their farm
+  choices with everything else.
+- **FMA8 Not changed:** money, accounting reports, benchmarks and Home's
+  money and performance figures (they follow the member's role, as
+  before); livestock (its locations aren't farms); co-op shares (the
+  organisation's). Analytics report emails go to whoever they're addressed
+  to.
 
 ## Farming (#249) stage 5: the Farming API for people's own apps (FA1-FA8; chosen by Claude 19 Oct 2026 when Jess said "Yea do those", not yet reviewed)
 
@@ -18816,7 +18971,8 @@ Gmail; times are New Zealand time.
   are matched as whole words, ignoring case.
 - **FC11 No farm named.** With one active farm, that's the farm. With
   more, the mailbox's chosen farm (Jess can choose one when connecting, or
-  later), else no farm: the item shows under "No farm".
+  later), else no farm: the item shows under "No farm". Since FC32 an item
+  put under the mailbox's chosen farm waits in Needs checking.
 - **FC12 Not farm arrangements.** An email needs one of the arrangement
   words and a date (or a no-exact-date phrase) in the same sentence, or the
   arrangement in the subject and the date in the text. "Our sale ends 31
@@ -19004,6 +19160,30 @@ her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
 Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
 `tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
 
+## Farming: a mailbox's usual farm is only a guess (FC32; built by Claude 21 Oct 2026 from #390, Claude's rule, not yet reviewed)
+
+Issue #390's review found that one mailbox often covers several properties,
+so the farm chosen for a mailbox (FC11) isn't proof that an email is about
+that farm. Xero and NetSuite have nothing like a farm calendar, so this is
+Claude's rule, kept to the safe side.
+
+Kōwhai Dairies has two active farms, **Home farm** and **Runoff**. Jess's
+mailbox has **Home farm** as its farm when none is named.
+
+- **FC32 A guess waits to be checked.** "Shearers arriving 7.30am on 3/11"
+  names no farm. The item is **Contractor**, Tue 3 Nov 2026, 7:30am, under
+  **Home farm**, and in Needs checking: "No farm named: put under Home
+  farm, this mailbox's usual farm". When Jess checks it (keeping Home farm
+  or choosing Runoff) it leaves Needs checking. "Spreading lime on the
+  Runoff on Friday 6 November" names a farm: it goes under Runoff with
+  nothing to check. With only one active farm nothing changes: that farm
+  is used and there's nothing to check. With no farm chosen for the
+  mailbox, or if the chosen farm is archived, the item is **No farm** and,
+  as before, not in Needs checking just for that. A later email moving a
+  checked item gets this reason as well as FC14's when it names no farm.
+
+Tests: `tests/integration/farm-calendar.test.ts` (FC32, in the FC11 test).
+
 ## Analytics: a website's Google Analytics data (GA1-GA8; built by Claude 20 Oct 2026 when Jess asked for "Google analytics for websites to tohyee", as Looker Studio's Google Analytics connector does, not yet reviewed)
 
 Not accounting: a data source for Analytics, so a website's visitors can be
@@ -19066,7 +19246,7 @@ Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
 
-## My mail: an Owner's private copy of their own mail (PM1-PM19; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
+## My mail: an Owner's private copy of their own mail (PM1-PM29; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
 
 Not accounting: a private store of an Owner's own email, for them and
 their own AI. Xero and NetSuite keep nothing like it, so the rules are
@@ -19191,13 +19371,92 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
 - **PM19 It only looks.** The key with the scope has no write tools, and
   its mail tools run read-only.
 
-Not included (#250's next part): filing an attachment into shared data
-(the bills inbox, soil tests) with a preview of what others will see; and
-attachment files through the AI (it gets their names). Tests:
+### Filing an attachment into shared data (PM20-PM29; built by Claude 21 Oct 2026, Claude's rules, not yet reviewed)
+
+Jess, 13 Oct 2026 (#250): "Nothing from email reaches shared data
+automatically. The owner files an attachment (for example 'use this as a
+soil test for paddock 12'), or sets up a rule they've approved (for example
+'attachments from the soil lab'). Before anything is shared, the owner sees
+a preview of exactly what will become visible to others. Filed items are
+copies; the email itself stays private." Decisions 720-726. Made-up:
+Kōwhai Dairies has Farming on and a farm, Home farm, with paddocks 12 and
+14. Jess's copy holds an email from "Rangi at the lab
+<rangi@soillab.example>", subject "Confidential results and your mortgage
+question", with three attachments: Soil results P12.csv (pH and Olsen P for
+samples 12, 14 and 99), Invoice 4471 Rangi.pdf and Board minutes.pdf.
+
+- **PM20 Into the bills inbox.** Jess clicks **File…** on the invoice,
+  chooses the bills inbox, renames it Invoice 4471.pdf and types the note
+  "Lab invoice for the September tests". **Preview what others will see**
+  shows: File "Invoice 4471.pdf (29 bytes)"; Where "The bills inbox,
+  waiting for a bill to be made from it"; Added by her; How it arrived
+  "Filed from a private email by you (nothing of the email is shared)";
+  and her note. Stays private: the email's subject, sender, recipients,
+  date and text; its other 2 attachments; the mailbox and folder; and the
+  attachment's own name. Nothing is saved until **File it**. Then Sam (the
+  bookkeeper) sees the item in the bills inbox, "Filed from a private email
+  by Jess", with the note; no sender, subject or date, and none of
+  "Rangi", "soillab", "mortgage" anywhere he can see, the audit trail
+  included (it says "attachment filed" to the bills inbox).
+- **PM21 As soil tests.** She files the CSV as soil tests on Home farm, lab
+  "Made-up Labs". The preview is the soil import's own: lines 2 and 3
+  (paddocks 12 and 14, 15 Aug 2026, two results each) are added; line 4,
+  sample 99, isn't ("There's no current paddock 99 on this farm"); results
+  are read from pH and Olsen P (mg/L); each test's source will be
+  "Imported from Soil results.csv, filed from a private email"; and the file
+  itself isn't shared, only the rows. A note is refused for an import. Sam
+  sees the two tests with that source. Filing the same file again is
+  refused in the preview ("already imported ... on <date>"), and the board
+  minutes PDF can't be imported ("Only CSV or Excel (.xlsx) files can be
+  imported. To keep a PDF or picture, attach it to a record instead").
+- **PM22 The name.** The filed name is the attachment's own unless she
+  types another, which must keep the ending (.pdf), with no slashes.
+- **PM23 Onto a record.** She searches contacts for "soil labs", chooses
+  Made-up Soil Labs Ltd and files the invoice with the note "Their
+  September invoice". Sam sees the file on the contact marked "Filed from a
+  private email", the note as an ordinary note, and the history "File
+  added: Invoice 4471.pdf (29 bytes), filed from a private email".
+- **PM24 Exactly what was previewed.** Changing the note or the name after
+  the preview and filing anyway is refused: "What would be filed has
+  changed since the preview. Check the preview again before filing." The
+  same goes for an import whose rows changed (a paddock added, say).
+- **PM25 Only Jess.** Mere (admin) and Sam get "not found" from every
+  filing route: the Filing card, a preview, filing, the record search,
+  making or deleting a rule, dismissing. Ana, another Owner, gets her own
+  empty Filing card and can search records, but can't preview, file or
+  touch Jess's rules or To file. An AI key acting as Jess is refused too.
+- **PM26 A rule.** Jess adds a rule: from @SoilLab.example, named *.csv,
+  to soil tests on Home farm, ticking "Also look at emails already copied".
+  The rule shows as "Attachments from anyone at soillab.example named
+  *.csv, to Soil tests on Home farm · 1 waiting", and To file lists Soil
+  results P12.csv with the email's sender, subject and date (for her eyes
+  only). Nothing has been shared. **Preview and file…** shows the same
+  preview as PM21; filing it adds the two tests and moves it to Filed
+  ("from a rule"). The rule's sender and pattern are encrypted in the
+  database. A rule needs a sender or a pattern; "not an address" is
+  refused. A new rule without the tick waits for new mail.
+- **PM27 After a sync.** With a rule for *.pdf to the bills inbox, a new
+  email with Statement.pdf arrives; after the next sync it's in To file and
+  not in the bills inbox. **Not this one** takes it off, and later syncs
+  don't bring it back.
+- **PM28 Copies stay.** After filing the invoice and the soil tests, Jess
+  deletes her imported history. The inbox item (with its file) and the two
+  soil tests stay; her list of what she filed, her rules and To file go
+  with the copy.
+- **PM29 Only while an Owner.** Made an admin, Jess can't file (even with a
+  preview she'd already seen): "not found". Made an Owner again, she can.
+
+Not included: making the bill itself while filing (the inbox's usual step
+does it); choosing the soil or pasture import's columns from My mail (the
+import's guess is used; the import page is there for a file that needs
+choices); notes with imports; rules that file without asking (decision 723
+says it can be loosened); attachment files through the AI. Tests:
 `tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14),
-`tests/integration/private-mail-ai.test.ts` (PM15-PM19)
-and `tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
-nothing else names the private tables).
+`tests/integration/private-mail-ai.test.ts` (PM15-PM19),
+`tests/integration/private-mail-filing.test.ts` (PM20-PM29),
+`tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
+nothing else names the private tables) and
+`tests/unit/private-mail-filing.test.ts` (PM21, PM22, PM26).
 ## Farming (#327): the co-op share register (CSR1-CSR10; Codex, delegated by owner, 20 October 2026, not yet reviewed)
 
 From the answer to item 15 in issue #360: a factual register and
@@ -19286,3 +19545,152 @@ Payments, kept apart from the shares:
   rules have changed over time and aren't verified, so it's deferred. Tohyee
   doesn't value shares (values are as entered, usually cost) or work out
   the tax on dividends, rebates or retentions.
+
+## Income tax (#292, #360 item 3): importing IRD account files (ITX-IMP1 to ITX-IMP12; Codex, delegated by owner, 20 October 2026; as delegated, not yet reviewed)
+
+Issue #360 item 3 chose "imports and reviewable forecasts first": structured
+CSV or Excel through a mapping and preview, PDFs kept as sources, and any
+figure from them reviewed by a person before it counts. There's no live
+IRD connection, and nothing is filed or paid. Decisions 710-716. Tested in
+`tests/unit/ird-imports.test.ts` and `tests/integration/ird-imports.test.ts`
+with made-up files.
+
+**What IRD lets a customer download (read 21 Oct 2026).** IRD's pages
+describe the myIR income summary as two "exportable PDFs" (Proof of income
+and Income details) for chosen dates
+([Understanding your income summary in myIR](https://www.ird.govt.nz/income-tax/income-tax-for-individuals/understanding-your-income-summary-in-myir)),
+tax agents' reports that "Export" to Excel
+([Unfiled returns report](https://www.ird.govt.nz/roles/tax-agents/unfiled-returns-report),
+[Client list reports](https://www.ird.govt.nz/roles/tax-agents/client-list-reports)),
+and a "Transaction summary report" chosen by time period that lists
+assessments, penalties and payments
+([Check your payments in myIR](https://www.ird.govt.nz/child-support/managing-payments/paying-parent/check-your-payments-in-myir),
+for child support). An account's transactions are listed in myIR under the
+tax type's "Returns and transactions", period by period. No IRD page found
+gives the columns of a downloaded account transaction list, or says every
+account can be downloaded as CSV or Excel. So Tohyee assumes no column
+names and no layout: the person maps each column, says what each value in
+the type column means, and sees every row before anything is saved. The
+example files below are made up.
+
+The example: Kererū Joinery Ltd, a company with a 31 March balance date,
+2027 income year. The 2026 return was filed on 20 Jun 2026 with RIT
+17,668.00, so each 2027 instalment is **6,183.80** (28 Aug 2026, 15 Jan
+2027, 7 May 2027; ITX5). File A (made up):
+
+```
+Kererū Joinery Ltd income tax (made-up file)
+Date,Transaction,Period,Debit,Credit,Instalment
+01/04/2026,Balance brought forward,31/03/2027,,,
+28/08/2026,Payment,31/03/2027,,"6,183.80",Instalment 1
+15/01/2027,Payment,31/03/2027,,"6,183.80",
+20/01/2027,Interest,31/03/2027,12.40,,
+25/01/2027,Interest,31/03/2027,,12.40,
+02/02/2027,Late payment penalty,31/03/2027,50.00,,
+```
+
+- **ITX-IMP1 The file and where it's from.** Owners and admins choose a
+  CSV or Excel (.xlsx) file up to 10 MB (5,000 rows), and say where it's
+  from: **downloaded from myIR** (IRD's own file) or **another
+  spreadsheet** (typed up from myIR, or from an accountant). Optionally it
+  links to a PDF already under IRD documents (e.g. the statement it came
+  with). A PDF can't be imported here; it's added as an IRD document
+  (ITX30). On import the file itself is kept as an IRD document, the source
+  of every figure from it, and can be opened later. The same file (same
+  bytes) can't be imported twice: Tohyee says when it was.
+- **ITX-IMP2 Mapping, with a preview.** Tohyee guesses the headings row
+  (the first of the first 20 rows that's all text: row 2 in file A; the
+  person can change it) and the person picks the columns: Date (needed),
+  Amount with which way round it is, or Debit and/or Credit; and
+  optionally Type, Period or income year, Instalment, Effective date,
+  Description and Reference. Each column can be used once. Every row is
+  shown with what it would become and any problem ("Date "31/02/2027"
+  isn't a date Tohyee can read", "Say what "Refund" rows are"). The import
+  is refused while any row has a problem. A row with no amount (the
+  balance brought forward) is left out and shown as such.
+- **ITX-IMP3 Saved mappings.** The mapping can be saved with a name ("myIR
+  income tax account"). Next time a file has the same headings, that
+  mapping is chosen for it (headings compared ignoring case and spaces).
+  Saving again under the same name replaces it; a saved mapping can be
+  deleted.
+- **ITX-IMP4 What each row is.** The different values in the Type column
+  are listed with how many rows have each, and the person says what each
+  is: payment, assessment, credit (transfer or adjustment), interest,
+  penalty, refund, other (recorded only), or **skip**. Tohyee suggests from
+  plain words ("Late payment penalty" → penalty), shown as suggestions. In
+  file A: Payment → payment, Interest → interest, Late payment penalty →
+  penalty, Balance brought forward → skip. Without a Type column the person
+  says what every row is (e.g. a list of payments only). The Instalment
+  column's values are mapped the same way to instalment 1, 2 or 3, the
+  end-of-year tax, or "doesn't say"; only "Instalment 1", "Installment 1"
+  and "P1" (and 2, 3) are suggested. A blank says nothing.
+- **ITX-IMP5 Year, dates and signs.** The income year comes from the
+  Period column (2027, or a date such as 31/03/2027: the income year it's
+  in for the balance date) or, without one, is chosen for the whole file.
+  Dates are read day first unless the person says otherwise; .xlsx dates
+  stored as numbers work. Debit and Credit columns say the direction; a
+  single Amount column needs the person to say whether a positive amount is
+  owed (a debit) or paid (a credit): in "Amount" files "6,183.80" with
+  "positive is a credit" is a payment and "-12.40" is a debit of 12.40.
+  Amounts are read as text into exact decimals (never floats), up to 2
+  places; "(12.40)", "12.40 DR" and "$6,183.80" work.
+- **ITX-IMP6 Nothing counts until a person accepts it.** Imported rows are
+  proposed figures, waiting for a person, like the figures an AI proposes
+  from an IRD document (ITX33). Each can be accepted or declined (with a
+  reason), once; several can be accepted together. An AI key can't accept
+  or decline. Until accepted, nothing in the income tax calculation
+  changes and no figure is shown as IRD's.
+- **ITX-IMP7 A payment that says its instalment.** Accepting file A's row
+  3 (28 Aug 2026, 6,183.80, "Instalment 1") adds a 2027 payment of
+  6,183.80 on 28 Aug 2026 ("From IRD's file kereru.csv, row 3; accepted by
+  <person>") and allocates it to instalment 1 as **confirmed by IRD**,
+  naming the imported file as the IRD document (ITX6A). Instalment 1 needs
+  **nil** more. From "another spreadsheet", the same row is allocated **by
+  us with evidence** (the file, row and its words), never confirmed by IRD.
+  With an Effective date column, that date is IRD's effective date and the
+  payment's date; without one, the file's date is used for both the
+  payment and lateness, and IRD's effective date stays blank (ITX6C).
+- **ITX-IMP8 A payment that doesn't say, and one already in Tohyee.**
+  Accepting row 4 (15 Jan 2027, 6,183.80, no instalment) adds the payment
+  **awaiting reconciliation**: it counts towards the year's total paid but
+  against no instalment, so instalment 2 still needs **6,183.80** (12,367.60
+  less 6,183.80 allocated). If a 6,183.80 payment for 2027 is already in
+  Tohyee (typed, or counted from the books) paid on IRD's date or up to 7
+  days before it (13 Jan 2027 from the bank), the row is shown "Will link to
+  the payment of 6,183.80 on 13 Jan 2027" and accepting links it instead
+  of adding another: the year's paid total stays **12,367.60**, not
+  18,551.40. Its IRD effective date is filled in when the file has one and
+  the payment hasn't. The person can accept it as a new payment instead. A
+  payment that's already allocated keeps its allocation; the row says what
+  the file says, to change by hand if the file is right. A payment row that
+  is a debit (a reversed or dishonoured payment) is recorded only.
+- **ITX-IMP9 An assessment.** A 2026 file's row "20/06/2026, Assessment,
+  31/03/2026, debit 17,668.00" can be accepted **as the 2026 assessed RIT**
+  only when the person says so and gives the date the return was filed (20
+  Jun 2026): the 2026 figures then show 17,668.00 filed 20 Jun 2026, and
+  the 2027 instalments are 6,183.80 each (ITX5). An existing assessed RIT is
+  replaced, and the outcome says what it was. Accepted without that, an
+  assessment is recorded only. An assessment that's a credit (a reduction)
+  can't be the assessed RIT.
+- **ITX-IMP10 Recorded only, declined and duplicates.** Interest,
+  penalties, credits, refunds and other rows accepted are recorded as IRD's
+  figures for the year and change nothing else: file A's interest is
+  12.40 charged and 12.40 credited, **0.00** net; the penalty is **50.00**.
+  Declining needs a reason. A row that looks the same as one already
+  accepted from another file (same kind, income year, date, direction and
+  amount, e.g. an overlapping download) is shown as such and can't be
+  accepted again; decline it.
+- **ITX-IMP11 IRD's figures for the year.** For the chosen income year, the
+  accepted rows are totalled by kind (debits, credits, net), and the page
+  says how many came from IRD's own files and how many from other
+  spreadsheets. Only accepted rows from a file the person said was from
+  myIR are called IRD's figures; waiting rows never are.
+- **ITX-IMP12 Who.** Importing, mapping, accepting and declining are for
+  owners and admins, as the rest of income tax; each is in the audit log
+  with who and when. Removing the source file (ITX30) keeps the rows and
+  what they did.
+
+Not built: a live IRD connection (gateway services need IRD's approval;
+#360 item 3 says it's a parallel workstream), reading figures out of PDFs
+here (the connected AI does that, ITX30-ITX35), and credits IRD transfers
+in from other years or tax types as payments (decision 623).

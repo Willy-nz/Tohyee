@@ -116,7 +116,7 @@ export async function withOrganisation<T>(
   const people = await loadMemberNames(membership.organisation.id);
   const result = await withOrganisationTransaction(
     membership.organisation,
-    { userId: auth.user.id, email: auth.user.email },
+    { userId: auth.user.id, email: auth.user.email, role: membership.role },
     (tx) => work(tx, { auth, membership }),
     { people },
   );

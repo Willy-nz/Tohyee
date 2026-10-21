@@ -300,12 +300,29 @@ describeWithDatabase("farm calendar from email", () => {
       ["Fert truck", true, false],
       ["Spraying", false, true],
     ]);
-    // With the mailbox's farm chosen, the next items naming none go there.
+    // FC32: with the mailbox's farm chosen, the next items naming none go there,
+    // but with two farms that's a guess, so they wait in Needs checking.
     await w.as(jess, (tx) => setMailboxFarm(tx, mailbox.id, w.home.id));
     inbox.push({ id: "a4", threadId: "a4", at: "2026-10-19T11:00:00Z", from: "Shearing Gang <crew@shearing.example>", subject: "Shearing", text: "Shearers arriving 7.30am on 3/11." });
+    inbox.push({ id: "a6", threadId: "a6", at: "2026-10-19T11:05:00Z", from: "Spread Co <jobs@spreadco.example>", subject: "Lime", text: "Spreading lime on the Runoff on Friday 6 November." });
     await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T11:30:00Z"));
     const november = await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-11-01", to: "2026-11-30" }));
-    expect(november.items.map((item) => [item.date, item.startTime, item.farmName])).toEqual([["2026-11-03", "07:30", "Home farm"]]);
+    expect(november.items.map((item) => [item.date, item.startTime, item.farmName, item.checkReasons, item.needsChecking])).toEqual([
+      ["2026-11-03", "07:30", "Home farm", ["No farm named: put under Home farm, this mailbox's usual farm"], true],
+      // Naming a farm is enough: no guess, nothing to check.
+      ["2026-11-06", null, "Runoff", [], false],
+    ]);
+    // Checking it (keeping Home farm) takes it out of Needs checking.
+    const shearing = november.items[0];
+    expect((await w.as(jess, (tx) => checkCalendarItem(tx, shearing.id, { date: shearing.date, startTime: shearing.startTime, farmId: w.home.id }))).needsChecking).toBe(false);
+    // FC32: the usual farm archived, the next item naming none is No farm, not a guess.
+    await w.as(jess, (tx) => saveFarm(tx, { id: w.home.id, name: "Home farm", isActive: false }));
+    await w.as(jess, (tx) => saveFarm(tx, { name: "Hill block" }));
+    inbox.push({ id: "a7", threadId: "a7", at: "2026-10-19T12:00:00Z", from: "Shearing Gang <crew@shearing.example>", subject: "Crutching", text: "Crutching on Tuesday 10 November." });
+    await checkFarmMailbox(w.organisation, mailbox.id, new Date("2026-10-19T12:30:00Z"));
+    const crutching = (await w.as(jess, (tx) => farmCalendar(tx, { from: "2026-11-10", to: "2026-11-10" }))).items;
+    expect(crutching.map((item) => [item.title, item.farmName, item.needsChecking])).toEqual([["Crutching", null, false]]);
+    await w.as(jess, (tx) => saveFarm(tx, { id: w.home.id, name: "Home farm", isActive: true }));
 
     // FC14: Jess gives the spreader a date and farm; it's checked and out of Needs checking.
     const spreader = toCheck[0];
@@ -319,7 +336,7 @@ describeWithDatabase("farm calendar from email", () => {
     toCheck = await w.as(jess, (tx) => itemsToCheck(tx));
     expect(toCheck.map((item) => [item.title, item.date, item.checkReasons])).toEqual([
       ["Spraying", "2026-10-21", ["Mentions more than one farm: Home farm, Runoff"]],
-      ["Spreading", "2026-10-29", ['Would move "Spreading lime" on Tue, 27 Oct, which you\'ve checked']],
+      ["Spreading", "2026-10-29", ['Would move "Spreading lime" on Tue, 27 Oct, which you\'ve checked', "No farm named: put under Home farm, this mailbox's usual farm"]],
     ]);
     // Jess says the new one replaces it; and hides the spraying.
     await w.as(jess, (tx) => replaceCalendarItem(tx, toCheck[1].id, spreader.id));

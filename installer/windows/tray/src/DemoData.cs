@@ -282,6 +282,10 @@ namespace Tohyee.Tray
                     "{'name':'kowhai-kindy-2026-09-30.tohyee-backup','sizeBytes':3984588,'header':{'kind':'organisation','displayName':'Kōwhai Kindergarten Inc','createdAt':'" + Ago(7) + "'}}," +
                     "{'name':'southern-paws-2026-09-30.tohyee-backup','sizeBytes':1258291,'header':{'kind':'organisation','displayName':'Southern Paws Ltd','createdAt':'" + Ago(7) + "'}}," +
                     "{'name':'server-2026-09-30.tohyee-backup','sizeBytes':81920,'header':{'kind':'core','displayName':null,'createdAt':'" + Ago(7) + "'}}]," +
+                    "'overview':{'everythingBackedUpAt':'" + Ago(7) + "','integrity':{'allCheckedAt':'" + Ago(30) + "','failed':0,'unchecked':0}," +
+                    "'destination':{'kind':'onedrive'},'offSite':{'verified':false,'note':'Not verified. Tohyee saves backups into your OneDrive folder, but it cannot see whether OneDrive has uploaded them. Check the OneDrive icon by the clock, and that the newest file is on the OneDrive website.'}," +
+                    "'storage':{'fileCount':4,'usedBytes':7736523,'freeBytes':212000000000,'nextBackupBytes':7736523},'attention':[],'recoveryKit':{'version':1,'olderVersions':[],'legacyFiles':null}}," +
+                    "'recoveryKit':{'keySet':true,'version':1,'id':'3f9a61c2d07e4b85','createdAt':'" + Ago(24 * 20) + "','checkedAt':'" + Ago(24 * 10) + "','checkedByEmail':'jess@example.nz','needsSaving':false}," +
                     "'keyStatus':{'keySet':true,'savedCopyCheckedAt':'" + Ago(24 * 10) + "','savedCopyCheckedByEmail':'jess@example.nz'}}");
             }
             if (path.StartsWith("/api/admin/email"))

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
@@ -16,6 +17,8 @@ namespace Tohyee.Tray
     internal sealed class BackupsPage : UserControl
     {
         private readonly TohyeeApi _api;
+        private readonly Label _summary = new Label { AutoSize = true, ForeColor = Theme.Text, Tag = "wrap", MaximumSize = new Size(Theme.S(640), 0), Margin = new Padding(0, 0, 0, 8) };
+        private readonly Label _attention = new Label { AutoSize = true, ForeColor = Ui.Danger, Tag = "wrap", MaximumSize = new Size(Theme.S(640), 0), Margin = new Padding(0, 0, 0, 8) };
         private readonly Label _state = Ui.State();
         private readonly CheckBox _enabled = new DarkCheckBox { Text = "Back up every night", AutoSize = true };
         private readonly TextBox _time = new TextBox { Width = Theme.S(80) };
@@ -25,6 +28,8 @@ namespace Tohyee.Tray
         private readonly ListView _files = Ui.List("Made", "Organisation", "Size", "File");
         private readonly Label _message = Ui.Status();
         private readonly Label _keyState = Ui.State();
+        private readonly Label _kitState = Ui.State();
+        private Card _legacyKey;
         private string _defaultFolder;
 
         public BackupsPage(TohyeeApi api)
@@ -33,7 +38,16 @@ namespace Tohyee.Tray
             _status.Height = Theme.S(150);
             _files.Height = Theme.S(200);
             BackColor = Theme.Bg;
-            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, and checks each file after it's made. Choose a OneDrive or Google Drive folder to get copies off this computer.");
+            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, checks each file after it's made, and reads the newest ones back to check them again every week. Choose a OneDrive or Google Drive folder to get copies off this computer.");
+
+            // What's known, and on what evidence (decision 733). No "safe" badge: what isn't proven is said.
+            var status = Ui.Card(page, "Status", "What Tohyee has done and checked, and what it can't see.");
+            status.Body.Controls.Add(_summary);
+            status.Body.Controls.Add(_attention);
+            var statusButtons = Ui.Row();
+            statusButtons.Controls.Add(Ui.Btn("Check backups now", async (s, e) => await CheckNow()));
+            statusButtons.Controls.Add(Ui.Btn("Open in the browser", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups")));
+            status.Body.Controls.Add(statusButtons);
 
             var nightly = Ui.Card(page, "Nightly backups", null);
             nightly.Body.Controls.Add(_state);
@@ -62,7 +76,16 @@ namespace Tohyee.Tray
             nightly.Body.Controls.Add(settingsButtons);
             nightly.Body.Controls.Add(_message);
 
-            var key = Ui.Card(page, "Your backup key", "Backups can only be opened with this server's backup key. If this computer is lost or rebuilt, you'll need a copy of the key to restore them, so save one somewhere safe that isn't the backup folder, such as a password manager. Then paste it back here so Tohyee can check your copy is exactly right.");
+            // The recovery kit (#389, decisions 735-736): made, downloaded and checked in the browser, where saving and choosing a file is natural.
+            var kit = Ui.Card(page, "Recovery kit", "The one thing you need, with the backup files, to get the books back on another computer. It holds this server's recovery key and nothing else. Save it in a password manager (or print it), not in the backup folder, then check your saved copy.");
+            kit.Body.Controls.Add(_kitState);
+            var kitButtons = Ui.Row();
+            kitButtons.Controls.Add(Ui.Btn("Save recovery kit…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups#recovery-kit")));
+            kitButtons.Controls.Add(Ui.Btn("Check recovery kit…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups#recovery-kit")));
+            kit.Body.Controls.Add(kitButtons);
+
+            var key = Ui.Card(page, "Older backups' key", "Backups made before recovery kits can only be opened on another computer with this server's older backup key (its TOHYEE_SECRET_KEY). Save a copy somewhere safe that isn't the backup folder, then paste it back here so Tohyee can check it. Once those older backups have aged out (up to 12 months), it isn't needed for them any more.");
+            _legacyKey = key;
             key.Body.Controls.Add(_keyState);
             var keyButtons = Ui.Row();
             keyButtons.Controls.Add(Ui.Btn("Show the key…", async (s, e) => await ShowKey()));
@@ -76,6 +99,7 @@ namespace Tohyee.Tray
             files.Body.Controls.Add(_files);
             var fileButtons = Ui.Row();
             fileButtons.Controls.Add(Ui.Btn("Restore as a copy…", async (s, e) => await Restore()));
+            fileButtons.Controls.Add(Ui.Btn("Restore on this computer…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups/restore")));
             fileButtons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
             files.Body.Controls.Add(fileButtons);
             Controls.Add(page);
@@ -138,6 +162,32 @@ namespace Tohyee.Tray
             Ui.FitColumns(_files);
             _files.EndUpdate();
 
+            ShowOverview(J.Obj(result, "overview"));
+
+            var recoveryKit = J.Obj(result, "recoveryKit");
+            if (recoveryKit == null || !J.Bool(recoveryKit, "keySet"))
+            {
+                _kitState.Text = recoveryKit == null ? "This server doesn't make recovery kits yet: update Tohyee." : "There's no TOHYEE_SECRET_KEY on this server, so there's no recovery key.";
+                _kitState.ForeColor = Ui.Danger;
+            }
+            else if (J.Str(recoveryKit, "version") == null)
+            {
+                _kitState.Text = "There's no recovery key yet: the first backup makes one.";
+                _kitState.ForeColor = Theme.Text;
+            }
+            else if (J.Str(recoveryKit, "checkedAt") == null)
+            {
+                _kitState.Text = "Not checked: nobody has checked a saved kit for recovery key version " + J.Str(recoveryKit, "version") + ".";
+                _kitState.ForeColor = Ui.Danger;
+            }
+            else
+            {
+                _kitState.Text = "Version " + J.Str(recoveryKit, "version") + ": " + J.Str(recoveryKit, "checkedByEmail") + " checked a saved kit on " + J.When(J.Str(recoveryKit, "checkedAt")) + ". That proves it was right then, not that it's still there.";
+                _kitState.ForeColor = Ui.Success;
+            }
+            // Only while backups from before recovery kits are kept (or the server is older).
+            _legacyKey.Visible = recoveryKit == null || J.Obj(J.Obj(J.Obj(result, "overview"), "recoveryKit"), "legacyFiles") != null;
+
             var keyStatus = J.Obj(result, "keyStatus");
             if (!J.Bool(keyStatus, "keySet"))
             {
@@ -174,6 +224,72 @@ namespace Tohyee.Tray
             {
                 _state.Text = "On: every night at " + _time.Text + (anyNever ? ". Not everything has been backed up yet; use Back up now to start." : ".");
                 _state.ForeColor = anyNever ? Theme.Text : Ui.Success;
+            }
+        }
+
+        private static string Ago(string iso)
+        {
+            DateTime parsed;
+            if (string.IsNullOrEmpty(iso) || !DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out parsed)) return "";
+            var hours = (DateTime.UtcNow - parsed).TotalHours;
+            if (hours < 1) return "under an hour ago";
+            if (hours < 48) return Math.Floor(hours) + " hours ago";
+            return Math.Floor(hours / 24) + " days ago";
+        }
+
+        /// <summary>The overview from the server, plus what only this app can see: whether OneDrive is running for this person.</summary>
+        private void ShowOverview(Dictionary<string, object> overview)
+        {
+            if (overview == null)
+            {
+                _summary.Text = "";
+                _attention.Text = "";
+                return;
+            }
+            var lines = new List<string>();
+            var all = J.Str(overview, "everythingBackedUpAt");
+            lines.Add("Latest backup: " + (all != null ? "everything, the oldest " + Ago(all) + " (" + J.When(all) + ")" : "not everything has been backed up yet"));
+            var integrity = J.Obj(overview, "integrity");
+            var checkedAt = J.Str(integrity, "allCheckedAt");
+            lines.Add("Files checked again: " + (J.Int(integrity, "failed") > 0 ? J.Int(integrity, "failed") + " failed (see below)" : checkedAt != null ? "all, " + Ago(checkedAt) : "not all yet"));
+            var test = J.Obj(overview, "testRestore");
+            if (test != null)
+            {
+                lines.Add("Last test restore: " + (J.Int(test, "failed") > 0 ? J.Int(test, "failed") + " failed (see below)" : J.Str(test, "allAt") != null ? "every database, " + Ago(J.Str(test, "allAt")) : "not done yet (use Test a restore in the browser)"));
+            }
+            lines.Add("Off-site copy: " + J.Str(J.Obj(overview, "offSite"), "note"));
+            var storage = J.Obj(overview, "storage");
+            var free = J.Obj(overview, "storage") != null && storage.ContainsKey("freeBytes") && storage["freeBytes"] != null ? "; " + SizeText(J.Num(storage, "freeBytes")) + " free" : "";
+            lines.Add("Space: " + J.Int(storage, "fileCount") + " files, " + SizeText(J.Num(storage, "usedBytes")) + free);
+            _summary.Text = string.Join(Environment.NewLine, lines);
+
+            var problems = new List<string>();
+            foreach (var item in J.List(overview, "attention")) problems.Add("• " + J.Str(item, "text"));
+            var destination = J.Obj(overview, "destination");
+            if (J.Str(destination, "kind") == "onedrive" && !_api.IsDemo && Process.GetProcessesByName("OneDrive").Length == 0)
+            {
+                // The service can't see this; the app runs as the person, so it can.
+                problems.Insert(0, "• OneDrive isn't running on this computer, so nothing in the backup folder is being uploaded. Start OneDrive and sign in. (Tohyee can't tell if it's paused or out of storage: check its icon by the clock.)");
+            }
+            _attention.Text = problems.Count == 0 ? "" : "Needs attention:" + Environment.NewLine + string.Join(Environment.NewLine, problems);
+        }
+
+        /// <summary>Reads the newest backup of each database back from the folder and checks it again.</summary>
+        private async Task CheckNow()
+        {
+            Ui.Show(_message, "Checking the newest backup files… this can take a few minutes.", false);
+            if (await Ui.Busy(this, _message, async () =>
+            {
+                var result = await _api.PostLong("/api/admin/backups/check", null);
+                var checks = J.List(result, "checks");
+                var failed = checks.FindAll(c => J.Str(c, "status") != "ok");
+                Ui.Show(_message, checks.Count == 0 ? "There are no backups to check yet." : failed.Count == 0 ? "Checked the newest backup of " + checks.Count + (checks.Count == 1 ? " database" : " databases") + ": all whole and unchanged." : failed.Count + " failed: " + J.Str(failed[0], "error"), failed.Count > 0);
+            }))
+            {
+                var keep = _message.Text;
+                var keepColour = _message.ForeColor;
+                await Reload();
+                Ui.Show(_message, keep, keepColour == Ui.Danger);
             }
         }
 
@@ -298,15 +414,15 @@ namespace Tohyee.Tray
                 catch (ApiException error)
                 {
                     // Made on another server (or before the key changed): ask for that server's key.
-                    if (!error.Message.Contains("made with a different key")) throw;
-                    var oldKey = AskKey("Restore from another server", "This backup was made with a different backup key, from another server or before this one was set up again. Paste the backup key you saved from that server:", true);
+                    if (!error.Message.Contains("made with a different key") && !error.Message.Contains("recovery kit")) throw;
+                    var oldKey = AskKey("Restore from another server", "This backup was made by another server (or before this one was set up again). Paste that server's recovery code (or, for a backup from before recovery kits, its backup key). For a recovery file, use Restore on this computer:", true);
                     if (string.IsNullOrEmpty(oldKey)) throw;
                     body["key"] = oldKey;
                     Ui.Show(_message, "Restoring… this can take a few minutes.", false);
                     result = await _api.PostLong("/api/admin/backups/restore", body);
                 }
                 var organisation = J.Obj(result, "organisation");
-                Ui.Show(_message, "Restored as " + J.Str(organisation, "displayName") + " (" + J.Str(organisation, "id") + "). Open Tohyee to check it.", false);
+                Ui.Show(_message, "Restored as " + J.Str(organisation, "displayName") + " (" + J.Str(organisation, "id") + "). Its automatic jobs (emails, feeds) are paused: check it in Tohyee, then turn them on in Backups in the browser.", false);
             }))
             {
                 var keep = _message.Text;

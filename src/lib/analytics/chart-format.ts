@@ -264,6 +264,8 @@ export type ChartFormat = {
   boxplot?: { outliers?: boolean };
   /** Small multiples: the most small charts (2-12, left out 6); the rest become "Other". */
   smallMultiples?: { max?: number };
+  /** Filled map: regions or territorial authorities; left out, whichever more of the group names match (decision 687). */
+  map?: { areas?: "regions" | "districts" };
 };
 
 export type WaterfallFormat = {
@@ -328,6 +330,10 @@ export type TableStyle = {
   totalsStyle?: "bold" | "shaded";
   /** Pivot subtotal levels to leave out (1 is the first row field). */
   subtotalsOff?: number[];
+  /** Pivot rows in a column per field (tabular, the default) or stepped: one indented column with each group's total as its heading (#376 phase 2). */
+  layout?: "tabular" | "stepped";
+  /** Pivot row groups shown open to start with, by level (1: only the first row field's groups are listed); left out, all open. */
+  expandTo?: number;
 };
 
 const NUMBER_TEXT = /^-?\d{1,15}(\.\d{1,6})?$/;
@@ -607,6 +613,8 @@ function parseTableStyle(input: unknown): TableStyle | undefined {
     totals: flag(raw.totals),
     totalsStyle: oneOf(raw.totalsStyle, ["bold", "shaded"] as const, "Totals style"),
     subtotalsOff,
+    layout: oneOf(raw.layout, ["tabular", "stepped"] as const, "Pivot layout"),
+    expandTo: whole(raw.expandTo, 1, 4, "Levels shown open"),
   });
 }
 
@@ -743,6 +751,7 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     histogram: parseHistogram(raw.histogram),
     boxplot: compact({ outliers: flag(object(raw.boxplot).outliers) }),
     smallMultiples: compact({ max: whole(object(raw.smallMultiples).max, 2, 12, "Most small charts") }),
+    map: compact({ areas: oneOf(object(raw.map).areas, ["regions", "districts"] as const, "Map areas") }),
   });
 }
 
@@ -855,7 +864,7 @@ export function formatOptionsFor(visual: string) {
     /** Colour rules on the marks. */
     rules: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "funnel", "gauge", "scatter"].includes(visual),
     /** Shows a legend. */
-    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"].includes(visual),
+    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap"].includes(visual),
     /** Column thickness and rounded ends. */
     thickness: ["column", "bar", "combo", "waterfall", "bullet", "histogram", "boxplot"].includes(visual),
     /** Data labels on the marks. */
@@ -866,7 +875,9 @@ export function formatOptionsFor(visual: string) {
     histogram: visual === "histogram",
     boxplot: visual === "boxplot",
     /** Coloured by amount on a scale (no per-value colour). */
-    scale: visual === "heatmap" || visual === "calendar",
+    scale: visual === "heatmap" || visual === "calendar" || visual === "filledmap",
+    filledmap: visual === "filledmap",
+    pointmap: visual === "pointmap",
     treemap: visual === "treemap",
     sankey: visual === "sankey",
     waterfall: visual === "waterfall",
@@ -891,7 +902,7 @@ export const SECOND_GROUPING: Partial<Record<string, { label: string; none: stri
 export const SECOND_GROUPING_REQUIRED = ["heatmap", "sankey"];
 
 /** The chart types a report can keep a default format for (#376, Power BI's visual defaults). */
-export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"] as const;
+export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap"] as const;
 export type DefaultableVisual = (typeof DEFAULTABLE_VISUALS)[number];
 export type VisualDefaults = Partial<Record<DefaultableVisual, ChartFormat>>;
 
@@ -917,6 +928,8 @@ export const VISUAL_NAMES: Record<DefaultableVisual, string> = {
   heatmap: "Heat map",
   calendar: "Calendar heat map",
   sankey: "Sankey",
+  filledmap: "Filled map",
+  pointmap: "Map with points",
 };
 
 /**

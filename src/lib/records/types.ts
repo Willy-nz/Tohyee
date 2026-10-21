@@ -58,6 +58,8 @@ export type RecordAttachment = {
   sha256: string;
   createdByEmail: string;
   createdAt: string;
+  /** Filed by an Owner from their private mail (decision 721): only the file was shared. */
+  filedFromPrivateMail: boolean;
   /** Whether the signed-in person may remove it (who added it, or an admin). */
   canRemove: boolean;
 };

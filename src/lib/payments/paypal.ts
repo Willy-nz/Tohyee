@@ -14,7 +14,7 @@ import { ConflictError, HttpError, NotFoundError, ValidationError } from "@/lib/
 import { getInvoice } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { cmp, dec, toFixedString, toPlainString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { closeLink, LINK_COLUMNS, type LinkRow, linkMatches, recordSession } from "@/lib/payments/stripe";
 import { decryptSecret, secretsAvailable } from "@/lib/secrets";
@@ -445,7 +445,7 @@ export async function checkDuePayPalPayments(): Promise<{ checked: number; faile
   let checked = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due = false;
       try {

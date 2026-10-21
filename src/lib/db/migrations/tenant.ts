@@ -17151,4 +17151,216 @@ create table analytics_themes (
 create unique index analytics_themes_name on analytics_themes (lower(name));
 `,
   },
+  {
+    version: "0177",
+    name: "analytics_dashboard_images",
+    sql: `
+-- Images placed on an Analytics report (#376 phase 2, decision 684):
+-- stored in the organisation's own database like other attachments, and
+-- served only to people who can see the report. JPG and PNG only, checked
+-- against their contents before they're stored. They go with the report:
+-- deleting the report deletes them, and saving a report removes images no
+-- tile uses any more.
+create table analytics_dashboard_images (
+  id bigserial primary key,
+  dashboard_id bigint not null references analytics_dashboards (id) on delete cascade,
+  file_name text not null check (length(file_name) between 1 and 255),
+  content_type text not null check (content_type in ('image/jpeg', 'image/png')),
+  byte_size integer not null check (byte_size between 1 and 5242880),
+  content bytea not null check (octet_length(content) = byte_size),
+  created_by_email text not null,
+  created_at timestamptz not null default now()
+);
+create index analytics_dashboard_images_dashboard on analytics_dashboard_images (dashboard_id);
+`,
+  },
+  {
+    version: "0180",
+    name: "private_mail_filing",
+    sql: `
+-- Filing an attachment from My mail into shared data (#250; examples
+-- PM20-PM29, decisions 720-726). Nothing from email reaches shared data
+-- unless its Owner files it, after a preview of exactly what others will
+-- see. Filed items are copies: the shared row holds the file (or the rows
+-- read from it) and a mark that it was filed from a private email, never
+-- the email's subject, sender, text or other attachments.
+
+-- The shared marks. The bills inbox's new source, and an optional note the
+-- Owner chose to share with it; files on records filed from a private email.
+alter table bill_inbox_items drop constraint bill_inbox_items_source_check;
+alter table bill_inbox_items add constraint bill_inbox_items_source_check check (source in ('upload', 'mailbox', 'ai', 'my_mail'));
+alter table bill_inbox_items add column note text check (note is null or length(note) between 1 and 1000);
+alter table record_attachments add column filed_from_private_mail boolean not null default false;
+
+-- The Owner's own record of what they filed (private, like the copy). It
+-- goes with the copy when its history is deleted; the filed copies don't.
+create table private_mail_filings (
+  id bigserial primary key,
+  copy_id bigint not null references private_mail_copies(id) on delete cascade,
+  owner_user_id uuid not null,
+  attachment_id bigint references private_mail_attachments(id) on delete set null,
+  rule_id bigint,
+  destination text not null check (destination in ('bills_inbox', 'soil_tests', 'pasture_readings', 'fertiliser_applications', 'record')),
+  -- Where it went (ids and the place's name), and what was shared (the file's
+  -- name, size and fingerprint, the note, how many rows): no email content.
+  filed jsonb not null,
+  filed_at timestamptz not null default now()
+);
+create index private_mail_filings_owner on private_mail_filings (owner_user_id, filed_at desc);
+
+-- Rules the Owner approved once: matching attachments wait in "To file"
+-- until the Owner confirms each one (decision 723). The sender and file
+-- name pattern are encrypted with the copy's key, like the mail.
+create table private_mail_rules (
+  id bigserial primary key,
+  copy_id bigint not null references private_mail_copies(id) on delete cascade,
+  owner_user_id uuid not null,
+  seal_ref text not null unique,
+  criteria bytea not null,
+  destination jsonb not null check (jsonb_typeof(destination) = 'object'),
+  -- Attachments up to this id have been checked against the rule.
+  checked_through bigint not null default 0,
+  created_at timestamptz not null default now()
+);
+create index private_mail_rules_copy on private_mail_rules (copy_id);
+
+create table private_mail_to_file (
+  id bigserial primary key,
+  copy_id bigint not null references private_mail_copies(id) on delete cascade,
+  owner_user_id uuid not null,
+  rule_id bigint not null references private_mail_rules(id) on delete cascade,
+  attachment_id bigint not null references private_mail_attachments(id) on delete cascade,
+  status text not null default 'waiting' check (status in ('waiting', 'filed', 'dismissed')),
+  filing_id bigint references private_mail_filings(id) on delete set null,
+  created_at timestamptz not null default now(),
+  decided_at timestamptz,
+  unique (rule_id, attachment_id)
+);
+create index private_mail_to_file_waiting on private_mail_to_file (owner_user_id, id) where status = 'waiting';
+
+create trigger private_mail_filings_owner before insert or update on private_mail_filings for each row execute function private_mail_row_owner_fixed();
+create trigger private_mail_rules_owner before insert or update on private_mail_rules for each row execute function private_mail_row_owner_fixed();
+create trigger private_mail_to_file_owner before insert or update on private_mail_to_file for each row execute function private_mail_row_owner_fixed();
+`,
+  },
+  {
+    version: "0179",
+    name: "ird_imports",
+    sql: `
+-- IRD account files imported through a column mapping (examples
+-- ITX-IMP1 to ITX-IMP12, decisions 710-716; Codex, delegated by owner, 20
+-- October 2026). The file itself is kept as an IRD document (the source).
+-- Each row becomes a proposed figure that a person accepts or declines;
+-- accepting a payment adds (or links) an income tax payment, and allocates
+-- it only when the row says which instalment it's for. Nothing posts and
+-- nothing is sent to IRD.
+create table ird_import_mappings (
+  id bigserial primary key,
+  name text not null check (length(name) between 1 and 100 and name = btrim(name)),
+  headings jsonb not null check (jsonb_typeof(headings) = 'array'),
+  mapping jsonb not null check (jsonb_typeof(mapping) = 'object'),
+  updated_by_email text,
+  updated_at timestamptz not null default now()
+);
+create unique index ird_import_mappings_name on ird_import_mappings (lower(name));
+
+create table ird_imports (
+  id bigserial primary key,
+  idempotency_key text not null unique,
+  request_hash text not null,
+  document_id bigint not null references ird_documents(id),
+  sha256 text not null,
+  source text not null check (source in ('myir_export', 'other_spreadsheet')),
+  supporting_document_id bigint references ird_documents(id),
+  mapping jsonb not null,
+  mapping_name text,
+  file_income_year integer check (file_income_year is null or file_income_year between 2000 and 2100),
+  created_by_email text,
+  created_at timestamptz not null default now()
+);
+create unique index ird_imports_sha256 on ird_imports (sha256);
+
+create table ird_import_rows (
+  id bigserial primary key,
+  import_id bigint not null references ird_imports(id) on delete cascade,
+  row_number integer not null check (row_number > 0),
+  kind text not null check (kind in ('payment', 'assessment', 'credit', 'interest', 'penalty', 'refund', 'other')),
+  income_year integer not null check (income_year between 2000 and 2100),
+  transaction_on date not null,
+  effective_on date,
+  direction text not null check (direction in ('debit', 'credit')),
+  amount numeric(18, 2) not null check (amount > 0),
+  applies_to text check (applies_to in ('instalment_1', 'instalment_2', 'instalment_3', 'end_of_year')),
+  applies_to_text text check (applies_to_text is null or length(applies_to_text) <= 200),
+  check (applies_to is null or applies_to_text is not null),
+  period_text text check (period_text is null or length(period_text) <= 200),
+  description text check (description is null or length(description) <= 500),
+  reference text check (reference is null or length(reference) <= 200),
+  cells jsonb not null check (jsonb_typeof(cells) = 'array'),
+  status text not null default 'waiting' check (status in ('waiting', 'accepted', 'declined')),
+  decided_by_email text,
+  decided_at timestamptz,
+  decline_reason text check (decline_reason is null or length(decline_reason) between 1 and 500),
+  check ((status = 'waiting') = (decided_at is null)),
+  check ((status = 'declined') = (decline_reason is not null)),
+  outcome text check (outcome is null or length(outcome) <= 500),
+  payment_id bigint references income_tax_payments(id) on delete set null,
+  allocation_id bigint references income_tax_payment_allocations(id) on delete set null,
+  set_assessed_rit boolean not null default false,
+  unique (import_id, row_number)
+);
+create index ird_import_rows_waiting on ird_import_rows (import_id) where status = 'waiting';
+create index ird_import_rows_year on ird_import_rows (income_year) where status = 'accepted';
+create unique index ird_import_rows_one_payment on ird_import_rows (payment_id) where payment_id is not null;
+`,
+  },
+  {
+    version: "0182",
+    name: "farm_reporting",
+    sql: `
+-- Farm-level reporting (#390, FR1-FR8, decision 743): as Xero does it, a
+-- tracking category carries the farm. Farming settings name the category;
+-- each farm is linked to at most one of its values (values under it count
+-- for the farm). Each farm's own physical figures for a year sit beside the
+-- organisation's (farm_year_figures). Nothing here posts.
+alter table farming_settings add column farm_tracking_category_id bigint references tracking_categories(id);
+alter table farms add column tracking_value_id bigint references tracking_values(id);
+create unique index farms_tracking_value on farms (tracking_value_id) where tracking_value_id is not null;
+
+create table farm_year_figures_by_farm (
+  farm_id bigint not null references farms(id),
+  year_end date not null,
+  effective_ha numeric(12, 2) check (effective_ha is null or effective_ha > 0),
+  peak_cows integer check (peak_cows is null or peak_cows > 0),
+  stock_units numeric(12, 1) check (stock_units is null or stock_units > 0),
+  milk_solids_kg numeric(14, 1) check (milk_solids_kg is null or milk_solids_kg > 0),
+  updated_by_email text not null,
+  updated_at timestamptz not null default now(),
+  primary key (farm_id, year_end)
+);
+`,
+  },
+  {
+    version: "0183",
+    name: "farm_member_access",
+    sql: `
+-- Which farms each member works on (#390, decision 744; Jess, 21 October
+-- 2026: "Yes, assigned farms only"). With two or more farms, viewers and
+-- bookkeepers see and record only for their farms; owners and admins see
+-- every farm. A member with no row here has no farms yet. Members live in the
+-- core database, so these rows name the user by id; they're removed when the
+-- member leaves.
+create table farm_member_scopes (
+  user_id uuid primary key,
+  all_farms boolean not null,
+  updated_by_email text not null,
+  updated_at timestamptz not null default now()
+);
+create table farm_member_farms (
+  user_id uuid not null references farm_member_scopes(user_id) on delete cascade,
+  farm_id bigint not null references farms(id),
+  primary key (user_id, farm_id)
+);
+`,
+  },
 ];

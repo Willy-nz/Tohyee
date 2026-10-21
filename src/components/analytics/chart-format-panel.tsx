@@ -363,7 +363,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
     const others = (current.categoryColors ?? []).filter((entry) => entry.name !== name);
     set({ categoryColors: color ? [...others, { name, color }] : others.length ? others : undefined });
   };
-  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || can.treemap || can.sankey || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
+  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || can.treemap || can.sankey || can.pointmap || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
   // Funnels show their labels unless turned off, like pies.
   const labelsByDefault = can.round || can.funnel;
 

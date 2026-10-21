@@ -11,7 +11,7 @@ import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/or
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays as addDaysIso } from "@/lib/financial-year";
 import { listMembers } from "@/lib/organisations/members";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord as Organisation } from "@/lib/organisations/registry";
 import { optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
 
@@ -469,7 +469,7 @@ export async function runDueFollowUpRules(organisations?: Organisation[]): Promi
   running = true;
   const total = { organisations: 0, tasksCreated: 0, failed: 0 };
   try {
-    for (const organisation of organisations ?? (await listAllOrganisations())) {
+    for (const organisation of organisations ?? (await listOrganisationsForJobs())) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       try {
         const done = await withOrganisationTransaction(organisation, FOLLOW_UP_ACTOR, async (tx) => {

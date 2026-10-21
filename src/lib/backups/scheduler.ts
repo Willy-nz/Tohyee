@@ -1,4 +1,5 @@
-import { backUpNow, type BackupRun, getBackupSettings, localParts, markInterruptedBackups } from "@/lib/backups/service";
+import { type BackupCheck, runDueIntegrityChecks } from "@/lib/backups/checks";
+import { backUpNow, type BackupRun, cleanUpInterruptedRestores, getBackupSettings, localParts, markInterruptedBackups } from "@/lib/backups/service";
 import { coreQuery } from "@/lib/db/transactions";
 import { sendSecurityAlert } from "@/lib/email/mailer";
 
@@ -44,6 +45,18 @@ async function emailServerAdmins(failed: BackupRun[]): Promise<void> {
   }
 }
 
+async function emailCheckFailures(failed: BackupCheck[]): Promise<void> {
+  const admins = await coreQuery<{ email: string }>("select email from users where is_server_admin and is_active");
+  const lines = [
+    `Tohyee's weekly check of the backups found ${failed.length === 1 ? "a problem" : `${failed.length} problems`}:`,
+    ...failed.map((check) => `- ${check.organisationId ?? "the server's own database"}: ${check.error ?? "no message"}`),
+    "The older backup files are still there. The server app's Backups tab (or `backups status` on the command line) shows the details; back up now to get a good copy.",
+  ];
+  for (const admin of admins.rows) {
+    await sendSecurityAlert(admin.email, "a backup check failed", lines);
+  }
+}
+
 let running = false;
 /** When this server process started: a run "running" from before then was cut off by a restart (#137). */
 const PROCESS_STARTED_AT = new Date();
@@ -53,6 +66,9 @@ export async function runDueBackups(now = new Date(), processStartedAt = PROCESS
   if (running) return [];
   running = true;
   try {
+    // A restore cut off by a restart leaves nothing half-made behind (decision 739).
+    const cleaned = await cleanUpInterruptedRestores(processStartedAt).catch(() => [] as string[]);
+    for (const id of cleaned) console.warn(`[tohyee] A restore into ${id} was interrupted by a restart; what it had made was removed.`);
     const settings = await getBackupSettings();
     if (!settings.enabled || !settings.keySet) return [];
     // Otherwise a cut-off run counts as "running" all day and blocks that day's backups.
@@ -81,11 +97,20 @@ export async function runDueBackups(now = new Date(), processStartedAt = PROCESS
 
 let timer: NodeJS.Timeout | null = null;
 
-/** Checks every 5 minutes whether the nightly backup is due, while the server runs. */
+/** Checks every 5 minutes whether the nightly backup (or the weekly check of the backups) is due, while the server runs. */
 export function startBackupScheduler(): void {
   if (timer) return;
   const tick = () => {
-    runDueBackups().catch((error) => console.warn("[tohyee] Backup scheduler:", error instanceof Error ? error.message : error));
+    runDueBackups()
+      .catch((error) => console.warn("[tohyee] Backup scheduler:", error instanceof Error ? error.message : error))
+      // Once a week the newest backups are read back and checked again (decision 732).
+      .then(() => runDueIntegrityChecks())
+      .then(async (checks) => {
+        const failed = checks.filter((check) => check.status === "failed");
+        for (const check of failed) console.warn(`[tohyee] Backup check of ${check.organisationId ?? "the server database"} failed: ${check.error}`);
+        if (failed.length > 0) await emailCheckFailures(failed).catch(() => undefined);
+      })
+      .catch((error) => console.warn("[tohyee] Backup check:", error instanceof Error ? error.message : error));
   };
   timer = setInterval(tick, 5 * 60 * 1000);
   timer.unref?.();

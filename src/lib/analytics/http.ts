@@ -18,5 +18,5 @@ export async function analyticsMember(
   const auth = await requireAuth(request);
   const organisationId = parseOrganisationId(organisationIdInput);
   const membership = await requireOrganisationRole(auth, organisationId, minimumRole);
-  return { organisation: membership.organisation, actor: { userId: auth.user.id, email: auth.user.email }, role: membership.role };
+  return { organisation: membership.organisation, actor: { userId: auth.user.id, email: auth.user.email, role: membership.role }, role: membership.role };
 }
