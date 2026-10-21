@@ -17,7 +17,7 @@ import { recordPayment } from "@/lib/invoices/payments";
 import { getInvoice } from "@/lib/invoices/service";
 import { CURRENCY_MINOR_UNITS, currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, divide, mul, sub, toFixedString, toPlainString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { decryptSecret, secretsAvailable } from "@/lib/secrets";
@@ -789,7 +789,7 @@ export async function checkDueOnlinePayments(): Promise<{ checked: number; faile
   let checked = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due = false;
       try {

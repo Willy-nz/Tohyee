@@ -11,7 +11,7 @@ import { type CalendarItem, CALENDAR_KINDS, type ChosenFolder, type CalendarKind
 import { type Arrangement, type FarmMailKind, nzDay, readEmail } from "@/lib/farming/mail-rules";
 import { RequestLimiter } from "@/lib/ai/limits";
 import { coreQuery } from "@/lib/db/transactions";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { getMembership, getOrganisation, type OrganisationRecord, parseOrganisationId } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
@@ -859,7 +859,7 @@ export async function checkAllFarmMail(): Promise<{ checked: number; failed: num
   let checked = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let ids: string[] = [];
       try {

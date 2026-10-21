@@ -14,7 +14,7 @@ import { requireCrm } from "@/lib/crm/switch";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { requireId, requireString } from "@/lib/validation";
@@ -517,7 +517,7 @@ export async function checkDueFileFeeds(): Promise<{ checked: number; failed: nu
   let checked = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due: Array<{ id: string; kind: string; mail_kind: string | null }> = [];
       try {
