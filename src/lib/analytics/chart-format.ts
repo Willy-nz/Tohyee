@@ -71,7 +71,11 @@ export type SeriesFormat = {
   tooltip?: "show" | "hide" | "only";
   /** A straight trend line (least squares) for this value. */
   trend?: boolean;
-  /** Carries the trend on for this many groups (1-12): a simple forecast. */
+  /**
+   * Linear projection (decision 692): carries the straight-line trend on for
+   * this many periods (1-12) after the last date. Saved as `forecast`, its
+   * name before #387, so saved charts keep it. Not a forecast of the books.
+   */
   forecast?: number;
 };
 
@@ -678,7 +682,7 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
         markers: flag(series.markers),
         tooltip: oneOf(series.tooltip, ["show", "hide", "only"] as const, `${what} tooltip`),
         trend: flag(series.trend),
-        forecast: whole(series.forecast, 1, 12, `${what} forecast periods`),
+        forecast: whole(series.forecast, 1, 12, `${what} linear projection periods`),
       }) ?? {}
     );
   });

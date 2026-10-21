@@ -2346,7 +2346,9 @@ that something happened.
   gridlines in a chosen colour and a plot area colour; tooltips off, with a
   total, and values left out of the tooltip or shown only there; reference
   lines (a value, target, average, median, lowest, highest, percentile or a
-  shaded band); a trend line and simple forecast per value; column
+  shaded band); a trend line and a linear projection per value (#387,
+  decision 692: only on a regular run of dates, oldest first, with missing
+  periods shown as gaps; not the cash flow forecast); column
   thickness, gaps and square ends; each line's width, style, step and dots.
   Chosen colours get a dark version in dark mode, and the editor warns
   when one fails the colour checks.

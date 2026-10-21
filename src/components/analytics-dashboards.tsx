@@ -1380,6 +1380,15 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilte
   // A tile with its own dates keeps them (the server does this for saved tiles).
   const filters = !asSaved && tile.dates ? { ...reportFilters, ...effectiveDates(tile.dates, reportFilters, todayInBrowser(), yearEnd) } as Filters : reportFilters;
   const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, view || draftWhere?.length ? { view, tiles: viewTiles, drill: tile.drill, where: draftWhere } : undefined);
+  // Drilled, the chart shows another level: say so to the chart (its projection works on what's shown).
+  const shownTile = useMemo(() => {
+    if (!view?.drill || !tile.query) return tile;
+    try {
+      return { ...tile, query: { ...tile.query, groupBy: drillView(tile.query, tile.drill, view.drill, tile.title).groupBy } };
+    } catch {
+      return tile;
+    }
+  }, [tile, view?.drill]);
   const { current } = useWorkspace();
   const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
   const [drillError, setDrillError] = useState<string | null>(null);
@@ -1411,7 +1420,7 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilte
     <>
       {drillError ? <Notice tone="error">{drillError}</Notice> : null}
       <TileResult
-        tile={tile}
+        tile={shownTile}
         result={state.result!}
         onDrill={tile.visual === "pivot" ? (selection, title) => void openDrill(selection, title) : undefined}
         onPick={onPick}
@@ -1475,8 +1484,12 @@ function TileResult({
   highlight?: { value: string | null } | null;
 }) {
   const measures = result.columns.filter((column) => column.role === "measure");
-  const spec = useMemo(() => tileChartSpec(tile, measures), [tile, measures]);
   const yearEndMonth = useContext(YearEndMonth);
+  const periodGrain = result.columns.find((column) => column.key === "category")?.grain;
+  const spec = useMemo(() => {
+    const built = tileChartSpec(tile, measures, { query: tile.query, truncated: result.truncated });
+    return built && periodGrain && NAMED_GRAINS.has(periodGrain) ? { ...built, periodName: (value: string) => periodLabel(value, periodGrain, yearEndMonth) } : built;
+  }, [tile, measures, result.truncated, periodGrain, yearEndMonth]);
 
   if (tile.visual === "pivot") {
     return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} format={tile.format} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
@@ -1485,11 +1498,8 @@ function TileResult({
   // Yes/No groups are named Yes and No on the chart too (decision 577).
   const yesNo = result.columns.some((column) => column.key === "category" && column.format === "boolean");
   const grain = result.columns.find((column) => column.key === "category")?.grain;
-  const named = yesNo
-    ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : booleanText(row.category) }))
-    : grain && NAMED_GRAINS.has(grain)
-      ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : periodLabel(row.category, grain, yearEndMonth) }))
-      : result.rows;
+  // Year, quarter and week groups are named for people on the chart; the rows keep their dates (for projections and clicks).
+  const named = yesNo ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : booleanText(row.category) })) : result.rows;
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(named, measures[0]?.key ?? "m0") : named;
   // Each group as drawn, back to its value as the server gave it (for clicks), and which to highlight.
   const rawOf = new Map(named.map((row, index) => [String(row.category), result.rows[index].category ?? null]));
@@ -1578,20 +1588,20 @@ function TileResult({
     : CHART_HEIGHTS[tile.height ?? "medium"];
   return (
     <>
-      {pickRow ? <GroupChooser rows={rows} chosen={highlighted?.length === 1 ? highlighted[0] : null} onChoose={pickRow} /> : null}
+      {pickRow ? <GroupChooser names={spec.periodName && rows.every((row) => typeof row.category === "string") ? rows.map((row) => spec.periodName!(String(row.category))) : chartGroupNames(rows.map((row) => row.category))} chosen={highlighted?.length === 1 ? highlighted[0] : null} onChoose={pickRow} /> : null}
       <Chart spec={spec} rows={rows} height={height} onPick={pickRow} highlight={highlighted} />
     </>
   );
 }
 
 /** Choosing a chart's group from the keyboard, as a click on it does (decision 754). */
-function GroupChooser({ rows, chosen, onChoose }: { rows: QueryResult["rows"]; chosen: number | null; onChoose: (index: number) => void }) {
+function GroupChooser({ names, chosen, onChoose }: { names: string[]; chosen: number | null; onChoose: (index: number) => void }) {
   return (
     <label className={styles.groupChooser}>
       <span className={styles.visuallyHidden}>Choose a group to filter by or drill into</span>
       <select value={chosen ?? ""} onChange={(event) => event.target.value !== "" && onChoose(Number(event.target.value))}>
         <option value="">Choose a group…</option>
-        {rows.map((row, index) => (row.category === "Other" ? null : <option key={index} value={index}>{String(row.category ?? "(blank)")}</option>))}
+        {names.map((name, index) => (name === "Other" ? null : <option key={index} value={index}>{name || "(blank)"}</option>))}
       </select>
     </label>
   );

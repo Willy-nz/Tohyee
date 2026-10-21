@@ -47,4 +47,12 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Under a chart: what its linear projection is, or why it isn't drawn (decision 692). */
+.projectionNote {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs, 12px);
+  line-height: 1.4;
+}
 .pickable { cursor: pointer; }

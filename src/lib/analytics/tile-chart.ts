@@ -1,6 +1,6 @@
 import { mergeFormats, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
-import type { Measure, ResultColumn, Visual } from "@/lib/analytics/query";
+import type { Measure, ResultColumn, TileQuery, Visual } from "@/lib/analytics/query";
 
 const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap"]);
 
@@ -11,9 +11,15 @@ const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "c
 export function tileChartSpec(
   tile: { visual: string; format?: ChartFormat; query?: { breakdown?: unknown } | null },
   measures: ResultColumn[],
-  options: { compact?: boolean } = {},
+  options: {
+    compact?: boolean;
+    /** The tile's question and whether its answer was cut short, so a linear projection knows its groups (decision 692). */
+    query?: Pick<TileQuery, "groupBy" | "sort" | "limit"> | null;
+    truncated?: boolean;
+  } = {},
 ): ChartSpec | null {
   if (!CHARTS.has(tile.visual as Visual) || measures.length === 0) return null;
+  const query = options.query;
   return {
     kind: tile.visual as ChartSpec["kind"],
     category: "category",
@@ -29,6 +35,9 @@ export function tileChartSpec(
     currency: "NZD",
     ...(options.compact ? { compact: true } : {}),
     ...(tile.format ? { format: tile.format } : {}),
+    ...(query
+      ? { projection: { grain: query.groupBy?.grain ?? null, sort: query.sort, limit: query.limit ?? null, truncated: options.truncated ?? false } }
+      : {}),
   };
 }
 
