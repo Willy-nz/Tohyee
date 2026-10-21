@@ -32,13 +32,16 @@ that something happened.
   key. **Keeping the key**: server admins can see the backup key (with their
   password) and check a saved copy by pasting it back; they're reminded on
   every page until someone has.
-- **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
-  across the top (Contacts under Sales/Purchases; Tax and Accounting under
-  Accountant), each opening to its overview, lists and settings; a ☰ menu with
+- **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports, Accounting,
+  Tax and Settings across the top (Contacts under Sales/Purchases; #375,
+  decision 700), each opening to its overview, lists and settings; a ☰ menu with
   the same sections on phones, where line editors stack each line's fields.
   Long columns have grey sub-headings so each group is two to six links, and
-  settings live on an **All settings** page of cards (Accountant › Settings ›
-  All settings) with the five most used left in the menu (#338, decision 580).
+  settings live on an **All settings** page of cards (Settings › All settings)
+  with the five most used left in the menu (#338, decision 580). Page titles
+  use the interface font and Home has a compact header with no picture
+  (decisions 701 and 703). Fields in a row line up by their controls, so help
+  and error text under one doesn't move the others (decision 704).
   **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
   you; Bills to pay with due-this-week; Next GST return), net profit by month,
   a To do card and recent activity. With Farming on, Home is the **farm
@@ -160,7 +163,7 @@ that something happened.
   goes) with a journal moving the value between the locations on the
   inventory account, whose total never changes; the negative stock
   setting, backdating and period locks are respected.
-- **Year-end pack** (Accountant, Year-end pack; #258, decision 522): one
+- **Year-end pack** (Accounting › Year end › Year-end pack; #258, decision 522): one
   ZIP for the accountant for a financial year. It holds:
   - the trial balance, profit and loss, balance sheet and general ledger
     (CSV)
@@ -566,7 +569,11 @@ that something happened.
   was taken from it, and emails moved out of the chosen folders drop at the
   next check (moved in, they're read). Not yet: attachments, changing one
   date of a repeat, and repeats read from email wording. The private copy
-  (My mail, #250) uses the same connection and folder choice.
+  (My mail, #250) uses the same connection and folder choice. Since #375
+  (decision 705) the calendar comes first: mailbox setup opens from Manage
+  mailboxes, someone with no mailbox gets a one-line Connect a mailbox
+  prompt, an empty week offers Add an item, and the redirect addresses an
+  administrator needs are under Settings › Email.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM14, decisions 610-617, tenant migration 0168, not
   yet reviewed; not tried with a real mailbox): an Owner of any
@@ -1186,7 +1193,7 @@ that something happened.
     - Herd value ratios, including Chatham Islands.
     - Bought young stock under NSC at cost.
     - High-priced livestock, with IRD's rate typed by the accountant.
-  - **Screens** under Accountant › Assets › Livestock: the head count,
+  - **Screens** under Accounting › Assets › Livestock: the head count,
     movements, and the valuation with a step for each. Livestock's
     settings (opening, elections, rates, accounts, locations) are under
     Settings.
@@ -2238,8 +2245,12 @@ that something happened.
 - **Income tax, stage 1** (#292; examples ITX1-ITX10, decision 545, tenant
   migration 0150), from IRD's published rules and **not yet reviewed by an
   accountant** (the screen says so): for a company or a sole trader with a
-  31 March balance date, from the 2025 income year. Accountant › Income tax
-  (owners and admins): taxable income from the books, with each income or
+  31 March balance date, from the 2025 income year. Tax › Income tax
+  (owners and admins), a workspace of pages since #375 (decision 702):
+  Overview (next payment, what needs doing, due dates), Forecast, Tax
+  calculation, Payments, Returns and Tax settings, keeping the income year
+  between them, with "Forecast incomplete" instead of $0.00 when the year has
+  no inputs at all. Taxable income comes from the books, with each income or
   expense account counting in full, not deductible, entertainment 50%,
   business use % or not taxable, plus typed adjustments, losses brought
   forward, other income and tax credits; actuals to the last whole month
@@ -2252,7 +2263,7 @@ that something happened.
 - **Provisional tax payments and where they go** (#292; examples
   ITX6A-ITX6H, decisions 620-623, tenant migration 0170; Codex, delegated by
   owner (via Will), 20 Oct 2026; not yet reviewed by an accountant). On the
-  Income tax page, each payment to IRD has its bank date and IRD's effective
+  Income tax › Payments page, each payment to IRD has its bank date and IRD's effective
   date, and is allocated to an instalment or the end-of-year tax as
   confirmed by IRD (naming an IRD document), allocated with evidence, or a
   forecast assumption. Unallocated payments are awaiting reconciliation and

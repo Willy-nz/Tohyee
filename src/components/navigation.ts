@@ -12,8 +12,8 @@ export type MenuSection = { heading: string | null; links: MenuLink[] };
 export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
 
 /**
- * The accounting menus: Home, Sales, Purchases, Banking, Payroll, Reports,
- * Accountant. Each opens to a panel of a few labelled groups.
+ * The accounting menus: Home, Sales, Purchases, Banking, Payroll, Farm,
+ * Reports, Accounting, Tax and Settings (#375, decision 700). Each opens to a panel of a few labelled groups.
  * Making something new lives in the "+ New" menu (NEW_ACTIONS), not here.
  * Server settings aren't here: they open only on the server computer.
  */
@@ -28,7 +28,7 @@ function section(heading: string, links: MenuLink[]): MenuLink[] {
   return links.map((link) => ({ ...link, section: heading }));
 }
 
-const ORIGINAL_MENUS: Menu[] = [
+export const MENUS: Menu[] = [
   { label: "Home", href: "/operations", groups: [] },
   {
     label: "Sales",
@@ -255,7 +255,8 @@ const ORIGINAL_MENUS: Menu[] = [
     ],
   },
   {
-    label: "Accountant",
+    // #375 (decision 700): the old Accountant menu split into Accounting, Tax and Settings.
+    label: "Accounting",
     groups: [
       {
         heading: "Ledger",
@@ -291,8 +292,13 @@ const ORIGINAL_MENUS: Menu[] = [
           ]),
         ],
       },
+    ],
+  },
+  {
+    label: "Tax",
+    groups: [
       {
-        heading: "Tax and R&D",
+        heading: "Tax",
         links: [
           ...section("GST", [
             { href: "/operations/gst-return", label: "GST return", module: "gst" },
@@ -307,6 +313,11 @@ const ORIGINAL_MENUS: Menu[] = [
           ]),
         ],
       },
+    ],
+  },
+  {
+    label: "Settings",
+    groups: [
       {
         // The most used settings; the rest are on the All settings page (SETTINGS, decision 580).
         heading: "Settings",
@@ -322,16 +333,6 @@ const ORIGINAL_MENUS: Menu[] = [
     ],
   },
 ];
-
-/** #375: separate everyday accounting, tax and administration. */
-export const MENUS: Menu[] = ORIGINAL_MENUS.flatMap((menu): Menu[] => {
-  if (menu.label !== "Accountant") return [menu];
-  return [
-    { label: "Accounting", href: "/operations/accounting-tools", area: ["/operations/accounting-tools", "/operations/accounts", "/operations/ledger-journals", "/operations/inventory", "/operations/fixed-assets", "/operations/livestock", "/operations/period-close"], groups: menu.groups.filter((group) => group.heading === "Ledger" || group.heading === "Assets") },
-    { label: "Tax", href: "/operations/tax-workspace", area: ["/operations/tax-workspace", "/operations/income-tax", "/operations/gst-return", "/operations/gst-audit", "/operations/tax", "/operations/rd"], groups: menu.groups.filter((group) => group.heading === "Tax and R&D") },
-    { label: "Settings", href: ALL_SETTINGS_HREF, area: ["/operations/settings", "/operations/members", "/operations/modules"], groups: menu.groups.filter((group) => group.heading === "Settings") },
-  ];
-});
 
 /** Every setting, as the All settings page's cards of 2-6 links (decision 580). */
 export const SETTINGS: MenuGroup[] = [
@@ -529,22 +530,9 @@ export const AREAS: Record<string, string[]> = {
   Farm: ["/operations/farming"],
   Banking: ["/operations/bank-accounts", "/operations/bank-rules", "/operations/exchange-rates", "/operations/fx-revaluation"],
   Reports: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
-  Accountant: [
-    "/operations/accounts",
-    "/operations/ledger-journals",
-    "/operations/inventory",
-    "/operations/fixed-assets",
-    "/operations/livestock",
-    "/operations/period-close",
-    "/operations/bank-accounts",
-    "/operations/gst-return",
-    "/operations/gst-audit",
-    "/operations/tax",
-    "/operations/income-tax",
-    "/operations/rd",
-    "/operations/settings",
-    "/operations/members",
-  ],
+  Accounting: ["/operations/accounts", "/operations/ledger-journals", "/operations/inventory", "/operations/fixed-assets", "/operations/livestock", "/operations/period-close"],
+  Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax", "/operations/income-tax", "/operations/rd"],
+  Settings: ["/operations/settings", "/operations/members", "/operations/modules"],
 };
 
 export function inArea(pathname: string, menu: Menu): boolean {

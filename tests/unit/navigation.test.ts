@@ -115,19 +115,68 @@ describe("menu sub-headings", () => {
     }
   });
 
-  it("separates accounting, tax and settings into focused landing pages (#375)", () => {
+  it("splits the old Accountant menu into Accounting, Tax and Settings dropdowns (#375, decision 700)", () => {
     const menus = visibleMenus("accounting", access("owner", everything));
-    const accounting = menus.find((menu) => menu.label === "Accounting")!;
-    expect(accounting.href).toBe("/operations/accounting-tools");
-    expect(accounting.groups.map((group) => group.heading)).toEqual(["Ledger", "Assets"]);
-    const tax = menus.find((menu) => menu.label === "Tax")!;
-    expect(tax.href).toBe("/operations/tax-workspace");
-    expect(tax.groups.flatMap((group) => group.links.map((link) => link.label))).toContain("Income tax");
-    expect(menus.find((menu) => menu.label === "Settings")?.href).toBe(ALL_SETTINGS_HREF);
-    const links = destinations(menus, []);
-    for (const href of ["/operations/period-close", "/operations/fixed-assets/depreciation", "/operations/rd/claim", "/operations/livestock/valuation", "/operations/reports/accountant-pack"]) {
-      expect(links.some((link) => link.href === href)).toBe(true);
-    }
+    const shape = (label: string) => {
+      const menu = menus.find((entry) => entry.label === label)!;
+      expect(menu.href, label).toBeUndefined(); // a dropdown, not a link to a landing page
+      return menu.groups.map((group) => [group.heading, menuSections(group).map((section) => [section.heading, section.links.map((link) => link.label)])]);
+    };
+    expect(shape("Accounting")).toEqual([
+      [
+        "Ledger",
+        [
+          ["Ledger", ["Journals", "Chart of accounts"]],
+          ["Year end", ["Period close", "Year-end pack", "Financial statements"]],
+          ["Inventory", ["Products and services", "Stock"]],
+        ],
+      ],
+      [
+        "Assets",
+        [
+          ["Fixed assets", ["Fixed assets", "Depreciation"]],
+          ["Livestock", ["Livestock", "Account sales", "Livestock valuation", "Livestock management values"]],
+        ],
+      ],
+    ]);
+    // One short column.
+    expect(shape("Tax")).toEqual([
+      [
+        "Tax",
+        [
+          ["GST", ["GST return", "GST audit report", "Tax codes"]],
+          ["Income tax", ["Income tax"]],
+          ["R&D", ["R&D activities", "Tagged R&D costs", "R&D claim report"]],
+        ],
+      ],
+    ]);
+    // Decision 580's five most used settings and All settings, unchanged.
+    expect(shape("Settings")).toEqual([["Settings", [[null, ["Organisation settings", "People and roles", "Email", "Sales platforms", "Import and export", "All settings"]]]]]);
+  });
+
+  it("keeps the Accountant menu's links, roles and modules (#375)", () => {
+    const links = MENUS.filter((menu) => ["Accounting", "Tax", "Settings"].includes(menu.label)).flatMap((menu) => menu.groups.flatMap((group) => group.links));
+    expect(links.find((link) => link.href === "/operations/income-tax")?.minRole).toBe("admin");
+    expect(links.find((link) => link.href === "/operations/gst-return")?.module).toBe("gst");
+    expect(links.find((link) => link.href === "/operations/livestock")?.module).toBe("livestock");
+    expect(links.find((link) => link.href === "/operations/settings/sales-platforms")?.minRole).toBeUndefined();
+    expect(links).toHaveLength(26);
+  });
+
+  it("shows each new menu as current on its own pages (#375)", () => {
+    const menu = (label: string) => MENUS.find((entry) => entry.label === label)!;
+    expect(inArea("/operations/income-tax/payments", menu("Tax"))).toBe(true);
+    expect(inArea("/operations/income-tax/payments", menu("Accounting"))).toBe(false);
+    expect(inArea("/operations/fixed-assets/depreciation", menu("Accounting"))).toBe(true);
+    expect(inArea(ALL_SETTINGS_HREF, menu("Settings"))).toBe(true);
+    expect(inArea("/operations/members", menu("Settings"))).toBe(true);
+  });
+
+  it("hides Income tax from someone below admin, leaving the rest of Tax", () => {
+    const tax = visibleMenus("accounting", access("bookkeeper", everything)).find((menu) => menu.label === "Tax")!;
+    const labels = tax.groups.flatMap((group) => group.links.map((link) => link.label));
+    expect(labels).not.toContain("Income tax");
+    expect(labels).toContain("GST return");
   });
 
   it("drops a section whose module is off, heading and all", () => {
@@ -141,7 +190,7 @@ describe("menu sub-headings", () => {
 
   it("names the sub-heading in the command palette's group", () => {
     const items = destinations(visibleMenus("accounting", access("owner", everything)), []);
-    expect(items.find((item) => item.label === "GST return")?.group).toBe("Tax › Tax and R&D › GST");
+    expect(items.find((item) => item.label === "GST return")?.group).toBe("Tax › GST");
     expect(items.find((item) => item.label === "Journals")?.group).toBe("Accounting › Ledger");
   });
 });

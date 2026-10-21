@@ -6722,3 +6722,80 @@ accounting example is marked not yet reviewed.
      (they're the figures, not the look). While building this, numbers of
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
+
+### Simpler navigation, tax workspace and lined-up forms (#375; decisions 700-705)
+
+700. **Accounting, Tax and Settings instead of Accountant** (21 October
+     2026). Issue #375 (owner feedback on screenshots, 20 October 2026: the
+     four-column Accountant menu was hard to scan). The Accountant menu
+     becomes three dropdowns, as in Xero's top bar: **Accounting** (Ledger:
+     journals, chart of accounts, year end and inventory; Assets: fixed
+     assets and livestock), **Tax** (one short column: GST, Income tax and
+     R&D) and **Settings** (decision 580's five most used and All
+     settings, unchanged). Every link keeps its address, role and module,
+     the sub-headings of decision 580 stay, and the search (Ctrl K) names
+     the new menu ("Tax › GST"). The first draft (PR #381) made these
+     three plain links to new landing pages of the same links; that took
+     two clicks to reach anything and lost decision 580's settings
+     shortcuts, so the landing pages were dropped. The CRM's grouping
+     (decision 581) and the Shopify entry (decision 582) are untouched.
+701. **No mountain photo** (Jess, 21 October 2026: "Get rid of mountain
+     photo"). Replaces decision 598. Home's header no longer shows the
+     Aoraki photo or keeps space for it, so the greeting is a normal
+     compact page header and the figures start near the top. The photo
+     file and its CSS are removed; nothing else used them. The website's
+     own images are separate and unchanged.
+702. **Income tax is a workspace of pages** (21 October 2026). Issue #375.
+     The one long page becomes six, each its own address so Back and
+     bookmarks work, with the income year kept in every link
+     (`?incomeYear=`) and chosen beside the title: **Overview** (the three
+     key figures, the next payment to IRD, what needs doing, and the due
+     dates), **Forecast** (the figures and what they're based on: actuals
+     to which month, then which budget, and the notes), **Tax calculation**
+     (the profit-to-tax working, adjustments, losses, credits and tax
+     depreciation), **Payments** (due dates, provisional tax, IRD's
+     figures and payments to IRD with their allocations from decision
+     620, payments found in the books, IRD's statements and their
+     proposals, and use-of-money interest), **Returns** (ICA, IR4 or IR3,
+     IR10, and a link to GST returns) and **Tax settings**. The figures,
+     rules and editors are the same ones as before: nothing about how tax
+     is worked out changed. "Needs attention" comes from the report itself:
+     no inputs for the year, payments to IRD not yet allocated, last
+     year's residual income tax still Tohyee's estimate, or a year that's
+     ended with return figures to check. **Forecast incomplete** replaces
+     an amount only when the year has nothing to work from: no income or
+     expense from the books or the overall budget, no adjustments, no tax
+     depreciation and none of IRD's figures typed. Then taxable income,
+     residual income tax and this year's end-of-year tax say "Forecast
+     incomplete" instead of $0.00 (or a refund of the provisional tax);
+     instalments, which come from last year's tax, still show. A year with
+     any input shows a zero it works out to as a zero. The "not yet
+     reviewed by an accountant" note stays at the top of every page, as a
+     line that opens to the full wording. Scenario comparisons, which the
+     issue mentions for Forecast, aren't built: they'd be a new feature.
+703. **Sans-serif page titles and bordered summary cards** (21 October
+     2026). Issue #375. Page titles use the interface font (Inter), bold,
+     replacing decision 475's serif titles. Home's four summary tiles are
+     bordered cards with a 28px figure, and Needs attention comes before
+     the profit chart (beside it from 1,440px wide, above it below that).
+     A GST tile that can't be worked out says "No return filed yet" or
+     "Position unavailable" in body-size text, with the reason under it,
+     instead of a large "Unavailable".
+704. **Fields in a row line up by their controls** (21 October 2026). Issue
+     #375. In an inline form or toolbar, fields line up at the top and
+     anything beside them (buttons, the date range) drops by one line of
+     label, so inputs, dropdowns and buttons share a line and help or
+     error text under one field doesn't move its neighbours. Controls in
+     those rows are at least 40px high, the same as buttons. A label long
+     enough to wrap still pushes its own control down: keep labels in
+     rows short.
+705. **The farm calendar comes first** (21 October 2026). Issue #375. The
+     mailbox setup opens from **Manage mailboxes**; someone with no
+     mailbox sees a one-line prompt with **Connect a mailbox** instead of
+     the whole setup. The provider field is called **Email provider**,
+     the sender filter **Email sender** (keeping "Who the email came from,
+     not who does the work" under it), and an empty week offers **Add an
+     item**. The redirect addresses and permissions an administrator adds
+     for farm mail moved to Settings › Email, beside the rest of the app
+     setup; the calendar just says an administrator sets it up. Who can
+     see a mailbox is unchanged (decision 571).

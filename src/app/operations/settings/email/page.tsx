@@ -233,8 +233,8 @@ function MicrosoftAppForm({ organisationId, settings, onSaved }: { organisationI
         the Microsoft Entra admin centre (entra.microsoft.com) › App registrations › New registration: any name (&ldquo;Tohyee&rdquo;); for a business
         mailbox choose &ldquo;Accounts in this organizational directory only&rdquo; and put your domain as the tenant below, or for Outlook.com choose
         &ldquo;Accounts in any organizational directory and personal Microsoft accounts&rdquo; and leave the tenant as common. Add a <strong>Web</strong> redirect
-        URI of <code>{redirect}</code>. For the farm calendar, also add <code>{typeof window === "undefined" ? "" : window.location.origin}/api/farming/mail/callback</code> and delegated <strong>Mail.Read</strong> permission. Under API permissions add Microsoft Graph delegated permissions <strong>Mail.Send</strong>, User.Read and
-        offline_access. Under Certificates &amp; secrets make a client secret and paste its value below. The CRM&apos;s email sync uses the same app.
+        URI of <code>{redirect}</code>. Under API permissions add Microsoft Graph delegated permissions <strong>Mail.Send</strong>, User.Read and
+        offline_access. For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{redirect.replace("/api/email/microsoft/callback", "/api/farming/mail/callback")}</code> and the delegated <strong>Mail.Read</strong> permission. Under Certificates &amp; secrets make a client secret and paste its value below. The CRM&apos;s email sync uses the same app.
       </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>
@@ -281,7 +281,7 @@ function GoogleAppForm({ organisationId, settings, onSaved }: { organisationId: 
         Library turn on the <strong>Gmail API</strong>; set up the OAuth consent screen with the permission{" "}
         <code>https://www.googleapis.com/auth/gmail.send</code>; then create an OAuth client of type <strong>Web application</strong> with the authorised
         redirect URI <code>{origin}/api/email/google/callback</code>, and paste its client ID and secret below. The CRM&apos;s email sync uses the same app
-        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it). For the farm calendar, add <code>{origin}/api/farming/mail/callback</code> and the read-only Gmail scope.
+        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it). For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{origin}/api/farming/mail/callback</code> and the permission <code>https://www.googleapis.com/auth/gmail.readonly</code>.
       </Notice>
       <Notice tone="warning">
         <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> sending email (gmail.send) is one of Google&apos;s &ldquo;sensitive&rdquo;
