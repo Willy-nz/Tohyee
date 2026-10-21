@@ -193,7 +193,7 @@ describe("what a value means (decision 696)", () => {
       blanks: "rows with no value are left out; with no rows at all it's blank, not 0",
       totals: "totals add the rows up exactly",
     });
-    expect(describeMeasure({ label: "Margin", ...margin, aggregate: "formula" }, "margins", tables.get("margins")!, "sale_date").totals).toMatch(/25%, not the average 20%/);
+    expect(describeMeasure({ ...margin, aggregate: "formula" }, "margins", tables.get("margins")!, "sale_date").totals).toMatch(/25%, not the average 20%/);
     expect(describeMeasure({ label: "Bank", aggregate: "sum", field: "balance", snapshot: { per: "account" } }, "balances", tables.get("balances")!, "balance_date").kind).toMatch(
       /latest row in each period for each account, added up; never added across dates/,
     );
