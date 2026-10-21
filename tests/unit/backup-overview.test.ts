@@ -65,7 +65,7 @@ describe("the Backups panel's overview (decision 733)", () => {
     expect(overview.attention).toEqual([]);
     expect(overview.offSite.verified).toBe(false);
     expect(overview.offSite.note).toMatch(/^Not verified/);
-    expect(overview.notProven).toEqual(["Off-site copy: Tohyee can't see whether OneDrive uploaded the files."]);
+    expect(overview.notProven).toEqual(["Off-site copy: Tohyee can't see whether OneDrive uploaded the files.", "That the backups restore: no test restore has been done yet."]);
     expect(overview.storage).toMatchObject({ fileCount: 2, usedBytes: 10 * MB, nextBackupBytes: 10 * MB, damagedFiles: [] });
     // There's no "safe" verdict to show.
     expect(JSON.stringify(overview)).not.toMatch(/"safe"|fully recoverable/i);
@@ -132,5 +132,22 @@ describe("the Backups panel's overview (decision 733)", () => {
     // Once a saved copy of the older key has been checked, that's no longer a problem.
     const checked = summariseBackups(input({ files, kit, keyStatus: { keySet: true, savedCopyCheckedAt: "2026-10-01T00:00:00Z" } }));
     expect(checked.attention).toEqual([]);
+  });
+
+  it("test restores and paused restored copies are shown", () => {
+    const test = (organisationId: string | null, status: "ok" | "failed", at: string): BackupCheck => ({ ...check(organisationId, status, at), kind: "test_restore", error: status === "failed" ? "pg_restore failed" : null });
+    const good = summariseBackups(input({ testRestores: [test(null, "ok", "2026-10-20T00:00:00Z"), test("kowhai", "ok", "2026-10-19T00:00:00Z")] }));
+    expect(good.testRestore).toEqual({ lastAt: "2026-10-20T00:00:00Z", allAt: "2026-10-19T00:00:00Z", failed: 0, failures: [] });
+    expect(good.notProven).toHaveLength(1);
+    const bad = summariseBackups(
+      input({
+        testRestores: [test("kowhai", "failed", "2026-10-20T00:00:00Z")],
+        pausedCopies: [{ id: "kowhai-20261020", displayName: "Kōwhai (restored)", pausedAt: "2026-10-20T00:00:00Z", reason: null }],
+      }),
+    );
+    expect(bad.attention.map((a) => a.text)).toEqual([
+      "The last test restore of Kōwhai Dairies failed: pg_restore failed",
+      "Kōwhai (restored) is a restored copy with its automatic jobs paused (email sending, feeds, mailbox checks). Turn them on once the original isn't running them.",
+    ]);
   });
 });

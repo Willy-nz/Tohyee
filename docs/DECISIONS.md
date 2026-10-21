@@ -6825,3 +6825,57 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      new key can't take back copies already taken with their kit. The
      older backup key (show and check) stays, labelled for backups made
      before recovery kits, while any are kept.
+737. **A restore re-encrypts stored secrets for the computer it's on**
+     (21 October 2026, #389 part 3; not yet reviewed by Jess). After
+     `pg_restore` into the new database, and before it's made ready, every
+     text column named `*_ciphertext` (the rule every stored secret
+     follows) is read in one transaction: values this server's key opens
+     are left, values the backup's live key opens (from a format 2 header,
+     or the older backup key given for a format 1 file) are re-encrypted
+     with this server's key, and the rest are counted and listed as
+     "connect again". The old live key isn't kept. The restore wizard
+     (`/server/backups/restore`, `src/lib/backups/recovery.ts`) finds
+     `.tohyee-backup` files in any folder on this computer (headers only),
+     takes no material, a recovery code, a recovery file and passphrase,
+     or an older backup key, checks the whole file and its version before
+     anything is made, then restores as a new organisation (keeping the
+     original's ID when this server doesn't have it). Nothing existing is
+     overwritten or deleted, and it ends with a cutover checklist.
+738. **Restored copies start with their automatic jobs paused; people come
+     back with their own IDs** (21 October 2026, #389 part 3; core
+     migration 0016 `organisations.jobs_paused_at`; not yet reviewed by
+     Jess). Every scheduled job that sends or imports (email outbox, bank,
+     payment and sales feeds, mailbox and calendar checks, private mail
+     sync, repeating invoices, follow-ups, exchange rates, analytics loads
+     and report emails) skips a paused organisation
+     (`listOrganisationsForJobs`), so a copy can't send the same invoices
+     or import the same transactions as the original while both exist. A
+     server admin turns them on after a confirmation that says how many
+     emails are queued. Things people do by hand in the copy still happen.
+     **Recover people from a server backup** restores the `_server` backup
+     into a scratch database and adds each user who isn't here with the
+     same ID, password hash, two-step secret (re-encrypted) and unused
+     backup codes, plus their memberships of organisations here with the
+     same ID; it previews first and can be run again. A person already here
+     under the same email (usually the admin made at set-up) is left alone
+     unless the server admin ticks them; then the backup's account takes
+     its place and its memberships. It refuses to leave no active server
+     admin. Sessions, AI and app keys and server settings (email, remote
+     access, folders) aren't copied: the old tunnel token would compete
+     with the original. Private mail stays its owner's (#250): the copy
+     keeps `owner_user_id`, the restoring admin gets "not found" for it,
+     and a copy whose owner isn't on this server is unreadable until that
+     person is recovered.
+739. **Interrupted restores are cleaned up; test restores are evidence**
+     (21 October 2026, #389 part 3; not yet reviewed by Jess). Each
+     restore is a `backup_checks` row while it runs. One still running
+     from before the server started is marked failed, and the organisation
+     it was making is removed with its database only if it's still
+     "pending" (never made ready). **Test a restore** restores each
+     database's newest backup into a scratch database
+     (`<core>_scratch_<random>`, always dropped), checks it's the
+     organisation it says, counts its journals, files and private mail
+     copies and that its stored secrets open with the backup's key, and
+     records the result; the status shows the last one and lists "no test
+     restore" as not proven. Two backups in the same second never share a
+     file name, so a checked file is never replaced.

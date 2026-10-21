@@ -6,7 +6,8 @@ import { Writable } from "node:stream";
 import packageJson from "../../../package.json";
 import { type AdminActor, type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail } from "@/lib/auth/service";
-import { BACKUP_EXTENSION, type BackupHeader, materialFromText, type RecoveryMaterial, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { BACKUP_EXTENSION, type BackupHeader, materialFromText, openBackupKeys, type RecoveryMaterial, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { describeSecretColumn, reEncryptStoredSecrets, type SecretsReport } from "@/lib/backups/rewrap";
 import { currentRecoveryKey, type RecoveryKey } from "@/lib/backups/recovery-key";
 import { diskSpace, explainBackupError, formatBytes, notEnoughSpace } from "@/lib/backups/destination";
 import { startPgTool } from "@/lib/backups/pg-tools";
@@ -600,33 +601,74 @@ export async function backupFileInFolder(name: unknown): Promise<string> {
 
 // ------------------------------------------------------------------ restoring
 
+/** What a restore checked and did (#389, decision 737), shown in the wizard and kept in `backup_checks`. */
+export type RestoreReport = {
+  organisationId: string;
+  from: { organisationId: string; displayName: string | null; madeAt: string; tohyeeVersion: string; format: 1 | 2; recoveryKeyVersion: number | null };
+  /** Stored secrets: re-encrypted for this server, already readable, or needing connecting again. */
+  secrets: SecretsReport;
+  /** Kinds of connection with values that couldn't be read. */
+  reconnect: string[];
+  privateMail: { copies: number; ownersHere: number; ownersNotHere: number };
+  /** Emails waiting to go in the copy's outbox: they'd be sent again if automatic jobs were turned on while the original still runs. */
+  queuedEmails: number;
+  attachments: number;
+  journals: number;
+  jobsPaused: true;
+};
+
+export type RestoreInput = {
+  file: string;
+  id?: unknown;
+  displayName?: unknown;
+  ownerEmail?: unknown;
+  /** A recovery code, or (format 1) the older backup key, as typed. */
+  key?: unknown;
+  /** Or the recovery kit already opened (a recovery file and its passphrase). */
+  material?: RecoveryMaterial;
+};
+
+/** The ID a restore suggests: the original's when it isn't on this server (a replacement computer), otherwise `<id>-<YYYYMMDD>`. */
+export async function suggestedRestoreId(header: Pick<BackupHeader, "organisationId" | "createdAt">): Promise<string> {
+  const original = header.organisationId!;
+  const here = await getOrganisation(original);
+  const taken = await getAdminPool().query("select 1 from pg_database where datname = $1", [databaseNameFor(original)]);
+  if (!here && !taken.rowCount) return original;
+  return `${original}-${localParts(new Date(header.createdAt)).date.replace(/-/g, "")}`.slice(0, 32);
+}
+
+async function countIn(client: { query: (sql: string) => Promise<{ rows: { n: string }[] }> }, table: string, where = "true"): Promise<number> {
+  const exists = await client.query(`select (to_regclass('public.${table}') is not null)::text as n`);
+  if (exists.rows[0]?.n !== "true") return 0;
+  return Number((await client.query(`select count(*)::text as n from ${table} where ${where}`)).rows[0]?.n ?? 0);
+}
+
 /**
  * Restores an organisation's backup as a new organisation (a copy), so the
  * current books are never overwritten. The copy gets the same members as the
- * original (or `ownerEmail`, when the original is gone), is brought up to this
- * server's version, and can be checked before anyone switches to it.
+ * original (or `ownerEmail`, or the person restoring, when the original
+ * isn't on this server), its stored secrets are re-encrypted with this
+ * server's key (decision 737), its automatic jobs start paused, and it's
+ * brought up to this server's version. A restore cut off part-way (a
+ * restart) is cleaned up when the server starts again (decision 739).
  */
-export async function restoreBackupAsCopy(
-  actor: AdminActor,
-  input: { file: string; id?: unknown; displayName?: unknown; ownerEmail?: unknown; key?: unknown },
-): Promise<OrganisationRecord> {
+export async function restoreBackup(actor: AdminActor, input: RestoreInput): Promise<{ organisation: OrganisationRecord; report: RestoreReport }> {
   // The recovery code (or, for an older backup, the backup key) of the server that made it, when that isn't this one.
-  const material = materialFromText(input.key);
-  if (!material && !secretsAvailable()) throw new UnavailableError("Restoring needs the recovery kit (or, for an older backup, the backup key) the backup was made with.");
+  const material = input.material ?? materialFromText(input.key);
+  if (!secretsAvailable()) throw new UnavailableError("Restoring needs this server's TOHYEE_SECRET_KEY (stored secrets are re-encrypted with it). Set it and restart Tohyee.");
   const { header } = await readBackupHeader(input.file);
   if (header.kind !== "organisation" || !header.organisationId) {
-    throw new ValidationError("That's a backup of the server's own database (users and settings), not of an organisation. Restoring it is a job for a database administrator (see docs/ARCHITECTURE.md).");
+    throw new ValidationError("That's a backup of the server's own database (people and settings), not of an organisation. Use Recover people from a server backup instead.");
   }
   if (header.schemaVersion && header.schemaVersion > LATEST_TENANT_VERSION) {
     throw new ValidationError(`That backup was made by a newer version of Tohyee (${header.tohyeeVersion}). Update this server first.`);
   }
   // Proves the key is right and the file is whole before anything is created.
   await checkBackup(input.file, material);
+  const { sourceLiveKey } = await openBackupKeys(input.file, material);
 
   const made = localParts(new Date(header.createdAt));
-  const id = parseOrganisationId(
-    input.id == null || input.id === "" ? `${header.organisationId}-${made.date.replace(/-/g, "")}`.slice(0, 32) : input.id,
-  );
+  const id = parseOrganisationId(input.id == null || input.id === "" ? await suggestedRestoreId(header) : input.id);
   const displayName =
     typeof input.displayName === "string" && input.displayName.trim()
       ? input.displayName.trim().slice(0, 150)
@@ -656,10 +698,11 @@ export async function restoreBackupAsCopy(
     if (!members.some((m) => m.role === "owner")) {
       throw new ValidationError("The original organisation is gone, so say who owns the copy (ownerEmail).");
     }
+    // Paused from the start (decision 738): nothing is sent or imported until a server admin turns its jobs on.
     await client.query(
-      `insert into organisations (id, display_name, database_name, base_currency, created_by)
-       values ($1, $2, $3, coalesce($4, 'NZD'), $5)`,
-      [id, displayName, databaseName, source?.baseCurrency ?? null, actor.id],
+      `insert into organisations (id, display_name, database_name, base_currency, created_by, jobs_paused_at, jobs_paused_reason)
+       values ($1, $2, $3, coalesce($4, 'NZD'), $5, now(), $6)`,
+      [id, displayName, databaseName, source?.baseCurrency ?? null, actor.id, `Restored from a backup made ${made.date}.`],
     );
     for (const member of members) {
       await client.query("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3)", [id, member.user_id, member.role]);
@@ -671,9 +714,15 @@ export async function restoreBackupAsCopy(
       details: { from: header.organisationId, backupMadeAt: header.createdAt, file: path.basename(input.file), displayName },
     });
   });
+  // Recorded as running, so a restore cut off by a restart is cleaned up later (decision 739).
+  const restoreRun = await coreQuery<{ id: string }>(
+    `insert into backup_checks (kind, organisation_id, file_name, details, requested_by_email) values ('restore', $1, $2, $3::jsonb, $4) returning id::text as id`,
+    [id, path.basename(input.file), JSON.stringify({ databaseName, from: header.organisationId }), actor.email],
+  );
 
   // Only a database this call made is dropped if the restore fails (#135).
   let created = false;
+  let report: RestoreReport;
   try {
     await getAdminPool().query(`create database ${quoteSqlIdentifier(databaseName)}`);
     created = true;
@@ -684,18 +733,59 @@ export async function restoreBackupAsCopy(
     if (restored.status === "rejected") throw restored.reason;
     if (fed.status === "rejected") throw fed.reason;
     const admin = await connectAsAdmin(databaseName);
+    let secrets: SecretsReport;
+    let privateOwners: string[] = [];
+    let counts = { queuedEmails: 0, attachments: 0, journals: 0 };
     try {
+      await admin.query("begin");
       await admin.query("update organisation_settings set organisation_id = $1, display_name = $2, updated_at = now() where id = true", [id, displayName]);
+      secrets = await reEncryptStoredSecrets(admin, sourceLiveKey);
+      await admin.query("commit");
+      if ((await countIn(admin, "private_mail_copies")) > 0) {
+        privateOwners = (await admin.query<{ owner_user_id: string }>("select owner_user_id::text from private_mail_copies")).rows.map((row) => row.owner_user_id);
+      }
+      counts = {
+        queuedEmails:
+          (await countIn(admin, "document_emails", "status in ('queued', 'sending')")) +
+          (await countIn(admin, "approval_emails", "status in ('queued', 'sending')")) +
+          (await countIn(admin, "roster_emails", "status in ('queued', 'sending')")),
+        attachments: await countIn(admin, "record_attachments"),
+        journals: await countIn(admin, "ledger_journals"),
+      };
+    } catch (error) {
+      await admin.query("rollback").catch(() => undefined);
+      throw error;
     } finally {
       await admin.end();
     }
+    const here = privateOwners.length
+      ? new Set((await coreQuery<{ id: string }>("select id::text from users where id = any($1::uuid[])", [privateOwners])).rows.map((row) => row.id))
+      : new Set<string>();
+    report = {
+      organisationId: id,
+      from: {
+        organisationId: header.organisationId,
+        displayName: header.displayName,
+        madeAt: header.createdAt,
+        tohyeeVersion: header.tohyeeVersion,
+        format: header.format,
+        recoveryKeyVersion: header.format === 2 ? header.recoveryKey.version : null,
+      },
+      secrets,
+      reconnect: [...new Set(secrets.columns.filter((c) => c.unreadable > 0).map((c) => describeSecretColumn(c.table)))],
+      privateMail: { copies: privateOwners.length, ownersHere: privateOwners.filter((o) => here.has(o)).length, ownersNotHere: privateOwners.filter((o) => !here.has(o)).length },
+      ...counts,
+      jobsPaused: true,
+    };
     await provisionOrganisation(id);
+    await coreQuery("update backup_checks set status = 'ok', finished_at = now(), details = details || $2::jsonb where id = $1", [restoreRun.rows[0].id, JSON.stringify({ report })]);
   } catch (error) {
     // Leave nothing half-restored behind.
     if (created) await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(databaseName)} with (force)`).catch(() => undefined);
     await withCoreTransaction(async (client) => {
       await client.query("delete from organisation_members where organisation_id = $1", [id]);
       await client.query("delete from organisations where id = $1", [id]);
+      await client.query("update backup_checks set status = 'failed', finished_at = now(), error = $2 where id = $1", [restoreRun.rows[0].id, error instanceof Error ? error.message.slice(0, 2000) : String(error)]);
       await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
         eventType: "organisation.restore_failed",
         entityType: "organisation",
@@ -705,7 +795,62 @@ export async function restoreBackupAsCopy(
     }).catch(() => undefined);
     throw error;
   }
-  return (await getOrganisation(id))!;
+  return { organisation: (await getOrganisation(id))!, report };
+}
+
+/** Restores an organisation's backup as a new organisation (a copy): `restoreBackup` without the report. */
+export async function restoreBackupAsCopy(actor: AdminActor, input: RestoreInput): Promise<OrganisationRecord> {
+  return (await restoreBackup(actor, input)).organisation;
+}
+
+/**
+ * Restores cut off part-way, by a restart or a power cut (decision 739): a
+ * restore still "running" from before this process started is marked
+ * failed, and the organisation it was making, if it's still "pending" (never
+ * made ready), is removed with its database. Nothing else is touched.
+ */
+export async function cleanUpInterruptedRestores(processStartedAt: Date): Promise<string[]> {
+  const stuck = await coreQuery<{ id: string; organisation_id: string; details: { databaseName?: string } }>(
+    "select id::text, organisation_id, details from backup_checks where kind = 'restore' and status = 'running' and started_at < $1",
+    [processStartedAt],
+  );
+  const cleaned: string[] = [];
+  for (const row of stuck.rows) {
+    const organisation = await getOrganisation(row.organisation_id);
+    if (organisation && organisation.provisioningStatus === "pending" && organisation.databaseName === row.details.databaseName) {
+      await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(organisation.databaseName)} with (force)`);
+      await withCoreTransaction(async (client) => {
+        await client.query("delete from organisation_members where organisation_id = $1", [organisation.id]);
+        await client.query("delete from organisations where id = $1 and provisioning_status = 'pending'", [organisation.id]);
+      });
+      cleaned.push(organisation.id);
+    }
+    await coreQuery("update backup_checks set status = 'failed', finished_at = now(), error = 'Interrupted: the server stopped while this restore ran. Nothing was kept from it; start it again.' where id = $1", [row.id]);
+  }
+  return cleaned;
+}
+
+/** Organisations whose automatic jobs are paused (restored copies, until a server admin turns them on). */
+export async function pausedOrganisations(): Promise<{ id: string; displayName: string; pausedAt: string; reason: string | null }[]> {
+  const result = await coreQuery<{ id: string; display_name: string; jobs_paused_at: Date; jobs_paused_reason: string | null }>(
+    "select id, display_name, jobs_paused_at, jobs_paused_reason from organisations where jobs_paused_at is not null order by display_name, organisations.id",
+  );
+  return result.rows.map((row) => ({ id: row.id, displayName: row.display_name, pausedAt: new Date(row.jobs_paused_at).toISOString(), reason: row.jobs_paused_reason }));
+}
+
+/**
+ * Turns a restored copy's automatic jobs on (decision 738): email sending,
+ * feeds, mailbox checks, repeating invoices and analytics loads. The server
+ * admin is shown first what will start; this is the action itself.
+ */
+export async function resumeOrganisationJobs(auth: ServerAdminAuth, organisationIdInput: unknown): Promise<void> {
+  if (!auth.user.isServerAdmin) throw new ForbiddenError("Only a server admin can turn on a restored copy's automatic jobs.");
+  const organisationId = parseOrganisationId(organisationIdInput);
+  await withCoreTransaction(async (client) => {
+    const updated = await client.query("update organisations set jobs_paused_at = null, jobs_paused_reason = null where id = $1 and jobs_paused_at is not null", [organisationId]);
+    if (!updated.rowCount) throw new NotFoundError(`${organisationId} has no paused jobs.`);
+    await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, { eventType: "organisation.jobs_resumed", entityType: "organisation", entityId: organisationId });
+  });
 }
 
 /** Decrypts a backup to a plain pg_dump file, for a database administrator (e.g. restoring the server's own database). */

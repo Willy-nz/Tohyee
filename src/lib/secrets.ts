@@ -65,6 +65,31 @@ export function decryptSecret(stored: string): string {
   }
 }
 
+/**
+ * Opens a stored secret with another server's TOHYEE_SECRET_KEY, for
+ * re-encrypting the secrets in a database restored from that server's
+ * backup with this server's key (#389, decision 737). Throws if that key
+ * doesn't open it.
+ */
+export function decryptSecretWithKey(stored: string, raw: string): string {
+  const [version, iv, tag, ciphertext] = stored.split(":");
+  if ((version !== "v1" && version !== "v2") || !iv || !tag || ciphertext === undefined) {
+    throw new UnavailableError("A stored secret is in an unknown format.");
+  }
+  const trimmed = raw.trim();
+  const keyBytes =
+    version === "v1"
+      ? createHash("sha256").update(trimmed, "utf8").digest()
+      : Buffer.from(hkdfSync("sha256", Buffer.from(trimmed, "utf8"), Buffer.alloc(0), "tohyee secrets v2", 32));
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", keyBytes, Buffer.from(iv, "base64"));
+    decipher.setAuthTag(Buffer.from(tag, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64")), decipher.final()]).toString("utf8");
+  } catch {
+    throw new UnavailableError("That key doesn't open this stored secret.");
+  }
+}
+
 /** A deterministic, keyed digest for command hashes that contain secret fields. */
 export function keyedSecretHash(value: string): string {
   return createHmac("sha256", key()).update("tohyee-secret-hash\0", "utf8").update(value, "utf8").digest("hex");

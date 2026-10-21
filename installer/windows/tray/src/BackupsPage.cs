@@ -99,6 +99,7 @@ namespace Tohyee.Tray
             files.Body.Controls.Add(_files);
             var fileButtons = Ui.Row();
             fileButtons.Controls.Add(Ui.Btn("Restore as a copy…", async (s, e) => await Restore()));
+            fileButtons.Controls.Add(Ui.Btn("Restore on this computer…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups/restore")));
             fileButtons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
             files.Body.Controls.Add(fileButtons);
             Controls.Add(page);
@@ -251,6 +252,11 @@ namespace Tohyee.Tray
             var integrity = J.Obj(overview, "integrity");
             var checkedAt = J.Str(integrity, "allCheckedAt");
             lines.Add("Files checked again: " + (J.Int(integrity, "failed") > 0 ? J.Int(integrity, "failed") + " failed (see below)" : checkedAt != null ? "all, " + Ago(checkedAt) : "not all yet"));
+            var test = J.Obj(overview, "testRestore");
+            if (test != null)
+            {
+                lines.Add("Last test restore: " + (J.Int(test, "failed") > 0 ? J.Int(test, "failed") + " failed (see below)" : J.Str(test, "allAt") != null ? "every database, " + Ago(J.Str(test, "allAt")) : "not done yet (use Test a restore in the browser)"));
+            }
             lines.Add("Off-site copy: " + J.Str(J.Obj(overview, "offSite"), "note"));
             var storage = J.Obj(overview, "storage");
             var free = J.Obj(overview, "storage") != null && storage.ContainsKey("freeBytes") && storage["freeBytes"] != null ? "; " + SizeText(J.Num(storage, "freeBytes")) + " free" : "";
@@ -408,15 +414,15 @@ namespace Tohyee.Tray
                 catch (ApiException error)
                 {
                     // Made on another server (or before the key changed): ask for that server's key.
-                    if (!error.Message.Contains("made with a different key")) throw;
-                    var oldKey = AskKey("Restore from another server", "This backup was made with a different backup key, from another server or before this one was set up again. Paste the backup key you saved from that server:", true);
+                    if (!error.Message.Contains("made with a different key") && !error.Message.Contains("recovery kit")) throw;
+                    var oldKey = AskKey("Restore from another server", "This backup was made by another server (or before this one was set up again). Paste that server's recovery code (or, for a backup from before recovery kits, its backup key). For a recovery file, use Restore on this computer:", true);
                     if (string.IsNullOrEmpty(oldKey)) throw;
                     body["key"] = oldKey;
                     Ui.Show(_message, "Restoring… this can take a few minutes.", false);
                     result = await _api.PostLong("/api/admin/backups/restore", body);
                 }
                 var organisation = J.Obj(result, "organisation");
-                Ui.Show(_message, "Restored as " + J.Str(organisation, "displayName") + " (" + J.Str(organisation, "id") + "). Open Tohyee to check it.", false);
+                Ui.Show(_message, "Restored as " + J.Str(organisation, "displayName") + " (" + J.Str(organisation, "id") + "). Its automatic jobs (emails, feeds) are paused: check it in Tohyee, then turn them on in Backups in the browser.", false);
             }))
             {
                 var keep = _message.Text;

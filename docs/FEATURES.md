@@ -49,8 +49,17 @@ that something happened.
   password again and checked by giving it back, per key version. A new
   recovery key can be made; older backups keep opening and the status says
   which earlier kit to keep until when. Backups from before keep opening
-  with the older backup key. Design and what's next (the restore wizard):
-  `docs/BACKUP-RECOVERY.md`.
+  with the older backup key. **Restore on this computer** (#389 part 3): a
+  wizard finds backups in any folder (OneDrive, a USB drive), takes the
+  recovery code or file, checks the whole backup and its version first,
+  restores as a new organisation (keeping its ID on a replacement
+  computer), re-encrypts stored secrets for this computer, and starts the
+  copy with its automatic jobs paused until a server admin turns them on.
+  **Recover people** brings users, passwords, two-step sign-in and
+  memberships back from a server backup with their own IDs, so private
+  mail stays its owner's. **Test a restore** proves the newest backups
+  restore, in a scratch database. An interrupted restore is cleaned up.
+  Design: `docs/BACKUP-RECOVERY.md`.
 - **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
   across the top (Contacts under Sales/Purchases; Tax and Accounting under
   Accountant), each opening to its overview, lists and settings; a ☰ menu with
