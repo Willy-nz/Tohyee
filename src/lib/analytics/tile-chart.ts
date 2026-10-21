@@ -2,14 +2,14 @@ import { mergeFormats, type ChartFormat, type DefaultableVisual, type VisualDefa
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
 import type { Measure, ResultColumn, TileQuery, Visual } from "@/lib/analytics/query";
 
-const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut", "waterfall", "funnel", "gauge", "bullet"]);
+const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"]);
 
 /**
  * A tile's chart, from its answer's value columns and its saved format. The
  * dashboard and pinned tiles both use this, so a chart looks the same in both.
  */
 export function tileChartSpec(
-  tile: { visual: string; format?: ChartFormat },
+  tile: { visual: string; format?: ChartFormat; query?: { breakdown?: unknown } | null },
   measures: ResultColumn[],
   options: {
     compact?: boolean;
@@ -23,6 +23,7 @@ export function tileChartSpec(
   return {
     kind: tile.visual as ChartSpec["kind"],
     category: "category",
+    ...(tile.query?.breakdown ? { detail: "breakdown" } : {}),
     series: measures.map((column, index) => ({
       field: column.key,
       label: column.label,

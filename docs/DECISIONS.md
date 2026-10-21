@@ -6760,6 +6760,61 @@ accounting example is marked not yet reviewed.
      target and a bullet chart's typed target are numbers about the data,
      so the format painter and chart type defaults leave them out, and
      pasting keeps the tile's own.
+678. **Scatter and bubble, histogram, box plot** (21 October 2026, #376
+     phase 2; Power BI's scatter chart, Excel's histogram and box and
+     whisker charts, as Power BI has no built-in histogram or box plot; not
+     yet reviewed by Jess). Scatter: each group is a dot, the first value
+     across and the second up; a third value sizes the dots as bubbles with
+     area in proportion to it (Power BI's "Size"), zero or less the
+     smallest; one colour (the first value's) with colour rules and group
+     colours; an optional least-squares trend line; names by the dots are
+     optional and sit to the left on the right-hand half so they stay on
+     the card. Histogram: counts how many groups' (rows') first value falls
+     in each bin, so grouping by an invoice number counts invoices. Bins
+     run from their start up to, not including, the next; the first starts
+     at a whole number of widths at or below the smallest value; the width
+     is chosen, or worked out from a chosen number of bins (2-50) or from
+     Sturges' rule (1 + log2 of the count) and rounded to 1, 2, 2.5 or 5
+     times a power of ten, as Excel and most tools do. Binning is done
+     exactly in decimals so a value on an edge (0.3) is never put in the
+     bin below by rounding; a width that would make more than 100 bins
+     falls back to the automatic one. Box plot: quartiles by linear
+     interpolation (Excel's QUARTILE.INC, the same rule as the reference
+     line percentiles, decision 673), worked out exactly; whiskers to the
+     furthest values within 1.5 times the interquartile range (Tukey, Excel's
+     default) and dots beyond, which can be turned off.
+679. **A second grouping inside the first** (21 October 2026). Box plots
+     (and, in later #376 phase 2 work, heat maps, Sankey diagrams and small
+     multiples) need two groupings, which a tile didn't have. A tile's
+     question can now have `breakdown` (a field, by day to year for dates)
+     inside its group by; it comes back as a second group column and rows
+     are ordered by the group, then the second grouping. It's refused
+     without a first grouping, when it's the same as the first, with
+     last-year or previous-period comparisons (they join on the one
+     group), and on chart types that don't use it. Existing tiles have
+     none and are unchanged. The 5,000 row limit and Top N apply to the
+     rows, as before.
+680. **Treemap, heat map, calendar heat map, Sankey** (21 October 2026,
+     #376 phase 2; Power BI's treemap and the usual heat map, calendar and
+     Sankey designs; not yet reviewed by Jess). All four show one value.
+     Treemap: a box per group sized by its total, largest first, with an
+     optional second grouping inside each box; top groups take the theme's
+     colours in order and, past the last colour, grey (never a made-up
+     colour, decision 599); boxes inside a group share its colour. Heat
+     map: groups across, the second grouping down (required), each cell's
+     total added exactly; colour is magnitude, so one hue light to dark
+     (Tohyee's sequential blues, which flip in dark mode so small amounts
+     sit near the dark card), or, when amounts are both below and above
+     zero, the diverging orange-grey-blue centred on zero; the scale is
+     shown under the chart. Calendar heat map: grouped by a date by day
+     (refused otherwise); each day coloured the same way; up to the three
+     latest years with data, newest first, Monday first, the year down the
+     left so it never covers the months on a phone; the tile grows to fit.
+     Sankey: each group flows to the values of the second grouping
+     (required); flows are totals added exactly; a name on both sides is
+     kept apart so a flow can't loop back; names that would overlap are
+     left to the tooltip. Treemaps and Sankeys leave out amounts of zero or
+     less (they have no size), as Power BI does.
 
 ### Linear projection (#387; decision 692)
 
