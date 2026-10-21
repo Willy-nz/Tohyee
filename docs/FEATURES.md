@@ -2086,8 +2086,19 @@ that something happened.
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into
   place (the arrows still work from the keyboard), duplicated, or clicked
-  to open, and **+ Add text** adds a heading with notes to split a
-  dashboard into sections. Up to 40 tiles.
+  to open, and **+ Add text or item** adds a heading with notes to split a
+  dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: text, images, shapes and buttons** (#376 phase 2, decisions
+  683-686). **+ Add text or item** adds one of four things to a report.
+  **Text** can use **bold**, *italic*, links, lists and values from the
+  data, e.g. "Sales this month: {Sales}", worked out over the report's
+  dates and slicers; whatever is typed always shows as text, and only web
+  and email links become links. An **image** (JPG or PNG, up to 5 MB) is
+  stored with the report and only people who can see the report can see
+  it. A **shape or line** (rectangle, rounded, circle, line or arrow) uses
+  the report's theme colours unless others are chosen. A **button** resets
+  the report's filters; going to another page and opening a bookmark will
+  come with report pages and bookmarks.
 - **Analytics: pivot table (matrix) improvements** (#376 phase 2, decision
   682). A pivot can have up to three column fields nested inside each
   other (e.g. year, then channel), with a total for each outer column; rows
