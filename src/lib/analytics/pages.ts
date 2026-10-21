@@ -27,6 +27,8 @@ export type ReportPage = {
   background?: "tinted" | string;
   /** Not in the page tabs: reached only by drill-through or a button (Power BI's hidden pages). */
   hidden?: boolean;
+  /** Other pages' groups can be drilled through to it, showing it filtered to the group (decision 756). */
+  drillThrough?: boolean;
 };
 
 export const MAX_PAGES = 12;
@@ -55,11 +57,11 @@ export function parsePages(input: unknown): ReportPage[] | undefined {
     if (raw.width !== undefined && raw.width !== null && !PAGE_WIDTHS.includes(raw.width as PageWidth)) throw new ValidationError(`${name}: choose the page's width from the list.`);
     const width = raw.width && raw.width !== "full" ? (raw.width as PageWidth) : undefined;
     const background = raw.background === undefined || raw.background === null || raw.background === "" ? undefined : raw.background === "tinted" ? "tinted" : hexColour(raw.background, `${name} background`);
-    return { id, name, ...(width ? { width } : {}), ...(background ? { background } : {}), ...(raw.hidden === true ? { hidden: true } : {}) };
+    return { id, name, ...(width ? { width } : {}), ...(background ? { background } : {}), ...(raw.hidden === true ? { hidden: true } : {}), ...(raw.drillThrough === true ? { drillThrough: true } : {}) };
   });
   if (pages.length && pages.every((page) => page.hidden)) throw new ValidationError("At least one page has to show in the page tabs.");
   // One page with nothing set is the same as no pages.
-  if (pages.length === 1 && !pages[0].width && !pages[0].background && pages[0].name === "Page 1") return undefined;
+  if (pages.length === 1 && !pages[0].width && !pages[0].background && !pages[0].drillThrough && pages[0].name === "Page 1") return undefined;
   return pages.length ? pages : undefined;
 }
 

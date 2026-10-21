@@ -2155,6 +2155,17 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: clicks, drill-down and drill-through** (#376 phase 3,
+  decisions 754-756). Clicking a group on a chart or table (or choosing it
+  from the chart's **Choose a group** list) filters the page's other tiles,
+  or highlights the group on tiles grouped the same way; each tile's
+  Interactions tab sets Filter, Highlight or No change for each other tile.
+  Charts can drill down by financial year, quarter, month and day (or
+  calendar years, or other fields), with **Drill down on click**, **↑ Up**
+  and **Next level for all**. A page marked as a drill-through page opens
+  filtered to a chosen group, with **← Back**. A bar above the tiles shows
+  what the page is filtered by, with Clear and **Reset to default**. None of
+  this can show a report viewer anything the report's tiles don't.
 - **Analytics: report pages** (#376 phase 3, decision 753). A report can
   have up to 12 pages, shown as tabs under its dates. In edit mode, **+ Add
   page** and **Page settings** (name, width, background, hide from the

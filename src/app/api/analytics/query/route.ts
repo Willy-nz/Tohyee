@@ -1,7 +1,8 @@
 import { json, readJson, route, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { allowedFilters, dateContext, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
-import type { DashboardFilters } from "@/lib/analytics/query";
+import type { DashboardFilters, TileQuery } from "@/lib/analytics/query";
+import { parseTileView, viewQuery, type TileDrill } from "@/lib/analytics/report-view";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
@@ -33,11 +34,21 @@ export const POST = route(async (request) => {
     const reader = { userId: auth.user.id, reportViewer: membership.role === "report_viewer" };
     // Today and the balance date, for filters like "in this financial year" (decision 578).
     const dates = await dateContext(tx);
+    // Drilling, clicks and drill-through (decision 756): worked out from the report's saved tiles, only narrowing.
+    const view = parseTileView(body.view);
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
-      return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId), filters: { ...allowedFilters(dashboard, filters, reader), dates } } };
+      const tile = tileOf(dashboard, body.tileId);
+      const viewed = viewQuery(dashboard.tiles, tile, view);
+      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...allowedFilters(dashboard, filters, reader), dates, view: viewed.where } } };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
+    // A question being built (viewers and up, who can ask any question): the other tiles are the ones sent, as drawn.
+    if (view) {
+      const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];
+      const viewed = viewQuery(tiles, { id: String(body.tileId ?? "draft"), title: "This tile", query: body.query as TileQuery, drill: body.viewDrill as TileDrill | undefined }, view);
+      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: viewed.where } } };
+    }
     return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates } } };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));

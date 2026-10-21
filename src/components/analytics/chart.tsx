@@ -13,7 +13,31 @@ type ChartProps = {
   rows: Record<string, string | number | null>[];
   /** Drawing height in pixels (a tile's Small, Medium or Large); the stylesheet's otherwise. */
   height?: number;
+  /** A click on a mark, by its row (decision 754): to filter other tiles or drill down. */
+  onPick?: (rowIndex: number) => void;
+  /** Rows to draw at full strength, the rest faded (highlight, decision 754); left out, all. */
+  highlight?: number[] | null;
 };
+
+/** Fades every mark but the highlighted rows' (with text in the tooltip and hidden table as before). */
+function faded(option: EChartsOption, rows: number, keep: Set<number>): EChartsOption {
+  const series = Array.isArray(option.series) ? option.series : option.series ? [option.series] : [];
+  return {
+    ...option,
+    series: series.map((entry) => {
+      const data = (entry as { data?: unknown[] }).data;
+      if (!Array.isArray(data) || data.length !== rows) return entry;
+      return {
+        ...entry,
+        data: data.map((item, index) => {
+          if (keep.has(index)) return item;
+          const value = item !== null && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : { value: item };
+          return { ...value, itemStyle: { ...((value.itemStyle as object) ?? {}), opacity: 0.25 } };
+        }),
+      };
+    }),
+  } as EChartsOption;
+}
 
 const DEFAULT_THEME: ChartTheme = chartThemeFromTokens(CHART_TOKENS.light);
 
@@ -34,7 +58,7 @@ function isKpiSummary(option: EChartsOption | KpiSummary): option is KpiSummary 
   return !isChartOption(option);
 }
 
-export function Chart({ spec, rows, height }: ChartProps) {
+export function Chart({ spec, rows, height, onPick, highlight }: ChartProps) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ECharts | null>(null);
@@ -44,7 +68,14 @@ export function Chart({ spec, rows, height }: ChartProps) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   // A report theme (decision 668) changes the variables the chart reads.
   const themeKey = useReportThemeKey();
-  const option = useMemo(() => toEChartsOption(spec, rows, theme), [spec, rows, theme]);
+  const option = useMemo(() => {
+    const drawn = toEChartsOption(spec, rows, theme);
+    return highlight && isChartOption(drawn) ? faded(drawn, rows.length, new Set(highlight)) : drawn;
+  }, [spec, rows, theme, highlight]);
+  const pickRef = useRef(onPick);
+  useEffect(() => {
+    pickRef.current = onPick;
+  }, [onPick]);
   const optionRef = useRef(option);
   const title = spec.title || spec.series.map((series) => series.label).join(", ") || "Chart";
 
@@ -89,6 +120,9 @@ export function Chart({ spec, rows, height }: ChartProps) {
       chart = echarts.init(container, undefined, { renderer: "svg" });
       chartRef.current = chart;
       if (isChartOption(optionRef.current)) chart.setOption(optionRef.current);
+      chart.on("click", (params) => {
+        if (typeof params.dataIndex === "number") pickRef.current?.(params.dataIndex);
+      });
     });
 
     return () => {
@@ -117,7 +151,7 @@ export function Chart({ spec, rows, height }: ChartProps) {
           ) : null}
         </div>
       ) : (
-        <div ref={containerRef} className={styles.canvas} style={height ? { height, minHeight: height } : undefined} role="img" aria-label={title} />
+        <div ref={containerRef} className={`${styles.canvas} ${onPick ? styles.pickable : ""}`} style={height ? { height, minHeight: height } : undefined} role="img" aria-label={title} />
       )}
       {/* A table can't be squeezed to 1px, so it's hidden inside a box that can (otherwise a long one stretches the page). */}
       <div className={styles.visuallyHidden}>
