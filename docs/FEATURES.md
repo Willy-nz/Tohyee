@@ -35,6 +35,21 @@ that something happened.
 - **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports, Accounting,
   Tax and Settings across the top (Contacts under Sales/Purchases; #375,
   decision 700), each opening to its overview, lists and settings; a ☰ menu with
+  every page until someone has. **Managed backups** (#389 part 1): a
+  **Backups** page in Server settings (and a Status card in the server app)
+  shows the latest backup and its age, when the newest files were last read
+  back and checked again (weekly, or **Check backups now**), off-site as
+  **not verified** (Tohyee can't see OneDrive uploads; the server app warns
+  when OneDrive isn't running), the space used and free, and what needs
+  attention or isn't proven, with no "safe" badge. Each file's SHA-256 is
+  recorded; a file changed, replaced or deleted afterwards fails the check.
+  Damaged files are never counted towards or deleted by pruning; a missing
+  folder or a disk that's clearly too full fails the backup at once with a
+  message saying what to do, keeping the older backups. Design for the
+  recovery kit and restore wizard: `docs/BACKUP-RECOVERY.md`.
+- **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
+  across the top (Contacts under Sales/Purchases; Tax and Accounting under
+  Accountant), each opening to its overview, lists and settings; a ☰ menu with
   the same sections on phones, where line editors stack each line's fields.
   Long columns have grey sub-headings so each group is two to six links, and
   settings live on an **All settings** page of cards (Settings › All settings)

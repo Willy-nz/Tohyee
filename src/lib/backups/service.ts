@@ -1,4 +1,5 @@
-import { createWriteStream, promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
@@ -6,6 +7,7 @@ import packageJson from "../../../package.json";
 import { type AdminActor, type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail } from "@/lib/auth/service";
 import { BACKUP_EXTENSION, type BackupHeader, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { diskSpace, explainBackupError, formatBytes, notEnoughSpace } from "@/lib/backups/destination";
 import { startPgTool } from "@/lib/backups/pg-tools";
 import { folderAccessHint } from "@/lib/server-admin/folder-access";
 import { backupsToKeep } from "@/lib/backups/retention";
@@ -55,6 +57,8 @@ export type BackupRun = {
   finishedAt: string | null;
   filePath: string | null;
   sizeBytes: number | null;
+  /** The file's SHA-256 when it was made and checked (null before #389). */
+  sha256: string | null;
   error: string | null;
 };
 
@@ -188,14 +192,44 @@ export async function updateBackupSettings(
 
 // ------------------------------------------------------------------ making backups
 
-type Target = { organisationId: string | null; displayName: string | null; databaseName: string; schemaVersion: string | null };
+export type Target = { organisationId: string | null; displayName: string | null; databaseName: string; schemaVersion: string | null };
 
-function folderFor(root: string, target: Target): string {
+/** One database's sub-folder of the backup folder. */
+export function folderFor(root: string, target: { organisationId: string | null }): string {
   return path.join(/* turbopackIgnore: true */ root, target.organisationId ?? SERVER_FOLDER);
 }
 
-function filePrefix(target: Target): string {
+export function filePrefix(target: { organisationId: string | null }): string {
   return target.organisationId ?? "server";
+}
+
+/** The SHA-256 of a file, as hex. */
+export async function fileSha256(file: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(/* turbopackIgnore: true */ file)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
+
+/**
+ * The backup folder must already be there (decision 731): if it's a OneDrive
+ * folder and OneDrive has been removed, making it again would quietly put
+ * backups in a plain folder nothing uploads. Only the default folder, which
+ * Tohyee owns, is made when missing.
+ */
+async function ensureRoot(root: string): Promise<void> {
+  if (path.resolve(/* turbopackIgnore: true */ root) === path.resolve(/* turbopackIgnore: true */ defaultBackupFolder())) {
+    await fs.mkdir(root, { recursive: true });
+    return;
+  }
+  const stat = await fs.stat(root).catch((error: NodeJS.ErrnoException) => {
+    throw Object.assign(new Error(error.message), { code: error.code === "ENOTDIR" ? "ENOENT" : error.code });
+  });
+  if (!stat.isDirectory()) throw Object.assign(new Error(`${root} isn't a folder`), { code: "ENOENT" });
+}
+
+/** All the databases backed up (the server's own first), or one organisation. */
+export async function backupTargets(organisationId?: string): Promise<Target[]> {
+  return targets(organisationId);
 }
 
 async function targets(organisationId?: string): Promise<Target[]> {
@@ -258,10 +292,31 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
   );
   const runId = run.rows[0].id;
   const folder = folderFor(root, target);
-  const finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date()).stamp}${BACKUP_EXTENSION}`);
+  // Never the name of a file already there (two backups in the same second): a checked file is never replaced.
+  let when = Date.now();
+  let finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date(when)).stamp}${BACKUP_EXTENSION}`);
+  while (await fs.stat(finalPath).then(() => true, () => false)) {
+    when += 1000;
+    finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date(when)).stamp}${BACKUP_EXTENSION}`);
+  }
   const partial = `${finalPath}.partial`;
   try {
+    await ensureRoot(root);
     await fs.mkdir(folder, { recursive: true });
+    // A backup that clearly won't fit fails at once, before anything is written or deleted (decision 732).
+    const previous = await coreQuery<{ size_bytes: string }>(
+      `select size_bytes::text as size_bytes from backup_runs where status = 'ok' and organisation_id is not distinct from $1 and size_bytes is not null
+        order by started_at desc, id desc limit 1`,
+      [target.organisationId],
+    );
+    const expected = Number(previous.rows[0]?.size_bytes ?? 0);
+    const space = await diskSpace(folder);
+    if (notEnoughSpace(space, expected)) {
+      throw Object.assign(
+        new Error(`There isn't room for this backup in ${root}: about ${formatBytes(expected)} is needed and ${formatBytes(space!.freeBytes)} is free`),
+        { code: "ENOSPC_ESTIMATE" },
+      );
+    }
     const dump = startPgTool("pg_dump", ["--format=custom", "--no-owner", "--no-privileges"], target.databaseName);
     dump.child.stdin?.end();
     const out = createWriteStream(partial, { mode: 0o600 });
@@ -283,16 +338,20 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
     await checkBackup(partial);
     await fs.rename(partial, finalPath);
     const { size } = await fs.stat(finalPath);
+    const sha256 = await fileSha256(finalPath);
     const done = await coreQuery<RunRow>(
-      `update backup_runs set status = 'ok', finished_at = now(), file_path = $2, size_bytes = $3
+      `update backup_runs set status = 'ok', finished_at = now(), file_path = $2, size_bytes = $3, sha256 = $4
         where id = $1 returning ${RUN_COLUMNS}`,
-      [runId, finalPath, size],
+      [runId, finalPath, size, sha256],
     );
-    await prune(folder, filePrefix(target));
+    await prune(folder, target);
     return toRun(done.rows[0]);
   } catch (error) {
     await fs.rm(partial, { force: true }).catch(() => undefined);
-    const message = error instanceof Error ? error.message : String(error);
+    const message =
+      (error as NodeJS.ErrnoException).code === "ENOSPC_ESTIMATE"
+        ? `${(error as Error).message}. Free up space or choose a folder on a bigger disk. The older backups were kept.`
+        : explainBackupError(error, root);
     const failed = await coreQuery<RunRow>(
       `update backup_runs set status = 'failed', finished_at = now(), error = $2 where id = $1 returning ${RUN_COLUMNS}`,
       [runId, message.slice(0, 2000)],
@@ -301,15 +360,40 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
   }
 }
 
-const BACKUP_NAME = /^([a-z0-9][a-z0-9-]*)_(\d{4}-\d{2}-\d{2}_\d{6})\.tohyee-backup$/;
+export const BACKUP_NAME = /^([a-z0-9][a-z0-9-]*)_(\d{4}-\d{2}-\d{2}_\d{6})\.tohyee-backup$/;
 
-/** Deletes old backups in one organisation's folder (only Tohyee backup files with that organisation's prefix). */
-async function prune(folder: string, prefix: string): Promise<string[]> {
-  const names = await fs.readdir(folder).catch(() => [] as string[]);
+/** One database's backup files in its folder, by name (newest first), with whether each one's header reads as that database's. */
+export async function datedBackupFiles(folder: string, target: { organisationId: string | null }): Promise<{ name: string; stamp: string; readable: boolean }[]> {
+  const prefix = filePrefix(target);
+  const names = await fs.readdir(/* turbopackIgnore: true */ folder).catch(() => [] as string[]);
   const dated = names
     .map((name) => ({ name, match: BACKUP_NAME.exec(name) }))
     .filter((entry) => entry.match && entry.match[1] === prefix)
-    .map((entry) => ({ name: entry.name, stamp: entry.match![2] }));
+    .map((entry) => ({ name: entry.name, stamp: entry.match![2] }))
+    .sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : 0));
+  const result: { name: string; stamp: string; readable: boolean }[] = [];
+  for (const entry of dated) {
+    let readable = false;
+    try {
+      const { header } = await readBackupHeader(path.join(folder, entry.name));
+      readable = header.organisationId === target.organisationId;
+    } catch {
+      readable = false;
+    }
+    result.push({ ...entry, readable });
+  }
+  return result;
+}
+
+/**
+ * Deletes old backups in one database's folder (decision 732). Only Tohyee
+ * backup files with that database's prefix are looked at, and only the ones
+ * whose header reads as that database's count: a damaged file never takes
+ * the place of a good one in the 14 days and 12 months, and pruning never
+ * deletes it either (it's reported instead, for a person to look at).
+ */
+async function prune(folder: string, target: { organisationId: string | null }): Promise<string[]> {
+  const dated = (await datedBackupFiles(folder, target)).filter((entry) => entry.readable);
   const keep = backupsToKeep(dated);
   const removed: string[] = [];
   for (const backup of dated) {
@@ -322,6 +406,25 @@ async function prune(folder: string, prefix: string): Promise<string[]> {
 }
 
 const BACKUP_LOCK = "tohyee:backups";
+
+/**
+ * Runs `work` holding the server-wide backup lock (one backup or check at a
+ * time); refused with `busyMessage` while another holds it.
+ */
+export async function withBackupLock<T>(busyMessage: string, work: () => Promise<T>): Promise<T> {
+  const lock = await getCorePool().connect();
+  try {
+    const locked = await lock.query<{ ok: boolean }>("select pg_try_advisory_lock(hashtext($1)) as ok", [BACKUP_LOCK]);
+    if (!locked.rows[0]?.ok) throw new ConflictError(busyMessage);
+    try {
+      return await work();
+    } finally {
+      await lock.query("select pg_advisory_unlock(hashtext($1))", [BACKUP_LOCK]);
+    }
+  } finally {
+    lock.release();
+  }
+}
 
 /**
  * Backs up every organisation and the server's own database (or one
@@ -339,25 +442,16 @@ export async function backUpNow(options: {
     throw new UnavailableError("Backups are encrypted with TOHYEE_SECRET_KEY, and it isn't set. Set it in the server's environment and restart Tohyee.");
   }
   const organisationId = options.organisationId ? parseOrganisationId(options.organisationId) : undefined;
-  const lock = await getCorePool().connect();
-  try {
-    const locked = await lock.query<{ ok: boolean }>("select pg_try_advisory_lock(hashtext($1)) as ok", [BACKUP_LOCK]);
-    if (!locked.rows[0]?.ok) throw new ConflictError("A backup is already running. Try again when it has finished.");
-    try {
-      const settings = await getBackupSettings();
-      let list = await targets(organisationId);
-      if (options.only) list = list.filter((t) => options.only!.includes(t.organisationId));
-      const runs: BackupRun[] = [];
-      for (const target of list) {
-        runs.push(await backUpTarget(settings.folder, target, options.trigger, options.requestedByEmail));
-      }
-      return runs;
-    } finally {
-      await lock.query("select pg_advisory_unlock(hashtext($1))", [BACKUP_LOCK]);
+  return withBackupLock("A backup or a check of the backups is already running. Try again when it has finished.", async () => {
+    const settings = await getBackupSettings();
+    let list = await targets(organisationId);
+    if (options.only) list = list.filter((t) => options.only!.includes(t.organisationId));
+    const runs: BackupRun[] = [];
+    for (const target of list) {
+      runs.push(await backUpTarget(settings.folder, target, options.trigger, options.requestedByEmail));
     }
-  } finally {
-    lock.release();
-  }
+    return runs;
+  });
 }
 
 // ------------------------------------------------------------------ what's there
@@ -371,9 +465,10 @@ type RunRow = {
   finished_at: Date | null;
   file_path: string | null;
   size_bytes: string | null;
+  sha256: string | null;
   error: string | null;
 };
-const RUN_COLUMNS = "id::text as id, organisation_id, trigger, status, started_at, finished_at, file_path, size_bytes::text as size_bytes, error";
+const RUN_COLUMNS = "id::text as id, organisation_id, trigger, status, started_at, finished_at, file_path, size_bytes::text as size_bytes, sha256, error";
 
 /**
  * Backups cut off by a restart (#137): a run still "running" that began
@@ -415,6 +510,7 @@ function toRun(row: RunRow): BackupRun {
     finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
     filePath: row.file_path,
     sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes),
+    sha256: row.sha256,
     error: row.error,
   };
 }
@@ -423,10 +519,10 @@ function toRun(row: RunRow): BackupRun {
 export async function backupStatus(): Promise<{ organisationId: string | null; displayName: string | null; latest: BackupRun | null; lastGood: BackupRun | null }[]> {
   const all = await targets();
   const latest = await coreQuery<RunRow>(
-    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs order by organisation_id, started_at desc, id desc`,
+    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs order by organisation_id, started_at desc, backup_runs.id desc`,
   );
   const good = await coreQuery<RunRow>(
-    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs where status = 'ok' order by organisation_id, started_at desc, id desc`,
+    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs where status = 'ok' order by organisation_id, started_at desc, backup_runs.id desc`,
   );
   const find = (rows: RunRow[], id: string | null) => {
     const row = rows.find((r) => r.organisation_id === id);
@@ -442,7 +538,7 @@ export async function backupStatus(): Promise<{ organisationId: string | null; d
 
 /** Recent backup attempts, newest first. */
 export async function recentBackupRuns(limit = 50): Promise<BackupRun[]> {
-  const result = await coreQuery<RunRow>(`select ${RUN_COLUMNS} from backup_runs order by started_at desc, id desc limit $1`, [limit]);
+  const result = await coreQuery<RunRow>(`select ${RUN_COLUMNS} from backup_runs order by started_at desc, backup_runs.id desc limit $1`, [limit]);
   return result.rows.map(toRun);
 }
 

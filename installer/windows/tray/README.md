@@ -64,8 +64,11 @@ Tohyee (the books) are at the bottom.
   checks TohyeeSetup, and runs it silently (decisions 328-331). The tray
   icon shows a notification when an update is out, and after installing
   (`--after-update`) says how it went.
-- **Backups**: nightly backups, the backup key, each organisation's last
-  backup, and the backup files (restore as a copy). Until a saved copy of the
+- **Backups**: a Status card (latest backup and its age, when the newest
+  files were last checked again, off-site "not verified", space used and
+  free, what needs attention, and a warning when OneDrive isn't running for
+  you), Check backups now, nightly backups, the backup key, each
+  organisation's last backup, and the backup files (restore as a copy). Until a saved copy of the
   key has been checked, the window opens on Backups with a reminder.
 - **Analytics**: each organisation's CSV folder on this computer, whether
   Tohyee can read it, and Browse and Save for each organisation. Blank clears

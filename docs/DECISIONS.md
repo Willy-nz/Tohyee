@@ -7164,3 +7164,62 @@ accounting example is marked not yet reviewed.
      for farm mail moved to Settings › Email, beside the rest of the app
      setup; the calendar just says an administrator sets it up. Who can
      see a mailbox is unchanged (decision 571).
+
+### Backups and recovery (#389; decisions 730-739)
+
+Jess asked for automatic managed backups, one separately saved recovery
+key, a restore wizard for a replacement computer and an evidence-based
+status (#389). There was no answer from Jess on the details, so these are
+Claude's design choices from the issue's requirements, not yet reviewed by
+Jess. The design is in `docs/BACKUP-RECOVERY.md`.
+
+730. **A backup recovery key of its own, kept apart from the live secrets**
+     (21 October 2026, #389; not yet reviewed by Jess). Backups stop being
+     encrypted with a key worked out from `TOHYEE_SECRET_KEY` (format 1)
+     and use a random 256-bit recovery key the server makes and numbers
+     (format 2, part 2 of #389). The server keeps it encrypted with the
+     live key, so backups stay unattended. Each backup carries the live key
+     its stored secrets were encrypted with, encrypted with the recovery
+     key, so a restore on a new computer can re-encrypt every `*_ciphertext`
+     value with that computer's own key (part 3). The recovery kit is the
+     recovery key alone: never the environment file, the PostgreSQL
+     passwords or the setup token. Format 1 files stay readable for good
+     with the key they were made with. Only AES-256-GCM, HKDF-SHA256,
+     SHA-256 and scrypt from Node's `crypto`. Windows-protected storage
+     (DPAPI) was considered for the live key and not used: it doesn't stop
+     a running service reading its own secrets, and it doesn't move to a
+     new computer.
+731. **Off-site is never "confirmed" from a write to a synced folder**
+     (21 October 2026, #389; not yet reviewed by Jess). Tohyee writes the
+     files; it can't see whether OneDrive, Google Drive or Dropbox uploaded
+     them (paused, signed out, out of storage, or only running while
+     someone is signed in). So off-site always shows "not verified", with
+     what to check. The kind of folder is worked out from its path
+     (`destination.ts`). The server app, which runs as the signed-in
+     person, warns when OneDrive isn't running. A chosen backup folder
+     that's gone isn't made again by a backup (a removed OneDrive folder
+     made again would be a plain folder nothing uploads), and failures say
+     what to do: plug in the drive, sign in to the sync app, the `icacls`
+     command, a full disk. The page explains that sync copies deletions
+     and ransomware too, and suggests a monthly copy to a USB drive kept
+     unplugged elsewhere; provider version history may help but isn't
+     promised.
+732. **Keeping good copies** (21 October 2026, #389; core migration 0016;
+     not yet reviewed by Jess). Each backup's SHA-256 is recorded. Weekly,
+     and on request, the newest file of each database is read back,
+     decrypted in full into `pg_restore --list` and its hash compared, so a
+     file changed, replaced or deleted after it was made is found
+     (`backup_checks`, emailed to server admins). Pruning counts and
+     deletes only files whose header reads as that database's: a damaged
+     file can't push out a good one and is left for a person. A backup that
+     clearly won't fit (less free space than the last backup's size plus
+     64 MB) fails before anything is written or deleted.
+733. **The status says what's proven, never "safe"** (21 October 2026,
+     #389; not yet reviewed by Jess). A Backups page in Server settings
+     (`/server/backups`, local address only, like the other server pages),
+     a Status card in the server app and `backups status` show the latest
+     backup and its age, the last check, off-site "not verified", space
+     used and free, the backup key's last checked copy, then "Needs
+     attention" and "Not proven yet" lists. Every line is from work the
+     server did. Parts 2 and 3 add the recovery kit's check and the last
+     test restore to it.
