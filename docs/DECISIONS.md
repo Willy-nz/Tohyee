@@ -7411,3 +7411,23 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      keyboard, go into the draft as one Undo step each, and say what they
      did. Rows are worked out as the 12-column grid lays them out on a wide
      screen; on phones every tile is full width, as before.
+
+### Report layout and interactivity (#376 phase 3; decisions 753-760)
+
+753. **Report pages** (22 October 2026, #376 phase 3; Power BI's report
+     pages and page settings, Looker Studio's pages; not yet reviewed by
+     Jess). A report can have up to 12 pages, each with a name, a width (fit
+     the screen, wide up to 1,280 pixels, or narrow up to 960 like a
+     document; phones always fit the screen) and a background (the theme's,
+     shaded, or any colour, with a dark version worked out for dark mode).
+     A page can be hidden from the tabs, to be opened by drill-through or a
+     button; one page always shows. Pages are kept in the report's settings
+     and each tile names its page; a report without pages is one page, and
+     the first page's tiles are saved without one, so every existing report,
+     pinned tile and report email is unchanged. A tile naming a page the
+     report doesn't have is put on the first page. The page tabs follow the
+     tabs pattern (arrow keys, Home, End) and the page shown is in the
+     address (`?page=`), so a link opens it. New tiles go on the page shown;
+     removing a page removes its tiles after asking. Dates and slicers are
+     the report's, on every page (per-page filters and slicers: decisions
+     757-758).

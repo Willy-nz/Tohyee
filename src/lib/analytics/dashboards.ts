@@ -10,6 +10,7 @@ import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
+import { pageForSaving, parsePages, type ReportPage } from "@/lib/analytics/pages";
 import {
   buildPivotDrillSql,
   buildPivotSql,
@@ -60,6 +61,8 @@ export type Tile = {
   button?: ButtonItem;
   /** How the chart looks (#331, #333); left out, it looks as it always has. */
   format?: ChartFormat;
+  /** The report page it's on (decision 753); left out, the first page. */
+  page?: string;
 };
 
 export type Slicer = { table: string; field: string; label: string };
@@ -74,6 +77,8 @@ export type DashboardSettings = {
   theme?: string;
   /** A default format per chart type for this report (Power BI's visual defaults); a tile's own settings win. */
   visualDefaults?: VisualDefaults;
+  /** The report's pages (#376 phase 3, decision 753); left out, one page. */
+  pages?: ReportPage[];
 };
 
 /** Today and the organisation's balance date, for dates that move (decision 577). */
@@ -128,6 +133,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
       slicers: row.settings.slicers ?? [],
       ...(row.settings.theme ? { theme: row.settings.theme } : {}),
       ...(row.settings.visualDefaults ? { visualDefaults: row.settings.visualDefaults } : {}),
+      ...(row.settings.pages?.length ? { pages: row.settings.pages } : {}),
     },
     tiles: row.tiles,
     createdByEmail: row.created_by_email,
@@ -246,6 +252,7 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
   const preset = isDatePreset(raw.preset) ? raw.preset : null;
   const theme = parseThemeChoice(raw.theme);
   const visualDefaults = parseVisualDefaults(raw.visualDefaults);
+  const pages = parsePages(raw.pages);
   return {
     from: date(raw.from, "From"),
     to: date(raw.to, "To"),
@@ -253,6 +260,7 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     slicers,
     ...(theme ? { theme } : {}),
     ...(visualDefaults ? { visualDefaults } : {}),
+    ...(pages ? { pages } : {}),
   };
 }
 
@@ -262,11 +270,18 @@ async function checkTheme(tx: OrgTx, settings: DashboardSettings): Promise<void>
   if (custom && !(await findTheme(tx, custom))) throw new ValidationError("That theme wasn't found. Choose another.");
 }
 
-function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
+function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: ReportPage[]): Tile[] {
   if (!Array.isArray(input)) throw new ValidationError("tiles must be a list.");
   if (input.length > MAX_TILES) throw new ValidationError(`A dashboard can have up to ${MAX_TILES} charts, tables and text cards.`);
   const seen = new Set<string>();
+  // Each tile on its page (decision 753): a page that isn't the report's puts it on the first.
   return input.map((entry, index) => {
+    const tile = parseTile(entry, index);
+    const page = pageForSaving((entry as Record<string, unknown> | null)?.page, pages);
+    return page ? { ...tile, page } : tile;
+  });
+
+  function parseTile(entry: unknown, index: number): Tile {
     const tile = (entry ?? {}) as Record<string, unknown>;
     const title = typeof tile.title === "string" && tile.title.trim() ? tile.title.trim().slice(0, 100) : `Tile ${index + 1}`;
     const visual = tile.visual as TileVisual;
@@ -356,7 +371,7 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
       query,
       ...(format ? { format } : {}),
     };
-  });
+  }
 }
 
 function parseName(input: unknown): string {
@@ -376,7 +391,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
-  const tiles = parseTiles(input.tiles ?? [], tables);
+  const tiles = parseTiles(input.tiles ?? [], tables, settings.pages);
   // An image is uploaded to a report that's already saved.
   if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
   const result = await tx.query<{ id: string }>(
@@ -404,7 +419,7 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings, tables);
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
-  const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables);
+  const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables, settings.pages);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
   if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
   await tx.query(

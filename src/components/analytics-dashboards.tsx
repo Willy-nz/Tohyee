@@ -2,7 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
@@ -33,6 +33,8 @@ import { ButtonItemView, ImageItemView, ItemEditor, ShapeItemView, TextItemView 
 import { isItemVisual, type ButtonAction } from "@/lib/analytics/items";
 import { PanelTabs } from "@/components/analytics/panel-tabs";
 import { ArrangeBar } from "@/components/analytics/arrange-bar";
+import { PageTabs, pageStyle } from "@/components/analytics/report-pages";
+import { addPage, movePage, openingPage, removePage, tilePage, tilesOnPage, withPage, type ReportPage } from "@/lib/analytics/pages";
 import { isSpecialistVisual, PANEL_TAB_LABELS, PANEL_TABS, type PanelTab } from "@/lib/analytics/editor-panels";
 
 /** Each small chart's height, by the tile's height. */
@@ -297,6 +299,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [chosenTiles, setChosenTiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The page shown (decision 753), kept in the address (?page=) so a link opens it.
+  const search = useSearchParams();
+  const [pageChoice, setPageChoice] = useState<string | null>(() => search.get("page"));
 
   const dashboard = draft ?? loaded.data?.dashboard ?? null;
   const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
@@ -373,6 +378,28 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
+  const pages = dashboard.settings.pages;
+  const page = openingPage(pages, pageChoice);
+  const pageTiles = tilesOnPage(dashboard.tiles, pages, page.id);
+  const look = pageStyle(page);
+  const choosePage = (pageId: string) => {
+    setPageChoice(pageId);
+    setChosenTiles([]);
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", pageId);
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  };
+  const setPages = (next: { pages: ReportPage[] | undefined; tiles: Tile[] }) => {
+    const settings = { ...dashboard.settings };
+    delete settings.pages;
+    setDraft({ ...dashboard, settings: next.pages ? { ...settings, pages: next.pages } : settings, tiles: next.tiles });
+  };
+  /** A tile added or changed, on the page shown. */
+  const placed = (tile: Tile): Tile => {
+    // The editors build the tile afresh: a changed tile stays on its page, a new one goes on the page shown.
+    const existing = dashboard.tiles.find((entry) => entry.id === tile.id);
+    return withPage(tile, existing ? tilePage(existing, pages) : page.id, pages);
+  };
   const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && isItemVisual(editingTile.visual) ? editingTile : null;
   const chartTile = textTile || editingTile === "new-text" ? null : editingTile;
   // The report's theme (decision 668) is scoped to its tiles and the editor's preview.
@@ -451,6 +478,28 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         onSettings={(settings) => setDraft({ ...dashboard, settings })}
       />
 
+      <PageTabs
+        pages={pages}
+        current={page.id}
+        onChoose={choosePage}
+        editing={editing}
+        panelId={`report-page-${dashboard.id}`}
+        onAdd={() => {
+          const id = `p${Date.now().toString(36)}`;
+          setPages(addPage(pages, dashboard.tiles, id));
+          choosePage(id);
+        }}
+        onUpdate={(changed) => setPages({ pages: (pages?.length ? pages : [page]).map((entry) => (entry.id === changed.id ? changed : entry)), tiles: dashboard.tiles })}
+        onMove={(pageId, by) => setPages(movePage(pages, dashboard.tiles, pageId, by))}
+        onRemove={async (gone) => {
+          const count = tilesOnPage(dashboard.tiles, pages, gone.id).length;
+          const ok = await confirm(count ? `Remove the ${gone.name} page and its ${count} ${count === 1 ? "tile" : "tiles"}? Nothing is saved until you choose Save and view.` : `Remove the ${gone.name} page?`, { title: "Remove page?", confirmLabel: "Remove", danger: true });
+          if (!ok) return;
+          setPages(removePage(pages, dashboard.tiles, gone.id));
+          setPageChoice(null);
+        }}
+      />
+
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
       {theming && editing && canEdit ? (
@@ -484,7 +533,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           tables={tables.data?.tables ?? []}
           filters={shown}
           onCancel={() => setEditingTile(null)}
-          onSave={async (tile) => {
+          onSave={async (given) => {
+            const tile = placed(given);
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
             const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
             if (await save({ ...dashboard, tiles })) setEditingTile(null);
@@ -503,7 +553,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           theme={theme}
           onSetDefault={setVisualDefault}
           onCancel={() => setEditingTile(null)}
-          onSave={async (tile) => {
+          onSave={async (given) => {
+            const tile = placed(given);
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
             const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
             if (await save({ ...dashboard, tiles })) setEditingTile(null);
@@ -513,18 +564,22 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
       {editing && !editingTile ? (
         <ArrangeBar
-          tiles={dashboard.tiles}
-          chosen={chosenTiles.filter((id) => dashboard.tiles.some((tile) => tile.id === id))}
+          tiles={pageTiles}
+          chosen={chosenTiles.filter((id) => pageTiles.some((tile) => tile.id === id))}
           onClear={() => setChosenTiles([])}
-          onArrange={(tiles) => void save({ ...dashboard, tiles })}
+          onArrange={(tiles) => void save({ ...dashboard, tiles: [...tiles, ...dashboard.tiles.filter((tile) => !pageTiles.includes(tile))] })}
         />
       ) : null}
 
-      {!editingTile && (dashboard.tiles.length === 0 ? (
-        <Empty>{canEdit ? editing ? "Start your report with Add chart. Choose a source, a visual and the fields to show." : "This report is empty. Choose Edit to add a chart." : "No tiles yet."}</Empty>
+      {!editingTile && (pageTiles.length === 0 ? (
+        <Empty>{canEdit ? editing ? `Start ${pages?.length ? "this page" : "your report"} with Add chart. Choose a source, a visual and the fields to show.` : "This page is empty. Choose Edit to add a chart." : "No tiles yet."}</Empty>
       ) : (
-        <div className={`${styles.grid} ${themeClass}`}>
+        <div id={`report-page-${dashboard.id}`} role={pages?.length ? "tabpanel" : undefined} aria-label={pages?.length ? page.name : undefined} style={look.style} className={`${styles.grid} ${themeClass} ${look.tinted ? styles.tintedPage : ""} ${look.style.background ? styles.colouredPage : ""}`}>
           {dashboard.tiles.map((tile, index) => {
+            if (!pageTiles.includes(tile)) return null;
+            // Moving goes past the tiles of other pages.
+            const before = dashboard.tiles.lastIndexOf(pageTiles[pageTiles.indexOf(tile) - 1]);
+            const after = dashboard.tiles.indexOf(pageTiles[pageTiles.indexOf(tile) + 1]);
             // Drawn with the report's default for its chart type under its own settings (#376).
             const shownTile = tileWithDefaults(tile, dashboard.settings.visualDefaults);
             const look = cardStyle(shownTile.format);
@@ -573,15 +628,15 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Select
                     </label>
                     <span className={styles.dragHandle} aria-hidden="true" title="Drag to move">⠿</span>
-                    <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, index - 1)} disabled={busy || index === 0}>
+                    <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, before)} disabled={busy || before < 0}>
                       ↑
                     </Button>
                     <Button
                       size="small"
                       variant="secondary"
                       aria-label={`Move ${tile.title} later`}
-                      onClick={() => moveTile(index, index + 1)}
-                      disabled={busy || index === dashboard.tiles.length - 1}
+                      onClick={() => moveTile(index, after)}
+                      disabled={busy || after < 0}
                     >
                       ↓
                     </Button>
