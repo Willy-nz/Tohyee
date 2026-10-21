@@ -18816,7 +18816,8 @@ Gmail; times are New Zealand time.
   are matched as whole words, ignoring case.
 - **FC11 No farm named.** With one active farm, that's the farm. With
   more, the mailbox's chosen farm (Jess can choose one when connecting, or
-  later), else no farm: the item shows under "No farm".
+  later), else no farm: the item shows under "No farm". Since FC32 an item
+  put under the mailbox's chosen farm waits in Needs checking.
 - **FC12 Not farm arrangements.** An email needs one of the arrangement
   words and a date (or a no-exact-date phrase) in the same sentence, or the
   arrangement in the subject and the date in the text. "Our sale ends 31
@@ -19003,6 +19004,30 @@ her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
 
 Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
 `tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
+
+## Farming: a mailbox's usual farm is only a guess (FC32; built by Claude 21 Oct 2026 from #390, Claude's rule, not yet reviewed)
+
+Issue #390's review found that one mailbox often covers several properties,
+so the farm chosen for a mailbox (FC11) isn't proof that an email is about
+that farm. Xero and NetSuite have nothing like a farm calendar, so this is
+Claude's rule, kept to the safe side.
+
+Kōwhai Dairies has two active farms, **Home farm** and **Runoff**. Jess's
+mailbox has **Home farm** as its farm when none is named.
+
+- **FC32 A guess waits to be checked.** "Shearers arriving 7.30am on 3/11"
+  names no farm. The item is **Contractor**, Tue 3 Nov 2026, 7:30am, under
+  **Home farm**, and in Needs checking: "No farm named: put under Home
+  farm, this mailbox's usual farm". When Jess checks it (keeping Home farm
+  or choosing Runoff) it leaves Needs checking. "Spreading lime on the
+  Runoff on Friday 6 November" names a farm: it goes under Runoff with
+  nothing to check. With only one active farm nothing changes: that farm
+  is used and there's nothing to check. With no farm chosen for the
+  mailbox, or if the chosen farm is archived, the item is **No farm** and,
+  as before, not in Needs checking just for that. A later email moving a
+  checked item gets this reason as well as FC14's when it names no farm.
+
+Tests: `tests/integration/farm-calendar.test.ts` (FC32, in the FC11 test).
 
 ## Analytics: a website's Google Analytics data (GA1-GA8; built by Claude 20 Oct 2026 when Jess asked for "Google analytics for websites to tohyee", as Looker Studio's Google Analytics connector does, not yet reviewed)
 

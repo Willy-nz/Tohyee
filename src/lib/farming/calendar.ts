@@ -562,15 +562,27 @@ async function earlierItem(tx: OrgTx, accountId: string, mail: FarmMail, arrange
   return fromSender.rows[0] ?? null;
 }
 
-async function farmFor(tx: OrgTx, account: AccountRow, arrangement: Arrangement): Promise<string | null> {
-  if (arrangement.farmIds.length === 1) return arrangement.farmIds[0];
-  if (arrangement.farmIds.length > 1) return null;
+/**
+ * Which farm an item is for (FC11, FC32). A farm the email names, or the only
+ * active farm, is taken as it is. With two or more, the mailbox's usual farm is
+ * only a guess (one mailbox often covers several properties), so the item is
+ * put there and sent to Needs checking with a reason. Without one it's No farm.
+ */
+async function farmFor(tx: OrgTx, account: AccountRow, arrangement: Arrangement): Promise<{ farmId: string | null; reason: string | null }> {
+  if (arrangement.farmIds.length === 1) return { farmId: arrangement.farmIds[0], reason: null };
+  if (arrangement.farmIds.length > 1) return { farmId: null, reason: null };
   const active = await tx.query<{ id: string }>("select id::text from farms where is_active order by farms.id limit 2");
-  if (active.rows.length === 1) return active.rows[0].id;
-  return account.default_farm_id;
+  if (active.rows.length === 1) return { farmId: active.rows[0].id, reason: null };
+  if (!account.default_farm_id) return { farmId: null, reason: null };
+  const usual = await tx.query<{ name: string }>("select name from farms where id = $1 and is_active", [account.default_farm_id]);
+  // An archived usual farm isn't used: the item stays No farm.
+  if (!usual.rows[0]) return { farmId: null, reason: null };
+  return { farmId: account.default_farm_id, reason: `No farm named: put under ${usual.rows[0].name}, this mailbox's usual farm` };
 }
 
-async function insertItem(tx: OrgTx, account: AccountRow, mail: FarmMail, arrangement: Arrangement, reasons: string[]): Promise<string> {
+async function insertItem(tx: OrgTx, account: AccountRow, mail: FarmMail, arrangement: Arrangement, checkReasons: string[]): Promise<string> {
+  const farm = await farmFor(tx, account, arrangement);
+  const reasons = farm.reason ? [...checkReasons, farm.reason] : checkReasons;
   const inserted = await tx.query<{ id: string }>(
     `insert into farm_calendar_items (account_id, external_id, thread_id, sent_at, sender_email, sender_name, subject, web_link, kind, title,
                                       item_date, start_time, end_time, tentative, change, check_reasons, farm_id, excerpt, user_id)
@@ -592,7 +604,7 @@ async function insertItem(tx: OrgTx, account: AccountRow, mail: FarmMail, arrang
       arrangement.tentative,
       arrangement.change,
       reasons,
-      await farmFor(tx, account, arrangement),
+      farm.farmId,
       arrangement.excerpt,
       account.user_id,
     ],
