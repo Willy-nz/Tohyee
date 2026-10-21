@@ -2180,6 +2180,16 @@ that something happened.
   (someone else saved in the meantime) is refused, saying who saved and
   when, and offers **Save mine as a copy** or **Reload the saved report**;
   a refused or failed save keeps the draft.
+- **Analytics: values that say what they mean** (#387, decisions
+  693-696, examples MD1-MD6). Each value in the chart editor has "What it
+  means": what a row is, how it's added up, its unit, movement or balance,
+  its date, blanks and zero, and totals. A table's totals row works
+  calculated values and averages out from the totals (10/100 and 90/300
+  total 25%). Amounts in different currencies are never added together
+  (blank, with a note, where they'd mix). A value can be a balance recorded
+  on each date, using the latest in each period rather than adding dates
+  up. A shaped table's Merge is refused when it would repeat rows or
+  numbers, and the preview says how many rows had no match.
 - **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into

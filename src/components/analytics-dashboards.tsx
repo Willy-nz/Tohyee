@@ -8,7 +8,7 @@ import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
-import { FormulaField, SavedValuesPicker, SaveValueButton, ValueRules } from "@/components/analytics/saved-values";
+import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, ValueMeaning, ValueRules } from "@/components/analytics/saved-values";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
@@ -1168,9 +1168,36 @@ function TileResult({
   const spec = useMemo(() => tileChartSpec(tile, measures, { query: tile.query, truncated: result.truncated }), [tile, measures, result.truncated]);
 
   if (tile.visual === "pivot") {
-    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} format={tile.format} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
+    return result.pivot ? (
+      <>
+        {result.notes?.map((note) => <Notice key={note} tone="warning">{note}</Notice>)}
+        <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} format={tile.format} />
+      </>
+    ) : (
+      <Notice tone="error">This pivot table needs to be saved again.</Notice>
+    );
   }
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
+  return (
+    <>
+      {/* What the figures can't show, e.g. amounts in two currencies left blank (decision 694). */}
+      {result.notes?.map((note) => <Notice key={note} tone="warning">{note}</Notice>)}
+      <TileFigures tile={tile} result={result} measures={measures} spec={spec} />
+    </>
+  );
+}
+
+function TileFigures({
+  tile,
+  result,
+  measures,
+  spec,
+}: {
+  tile: Pick<Tile, "title" | "visual" | "format" | "height"> & { query?: TileQuery | null };
+  result: QueryResult;
+  measures: ResultColumn[];
+  spec: ReturnType<typeof tileChartSpec>;
+}) {
   // Yes/No groups are named Yes and No on the chart too (decision 577).
   const yesNo = result.columns.some((column) => column.key === "category" && column.format === "boolean");
   const named = yesNo ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : booleanText(row.category) })) : result.rows;
@@ -1181,7 +1208,7 @@ function TileResult({
     const look = tableLook(tile.format?.table);
     const ranges = measures.map((column) => columnRange(result.rows.map((row) => row[column.key])));
     const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
-    const totals = tile.format?.table?.totals ? tableTotals(result.columns, result.rows, aggregates) : null;
+    const totals = tile.format?.table?.totals ? tableTotals(result.columns, result.rows, aggregates, result.totals) : null;
     return (
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${look.className}`} style={look.style}>
@@ -1628,7 +1655,7 @@ function TileEditor({
   const pivotRows = query.pivot?.rows ?? [];
   const subColumns = query.pivot?.subColumns ?? [];
   const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : []), ...subColumns.map((dimension) => dimension.field)]);
-  const preview = useTileResult(organisationId, query.table ? query : null, filters);
+  const preview = useTileResult(organisationId, query.table ? query : null, filters, undefined, visual === "table" && format?.table?.totals === true);
   // The preview's groups, for colouring a group and limiting a date axis (#376).
   const groupValues = preview?.result && query.groupBy ? preview.result.rows.map((row) => row.category) : null;
 
@@ -2060,6 +2087,8 @@ function TileEditor({
             </label>
           ) : null}
           <ValueRules measure={measure} />
+          <ValueKindFields index={index} measure={measure} columns={columns} pivot={visual === "pivot"} onChange={(patch) => setMeasure(index, patch)} />
+          <ValueMeaning measure={measure} table={query.table} columns={columns} dateField={query.dateField ?? (query.groupBy?.grain ? query.groupBy.field : null)} />
           {visual !== "pivot" ? (
             <SaveValueButton
               organisationId={organisationId}
