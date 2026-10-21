@@ -6849,3 +6849,57 @@ accounting example is marked not yet reviewed.
      with"), so a viewer can't change the report by looking at it. In the
      stepped layout a level whose subtotal is turned off keeps its heading
      row with blank figures.
+683. **Rich text with values** (21 October 2026, #376 phase 2; Power BI's
+     text box with dynamic values, Looker Studio's text; not yet reviewed
+     by Jess). A text item's words can use a small, safe set of marks:
+     `**bold**`, `*italic*`, `[words](https://link)`, lines starting "- " or
+     "1. " for lists, a blank line between paragraphs, and `{Value name}`
+     for one of the item's values, e.g. "Sales this month: {Sales}". The
+     values are the text item's own question: up to six totals from one
+     data source over the report's dates and slicers, no grouping and no
+     comparison with another period, run the same way as a key figure (a
+     report viewer runs only the saved question). A value shows formatted
+     as in a table; a name with no value stays as typed, so the person can
+     see what to fix, and the editor warns. The text is parsed into a tree
+     that the page draws as React elements, never as HTML: anything typed,
+     and any value, is always text. Only http, https and mailto links are
+     made into links (they open in a new tab with no referrer); anything
+     else, such as `javascript:`, is left as plain text. Existing text
+     cards stay plain text until "Formatting" is turned on; new ones start
+     with it on. Up to 4,000 characters (plain notes keep their 2,000).
+684. **Images on reports** (21 October 2026, #376 phase 2; Power BI's and
+     Looker Studio's image item; not yet reviewed by Jess). An image is
+     uploaded to a saved report (so a new report is saved first), stored in
+     the organisation's own database like record attachments, checked the
+     same way (the type from its name, confirmed by its contents), JPG or
+     PNG only, up to 5 MB and 40 per report. It belongs to that report:
+     it's served only through the report, to people who can see the report
+     (a report viewer only when it's shared with them, decision 360), with
+     the same headers as attachments so it can't run as a page. There are
+     no links to images from outside Tohyee (still no public links). A
+     tile can only use its own report's images; saving the report removes
+     images no tile uses any more, and deleting the report deletes them.
+     An image has a description for screen readers (blank only for
+     decoration) and fits inside the tile or fills it.
+685. **Shapes and lines** (21 October 2026, #376 phase 2; Power BI's shapes;
+     not yet reviewed by Jess). Rectangle, rounded rectangle, circle or
+     oval, line and arrow (across, down or corner to corner), with a fill
+     colour (not for lines), a line colour and width (0-12 pixels) and,
+     on a filled shape, a few words. Left alone they use the report
+     theme's first colour (a light wash inside); a chosen colour is
+     checked as a hex colour and drawn as its worked-out dark version in
+     dark mode (decision 672). Shapes are decoration, hidden from screen
+     readers except for their words. They sit in the report's grid like
+     every other tile; placing them freely over other tiles waits for the
+     free-position canvas (phase 3).
+686. **Buttons** (21 October 2026, #376 phase 2; Power BI's buttons; not yet
+     reviewed by Jess). A button has a label and an action. The only
+     action today is "Reset the filters" (back to the report's saved dates
+     and slicers, as Power BI's "reset to default"); "Go to a page" and
+     "Open a bookmark" are listed as coming and refused when saved, until
+     report pages and bookmarks exist (phase 3). Adding an action means
+     listing it in `BUTTON_ACTIONS` (`src/lib/analytics/items.ts`),
+     accepting it in `parseButton` and handling it in the report's
+     `runButtonAction`. A button is an ordinary button for the keyboard
+     and screen readers, and works the same while the report is being
+     changed (its Edit button opens it for changing).

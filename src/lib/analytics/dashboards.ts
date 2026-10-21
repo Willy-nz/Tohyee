@@ -4,6 +4,9 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { parseChartFormat, parseVisualDefaults, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { findTheme } from "@/lib/analytics/themes";
+import { parseButton, parseImage, parseShape, type ButtonItem, type ImageItem, type ItemVisual, type ShapeItem } from "@/lib/analytics/items";
+import { MAX_RICH_TEXT } from "@/lib/analytics/rich-text";
+import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
@@ -36,8 +39,8 @@ import { getOrganisationSettings } from "@/lib/organisations/settings";
 
 export type { TileHeight, TileWidth } from "@/lib/analytics/layout";
 
-/** A chart or table, or a text card (a heading and notes, no data). */
-export type TileVisual = Visual | "text";
+/** A chart or table, or a non-data item: text (with values), an image, a shape or a button (#376 phase 2). */
+export type TileVisual = Visual | ItemVisual;
 
 export type Tile = {
   id: string;
@@ -46,10 +49,15 @@ export type Tile = {
   width: TileWidth;
   /** Left out: medium. */
   height?: TileHeight;
-  /** A text card has no question. */
+  /** A text card's question is optional: one total per value, for {Value} in its text. Images, shapes and buttons have none. */
   query: TileQuery | null;
   /** A text card's notes (plain text; blank lines start a new paragraph). */
   text?: string;
+  /** "rich": the notes use bold, italic, links, lists and {Value} (decision 683); left out, plain text as before. */
+  textFormat?: "rich";
+  image?: ImageItem;
+  shape?: ShapeItem;
+  button?: ButtonItem;
   /** How the chart looks (#331, #333); left out, it looks as it always has. */
   format?: ChartFormat;
 };
@@ -89,7 +97,7 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "image", "shape", "button"];
 /** Charts that can show one total, with no grouping. */
 const UNGROUPED: TileVisual[] = ["table", "kpi", "pivot", "gauge", "bullet"];
 export const MAX_TILES = 40;
@@ -269,11 +277,42 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     seen.add(id);
     const width: TileWidth = TILE_WIDTHS.includes(tile.width as TileWidth) ? (tile.width as TileWidth) : "half";
     const height = TILE_HEIGHTS.includes(tile.height as TileHeight) && tile.height !== "medium" ? (tile.height as TileHeight) : undefined;
+    const what = title;
     if (visual === "text") {
       if (tile.text !== undefined && tile.text !== null && typeof tile.text !== "string") throw new ValidationError(`${title}: the notes should be text.`);
       const text = typeof tile.text === "string" ? tile.text.replace(/\r\n/g, "\n").trim() : "";
-      if (text.length > 2000) throw new ValidationError(`${title}: the notes can be up to 2,000 characters.`);
-      return { id, title, visual, width, query: null, ...(text ? { text } : {}) };
+      const rich = tile.textFormat === "rich";
+      const most = rich ? MAX_RICH_TEXT : 2000;
+      if (text.length > most) throw new ValidationError(`${title}: the notes can be up to ${most.toLocaleString("en-NZ")} characters.`);
+      // Values for {Value} in rich text: one total each, no grouping (decision 683).
+      let query: TileQuery | null = null;
+      if (rich && tile.query !== undefined && tile.query !== null) {
+        try {
+          query = parseTileQuery(tile.query, tables);
+        } catch (error) {
+          throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (query.groupBy || query.pivot || query.breakdown) throw new ValidationError(`${title}: values in text are one total each, so they can't be grouped.`);
+        if (query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: values in text can't compare with another period yet.`);
+      }
+      let format: ChartFormat | undefined;
+      try {
+        format = parseChartFormat(tile.format);
+      } catch (error) {
+        throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return { id, title, visual, width, query, ...(text ? { text } : {}), ...(rich ? { textFormat: "rich" as const } : {}), ...(format ? { format } : {}) };
+    }
+    if (visual === "image" || visual === "shape" || visual === "button") {
+      let format: ChartFormat | undefined;
+      try {
+        format = parseChartFormat(tile.format);
+      } catch (error) {
+        throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const item =
+        visual === "image" ? { image: parseImage(tile.image, what) } : visual === "shape" ? { shape: parseShape(tile.shape, what) } : { button: parseButton(tile.button, what) };
+      return { id, title, visual, width, ...(height ? { height } : {}), query: null, ...item, ...(format ? { format } : {}) };
     }
     let query: TileQuery;
     try {
@@ -333,6 +372,9 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
+  const tiles = parseTiles(input.tiles ?? [], tables);
+  // An image is uploaded to a report that's already saved.
+  if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
   const result = await tx.query<{ id: string }>(
     `insert into analytics_dashboards (name, description, settings, tiles, created_by_email, updated_by_email)
      values ($1, $2, $3::jsonb, $4::jsonb, $5, $5) returning id::text`,
@@ -340,7 +382,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
       name,
       parseDescription(input.description),
       JSON.stringify(settings),
-      JSON.stringify(parseTiles(input.tiles ?? [], tables)),
+      JSON.stringify(tiles),
       tx.actor.email,
     ],
   );
@@ -359,6 +401,8 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
   const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables);
+  // Images must be this report's own; ones no tile uses any more are removed (decision 684).
+  if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
   await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
             updated_by_email = $6, updated_at = now() where id = $1`,

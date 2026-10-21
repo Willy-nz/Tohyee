@@ -27,6 +27,9 @@ import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-s
 import { calendarHeight, calendarYears } from "@/lib/analytics/chart-relationships";
 import { additiveValues } from "@/lib/analytics/small-multiples";
 import { SmallMultiplesView } from "@/components/analytics/small-multiples";
+import { useTileResult } from "@/components/analytics/use-tile-result";
+import { ButtonItemView, ImageItemView, ItemEditor, ShapeItemView, TextItemView } from "@/components/analytics/items";
+import { isItemVisual, type ButtonAction } from "@/lib/analytics/items";
 
 /** Each small chart's height, by the tile's height. */
 const MULTIPLE_HEIGHTS: Record<TileHeight, number> = { small: 160, medium: 200, large: 260 };
@@ -34,7 +37,7 @@ import type { ReportTheme } from "@/lib/charts/report-themes";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
-import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, paragraphs, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
+import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import type {
   Aggregate,
   ColumnInfo,
@@ -88,6 +91,8 @@ const VISUALS: Array<{ value: Visual; label: string }> = [
   { value: "calendar", label: "Calendar heat map" },
   { value: "sankey", label: "Sankey" },
 ];
+
+const ITEM_NAMES: Record<string, string> = { text: "Text", image: "Image", shape: "Shape", button: "Button" };
 
 const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
   { value: "sum", label: "Total" },
@@ -244,7 +249,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
       {list.error ? <Notice tone="error">{list.error}</Notice> : !list.data ? <p className={ui.muted}>Loading reports…</p> : !reports.length ? <Empty>{search ? "No reports match your search." : can("bookkeeper") ? "Your first report starts here. Choose Create report to build it." : "No reports are available to you yet."}</Empty> : view === "list" ? (
         <div className={ui.tableWrap}><table className={ui.table}><thead><tr><th>Report</th><th>Charts and tables</th><th>Last updated</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link href={`/analytics/dashboards/${report.id}`}>{report.name}</Link><div className={ui.muted}>{report.description}</div></td><td>{report.tiles.length}</td><td>{formatDateTime(report.updatedAt)}</td></tr>)}</tbody></table></div>
       ) : <div className={styles.dashboardCards}>{reports.map((report) => <Link key={report.id} href={`/analytics/dashboards/${report.id}`} className={styles.dashboardCard}>
-        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{tile.visual === "text" ? "Text" : VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
+        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{ITEM_NAMES[tile.visual] ?? VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
         <strong>{report.name}</strong>{report.description ? <span className={ui.muted}>{report.description}</span> : null}<span className={styles.reportMeta}>{report.tiles.length} charts and tables · {formatDateTime(report.updatedAt)}</span>
       </Link>)}</div>}
     </>
@@ -289,6 +294,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
   const dates: DateContext = { today: loaded.data?.today ?? todayInBrowser(), financialYearEndMonth: loaded.data?.financialYearEndMonth ?? 3 };
   const canEdit = can("bookkeeper");
+  /**
+   * What a report's buttons do (#376 phase 2, decision 686). Only resetting
+   * the filters exists so far; pages and bookmarks (phase 3) add their
+   * actions here and in BUTTON_ACTIONS.
+   */
+  const runButtonAction = (action: ButtonAction) => {
+    if (action === "reset_filters") setFilters(null);
+  };
 
   async function save(next: Dashboard) {
     setBusy(true);
@@ -352,7 +365,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
-  const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && editingTile.visual === "text" ? editingTile : null;
+  const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && isItemVisual(editingTile.visual) ? editingTile : null;
   const chartTile = textTile || editingTile === "new-text" ? null : editingTile;
   // The report's theme (decision 668) is scoped to its tiles and the editor's preview.
   const theme = reportTheme(dashboard.settings.theme, dashboard.customTheme);
@@ -387,7 +400,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                 + Add chart
               </Button>
               <Button variant="secondary" onClick={() => setEditingTile("new-text")} disabled={busy || Boolean(editingTile)}>
-                + Add text
+                + Add text or item
               </Button>
               <Button variant="secondary" aria-expanded={theming} onClick={() => setTheming(!theming)} disabled={busy}>
                 Theme: {theme.name}
@@ -454,10 +467,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       ) : null}
 
       {canEdit && textTile ? (
-        <TextTileEditor
+        <ItemEditor
           key={textTile === "new" ? "new-text" : textTile.id}
           saving={busy}
           tile={textTile === "new" ? null : textTile}
+          organisationId={organisationId}
+          dashboardId={dashboard.id}
+          tables={tables.data?.tables ?? []}
+          filters={shown}
           onCancel={() => setEditingTile(null)}
           onSave={async (tile) => {
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
@@ -545,7 +562,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     <Button size="small" variant="secondary" aria-label={`Edit ${tile.title}`} onClick={() => setEditingTile(tile)} disabled={busy}>
                       Edit
                     </Button>
-                    {tile.visual === "text" ? null : copied && copied.from !== tile.id ? (
+                    {isItemVisual(tile.visual) ? null : copied && copied.from !== tile.id ? (
                       <Button size="small" variant="secondary" aria-label={`Paste format on ${tile.title}`} onClick={() => paste(tile)} disabled={busy}>
                         Paste format
                       </Button>
@@ -579,7 +596,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Remove
                     </Button>
                   </div>
-                ) : tile.visual === "text" ? null : (
+                ) : isItemVisual(tile.visual) ? null : (
                   // Only saved tiles can be pinned, so not while the dashboard is being changed.
                   <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
                 )}
@@ -594,10 +611,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} onAction={runButtonAction} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} onAction={runButtonAction} />
               )}
             </section>
             );
@@ -873,41 +890,13 @@ function SlicerControl({
 }
 
 /** A tile's answer: its saved question (`saved`, all a report viewer can run) or a question being built (`query`). */
-function useTileResult(organisationId: string, query: TileQuery | null, filters: Filters, saved?: { dashboardId: string; tileId: string }) {
-  const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
-  const key = JSON.stringify({ query, filters, saved });
-  useEffect(() => {
-    if (!query) return;
-    let cancelled = false;
-    const question = saved ? { dashboardId: saved.dashboardId, tileId: saved.tileId } : { query };
-    api<QueryResult>("/api/analytics/query", {
-      method: "POST",
-      body: { organisationId, ...question, filters: { from: filters.from || null, to: filters.to || null, values: filters.values } },
-    }).then(
-      (result) => {
-        if (!cancelled) setState({ key, result, error: null });
-      },
-      (error) => {
-        if (!cancelled) setState({ key, result: null, error: errorMessage(error) });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-    // `key` covers query and filters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisationId, key]);
-  return state?.key === key ? state : null;
-}
-
-function TileBody(props: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
-  if (props.tile.visual === "text") {
-    return (
-      <div className={styles.textBody}>
-        {paragraphs(props.tile.text).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-      </div>
-    );
-  }
+function TileBody(props: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; onAction?: (action: ButtonAction) => void }) {
+  const { tile } = props;
+  const height = CHART_HEIGHTS[tile.height ?? "small"];
+  if (tile.visual === "text") return <TextItemView organisationId={props.organisationId} dashboardId={props.dashboardId} tile={tile} filters={props.filters} />;
+  if (tile.visual === "image" && tile.image) return <ImageItemView organisationId={props.organisationId} dashboardId={props.dashboardId} image={tile.image} height={height} />;
+  if (tile.visual === "shape" && tile.shape) return <ShapeItemView shape={tile.shape} height={height} />;
+  if (tile.visual === "button" && tile.button) return <ButtonItemView button={tile.button} onAction={props.onAction} />;
   return <QueryTileBody {...props} />;
 }
 
@@ -1410,7 +1399,7 @@ function TileEditor({
   const { can } = useWorkspace();
   const [fieldSearch, setFieldSearch] = useState("");
   const [title, setTitle] = useState(tile?.title ?? "");
-  const [visual, setVisual] = useState<Visual>(tile && tile.visual !== "text" ? tile.visual : "column");
+  const [visual, setVisual] = useState<Visual>(tile && !isItemVisual(tile.visual) ? tile.visual : "column");
   const [width, setWidth] = useState<TileWidth>(tile?.width ?? "half");
   const [height, setHeight] = useState<TileHeight>(tile?.height ?? "medium");
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
@@ -1931,39 +1920,3 @@ function TileEditor({
   );
 }
 
-/** Adding or changing a text card: a heading and notes to split a dashboard into sections (#335). */
-function TextTileEditor({ saving, tile, onSave, onCancel }: { saving: boolean; tile: Tile | null; onSave: (tile: Tile) => void; onCancel: () => void }) {
-  const [title, setTitle] = useState(tile?.title ?? "");
-  const [text, setText] = useState(tile?.text ?? "");
-  const [width, setWidth] = useState<TileWidth>(tile?.width ?? "full");
-  return (
-    <Card title={tile ? "Change the text" : "Add text"} description="A heading and notes, e.g. to start a section of the report. Leave a blank line between paragraphs.">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave({ id: tile?.id ?? `t${Date.now().toString(36)}`, title: title.trim() || "Notes", visual: "text", width, query: null, ...(text.trim() ? { text: text.trim() } : {}) });
-        }}
-      >
-        <fieldset disabled={saving} className={styles.propertyFields}>
-          <div className={styles.propertyGrid}>
-            <Field label="Heading">
-              <input autoFocus value={title} maxLength={100} placeholder="e.g. Sales" onChange={(event) => setTitle(event.target.value)} />
-            </Field>
-            <Field label="Notes" hint="Up to 2,000 characters.">
-              <textarea rows={4} maxLength={2000} value={text} onChange={(event) => setText(event.target.value)} />
-            </Field>
-            <Field label="Width">
-              <select value={width} onChange={(event) => setWidth(event.target.value as TileWidth)}>
-                {TILE_WIDTHS.map((entry) => <option key={entry} value={entry}>{WIDTH_LABELS[entry]}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className={ui.rowButtons}>
-            <Button type="submit">{saving ? "Saving…" : tile ? "Apply changes" : "Add to report"}</Button>
-            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-          </div>
-        </fieldset>
-      </form>
-    </Card>
-  );
-}
