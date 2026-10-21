@@ -171,6 +171,7 @@ export const MENUS: Menu[] = [
         links: [
           ...section("Paddocks and soil", [
             { href: "/operations/farming", label: "Farms and paddocks" },
+            { href: "/operations/farming/compare", label: "All farms compared" },
             { href: "/operations/farming/soil", label: "Soil tests" },
             { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
             { href: "/operations/farming/pasture", label: "Pasture and feed" },

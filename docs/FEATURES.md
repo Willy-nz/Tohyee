@@ -1579,7 +1579,12 @@ that something happened.
   show their destination farm in the preview and import button, and an
   archived farm can't be imported into. Farm Home remains an all-farms overview:
   money, livestock and performance are organisation-wide, not separate books
-  or farm profitability reports. A paddock's identity
+  or farm profitability reports. **All farms compared** (Farm menu, and
+  from the farm selector; #390, PF9, decision 742): each active farm's
+  area, pasture cover with its reading dates and freshness, paddocks
+  missing readings, and latest fertiliser plan, with links to that farm's
+  records, and a total row worked from every paddock (not an average of
+  averages). No money figures. A paddock's identity
   doesn't depend on its name, and its **effective area** (what plans use,
   FB1) sits beside its **mapped area**. The mapped area is worked out from
   its boundary, geodesically on WGS84 with GeographicLib, with no PostGIS.
