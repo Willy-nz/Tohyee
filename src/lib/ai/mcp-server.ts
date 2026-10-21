@@ -80,7 +80,7 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
         const people = await loadMemberNames(organisation.id);
         const result = await withOrganisationTransaction(
           organisation,
-          { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity) },
+          { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role },
           (tx) => tool.run(tx, args, { role: identity.membership.role, organisationId: organisation.id, source: `ai-${identity.tokenId}` }),
           { people, readOnly: tool.readOnly ?? tool.level === "read" },
         );

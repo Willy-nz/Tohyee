@@ -1,8 +1,8 @@
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 12px;
+  align-items: flex-start;
+  gap: 12px;
   margin: 12px 0;
 }
 
@@ -367,3 +367,15 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* #375: one control baseline with filters; date buttons use the same height. */
+.toolbar > .range { margin-top: calc(1.5 * var(--text-sm) + 6px); min-height: 40px; flex-wrap: wrap; }
+.toolbar label { line-height: 1.5; }
+.range button { min-height: 40px; }
+.toolbar > div { min-width: 0; max-width: 100%; }
+.toolbar select { max-width: 100%; }
+@media (max-width: 767px) { .toolbar > .range { width: 100%; margin-top: 0; } }
+
+/* #375: a compact prompt in place of the mailbox setup for someone with no mailbox connected. */
+.connectPrompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.connectPrompt p { flex: 1 1 280px; max-width: 75ch; }

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPageSession } from "@/lib/auth/page-session";
 import { twoStepRequired } from "@/lib/auth/sessions";
-import { BACKUP_KEY_REMINDER, backupKeyNeedsSaving } from "@/lib/backups/key";
+import { RECOVERY_KIT_REMINDER, recoveryKitNeedsSaving } from "@/lib/backups/recovery-kit";
 import { listMembershipsForUser } from "@/lib/organisations/registry";
 import { localAdminUrl } from "@/lib/server-admin/local";
 
@@ -34,8 +34,8 @@ export async function loadPageWorkspace() {
       "Two-step sign-in is off: this server has no TOHYEE_SECRET_KEY, so people sign in with a password only. Set it (32+ random characters) in the server's environment and restart Tohyee before letting anyone in from outside your network. The Windows installer sets it when you update.",
     );
   }
-  if (session.user.isServerAdmin && (await backupKeyNeedsSaving())) {
-    warnings.push(BACKUP_KEY_REMINDER);
+  if (session.user.isServerAdmin && (await recoveryKitNeedsSaving())) {
+    warnings.push(RECOVERY_KIT_REMINDER);
   }
   return {
     user: session.user,

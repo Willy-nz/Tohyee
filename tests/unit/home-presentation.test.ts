@@ -26,7 +26,7 @@ describe("Home presentation preserves financial meaning", () => {
       { status: "error", periodStart: "2026-10-01", periodEnd: "2026-11-30", message: "Check the tax rate." } as const,
     ]) {
       const html = gst(state);
-      expect(html).toContain("Unavailable");
+      expect(html).toContain(state.status === "none_filed" ? "No return filed yet" : "Position unavailable");
       expect(html).not.toContain("0.00");
       expect(html).not.toContain("Payable");
     }

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { requireFarmAccess } from "./access";
 import { createAccount } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
 import { parseDelimited } from "@/lib/bank/formats/table";
 import { parseIsoDate } from "@/lib/dates";
+import { type ImportOrigin, importSource } from "@/lib/farming/soil";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { add, cmp, dec, type Decimal, divide, mul, parseDecimalInput, sub, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -98,6 +100,7 @@ export type PlanSummary = { id: string; farmId: string; name: string; latestVers
 export async function listPlans(tx: OrgTx, input: { farmId: unknown }): Promise<PlanSummary[]> {
   await requireFarming(tx);
   const farmId = requireId(input.farmId, "farmId");
+  await requireFarmAccess(tx, farmId);
   const rows = await tx.query<{ id: string; farm_id: string; name: string; latest: number | null; created_at: string }>(
     `select p.id::text, p.farm_id::text, p.name, (select max(v.version) from fertiliser_plan_versions v where v.plan_id = p.id) as latest, p.created_at::text
        from fertiliser_plans p where p.farm_id = $1 order by p.created_at desc, p.id desc`,
@@ -112,6 +115,7 @@ export async function createPlan(tx: OrgTx, input: { farmId: unknown; name: unkn
   const name = requireString(input.name, "Plan name", { maxLength: 100 });
   const farm = await tx.query("select 1 from farms where id = $1", [farmId]);
   if (!farm.rowCount) throw new NotFoundError("Farm not found.");
+  await requireFarmAccess(tx, farmId);
   const clash = await tx.query("select 1 from fertiliser_plans where farm_id = $1 and lower(name) = lower($2)", [farmId, name]);
   if (clash.rowCount) throw new ValidationError(`The farm already has a plan called ${name}.`);
   const row = await tx.query<{ id: string }>("insert into fertiliser_plans (farm_id, name, created_by_email) values ($1, $2, $3) returning id::text", [farmId, name, tx.actor.email]);
@@ -124,6 +128,7 @@ async function requirePlan(tx: OrgTx, idInput: unknown): Promise<{ id: string; f
   const id = requireId(idInput, "planId");
   const row = await tx.query<{ id: string; farm_id: string; name: string }>("select id::text, farm_id::text, name from fertiliser_plans where id = $1", [id]);
   if (!row.rows[0]) throw new NotFoundError("Plan not found.");
+  await requireFarmAccess(tx, row.rows[0].farm_id, "Plan not found.");
   return row.rows[0];
 }
 
@@ -289,6 +294,10 @@ export async function recordApplication(
 export async function removeApplication(tx: OrgTx, idInput: unknown): Promise<PlanReport> {
   await requireFarming(tx);
   const id = requireId(idInput, "applicationId");
+  const owner = await tx.query<{ plan_id: string }>("select plan_id::text from fertiliser_applications where id = $1", [id]);
+  if (owner.rows[0]) await requirePlan(tx, owner.rows[0].plan_id).catch(() => {
+    throw new NotFoundError("That application wasn't found.");
+  });
   // Removing it would move its share of a spreading bill onto the other paddocks without anyone choosing that.
   const spread = await tx.query("select 1 from fertiliser_spreading where application_id = $1", [id]);
   if (spread.rowCount) throw new ConflictError("A spreading bill is linked to this application. Unlink the spreading first.");
@@ -384,7 +393,7 @@ export async function previewApplicationImport(tx: OrgTx, planIdInput: unknown, 
 }
 
 /** Imports the rows without errors. The same file twice adds nothing (FB8). */
-export async function importApplications(tx: OrgTx, planIdInput: unknown, input: { fileName: unknown; content: unknown }): Promise<PlanReport> {
+export async function importApplications(tx: OrgTx, planIdInput: unknown, input: { fileName: unknown; content: unknown }, options: ImportOrigin = {}): Promise<PlanReport> {
   const plan = await requirePlan(tx, planIdInput);
   await tx.query("select 1 from fertiliser_plans where id = $1 for update", [plan.id]);
   const read = await readApplications(tx, plan, input);
@@ -392,16 +401,21 @@ export async function importApplications(tx: OrgTx, planIdInput: unknown, input:
   const good = read.rows.filter((row) => !row.error);
   if (good.length === 0) throw new ValidationError("There are no rows without errors to import.");
   for (const row of good) {
-    await insertApplication(tx, plan, { paddockId: row.paddockId!, productId: row.productId!, appliedOn: row.appliedOn!, tonnes: row.tonnes!, treatedHa: row.treatedHa, source: `Imported from ${read.fileName}` }, `Line ${row.line}: `);
+    await insertApplication(tx, plan, { paddockId: row.paddockId!, productId: row.productId!, appliedOn: row.appliedOn!, tonnes: row.tonnes!, treatedHa: row.treatedHa, source: importSource(read.fileName, options) }, `Line ${row.line}: `);
   }
   await tx.query("insert into farm_imports (farm_id, kind, file_name, sha256, summary, created_by_email) values ($1, 'fertiliser_applications', $2, $3, $4::jsonb, $5)", [
     plan.farm_id,
     read.fileName,
     read.sha256,
-    JSON.stringify({ imported: good.length, skipped: read.rows.length - good.length }),
+    JSON.stringify({ imported: good.length, skipped: read.rows.length - good.length, ...(options.filedFromPrivateMail ? { filedFromPrivateMail: true } : {}) }),
     tx.actor.email,
   ]);
-  await writeAuditEvent(tx, { eventType: "farming.fertiliser_applications_imported", entityType: "fertiliser_plan", entityId: plan.id, details: { fileName: read.fileName, imported: good.length } });
+  await writeAuditEvent(tx, {
+    eventType: "farming.fertiliser_applications_imported",
+    entityType: "fertiliser_plan",
+    entityId: plan.id,
+    details: { fileName: read.fileName, imported: good.length, ...(options.filedFromPrivateMail ? { filedFromPrivateMail: true } : {}) },
+  });
   return getPlanReport(tx, plan.id);
 }
 

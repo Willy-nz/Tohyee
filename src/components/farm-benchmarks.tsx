@@ -5,6 +5,7 @@ import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { ReportExport } from "@/components/reports/report-export";
 import { Button, Card, Field, Notice, ui } from "@/components/ui";
+import { FarmReportingSetupCard, FarmSplitCard } from "@/components/farm-reporting";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate } from "@/lib/format";
@@ -52,6 +53,7 @@ function Row({ label, values, total }: { label: string; values: PerUnit; total?:
 export function FarmBenchmarksView({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const [yearEnd, setYearEnd] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
   const report = useApiData<FarmBenchmarks>("/api/farming/benchmarks", { organisationId, yearEnd });
   const data = report.data;
   return (
@@ -122,7 +124,16 @@ export function FarmBenchmarksView({ organisationId }: { organisationId: string 
           </>
         ) : null}
       </Card>
-      <ExpenseGroupsCard organisationId={organisationId} canEdit={can("bookkeeper")} onSaved={report.reload} />
+      {data ? <FarmSplitCard organisationId={organisationId} yearEnd={data.yearEnd} version={version} /> : null}
+      <ExpenseGroupsCard
+        organisationId={organisationId}
+        canEdit={can("bookkeeper")}
+        onSaved={() => {
+          report.reload();
+          setVersion((current) => current + 1);
+        }}
+      />
+      {data ? <FarmReportingSetupCard organisationId={organisationId} yearEnd={data.yearEnd} canEdit={can("bookkeeper")} onSaved={() => setVersion((current) => current + 1)} /> : null}
     </>
   );
 }
