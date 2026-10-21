@@ -23,6 +23,7 @@ import { ConflictError, ForbiddenError, NotFoundError, UnavailableError, Validat
 import { databaseNameFor, listAllOrganisations } from "@/lib/organisations/admin";
 import { provisionOrganisation } from "@/lib/organisations/provisioning";
 import { getOrganisation, parseOrganisationId, type OrganisationRecord } from "@/lib/organisations/registry";
+import { privateMailCopyOwners } from "@/lib/private-mail/store";
 import { secretsAvailable } from "@/lib/secrets";
 import { deleteServerSetting, readServerSetting, writeServerSetting } from "@/lib/server-settings";
 
@@ -741,9 +742,7 @@ export async function restoreBackup(actor: AdminActor, input: RestoreInput): Pro
       await admin.query("update organisation_settings set organisation_id = $1, display_name = $2, updated_at = now() where id = true", [id, displayName]);
       secrets = await reEncryptStoredSecrets(admin, sourceLiveKey);
       await admin.query("commit");
-      if ((await countIn(admin, "private_mail_copies")) > 0) {
-        privateOwners = (await admin.query<{ owner_user_id: string }>("select owner_user_id::text from private_mail_copies")).rows.map((row) => row.owner_user_id);
-      }
+      privateOwners = await privateMailCopyOwners(admin);
       counts = {
         queuedEmails:
           (await countIn(admin, "document_emails", "status in ('queued', 'sending')")) +

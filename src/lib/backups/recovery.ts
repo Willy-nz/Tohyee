@@ -15,6 +15,7 @@ import { connectAsAdmin, getAdminPool } from "@/lib/db/pools";
 import { quoteSqlIdentifier } from "@/lib/db/sql";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { privateMailCopyOwners } from "@/lib/private-mail/store";
 import { decryptSecretWithKey, encryptSecret, decryptSecret } from "@/lib/secrets";
 
 /**
@@ -195,7 +196,7 @@ export async function testRestore(options: { requestedByEmail: string | null; or
             if (settings.rows[0]?.organisation_id !== header.organisationId) throw new Error("The restored database isn't the organisation its backup says it is.");
             result.journals = await count(client, "ledger_journals");
             result.attachments = await count(client, "record_attachments");
-            result.privateMailCopies = await count(client, "private_mail_copies");
+            result.privateMailCopies = (await privateMailCopyOwners(client)).length;
           } else {
             result.users = await count(client, "users");
             result.organisations = await count(client, "organisations");
