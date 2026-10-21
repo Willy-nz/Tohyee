@@ -243,6 +243,52 @@ export type ChartFormat = {
   chartRules?: Array<KpiRule & { series?: number }>;
   /** How a table or pivot looks. */
   table?: TableStyle;
+  /** Waterfall: the total bar and the colours for rises, falls and the total (#376 phase 2). */
+  waterfall?: WaterfallFormat;
+  /** Funnel: the percentage each stage shows. */
+  funnel?: FunnelFormat;
+  /** Gauge: its range and a target. */
+  gauge?: GaugeFormat;
+  /** Bullet chart: a target and the shaded bands behind each bar. */
+  bullet?: BulletFormat;
+  /** Scatter and bubble: the across (x) axis, as the value axis is the up (y) one. */
+  xAxis?: AxisFormat;
+  scatter?: { trend?: boolean };
+  /** Histogram: how many bins, or how wide each is (a decimal string); left out, worked out from the values. */
+  histogram?: { bins?: number; width?: string };
+  /** Box plot: dots for values beyond the whiskers; on unless turned off. */
+  boxplot?: { outliers?: boolean };
+};
+
+export type WaterfallFormat = {
+  /** A bar for the total at the end; on unless turned off. */
+  total?: boolean;
+  totalLabel?: string;
+  /** Thin lines joining each bar to the next; on unless turned off. */
+  connectors?: boolean;
+  increase?: string;
+  decrease?: string;
+  totalColor?: string;
+};
+
+export type FunnelFormat = {
+  /** Each stage as a share of the first stage (the default), of the stage before, or no share. */
+  percent?: "first" | "previous" | "none";
+};
+
+export type GaugeFormat = {
+  /** The ends of the dial (decimal strings); left out, 0 and twice the value (or the target, if bigger). */
+  min?: string;
+  max?: string;
+  /** A target when the tile has no second value. */
+  target?: string;
+};
+
+export type BulletFormat = {
+  /** A target when the tile has no second value. */
+  target?: string;
+  /** Where the shaded bands change, as percentages of the target (ascending, up to 3); left out, 60 and 80. */
+  bands?: number[];
 };
 
 export type IconSet = "arrows" | "shapes";
@@ -682,7 +728,59 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     }),
     chartRules: parseChartRules(raw.chartRules),
     table: parseTableStyle(raw.table),
+    waterfall: parseWaterfall(raw.waterfall),
+    funnel: compact({ percent: oneOf(object(raw.funnel).percent, ["first", "previous", "none"] as const, "Funnel percentage") }),
+    gauge: parseGauge(raw.gauge),
+    bullet: parseBullet(raw.bullet),
+    xAxis: parseAxis(raw.xAxis, "Across axis"),
+    scatter: compact({ trend: flag(object(raw.scatter).trend) }),
+    histogram: parseHistogram(raw.histogram),
+    boxplot: compact({ outliers: flag(object(raw.boxplot).outliers) }),
   });
+}
+
+function parseHistogram(input: unknown): ChartFormat["histogram"] {
+  const raw = object(input);
+  const width = numberText(raw.width, "Bin width");
+  if (width !== undefined && Number(width) <= 0) throw new ValidationError("Bin width should be more than zero.");
+  const bins = whole(raw.bins, 2, 50, "Number of bins");
+  if (width !== undefined && bins !== undefined) throw new ValidationError("Choose a number of bins or a bin width, not both.");
+  return compact({ bins, width });
+}
+
+function parseWaterfall(input: unknown): WaterfallFormat | undefined {
+  const raw = object(input);
+  return compact({
+    total: flag(raw.total),
+    totalLabel: text(raw.totalLabel, 40, "Total bar name"),
+    connectors: flag(raw.connectors),
+    increase: hexColour(raw.increase, "Rise colour"),
+    decrease: hexColour(raw.decrease, "Fall colour"),
+    totalColor: hexColour(raw.totalColor, "Total colour"),
+  });
+}
+
+function parseGauge(input: unknown): GaugeFormat | undefined {
+  const raw = object(input);
+  const min = numberText(raw.min, "Gauge minimum");
+  const max = numberText(raw.max, "Gauge maximum");
+  if (min !== undefined && max !== undefined && Number(min) >= Number(max)) throw new ValidationError("Gauge: the maximum should be more than the minimum.");
+  return compact({ min, max, target: numberText(raw.target, "Gauge target") });
+}
+
+function parseBullet(input: unknown): BulletFormat | undefined {
+  const raw = object(input);
+  let bands: number[] | undefined;
+  if (raw.bands !== undefined && raw.bands !== null) {
+    if (!Array.isArray(raw.bands) || raw.bands.length > 3) throw new ValidationError("Bullet bands: up to 3 percentages.");
+    bands = raw.bands.map((entry, index) => {
+      const value = whole(entry, 1, 300, `Bullet band ${index + 1} (% of the target)`);
+      if (value === undefined) throw new ValidationError(`Bullet band ${index + 1}: enter a percentage of the target.`);
+      return value;
+    });
+    if (bands.some((value, index) => index > 0 && value <= bands![index - 1])) throw new ValidationError("Bullet bands should go up, e.g. 60 then 80.");
+  }
+  return compact({ target: numberText(raw.target, "Bullet target"), bands });
 }
 
 /** What kind of number a value column holds (from its query column). */
@@ -745,11 +843,45 @@ export function formatOptionsFor(visual: string) {
     donutTotal: visual === "donut",
     colorByCategory: visual === "column" || visual === "bar",
     kpi: visual === "kpi",
+    /** Has a value axis and a group axis to format (#376 phase 2 visuals included). */
+    axes: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "scatter", "histogram", "boxplot"].includes(visual),
+    /** Colour rules on the marks. */
+    rules: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "funnel", "gauge", "scatter"].includes(visual),
+    /** Shows a legend. */
+    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"].includes(visual),
+    /** Column thickness and rounded ends. */
+    thickness: ["column", "bar", "combo", "waterfall", "bullet", "histogram", "boxplot"].includes(visual),
+    /** Data labels on the marks. */
+    labels: !["kpi", "gauge", "boxplot", "calendar"].includes(visual),
+    /** The group axis is numbers too (scatter's across axis), or its groups are bins (histogram). */
+    groupAxis: !["scatter"].includes(visual),
+    scatter: visual === "scatter",
+    histogram: visual === "histogram",
+    boxplot: visual === "boxplot",
+    /** Coloured by amount on a scale (no per-value colour). */
+    scale: visual === "heatmap" || visual === "calendar",
+    treemap: visual === "treemap",
+    sankey: visual === "sankey",
+    waterfall: visual === "waterfall",
+    funnel: visual === "funnel",
+    gauge: visual === "gauge",
+    bullet: visual === "bullet",
   };
 }
 
+/** Chart types that use a second grouping inside the first (#376 phase 2), and what it's called for each. */
+export const SECOND_GROUPING: Partial<Record<string, { label: string; none: string | null; hint: string }>> = {
+  boxplot: { label: "Each box is made of", none: "Nothing: one box of every group's value", hint: "e.g. boxes by region, each made of its customers' totals" },
+  treemap: { label: "Inside each box", none: "Nothing", hint: "e.g. regions, each split into its products" },
+  heatmap: { label: "Down the side", none: null, hint: "The groups go across; e.g. months across, products down" },
+  sankey: { label: "Flows to", none: null, hint: "Each group flows to these, e.g. accounts to their contacts" },
+};
+
+/** Chart types whose second grouping must be chosen. */
+export const SECOND_GROUPING_REQUIRED = ["heatmap", "sankey"];
+
 /** The chart types a report can keep a default format for (#376, Power BI's visual defaults). */
-export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot"] as const;
+export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"] as const;
 export type DefaultableVisual = (typeof DEFAULTABLE_VISUALS)[number];
 export type VisualDefaults = Partial<Record<DefaultableVisual, ChartFormat>>;
 
@@ -764,6 +896,17 @@ export const VISUAL_NAMES: Record<DefaultableVisual, string> = {
   kpi: "Key figure",
   table: "Table",
   pivot: "Pivot table",
+  waterfall: "Waterfall",
+  funnel: "Funnel",
+  gauge: "Gauge",
+  bullet: "Bullet chart",
+  scatter: "Scatter or bubble",
+  histogram: "Histogram",
+  boxplot: "Box plot",
+  treemap: "Treemap",
+  heatmap: "Heat map",
+  calendar: "Calendar heat map",
+  sankey: "Sankey",
 };
 
 /**
@@ -779,6 +922,14 @@ export function painterFormat(format: ChartFormat | undefined): ChartFormat | un
     delete kpi.target;
     if (Object.keys(kpi).length) copy.kpi = kpi;
     else delete copy.kpi;
+  }
+  // A gauge's range and target, and a bullet chart's target, are numbers about the data too.
+  delete copy.gauge;
+  if (copy.bullet) {
+    const bullet = { ...copy.bullet };
+    delete bullet.target;
+    if (Object.keys(bullet).length) copy.bullet = bullet;
+    else delete copy.bullet;
   }
   return Object.keys(copy).length ? copy : undefined;
 }
@@ -826,6 +977,9 @@ export function mergeFormats(base: ChartFormat | undefined, own: ChartFormat | u
 export function pasteFormat(copied: ChartFormat | undefined, target: ChartFormat | undefined): ChartFormat | undefined {
   const format = painterFormat(copied);
   const keep = target?.kpi?.target;
-  if (keep === undefined) return format;
-  return { ...format, kpi: { ...format?.kpi, target: keep } };
+  const result: ChartFormat = { ...format };
+  if (keep !== undefined) result.kpi = { ...format?.kpi, target: keep };
+  if (target?.gauge) result.gauge = target.gauge;
+  if (target?.bullet?.target !== undefined) result.bullet = { ...format?.bullet, target: target.bullet.target };
+  return Object.keys(result).length ? result : undefined;
 }
