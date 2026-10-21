@@ -2104,6 +2104,14 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: small multiples** (#376 phase 2, decision 681). A column,
+  bar or line chart can show "One small chart for each" value of a second
+  field, e.g. a chart per region: every small chart has the same groups
+  along the axis and the same value scale, one legend above them all, and
+  up to 6 charts (2 to 12 can be chosen). Past that the smaller ones are
+  added together exactly as "Other" when the values are totals or counts;
+  averages and other values that can't be added are left out, and the
+  card says so. Pinned tiles show up to four.
 - **Analytics: treemap, heat map, calendar heat map and Sankey** (#376
   phase 2, decision 680). A **treemap** shows each group as a box sized by
   its total, optionally split into a second grouping ("Inside each box"),
