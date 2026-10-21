@@ -48,3 +48,23 @@ document.querySelectorAll('[role="tablist"]').forEach((list) => {
     });
   });
 });
+
+// Marketing illustration only: fixed fictional values, not accounting calculations.
+const chartExamples = {
+  sales: { total: "$195,000", label: "sales", heights: [48, 62, 54, 72, 68, 86], values: ["$24,000", "$31,000", "$27,000", "$36,000", "$34,000", "$43,000"] },
+  costs: { total: "$139,000", label: "costs", heights: [36, 42, 40, 50, 52, 58], values: ["$18,000", "$21,000", "$20,000", "$25,000", "$26,000", "$29,000"] },
+};
+const chartButtons = document.querySelectorAll("[data-chart]");
+chartButtons.forEach((button) => button.addEventListener("click", () => {
+  const example = chartExamples[button.dataset.chart];
+  chartButtons.forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+  document.getElementById("chart-total").textContent = example.total;
+  document.getElementById("chart-description").textContent = `Example ${example.label} · April–September`;
+  document.getElementById("bar-chart").setAttribute("aria-label", `Monthly ${example.label} in NZ dollars`);
+  document.querySelectorAll("#bar-chart .bar").forEach((bar, index) => {
+    bar.style.setProperty("--bar", `${example.heights[index]}%`);
+    bar.dataset.value = example.values[index];
+  });
+  const months = ["April", "May", "June", "July", "August", "September"];
+  document.getElementById("chart-accessible").textContent = `${example.label}: ${months.map((month, index) => `${month} ${example.values[index]}`).join("; ")}.`;
+}));
