@@ -375,6 +375,12 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
               ))
             ) : null}
           </Section>
+          {["column", "line", "area", "combo"].includes(visual) ? (
+            <Section title="Zoom" open paths={["zoom"]}>
+              <Check label="Zoom along the bottom axis" hint="A slider under the chart, and the mouse wheel or a pinch, to look at part of a long run of dates" checked={current.zoom === true} onChange={(checked) => set({ zoom: checked || undefined })} />
+              <p className={styles.note}>Best for charts grouped by dates. Zooming only changes what the chart shows; the other tiles and the totals stay the same.</p>
+            </Section>
+          ) : null}
         </div>
       </SourceProvider>
     );

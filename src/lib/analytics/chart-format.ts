@@ -230,6 +230,8 @@ export type ChartFormat = {
   stack?: "none" | "stacked" | "percent";
   smooth?: boolean;
   markers?: boolean;
+  /** Zoom along the group axis with a slider (decision 760; time charts). */
+  zoom?: boolean;
   donutTotal?: boolean;
   card?: CardFormat;
   kpi?: KpiFormat;
@@ -725,6 +727,7 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     }),
     stack: oneOf(raw.stack, ["none", "stacked", "percent"] as const, "Stacking"),
     smooth: flag(raw.smooth),
+    zoom: flag(raw.zoom),
     markers: flag(raw.markers),
     donutTotal: flag(raw.donutTotal),
     card: parseCard(raw.card),

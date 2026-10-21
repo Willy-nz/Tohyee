@@ -7536,3 +7536,12 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      the report's default (its dates and slicers, nothing clicked, drilled,
      drilled through or hidden); a button's page or bookmark must be the
      report's own.
+760. **Zooming a time chart; no free-position canvas yet** (22 October
+     2026, #376 phase 3; Power BI's zoom slider, ECharts' data zoom). A
+     column, line, area or columns-and-line chart can have **Zoom along the
+     bottom axis** (Interactions tab): a slider under the chart and the
+     mouse wheel or a pinch. It only changes what that chart shows; other
+     tiles, totals and exports are unchanged, and it isn't kept. The
+     free-position canvas (#376 says optional, after the rest) isn't built:
+     the flowing grid with aligning and sizing (decision 752) stays the only
+     layout, on every screen.
