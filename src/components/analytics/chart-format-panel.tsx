@@ -361,7 +361,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
     const others = (current.categoryColors ?? []).filter((entry) => entry.name !== name);
     set({ categoryColors: color ? [...others, { name, color }] : others.length ? others : undefined });
   };
-  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
+  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || can.treemap || can.sankey || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
   // Funnels show their labels unless turned off, like pies.
   const labelsByDefault = can.round || can.funnel;
 
@@ -421,7 +421,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </select>
                 </Field>
               ) : null}
-              {!can.round && !can.kpi && !(current.colorByCategory && values.length === 1) ? (
+              {!can.round && !can.kpi && !can.scale && !can.treemap && !can.sankey && !(current.colorByCategory && values.length === 1) ? (
                 <>
                   <div className={styles.colourRow}>
                     <Swatch hue={series.color} hex={series.hex} />
@@ -535,6 +535,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           ) : null}
           {can.axes ? (
             <Section title="Axes">
+              {can.groupAxis ? (
               <fieldset className={styles.group}>
                 <legend>{visual === "bar" || visual === "bullet" ? "Group axis (down the side)" : "Group axis (along the bottom)"}</legend>
                 <Field label="Title">
@@ -554,7 +555,10 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </div>
                 ) : null}
               </fieldset>
-              <AxisFields name={usesRight ? "Left axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
+              ) : (
+                <AxisFields name="Across axis" value={current.xAxis} defaultGridlines onChange={(xAxis) => set({ xAxis })} />
+              )}
+              <AxisFields name={usesRight ? "Left axis" : can.scatter ? "Up axis" : can.histogram ? "Count axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
               {usesRight ? <AxisFields name="Right axis" value={current.rightAxis} defaultGridlines={false} onChange={(rightAxis) => set({ rightAxis })} /> : null}
             </Section>
           ) : null}

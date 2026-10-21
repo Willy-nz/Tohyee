@@ -33,6 +33,8 @@ export type ChartSeries = {
 export type ChartSpec = {
   kind: ChartKind;
   category: string;
+  /** The second grouping's column (#376 phase 2), e.g. the items in each box of a box plot. */
+  detail?: string;
   series: ChartSeries[];
   stacked?: boolean;
   valueFormat: "money" | "number" | "percent";
@@ -58,7 +60,7 @@ function validateFields(spec: ChartSpec, rows: ChartRow[]) {
   if (rows.length === 0) return;
   // A gauge (and a bullet chart with no groups) shows one total, so there's no group column.
   const grouped = spec.kind !== "gauge" && !(spec.kind === "bullet" && !rows.some((row) => Object.prototype.hasOwnProperty.call(row, spec.category)));
-  const fields = [...(grouped ? [spec.category] : []), ...spec.series.map((series) => series.field)];
+  const fields = [...(grouped ? [spec.category] : []), ...(spec.detail ? [spec.detail] : []), ...spec.series.map((series) => series.field)];
   for (const field of fields) {
     if (!rows.every((row) => Object.prototype.hasOwnProperty.call(row, field))) {
       throw new Error(`Chart field "${field}" is missing from the rows.`);
@@ -365,6 +367,7 @@ function forMode(format: ChartFormat, theme: ChartTheme): ChartFormat {
     ...(format.labels?.color ? { labels: { ...format.labels, color: text(format.labels.color) } } : {}),
     ...(format.categoryAxis ? { categoryAxis: axis(format.categoryAxis) } : {}),
     ...(format.valueAxis ? { valueAxis: axis(format.valueAxis) } : {}),
+    ...(format.xAxis ? { xAxis: axis(format.xAxis) } : {}),
     ...(format.rightAxis ? { rightAxis: axis(format.rightAxis) } : {}),
     ...(format.gridlines?.color ? { gridlines: { ...format.gridlines, color: surface(format.gridlines.color) } } : {}),
     ...(format.plot?.background ? { plot: { background: surface(format.plot.background) } } : {}),
