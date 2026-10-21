@@ -1626,6 +1626,14 @@ that something happened.
   own hectares, cows, stock units and milk solids are entered for the year,
   and its per-unit amounts use only those. Shared costs and charges
   between farms are moved with journals. Needs Advanced features on.
+- **Farms each member works on** (People and roles; #390, FMA1-FMA8,
+  decision 744, tenant migration 0183; Jess: "Yes, assigned farms only"):
+  with two or more farms, viewers, bookkeepers and report viewers see and
+  record only for their farms (or all farms if chosen); owners and admins
+  see every farm. Not assigned yet means no farms, with a warning on the
+  screen. Enforced on the server for every farming route, Home's farm
+  cards, the shared farm calendar, farm apps and AI tools; the farm
+  notebook and Analytics' farm tables need all farms.
 - **Farms and paddocks** (Farm menu; #249 stage 1, decision 514, tenant
   migration 0133): an optional module, part of Accounting, turned on in
   Settings, Modules. **Farms** hold **paddocks**. The farm selector supports

@@ -3,6 +3,7 @@ import * as comparisonRoute from "@/app/api/farming/comparison/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { setMemberFarmAccess } from "@/lib/farming/access";
 import { farmComparison } from "@/lib/farming/comparison";
 import { createPlan } from "@/lib/farming/fertiliser";
 import { addPaddock, saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
@@ -60,9 +61,13 @@ describeWithDatabase("all farms compared", () => {
     expect(result.allFarms).toMatchObject({ farms: 2, paddocks: 5, effectiveHa: "65.00", farmsWithoutPlan: 1 });
     expect(result.allFarms.pasture).toMatchObject({ averageKgDmPerHa: 2082, totalKgDm: 114500, measuredHa: "55.00", farmsNotFresh: 1 });
 
-    // Any member may look (as for pasture records); someone outside the organisation may not.
+    // A member sees the farms they're assigned to (#407, decision 744); someone outside the organisation may not look.
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const ask = async (user: SessionUser) => comparisonRoute.GET(apiRequest(`/api/farming/comparison?organisationId=${org}&onDate=2026-10-22`, { cookie: await sessionCookieFor(user) }), undefined as never);
+    const unassigned = await ask(viewer);
+    expect(unassigned.status).toBe(200);
+    expect((await unassigned.json()).comparison.allFarms.farms).toBe(0);
+    await as((tx) => setMemberFarmAccess(tx, { userId: viewer.id, role: "viewer", access: "all" }));
     const seen = await ask(viewer);
     expect(seen.status).toBe(200);
     expect((await seen.json()).comparison.allFarms.pasture.averageKgDmPerHa).toBe(2082);

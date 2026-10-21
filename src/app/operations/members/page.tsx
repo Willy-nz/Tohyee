@@ -10,6 +10,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { Handover } from "@/lib/organisations/handover";
 import type { Member } from "@/lib/organisations/members";
 import { useConfirm } from "@/components/confirm-dialog";
+import { MemberFarms } from "@/components/member-farms";
 
 const ROLE_HELP: Record<Role, string> = {
   sales_rep: "Uses the CRM only: every company and person, and their own deals, tasks and forecast. Nothing of the books.",
@@ -164,6 +165,7 @@ function Members({ organisationId }: { organisationId: string }) {
           </table>
         </div>
       </Card>
+      {members.data ? <MemberFarms organisationId={organisationId} members={members.data.members} /> : null}
     </>
   );
 }

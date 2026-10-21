@@ -7384,3 +7384,23 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      screen divided organisation-wide figures by one farm's area; nothing
      needed fixing there. Migration 0182 adds the category setting, each
      farm's value and each farm's year figures.
+744. **Farm staff see only their farms** (Jess, 21 October 2026: "Yes,
+     assigned farms only"; the details below are Claude's, FMA1-FMA8). With
+     two or more farms (archived ones count), viewers, bookkeepers and
+     report viewers see and record only for the farms an owner or admin
+     chooses for them, or all farms. **Owners and admins** are "owners and
+     accountants" and always see every farm; an accountant on the
+     bookkeeper role is given All farms. A member **not assigned yet sees
+     no farms**: the safer default, so adding someone never shows them
+     every property; People and roles names anyone waiting. Enforced in the
+     farming services every route, farm app, AI tool and Home card goes
+     through; another farm's records are "not found". The actor now carries
+     the member's role (set by each sign-in path) so the rule can be
+     applied inside the organisation's transaction; a person whose role
+     isn't known is treated as assigned farms only. Row-level security in
+     PostgreSQL was considered and not used, because the Docker install
+     connects as PostgreSQL's superuser, which bypasses it. The farm
+     notebook and Analytics' farm tables cover every farm, so they need All
+     farms. Shared calendar items show only for your farms or no farm;
+     owner-private mail rules (decision 571) are unchanged. Money and
+     accounting reports still follow the role alone. Migration 0183.
