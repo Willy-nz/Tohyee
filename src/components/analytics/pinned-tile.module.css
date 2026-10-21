@@ -64,3 +64,9 @@
   height: 140px;
   min-height: 120px;
 }
+
+.attribution {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}

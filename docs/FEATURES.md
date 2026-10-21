@@ -2088,6 +2088,14 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: New Zealand maps** (#376 phase 2, decision 687). A
+  **filled map** colours New Zealand's regions or districts and cities by a
+  value, e.g. sales by region; names are matched however they're spelt
+  (macrons, "Region", "District" and so on), and names that aren't on the
+  map are listed under it. A **map with points** puts a dot at each
+  latitude and longitude, sized by a third value if you like. The
+  boundaries come with Tohyee (Stats NZ, CC BY 4.0), so no outside map
+  service is used.
 - **Analytics: text, images, shapes and buttons** (#376 phase 2, decisions
   683-686). **+ Add text or item** adds one of four things to a report.
   **Text** can use **bold**, *italic*, links, lists and values from the

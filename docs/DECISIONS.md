@@ -6903,3 +6903,28 @@ accounting example is marked not yet reviewed.
      `runButtonAction`. A button is an ordinary button for the keyboard
      and screen readers, and works the same while the report is being
      changed (its Edit button opens it for changing).
+687. **New Zealand maps** (22 October 2026, #376 phase 2; Power BI's filled
+     map and map visuals; not yet reviewed by Jess). Two chart types, drawn
+     without any outside map or tile service (the issue: "no external map
+     tiles unless agreed"). A **filled map** is grouped by a region or a
+     district or city name and colours each area by one value on the
+     sequential scale (diverging when amounts are both sides of zero), as
+     heat maps do; names match whatever their macrons,
+     apostrophes, case and words like "Region", "District" or "Council",
+     plus a few other names people use (Wanganui, Hutt, Tairāwhiti). Regions
+     or territorial authorities are chosen, or worked out from which more of
+     the names match. Totals for names that land on the same area are added
+     exactly. Names that aren't areas are listed under the map, not
+     guessed. A **map with points** is grouped by anything and needs a
+     latitude and a longitude (two values, normally averages), with a third
+     value sizing the points as bubbles; points outside New Zealand are left
+     out and counted under the map. The boundaries are Stats NZ's regional
+     council (2017) and territorial authority (2021) generalised layers,
+     CC BY 4.0, simplified to under 70 KB each, shipped with Tohyee and
+     loaded only when a map is drawn; every map says "Boundaries: Stats NZ,
+     CC BY 4.0." under it, and `licenses/nz-boundaries/NOTICE` records the
+     source and changes. CC BY 4.0 only asks for attribution, so it can be
+     distributed with Tohyee's AGPLv3 code. The Chatham Islands are drawn
+     6.5° closer to the mainland as an inset (as Stats NZ's own maps do);
+     points there move with them. Maps don't zoom or pan (the whole country
+     always shows); suburbs, wards and meshblocks aren't included.

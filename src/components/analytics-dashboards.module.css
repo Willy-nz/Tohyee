@@ -372,3 +372,4 @@
 .pivotStep {
   white-space: nowrap;
 }
+.mapNote { margin: 4px 0 0; color: var(--report-text-muted, var(--text-muted)); font-size: var(--text-xs, 12px); }
