@@ -7,8 +7,10 @@ import { FertiliserHome } from "@/components/fertiliser";
 import { Page, PageHeader } from "@/components/ui";
 
 function ForPlan() {
-  const plan = useSearchParams().get("plan");
-  return <RequireOrganisation>{(organisationId) => <FertiliserHome key={`${organisationId}-${plan ?? ""}`} organisationId={organisationId} planId={plan} />}</RequireOrganisation>;
+  const params = useSearchParams();
+  const plan = params.get("plan");
+  const farm = params.get("farm");
+  return <RequireOrganisation>{(organisationId) => <FertiliserHome key={`${organisationId}-${plan ?? ""}-${farm ?? ""}`} organisationId={organisationId} planId={plan} farmId={farm} />}</RequireOrganisation>;
 }
 
 export default function FertiliserPage() {

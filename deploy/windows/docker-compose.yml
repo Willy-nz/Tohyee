@@ -35,7 +35,7 @@ services:
       TOHYEE_SECRET_KEY: ${TOHYEE_SECRET_KEY:-}
       TOHYEE_TIME_ZONE: Pacific/Auckland
     volumes:
-      # Backups (encrypted with TOHYEE_SECRET_KEY, the backup key). They go in
+      # Backups (encrypted with the server's recovery key; save its recovery kit). They go in
       # a normal Windows folder, not inside Docker Desktop's own disk, so
       # resetting or removing Docker Desktop doesn't take them with your data:
       # by default the backups folder next to this file. To have them in

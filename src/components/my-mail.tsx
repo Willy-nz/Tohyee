@@ -9,6 +9,8 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { MailAiKey } from "@/lib/private-mail/ai";
 import type { MailFolder } from "@/lib/farming/mail-providers";
+import type { FilingOptions, FilingOverview } from "@/lib/private-mail/filing-types";
+import { FilePanel, FilingCard } from "@/components/my-mail-filing";
 import { type CopyState, copyExclusions, copyProgress, formatBytes, type MailHit, type MailThread, type MyMail, type MyMailbox } from "@/lib/private-mail/types";
 import styles from "./my-mail.module.css";
 
@@ -37,6 +39,7 @@ function person(value: { email: string; name: string | null } | null): string {
 export function MyMailHome({ organisationId, isOwner }: { organisationId: string; isOwner: boolean }) {
   const search = useSearchParams();
   const mail = useApiData<MyMail>(isOwner ? "/api/my-mail" : null, { organisationId });
+  const filing = useApiData<FilingOverview>(isOwner ? "/api/my-mail/filing" : null, { organisationId });
   const [picking, setPicking] = useState<string | null>(search.get("folders"));
   const connected = search.get("connected");
   const returnedError = search.get("error");
@@ -56,7 +59,9 @@ export function MyMailHome({ organisationId, isOwner }: { organisationId: string
       {connected ? <Notice tone="success">Connected {connected}. Tick the folders to copy: nothing is copied until you do.</Notice> : null}
       {returnedError ? <Notice tone="error">{returnedError}</Notice> : null}
       <Mailboxes organisationId={organisationId} data={mail.data} error={mail.error} onChanged={mail.reload} picking={picking} onPick={setPicking} />
-      {copies.length ? <Reader organisationId={organisationId} copies={copies} /> : null}
+      {copies.length ? <Reader organisationId={organisationId} copies={copies} filingOptions={filing.data?.options ?? null} onFiled={filing.reload} /> : null}
+      {filing.error ? <Notice tone="error">{filing.error}</Notice> : null}
+      {copies.length && filing.data ? <FilingCard organisationId={organisationId} overview={filing.data} copies={copies} onChanged={filing.reload} /> : null}
       <AiKeys organisationId={organisationId} />
     </>
   );
@@ -419,7 +424,17 @@ function FolderPicker({ organisationId, mailbox, onClose, onSaved }: { organisat
 }
 
 /** PM9-PM11: search the copies, read a conversation, download its attachments. */
-function Reader({ organisationId, copies }: { organisationId: string; copies: Array<{ id: string; email: string; provider: "google" | "microsoft" }> }) {
+function Reader({
+  organisationId,
+  copies,
+  filingOptions,
+  onFiled,
+}: {
+  organisationId: string;
+  copies: Array<{ id: string; email: string; provider: "google" | "microsoft" }>;
+  filingOptions: FilingOptions | null;
+  onFiled: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [copyId, setCopyId] = useState("");
   const [asked, setAsked] = useState<{ query: string; copyId: string }>({ query: "", copyId: "" });
@@ -535,14 +550,29 @@ function Reader({ organisationId, copies }: { organisationId: string; copies: Ar
             </>
           )}
         </div>
-        <div>{openId ? <Thread key={openId} organisationId={organisationId} messageId={openId} headingRef={threadHeading} onClose={() => setOpenId(null)} /> : <p className={ui.muted}>Choose an email to read it.</p>}</div>
+        <div>{openId ? <Thread key={openId} organisationId={organisationId} messageId={openId} headingRef={threadHeading} onClose={() => setOpenId(null)} filingOptions={filingOptions} onFiled={onFiled} /> : <p className={ui.muted}>Choose an email to read it.</p>}</div>
       </div>
     </Card>
   );
 }
 
-function Thread({ organisationId, messageId, headingRef, onClose }: { organisationId: string; messageId: string; headingRef: RefObject<HTMLHeadingElement | null>; onClose: () => void }) {
+function Thread({
+  organisationId,
+  messageId,
+  headingRef,
+  onClose,
+  filingOptions,
+  onFiled,
+}: {
+  organisationId: string;
+  messageId: string;
+  headingRef: RefObject<HTMLHeadingElement | null>;
+  onClose: () => void;
+  filingOptions: FilingOptions | null;
+  onFiled: () => void;
+}) {
   const thread = useApiData<MailThread>(`/api/my-mail/messages/${messageId}`, { organisationId });
+  const [filing, setFiling] = useState<{ id: string; name: string } | null>(null);
   if (thread.error) return <Notice tone="error">{thread.error}</Notice>;
   if (!thread.data) return <p className={ui.muted} role="status">Opening…</p>;
   const first = thread.data.messages[0];
@@ -586,9 +616,17 @@ function Thread({ organisationId, messageId, headingRef, onClose }: { organisati
                     {formatBytes(file.size)}
                     {file.notKept === "too_big" ? " · too big to keep: open it in your mailbox" : file.notKept === "linked" ? " · a linked item: open it in Outlook" : ""}
                   </span>
+                  {file.kept && filingOptions ? (
+                    <Button size="small" variant="secondary" aria-label={`File ${file.name} into shared data`} onClick={() => setFiling({ id: file.id, name: file.name })}>
+                      File…
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>
+          ) : null}
+          {filing && filingOptions && message.attachments.some((file) => file.id === filing.id) ? (
+            <FilePanel key={filing.id} organisationId={organisationId} options={filingOptions} attachment={filing} onClose={() => setFiling(null)} onFiled={onFiled} />
           ) : null}
           {message.webLink ? (
             <a href={message.webLink} target="_blank" rel="noreferrer noopener" className={styles.meta}>

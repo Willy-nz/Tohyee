@@ -61,6 +61,35 @@ describeWithDatabase("farms and paddocks", () => {
     return { org, as, farm };
   }
 
+  it("keeps nine farms' same-named paddocks and import histories separate", async () => {
+    const w = await setup();
+    for (let number = 2; number <= 9; number++) {
+      await w.as((tx) => saveFarm(tx, { name: `Property ${number}` }));
+    }
+    const farms = await w.as((tx) => listFarms(tx));
+    expect(farms).toHaveLength(9);
+    const file = JSON.stringify({ type: "FeatureCollection", features: [feature("Home", box(169.9))] });
+    const paddockIds = new Set<string>();
+    for (const farm of farms) {
+      const preview = await w.as((tx) => previewBoundaryImport(tx, farm.id, { fileName: "paddocks.geojson", content: file }));
+      expect(preview.counts.new).toBe(1);
+      expect(preview.alreadyImportedOn).toBeNull();
+      await w.as((tx) => importBoundaries(tx, farm.id, { fileName: "paddocks.geojson", content: file }));
+      const paddocks = await w.as((tx) => listPaddocks(tx, { farmId: farm.id }));
+      expect(paddocks).toHaveLength(1);
+      expect(paddocks[0]).toMatchObject({ name: "Home", farmId: farm.id });
+      paddockIds.add(paddocks[0].id);
+    }
+    expect(paddockIds.size).toBe(9);
+    await expect(w.as((tx) => importBoundaries(tx, farms[8].id, { fileName: "again.geojson", content: file }))).rejects.toThrow("already imported");
+    // An archived farm can't be an import destination, even from a stale link or saved choice.
+    const other = JSON.stringify({ type: "FeatureCollection", features: [feature("Back", box(170.1))] });
+    await w.as((tx) => saveFarm(tx, { id: farms[8].id, name: farms[8].name, isActive: false }));
+    await expect(w.as((tx) => previewBoundaryImport(tx, farms[8].id, { fileName: "back.geojson", content: other }))).rejects.toThrow("archived");
+    await expect(w.as((tx) => importBoundaries(tx, farms[8].id, { fileName: "back.geojson", content: other }))).rejects.toThrow("archived");
+    expect((await w.as((tx) => previewBoundaryImport(tx, farms[7].id, { fileName: "back.geojson", content: other }))).counts.new).toBe(1);
+  });
+
   it("Farming needs Accounting, and is off until turned on", async () => {
     organisations += 1;
     const org = `farm-${organisations}-co`;

@@ -360,6 +360,41 @@ describeWithDatabase("analytics dashboards", () => {
     await patch([tile]);
   });
 
+  it("saves filled maps and maps with points, and refuses the wrong values (#376 phase 2)", async () => {
+    const patch = (tiles: unknown[]) =>
+      dashboardRoute.PATCH(
+        apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }),
+        params({ dashboardId }),
+      );
+    const qty = { label: "Qty", aggregate: "sum", field: "quantity" };
+    const byRegion = { ...tile.query, groupBy: { field: "region" }, measures: [qty] };
+    const latLong = [{ label: "Latitude", aggregate: "avg", field: "quantity" }, { label: "Longitude", aggregate: "avg", field: "unit_price" }];
+    const saved = await body(
+      await patch([
+        { ...tile, id: "fm", visual: "filledmap", query: byRegion, format: { map: { areas: "regions" } } },
+        { ...tile, id: "pm", visual: "pointmap", query: { ...byRegion, measures: [...latLong, qty] } },
+      ]),
+    );
+    expect(saved.status).toBe(200);
+    expect(saved.data.dashboard.tiles.map((entry: { visual: string; format?: unknown }) => [entry.visual, entry.format ?? null])).toEqual([
+      ["filledmap", { map: { areas: "regions" } }],
+      ["pointmap", null],
+    ]);
+    const refusals: Array<[unknown, RegExp]> = [
+      [{ ...tile, visual: "filledmap", query: { ...byRegion, measures: [qty, qty] } }, /one value for each region/],
+      [{ ...tile, visual: "filledmap", query: byRegion, format: { map: { areas: "suburbs" } } }, /Map areas/],
+      [{ ...tile, visual: "pointmap", query: byRegion }, /latitude and a longitude/],
+      [{ ...tile, visual: "pointmap", query: { ...byRegion, measures: [...latLong, { ...qty, compare: "previous_year" }] } }, /can't compare|grouped by a date/],
+      [{ ...tile, visual: "filledmap", query: { ...byRegion, groupBy: null } }, /needs something to group by/],
+    ];
+    for (const [entry, message] of refusals) {
+      const refused = await body(await patch([entry]));
+      expect(refused.status).toBe(400);
+      expect(refused.data.error).toMatch(message);
+    }
+    await patch([tile]);
+  });
+
   it("compares one total with the previous period or last year, with a trend by month (#334)", async () => {
     const ask = async (query: unknown, filters: unknown) =>
       body(await queryRoute.POST(apiRequest("/api/analytics/query", { method: "POST", cookie: viewerCookie, body: { organisationId: ORG, query, filters } }), noContext));

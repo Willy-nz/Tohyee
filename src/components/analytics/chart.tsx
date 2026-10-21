@@ -5,6 +5,7 @@ import type { ECharts, EChartsOption } from "echarts";
 import { formatChartValue, toEChartsOption, type ChartSpec, type KpiSummary } from "@/lib/analytics/chart-spec";
 import { CHART_TOKENS, chartThemeFromTokens, readChartTheme, type ChartTheme } from "@/lib/charts/theme";
 import { useReportThemeKey } from "@/components/analytics/report-theme";
+import { isMapKind, loadNzMaps } from "@/components/analytics/nz-maps";
 import styles from "./chart.module.css";
 
 type ChartProps = {
@@ -38,6 +39,8 @@ export function Chart({ spec, rows, height }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ECharts | null>(null);
   const isKpi = spec.kind === "kpi";
+  // Maps need the New Zealand boundaries registered before they're drawn.
+  const isMap = isMapKind(spec.kind);
   const [theme, setTheme] = useState(DEFAULT_THEME);
   // A report theme (decision 668) changes the variables the chart reads.
   const themeKey = useReportThemeKey();
@@ -60,10 +63,16 @@ export function Chart({ spec, rows, height }: ChartProps) {
 
   useEffect(() => {
     optionRef.current = option;
-    if (!isKpi && chartRef.current && isChartOption(option)) {
-      chartRef.current.setOption(option, { notMerge: true });
+    const chart = chartRef.current;
+    if (isKpi || !chart || !isChartOption(option)) return;
+    if (!isMap) {
+      chart.setOption(option, { notMerge: true });
+      return;
     }
-  }, [isKpi, option]);
+    void loadNzMaps().then(() => {
+      if (chartRef.current === chart && optionRef.current === option) chart.setOption(option, { notMerge: true });
+    });
+  }, [isKpi, isMap, option]);
 
   useEffect(() => {
     if (isKpi) return;
@@ -75,7 +84,7 @@ export function Chart({ spec, rows, height }: ChartProps) {
     const resizeObserver = new ResizeObserver(() => chart?.resize());
     resizeObserver.observe(container);
 
-    void import("echarts").then((echarts) => {
+    void Promise.all([import("echarts"), isMap ? loadNzMaps() : null]).then(([echarts]) => {
       if (disposed) return;
       chart = echarts.init(container, undefined, { renderer: "svg" });
       chartRef.current = chart;
@@ -88,7 +97,8 @@ export function Chart({ spec, rows, height }: ChartProps) {
       chart?.dispose();
       if (chartRef.current === chart) chartRef.current = null;
     };
-  }, [isKpi]);
+    // A chart that becomes a map is drawn again once the boundaries are in.
+  }, [isKpi, isMap]);
 
   const summary = isKpi && isKpiSummary(option) ? option : null;
   const previous = summary?.previous ?? null;

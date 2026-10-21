@@ -47,7 +47,9 @@ describe("analytics pivot table", () => {
     expect(html).toContain("Channel: Web");
     expect(html).not.toContain("<input");
     // No drill-down offered: values are plain text, not buttons.
-    expect(html).not.toContain("<button");
+    expect(html).not.toMatch(/pivotCell/);
+    // Groups open and close (#376 phase 2), with their names for screen readers.
+    expect(html).toContain('aria-expanded="true" aria-label="Close Otago"');
   });
 
   it("offers each value as a keyboard-reachable button and the existing exports on a dashboard", () => {

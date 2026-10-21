@@ -1,4 +1,5 @@
 import { listBankAccounts } from "@/lib/bank/accounts";
+import { farmScope } from "@/lib/farming/access";
 import { cashFlowForecast } from "@/lib/cash-flow/forecast";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -262,6 +263,7 @@ async function performanceCard(tx: OrgTx, latest: FarmBenchmarks): Promise<FarmH
 
 /** The farm notebook: the latest goals, and the latest other notes. */
 async function notebookCard(tx: OrgTx): Promise<FarmHomeNotebook | null> {
+  if (!(await farmScope(tx)).all) return null;
   const notes = await listNotebook(tx, { limit: 50 });
   if (!notes.length) return null;
   return { goals: notes.filter((note) => note.category === "goals").slice(0, 3), recent: notes.filter((note) => note.category !== "goals").slice(0, 3) };

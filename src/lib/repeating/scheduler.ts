@@ -1,6 +1,6 @@
 import { accountingEnabled } from "@/lib/organisations/accounting-switch";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { REPEATING_BILL_KIND } from "@/lib/repeating/bills";
 import { listDueTemplateIds, type RepeatingKind, runTemplates, type ScheduledTemplate } from "@/lib/repeating/runner";
@@ -62,7 +62,7 @@ export async function runDueRepeatingDocuments(): Promise<{ organisations: numbe
   let made = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       organisations += 1;
       for (const kind of KINDS) {

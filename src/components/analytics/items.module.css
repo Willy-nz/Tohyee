@@ -1,0 +1,123 @@
+.rich {
+  color: var(--report-text, var(--text));
+  line-height: 1.5;
+}
+.rich p,
+.rich ul,
+.rich ol {
+  margin: 0 0 8px;
+}
+.rich ul,
+.rich ol {
+  padding-inline-start: 22px;
+}
+.rich a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.value {
+  font-weight: 600;
+}
+.plain {
+  color: var(--text-muted);
+}
+.plain p {
+  margin: 0 0 8px;
+  white-space: pre-line;
+}
+.imageBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.imageBox img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.contain {
+  object-fit: contain;
+}
+.cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.shape {
+  position: relative;
+  min-height: 40px;
+}
+.shape svg {
+  display: block;
+  overflow: visible;
+}
+.shapeText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  color: var(--report-text, var(--text));
+  font-weight: 600;
+  text-align: center;
+}
+.buttonBox {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+.fields {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.group {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.measure {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.measure > * {
+  min-width: 0;
+}
+.measure > input,
+.measure > select {
+  flex: 1 1 140px;
+  width: auto;
+}
+.note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.previewHeading {
+  margin: 4px 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.preview {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
