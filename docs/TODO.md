@@ -69,7 +69,9 @@ Where these stand (20 Oct 2026):
   more; examples ITX1 onward). The order and scope are now decision 634
   (#360 items 1-6): the organisation's own tax workspace first, prepare and
   export only, no automatic filing. ITX6 and RAT1 are being built from the
-  20 Oct comment on #292.
+  20 Oct comment on #292. Importing IRD account files (#360 item 3,
+  ITX-IMP1 to ITX-IMP12, decisions 710-716) is built; it still needs a
+  real myIR download to try it on (evidence, not a choice).
 - **Analytics:** built (decisions 353 onward; `docs/ANALYTICS-REVIEW.md`,
   `docs/ANALYTICS-STUDIO.md`). The default dashboards are decision 639
   (#360 item 20). Each becomes its own app in

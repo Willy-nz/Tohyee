@@ -8,6 +8,8 @@ import * as booksRoute from "@/app/api/analytics/books/route";
 import * as dashboardPreferencesRoute from "@/app/api/dashboard-preferences/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
 import * as sharesRoute from "@/app/api/analytics/dashboards/[dashboardId]/shares/route";
+import * as imagesRoute from "@/app/api/analytics/dashboards/[dashboardId]/images/route";
+import * as imageRoute from "@/app/api/analytics/dashboards/[dashboardId]/images/[imageId]/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
 import * as queryRoute from "@/app/api/analytics/query/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
@@ -372,6 +374,74 @@ describeWithDatabase("analytics dashboard sharing", () => {
     const books = await booksRoute.POST(apiRequest("/api/analytics/books", { method: "POST", cookie: clientCookie, body: { organisationId: ORG } }), noContext);
     expect(books.status).toBe(403);
     expect((await share(sharedId, [client.id], clientCookie)).status).toBe(403);
+  });
+
+  it("puts text with values, images, shapes and buttons on a report; images only for people who can see it (#376 phase 2)", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+    const upload = async (dashboardId: string, cookie: string, name: string, content: Uint8Array) => {
+      const form = new FormData();
+      form.set("organisationId", ORG);
+      form.set("file", new File([new Uint8Array(content)], name));
+      const encoded = new Response(form);
+      const bytes = new Uint8Array(await encoded.arrayBuffer());
+      return imagesRoute.POST(
+        new Request(`http://tohyee.test/api/analytics/dashboards/${dashboardId}/images`, {
+          method: "POST",
+          headers: { cookie, origin: "http://tohyee.test", "content-type": encoded.headers.get("content-type")!, "content-length": String(bytes.length) },
+          body: bytes,
+        }),
+        params({ dashboardId }),
+      );
+    };
+    const getImage = (dashboardId: string, imageId: string, cookie: string) =>
+      imageRoute.GET(apiRequest(`/api/analytics/dashboards/${dashboardId}/images/${imageId}?organisationId=${ORG}`, { cookie }), params({ dashboardId, imageId }));
+    const patch = (dashboardId: string, tiles: unknown[]) =>
+      dashboardRoute.PATCH(apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }), params({ dashboardId }));
+
+    const added = await body(await upload(sharedId, ownerCookie, "logo.png", png));
+    expect(added.status).toBe(201);
+    const imageId = String(added.data.image.id);
+    expect((await body(await upload(sharedId, ownerCookie, "notes.csv", new TextEncoder().encode("a,b\n")))).status).toBe(400);
+    expect((await body(await upload(sharedId, ownerCookie, "fake.png", new TextEncoder().encode("not a png")))).status).toBe(400);
+    // A report viewer can't add images.
+    expect((await upload(sharedId, clientCookie, "logo.png", png)).status).toBe(403);
+
+    const items = [
+      { id: "words", title: "Notes", visual: "text", width: "full", textFormat: "rich", text: "Sales so far: **{Sales}**", query: { table: "sales", groupBy: null, measures: [{ label: "Sales", aggregate: "sum", field: "quantity", times: "unit_price" }], filters: [] } },
+      { id: "logo", title: "Logo", visual: "image", width: "quarter", query: null, image: { id: imageId, alt: "Our logo" } },
+      { id: "box", title: "Box", visual: "shape", width: "quarter", query: null, shape: { kind: "rounded", fill: "#ABCDEF", text: "Costs" } },
+      { id: "reset", title: "Reset", visual: "button", width: "quarter", query: null, button: { label: "Reset filters", action: "reset_filters" } },
+    ];
+    const saved = await body(await patch(sharedId, [tile("regions"), pivotTile, ...items]));
+    expect(saved.status).toBe(200);
+    expect(saved.data.dashboard.tiles.slice(2).map((entry: { visual: string }) => entry.visual)).toEqual(["text", "image", "shape", "button"]);
+    expect(saved.data.dashboard.tiles[4].shape).toEqual({ kind: "rounded", fill: "#abcdef", text: "Costs" });
+
+    // The client sees the image and the text's value on the shared report.
+    const seen = await getImage(sharedId, imageId, clientCookie);
+    expect(seen.status).toBe(200);
+    expect(seen.headers.get("content-type")).toBe("image/png");
+    expect(seen.headers.get("content-security-policy")).toContain("sandbox");
+    expect(new Uint8Array(await seen.arrayBuffer())).toEqual(png);
+    const words = await body(await runTile(clientCookie, { dashboardId: sharedId, tileId: "words" }));
+    expect(words.status).toBe(200);
+    expect(words.data.rows).toEqual([{ m0: "20.300000" }]);
+
+    // Not through another report, and not a report that isn't shared with them.
+    expect((await getImage(privateId, imageId, ownerCookie)).status).toBe(404);
+    const privateImage = await body(await upload(privateId, ownerCookie, "secret.png", png));
+    expect((await getImage(privateId, String(privateImage.data.image.id), clientCookie)).status).toBe(404);
+    expect((await getImage(privateId, String(privateImage.data.image.id), ownerCookie)).status).toBe(200);
+    // A tile can't use another report's image.
+    const borrowed = await body(await patch(sharedId, [{ ...items[1], image: { id: String(privateImage.data.image.id) } }]));
+    expect(borrowed.status).toBe(400);
+    expect(borrowed.data.error).toMatch(/isn't one of this report's/);
+    // A button that isn't available yet is refused.
+    expect((await body(await patch(sharedId, [{ ...items[3], button: { label: "Next", action: "go_to_page" } }]))).status).toBe(400);
+
+    // Saving without the image tile removes the image.
+    expect((await body(await patch(sharedId, [tile("regions"), pivotTile]))).status).toBe(200);
+    expect((await getImage(sharedId, imageId, ownerCookie)).status).toBe(404);
   });
 
   it("stops showing a dashboard once it's unshared", async () => {

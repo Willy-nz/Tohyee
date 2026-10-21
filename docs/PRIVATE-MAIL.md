@@ -1,6 +1,6 @@
 # My mail: who can read a private mail copy
 
-Issue #250; decisions 610-619; examples PM1-PM19. This says plainly what
+Issue #250; decisions 610-619 and 720-726; examples PM1-PM29. This says plainly what
 protects an Owner's private copy of their own mail, and what doesn't.
 
 ## What it is
@@ -54,6 +54,29 @@ Tohyee), and the scope is checked again on every call by the same access
 layer. Other keys aren't offered the tools. Answers cite each email.
 Tohyee can't control what an AI service outside it keeps of what it was
 told: that's between the Owner and their AI provider.
+
+## Filing an attachment into shared data
+
+Nothing from the copy reaches anyone else unless its Owner files it
+(decisions 720-726). **File…** on an attachment shows a preview of exactly
+what others will see: the file (or, for an import, the rows read from it),
+its name (which the Owner can change), where it goes, who filed it, that
+it was filed from a private email, and a note only if the Owner typed one.
+It also lists what stays private: the email's subject, sender, recipients,
+date and text, its other attachments, and the mailbox and folder. Filing
+is refused if anything has changed since the preview. It goes through the
+destination's own path (bills inbox, soil test, pasture reading or
+fertiliser application import, a record's files), so the same checks
+apply as for an upload.
+
+What's filed is a copy: shared data like any other, seen by whoever can
+see that part of Tohyee, and removed the usual way for it. Deleting the
+private copy doesn't delete it. The Owner's own list of what they filed,
+their rules and **To file** are private like the copy, and go when it's
+deleted. A rule's sender and file name pattern are encrypted with the
+copy's key. Rules never share anything on their own: each match waits in
+To file until the Owner previews and files it. Only the Owner on Tohyee's
+own screens can file or make a rule, not an AI key.
 
 ## How it's stored
 
@@ -128,7 +151,14 @@ a recovery design first; it isn't built.
   copy is gone from every backup about 12 months later. A backup file
   copied elsewhere is outside Tohyee's reach.
 - **Restoring** a backup as a new organisation brings the copy with it,
-  still owned by the same person; nobody else can read it there either.
+  still owned by the same person; nobody else can read it there either,
+  including the server admin who restored it (they become an Owner of the
+  copy, and still get "not found"). On another computer the copy's key is
+  re-encrypted with that computer's `TOHYEE_SECRET_KEY` as part of the
+  restore (decision 737). If the owner isn't on that server, the copy is
+  kept and nobody can read it until their account is recovered from the
+  server backup with the same ID (decision 738); it's never handed to
+  anyone else.
 
 ## Not tried with a real mailbox
 

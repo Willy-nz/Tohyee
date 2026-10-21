@@ -96,6 +96,8 @@ The financial summary and chart each show their relevant as-at date or reporting
 
 ### Mountain treatment
 
+> Superseded 21 October 2026: Jess decided to remove the mountain photo from the app (decision 701), and page titles use the interface font instead of a serif (decision 703, #375).
+
 Use the supplied photo as the visual source. Crop around the central mountain and adjoining ridge, with only a thin suggestion of the lake. Exclude the foreground road, trees and most empty sky. Do not substitute invented mountain artwork.
 
 The implementation treatment is monochrome, initially 5% opacity, with a soft fade into the canvas on the left and bottom. Place it only on the right of the greeting region, approximately 520px wide and 150px high at desktop size. Keep greeting text over a solid canvas area and utility controls on an opaque surface.

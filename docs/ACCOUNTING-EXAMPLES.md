@@ -18837,7 +18837,8 @@ Gmail; times are New Zealand time.
   are matched as whole words, ignoring case.
 - **FC11 No farm named.** With one active farm, that's the farm. With
   more, the mailbox's chosen farm (Jess can choose one when connecting, or
-  later), else no farm: the item shows under "No farm".
+  later), else no farm: the item shows under "No farm". Since FC32 an item
+  put under the mailbox's chosen farm waits in Needs checking.
 - **FC12 Not farm arrangements.** An email needs one of the arrangement
   words and a date (or a no-exact-date phrase) in the same sentence, or the
   arrangement in the subject and the date in the text. "Our sale ends 31
@@ -19025,6 +19026,30 @@ her Outlook has **Inbox › Farm › Vet** and **Inbox › Board papers**.
 Tests: `tests/integration/farm-calendar.test.ts` (FC25-FC30) and
 `tests/unit/farm-mail-folders.test.ts` (FC25, FC26).
 
+## Farming: a mailbox's usual farm is only a guess (FC32; built by Claude 21 Oct 2026 from #390, Claude's rule, not yet reviewed)
+
+Issue #390's review found that one mailbox often covers several properties,
+so the farm chosen for a mailbox (FC11) isn't proof that an email is about
+that farm. Xero and NetSuite have nothing like a farm calendar, so this is
+Claude's rule, kept to the safe side.
+
+Kōwhai Dairies has two active farms, **Home farm** and **Runoff**. Jess's
+mailbox has **Home farm** as its farm when none is named.
+
+- **FC32 A guess waits to be checked.** "Shearers arriving 7.30am on 3/11"
+  names no farm. The item is **Contractor**, Tue 3 Nov 2026, 7:30am, under
+  **Home farm**, and in Needs checking: "No farm named: put under Home
+  farm, this mailbox's usual farm". When Jess checks it (keeping Home farm
+  or choosing Runoff) it leaves Needs checking. "Spreading lime on the
+  Runoff on Friday 6 November" names a farm: it goes under Runoff with
+  nothing to check. With only one active farm nothing changes: that farm
+  is used and there's nothing to check. With no farm chosen for the
+  mailbox, or if the chosen farm is archived, the item is **No farm** and,
+  as before, not in Needs checking just for that. A later email moving a
+  checked item gets this reason as well as FC14's when it names no farm.
+
+Tests: `tests/integration/farm-calendar.test.ts` (FC32, in the FC11 test).
+
 ## Analytics: a website's Google Analytics data (GA1-GA8; built by Claude 20 Oct 2026 when Jess asked for "Google analytics for websites to tohyee", as Looker Studio's Google Analytics connector does, not yet reviewed)
 
 Not accounting: a data source for Analytics, so a website's visitors can be
@@ -19087,7 +19112,7 @@ Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
 
-## My mail: an Owner's private copy of their own mail (PM1-PM19; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
+## My mail: an Owner's private copy of their own mail (PM1-PM29; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
 
 Not accounting: a private store of an Owner's own email, for them and
 their own AI. Xero and NetSuite keep nothing like it, so the rules are
@@ -19212,13 +19237,92 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
 - **PM19 It only looks.** The key with the scope has no write tools, and
   its mail tools run read-only.
 
-Not included (#250's next part): filing an attachment into shared data
-(the bills inbox, soil tests) with a preview of what others will see; and
-attachment files through the AI (it gets their names). Tests:
+### Filing an attachment into shared data (PM20-PM29; built by Claude 21 Oct 2026, Claude's rules, not yet reviewed)
+
+Jess, 13 Oct 2026 (#250): "Nothing from email reaches shared data
+automatically. The owner files an attachment (for example 'use this as a
+soil test for paddock 12'), or sets up a rule they've approved (for example
+'attachments from the soil lab'). Before anything is shared, the owner sees
+a preview of exactly what will become visible to others. Filed items are
+copies; the email itself stays private." Decisions 720-726. Made-up:
+Kōwhai Dairies has Farming on and a farm, Home farm, with paddocks 12 and
+14. Jess's copy holds an email from "Rangi at the lab
+<rangi@soillab.example>", subject "Confidential results and your mortgage
+question", with three attachments: Soil results P12.csv (pH and Olsen P for
+samples 12, 14 and 99), Invoice 4471 Rangi.pdf and Board minutes.pdf.
+
+- **PM20 Into the bills inbox.** Jess clicks **File…** on the invoice,
+  chooses the bills inbox, renames it Invoice 4471.pdf and types the note
+  "Lab invoice for the September tests". **Preview what others will see**
+  shows: File "Invoice 4471.pdf (29 bytes)"; Where "The bills inbox,
+  waiting for a bill to be made from it"; Added by her; How it arrived
+  "Filed from a private email by you (nothing of the email is shared)";
+  and her note. Stays private: the email's subject, sender, recipients,
+  date and text; its other 2 attachments; the mailbox and folder; and the
+  attachment's own name. Nothing is saved until **File it**. Then Sam (the
+  bookkeeper) sees the item in the bills inbox, "Filed from a private email
+  by Jess", with the note; no sender, subject or date, and none of
+  "Rangi", "soillab", "mortgage" anywhere he can see, the audit trail
+  included (it says "attachment filed" to the bills inbox).
+- **PM21 As soil tests.** She files the CSV as soil tests on Home farm, lab
+  "Made-up Labs". The preview is the soil import's own: lines 2 and 3
+  (paddocks 12 and 14, 15 Aug 2026, two results each) are added; line 4,
+  sample 99, isn't ("There's no current paddock 99 on this farm"); results
+  are read from pH and Olsen P (mg/L); each test's source will be
+  "Imported from Soil results.csv, filed from a private email"; and the file
+  itself isn't shared, only the rows. A note is refused for an import. Sam
+  sees the two tests with that source. Filing the same file again is
+  refused in the preview ("already imported ... on <date>"), and the board
+  minutes PDF can't be imported ("Only CSV or Excel (.xlsx) files can be
+  imported. To keep a PDF or picture, attach it to a record instead").
+- **PM22 The name.** The filed name is the attachment's own unless she
+  types another, which must keep the ending (.pdf), with no slashes.
+- **PM23 Onto a record.** She searches contacts for "soil labs", chooses
+  Made-up Soil Labs Ltd and files the invoice with the note "Their
+  September invoice". Sam sees the file on the contact marked "Filed from a
+  private email", the note as an ordinary note, and the history "File
+  added: Invoice 4471.pdf (29 bytes), filed from a private email".
+- **PM24 Exactly what was previewed.** Changing the note or the name after
+  the preview and filing anyway is refused: "What would be filed has
+  changed since the preview. Check the preview again before filing." The
+  same goes for an import whose rows changed (a paddock added, say).
+- **PM25 Only Jess.** Mere (admin) and Sam get "not found" from every
+  filing route: the Filing card, a preview, filing, the record search,
+  making or deleting a rule, dismissing. Ana, another Owner, gets her own
+  empty Filing card and can search records, but can't preview, file or
+  touch Jess's rules or To file. An AI key acting as Jess is refused too.
+- **PM26 A rule.** Jess adds a rule: from @SoilLab.example, named *.csv,
+  to soil tests on Home farm, ticking "Also look at emails already copied".
+  The rule shows as "Attachments from anyone at soillab.example named
+  *.csv, to Soil tests on Home farm · 1 waiting", and To file lists Soil
+  results P12.csv with the email's sender, subject and date (for her eyes
+  only). Nothing has been shared. **Preview and file…** shows the same
+  preview as PM21; filing it adds the two tests and moves it to Filed
+  ("from a rule"). The rule's sender and pattern are encrypted in the
+  database. A rule needs a sender or a pattern; "not an address" is
+  refused. A new rule without the tick waits for new mail.
+- **PM27 After a sync.** With a rule for *.pdf to the bills inbox, a new
+  email with Statement.pdf arrives; after the next sync it's in To file and
+  not in the bills inbox. **Not this one** takes it off, and later syncs
+  don't bring it back.
+- **PM28 Copies stay.** After filing the invoice and the soil tests, Jess
+  deletes her imported history. The inbox item (with its file) and the two
+  soil tests stay; her list of what she filed, her rules and To file go
+  with the copy.
+- **PM29 Only while an Owner.** Made an admin, Jess can't file (even with a
+  preview she'd already seen): "not found". Made an Owner again, she can.
+
+Not included: making the bill itself while filing (the inbox's usual step
+does it); choosing the soil or pasture import's columns from My mail (the
+import's guess is used; the import page is there for a file that needs
+choices); notes with imports; rules that file without asking (decision 723
+says it can be loosened); attachment files through the AI. Tests:
 `tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14),
-`tests/integration/private-mail-ai.test.ts` (PM15-PM19)
-and `tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
-nothing else names the private tables).
+`tests/integration/private-mail-ai.test.ts` (PM15-PM19),
+`tests/integration/private-mail-filing.test.ts` (PM20-PM29),
+`tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
+nothing else names the private tables) and
+`tests/unit/private-mail-filing.test.ts` (PM21, PM22, PM26).
 ## Farming (#327): the co-op share register (CSR1-CSR10; Codex, delegated by owner, 20 October 2026, not yet reviewed)
 
 From the answer to item 15 in issue #360: a factual register and
@@ -19307,3 +19411,152 @@ Payments, kept apart from the shares:
   rules have changed over time and aren't verified, so it's deferred. Tohyee
   doesn't value shares (values are as entered, usually cost) or work out
   the tax on dividends, rebates or retentions.
+
+## Income tax (#292, #360 item 3): importing IRD account files (ITX-IMP1 to ITX-IMP12; Codex, delegated by owner, 20 October 2026; as delegated, not yet reviewed)
+
+Issue #360 item 3 chose "imports and reviewable forecasts first": structured
+CSV or Excel through a mapping and preview, PDFs kept as sources, and any
+figure from them reviewed by a person before it counts. There's no live
+IRD connection, and nothing is filed or paid. Decisions 710-716. Tested in
+`tests/unit/ird-imports.test.ts` and `tests/integration/ird-imports.test.ts`
+with made-up files.
+
+**What IRD lets a customer download (read 21 Oct 2026).** IRD's pages
+describe the myIR income summary as two "exportable PDFs" (Proof of income
+and Income details) for chosen dates
+([Understanding your income summary in myIR](https://www.ird.govt.nz/income-tax/income-tax-for-individuals/understanding-your-income-summary-in-myir)),
+tax agents' reports that "Export" to Excel
+([Unfiled returns report](https://www.ird.govt.nz/roles/tax-agents/unfiled-returns-report),
+[Client list reports](https://www.ird.govt.nz/roles/tax-agents/client-list-reports)),
+and a "Transaction summary report" chosen by time period that lists
+assessments, penalties and payments
+([Check your payments in myIR](https://www.ird.govt.nz/child-support/managing-payments/paying-parent/check-your-payments-in-myir),
+for child support). An account's transactions are listed in myIR under the
+tax type's "Returns and transactions", period by period. No IRD page found
+gives the columns of a downloaded account transaction list, or says every
+account can be downloaded as CSV or Excel. So Tohyee assumes no column
+names and no layout: the person maps each column, says what each value in
+the type column means, and sees every row before anything is saved. The
+example files below are made up.
+
+The example: Kererū Joinery Ltd, a company with a 31 March balance date,
+2027 income year. The 2026 return was filed on 20 Jun 2026 with RIT
+17,668.00, so each 2027 instalment is **6,183.80** (28 Aug 2026, 15 Jan
+2027, 7 May 2027; ITX5). File A (made up):
+
+```
+Kererū Joinery Ltd income tax (made-up file)
+Date,Transaction,Period,Debit,Credit,Instalment
+01/04/2026,Balance brought forward,31/03/2027,,,
+28/08/2026,Payment,31/03/2027,,"6,183.80",Instalment 1
+15/01/2027,Payment,31/03/2027,,"6,183.80",
+20/01/2027,Interest,31/03/2027,12.40,,
+25/01/2027,Interest,31/03/2027,,12.40,
+02/02/2027,Late payment penalty,31/03/2027,50.00,,
+```
+
+- **ITX-IMP1 The file and where it's from.** Owners and admins choose a
+  CSV or Excel (.xlsx) file up to 10 MB (5,000 rows), and say where it's
+  from: **downloaded from myIR** (IRD's own file) or **another
+  spreadsheet** (typed up from myIR, or from an accountant). Optionally it
+  links to a PDF already under IRD documents (e.g. the statement it came
+  with). A PDF can't be imported here; it's added as an IRD document
+  (ITX30). On import the file itself is kept as an IRD document, the source
+  of every figure from it, and can be opened later. The same file (same
+  bytes) can't be imported twice: Tohyee says when it was.
+- **ITX-IMP2 Mapping, with a preview.** Tohyee guesses the headings row
+  (the first of the first 20 rows that's all text: row 2 in file A; the
+  person can change it) and the person picks the columns: Date (needed),
+  Amount with which way round it is, or Debit and/or Credit; and
+  optionally Type, Period or income year, Instalment, Effective date,
+  Description and Reference. Each column can be used once. Every row is
+  shown with what it would become and any problem ("Date "31/02/2027"
+  isn't a date Tohyee can read", "Say what "Refund" rows are"). The import
+  is refused while any row has a problem. A row with no amount (the
+  balance brought forward) is left out and shown as such.
+- **ITX-IMP3 Saved mappings.** The mapping can be saved with a name ("myIR
+  income tax account"). Next time a file has the same headings, that
+  mapping is chosen for it (headings compared ignoring case and spaces).
+  Saving again under the same name replaces it; a saved mapping can be
+  deleted.
+- **ITX-IMP4 What each row is.** The different values in the Type column
+  are listed with how many rows have each, and the person says what each
+  is: payment, assessment, credit (transfer or adjustment), interest,
+  penalty, refund, other (recorded only), or **skip**. Tohyee suggests from
+  plain words ("Late payment penalty" → penalty), shown as suggestions. In
+  file A: Payment → payment, Interest → interest, Late payment penalty →
+  penalty, Balance brought forward → skip. Without a Type column the person
+  says what every row is (e.g. a list of payments only). The Instalment
+  column's values are mapped the same way to instalment 1, 2 or 3, the
+  end-of-year tax, or "doesn't say"; only "Instalment 1", "Installment 1"
+  and "P1" (and 2, 3) are suggested. A blank says nothing.
+- **ITX-IMP5 Year, dates and signs.** The income year comes from the
+  Period column (2027, or a date such as 31/03/2027: the income year it's
+  in for the balance date) or, without one, is chosen for the whole file.
+  Dates are read day first unless the person says otherwise; .xlsx dates
+  stored as numbers work. Debit and Credit columns say the direction; a
+  single Amount column needs the person to say whether a positive amount is
+  owed (a debit) or paid (a credit): in "Amount" files "6,183.80" with
+  "positive is a credit" is a payment and "-12.40" is a debit of 12.40.
+  Amounts are read as text into exact decimals (never floats), up to 2
+  places; "(12.40)", "12.40 DR" and "$6,183.80" work.
+- **ITX-IMP6 Nothing counts until a person accepts it.** Imported rows are
+  proposed figures, waiting for a person, like the figures an AI proposes
+  from an IRD document (ITX33). Each can be accepted or declined (with a
+  reason), once; several can be accepted together. An AI key can't accept
+  or decline. Until accepted, nothing in the income tax calculation
+  changes and no figure is shown as IRD's.
+- **ITX-IMP7 A payment that says its instalment.** Accepting file A's row
+  3 (28 Aug 2026, 6,183.80, "Instalment 1") adds a 2027 payment of
+  6,183.80 on 28 Aug 2026 ("From IRD's file kereru.csv, row 3; accepted by
+  <person>") and allocates it to instalment 1 as **confirmed by IRD**,
+  naming the imported file as the IRD document (ITX6A). Instalment 1 needs
+  **nil** more. From "another spreadsheet", the same row is allocated **by
+  us with evidence** (the file, row and its words), never confirmed by IRD.
+  With an Effective date column, that date is IRD's effective date and the
+  payment's date; without one, the file's date is used for both the
+  payment and lateness, and IRD's effective date stays blank (ITX6C).
+- **ITX-IMP8 A payment that doesn't say, and one already in Tohyee.**
+  Accepting row 4 (15 Jan 2027, 6,183.80, no instalment) adds the payment
+  **awaiting reconciliation**: it counts towards the year's total paid but
+  against no instalment, so instalment 2 still needs **6,183.80** (12,367.60
+  less 6,183.80 allocated). If a 6,183.80 payment for 2027 is already in
+  Tohyee (typed, or counted from the books) paid on IRD's date or up to 7
+  days before it (13 Jan 2027 from the bank), the row is shown "Will link to
+  the payment of 6,183.80 on 13 Jan 2027" and accepting links it instead
+  of adding another: the year's paid total stays **12,367.60**, not
+  18,551.40. Its IRD effective date is filled in when the file has one and
+  the payment hasn't. The person can accept it as a new payment instead. A
+  payment that's already allocated keeps its allocation; the row says what
+  the file says, to change by hand if the file is right. A payment row that
+  is a debit (a reversed or dishonoured payment) is recorded only.
+- **ITX-IMP9 An assessment.** A 2026 file's row "20/06/2026, Assessment,
+  31/03/2026, debit 17,668.00" can be accepted **as the 2026 assessed RIT**
+  only when the person says so and gives the date the return was filed (20
+  Jun 2026): the 2026 figures then show 17,668.00 filed 20 Jun 2026, and
+  the 2027 instalments are 6,183.80 each (ITX5). An existing assessed RIT is
+  replaced, and the outcome says what it was. Accepted without that, an
+  assessment is recorded only. An assessment that's a credit (a reduction)
+  can't be the assessed RIT.
+- **ITX-IMP10 Recorded only, declined and duplicates.** Interest,
+  penalties, credits, refunds and other rows accepted are recorded as IRD's
+  figures for the year and change nothing else: file A's interest is
+  12.40 charged and 12.40 credited, **0.00** net; the penalty is **50.00**.
+  Declining needs a reason. A row that looks the same as one already
+  accepted from another file (same kind, income year, date, direction and
+  amount, e.g. an overlapping download) is shown as such and can't be
+  accepted again; decline it.
+- **ITX-IMP11 IRD's figures for the year.** For the chosen income year, the
+  accepted rows are totalled by kind (debits, credits, net), and the page
+  says how many came from IRD's own files and how many from other
+  spreadsheets. Only accepted rows from a file the person said was from
+  myIR are called IRD's figures; waiting rows never are.
+- **ITX-IMP12 Who.** Importing, mapping, accepting and declining are for
+  owners and admins, as the rest of income tax; each is in the audit log
+  with who and when. Removing the source file (ITX30) keeps the rows and
+  what they did.
+
+Not built: a live IRD connection (gateway services need IRD's approval;
+#360 item 3 says it's a parallel workstream), reading figures out of PDFs
+here (the connected AI does that, ITX30-ITX35), and credits IRD transfers
+in from other years or tax types as payments (decision 623).

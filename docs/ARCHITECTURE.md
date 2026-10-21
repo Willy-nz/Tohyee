@@ -1676,34 +1676,62 @@ Still to come for other jobs: a general transactional outbox.
 
 ## Backups and restore
 
-`src/lib/backups/`. Each database (every ready organisation, plus the core
+`src/lib/backups/`; the recovery design (keys, the recovery kit, the restore
+wizard, what's tested) is in `docs/BACKUP-RECOVERY.md` (#389, decisions
+730-739). Each database (every ready organisation, plus the core
 database) is dumped with `pg_dump --format=custom --no-owner --no-privileges`
 as the admin login, straight into an encrypted file:
 
-- **Format** (`format.ts`): `TOHYEE-BACKUP 1\n`, a JSON header line (what's
-  inside: organisation, database, schema version, Tohyee version, when, a
-  fingerprint of the key), then a 12-byte IV, the AES-256-GCM ciphertext and
-  its 16-byte tag. The header is the GCM additional data, so it can't be
-  changed either. The key is HKDF-SHA256 of `TOHYEE_SECRET_KEY` ("tohyee
-  backups v1"), separate from the key for stored secrets. Losing
-  `TOHYEE_SECRET_KEY` means losing the backups, so (`key.ts`) a server admin
-  can see it after typing their password again (5 wrong tries in 15 minutes
-  blocks it), and proves a saved copy by pasting it back: the server compares
-  it and records when, for that key's fingerprint, in `server_settings`
-  (`backup_key`). Until a saved copy of the current key has been checked,
-  server admins see a reminder on every page and the server app opens on
-  Backups. The key never goes in the audit trail.
+- **Format** (`format.ts`): `TOHYEE-BACKUP 2\n`, a JSON header line (what's
+  inside: organisation, database, schema version, Tohyee version, when, the
+  recovery key's version and fingerprint, a salt, and the live key
+  encrypted with the recovery key), then a 12-byte IV, the AES-256-GCM
+  ciphertext and its 16-byte tag. The header is the GCM additional data, so
+  it can't be changed either. The file key is HKDF-SHA256(recovery key,
+  salt). The **recovery key** (`recovery-key.ts`, decision 734) is 32
+  random bytes, versioned, kept in `server_settings` encrypted with
+  `TOHYEE_SECRET_KEY`; the **recovery kit** (`recovery-code.ts`,
+  `recovery-kit.ts`, decisions 735-736) is that key as a code or a
+  passphrase-protected file (scrypt), exported with the password again and
+  checked by giving it back. Format 1 files (`TOHYEE-BACKUP 1`, key HKDF of
+  `TOHYEE_SECRET_KEY`, "tohyee backups v1") made before still open with the
+  key they were made with. For those, (`key.ts`) a server admin
+  can see that key after typing their password again (5 wrong tries in 15
+  minutes blocks it, counted with the kit's), and proves a saved copy by
+  pasting it back: the server compares it and records when, for that key's
+  fingerprint, in `server_settings` (`backup_key`). Until a saved kit for the
+  current recovery key version has been checked, server admins see a
+  reminder on every page and the server app opens on Backups. No key ever
+  goes in the audit trail or the logs.
 - **Where**: the backup folder (a server setting; default
   `TOHYEE_BACKUP_DIR`, else `%ProgramData%\Tohyee\backups` on Windows or
   `./backups`), one sub-folder per organisation and `_server` for the core
   database, files named `<id>_<YYYY-MM-DD_HHmmss>.tohyee-backup` in the
   business time zone. Saving the setting checks the server can write there.
-  It's written as `.partial` and renamed once checked.
+  A chosen folder that's gone when a backup runs isn't made again (it could
+  be an unplugged drive or a removed OneDrive folder): the backup fails with
+  a message saying what to do (`destination.ts`). A backup that clearly
+  won't fit in the free space fails before anything is written.
+  It's written as `.partial` and renamed once checked; its SHA-256 is kept
+  in `backup_runs.sha256` (core migration 0016).
 - **Checked** after writing: the whole file is decrypted (so the tag is
   verified) into `pg_restore --list`.
 - **Kept**: the newest of each of the last 14 days that have a backup and the
   first of each of the last 12 months (`retention.ts`); only files with that
-  organisation's prefix in its folder are ever deleted.
+  organisation's prefix in its folder whose header reads as that
+  organisation's are counted or deleted, so a damaged file never pushes out
+  a good one and is left for a person to look at.
+- **Checked again** (`checks.ts`): weekly (from the scheduler) and on request
+  ("Check backups now", `POST /api/admin/backups/check`, `backups verify`),
+  each database's newest file is read back, fully decrypted into
+  `pg_restore --list` and its SHA-256 compared with the recorded one; a
+  database with a good backup on record but no file fails. Each check is a
+  row in `backup_checks`; failures are emailed to server admins.
+- **Status** (`overview.ts`): the Backups page (`/server/backups`), the
+  server app and `backups status` show the latest backup and its age, the
+  last check, the space used and free, and off-site as "not verified" (a
+  file in a synced folder isn't proof of an upload), with what needs
+  attention and what isn't proven. No "safe" badge.
 - **Recorded**: every attempt is a row in `backup_runs` (core database),
   written by the code doing the work: started, ok or failed with the error,
   file and size.
@@ -1722,9 +1750,17 @@ as the admin login, straight into an encrypted file:
   (migrations up to this server's version, runtime-login grants). Any failure
   drops the new database and registry row. A backup from a newer Tohyee is
   refused. A backup made on another server (or before the key changed) is
-  restored by giving that server's key with the request; this server's own
-  key is never replaced. The core database isn't restored by the app: `backups decrypt`
-  turns a file into a plain pg_dump for a database administrator.
+  restored by giving that server's recovery code (or, for format 1, its
+  key) with the request; this server's own keys are never replaced. Stored
+  secrets (`*_ciphertext`) are re-encrypted with this server's key before
+  the copy is ready (`rewrap.ts`), and the copy starts with
+  `jobs_paused_at` set, so every scheduled job skips it
+  (`listOrganisationsForJobs`) until a server admin turns them on. The
+  core database is never replaced: `recoverPeople` (`recovery.ts`) restores
+  a `_server` backup into a scratch database and adds the users who aren't
+  here (same IDs) and their memberships. Test restores use the same scratch
+  databases. `backups decrypt` still turns a file into a plain pg_dump for a
+  database administrator.
 - Tests (`tests/integration/backups.test.ts`) back up and restore real
   organisations, with one login and with a separate runtime login, and check
   that a changed file or the wrong key is refused.
@@ -1871,8 +1907,10 @@ run time.
 
 - Canonical production HTTPS origin and local/offline access model.
 - Break-glass recovery ownership beyond the admin CLI.
-- Backup key custody beyond "keep a copy of TOHYEE_SECRET_KEY", and recovery
-  targets. Restoring the core database is still manual.
+- Recovery targets (how old a backup may be, how fast a restore must be).
+  Changing `TOHYEE_SECRET_KEY` itself on a running server (re-encrypting
+  every stored secret) isn't built. Backup custody and recovery are in
+  `docs/BACKUP-RECOVERY.md`.
 - Remote BI connectivity.
 - GST on standard-rated foreign-currency spend and receive money, and the
   reverse charge on imported services. (Foreign-currency documents, their
