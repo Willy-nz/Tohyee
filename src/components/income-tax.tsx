@@ -17,6 +17,7 @@ import type { BookPayments as BookPaymentsData } from "@/lib/tax/income/book-pay
 import { APPLIES_TO, APPLIES_TO_LABELS, type AppliesToKey, type TaxAllocation } from "@/lib/tax/income/allocation-kinds";
 import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
 import { postForm } from "@/components/rd";
+import { IrdImports } from "@/components/ird-imports";
 import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
 import { IR10_BOX_LABELS, IR10_ROLE_LABELS } from "@/lib/tax/income/ir10-boxes";
 import { TAX_DEPRECIATION_METHOD_LABELS, TAX_DEPRECIATION_METHODS, type TaxDepreciationMethod } from "@/lib/tax/income/depreciation";
@@ -1785,6 +1786,7 @@ function Report({ organisationId, report, reload }: { organisationId: string; re
       )}
       <BookPayments organisationId={organisationId} years={report.years} onChanged={reload} />
       <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} endMonth={report.endMonth} onChanged={reload} />
+      <IrdImports organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
       <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} endMonth={report.endMonth} onSaved={reload} />
       <Card title="Notes">
         <ul>

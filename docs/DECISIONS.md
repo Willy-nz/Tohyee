@@ -6722,3 +6722,70 @@ accounting example is marked not yet reviewed.
      (they're the figures, not the look). While building this, numbers of
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
+
+### Importing IRD account files (#360 item 3; decisions 710-716)
+
+710. **Imports first, with no IRD layout assumed** (21 October 2026; #292,
+     #360 item 3). **Who decided:** Codex, delegated by owner, 20 October
+     2026 ("imports and reviewable forecasts first: accept structured
+     CSV/Excel through mapping and preview; retain PDF source documents").
+     IRD's pages (read 21 Oct 2026) describe PDF downloads of the income
+     summary, Excel exports of tax agents' reports, and on-screen
+     "Returns and transactions" by period, but no page gives the columns
+     of a downloaded account transaction list. So Tohyee assumes no
+     columns: the person maps Date, Amount (or Debit and Credit), Type,
+     Period, Instalment, Effective date, Description and Reference, says
+     what each Type and Instalment value means (or skips rows), and sees
+     every row with any problem before anything is saved, like Tohyee's
+     other imports (NetSuite's import assistant). Type suggestions come
+     only from plain words and are shown as suggestions. ITX-IMP1 to
+     ITX-IMP5, as delegated, not yet reviewed.
+711. **Saved mappings** (21 October 2026; Codex, delegated by owner, 20
+     October 2026). A mapping is saved under a name with the headings it
+     was made for, and chosen again for a file with the same headings
+     (case and spaces ignored). Several can be kept (an income tax account
+     and a provisional tax list may differ). ITX-IMP3.
+712. **The file is the source** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). The imported file is kept as an IRD document
+     and can be opened; it can be linked to a PDF already under IRD
+     documents. The same file can't be imported twice. Removing the file
+     keeps its rows and what they did. PDFs aren't imported here; they stay
+     IRD documents (decision 549). ITX-IMP1, ITX-IMP12.
+713. **Rows are proposals until a person accepts them** (21 October 2026;
+     Codex, delegated by owner, 20 October 2026; following decision 549).
+     Each row is accepted or declined (with a reason) once, by a person,
+     never an AI key. Waiting rows change nothing and aren't called IRD's.
+     A row that looks the same as one already accepted from another file
+     (same kind, year, date, direction and amount) can't be accepted
+     again. ITX-IMP6, ITX-IMP10.
+714. **Only IRD's own file confirms** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). The person says whether the file was
+     downloaded from myIR or is another spreadsheet. An accepted payment
+     row that says its instalment is allocated **confirmed by IRD** (naming
+     the imported file as the IRD document, decision 620) only for a myIR
+     file; for another spreadsheet it's allocated **with evidence** (the
+     file and row). Accepted rows are "IRD's figures" only from a myIR
+     file. Tohyee can't check that a file really came from myIR, as with
+     PDFs (decision 549): it's the person's statement, shown with the file.
+     ITX-IMP7, ITX-IMP11.
+715. **Payments feed the allocation model only when the row says**
+     (21 October 2026; Codex, delegated by owner, 20 October 2026;
+     decisions 620-623). A payment with no instalment in the file is
+     **awaiting reconciliation**, whatever its date. A payment already in
+     Tohyee for the same income year and amount, paid on IRD's date or up
+     to 7 days before it (bank payments take days to reach IRD), is linked
+     rather than added, so it isn't counted twice; the person can add it as
+     a new payment instead. An existing allocation is never replaced by an
+     import. The file's effective date, when it has one, is IRD's effective
+     date; otherwise the file's date is used for the payment and IRD's
+     effective date stays blank. A payment row going the other way
+     (reversed or refunded) is recorded only. ITX-IMP7, ITX-IMP8.
+716. **Assessments and the rest** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). An assessment becomes the year's assessed RIT
+     only when the person says so and gives the date the return was filed
+     (as typing it, ITX3); otherwise it's recorded. Interest, penalties,
+     credits, refunds and other rows are recorded as IRD's figures for the
+     year and totalled (debits, credits, net), changing nothing else: the
+     use-of-money interest estimate (552) stays Tohyee's estimate, and
+     credits transferred in still aren't payments (623). No IRD connection,
+     filing or payment (#360 items 3 and 4). ITX-IMP9 to ITX-IMP11.
