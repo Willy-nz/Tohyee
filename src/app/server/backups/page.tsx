@@ -171,7 +171,8 @@ function Status({ details }: { details: Details }) {
         <div className={ui.recordField}>
           <dt>Off-site copy</dt>
           <dd>
-            <Badge tone="amber">Not verified</Badge> <span className={ui.muted}>{overview.offSite.note}</span>
+            {overview.destination.synced || overview.destination.kind === "network" ? <Badge tone="amber">Not verified</Badge> : <Badge tone="red">None</Badge>}{" "}
+            <span className={ui.muted}>{overview.offSite.note}</span>
           </dd>
         </div>
         <div className={ui.recordField}>

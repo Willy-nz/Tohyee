@@ -68,7 +68,7 @@ const CHECK_STALE_DAYS = 8;
 const HOUR = 60 * 60 * 1000;
 
 function nameOf(target: { organisationId: string | null; displayName: string | null }): string {
-  return target.displayName ?? (target.organisationId ? target.organisationId : "The server's own database (users and settings)");
+  return target.displayName ?? (target.organisationId ? target.organisationId : "the server's own database (users and settings)");
 }
 
 export function summariseBackups(input: OverviewInput): BackupOverview {
