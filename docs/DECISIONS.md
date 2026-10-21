@@ -7537,3 +7537,24 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      Shopify or WooCommerce order is in Analytics only as its invoice and
      journals (MD5): the books copy has no orders table, so nothing can
      count both.
+### The access contract for Analytics outputs (#387; decision 697)
+
+697. **Every Analytics output uses the report viewer's server-side scope;
+     a slicer lists only what the tiles show** (21 October 2026, #387;
+     settled as the review proposes, at the lead's direction, not yet
+     confirmed by Jess). The contract is written out in
+     ANALYTICS-STUDIO.md ("Who can see what") and tested: figures,
+     tooltips, totals and comparisons come from the saved tile's answer;
+     drill-through gives only the pivot's own fields; CSV and Excel are
+     made from what the page already has; pinned tiles go through the same
+     query path and hide when unshared; addresses and `?edit=1` grant
+     nothing; there are no caches and no scheduled outputs yet (a future
+     one runs as its recipient, checked at send time). Checking it found
+     one gap: a report viewer's slicer listed every value of the column in
+     the whole table, so a report showing only web sales still named the
+     regions and notes of shop sales. A report viewer's slicer now lists
+     the distinct values in the rows each tile (on a table with that field)
+     reads after the tile's own filters, ignoring dates (the viewer can
+     change them) and up to 500. Viewers and up still get the whole column,
+     since they can query the table anyway. No row-level rules were added
+     (phase 5).

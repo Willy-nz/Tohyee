@@ -11,6 +11,7 @@ import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import {
+  buildDistinctValuesSql,
   buildPivotDrillSql,
   buildPivotSql,
   buildTileSql,
@@ -24,6 +25,7 @@ import {
   type PivotDrillResult,
   type PivotDrillSelection,
   type PivotRow,
+  type QueryDates,
   type QueryResult,
   quoteIdentifier,
   type TileQuery,
@@ -657,6 +659,45 @@ export async function columnValues(organisationId: string, table: string, field:
     [],
   );
   return { values: rows.map((row) => row.value ?? ""), type: column.type };
+}
+
+/**
+ * A slicer's values for a report viewer (#387, decision 697): only values
+ * the report's own tiles can show, i.e. the distinct values of the field in
+ * the rows each tile on a table with that field reads, after the tile's own
+ * filters. Listing the whole table's values would name rows the tiles
+ * leave out. Dates aren't applied: the viewer can change them anyway.
+ */
+export async function slicerValuesFor(
+  organisationId: string,
+  dashboard: Dashboard,
+  field: string,
+  dates: QueryDates,
+  /** Tables this person can't read (farm tables, decision 744): their tiles are left out. */
+  skip: ReadonlySet<string> = new Set(),
+): Promise<{ values: string[]; type: string }> {
+  const tables = await listTables(organisationId);
+  const found = new Set<string>();
+  let type = "VARCHAR";
+  for (const tile of dashboard.tiles) {
+    if (!tile.query || skip.has(tile.query.table)) continue;
+    const columns = tables.get(tile.query.table);
+    const column = columns?.find((entry) => entry.name === field);
+    if (!columns || !column) continue;
+    type = column.type;
+    let rows: Array<Record<string, string | null>>;
+    try {
+      const built = buildDistinctValuesSql(tile.query, columns, field, { dates });
+      rows = await runBuiltQuery(organisationId, built.sql, built.params);
+    } catch {
+      // A tile whose filters no longer fit its table can't show anything either.
+      continue;
+    }
+    for (const row of rows) {
+      if (row.value !== null && row.value !== undefined) found.add(row.value);
+    }
+  }
+  return { values: [...found].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, 500), type };
 }
 
 /** The loaded tables and their columns, for building tiles. */
