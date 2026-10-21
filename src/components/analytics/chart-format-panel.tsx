@@ -52,6 +52,8 @@ type Props = {
   /** A table's group column, or a pivot's row fields, by name. */
   groupName?: string | null;
   rowFields?: string[];
+  /** The tile shows small multiples (a column, bar or line chart with a second grouping). */
+  smallMultiples?: boolean;
 };
 
 /** Removes settings left at their default, so Reset and "nothing changed" are the same thing. */
@@ -315,7 +317,7 @@ function ReferenceLines({ values, lines, onChange }: { values: string[]; lines: 
 }
 
 /** The Format section of the chart panel (#331, #333, #376): every change shows in the preview straight away. */
-export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [] }: Props) {
+export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [], smallMultiples = false }: Props) {
   // What the chart shows: the report's default for its type with the tile's own settings over it.
   const current = mergeFormats(inherited, format) ?? {};
   const can = formatOptionsFor(visual);
@@ -469,7 +471,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           );
         })}
       </Section>
-      <VisualSettings visual={visual} values={values} format={current} set={set} />
+      <VisualSettings visual={visual} values={values} format={current} set={set} smallMultiples={smallMultiples} />
       {!can.kpi ? (
         <>
           {can.labels ? (
