@@ -3,6 +3,7 @@ import type { ChartFormat } from "@/lib/analytics/chart-format";
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
 import { MARKS, tooltipHtml, type ChartTheme, type TooltipRow, echartsBase } from "@/lib/charts/theme";
 import { contrast } from "@/lib/charts/colour-check";
+import { calendarOption, heatmapOption, sankeyOption, treemapOption } from "@/lib/analytics/chart-relationships";
 import { boxPlotOption, histogramOption, scatterOption } from "@/lib/analytics/chart-distributions";
 import { add, dec, isDecimalString, isNegative, sum, toPlainString, type Decimal } from "@/lib/money/decimal";
 
@@ -13,8 +14,8 @@ import { add, dec, isDecimalString, isNegative, sum, toPlainString, type Decimal
  * colour rules), handed over by `toEChartsOption` as a kit.
  */
 
-export type ExtraKind = "waterfall" | "funnel" | "gauge" | "bullet" | "scatter" | "histogram" | "boxplot";
-export const EXTRA_KINDS: ReadonlySet<ExtraKind> = new Set(["waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot"]);
+export type ExtraKind = "waterfall" | "funnel" | "gauge" | "bullet" | "scatter" | "histogram" | "boxplot" | "treemap" | "heatmap" | "calendar" | "sankey";
+export const EXTRA_KINDS: ReadonlySet<ExtraKind> = new Set(["waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"]);
 
 type ChartRow = Record<string, string | number | null>;
 type Formatter = (value: number | string) => string;
@@ -66,6 +67,14 @@ export function extraOption(kit: ChartKit): EChartsOption {
       return histogramOption(kit);
     case "boxplot":
       return boxPlotOption(kit);
+    case "treemap":
+      return treemapOption(kit);
+    case "heatmap":
+      return heatmapOption(kit);
+    case "calendar":
+      return calendarOption(kit);
+    case "sankey":
+      return sankeyOption(kit);
   }
 }
 

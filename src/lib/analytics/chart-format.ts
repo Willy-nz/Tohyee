@@ -848,16 +848,20 @@ export function formatOptionsFor(visual: string) {
     /** Colour rules on the marks. */
     rules: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "funnel", "gauge", "scatter"].includes(visual),
     /** Shows a legend. */
-    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet", "scatter", "histogram", "boxplot"].includes(visual),
+    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"].includes(visual),
     /** Column thickness and rounded ends. */
     thickness: ["column", "bar", "combo", "waterfall", "bullet", "histogram", "boxplot"].includes(visual),
     /** Data labels on the marks. */
-    labels: !["kpi", "gauge", "boxplot"].includes(visual),
+    labels: !["kpi", "gauge", "boxplot", "calendar"].includes(visual),
     /** The group axis is numbers too (scatter's across axis), or its groups are bins (histogram). */
     groupAxis: !["scatter"].includes(visual),
     scatter: visual === "scatter",
     histogram: visual === "histogram",
     boxplot: visual === "boxplot",
+    /** Coloured by amount on a scale (no per-value colour). */
+    scale: visual === "heatmap" || visual === "calendar",
+    treemap: visual === "treemap",
+    sankey: visual === "sankey",
     waterfall: visual === "waterfall",
     funnel: visual === "funnel",
     gauge: visual === "gauge",
@@ -868,10 +872,16 @@ export function formatOptionsFor(visual: string) {
 /** Chart types that use a second grouping inside the first (#376 phase 2), and what it's called for each. */
 export const SECOND_GROUPING: Partial<Record<string, { label: string; none: string | null; hint: string }>> = {
   boxplot: { label: "Each box is made of", none: "Nothing: one box of every group's value", hint: "e.g. boxes by region, each made of its customers' totals" },
+  treemap: { label: "Inside each box", none: "Nothing", hint: "e.g. regions, each split into its products" },
+  heatmap: { label: "Down the side", none: null, hint: "The groups go across; e.g. months across, products down" },
+  sankey: { label: "Flows to", none: null, hint: "Each group flows to these, e.g. accounts to their contacts" },
 };
 
+/** Chart types whose second grouping must be chosen. */
+export const SECOND_GROUPING_REQUIRED = ["heatmap", "sankey"];
+
 /** The chart types a report can keep a default format for (#376, Power BI's visual defaults). */
-export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot"] as const;
+export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"] as const;
 export type DefaultableVisual = (typeof DEFAULTABLE_VISUALS)[number];
 export type VisualDefaults = Partial<Record<DefaultableVisual, ChartFormat>>;
 
@@ -893,6 +903,10 @@ export const VISUAL_NAMES: Record<DefaultableVisual, string> = {
   scatter: "Scatter or bubble",
   histogram: "Histogram",
   boxplot: "Box plot",
+  treemap: "Treemap",
+  heatmap: "Heat map",
+  calendar: "Calendar heat map",
+  sankey: "Sankey",
 };
 
 /**

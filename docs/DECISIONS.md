@@ -6792,3 +6792,24 @@ accounting example is marked not yet reviewed.
      group), and on chart types that don't use it. Existing tiles have
      none and are unchanged. The 5,000 row limit and Top N apply to the
      rows, as before.
+680. **Treemap, heat map, calendar heat map, Sankey** (21 October 2026,
+     #376 phase 2; Power BI's treemap and the usual heat map, calendar and
+     Sankey designs; not yet reviewed by Jess). All four show one value.
+     Treemap: a box per group sized by its total, largest first, with an
+     optional second grouping inside each box; top groups take the theme's
+     colours in order and, past the last colour, grey (never a made-up
+     colour, decision 599); boxes inside a group share its colour. Heat
+     map: groups across, the second grouping down (required), each cell's
+     total added exactly; colour is magnitude, so one hue light to dark
+     (Tohyee's sequential blues, which flip in dark mode so small amounts
+     sit near the dark card), or, when amounts are both below and above
+     zero, the diverging orange-grey-blue centred on zero; the scale is
+     shown under the chart. Calendar heat map: grouped by a date by day
+     (refused otherwise); each day coloured the same way; up to the three
+     latest years with data, newest first, Monday first, the year down the
+     left so it never covers the months on a phone; the tile grows to fit.
+     Sankey: each group flows to the values of the second grouping
+     (required); flows are totals added exactly; a name on both sides is
+     kept apart so a flow can't loop back; names that would overlap are
+     left to the tooltip. Treemaps and Sankeys leave out amounts of zero or
+     less (they have no size), as Power BI does.
