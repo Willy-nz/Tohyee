@@ -61,6 +61,29 @@ describeWithDatabase("farms and paddocks", () => {
     return { org, as, farm };
   }
 
+  it("keeps nine farms' same-named paddocks and import histories separate", async () => {
+    const w = await setup();
+    for (let number = 2; number <= 9; number++) {
+      await w.as((tx) => saveFarm(tx, { name: `Property ${number}` }));
+    }
+    const farms = await w.as((tx) => listFarms(tx));
+    expect(farms).toHaveLength(9);
+    const file = JSON.stringify({ type: "FeatureCollection", features: [feature("Home", box(169.9))] });
+    const paddockIds = new Set<string>();
+    for (const farm of farms) {
+      const preview = await w.as((tx) => previewBoundaryImport(tx, farm.id, { fileName: "paddocks.geojson", content: file }));
+      expect(preview.counts.new).toBe(1);
+      expect(preview.alreadyImportedOn).toBeNull();
+      await w.as((tx) => importBoundaries(tx, farm.id, { fileName: "paddocks.geojson", content: file }));
+      const paddocks = await w.as((tx) => listPaddocks(tx, { farmId: farm.id }));
+      expect(paddocks).toHaveLength(1);
+      expect(paddocks[0]).toMatchObject({ name: "Home", farmId: farm.id });
+      paddockIds.add(paddocks[0].id);
+    }
+    expect(paddockIds.size).toBe(9);
+    await expect(w.as((tx) => importBoundaries(tx, farms[8].id, { fileName: "again.geojson", content: file }))).rejects.toThrow("already imported");
+  });
+
   it("Farming needs Accounting, and is off until turned on", async () => {
     organisations += 1;
     const org = `farm-${organisations}-co`;

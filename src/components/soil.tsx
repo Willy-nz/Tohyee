@@ -2,6 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
+import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
@@ -65,12 +66,11 @@ export function SoilHome({ organisationId }: { organisationId: string }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", {
     organisationId,
   });
-  const [farmId, setFarmId] = useState<string | null>(null);
+  const { farm, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? []);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
-  const farm = active.find((entry) => entry.id === farmId) ?? active[0] ?? null;
-  if (!farm) {
+  if (!active.length) {
     return (
       <Empty>
         Add your farm and its paddocks first, under{" "}
@@ -80,23 +80,8 @@ export function SoilHome({ organisationId }: { organisationId: string }) {
   }
   return (
     <>
-      {active.length > 1 ? (
-        <div className={ui.tabs} role="tablist" aria-label="Farms">
-          {active.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              role="tab"
-              aria-selected={entry.id === farm.id}
-              className={`${ui.tab} ${entry.id === farm.id ? ui.tabActive : ""}`}
-              onClick={() => setFarmId(entry.id)}
-            >
-              {entry.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <FarmSoil key={farm.id} organisationId={organisationId} farm={farm} />
+      <FarmSelector farms={active} farm={farm} onChange={selectFarm} />
+      {farm ? <FarmSoil key={farm.id} organisationId={organisationId} farm={farm} /> : null}
     </>
   );
 }
