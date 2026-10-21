@@ -1,10 +1,13 @@
 "use client";
 
 import { type FormEvent, Fragment, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import styles from "./tax-workspace.module.css";
 import { DateInput } from "@/components/date-input";
 import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, PageHeader, Stat, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, personName } from "@/lib/format";
 import { ALLOCATION_STATUS_LABELS, ALLOCATION_STATUSES, type AllocationStatus, EXPENSE_TREATMENTS, INCOME_TREATMENTS, incomeYearLabel, TAXPAYER_TYPE_LABELS, TREATMENT_LABELS, type TaxpayerType, type Treatment } from "@/lib/tax/income/rules";
@@ -17,11 +20,13 @@ import type { BookPayments as BookPaymentsData } from "@/lib/tax/income/book-pay
 import { APPLIES_TO, APPLIES_TO_LABELS, type AppliesToKey, type TaxAllocation } from "@/lib/tax/income/allocation-kinds";
 import type { IrdDocument, IrdProposal } from "@/lib/tax/income/ird-documents";
 import { postForm } from "@/components/rd";
-import { IrdImports } from "@/components/ird-imports";
 import { ICA_KIND_LABELS, ICA_KINDS, type IcaKind } from "@/lib/tax/income/ica-kinds";
 import { IR10_BOX_LABELS, IR10_ROLE_LABELS } from "@/lib/tax/income/ir10-boxes";
 import { TAX_DEPRECIATION_METHOD_LABELS, TAX_DEPRECIATION_METHODS, type TaxDepreciationMethod } from "@/lib/tax/income/depreciation";
 import type { IncomeTaxReport, IncomeTaxSettings, IncomeTaxYear, ReportAccount, TaxPayment } from "@/lib/tax/income/service";
+import { dependsOnForecast, forecastIncomplete, nextDue, taxTasks } from "@/lib/tax/income/workspace";
+import { useModules } from "@/components/modules";
+import { IrdImports } from "@/components/ird-imports";
 
 /**
  * Income tax, stage 1 (examples ITX1-ITX10, decision 545): taxable income
@@ -1731,98 +1736,260 @@ function InterestCard({ report }: { report: Supported }) {
   );
 }
 
-function Report({ organisationId, report, reload }: { organisationId: string; report: Supported; reload: () => void }) {
+type TaxView = "overview" | "forecast" | "calculation" | "payments" | "returns" | "settings";
+
+/** The workspace's pages (#375, decision 702): each its own address under /operations/income-tax. */
+const TAX_VIEWS: ReadonlyArray<readonly [TaxView, string]> = [
+  ["overview", "Overview"],
+  ["forecast", "Forecast"],
+  ["calculation", "Tax calculation"],
+  ["payments", "Payments"],
+  ["returns", "Returns"],
+  ["settings", "Tax settings"],
+];
+
+function viewHref(view: TaxView, incomeYear: number | null): string {
+  return `/operations/income-tax${view === "overview" ? "" : `/${view}`}${incomeYear ? `?incomeYear=${incomeYear}` : ""}`;
+}
+
+/** A forecast figure, or "Forecast incomplete" when the year has nothing to work from (decision 702). */
+function ForecastFigure({ value, incomplete }: { value: string; incomplete: boolean }) {
+  return incomplete ? <span className={ui.muted}>Forecast incomplete</span> : <Money value={value} />;
+}
+
+function Figures({ report, incomplete }: { report: Supported; incomplete: boolean }) {
+  return (
+    <div className={ui.statRow}>
+      <Stat label="Taxable income" value={<ForecastFigure value={report.workpaper.taxableIncome} incomplete={incomplete} />} />
+      <Stat label="Residual income tax" value={<ForecastFigure value={report.workpaper.rit} incomplete={incomplete} />} />
+      <Stat
+        label={!incomplete && Number(report.endOfYear.amount) < 0 ? "Expected refund" : "Expected end-of-year tax"}
+        value={<ForecastFigure value={report.endOfYear.amount.replace(/^-/, "")} incomplete={incomplete} />}
+      />
+    </div>
+  );
+}
+
+function DueDates({ report, incomplete }: { report: Supported; incomplete: boolean }) {
+  return (
+    <Card title="Due dates" description="Payments to IRD for this year and last year's end-of-year tax. A date on a weekend or public holiday is on time the next business day.">
+      <div className={ui.tableWrap}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <thead>
+            <tr>
+              <th>Due</th>
+              <th>What</th>
+              <th className={ui.num}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.dueDates.map((entry) => (
+              <tr key={entry.key}>
+                <td data-label="Due">
+                  {formatDate(entry.dueDate)}
+                  {entry.onTimeBy.date !== entry.dueDate ? <span className={ui.muted}> (on time by {formatDate(entry.onTimeBy.date)})</span> : null}
+                </td>
+                <td data-label="What">{entry.label}</td>
+                <td data-label="Amount" className={ui.num}>
+                  {entry.amount === null ? (
+                    <span className={ui.muted}>Not known yet</span>
+                  ) : incomplete && dependsOnForecast(entry, report.incomeYear) ? (
+                    <span className={ui.muted}>Forecast incomplete</span>
+                  ) : (
+                    <Money value={entry.amount} />
+                  )}{" "}
+                  {entry.estimate ? <Badge tone="amber">Estimate</Badge> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function Overview({ report, incomplete }: { report: Supported; incomplete: boolean }) {
+  const next = nextDue(report.dueDates, report.interest.soFar.asAt);
+  const tasks = taxTasks(report);
   return (
     <>
-      <div className={ui.statRow}>
-        <Stat label="Taxable income" value={<Money value={report.workpaper.taxableIncome} />} />
-        <Stat label="Tax" value={<Money value={report.workpaper.tax} />} />
-        <Stat label="Residual income tax" value={<Money value={report.workpaper.rit} />} />
-        <Stat label="Provisional tax" value={<Money value={report.endOfYear.provisional} />} />
-        <Stat label={Number(report.endOfYear.amount) < 0 ? "Expected refund" : "Expected end-of-year tax"} value={<Money value={report.endOfYear.amount.replace(/^-/, "")} />} />
-      </div>
-      <Card title="Due dates" description="Payments to IRD for this year and last year's end-of-year tax. A date on a weekend or public holiday is on time the next business day.">
-        <div className={ui.tableWrap}>
-          <table className={`${ui.table} ${ui.stackOnPhone}`}>
-            <thead>
-              <tr>
-                <th>Due</th>
-                <th>What</th>
-                <th className={ui.num}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.dueDates.map((entry) => (
-                <tr key={entry.key}>
-                  <td data-label="Due">
-                    {formatDate(entry.dueDate)}
-                    {entry.onTimeBy.date !== entry.dueDate ? <span className={ui.muted}> (on time by {formatDate(entry.onTimeBy.date)})</span> : null}
-                  </td>
-                  <td data-label="What">{entry.label}</td>
-                  <td data-label="Amount" className={ui.num}>
-                    {entry.amount === null ? <span className={ui.muted}>Not known yet</span> : <Money value={entry.amount} />} {entry.estimate ? <Badge tone="amber">Estimate</Badge> : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <Figures report={report} incomplete={incomplete} />
+      <Card title="Next payment to IRD">
+        {next ? (
+          <p>
+            <strong>{formatDate(next.dueDate)}</strong>: {next.label},{" "}
+            {next.amount === null ? "amount not known yet" : incomplete && dependsOnForecast(next, report.incomeYear) ? "forecast incomplete" : <Money value={next.amount} />}
+            {next.estimate ? <> <Badge tone="amber">Estimate</Badge></> : null}
+          </p>
+        ) : (
+          <p className={ui.muted}>No payment is due from today for this income year.</p>
+        )}
       </Card>
-      <Workpaper organisationId={organisationId} report={report} onSaved={reload} />
-      <TaxAssets organisationId={organisationId} assets={report.taxAssets} incomeYear={report.incomeYear} onSaved={reload} />
-      <Provisional report={report} />
-      <InterestCard report={report} />
-      {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
-      {report.ir4 ? (
-        <TaxReturnCard title={`IR4 company return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR4 form and guide" order={IR4_BOXES} labels={IR4_BOX_LABELS} result={report.ir4} residualBox="30J" outcomeBox="30L" provisionalBox="33" />
-      ) : null}
-      {report.ir3 ? (
-        <TaxReturnCard title={`IR3 individual return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR3 form and guide (the Question 36 worksheet)" order={IR3_BOXES} labels={IR3_BOX_LABELS} result={report.ir3} residualBox="W14" outcomeBox="W16" provisionalBox="39" />
-      ) : null}
-      {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
-        <Card title="IR10 financial statements summary">
-          <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>
-        </Card>
-      )}
-      <BookPayments organisationId={organisationId} years={report.years} onChanged={reload} />
-      <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} endMonth={report.endMonth} onChanged={reload} />
-      <IrdImports organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
-      <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} endMonth={report.endMonth} onSaved={reload} />
-      <Card title="Notes">
-        <ul>
-          {report.notes.map((text) => (
-            <li key={text}>{text}</li>
-          ))}
-        </ul>
+      <Card title="Needs attention">
+        {tasks.length === 0 ? (
+          <p className={ui.muted}>Nothing for this income year.</p>
+        ) : (
+          <ul className={styles.tasks}>
+            {tasks.map((task) => (
+              <li key={task.key}>
+                {task.text} <Link href={viewHref(task.view, report.incomeYear)}>{TAX_VIEWS.find(([key]) => key === task.view)![1]}</Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
+      <DueDates report={report} incomplete={incomplete} />
     </>
   );
 }
 
-export function IncomeTaxView({ organisationId }: { organisationId: string }) {
-  const [incomeYear, setIncomeYear] = useState<number | null>(null);
-  const loaded = useApiData<{ report: IncomeTaxReport }>("/api/income-tax", { organisationId, incomeYear });
-  const report = loaded.data?.report;
-  if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
-  if (!report) return <p className={ui.muted}>Loading…</p>;
+function Report({ organisationId, report, reload, view, gst }: { organisationId: string; report: Supported; reload: () => void; view: Exclude<TaxView, "settings">; gst: boolean }) {
+  const incomplete = forecastIncomplete(report);
   return (
     <>
-      <div className={ui.toolbar}>
-        <Field label="Income year">
-          <select value={report.incomeYear} onChange={(event) => setIncomeYear(Number(event.target.value))}>
-            {report.years.map((value) => (
-              <option key={value} value={value}>
-                {incomeYearLabel(value, report.endMonth)}
-              </option>
-            ))}
-          </select>
-        </Field>
+      {/* On Overview, Needs attention says the same, so the notice isn't repeated there. */}
+      {incomplete && (view === "forecast" || view === "calculation") ? (
+        <Notice tone="warning">
+          <strong>Forecast incomplete.</strong> No income or expenses were found for this year, in the books or the overall budget, and nothing&apos;s been typed or adjusted, so the tax isn&apos;t shown as $0.00.{" "}
+          <Link href="/operations/budgets">Add a budget</Link> or <Link href={viewHref("calculation", report.incomeYear)}>check the calculation</Link>.
+        </Notice>
+      ) : null}
+      {view === "overview" ? <Overview report={report} incomplete={incomplete} /> : null}
+      {view === "forecast" ? (
+        <>
+          <Figures report={report} incomplete={incomplete} />
+          <Card title="What the forecast is based on">
+            <p>
+              {report.actualsTo ? `Actuals to ${formatDate(report.actualsTo)}.` : "No actuals yet for this income year."}{" "}
+              {report.budgetFrom ? `From ${formatDate(report.budgetFrom)}, the ${report.budgetName ?? "overall budget"}${report.budgetName ? "" : " (none set up yet)"}.` : "The year has ended, so no budget is used."}
+            </p>
+            <div className={ui.actions}>
+              <Link href="/operations/budgets">Budgets</Link>
+              <Link href={viewHref("calculation", report.incomeYear)}>Tax calculation and adjustments</Link>
+            </div>
+          </Card>
+          <Card title="Notes">
+            <ul>
+              {report.notes.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
+          </Card>
+        </>
+      ) : null}
+      {view === "calculation" ? (
+        <>
+          <Workpaper organisationId={organisationId} report={report} onSaved={reload} />
+          <TaxAssets organisationId={organisationId} assets={report.taxAssets} incomeYear={report.incomeYear} onSaved={reload} />
+        </>
+      ) : null}
+      {view === "payments" ? (
+        <>
+          <DueDates report={report} incomplete={incomplete} />
+          <Provisional report={report} />
+          <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} endMonth={report.endMonth} onSaved={reload} />
+          <BookPayments organisationId={organisationId} years={report.years} onChanged={reload} />
+          <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} endMonth={report.endMonth} onChanged={reload} />
+          <IrdImports organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
+          <InterestCard report={report} />
+        </>
+      ) : null}
+      {view === "returns" ? (
+        <>
+          {report.ica ? <IcaCard organisationId={organisationId} ica={report.ica} onSaved={reload} /> : null}
+          {report.ir4 ? (
+            <TaxReturnCard title={`IR4 company return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR4 form and guide" order={IR4_BOXES} labels={IR4_BOX_LABELS} result={report.ir4} residualBox="30J" outcomeBox="30L" provisionalBox="33" />
+          ) : null}
+          {report.ir3 ? (
+            <TaxReturnCard title={`IR3 individual return: income and tax (${report.incomeYear})`} source="IRD's 2026 IR3 form and guide (the Question 36 worksheet)" order={IR3_BOXES} labels={IR3_BOX_LABELS} result={report.ir3} residualBox="W14" outcomeBox="W16" provisionalBox="39" />
+          ) : null}
+          {report.ir10 ? <Ir10Card organisationId={organisationId} report={report} ir10={report.ir10} onSaved={reload} /> : (
+            <Card title="IR10 financial statements summary">
+              <p className={ui.muted}>The IR10 is shown once the {report.incomeYear} income year has ended (31 March {report.incomeYear}).</p>
+            </Card>
+          )}
+          {gst ? (
+            <Card title="GST returns">
+              <p>
+                GST returns have their own page: <Link href="/operations/gst-return">GST return</Link>.
+              </p>
+            </Card>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/** Which page of the workspace a path is (decision 702). */
+export function taxViewOf(pathname: string): TaxView {
+  const segment = pathname.split("/")[3];
+  return TAX_VIEWS.find(([key]) => key === segment)?.[0] ?? "overview";
+}
+
+export function IncomeTaxView({ organisationId }: { organisationId: string }) {
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const router = useRouter();
+  const modules = useModules(organisationId);
+  const requestedYear = search.get("incomeYear");
+  const incomeYear = requestedYear && /^\d{4}$/.test(requestedYear) ? Number(requestedYear) : null;
+  const view = taxViewOf(pathname);
+  const loaded = useApiData<{ report: IncomeTaxReport }>("/api/income-tax", { organisationId, incomeYear });
+  const report = loaded.data?.report;
+  const year = report?.incomeYear ?? incomeYear;
+  return (
+    <>
+      <PageHeader
+        title="Income tax"
+        description="What's due, what to set aside, and the working behind it."
+        actions={
+          report ? (
+            <Field label="Income year">
+              <select value={report.incomeYear} onChange={(event) => router.push(`${pathname}?incomeYear=${event.target.value}`)}>
+                {report.years.map((value) => (
+                  <option key={value} value={value}>
+                    {incomeYearLabel(value, report.endMonth)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : undefined
+        }
+      />
+      <div className={styles.workspace}>
+        <nav className={styles.navigation} aria-label="Income tax">
+          {TAX_VIEWS.map(([key, label]) => (
+            <Link key={key} href={viewHref(key, year)} aria-current={view === key ? "page" : undefined}>
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className={styles.content}>
+          {loaded.error ? (
+            <Notice tone="error">{loaded.error}</Notice>
+          ) : !report ? (
+            <p className={ui.muted}>Loading…</p>
+          ) : (
+            <>
+              <details className={styles.review}>
+                <summary>Estimates, not yet reviewed by an accountant</summary>
+                <p>These figures follow IRD&apos;s published rules as Tohyee reads them. They haven&apos;t been reviewed by an accountant yet, so check them before relying on them. Nothing here files a return or pays IRD.</p>
+              </details>
+              {view === "settings" ? (
+                <Settings key={`${report.settings.version}`} organisationId={organisationId} settings={report.settings} onSaved={loaded.reload} />
+              ) : report.supported ? (
+                <Report organisationId={organisationId} report={report} reload={loaded.reload} view={view} gst={Boolean(modules?.gst)} />
+              ) : (
+                <Notice tone="info">
+                  {report.reason} <Link href={viewHref("settings", year)}>Tax settings</Link>
+                </Notice>
+              )}
+            </>
+          )}
+        </div>
       </div>
-      <Notice tone="warning">
-        These figures follow IRD&apos;s published rules as Tohyee reads them. They haven&apos;t been reviewed by an accountant yet, so check them before relying on them. Nothing here files a return or pays IRD.
-      </Notice>
-      {report.supported ? <Report organisationId={organisationId} report={report} reload={loaded.reload} /> : <Notice tone="info">{report.reason}</Notice>}
-      <Settings key={`${report.settings.version}`} organisationId={organisationId} settings={report.settings} onSaved={loaded.reload} />
     </>
   );
 }

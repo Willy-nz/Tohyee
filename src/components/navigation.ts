@@ -12,8 +12,8 @@ export type MenuSection = { heading: string | null; links: MenuLink[] };
 export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
 
 /**
- * The accounting menus: Home, Sales, Purchases, Banking, Payroll, Reports,
- * Accountant. Each opens to a panel of a few labelled groups.
+ * The accounting menus: Home, Sales, Purchases, Banking, Payroll, Farm,
+ * Reports, Accounting, Tax and Settings (#375, decision 700). Each opens to a panel of a few labelled groups.
  * Making something new lives in the "+ New" menu (NEW_ACTIONS), not here.
  * Server settings aren't here: they open only on the server computer.
  */
@@ -255,7 +255,8 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Accountant",
+    // #375 (decision 700): the old Accountant menu split into Accounting, Tax and Settings.
+    label: "Accounting",
     groups: [
       {
         heading: "Ledger",
@@ -291,8 +292,13 @@ export const MENUS: Menu[] = [
           ]),
         ],
       },
+    ],
+  },
+  {
+    label: "Tax",
+    groups: [
       {
-        heading: "Tax and R&D",
+        heading: "Tax",
         links: [
           ...section("GST", [
             { href: "/operations/gst-return", label: "GST return", module: "gst" },
@@ -307,6 +313,11 @@ export const MENUS: Menu[] = [
           ]),
         ],
       },
+    ],
+  },
+  {
+    label: "Settings",
+    groups: [
       {
         // The most used settings; the rest are on the All settings page (SETTINGS, decision 580).
         heading: "Settings",
@@ -519,22 +530,9 @@ export const AREAS: Record<string, string[]> = {
   Farm: ["/operations/farming"],
   Banking: ["/operations/bank-accounts", "/operations/bank-rules", "/operations/exchange-rates", "/operations/fx-revaluation"],
   Reports: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
-  Accountant: [
-    "/operations/accounts",
-    "/operations/ledger-journals",
-    "/operations/inventory",
-    "/operations/fixed-assets",
-    "/operations/livestock",
-    "/operations/period-close",
-    "/operations/bank-accounts",
-    "/operations/gst-return",
-    "/operations/gst-audit",
-    "/operations/tax",
-    "/operations/income-tax",
-    "/operations/rd",
-    "/operations/settings",
-    "/operations/members",
-  ],
+  Accounting: ["/operations/accounts", "/operations/ledger-journals", "/operations/inventory", "/operations/fixed-assets", "/operations/livestock", "/operations/period-close"],
+  Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax", "/operations/income-tax", "/operations/rd"],
+  Settings: ["/operations/settings", "/operations/members", "/operations/modules"],
 };
 
 export function inArea(pathname: string, menu: Menu): boolean {
