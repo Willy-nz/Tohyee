@@ -18675,6 +18675,27 @@ in `tests/unit/pasture.test.ts` and `tests/integration/pasture.test.ts`.
   record entered by mistake is removed, and kept for the history. They're
   copied into the analytics database as `tohyee_farm_pasture_readings`,
   `tohyee_farm_grazings` and `tohyee_farm_supplements`.
+- **PF9 All farms compared** (#390, added by Claude 21 Oct 2026, Claude's
+  rule kept to PF3's arithmetic, not yet reviewed; Xero has nothing like it,
+  and it works as a Power BI table with a total row does when the total is
+  recalculated from the rows' detail, not by averaging the rows). Farm ›
+  All farms compared lists each active farm on a date: paddocks, effective
+  and mapped hectares, cover (PF3), the newest and oldest readings used,
+  how many paddocks have no reading or no area, and its latest fertiliser
+  plan with tonnes applied and planned; each links to that farm's records.
+  **Home farm**: A 10.00 ha at 2,500 (15 Oct), B 5.00 ha at 1,900 (20 Oct),
+  C 8.00 ha no reading: **2,300** over 15.00 ha, newest reading 20 Oct.
+  **Runoff**: A 40.00 ha at 2,000 (1 Sep), B 2.00 ha no reading: **2,000**
+  over 40.00 ha, newest 1 Sep, flagged as 51 days old (more than 14 days,
+  as Home's catch-up list). **All 2 farms**: (34,500 + 80,000) ÷ 55.00 =
+  **2,082 kg DM/ha** (not 2,150, the average of the two averages), 114,500
+  kg DM, 2 paddocks with no reading, readings from 1 Sep to 20 Oct, 1 of 2
+  farms not walked in the last 14 days. Areas and fertiliser tonnes are
+  added; farms without a plan are counted. A farm with no readings shows
+  "No readings", never 0. Archived farms aren't included. Money isn't
+  shown: that waits for the farm reporting rules. Tested in
+  `tests/unit/farm-comparison.test.ts` and
+  `tests/integration/farm-comparison.test.ts`.
 
 ## Farming (#249) stage 5: the Farming API for people's own apps (FA1-FA8; chosen by Claude 19 Oct 2026 when Jess said "Yea do those", not yet reviewed)
 

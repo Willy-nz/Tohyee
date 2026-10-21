@@ -7351,3 +7351,15 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      and makes more work when the guess is right. A farm the email names,
      or the only active farm, is used without a check. An archived usual
      farm isn't used. No farm is never filled in from anything else.
+
+742. **All farms compared** (21 October 2026, #390, PF9; Claude's rule
+     kept to PF3's arithmetic). A separate page rather than a tab on Home:
+     Home stays the organisation-wide overview, and nine or more farms need
+     a table. The all-farms cover is worked from every paddock's area and
+     reading, so a big farm counts for its hectares; averaging the farms'
+     averages would give a small block the same weight as a large one.
+     Missing data is shown, not filled in: "No readings", paddocks with no
+     reading or no area, and the dates the readings came from. "Not fresh"
+     uses Home's 14 days. Only operational figures: no money until the
+     farm reporting rules exist (#390). Reads the farms in turn like Home
+     does; batching waits for a measured need.

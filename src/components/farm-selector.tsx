@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -47,6 +48,7 @@ export function FarmSelector({ farms, farm, stale = false, onChange }: { farms: 
           {active.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
         </select>
       </Field>
+      <Link href="/operations/farming/compare">Compare all farms</Link>
       {stale ? <Notice tone="warning">The farm you were working on is archived or isn&apos;t in this organisation. Choose a farm.</Notice> : !farm ? <p className={ui.muted}>Choose a farm to view or add its records.</p> : null}
     </div>
   );
