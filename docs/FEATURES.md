@@ -2082,6 +2082,11 @@ that something happened.
   the consent screen and `/api/analytics/google/callback` to the redirect
   URIs; while the app is in Testing, Google ends sign-ins after 7 days.
   Tested with canned Google responses only, not a real GA4 property.
+- **Analytics: how fresh a report is** (#387, decision 698). Under a
+  report's dates, each source says when it was last refreshed and the
+  latest date in its data; a failed refresh shows as a warning that the
+  report still has the last good data, and sources refreshed at different
+  times are pointed out.
 - **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into

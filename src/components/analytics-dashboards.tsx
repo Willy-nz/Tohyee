@@ -10,6 +10,7 @@ import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueRules } from "@/components/analytics/saved-values";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
 import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
@@ -410,6 +411,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         onSettings={(settings) => setDraft({ ...dashboard, settings })}
       />
 
+      <ReportFreshnessLine organisationId={organisationId} dashboardId={dashboard.id} />
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
       {theming && editing && canEdit ? (
