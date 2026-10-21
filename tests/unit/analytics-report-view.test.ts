@@ -200,3 +200,22 @@ describe("financial years and view filters in the query (decisions 755-756)", ()
     expect(other.rows).toHaveLength(2);
   });
 });
+
+describe("financial periods on charts and projections (decision 755)", () => {
+  it("names chart groups by period and projects financial years from the balance date", async () => {
+    const { toEChartsOption } = await import("@/lib/analytics/chart-spec");
+    const { projectionPlan } = await import("@/lib/analytics/projection");
+    const theme = { text: "#111111", mutedText: "#555555", grid: "#eeeeee", background: "#ffffff", palette: ["#0e7467"] };
+    const option = toEChartsOption(
+      { kind: "column", category: "category", series: [{ field: "m0", label: "Sales" }], valueFormat: "number", periodName: (value) => periodLabel(value, "fyear", 5) },
+      [
+        { category: "2025-06-01", m0: "1" },
+        { category: "2026-06-01", m0: "2" },
+      ],
+      theme,
+    ) as { xAxis?: { data?: string[] } };
+    expect(option.xAxis?.data).toEqual(["FY2026", "FY2027"]);
+    const plan = projectionPlan(["2024-06-01", "2025-06-01", "2026-06-01"], [true, true, true], 1, { grain: "fyear" });
+    expect(plan.ok && [plan.grain, plan.future, plan.missing]).toEqual(["fyear", ["2027-06-01"], []]);
+  });
+});

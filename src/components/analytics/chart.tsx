@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ECharts, EChartsOption } from "echarts";
-import { formatChartValue, toEChartsOption, type ChartSpec, type KpiSummary } from "@/lib/analytics/chart-spec";
+import { chartRows, formatChartValue, projectedRows, toEChartsOption, type ChartSpec, type KpiSummary } from "@/lib/analytics/chart-spec";
 import { CHART_TOKENS, chartThemeFromTokens, readChartTheme, type ChartTheme } from "@/lib/charts/theme";
 import { useReportThemeKey } from "@/components/analytics/report-theme";
 import { isMapKind, loadNzMaps } from "@/components/analytics/nz-maps";
@@ -77,6 +77,9 @@ export function Chart({ spec, rows, height, onPick, highlight }: ChartProps) {
     pickRef.current = onPick;
   }, [onPick]);
   const optionRef = useRef(option);
+  // Whether a linear projection is drawn, or why not, and its figures for the table (decision 692).
+  const projectionNote = useMemo(() => chartRows(spec, rows).projection?.note ?? null, [spec, rows]);
+  const projected = useMemo(() => projectedRows(spec, rows), [spec, rows]);
   const title = spec.title || spec.series.map((series) => series.label).join(", ") || "Chart";
 
   useEffect(() => {
@@ -153,6 +156,7 @@ export function Chart({ spec, rows, height, onPick, highlight }: ChartProps) {
       ) : (
         <div ref={containerRef} className={`${styles.canvas} ${onPick ? styles.pickable : ""}`} style={height ? { height, minHeight: height } : undefined} role="img" aria-label={title} />
       )}
+      {projectionNote ? <p className={styles.projectionNote}>{projectionNote}</p> : null}
       {/* A table can't be squeezed to 1px, so it's hidden inside a box that can (otherwise a long one stretches the page). */}
       <div className={styles.visuallyHidden}>
       <table>
@@ -169,6 +173,14 @@ export function Chart({ spec, rows, height, onPick, highlight }: ChartProps) {
               <th scope="row">{String(row[spec.category] ?? "")}</th>
               {spec.series.map((series) => (
                 <td key={series.field}>{row[series.field] === null ? "" : String(row[series.field] ?? "")}</td>
+              ))}
+            </tr>
+          ))}
+          {projected.map((row) => (
+            <tr key={`projected-${row.period}`}>
+              <th scope="row">{row.period} (projected)</th>
+              {row.values.map((value, index) => (
+                <td key={spec.series[index].field}>{value === null ? "" : `${value} (linear projection, not an actual)`}</td>
               ))}
             </tr>
           ))}

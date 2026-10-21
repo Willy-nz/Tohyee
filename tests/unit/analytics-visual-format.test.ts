@@ -88,7 +88,7 @@ describe("checking the new settings", () => {
     expect(() => parseChartFormat({ referenceLines: [{ kind: "band", value: "5", to: "1" }] })).toThrow(/more than/);
     expect(() => parseChartFormat({ referenceLines: Array(9).fill({ kind: "average" }) })).toThrow(/up to 8/);
     expect(() => parseChartFormat({ categoryColors: Array(51).fill({ name: "x", color: "#000000" }) })).toThrow(/up to 50/);
-    expect(() => parseChartFormat({ series: [{ forecast: 40 }] })).toThrow(/forecast/i);
+    expect(() => parseChartFormat({ series: [{ forecast: 40 }] })).toThrow(/linear projection/i);
     expect(() => parseChartFormat({ bars: { thickness: 200 } })).toThrow(/thickness/i);
   });
 
@@ -204,7 +204,7 @@ describe("tooltips", () => {
   });
 });
 
-describe("reference lines, trend and forecast", () => {
+describe("reference lines, trend and linear projection", () => {
   it("works out average, median, min, max and percentiles from the drawn values", () => {
     const values = [100, 200, 300, 400];
     expect(referenceValue({ kind: "average" }, values)).toBe(250);
@@ -236,15 +236,19 @@ describe("reference lines, trend and forecast", () => {
     expect(((bars.series.find((series) => series.name === "Reference lines")!.markLine as { data: Array<Record<string, unknown>> }).data[0])).toMatchObject({ xAxis: 50 });
   });
 
-  it("fits a straight trend line and carries it forward for a simple forecast", () => {
+  it("fits a straight trend line and carries it forward as a linear projection (decision 692)", () => {
     expect(trendLine([100, 200, 300, 400], 2)).toEqual([100, 200, 300, 400, 500, 600]);
     expect(trendLine([5], 0)).toEqual([5]);
     const result = option({ ...columns, kind: "line" }, { series: [{ trend: true, forecast: 2 }] });
     expect(result.xAxis!.data).toEqual(["Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026"]);
     const trend = result.series.find((series) => series.name === "Sales trend")!;
-    expect(trend.data).toEqual([100, 200, 300, 400, 500, 600]);
+    expect(trend.data).toEqual([100, 200, 300, 400, null, null]);
     expect(trend.lineStyle).toMatchObject({ type: "dashed" });
-    // The value itself has nothing in the forecast months.
+    // The projection is its own dotted line from the last date shown.
+    const projection = result.series.find((series) => series.name === "Sales linear projection")!;
+    expect(projection.data).toEqual([null, null, null, 400, 500, 600]);
+    expect(projection.lineStyle).toMatchObject({ type: "dotted" });
+    // The value itself has nothing in the projected months.
     expect(result.series[0].data.slice(4)).toEqual([null, null]);
   });
 });
