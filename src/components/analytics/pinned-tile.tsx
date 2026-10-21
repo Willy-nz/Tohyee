@@ -1,8 +1,11 @@
 "use client";
 
+import { MAP_ATTRIBUTION } from "@/lib/analytics/maps";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
+import { SmallMultiplesView } from "@/components/analytics/small-multiples";
+import { additiveValues } from "@/lib/analytics/small-multiples";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { Empty, Notice, ui } from "@/components/ui";
 import { tileChartSpec, tileWithDefaults } from "@/lib/analytics/tile-chart";
@@ -118,11 +121,15 @@ function PinnedTileResult({ tile, result }: { tile: Tile; result: QueryResult })
 
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   if (tile.visual === "kpi" && measures.length > 0) return <KeyFigureView result={result} format={tile.format} compact />;
+  if (spec && tile.query?.breakdown && (tile.visual === "column" || tile.visual === "bar" || tile.visual === "line")) {
+    return <SmallMultiplesView spec={spec} rows={result.rows} additive={additiveValues(tile.query.measures)} height={120} compact />;
+  }
   if (spec) {
     const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(result.rows, measures[0].key) : result.rows;
     return (
       <div className={styles.chart}>
         <Chart spec={spec} rows={rows} />
+        {tile.visual === "filledmap" || tile.visual === "pointmap" ? <p className={styles.attribution}>{MAP_ATTRIBUTION}</p> : null}
       </div>
     );
   }

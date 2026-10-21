@@ -1,0 +1,22 @@
+New Zealand boundaries used by Analytics maps
+(src/lib/analytics/maps/nz-regions.json and nz-districts.json)
+
+Regions: Stats NZ, Regional Council 2017 (generalised).
+Territorial authorities: Stats NZ, Territorial Authority 2021 (generalised);
+Auckland's local board areas are joined into one area, Auckland, and the
+"Area Outside Territorial Authority" is left out.
+
+Source: Stats NZ (https://datafinder.stats.govt.nz/), obtained through
+geoBoundaries (https://www.geoboundaries.org/, records NZL-ADM1-40311993 and
+NZL-ADM2-76426892), which lists both as licensed under the Creative Commons
+Attribution 4.0 International licence.
+
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+
+Changes made for Tohyee: simplified to about 5% of the points (mapshaper,
+Visvalingam, shapes kept), slivers under 3 km² removed, coordinates rounded
+to 0.001°, names corrected to UTF-8 and Manawatū-Whanganui, longitudes west
+of 180° taken as east, and the Chatham Islands moved 6.5° west so they are
+drawn as an inset near the mainland. Every map in Tohyee shows
+"Boundaries: Stats NZ, CC BY 4.0." under it.

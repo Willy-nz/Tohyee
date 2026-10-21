@@ -330,6 +330,7 @@ describeWithDatabase("analytics dashboards", () => {
         { ...tile, id: "m", visual: "heatmap", query: { ...byRegion, breakdown: { field: "order_date", grain: "month" } } },
         { ...tile, id: "c", visual: "calendar", query: { ...byRegion, groupBy: { field: "order_date", grain: "day" } } },
         { ...tile, id: "k", visual: "sankey", query: { ...byRegion, breakdown: { field: "order_date", grain: "year" } } },
+        { ...tile, id: "sm", visual: "line", query: { ...byRegion, breakdown: { field: "order_date", grain: "year" } }, format: { smallMultiples: { max: 3 } } },
       ]),
     );
     expect(saved.status).toBe(200);
@@ -341,7 +342,7 @@ describeWithDatabase("analytics dashboards", () => {
     expect(answer.data.columns.map((column: { key: string }) => column.key)).toEqual(["category", "breakdown", "m0"]);
 
     const refusals: Array<[unknown, RegExp]> = [
-      [{ ...tile, visual: "column", query: { ...byRegion, breakdown: { field: "order_date", grain: "day" } } }, /doesn't use a second grouping/],
+      [{ ...tile, visual: "pie", query: { ...byRegion, breakdown: { field: "order_date", grain: "day" } } }, /doesn't use a second grouping/],
       [{ ...tile, visual: "scatter", query: byRegion }, /needs two values/],
       [{ ...tile, visual: "histogram", query: { ...byRegion, measures: [qty, qty] } }, /spread of one value/],
       [{ ...tile, visual: "histogram", query: byRegion, format: { histogram: { bins: 2, width: "1" } } }, /not both/],
@@ -349,6 +350,41 @@ describeWithDatabase("analytics dashboards", () => {
       [{ ...tile, visual: "sankey", query: byRegion }, /flows to/],
       [{ ...tile, visual: "calendar", query: { ...byRegion, groupBy: { field: "order_date", grain: "month" } } }, /by day/],
       [{ ...tile, visual: "treemap", query: { ...byRegion, measures: [qty, qty] } }, /one value/],
+    ];
+    for (const [entry, message] of refusals) {
+      const refused = await body(await patch([entry]));
+      expect(refused.status).toBe(400);
+      expect(refused.data.error).toMatch(message);
+    }
+    await patch([tile]);
+  });
+
+  it("saves filled maps and maps with points, and refuses the wrong values (#376 phase 2)", async () => {
+    const patch = (tiles: unknown[]) =>
+      dashboardRoute.PATCH(
+        apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, tiles } }),
+        params({ dashboardId }),
+      );
+    const qty = { label: "Qty", aggregate: "sum", field: "quantity" };
+    const byRegion = { ...tile.query, groupBy: { field: "region" }, measures: [qty] };
+    const latLong = [{ label: "Latitude", aggregate: "avg", field: "quantity" }, { label: "Longitude", aggregate: "avg", field: "unit_price" }];
+    const saved = await body(
+      await patch([
+        { ...tile, id: "fm", visual: "filledmap", query: byRegion, format: { map: { areas: "regions" } } },
+        { ...tile, id: "pm", visual: "pointmap", query: { ...byRegion, measures: [...latLong, qty] } },
+      ]),
+    );
+    expect(saved.status).toBe(200);
+    expect(saved.data.dashboard.tiles.map((entry: { visual: string; format?: unknown }) => [entry.visual, entry.format ?? null])).toEqual([
+      ["filledmap", { map: { areas: "regions" } }],
+      ["pointmap", null],
+    ]);
+    const refusals: Array<[unknown, RegExp]> = [
+      [{ ...tile, visual: "filledmap", query: { ...byRegion, measures: [qty, qty] } }, /one value for each region/],
+      [{ ...tile, visual: "filledmap", query: byRegion, format: { map: { areas: "suburbs" } } }, /Map areas/],
+      [{ ...tile, visual: "pointmap", query: byRegion }, /latitude and a longitude/],
+      [{ ...tile, visual: "pointmap", query: { ...byRegion, measures: [...latLong, { ...qty, compare: "previous_year" }] } }, /can't compare|grouped by a date/],
+      [{ ...tile, visual: "filledmap", query: { ...byRegion, groupBy: null } }, /needs something to group by/],
     ];
     for (const [entry, message] of refusals) {
       const refused = await body(await patch([entry]));

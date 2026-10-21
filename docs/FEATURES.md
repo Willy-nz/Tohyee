@@ -568,7 +568,8 @@ that something happened.
   date of a repeat, and repeats read from email wording. The private copy
   (My mail, #250) uses the same connection and folder choice.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
-  #250 with #340, PM1-PM14, decisions 610-617, tenant migration 0168, not
+  #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
+  migrations 0168, 0169 and 0180, not
   yet reviewed; not tried with a real mailbox): an Owner of any
   organisation keeps a copy of their own Gmail or Microsoft mail, from the
   folders or labels they tick on the farm calendar's one connection and
@@ -588,8 +589,17 @@ that something happened.
   Delete imported history are separate. Since PM15-PM19 (decisions 618,
   619, tenant migration 0169): the Owner can let their own Look only AI
   keys search and read it over MCP (search_my_mail, read_my_mail), citing
-  each email; no other key is offered the tools. Not yet: filing an
-  attachment into shared data with a preview.
+  each email; no other key is offered the tools. Since PM20-PM29
+  (decisions 720-726, tenant migration 0180): **File…** on an attachment
+  files a copy into the bills inbox, a soil test, pasture reading or
+  fertiliser application import, or an existing record's files, after a
+  preview of exactly what others will see and what stays private (each
+  feature's own import preview and checks; refused if anything changed
+  since). Filed copies say "filed from a private email" and carry nothing of
+  the email. Rules (sender or @domain and/or a file name pattern) put
+  matches in **To file** for the Owner to confirm one by one. Not yet:
+  making the bill while filing, choosing import columns from My mail, rules
+  that file without asking.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
@@ -2086,8 +2096,44 @@ that something happened.
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into
   place (the arrows still work from the keyboard), duplicated, or clicked
-  to open, and **+ Add text** adds a heading with notes to split a
-  dashboard into sections. Up to 40 tiles.
+  to open, and **+ Add text or item** adds a heading with notes to split a
+  dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: New Zealand maps** (#376 phase 2, decision 687). A
+  **filled map** colours New Zealand's regions or districts and cities by a
+  value, e.g. sales by region; names are matched however they're spelt
+  (macrons, "Region", "District" and so on), and names that aren't on the
+  map are listed under it. A **map with points** puts a dot at each
+  latitude and longitude, sized by a third value if you like. The
+  boundaries come with Tohyee (Stats NZ, CC BY 4.0), so no outside map
+  service is used.
+- **Analytics: text, images, shapes and buttons** (#376 phase 2, decisions
+  683-686). **+ Add text or item** adds one of four things to a report.
+  **Text** can use **bold**, *italic*, links, lists and values from the
+  data, e.g. "Sales this month: {Sales}", worked out over the report's
+  dates and slicers; whatever is typed always shows as text, and only web
+  and email links become links. An **image** (JPG or PNG, up to 5 MB) is
+  stored with the report and only people who can see the report can see
+  it. A **shape or line** (rectangle, rounded, circle, line or arrow) uses
+  the report's theme colours unless others are chosen. A **button** resets
+  the report's filters; going to another page and opening a bookmark will
+  come with report pages and bookmarks.
+- **Analytics: pivot table (matrix) improvements** (#376 phase 2, decision
+  682). A pivot can have up to three column fields nested inside each
+  other (e.g. year, then channel), with a total for each outer column; rows
+  can be laid out stepped (one indented column, each group's total as its
+  heading, as Power BI's matrix) or a column per field as before; each
+  group opens and closes (+ / −, with Open all and Close all), and the
+  report can choose how many levels are open to start with. Clicking a
+  cell under nested columns opens that cell's rows, and exports name each
+  column by its whole path.
+- **Analytics: small multiples** (#376 phase 2, decision 681). A column,
+  bar or line chart can show "One small chart for each" value of a second
+  field, e.g. a chart per region: every small chart has the same groups
+  along the axis and the same value scale, one legend above them all, and
+  up to 6 charts (2 to 12 can be chosen). Past that the smaller ones are
+  added together exactly as "Other" when the values are totals or counts;
+  averages and other values that can't be added are left out, and the
+  card says so. Pinned tiles show up to four.
 - **Analytics: treemap, heat map, calendar heat map and Sankey** (#376
   phase 2, decision 680). A **treemap** shows each group as a box sized by
   its total, optionally split into a second grouping ("Inside each box"),

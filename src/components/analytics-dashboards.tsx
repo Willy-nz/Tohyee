@@ -14,6 +14,7 @@ import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/
 import { ThemePanel } from "@/components/analytics/theme-panel";
 import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
 import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/conditional";
+import { columnHeaderRows, columnPathText, initiallyCollapsed, isGroupRow, steppedRows, visibleWithCollapsed } from "@/lib/analytics/matrix";
 import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -24,11 +25,20 @@ import { mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, V
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
 import { calendarHeight, calendarYears } from "@/lib/analytics/chart-relationships";
+import { MAP_ATTRIBUTION, mapNote } from "@/lib/analytics/maps";
+import { additiveValues } from "@/lib/analytics/small-multiples";
+import { SmallMultiplesView } from "@/components/analytics/small-multiples";
+import { useTileResult } from "@/components/analytics/use-tile-result";
+import { ButtonItemView, ImageItemView, ItemEditor, ShapeItemView, TextItemView } from "@/components/analytics/items";
+import { isItemVisual, type ButtonAction } from "@/lib/analytics/items";
+
+/** Each small chart's height, by the tile's height. */
+const MULTIPLE_HEIGHTS: Record<TileHeight, number> = { small: 160, medium: 200, large: 260 };
 import type { ReportTheme } from "@/lib/charts/report-themes";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
-import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, paragraphs, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
+import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import type {
   Aggregate,
   ColumnInfo,
@@ -38,6 +48,7 @@ import type {
   PivotData,
   PivotDrillResult,
   PivotDrillSelection,
+  PivotDimension,
   PivotGrain,
   PivotRow,
   QueryResult,
@@ -80,7 +91,11 @@ const VISUALS: Array<{ value: Visual; label: string }> = [
   { value: "heatmap", label: "Heat map" },
   { value: "calendar", label: "Calendar heat map" },
   { value: "sankey", label: "Sankey" },
+  { value: "filledmap", label: "Filled map (NZ)" },
+  { value: "pointmap", label: "Map with points (NZ)" },
 ];
+
+const ITEM_NAMES: Record<string, string> = { text: "Text", image: "Image", shape: "Shape", button: "Button" };
 
 const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
   { value: "sum", label: "Total" },
@@ -237,7 +252,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
       {list.error ? <Notice tone="error">{list.error}</Notice> : !list.data ? <p className={ui.muted}>Loading reports…</p> : !reports.length ? <Empty>{search ? "No reports match your search." : can("bookkeeper") ? "Your first report starts here. Choose Create report to build it." : "No reports are available to you yet."}</Empty> : view === "list" ? (
         <div className={ui.tableWrap}><table className={ui.table}><thead><tr><th>Report</th><th>Charts and tables</th><th>Last updated</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link href={`/analytics/dashboards/${report.id}`}>{report.name}</Link><div className={ui.muted}>{report.description}</div></td><td>{report.tiles.length}</td><td>{formatDateTime(report.updatedAt)}</td></tr>)}</tbody></table></div>
       ) : <div className={styles.dashboardCards}>{reports.map((report) => <Link key={report.id} href={`/analytics/dashboards/${report.id}`} className={styles.dashboardCard}>
-        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{tile.visual === "text" ? "Text" : VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
+        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{ITEM_NAMES[tile.visual] ?? VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
         <strong>{report.name}</strong>{report.description ? <span className={ui.muted}>{report.description}</span> : null}<span className={styles.reportMeta}>{report.tiles.length} charts and tables · {formatDateTime(report.updatedAt)}</span>
       </Link>)}</div>}
     </>
@@ -282,6 +297,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
   const dates: DateContext = { today: loaded.data?.today ?? todayInBrowser(), financialYearEndMonth: loaded.data?.financialYearEndMonth ?? 3 };
   const canEdit = can("bookkeeper");
+  /**
+   * What a report's buttons do (#376 phase 2, decision 686). Only resetting
+   * the filters exists so far; pages and bookmarks (phase 3) add their
+   * actions here and in BUTTON_ACTIONS.
+   */
+  const runButtonAction = (action: ButtonAction) => {
+    if (action === "reset_filters") setFilters(null);
+  };
 
   async function save(next: Dashboard) {
     setBusy(true);
@@ -345,7 +368,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
-  const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && editingTile.visual === "text" ? editingTile : null;
+  const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && isItemVisual(editingTile.visual) ? editingTile : null;
   const chartTile = textTile || editingTile === "new-text" ? null : editingTile;
   // The report's theme (decision 668) is scoped to its tiles and the editor's preview.
   const theme = reportTheme(dashboard.settings.theme, dashboard.customTheme);
@@ -380,7 +403,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                 + Add chart
               </Button>
               <Button variant="secondary" onClick={() => setEditingTile("new-text")} disabled={busy || Boolean(editingTile)}>
-                + Add text
+                + Add text or item
               </Button>
               <Button variant="secondary" aria-expanded={theming} onClick={() => setTheming(!theming)} disabled={busy}>
                 Theme: {theme.name}
@@ -447,10 +470,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       ) : null}
 
       {canEdit && textTile ? (
-        <TextTileEditor
+        <ItemEditor
           key={textTile === "new" ? "new-text" : textTile.id}
           saving={busy}
           tile={textTile === "new" ? null : textTile}
+          organisationId={organisationId}
+          dashboardId={dashboard.id}
+          tables={tables.data?.tables ?? []}
+          filters={shown}
           onCancel={() => setEditingTile(null)}
           onSave={async (tile) => {
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
@@ -538,7 +565,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     <Button size="small" variant="secondary" aria-label={`Edit ${tile.title}`} onClick={() => setEditingTile(tile)} disabled={busy}>
                       Edit
                     </Button>
-                    {tile.visual === "text" ? null : copied && copied.from !== tile.id ? (
+                    {isItemVisual(tile.visual) ? null : copied && copied.from !== tile.id ? (
                       <Button size="small" variant="secondary" aria-label={`Paste format on ${tile.title}`} onClick={() => paste(tile)} disabled={busy}>
                         Paste format
                       </Button>
@@ -572,7 +599,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Remove
                     </Button>
                   </div>
-                ) : tile.visual === "text" ? null : (
+                ) : isItemVisual(tile.visual) ? null : (
                   // Only saved tiles can be pinned, so not while the dashboard is being changed.
                   <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
                 )}
@@ -587,10 +614,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} onAction={runButtonAction} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} onAction={runButtonAction} />
               )}
             </section>
             );
@@ -866,41 +893,13 @@ function SlicerControl({
 }
 
 /** A tile's answer: its saved question (`saved`, all a report viewer can run) or a question being built (`query`). */
-function useTileResult(organisationId: string, query: TileQuery | null, filters: Filters, saved?: { dashboardId: string; tileId: string }) {
-  const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
-  const key = JSON.stringify({ query, filters, saved });
-  useEffect(() => {
-    if (!query) return;
-    let cancelled = false;
-    const question = saved ? { dashboardId: saved.dashboardId, tileId: saved.tileId } : { query };
-    api<QueryResult>("/api/analytics/query", {
-      method: "POST",
-      body: { organisationId, ...question, filters: { from: filters.from || null, to: filters.to || null, values: filters.values } },
-    }).then(
-      (result) => {
-        if (!cancelled) setState({ key, result, error: null });
-      },
-      (error) => {
-        if (!cancelled) setState({ key, result: null, error: errorMessage(error) });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-    // `key` covers query and filters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organisationId, key]);
-  return state?.key === key ? state : null;
-}
-
-function TileBody(props: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
-  if (props.tile.visual === "text") {
-    return (
-      <div className={styles.textBody}>
-        {paragraphs(props.tile.text).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-      </div>
-    );
-  }
+function TileBody(props: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; onAction?: (action: ButtonAction) => void }) {
+  const { tile } = props;
+  const height = CHART_HEIGHTS[tile.height ?? "small"];
+  if (tile.visual === "text") return <TextItemView organisationId={props.organisationId} dashboardId={props.dashboardId} tile={tile} filters={props.filters} />;
+  if (tile.visual === "image" && tile.image) return <ImageItemView organisationId={props.organisationId} dashboardId={props.dashboardId} image={tile.image} height={height} />;
+  if (tile.visual === "shape" && tile.shape) return <ShapeItemView shape={tile.shape} height={height} />;
+  if (tile.visual === "button" && tile.button) return <ButtonItemView button={tile.button} onAction={props.onAction} />;
   return <QueryTileBody {...props} />;
 }
 
@@ -1048,6 +1047,21 @@ function TileResult({
       </div>
     );
   }
+  if (tile.query?.breakdown && (tile.visual === "column" || tile.visual === "bar" || tile.visual === "line")) {
+    // Small multiples (#376 phase 2): one small chart for each value of the second grouping.
+    return <SmallMultiplesView spec={spec} rows={rows} additive={additiveValues(tile.query.measures)} height={MULTIPLE_HEIGHTS[tile.height ?? "medium"]} />;
+  }
+  if (tile.visual === "filledmap" || tile.visual === "pointmap") {
+    // Groups that can't go on the map are named under it (the hidden data table still has every row).
+    const note = mapNote(tile.visual, rows, chartGroupNames(rows.map((row) => row.category)), measures.map((column) => column.key), tile.format?.map?.areas);
+    return (
+      <>
+        <Chart spec={spec} rows={rows} height={CHART_HEIGHTS[tile.height ?? "medium"]} />
+        {note ? <p className={styles.mapNote}>{note}</p> : null}
+        <p className={styles.mapNote}>{MAP_ATTRIBUTION}</p>
+      </>
+    );
+  }
   // A calendar heat map is as tall as the years it shows (up to three).
   const height = tile.visual === "calendar"
     ? Math.max(CHART_HEIGHTS[tile.height ?? "medium"], calendarHeight(calendarYears(rows.map((row) => String(row.category ?? ""))).length))
@@ -1065,7 +1079,15 @@ function pivotRowLabel(row: PivotRow, index: number, field: ResultColumn): strin
 function pivotColumnLabel(column: PivotColumn, pivot: PivotData): string {
   if (column.total) return "Grand total";
   if (!pivot.columnField) return column.measure.label;
+  if (column.path) return columnPathText(column, (level, value) => pivotValueLabel(pivot, level, value, false));
   return column.pivotValue === null ? "(blank)" : showValue(column.pivotValue, pivot.columnField);
+}
+
+/** A column field's value as shown, with its field's name in front for headings. */
+function pivotValueLabel(pivot: PivotData, level: number, value: string | null, named: boolean): string {
+  const field = pivot.columnFields?.[level] ?? pivot.columnField!;
+  const text = value === null ? "(blank)" : showValue(value, field);
+  return named ? `${fieldLabel(field.label)}: ${text}` : text;
 }
 
 /** The pivot as a report table for the existing CSV/Excel export (`/api/reports/export`), exact values kept as text. */
@@ -1073,7 +1095,16 @@ export function pivotExportTable(pivot: PivotData): ReportExportTable {
   const columns = [
     ...pivot.rowFields.map((field) => fieldLabel(field.label)),
     ...pivot.columns.map((column) =>
-      [column.total ? "Grand total" : pivot.columnField ? `${fieldLabel(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}` : "", column.measure.label]
+      [
+        column.total
+          ? "Grand total"
+          : column.path
+            ? columnPathText(column, (level, value) => pivotValueLabel(pivot, level, value, true))
+            : pivot.columnField
+              ? `${fieldLabel(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}`
+              : "",
+        column.measure.label,
+      ]
         .filter(Boolean)
         .join(" · "),
     ),
@@ -1147,7 +1178,7 @@ export function PivotTable({
     const columnValue = column.total ? "Grand total" : pivot.columnField ? pivotColumnLabel(column, pivot) : "";
     const drillTitle = [rowValues.join(" · "), columnValue, column.measure.label].filter(Boolean).join(" · ") || "Grand total";
     onDrill(
-      { depth: row.depth, dimensions: row.dimensions, pivotValue: column.pivotValue, total: column.total },
+      { depth: row.depth, dimensions: row.dimensions, pivotValue: column.pivotValue, total: column.total, ...(column.path ? { pivotPath: column.path } : {}) },
       `Rows · ${drillTitle}`,
     );
   };
@@ -1156,13 +1187,56 @@ export function PivotTable({
   const measureKeys = [...new Set(pivot.columns.map((column) => column.measure.key))];
   const detailRows = pivot.rows.filter((row) => row.kind === "detail");
   const ranges = new Map(pivot.columns.map((column) => [column.key, columnRange(detailRows.map((row) => row.cells[column.key] ?? null))]));
-  const shownRows = visiblePivotRows(pivot.rows, format?.table);
+  // Matrix layout (#376 phase 2): stepped rows, and groups that open and close.
+  const levels = pivot.rowFields.length;
+  const stepped = format?.table?.layout === "stepped" && levels > 0;
+  const offLevels = new Set(format?.table?.subtotalsOff ?? []);
+  const ordered = stepped ? steppedRows(pivot.rows.filter((row) => row.kind !== "grand_total" || format?.table?.totals !== false), levels) : visiblePivotRows(pivot.rows, format?.table);
+  const groupsKey = JSON.stringify([pivot.rows.map((row) => row.key), format?.table?.expandTo]);
+  const [collapsedState, setCollapsed] = useState<{ key: string; set: Set<string> } | null>(null);
+  const collapsed = collapsedState?.key === groupsKey ? collapsedState.set : initiallyCollapsed(pivot.rows, levels, format?.table?.expandTo);
+  const toggle = (row: PivotRow) => {
+    const next = new Set(collapsed);
+    if (next.has(row.key)) next.delete(row.key);
+    else next.add(row.key);
+    setCollapsed({ key: groupsKey, set: next });
+  };
+  const groups = ordered.filter((row) => isGroupRow(row, levels));
+  const shownRows = visibleWithCollapsed(ordered, collapsed);
+  const headerRows = pivot.columnField ? columnHeaderRows(pivot, (level, value) => pivotValueLabel(pivot, level, value, true)) : [];
+  const headerDepth = headerRows.length + 1;
+  const rowLabel = (row: PivotRow): string => {
+    if (row.kind === "grand_total") return "Grand total";
+    const level = Math.max(0, row.depth - 1);
+    const value = row.dimensions[level];
+    return value === null ? "(blank)" : showValue(value, pivot.rowFields[level]);
+  };
+  const toggleButton = (row: PivotRow) => {
+    if (!isGroupRow(row, levels)) return null;
+    const open = !collapsed.has(row.key);
+    const name = row.dimensions.slice(0, row.depth).map((value, index) => (value === null ? "(blank)" : showValue(value, pivot.rowFields[index]))).join(" · ");
+    return (
+      <button type="button" className={styles.pivotToggle} aria-expanded={open} aria-label={`${open ? "Close" : "Open"} ${name}`} onClick={() => toggle(row)}>
+        <span aria-hidden="true">{open ? "−" : "+"}</span>
+      </button>
+    );
+  };
   return (
     <div className={styles.pivot}>
-      {exportFor ? (
+      {exportFor || groups.length ? (
         <div className={styles.pivotTools}>
-          <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("csv")}>Export CSV</Button>
-          <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("xlsx")}>Export Excel</Button>
+          {groups.length ? (
+            <>
+              <Button size="small" variant="secondary" disabled={collapsed.size === 0} onClick={() => setCollapsed({ key: groupsKey, set: new Set() })}>Open all</Button>
+              <Button size="small" variant="secondary" disabled={collapsed.size === groups.length} onClick={() => setCollapsed({ key: groupsKey, set: new Set(groups.map((row) => row.key)) })}>Close all</Button>
+            </>
+          ) : null}
+          {exportFor ? (
+            <>
+              <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("csv")}>Export CSV</Button>
+              <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("xlsx")}>Export Excel</Button>
+            </>
+          ) : null}
         </div>
       ) : null}
       {exportError ? <Notice tone="error">{exportError}</Notice> : null}
@@ -1172,33 +1246,50 @@ export function PivotTable({
           <thead>
             {pivot.columnField ? (
               <>
-                <tr>
-                  {pivot.rowFields.map((field) => <th key={field.key} scope="col" rowSpan={2}>{fieldLabel(field.label)}</th>)}
-                  {pivot.columnValues.map((value, index) => {
-                    const column = pivot.columns.find((entry) => !entry.total && entry.pivotValue === value)!;
-                    const count = pivot.columns.filter((entry) => !entry.total && entry.pivotValue === value).length;
-                    return <th key={`column-${index}`} scope="colgroup" colSpan={count}>{fieldLabel(pivot.columnField!.label)}: {pivotColumnLabel(column, pivot)}</th>;
-                  })}
-                  {pivot.columns.some((column) => column.total) ? (
-                    <th scope="colgroup" colSpan={pivot.columns.filter((column) => column.total).length}>Grand total</th>
-                  ) : null}
-                </tr>
+                {headerRows.map((cells, level) => (
+                  <tr key={`level-${level}`}>
+                    {level === 0
+                      ? stepped
+                        ? <th scope="col" rowSpan={headerDepth}>{pivot.rowFields.map((field) => fieldLabel(field.label)).join(" › ")}</th>
+                        : pivot.rowFields.map((field) => <th key={field.key} scope="col" rowSpan={headerDepth}>{fieldLabel(field.label)}</th>)
+                      : null}
+                    {cells.map((cell) => (
+                      <th key={cell.key} scope="colgroup" colSpan={cell.colSpan} rowSpan={cell.rowSpan}>{cell.text}</th>
+                    ))}
+                  </tr>
+                ))}
                 <tr>{pivot.columns.map((column) => <th key={column.key} scope="col" className={ui.num}>{column.measure.label}</th>)}</tr>
               </>
             ) : (
               <tr>
-                {pivot.rowFields.map((field) => <th key={field.key} scope="col">{fieldLabel(field.label)}</th>)}
+                {stepped
+                  ? <th scope="col">{pivot.rowFields.map((field) => fieldLabel(field.label)).join(" › ")}</th>
+                  : pivot.rowFields.map((field) => <th key={field.key} scope="col">{fieldLabel(field.label)}</th>)}
                 {pivot.columns.map((column) => <th key={column.key} scope="col" className={ui.num}>{column.measure.label}</th>)}
               </tr>
             )}
           </thead>
           <tbody>
-            {shownRows.map((row) => (
-              <tr key={row.key} className={row.kind !== "detail" ? totalRowClass(format?.table, styles.pivotTotal) : undefined}>
-                {pivot.rowFields.map((field, index) => (
-                  <th key={field.key} scope="row">{pivotRowLabel(row, index, field)}</th>
-                ))}
+            {shownRows.map((row) => {
+              // In the stepped layout a group's row is its heading; with its subtotal turned off, its figures are left blank.
+              const blank = stepped && row.kind === "subtotal" && offLevels.has(row.depth);
+              return (
+              <tr key={row.key} className={row.kind !== "detail" && !(stepped && row.kind === "subtotal" && blank) ? totalRowClass(format?.table, styles.pivotTotal) : undefined}>
+                {stepped ? (
+                  <th scope="row" className={styles.pivotStep} style={{ paddingInlineStart: `${8 + Math.max(0, row.depth - 1) * 16}px` }}>
+                    {toggleButton(row)}
+                    {rowLabel(row)}
+                  </th>
+                ) : (
+                  pivot.rowFields.map((field, index) => (
+                    <th key={field.key} scope="row">
+                      {row.kind === "subtotal" && index === row.depth ? toggleButton(row) : null}
+                      {pivotRowLabel(row, index, field)}
+                    </th>
+                  ))
+                )}
                 {pivot.columns.map((column) => (
+                  blank ? <td key={column.key} className={ui.num} /> :
                   <FormattedCell
                     key={column.key}
                     className={ui.num}
@@ -1212,7 +1303,7 @@ export function PivotTable({
                       <button
                         type="button"
                         className={styles.pivotCell}
-                        aria-label={`Show rows for ${pivot.rowFields.map((field, index) => pivotRowLabel(row, index, field)).filter(Boolean).join(" · ")}, ${pivotColumnLabel(column, pivot)}, ${column.measure.label}`}
+                        aria-label={`Show rows for ${stepped ? rowLabel(row) : pivot.rowFields.map((field, index) => pivotRowLabel(row, index, field)).filter(Boolean).join(" · ")}, ${pivotColumnLabel(column, pivot)}, ${column.measure.label}`}
                         onClick={() => click(row, column)}
                       >
                         {showValue(row.cells[column.key] ?? null, column.measure)}
@@ -1223,7 +1314,8 @@ export function PivotTable({
                   </FormattedCell>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1321,7 +1413,7 @@ function TileEditor({
   const { can } = useWorkspace();
   const [fieldSearch, setFieldSearch] = useState("");
   const [title, setTitle] = useState(tile?.title ?? "");
-  const [visual, setVisual] = useState<Visual>(tile && tile.visual !== "text" ? tile.visual : "column");
+  const [visual, setVisual] = useState<Visual>(tile && !isItemVisual(tile.visual) ? tile.visual : "column");
   const [width, setWidth] = useState<TileWidth>(tile?.width ?? "half");
   const [height, setHeight] = useState<TileHeight>(tile?.height ?? "medium");
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
@@ -1332,7 +1424,8 @@ function TileEditor({
   const numbers = columns.filter((column) => isNumber(column.type));
   const groupType = columns.find((column) => column.name === query.groupBy?.field)?.type ?? "";
   const pivotRows = query.pivot?.rows ?? [];
-  const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : [])]);
+  const subColumns = query.pivot?.subColumns ?? [];
+  const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : []), ...subColumns.map((dimension) => dimension.field)]);
   const preview = useTileResult(organisationId, query.table ? query : null, filters);
   // The preview's groups, for colouring a group and limiting a date axis (#376).
   const groupValues = preview?.result && query.groupBy ? preview.result.rows.map((row) => row.category) : null;
@@ -1387,6 +1480,30 @@ function TileEditor({
       // A calendar heat map is grouped by a date, by day.
       const date = columns.find((column) => column.name === query.groupBy?.field && isDate(column.type)) ?? columns.find((column) => isDate(column.type));
       if (date) setQuery((current) => ({ ...current, groupBy: { field: date.name, grain: "day" }, breakdown: null, measures: current.measures.map((measure) => ({ ...measure, compare: undefined })) }));
+    }
+    if (next === "filledmap") {
+      // A filled map is grouped by a region or district name: start with a field called that, one value.
+      const area = columns.find((column) => !isNumber(column.type) && /region|district|territor|council|city/i.test(column.name));
+      setQuery((current) => ({
+        ...current,
+        groupBy: area && !current.groupBy ? { field: area.name } : current.groupBy,
+        measures: current.measures.slice(0, 1).map((measure) => ({ ...measure, compare: undefined })),
+      }));
+    }
+    if (next === "pointmap") {
+      // A map with points needs a latitude and a longitude (the average of each group's), then a value to size them.
+      const latitude = columns.find((column) => isNumber(column.type) && /^(lat|latitude)$|latitude/i.test(column.name));
+      const longitude = columns.find((column) => isNumber(column.type) && /^(lon|lng|long|longitude)$|longitude/i.test(column.name));
+      if (latitude && longitude && !(query.measures[0]?.field === latitude.name && query.measures[1]?.field === longitude.name)) {
+        setQuery((current) => ({
+          ...current,
+          measures: [
+            { label: "Latitude", aggregate: "avg", field: latitude.name },
+            { label: "Longitude", aggregate: "avg", field: longitude.name },
+            ...current.measures.filter((measure) => measure.field !== latitude.name && measure.field !== longitude.name).slice(0, 1).map((measure) => ({ ...measure, compare: undefined })),
+          ],
+        }));
+      }
     }
     if (next === "gauge" && query.groupBy) {
       // A gauge shows one total.
@@ -1479,7 +1596,7 @@ function TileEditor({
                       const type = columns.find((column) => column.name === field)?.type ?? "";
                       const rows = [...pivotRows];
                       rows[index] = { field, ...(isDate(type) ? { grain: "month" } : {}) };
-                      setQuery({ ...query, pivot: { rows, column: query.pivot?.column ?? null } });
+                      setQuery({ ...query, pivot: { ...query.pivot, rows, column: query.pivot?.column ?? null } });
                     }}
                   >
                     {columnOptions(columns.filter((column) => !usedPivotFields.has(column.name) || column.name === dimension.field))}
@@ -1493,7 +1610,7 @@ function TileEditor({
                       onChange={(event) => {
                         const rows = [...pivotRows];
                         rows[index] = { ...dimension, grain: event.target.value as PivotGrain };
-                        setQuery({ ...query, pivot: { rows, column: query.pivot?.column ?? null } });
+                        setQuery({ ...query, pivot: { ...query.pivot, rows, column: query.pivot?.column ?? null } });
                       }}
                     >
                       {PIVOT_GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
@@ -1505,7 +1622,7 @@ function TileEditor({
                   variant="danger"
                   aria-label={`Remove pivot row ${index + 1}`}
                   disabled={pivotRows.length === 1}
-                  onClick={() => setQuery({ ...query, pivot: { rows: pivotRows.filter((_row, at) => at !== index), column: query.pivot?.column ?? null } })}
+                  onClick={() => setQuery({ ...query, pivot: { ...query.pivot, rows: pivotRows.filter((_row, at) => at !== index), column: query.pivot?.column ?? null } })}
                 >
                   Remove row
                 </Button>
@@ -1522,6 +1639,7 @@ function TileEditor({
                   setQuery({
                     ...query,
                     pivot: {
+                      ...query.pivot,
                       rows: [...pivotRows, { field: column.name, ...(isDate(column.type) ? { grain: "month" as const } : {}) }],
                       column: query.pivot?.column ?? null,
                     },
@@ -1542,6 +1660,8 @@ function TileEditor({
                     pivot: {
                       rows: pivotRows,
                       column: field ? { field, ...(isDate(type) ? { grain: "month" as const } : {}) } : null,
+                      // Columns inside need an outer one; a field can only be used once.
+                      ...(field && subColumns.some((entry) => entry.field !== field) ? { subColumns: subColumns.filter((entry) => entry.field !== field) } : {}),
                     },
                   });
                 }}
@@ -1556,12 +1676,64 @@ function TileEditor({
                   value={query.pivot.column.grain ?? "month"}
                   onChange={(event) => setQuery({
                     ...query,
-                    pivot: { rows: pivotRows, column: { ...query.pivot!.column!, grain: event.target.value as PivotGrain } },
+                    pivot: { ...query.pivot, rows: pivotRows, column: { ...query.pivot!.column!, grain: event.target.value as PivotGrain } },
                   })}
                 >
                   {PIVOT_GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
                 </select>
               </Field>
+            ) : null}
+            {query.pivot?.column ? (
+              <>
+                {subColumns.map((dimension, index) => {
+                  const setSub = (next: PivotDimension | null) => {
+                    const list = [...subColumns];
+                    if (next) list[index] = next;
+                    else list.splice(index, 1);
+                    setQuery({ ...query, pivot: { ...query.pivot!, subColumns: list.length ? list : undefined } });
+                  };
+                  const type = columns.find((column) => column.name === dimension.field)?.type ?? "";
+                  return (
+                    <div className={styles.pivotField} key={`sub-${index}`}>
+                      <Field label={`Pivot column ${index + 2} (inside)`}>
+                        <select
+                          aria-label={`Pivot column ${index + 2}`}
+                          value={dimension.field}
+                          onChange={(event) => {
+                            const field = event.target.value;
+                            const fieldType = columns.find((column) => column.name === field)?.type ?? "";
+                            setSub({ field, ...(isDate(fieldType) ? { grain: "month" as const } : {}) });
+                          }}
+                        >
+                          {columnOptions(columns.filter((column) => !usedPivotFields.has(column.name) || column.name === dimension.field))}
+                        </select>
+                      </Field>
+                      {isDate(type) ? (
+                        <Field label="Group by">
+                          <select aria-label={`Pivot column ${index + 2} date grouping`} value={dimension.grain ?? "month"} onChange={(event) => setSub({ ...dimension, grain: event.target.value as PivotGrain })}>
+                            {PIVOT_GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
+                          </select>
+                        </Field>
+                      ) : null}
+                      <Button size="small" variant="danger" aria-label={`Remove pivot column ${index + 2}`} onClick={() => setSub(null)}>Remove column</Button>
+                    </div>
+                  );
+                })}
+                <div className={styles.addRow}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={subColumns.length >= 2 || columns.every((column) => usedPivotFields.has(column.name))}
+                    onClick={() => {
+                      const column = columns.find((entry) => !usedPivotFields.has(entry.name));
+                      if (!column) return;
+                      setQuery({ ...query, pivot: { ...query.pivot!, subColumns: [...subColumns, { field: column.name, ...(isDate(column.type) ? { grain: "month" as const } : {}) }] } });
+                    }}
+                  >
+                    Add a column inside
+                  </Button>
+                </div>
+              </>
             ) : null}
           </>
         ) : visual === "gauge" ? null : (
@@ -1751,10 +1923,11 @@ function TileEditor({
         inherited={defaults?.[visual]}
         onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
         theme={theme}
-        groups={groupValues ? chartGroupNames(groupValues) : undefined}
+        groups={groupValues ? [...new Set(chartGroupNames(groupValues))] : undefined}
         datedGroups={groupValues ? datedGroups(groupValues) : false}
         groupName={query.groupBy ? fieldLabel(query.groupBy.field) : null}
         rowFields={(query.pivot?.rows ?? []).map((row) => fieldLabel(row.field))}
+        smallMultiples={Boolean(query.breakdown)}
       />
       {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 
@@ -1785,39 +1958,3 @@ function TileEditor({
   );
 }
 
-/** Adding or changing a text card: a heading and notes to split a dashboard into sections (#335). */
-function TextTileEditor({ saving, tile, onSave, onCancel }: { saving: boolean; tile: Tile | null; onSave: (tile: Tile) => void; onCancel: () => void }) {
-  const [title, setTitle] = useState(tile?.title ?? "");
-  const [text, setText] = useState(tile?.text ?? "");
-  const [width, setWidth] = useState<TileWidth>(tile?.width ?? "full");
-  return (
-    <Card title={tile ? "Change the text" : "Add text"} description="A heading and notes, e.g. to start a section of the report. Leave a blank line between paragraphs.">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave({ id: tile?.id ?? `t${Date.now().toString(36)}`, title: title.trim() || "Notes", visual: "text", width, query: null, ...(text.trim() ? { text: text.trim() } : {}) });
-        }}
-      >
-        <fieldset disabled={saving} className={styles.propertyFields}>
-          <div className={styles.propertyGrid}>
-            <Field label="Heading">
-              <input autoFocus value={title} maxLength={100} placeholder="e.g. Sales" onChange={(event) => setTitle(event.target.value)} />
-            </Field>
-            <Field label="Notes" hint="Up to 2,000 characters.">
-              <textarea rows={4} maxLength={2000} value={text} onChange={(event) => setText(event.target.value)} />
-            </Field>
-            <Field label="Width">
-              <select value={width} onChange={(event) => setWidth(event.target.value as TileWidth)}>
-                {TILE_WIDTHS.map((entry) => <option key={entry} value={entry}>{WIDTH_LABELS[entry]}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className={ui.rowButtons}>
-            <Button type="submit">{saving ? "Saving…" : tile ? "Apply changes" : "Add to report"}</Button>
-            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-          </div>
-        </fieldset>
-      </form>
-    </Card>
-  );
-}
