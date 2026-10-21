@@ -26,7 +26,7 @@ import {
   valueKey,
 } from "@/lib/tax/income/ird-import-kinds";
 import { getIrdDocument } from "@/lib/tax/income/ird-documents";
-import { incomeYearOf, isSupportedIncomeYear, money, shortDate } from "@/lib/tax/income/rules";
+import { incomeYearOf, isSupportedIncomeYear, money, moneyText, shortDate } from "@/lib/tax/income/rules";
 import { addPayment, getIncomeTaxYear, requireIncomeYear, saveIncomeTaxYear } from "@/lib/tax/income/service";
 import { asRecord, optionalBoolean, optionalId, optionalString, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 
@@ -695,7 +695,7 @@ export async function acceptImportRow(tx: OrgTx, idInput: unknown, input: { useA
     const match = asNewPayment ? null : await matchingPayment(tx, row, { lock: true });
     if (match) {
       paymentId = match.id;
-      outcome = `Linked to the payment of ${money(dec(match.amount))} on ${shortDate(match.paid_on)} already in Tohyee, so it isn't counted twice.`;
+      outcome = `Linked to the payment of ${moneyText(dec(match.amount))} on ${shortDate(match.paid_on)} already in Tohyee, so it isn't counted twice.`;
       if (row.effective_on && !match.ird_effective_on) {
         await setEffectiveDate(tx, { paymentId: match.id, irdEffectiveOn: row.effective_on });
         outcome += ` IRD's effective date ${shortDate(row.effective_on)} added.`;
@@ -710,7 +710,7 @@ export async function acceptImportRow(tx: OrgTx, idInput: unknown, input: { useA
         note: `From ${from}; accepted by ${tx.actor.email}`.slice(0, 200),
       });
       paymentId = added.payment.id;
-      outcome = `Added as a payment of ${money(dec(row.amount))} on ${shortDate(irdDate(row))}${row.effective_on ? "" : " (the file's date; no effective date)"}.`;
+      outcome = `Added as a payment of ${moneyText(dec(row.amount))} on ${shortDate(irdDate(row))}${row.effective_on ? "" : " (the file's date; no effective date)"}.`;
     }
     if (row.applies_to) {
       const current = await tx.query<{ amount: string }>("select amount::text from income_tax_payment_allocations where payment_id = $1 and replaced_at is null", [paymentId]);
@@ -733,7 +733,7 @@ export async function acceptImportRow(tx: OrgTx, idInput: unknown, input: { useA
     } else {
       const allocated = await tx.query<{ total: string }>("select coalesce(sum(amount), 0)::text as total from income_tax_payment_allocations where payment_id = $1 and replaced_at is null and status <> 'forecast'", [paymentId]);
       const left = sub(dec(row.amount), dec(allocated.rows[0].total));
-      if (cmp(left, ZERO_DECIMAL) > 0) outcome += ` The file doesn't say which instalment it's for, so ${money(left)} is awaiting reconciliation.`;
+      if (cmp(left, ZERO_DECIMAL) > 0) outcome += ` The file doesn't say which instalment it's for, so ${moneyText(left)} is awaiting reconciliation.`;
     }
   } else if (row.kind === "payment") {
     outcome = "Recorded only: a payment going the other way (reversed, dishonoured or refunded). Find the payment it undoes and remove or reallocate it yourself.";
@@ -755,7 +755,7 @@ export async function acceptImportRow(tx: OrgTx, idInput: unknown, input: { useA
       version: year.version,
     });
     setRit = true;
-    outcome = `Saved as the ${row.income_year} assessed RIT (${money(dec(row.amount))}, return filed ${shortDate(returnFiledOn)})${year.assessedRit !== null ? `, replacing ${money(dec(year.assessedRit))}` : ""}.`;
+    outcome = `Saved as the ${row.income_year} assessed RIT (${moneyText(dec(row.amount))}, return filed ${shortDate(returnFiledOn)})${year.assessedRit !== null ? `, replacing ${moneyText(dec(year.assessedRit))}` : ""}.`;
   } else {
     outcome = `Recorded as IRD's ${IRD_ROW_KIND_LABELS[row.kind].toLowerCase()} for the ${row.income_year} income year. Nothing else changed.`;
   }

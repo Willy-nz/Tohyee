@@ -43,13 +43,35 @@ import type { IrdDocument } from "@/lib/tax/income/ird-documents";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PREVIEW_ROWS = 200;
+/** A block whose tables scroll or stack inside it, rather than widening the card on a phone. */
+const BLOCK = { minWidth: 0, gridTemplateColumns: "minmax(0, 1fr)" } as const;
 
 type Status = { tone: "success" | "error"; text: string } | null;
-type ReadFile = { fileName: string; rows: string[][]; headerRow: number; headings: string[] };
-type ReadResult = { file: ReadFile; mappings: SavedIrdMapping[]; suggestedMappingId: string | null };
-type Loaded = { imports: IrdImport[]; mappings: SavedIrdMapping[]; documents: IrdDocument[]; figures: ImportedFigures | null };
+type ReadFile = {
+  fileName: string;
+  rows: string[][];
+  headerRow: number;
+  headings: string[];
+};
+type ReadResult = {
+  file: ReadFile;
+  mappings: SavedIrdMapping[];
+  suggestedMappingId: string | null;
+};
+type Loaded = {
+  imports: IrdImport[];
+  mappings: SavedIrdMapping[];
+  documents: IrdDocument[];
+  figures: ImportedFigures | null;
+};
 
-const emptyMapping = (headerRow: number): IrdImportMapping => ({ headerRow, columns: {}, dateOrder: "dmy", kindValues: {}, appliesToValues: {} });
+const emptyMapping = (headerRow: number): IrdImportMapping => ({
+  headerRow,
+  columns: {},
+  dateOrder: "dmy",
+  kindValues: {},
+  appliesToValues: {},
+});
 
 /** Fills in suggestions for values that have no choice yet, so the person starts from something and changes what's wrong. */
 export function withSuggestions(mapping: IrdImportMapping, rows: readonly string[][]): IrdImportMapping {
@@ -76,7 +98,23 @@ function directionAmount(row: { direction: "debit" | "credit" | null; amount: st
   );
 }
 
-function Mapper({ organisationId, read, source, years, documents, fileBase64, onImported }: { organisationId: string; read: ReadResult; source: IrdImportSource; years: number[]; documents: IrdDocument[]; fileBase64: string; onImported: () => void }) {
+function Mapper({
+  organisationId,
+  read,
+  source,
+  years,
+  documents,
+  fileBase64,
+  onImported,
+}: {
+  organisationId: string;
+  read: ReadResult;
+  source: IrdImportSource;
+  years: number[];
+  documents: IrdDocument[];
+  fileBase64: string;
+  onImported: () => void;
+}) {
   const rows = read.file.rows;
   const suggested = read.mappings.find((entry) => entry.id === read.suggestedMappingId);
   const [savedId, setSavedId] = useState<string>(suggested?.id ?? "");
@@ -95,7 +133,15 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
-      api<{ preview: IrdImportPreview }>("/api/income-tax/imports/preview", { method: "POST", body: { organisationId, rows, mapping, fileIncomeYear: fileIncomeYear || null } }).then(
+      api<{ preview: IrdImportPreview }>("/api/income-tax/imports/preview", {
+        method: "POST",
+        body: {
+          organisationId,
+          rows,
+          mapping,
+          fileIncomeYear: fileIncomeYear || null,
+        },
+      }).then(
         (result) => {
           if (!cancelled) setPreview(result.preview);
         },
@@ -110,7 +156,16 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
     };
   }, [organisationId, rows, mapping, fileIncomeYear]);
 
-  const setColumn = (field: IrdImportColumn, heading: string) => setMapping((current) => withSuggestions({ ...current, columns: { ...current.columns, [field]: heading || undefined } }, rows));
+  const setColumn = (field: IrdImportColumn, heading: string) =>
+    setMapping((current) =>
+      withSuggestions(
+        {
+          ...current,
+          columns: { ...current.columns, [field]: heading || undefined },
+        },
+        rows,
+      ),
+    );
   const chooseSaved = (id: string) => {
     setSavedId(id);
     const saved = read.mappings.find((entry) => entry.id === id);
@@ -126,7 +181,17 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
     try {
       await api("/api/income-tax/imports", {
         method: "POST",
-        body: { organisationId, idempotencyKey: key, fileName: read.file.fileName, fileBase64, source, mapping, fileIncomeYear: fileIncomeYear || null, supportingDocumentId: supportingDocumentId || null, saveMappingAs: saveAs.trim() || null },
+        body: {
+          organisationId,
+          idempotencyKey: key,
+          fileName: read.file.fileName,
+          fileBase64,
+          source,
+          mapping,
+          fileIncomeYear: fileIncomeYear || null,
+          supportingDocumentId: supportingDocumentId || null,
+          saveMappingAs: saveAs.trim() || null,
+        },
       });
       onImported();
     } catch (error) {
@@ -138,7 +203,7 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
 
   const ready = preview && preview.mappingProblems.length === 0 && preview.counts.withProblems === 0 && preview.counts.toReview > 0;
   return (
-    <div className={ui.reportBlock}>
+    <div className={ui.reportBlock} style={BLOCK}>
       <h3>Match the columns: {read.file.fileName}</h3>
       <p className={ui.muted}>IRD doesn&apos;t publish the columns of its downloads, so tell Tohyee which column is which. Every row is shown below before anything is saved.</p>
       <div className={ui.inlineForm}>
@@ -155,16 +220,36 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
           </Field>
         ) : null}
         <Field label="Headings are on row">
-          <select value={mapping.headerRow} onChange={(event) => setMapping((current) => ({ ...emptyMapping(Number(event.target.value)), dateOrder: current.dateOrder }))}>
+          <select
+            value={mapping.headerRow}
+            onChange={(event) =>
+              setMapping((current) => ({
+                ...emptyMapping(Number(event.target.value)),
+                dateOrder: current.dateOrder,
+              }))
+            }
+          >
             {rows.slice(0, 20).map((row, index) => (
               <option key={index} value={index}>
-                {index + 1}: {row.filter((cell) => cell.trim()).join(", ").slice(0, 60) || "(blank)"}
+                {index + 1}:{" "}
+                {row
+                  .filter((cell) => cell.trim())
+                  .join(", ")
+                  .slice(0, 60) || "(blank)"}
               </option>
             ))}
           </select>
         </Field>
         <Field label="Dates are written">
-          <select value={mapping.dateOrder} onChange={(event) => setMapping((current) => ({ ...current, dateOrder: event.target.value as DateOrder }))}>
+          <select
+            value={mapping.dateOrder}
+            onChange={(event) =>
+              setMapping((current) => ({
+                ...current,
+                dateOrder: event.target.value as DateOrder,
+              }))
+            }
+          >
             {DATE_ORDERS.map((order) => (
               <option key={order} value={order}>
                 {DATE_ORDER_LABELS[order]}
@@ -190,7 +275,15 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
       <div className={ui.inlineForm}>
         {mapping.columns.amount ? (
           <Field label="The Amount column">
-            <select value={mapping.amountSign ?? ""} onChange={(event) => setMapping((current) => ({ ...current, amountSign: (event.target.value || undefined) as AmountSign | undefined }))}>
+            <select
+              value={mapping.amountSign ?? ""}
+              onChange={(event) =>
+                setMapping((current) => ({
+                  ...current,
+                  amountSign: (event.target.value || undefined) as AmountSign | undefined,
+                }))
+              }
+            >
               <option value="">Choose…</option>
               {AMOUNT_SIGNS.map((sign) => (
                 <option key={sign} value={sign}>
@@ -202,7 +295,15 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
         ) : null}
         {!mapping.columns.type ? (
           <Field label="Every row is">
-            <select value={mapping.defaultKind ?? ""} onChange={(event) => setMapping((current) => ({ ...current, defaultKind: (event.target.value || undefined) as IrdRowKind | undefined }))}>
+            <select
+              value={mapping.defaultKind ?? ""}
+              onChange={(event) =>
+                setMapping((current) => ({
+                  ...current,
+                  defaultKind: (event.target.value || undefined) as IrdRowKind | undefined,
+                }))
+              }
+            >
               <option value="">Choose…</option>
               {IRD_ROW_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
@@ -226,84 +327,104 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
         ) : null}
       </div>
       {typeValues.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <table className={`${ui.table} ${ui.stackOnPhone}`}>
-            <caption className={ui.muted}>What each value in the {mapping.columns.type} column is. Suggestions come from the words; check them.</caption>
-            <thead>
-              <tr>
-                <th>{mapping.columns.type}</th>
-                <th className={ui.num}>Rows</th>
-                <th>Is</th>
-              </tr>
-            </thead>
-            <tbody>
-              {typeValues.map((value) => (
-                <tr key={value.key}>
-                  <td data-label={mapping.columns.type}>{value.text || <span className={ui.muted}>(blank)</span>}</td>
-                  <td data-label="Rows" className={ui.num}>
-                    {value.count}
-                  </td>
-                  <td data-label="Is">
-                    <select
-                      aria-label={`What "${value.text || "(blank)"}" rows are`}
-                      value={mapping.kindValues[value.key] ?? ""}
-                      onChange={(event) => setMapping((current) => ({ ...current, kindValues: { ...current.kindValues, [value.key]: event.target.value as IrdRowKind | "skip" } }))}
-                    >
-                      <option value="" disabled>
-                        Choose…
-                      </option>
-                      {IRD_ROW_KINDS.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {IRD_ROW_KIND_LABELS[kind]}
-                        </option>
-                      ))}
-                      <option value="skip">Leave these rows out</option>
-                    </select>
-                  </td>
+        <>
+          <p className={ui.muted}>What each value in the {mapping.columns.type} column is. Suggestions come from the words; check them.</p>
+          <div className={ui.tableWrap}>
+            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+              <thead>
+                <tr>
+                  <th>{mapping.columns.type}</th>
+                  <th className={ui.num}>Rows</th>
+                  <th>Is</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {typeValues.map((value) => (
+                  <tr key={value.key}>
+                    <td data-label={mapping.columns.type}>{value.text || <span className={ui.muted}>(blank)</span>}</td>
+                    <td data-label="Rows" className={ui.num}>
+                      {value.count}
+                    </td>
+                    <td data-label="Is">
+                      <select
+                        aria-label={`What "${value.text || "(blank)"}" rows are`}
+                        value={mapping.kindValues[value.key] ?? ""}
+                        onChange={(event) =>
+                          setMapping((current) => ({
+                            ...current,
+                            kindValues: {
+                              ...current.kindValues,
+                              [value.key]: event.target.value as IrdRowKind | "skip",
+                            },
+                          }))
+                        }
+                      >
+                        <option value="" disabled>
+                          Choose…
+                        </option>
+                        {IRD_ROW_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {IRD_ROW_KIND_LABELS[kind]}
+                          </option>
+                        ))}
+                        <option value="skip">Leave these rows out</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : null}
       {appliesValues.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <table className={`${ui.table} ${ui.stackOnPhone}`}>
-            <caption className={ui.muted}>Which instalment each value in the {mapping.columns.appliesTo} column means. A payment is allocated only when the file says.</caption>
-            <thead>
-              <tr>
-                <th>{mapping.columns.appliesTo}</th>
-                <th className={ui.num}>Rows</th>
-                <th>Means</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appliesValues.map((value) => (
-                <tr key={value.key}>
-                  <td data-label={mapping.columns.appliesTo}>{value.text || <span className={ui.muted}>(blank)</span>}</td>
-                  <td data-label="Rows" className={ui.num}>
-                    {value.count}
-                  </td>
-                  <td data-label="Means">
-                    <select
-                      aria-label={`What "${value.text || "(blank)"}" means`}
-                      value={mapping.appliesToValues[value.key] ?? "none"}
-                      disabled={value.key === ""}
-                      onChange={(event) => setMapping((current) => ({ ...current, appliesToValues: { ...current.appliesToValues, [value.key]: event.target.value as AppliesToKey | "none" } }))}
-                    >
-                      <option value="none">Doesn&apos;t say</option>
-                      {APPLIES_TO.map((entry) => (
-                        <option key={entry} value={entry}>
-                          {APPLIES_TO_LABELS[entry]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
+        <>
+          <p className={ui.muted}>Which instalment each value in the {mapping.columns.appliesTo} column means. A payment is allocated only when the file says.</p>
+          <div className={ui.tableWrap}>
+            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+              <thead>
+                <tr>
+                  <th>{mapping.columns.appliesTo}</th>
+                  <th className={ui.num}>Rows</th>
+                  <th>Means</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {appliesValues.map((value) => (
+                  <tr key={value.key}>
+                    <td data-label={mapping.columns.appliesTo}>{value.text || <span className={ui.muted}>(blank)</span>}</td>
+                    <td data-label="Rows" className={ui.num}>
+                      {value.count}
+                    </td>
+                    <td data-label="Means">
+                      <select
+                        aria-label={`What "${value.text || "(blank)"}" means`}
+                        value={mapping.appliesToValues[value.key] ?? "none"}
+                        disabled={value.key === ""}
+                        onChange={(event) =>
+                          setMapping((current) => ({
+                            ...current,
+                            appliesToValues: {
+                              ...current.appliesToValues,
+                              [value.key]: event.target.value as AppliesToKey | "none",
+                            },
+                          }))
+                        }
+                      >
+                        <option value="none">Doesn&apos;t say</option>
+                        {APPLIES_TO.map((entry) => (
+                          <option key={entry} value={entry}>
+                            {APPLIES_TO_LABELS[entry]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : null}
       {preview && preview.mappingProblems.length > 0 ? (
         <Notice tone="warning">
@@ -317,7 +438,8 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
       {preview && preview.mappingProblems.length === 0 ? (
         <>
           <p>
-            {preview.counts.toReview} row{preview.counts.toReview === 1 ? "" : "s"} to bring in for checking
+            {preview.counts.toReview} row
+            {preview.counts.toReview === 1 ? "" : "s"} to bring in for checking
             {preview.counts.skipped ? `, ${preview.counts.skipped} left out` : ""}
             {preview.counts.withProblems ? (
               <>
@@ -356,14 +478,24 @@ function Mapper({ organisationId, read, source, years, documents, fileBase64, on
                       {row.skipped ? null : directionAmount(row)}
                     </td>
                     <td data-label="Check">
-                      {row.problems.length > 0 ? <Badge tone="red">{row.problems.join(" ")}</Badge> : row.skipped ? <span className={ui.muted}>Left out. {row.skipped}</span> : <Badge tone="green">OK</Badge>}
+                      {row.problems.length > 0 ? (
+                        <Badge tone="red">{row.problems.join(" ")}</Badge>
+                      ) : row.skipped ? (
+                        <span className={ui.muted}>Left out. {row.skipped}</span>
+                      ) : (
+                        <Badge tone="green">OK</Badge>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {preview.rows.length > MAX_PREVIEW_ROWS ? <p className={ui.muted}>Showing the first {MAX_PREVIEW_ROWS} rows of {preview.rows.length}; all of them are checked.</p> : null}
+          {preview.rows.length > MAX_PREVIEW_ROWS ? (
+            <p className={ui.muted}>
+              Showing the first {MAX_PREVIEW_ROWS} rows of {preview.rows.length}; all of them are checked.
+            </p>
+          ) : null}
         </>
       ) : null}
       <div className={ui.inlineForm}>
@@ -399,7 +531,10 @@ function RowActions({ organisationId, row, onDone }: { organisationId: string; r
   async function post(action: "accept" | "decline", body: Record<string, unknown>) {
     try {
       setError(null);
-      await api(`/api/income-tax/imports/rows/${row.id}/${action}`, { method: "POST", body: { organisationId, ...body } });
+      await api(`/api/income-tax/imports/rows/${row.id}/${action}`, {
+        method: "POST",
+        body: { organisationId, ...body },
+      });
       onDone();
     } catch (failure) {
       setError(errorMessage(failure));
@@ -423,7 +558,15 @@ function RowActions({ organisationId, row, onDone }: { organisationId: string; r
           <Field label="Return filed on">
             <DateInput value={filedOn} onChange={(event) => setFiledOn(event.target.value)} />
           </Field>
-          <Button size="small" onClick={() => void post("accept", { useAsAssessedRit: true, returnFiledOn: filedOn })}>
+          <Button
+            size="small"
+            onClick={() =>
+              void post("accept", {
+                useAsAssessedRit: true,
+                returnFiledOn: filedOn,
+              })
+            }
+          >
             Save as the {row.incomeYear} assessed RIT
           </Button>
           <Button size="small" variant="secondary" onClick={() => setMode("none")}>
@@ -460,7 +603,12 @@ function RowActions({ organisationId, row, onDone }: { organisationId: string; r
 function rowStatus(row: IrdImportRow, source: IrdImportSource) {
   if (row.status === "accepted") return <Badge tone="green">{source === "myir_export" ? "Accepted: IRD's figure" : "Accepted: from a spreadsheet"}</Badge>;
   if (row.status === "declined") return <Badge tone="neutral">Declined</Badge>;
-  if (row.sameAs) return <Badge tone="amber">Already accepted from {row.sameAs.fileName}, row {row.sameAs.row}</Badge>;
+  if (row.sameAs)
+    return (
+      <Badge tone="amber">
+        Already accepted from {row.sameAs.fileName}, row {row.sameAs.row}
+      </Badge>
+    );
   return <Badge tone="blue">To check</Badge>;
 }
 
@@ -472,7 +620,10 @@ function ImportCard({ organisationId, entry, onDone }: { organisationId: string;
   async function acceptChosen() {
     try {
       setError(null);
-      await api("/api/income-tax/imports/rows/accept", { method: "POST", body: { organisationId, rowIds: chosen } });
+      await api("/api/income-tax/imports/rows/accept", {
+        method: "POST",
+        body: { organisationId, rowIds: chosen },
+      });
       setChosen([]);
       onDone();
     } catch (failure) {
@@ -480,9 +631,11 @@ function ImportCard({ organisationId, entry, onDone }: { organisationId: string;
     }
   }
   return (
-    <div className={ui.reportBlock}>
-      <p>
-        {entry.fileRemoved ? <strong>{entry.fileName}</strong> : (
+    <div className={ui.reportBlock} style={BLOCK}>
+      <p style={{ overflowWrap: "anywhere" }}>
+        {entry.fileRemoved ? (
+          <strong>{entry.fileName}</strong>
+        ) : (
           <a href={fileUrl(entry.documentId)} target="_blank" rel="noreferrer">
             <strong>{entry.fileName}</strong>
           </a>
@@ -497,7 +650,9 @@ function ImportCard({ organisationId, entry, onDone }: { organisationId: string;
           <>
             {" "}
             · goes with{" "}
-            {entry.supportingDocument.removed ? entry.supportingDocument.fileName : (
+            {entry.supportingDocument.removed ? (
+              entry.supportingDocument.fileName
+            ) : (
               <a href={fileUrl(entry.supportingDocument.id)} target="_blank" rel="noreferrer">
                 {entry.supportingDocument.fileName}
               </a>
@@ -542,7 +697,11 @@ function ImportCard({ organisationId, entry, onDone }: { organisationId: string;
                 </td>
                 <td data-label="What">
                   {IRD_ROW_KIND_LABELS[row.kind]}
-                  {row.appliesTo ? <span> · {APPLIES_TO_LABELS[row.appliesTo]}</span> : row.kind === "payment" && row.direction === "credit" ? <span className={ui.muted}> · instalment not stated</span> : null}
+                  {row.appliesTo ? (
+                    <span> · {APPLIES_TO_LABELS[row.appliesTo]}</span>
+                  ) : row.kind === "payment" && row.direction === "credit" ? (
+                    <span className={ui.muted}> · instalment not stated</span>
+                  ) : null}
                   {row.description ? <span className={ui.muted}> · {row.description}</span> : null}
                   {row.wouldLinkTo ? (
                     <div className={ui.muted}>
@@ -566,12 +725,13 @@ function ImportCard({ organisationId, entry, onDone }: { organisationId: string;
         </table>
       </div>
       {bulkable.length > 1 ? (
-        <div className={ui.rowButtons}>
+        <div className={ui.rowButtons} style={{ flexWrap: "wrap", whiteSpace: "normal", gap: 8, alignItems: "center" }}>
+          <span className={ui.muted}>Tick only rows you&apos;ve checked against the file.</span>
           <Button size="small" variant="secondary" onClick={() => setChosen(chosen.length === bulkable.length ? [] : bulkable.map((row) => row.id))}>
             {chosen.length === bulkable.length ? "Choose none" : "Choose all to check"}
           </Button>
           <Button size="small" disabled={chosen.length === 0} onClick={() => void acceptChosen()}>
-            Accept {chosen.length} chosen: I&apos;ve checked them against the file
+            Accept {chosen.length} checked
           </Button>
         </div>
       ) : null}
@@ -583,47 +743,55 @@ function ImportCard({ organisationId, entry, onDone }: { organisationId: string;
 function YearFiguresFromImports({ figures }: { figures: ImportedFigures }) {
   if (figures.byKind.length === 0) return <p className={ui.muted}>Nothing accepted from imported files for the {figures.incomeYear} income year yet.</p>;
   return (
-    <div className={ui.tableWrap}>
-      <table className={`${ui.table} ${ui.stackOnPhone}`}>
-        <caption className={ui.muted}>
-          Accepted rows for the {figures.incomeYear} income year: {figures.fromIrd} from IRD&apos;s own files
-          {figures.fromOther ? `, ${figures.fromOther} from other spreadsheets (not IRD's figures)` : ""}.
-        </caption>
-        <thead>
-          <tr>
-            <th>Kind</th>
-            <th className={ui.num}>Owed (debits)</th>
-            <th className={ui.num}>Paid or credited</th>
-            <th className={ui.num}>Net owed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {figures.byKind.map((entry) => (
-            <tr key={entry.kind}>
-              <td data-label="Kind">{IRD_ROW_KIND_LABELS[entry.kind]}</td>
-              <td data-label="Owed (debits)" className={ui.num}>
-                <Money value={entry.debits} />
-              </td>
-              <td data-label="Paid or credited" className={ui.num}>
-                <Money value={entry.credits} />
-              </td>
-              <td data-label="Net owed" className={ui.num}>
-                <Money value={entry.net} />
-              </td>
+    <>
+      <p className={ui.muted}>
+        Accepted rows for the {figures.incomeYear} income year: {figures.fromIrd} from IRD&apos;s own files
+        {figures.fromOther ? `, ${figures.fromOther} from other spreadsheets (not IRD's figures)` : ""}.
+      </p>
+      <div className={ui.tableWrap}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <thead>
+            <tr>
+              <th>Kind</th>
+              <th className={ui.num}>Owed (debits)</th>
+              <th className={ui.num}>Paid or credited</th>
+              <th className={ui.num}>Net owed</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {figures.byKind.map((entry) => (
+              <tr key={entry.kind}>
+                <td data-label="Kind">{IRD_ROW_KIND_LABELS[entry.kind]}</td>
+                <td data-label="Owed (debits)" className={ui.num}>
+                  <Money value={entry.debits} />
+                </td>
+                <td data-label="Paid or credited" className={ui.num}>
+                  <Money value={entry.credits} />
+                </td>
+                <td data-label="Net owed" className={ui.num}>
+                  <Money value={entry.net} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
 /** The income tax workspace's import panel (ITX-IMP1 to ITX-IMP12). Owners and admins. */
 export function IrdImports({ organisationId, incomeYear, years, onChanged }: { organisationId: string; incomeYear: number; years: number[]; onChanged: () => void }) {
-  const loaded = useApiData<Loaded>("/api/income-tax/imports", { organisationId, incomeYear });
+  const loaded = useApiData<Loaded>("/api/income-tax/imports", {
+    organisationId,
+    incomeYear,
+  });
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<IrdImportSource>("myir_export");
-  const [read, setRead] = useState<{ result: ReadResult; base64: string } | null>(null);
+  const [read, setRead] = useState<{
+    result: ReadResult;
+    base64: string;
+  } | null>(null);
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
   const refresh = () => {
@@ -633,14 +801,20 @@ export function IrdImports({ organisationId, incomeYear, years, onChanged }: { o
   async function readFile() {
     if (!file) return;
     if (file.size > MAX_BYTES) {
-      setStatus({ tone: "error", text: `${file.name} is more than 10 MB. Split it into smaller files.` });
+      setStatus({
+        tone: "error",
+        text: `${file.name} is more than 10 MB. Split it into smaller files.`,
+      });
       return;
     }
     setBusy(true);
     setStatus(null);
     try {
       const base64 = await readFileAsBase64(file);
-      const result = await api<ReadResult>("/api/income-tax/imports/read", { method: "POST", body: { organisationId, fileName: file.name, fileBase64: base64 } });
+      const result = await api<ReadResult>("/api/income-tax/imports/read", {
+        method: "POST",
+        body: { organisationId, fileName: file.name, fileBase64: base64 },
+      });
       setRead({ result, base64 });
     } catch (error) {
       setStatus({ tone: "error", text: errorMessage(error) });
@@ -650,7 +824,10 @@ export function IrdImports({ organisationId, incomeYear, years, onChanged }: { o
   }
   async function deleteMapping(mapping: SavedIrdMapping) {
     try {
-      await api(`/api/income-tax/imports/mappings/${mapping.id}`, { method: "DELETE", query: { organisationId } });
+      await api(`/api/income-tax/imports/mappings/${mapping.id}`, {
+        method: "DELETE",
+        query: { organisationId },
+      });
       loaded.reload();
     } catch (error) {
       setStatus({ tone: "error", text: errorMessage(error) });
@@ -678,7 +855,10 @@ export function IrdImports({ organisationId, incomeYear, years, onChanged }: { o
             onImported={() => {
               setRead(null);
               setFile(null);
-              setStatus({ tone: "success", text: "Imported. Check the rows below and accept or decline each one." });
+              setStatus({
+                tone: "success",
+                text: "Imported. Check the rows below and accept or decline each one.",
+              });
               refresh();
             }}
           />
@@ -718,7 +898,10 @@ export function IrdImports({ organisationId, incomeYear, years, onChanged }: { o
         <Empty>No IRD files imported yet.</Empty>
       ) : (
         <>
-          <h3>Imported files{waiting ? ` (${waiting} row${waiting === 1 ? "" : "s"} to check)` : ""}</h3>
+          <h3>
+            Imported files
+            {waiting ? ` (${waiting} row${waiting === 1 ? "" : "s"} to check)` : ""}
+          </h3>
           {data.imports.map((entry) => (
             <ImportCard key={entry.id} organisationId={organisationId} entry={entry} onDone={refresh} />
           ))}

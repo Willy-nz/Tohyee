@@ -123,7 +123,7 @@ describeWithDatabase("income tax: importing IRD account files", () => {
     await expect(inOrganisation(org, { userId: owner.id, email: owner.email, via: 'AI key "Claude"' }, (tx) => acceptImportRow(tx, rowIds[4]))).rejects.toThrow("Only a person");
     const accepted = await as((tx) => acceptImportRow(tx, rowIds[4]));
     expect(accepted.status).toBe("accepted");
-    expect(accepted.outcome).toBe("Added as a payment of 6183.80 on 28 Aug 2026 (the file's date; no effective date). Confirmed by IRD: towards Instalment 1.");
+    expect(accepted.outcome).toBe("Added as a payment of 6,183.80 on 28 Aug 2026 (the file's date; no effective date). Confirmed by IRD: towards Instalment 1.");
     const payments = await as((tx) => listPayments(tx, 2027));
     expect(payments).toHaveLength(1);
     expect(payments[0]).toMatchObject({ paidOn: "2026-08-28", amount: "6183.80", irdEffectiveOn: null, awaiting: "0.00" });
@@ -142,7 +142,7 @@ describeWithDatabase("income tax: importing IRD account files", () => {
     expect(waiting.wouldLinkTo).toMatchObject({ paymentId: typed.payment.id, paidOn: "2027-01-13" });
     const accepted = await as((tx) => acceptImportRow(tx, rowIds[5]));
     expect(accepted.paymentId).toBe(typed.payment.id);
-    expect(accepted.outcome).toBe("Linked to the payment of 6183.80 on 13 Jan 2027 already in Tohyee, so it isn't counted twice. The file doesn't say which instalment it's for, so 6183.80 is awaiting reconciliation.");
+    expect(accepted.outcome).toBe("Linked to the payment of 6,183.80 on 13 Jan 2027 already in Tohyee, so it isn't counted twice. The file doesn't say which instalment it's for, so 6,183.80 is awaiting reconciliation.");
     const { built, schedule: after } = await schedule();
     expect(built.paidTotal).toBe("12367.60");
     expect(after.instalments[1]).toMatchObject({ paid: "0.00", remaining: "6183.80" });
@@ -212,7 +212,7 @@ describeWithDatabase("income tax: importing IRD account files", () => {
     await expect(as((tx) => acceptImportRow(tx, payment.id, { useAsAssessedRit: true }), other)).rejects.toThrow("Only an assessment");
     await expect(as((tx) => acceptImportRow(tx, assessment.id, { useAsAssessedRit: true }), other)).rejects.toThrow();
     const rit = await as((tx) => acceptImportRow(tx, assessment.id, { useAsAssessedRit: true, returnFiledOn: "2026-06-20" }), other);
-    expect(rit).toMatchObject({ setAssessedRit: true, outcome: "Saved as the 2026 assessed RIT (17668.00, return filed 20 Jun 2026)." });
+    expect(rit).toMatchObject({ setAssessedRit: true, outcome: "Saved as the 2026 assessed RIT (17,668.00, return filed 20 Jun 2026)." });
     expect(await as((tx) => getIncomeTaxYear(tx, 2026), other)).toMatchObject({ assessedRit: "17668.00", returnFiledOn: "2026-06-20" });
     const paid = await as((tx) => acceptImportRow(tx, payment.id), other);
     expect(paid.outcome).toContain("Allocated with this file as evidence: towards Instalment 1.");
