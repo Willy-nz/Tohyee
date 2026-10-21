@@ -13,7 +13,7 @@ import styles from "./chart-format-panel.module.css";
  * sections. Everything is saved through `parseChartFormat` like the rest.
  */
 
-type Props = { visual: Visual; values: string[]; format: ChartFormat; set: (patch: Partial<ChartFormat>) => void };
+type Props = { visual: Visual; values: string[]; format: ChartFormat; set: (patch: Partial<ChartFormat>) => void; smallMultiples?: boolean };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -58,7 +58,19 @@ function NumberText({ label, hint, value, onChange }: { label: string; hint?: st
   );
 }
 
-export function VisualSettings({ visual, values, format, set }: Props) {
+export function VisualSettings({ visual, values, format, set, smallMultiples = false }: Props) {
+  if (smallMultiples && (visual === "column" || visual === "bar" || visual === "line")) {
+    return (
+      <Section title="Small multiples">
+        <p className={styles.note}>One small chart for each value of the second grouping, all with the same groups and the same scale. Past the most charts, the smaller ones are added together as &quot;Other&quot; (totals and counts only; other values are left out).</p>
+        <Field label="Most small charts" hint="2 to 12">
+          <select value={format.smallMultiples?.max ?? 6} onChange={(event) => set({ smallMultiples: Number(event.target.value) === 6 ? undefined : { max: Number(event.target.value) } })}>
+            {Array.from({ length: 11 }, (_unused, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
+          </select>
+        </Field>
+      </Section>
+    );
+  }
   if (visual === "waterfall") {
     const current: WaterfallFormat = format.waterfall ?? {};
     const update = (patch: Partial<WaterfallFormat>) => set({ waterfall: { ...current, ...patch } });
