@@ -232,12 +232,36 @@ function comparisonType(type: string): string {
   return "VARCHAR";
 }
 
+/**
+ * What a Merge step must be checked for before it runs (#387, decision
+ * 693), worked out by `mergeCheckSql` from the rows themselves:
+ * - the other table must have at most one row for each match, or every
+ *   matching row here would be repeated and its amounts counted again (one
+ *   invoice of 100.00 merged with its three lines would become 300.00);
+ * - when this table has several rows for one match (many lines to one
+ *   invoice), only text, dates and Yes/No can be brought in: a number from
+ *   the other table would repeat on each row and add up more than once;
+ * - rows with no match are counted, to say what happened to them.
+ */
+export type MergeCheck = {
+  step: number;
+  table: string;
+  join: "left" | "inner";
+  /** This table's match columns and the other table's, in order. */
+  columns: string[];
+  withColumns: string[];
+  /** The numbers brought in (by their new names). */
+  numbers: string[];
+  /** The rows before the merge, as a CTE name in `sql`. */
+  source: string;
+};
+
 export function buildShapeQuery(input: {
   baseTable: string;
   tables: Map<string, ShapeColumn[]>;
   steps: unknown;
   throughStep?: number;
-}): { sql: string; params: unknown[]; columns: ShapeColumn[] } {
+}): { sql: string; params: unknown[]; columns: ShapeColumn[]; merges: MergeCheck[]; ctes: string } {
   const parsed = parseShapeSteps(input.steps);
   if (!input.tables.has(input.baseTable)) throw new ValidationError(`There's no loaded table called ${input.baseTable}.`);
   if (input.throughStep !== undefined && (!Number.isInteger(input.throughStep) || input.throughStep < 0 || input.throughStep >= parsed.length)) {
@@ -253,6 +277,7 @@ export function buildShapeQuery(input: {
   let source = "shape0";
   let columns = tableColumns(input.tables, input.baseTable);
 
+  const merges: MergeCheck[] = [];
   const selected = (current: Map<string, string>) => [...current.keys()].map((name) => quote(name)).join(", ");
   const checkedNames = (current: Map<string, string>, value: string[]) => value.map((name) => requireColumn(current, name));
 
@@ -382,6 +407,15 @@ export function buildShapeQuery(input: {
           return { column, name };
         });
         ensureUnused(columns, additions.map(({ name }) => name));
+        merges.push({
+          step: index + 1,
+          table: step.table,
+          join: step.join,
+          columns: step.matches.map((match) => match.column),
+          withColumns: step.matches.map((match) => match.withColumn),
+          numbers: additions.filter(({ column }) => NUMBER_TYPE.test(right.get(column)!) || /^(DOUBLE|FLOAT)/.test(right.get(column)!)).map(({ column }) => column),
+          source,
+        });
         columns = new Map([...columns, ...additions.map(({ column, name }) => [name, right.get(column)!] as const)]);
         sql = `select ${[...[...columns.keys()].filter((name) => !additions.some((entry) => entry.name === name)).map((name) => `${quote("left_source")}.${quote(name)} as ${quote(name)}`), ...additions.map(({ column, name }) => `${quote("right_source")}.${quote(column)} as ${quote(name)}`)].join(", ")} from ${source} as ${quote("left_source")} ${step.join === "left" ? "left" : "inner"} join ${quote(step.table)} as ${quote("right_source")} on ${matches.join(" and ")}`;
         break;
@@ -406,5 +440,58 @@ export function buildShapeQuery(input: {
   });
 
   const outputColumns = [...columns].map(([name, type]) => ({ name, type }));
-  return { sql: `with ${ctes.join(", ")} select * from ${source}`, params, columns: outputColumns };
+  return { sql: `with ${ctes.join(", ")} select * from ${source}`, params, columns: outputColumns, merges, ctes: ctes.join(", ") };
+}
+
+/**
+ * One query answering a Merge step's checks (decision 693): how many match
+ * values the other table repeats and the most rows one has, whether this
+ * table repeats any, and how many of this table's rows have no match. Rows
+ * with a blank match column never match, so they aren't counted as repeats.
+ * Every CTE is kept so the query uses every parameter.
+ */
+export function mergeCheckSql(ctes: string, check: MergeCheck): string {
+  const right = quote(check.table);
+  const rightKeys = check.withColumns.map(quote).join(", ");
+  const leftKeys = check.columns.map(quote).join(", ");
+  const notBlank = (keys: string[]) => keys.map((key) => `${quote(key)} is not null`).join(" and ");
+  const matched = check.columns.map((column, index) => `l.${quote(column)} = r.${quote(check.withColumns[index])}`).join(" and ");
+  return `with ${ctes}
+    select
+      (select count(*) from (select ${rightKeys} from ${right} where ${notBlank(check.withColumns)} group by ${rightKeys} having count(*) > 1)) as right_repeats,
+      (select max(n) from (select count(*) as n from ${right} where ${notBlank(check.withColumns)} group by ${rightKeys})) as right_most,
+      (select cast(${check.withColumns.length === 1 ? rightKeys : `row(${rightKeys})`} as VARCHAR) from ${right} where ${notBlank(check.withColumns)} group by ${rightKeys} having count(*) > 1 order by count(*) desc, 1 limit 1) as right_example,
+      (select count(*) from (select ${leftKeys} from ${check.source} where ${notBlank(check.columns)} group by ${leftKeys} having count(*) > 1)) as left_repeats,
+      (select count(*) from ${check.source} l where not exists (select 1 from ${right} r where ${matched})) as unmatched,
+      (select count(*) from ${check.source}) as rows`;
+}
+
+/** The check's answer, as a refusal (thrown) or notes on what the merge does. */
+export function mergeCheckOutcome(
+  check: MergeCheck,
+  baseName: string,
+  answer: { right_repeats: string | null; right_most: string | null; right_example: string | null; left_repeats: string | null; unmatched: string | null; rows: string | null },
+): string[] {
+  const on = check.withColumns.join(" and ");
+  if (Number(answer.right_repeats ?? 0) > 0) {
+    throw new ValidationError(
+      `Step ${check.step}: ${check.table} has more than one row for the same ${on} (${answer.right_example ?? "one value"} has ${answer.right_most} rows), so each matching row here would be repeated and its amounts counted more than once (one invoice of 100.00 merged with its three lines would become 300.00). Merge on columns that are different on every row of ${check.table}, or group ${check.table} by ${on} first.`,
+    );
+  }
+  if (Number(answer.left_repeats ?? 0) > 0 && check.numbers.length > 0) {
+    throw new ValidationError(
+      `Step ${check.step}: several rows here have the same ${check.columns.join(" and ")}, so ${check.numbers.join(", ")} from ${check.table} would repeat on each of them and add up more than once. Bring in text, dates or Yes/No only, or start from ${check.table} and merge these rows into it after grouping them.`,
+    );
+  }
+  const notes: string[] = [];
+  const unmatched = Number(answer.unmatched ?? 0);
+  if (unmatched > 0) {
+    const rows = `${unmatched.toLocaleString("en-NZ")} of ${Number(answer.rows ?? 0).toLocaleString("en-NZ")} rows`;
+    notes.push(
+      check.join === "inner"
+        ? `Step ${check.step}: ${rows} of ${baseName} have no match in ${check.table} and are left out.`
+        : `Step ${check.step}: ${rows} of ${baseName} have no match in ${check.table}; what they'd bring in is blank.`,
+    );
+  }
+  return notes;
 }

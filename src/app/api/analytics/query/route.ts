@@ -74,9 +74,11 @@ export const POST = route(async (request) => {
       const allowed = allowedFilters(dashboard, filters, reader);
       // A tile with its own dates ignores the report's (decision 758).
       const own = effectiveDates(tile.dates, allowed, dates.today, dates.yearEndMonth);
+      // A table with a totals row gets the whole answer as one total too (decision 694).
+      const totals = tile.visual === "table" && tile.format?.table?.totals === true;
       return {
         organisationId: tx.organisationId,
-        query: { tile: { query: viewed.query }, filters: { ...allowed, ...own, dates, view: [...viewed.where, ...ranges, ...(page?.filters ?? []).map((entry) => entry.filter)] } },
+        query: { tile: { query: viewed.query }, filters: { ...allowed, ...own, dates, view: [...viewed.where, ...ranges, ...(page?.filters ?? []).map((entry) => entry.filter)] }, totals },
       };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
@@ -85,10 +87,10 @@ export const POST = route(async (request) => {
     if (view) {
       const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];
       const viewed = viewQuery(tiles, { id: String(body.tileId ?? "draft"), title: "This tile", query: body.query as TileQuery, drill: body.viewDrill as TileDrill | undefined }, view);
-      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)] } } };
+      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)] }, totals: body.totals === true } };
     }
-    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where) } } };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where) }, totals: body.totals === true } };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));
-  return json(await runTile(organisationId, query.tile.query, query.filters));
+  return json(await runTile(organisationId, query.tile.query, query.filters, { totals: query.totals }));
 });
