@@ -535,6 +535,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           ) : null}
           {can.axes ? (
             <Section title="Axes">
+              {can.groupAxis ? (
               <fieldset className={styles.group}>
                 <legend>{visual === "bar" || visual === "bullet" ? "Group axis (down the side)" : "Group axis (along the bottom)"}</legend>
                 <Field label="Title">
@@ -554,7 +555,10 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </div>
                 ) : null}
               </fieldset>
-              <AxisFields name={usesRight ? "Left axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
+              ) : (
+                <AxisFields name="Across axis" value={current.xAxis} defaultGridlines onChange={(xAxis) => set({ xAxis })} />
+              )}
+              <AxisFields name={usesRight ? "Left axis" : can.scatter ? "Up axis" : can.histogram ? "Count axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
               {usesRight ? <AxisFields name="Right axis" value={current.rightAxis} defaultGridlines={false} onChange={(rightAxis) => set({ rightAxis })} /> : null}
             </Section>
           ) : null}

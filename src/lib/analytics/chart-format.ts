@@ -251,6 +251,13 @@ export type ChartFormat = {
   gauge?: GaugeFormat;
   /** Bullet chart: a target and the shaded bands behind each bar. */
   bullet?: BulletFormat;
+  /** Scatter and bubble: the across (x) axis, as the value axis is the up (y) one. */
+  xAxis?: AxisFormat;
+  scatter?: { trend?: boolean };
+  /** Histogram: how many bins, or how wide each is (a decimal string); left out, worked out from the values. */
+  histogram?: { bins?: number; width?: string };
+  /** Box plot: dots for values beyond the whiskers; on unless turned off. */
+  boxplot?: { outliers?: boolean };
 };
 
 export type WaterfallFormat = {
@@ -725,7 +732,20 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     funnel: compact({ percent: oneOf(object(raw.funnel).percent, ["first", "previous", "none"] as const, "Funnel percentage") }),
     gauge: parseGauge(raw.gauge),
     bullet: parseBullet(raw.bullet),
+    xAxis: parseAxis(raw.xAxis, "Across axis"),
+    scatter: compact({ trend: flag(object(raw.scatter).trend) }),
+    histogram: parseHistogram(raw.histogram),
+    boxplot: compact({ outliers: flag(object(raw.boxplot).outliers) }),
   });
+}
+
+function parseHistogram(input: unknown): ChartFormat["histogram"] {
+  const raw = object(input);
+  const width = numberText(raw.width, "Bin width");
+  if (width !== undefined && Number(width) <= 0) throw new ValidationError("Bin width should be more than zero.");
+  const bins = whole(raw.bins, 2, 50, "Number of bins");
+  if (width !== undefined && bins !== undefined) throw new ValidationError("Choose a number of bins or a bin width, not both.");
+  return compact({ bins, width });
 }
 
 function parseWaterfall(input: unknown): WaterfallFormat | undefined {
@@ -824,15 +844,20 @@ export function formatOptionsFor(visual: string) {
     colorByCategory: visual === "column" || visual === "bar",
     kpi: visual === "kpi",
     /** Has a value axis and a group axis to format (#376 phase 2 visuals included). */
-    axes: ["column", "bar", "line", "area", "combo", "waterfall", "bullet"].includes(visual),
+    axes: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "scatter", "histogram", "boxplot"].includes(visual),
     /** Colour rules on the marks. */
-    rules: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "funnel", "gauge"].includes(visual),
+    rules: ["column", "bar", "line", "area", "combo", "waterfall", "bullet", "funnel", "gauge", "scatter"].includes(visual),
     /** Shows a legend. */
-    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet"].includes(visual),
+    legend: !["kpi", "gauge", "funnel", "waterfall", "bullet", "scatter", "histogram", "boxplot"].includes(visual),
     /** Column thickness and rounded ends. */
-    thickness: ["column", "bar", "combo", "waterfall", "bullet"].includes(visual),
+    thickness: ["column", "bar", "combo", "waterfall", "bullet", "histogram", "boxplot"].includes(visual),
     /** Data labels on the marks. */
-    labels: !["kpi", "gauge"].includes(visual),
+    labels: !["kpi", "gauge", "boxplot"].includes(visual),
+    /** The group axis is numbers too (scatter's across axis), or its groups are bins (histogram). */
+    groupAxis: !["scatter"].includes(visual),
+    scatter: visual === "scatter",
+    histogram: visual === "histogram",
+    boxplot: visual === "boxplot",
     waterfall: visual === "waterfall",
     funnel: visual === "funnel",
     gauge: visual === "gauge",
@@ -840,8 +865,13 @@ export function formatOptionsFor(visual: string) {
   };
 }
 
+/** Chart types that use a second grouping inside the first (#376 phase 2), and what it's called for each. */
+export const SECOND_GROUPING: Partial<Record<string, { label: string; none: string | null; hint: string }>> = {
+  boxplot: { label: "Each box is made of", none: "Nothing: one box of every group's value", hint: "e.g. boxes by region, each made of its customers' totals" },
+};
+
 /** The chart types a report can keep a default format for (#376, Power BI's visual defaults). */
-export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet"] as const;
+export const DEFAULTABLE_VISUALS = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot"] as const;
 export type DefaultableVisual = (typeof DEFAULTABLE_VISUALS)[number];
 export type VisualDefaults = Partial<Record<DefaultableVisual, ChartFormat>>;
 
@@ -860,6 +890,9 @@ export const VISUAL_NAMES: Record<DefaultableVisual, string> = {
   funnel: "Funnel",
   gauge: "Gauge",
   bullet: "Bullet chart",
+  scatter: "Scatter or bubble",
+  histogram: "Histogram",
+  boxplot: "Box plot",
 };
 
 /**

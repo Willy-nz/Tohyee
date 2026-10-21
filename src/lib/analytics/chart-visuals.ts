@@ -3,6 +3,7 @@ import type { ChartFormat } from "@/lib/analytics/chart-format";
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
 import { MARKS, tooltipHtml, type ChartTheme, type TooltipRow, echartsBase } from "@/lib/charts/theme";
 import { contrast } from "@/lib/charts/colour-check";
+import { boxPlotOption, histogramOption, scatterOption } from "@/lib/analytics/chart-distributions";
 import { add, dec, isDecimalString, isNegative, sum, toPlainString, type Decimal } from "@/lib/money/decimal";
 
 /**
@@ -12,8 +13,8 @@ import { add, dec, isDecimalString, isNegative, sum, toPlainString, type Decimal
  * colour rules), handed over by `toEChartsOption` as a kit.
  */
 
-export type ExtraKind = "waterfall" | "funnel" | "gauge" | "bullet";
-export const EXTRA_KINDS: ReadonlySet<ExtraKind> = new Set(["waterfall", "funnel", "gauge", "bullet"]);
+export type ExtraKind = "waterfall" | "funnel" | "gauge" | "bullet" | "scatter" | "histogram" | "boxplot";
+export const EXTRA_KINDS: ReadonlySet<ExtraKind> = new Set(["waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot"]);
 
 type ChartRow = Record<string, string | number | null>;
 type Formatter = (value: number | string) => string;
@@ -59,6 +60,12 @@ export function extraOption(kit: ChartKit): EChartsOption {
       return gaugeOption(kit);
     case "bullet":
       return bulletOption(kit);
+    case "scatter":
+      return scatterOption(kit);
+    case "histogram":
+      return histogramOption(kit);
+    case "boxplot":
+      return boxPlotOption(kit);
   }
 }
 
