@@ -1,0 +1,26 @@
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+}
+
+.count {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.message {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

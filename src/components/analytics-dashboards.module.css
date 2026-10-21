@@ -373,3 +373,12 @@
   white-space: nowrap;
 }
 .mapNote { margin: 4px 0 0; color: var(--report-text-muted, var(--text-muted)); font-size: var(--text-xs, 12px); }
+
+/* The chart panel (#387, decisions 750-751). */
+.visualPicker .moreTypes { border-style: dashed; color: var(--text-muted); }
+.sizeFields { margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
+.sizeFields > legend { padding: 0 4px; font-size: var(--text-sm); font-weight: 600; }
+.advancedToggle { flex-wrap: wrap; }
+.editorButtons { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.chooseTile { font-size: var(--text-sm); margin-right: 4px; }
+.chosenTile { outline: 2px solid var(--accent); outline-offset: 2px; }

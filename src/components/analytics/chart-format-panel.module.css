@@ -173,3 +173,44 @@
   margin: 0;
   padding-left: 18px;
 }
+
+/* Where a setting comes from (#387, decision 750): text as well as colour. */
+.source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.source[data-source="chart"] .sourceText {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sourceText::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  vertical-align: 1px;
+}
+
+.source[data-source="chart"] .sourceText::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.changed {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.advancedToggle {
+  margin-top: 4px;
+}

@@ -7363,3 +7363,51 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      uses Home's 14 days. Only operational figures: no money until the
      farm reporting rules exist (#390). Reads the farms in turn like Home
      does; batching waits for a measured need.
+
+
+### Keeping the chart editor manageable (#387; decisions 750-752)
+
+750. **Data, Style and Interactions** (22 October 2026, #387 P1 "Keep the
+     editor manageable"; Power BI's Build / Format / Analytics panes and
+     Looker Studio's Setup / Style tabs; not yet reviewed by Jess). The
+     selected chart's panel has three tabs, after its title and chart type:
+     **Data** (source, grouping, dates, order, values, row filters, a key
+     figure's comparison), **Style** (size in the report, then the chart's
+     look in folded sections) and **Interactions** (tooltips: shown, the
+     total, and each value shown, left out or only in the tooltip). The
+     arrow keys move between tabs; every tab stays in the page, so nothing
+     typed is lost by looking at another. Only settings that apply to the
+     chart type show, as before. The report theme stays in its own panel
+     (Theme), the tile's size in the report is its own group at the top of
+     Style, and the chart's look is below it, so the three levels are apart.
+     Each Style section, and each value's number format, says where its
+     settings come from: **Changed on this chart** (with **Reset**, which
+     takes off only those settings, so the chart type default or the theme
+     shows again), **From this report's columns default** (with **Reset the
+     default**, which changes the default for every chart of that type that
+     doesn't set its own) or **From the theme**. A folded section's heading
+     says "changed" or "default", so a changed setting can be found without
+     opening the others. **Reset all of this chart's style** still clears
+     every change on the chart at once.
+751. **Specialist chart types and advanced settings behind a choice** (22
+     October 2026, #387). The chart type buttons and list show the ten
+     common types (columns, bars, line, area, columns and line, pie, donut,
+     key figure, table, pivot table); **More chart types…** shows the
+     specialist ones (waterfall, funnel, gauge, bullet, scatter, histogram,
+     box plot, treemap, heat maps, Sankey, maps). A chart that already uses
+     one shows it. **Show advanced settings** (remembered in this browser
+     only) shows reference lines, trend lines and projections, colour rules,
+     gridline and plot area styles, and log scales. Any of these a chart (or
+     its chart type default) already uses shows anyway, so nothing in use is
+     out of sight.
+752. **Lining up and sizing tiles in the grid** (22 October 2026, #387; the
+     flowing grid stays, the free-position canvas comes later if at all).
+     In edit mode each tile has a **Select** tick box. With two or more
+     chosen: **Same width** and **Same height** give them the first chosen
+     tile's size; **Share a row** gives two, three or four tiles halves,
+     thirds or quarters, moves them together after the first chosen one and
+     gives them the tallest one's height; **Line up heights** gives every
+     tile in a chosen tile's row the row's tallest height. All work from the
+     keyboard, go into the draft as one Undo step each, and say what they
+     did. Rows are worked out as the 12-column grid lays them out on a wide
+     screen; on phones every tile is full width, as before.

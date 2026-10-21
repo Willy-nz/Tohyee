@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { SettingSection, SourceProvider, SourceTag } from "@/components/analytics/setting-source";
+import { usesAdvanced, withoutSettings } from "@/lib/analytics/editor-panels";
 import { ColourInput } from "@/components/analytics/colour-input";
 import { ChartRuleFields, ConditionalFields, TableStyleFields } from "@/components/analytics/conditional-panel";
 import { Button, Field, Notice, ui } from "@/components/ui";
@@ -54,6 +56,12 @@ type Props = {
   rowFields?: string[];
   /** The tile shows small multiples (a column, bar or line chart with a second grouping). */
   smallMultiples?: boolean;
+  /** Which tab of the chart's panel this is (#387, decision 750): its look, or what happens when people point at it. */
+  part?: "style" | "interactions";
+  /** Show advanced settings (statistics, colour rules, gridlines); ones the chart uses always show. */
+  advanced?: boolean;
+  /** More settings shown first in the Style tab (a key figure's look). */
+  extra?: ReactNode;
 };
 
 /** Removes settings left at their default, so Reset and "nothing changed" are the same thing. */
@@ -74,14 +82,7 @@ export function tidyFormat(format: ChartFormat | undefined): ChartFormat | undef
   return prune(format) as ChartFormat | undefined;
 }
 
-function Section({ title, children, open }: { title: string; children: ReactNode; open?: boolean }) {
-  return (
-    <details className={styles.section} open={open}>
-      <summary>{title}</summary>
-      <div className={styles.body}>{children}</div>
-    </details>
-  );
-}
+const Section = SettingSection;
 
 function Check({ label, checked, onChange, hint }: { label: string; checked: boolean; onChange: (checked: boolean) => void; hint?: string }) {
   return (
@@ -214,7 +215,7 @@ function AxisLookFields({ name, value, onChange }: { name: string; value: AxisFo
   );
 }
 
-function AxisFields({ name, value, onChange, defaultGridlines }: { name: string; value: AxisFormat | undefined; onChange: (value: AxisFormat) => void; defaultGridlines: boolean }) {
+function AxisFields({ name, value, onChange, defaultGridlines, advanced = true }: { name: string; value: AxisFormat | undefined; onChange: (value: AxisFormat) => void; defaultGridlines: boolean; advanced?: boolean }) {
   const current = value ?? {};
   return (
     <fieldset className={styles.group}>
@@ -235,7 +236,7 @@ function AxisFields({ name, value, onChange, defaultGridlines }: { name: string;
       </div>
       <Check label="Gridlines" checked={current.gridlines ?? defaultGridlines} onChange={(checked) => onChange({ ...current, gridlines: checked === defaultGridlines ? undefined : checked })} />
       <Check label="Start at zero" checked={current.zero !== false} onChange={(checked) => onChange({ ...current, zero: checked ? undefined : false })} />
-      <Check label="Log scale" hint="For values above zero that range from small to very large" checked={current.log === true} onChange={(checked) => onChange({ ...current, log: checked || undefined })} />
+      {advanced || current.log ? <Check label="Log scale" hint="For values above zero that range from small to very large" checked={current.log === true} onChange={(checked) => onChange({ ...current, log: checked || undefined })} /> : null}
       <AxisLookFields name={name} value={current} onChange={(patch) => onChange({ ...current, ...patch })} />
       <details className={styles.inner}>
         <summary>Number format on this axis</summary>
@@ -317,7 +318,7 @@ function ReferenceLines({ values, lines, onChange }: { values: string[]; lines: 
 }
 
 /** The Format section of the chart panel (#331, #333, #376): every change shows in the preview straight away. */
-export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [], smallMultiples = false }: Props) {
+export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [], smallMultiples = false, part = "style", advanced: showAdvanced = false, extra }: Props) {
   // What the chart shows: the report's default for its type with the tile's own settings over it.
   const current = mergeFormats(inherited, format) ?? {};
   const can = formatOptionsFor(visual);
@@ -331,30 +332,71 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
   const usesRight = can.secondAxis && values.some((_name, index) => seriesAt(index).axis === "right");
   const tooManyForBlues = current.palette === "blues" && (current.colorByCategory ? false : values.length > 4);
   const warnings = chosenColourWarnings(values.map((_name, index) => current.series?.[index]?.hex), theme);
+  // Advanced settings show when asked for, or when the chart (or its default) already uses one (decision 751).
+  const advanced = showAdvanced || usesAdvanced(current);
+  const chartTypeName = VISUAL_NAMES[visual as keyof typeof VISUAL_NAMES] ?? "Chart";
+  const sourceInfo = {
+    own: format,
+    inherited,
+    chartTypeName,
+    themeName: theme.name,
+    resetOwn: (paths: Array<Array<string | number>>) => onChange(tidyFormat(withoutSettings(format, paths))),
+    resetDefault: onSetDefault && inherited ? (paths: Array<Array<string | number>>) => onSetDefault(withoutSettings(inherited, paths)) : undefined,
+  };
   const heading = (
     <>
       <div className={styles.heading}>
-        <h3>Format</h3>
-        <Button size="small" variant="secondary" disabled={!format} onClick={() => onChange(undefined)} title={inherited ? "Back to this report's default for the chart type" : undefined}>Reset to default</Button>
+        <h3>Style</h3>
+        <Button size="small" variant="secondary" disabled={!format} onClick={() => onChange(undefined)} title={inherited ? "Every setting changed on this chart goes back to this report's default for the chart type" : "Every setting changed on this chart goes back to the theme"}>Reset all of this chart&apos;s style</Button>
       </div>
       <DefaultButtons visual={visual} current={current} inherited={inherited} onSetDefault={onSetDefault} />
     </>
   );
 
+  if (part === "interactions") {
+    if (can.kpi || visual === "table" || visual === "pivot") return null;
+    return (
+      <SourceProvider value={sourceInfo}>
+        <div className={styles.panel}>
+          <Section title="Tooltip" open paths={["tooltip"]}>
+            <Check label="Show tooltips" checked={current.tooltip?.show !== false} onChange={(checked) => set({ tooltip: { ...current.tooltip, show: checked ? undefined : false } })} />
+            {can.cartesian && values.length > 1 ? (
+              <Check label="Total of the values" checked={current.tooltip?.total === true} onChange={(checked) => set({ tooltip: { ...current.tooltip, total: checked || undefined } })} />
+            ) : null}
+            {can.cartesian ? (
+              values.map((name, index) => (
+                <Field key={index} label={`${name || `Value ${index + 1}`} in the tooltip`}>
+                  <select aria-label={`${name} in the tooltip`} value={seriesAt(index).tooltip ?? "show"} onChange={(event) => setSeries(index, { tooltip: event.target.value === "show" ? undefined : (event.target.value as "hide" | "only") })}>
+                    <option value="show">Shown</option>
+                    <option value="hide">Left out</option>
+                    <option value="only">Only in the tooltip (not drawn)</option>
+                  </select>
+                </Field>
+              ))
+            ) : null}
+          </Section>
+        </div>
+      </SourceProvider>
+    );
+  }
+
   if (visual === "table" || visual === "pivot") {
     return (
+      <SourceProvider value={sourceInfo}>
       <div className={styles.panel}>
         {heading}
-        <Section title="Table style">
+        {extra}
+        <Section title="Table style" paths={["table"]}>
           <TableStyleFields format={current} set={set} pivot={visual === "pivot"} rowFields={rowFields} />
         </Section>
-        <Section title="Conditional formatting">
+        <Section title="Conditional formatting" paths={[["conditional"], ["dataBars"], ["icons"]]}>
           <ConditionalFields values={values} format={current} set={set} groupName={visual === "pivot" ? rowFields[0] ?? null : groupName} />
         </Section>
-        <Section title="Title and card">
+        <Section title="Title and card" paths={["card"]}>
           <CardFields format={current} set={set} />
         </Section>
       </div>
+      </SourceProvider>
     );
   }
 
@@ -368,10 +410,12 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
   const labelsByDefault = can.round || can.funnel;
 
   return (
+    <SourceProvider value={sourceInfo}>
     <div className={styles.panel}>
       {heading}
+      {extra}
       {!can.kpi ? (
-        <Section title="Colours">
+        <Section title="Colours" paths={[["palette"], ["colorByCategory"], ["categoryColors"], ["negativeRed"]]}>
           <Field label="Colours" hint={tooManyForBlues ? "Tohyee blues has 4 shades, so this chart uses the full colours." : undefined}>
             <select value={current.palette ?? "tohyee"} onChange={(event) => set({ palette: event.target.value === "tohyee" ? undefined : (event.target.value as PaletteId) })}>
               {(Object.keys(PALETTES) as PaletteId[]).map((id) => <option key={id} value={id}>{PALETTES[id].label}</option>)}
@@ -399,7 +443,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           ) : null}
         </Section>
       ) : null}
-      <Section title={values.length > 1 ? "Values" : "Value"} open={can.secondAxis && values.length > 1}>
+      <Section title={values.length > 1 ? "Values" : "Value"} open={can.secondAxis && values.length > 1} paths={["series"]}>
         {values.map((name, index) => {
           const series = seriesAt(index);
           const label = name || `Value ${index + 1}`;
@@ -407,6 +451,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           return (
             <fieldset key={index} className={styles.group}>
               <legend>{label}</legend>
+              {values.length > 1 ? <SourceTag paths={["series", index]} what={label} /> : null}
               {can.columnOrLine ? (
                 <Field label="Show as">
                   <select aria-label={`${name} show as`} value={series.as ?? (index === 0 ? "bar" : "line")} onChange={(event) => setSeries(index, { as: event.target.value as "bar" | "line" })}>
@@ -437,15 +482,6 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   <ColourInput label={`${label}: any colour`} value={series.hex} onChange={(hex) => setSeries(index, { hex })} />
                 </>
               ) : null}
-              {can.cartesian ? (
-                <Field label="In the tooltip">
-                  <select aria-label={`${name} in the tooltip`} value={series.tooltip ?? "show"} onChange={(event) => setSeries(index, { tooltip: event.target.value === "show" ? undefined : (event.target.value as "hide" | "only") })}>
-                    <option value="show">Shown</option>
-                    <option value="hide">Left out</option>
-                    <option value="only">Only in the tooltip (not drawn)</option>
-                  </select>
-                </Field>
-              ) : null}
               {isLine ? (
                 <div className={styles.pair}>
                   <NumberBox label="Line width" value={series.lineWidth} min={1} max={6} placeholder="2" onChange={(lineWidth) => setSeries(index, { lineWidth })} />
@@ -460,13 +496,16 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </Field>
                 </div>
               ) : null}
-              {can.cartesian && current.stack !== "percent" ? (
+              {can.cartesian && current.stack !== "percent" && (advanced || series.trend || series.forecast) ? (
                 <div className={styles.pair}>
                   <Check label="Trend line" checked={series.trend === true} onChange={(checked) => setSeries(index, { trend: checked || undefined })} />
                   <NumberBox label="Forecast" hint="Groups to carry the trend on (1 to 12)" value={series.forecast} min={1} max={12} placeholder="None" onChange={(forecast) => setSeries(index, { forecast })} />
                 </div>
               ) : null}
-              <NumberFields name={name} value={series.number} labels={can.kpi} onChange={(number) => setSeries(index, { number })} />
+              <div className={styles.group}>
+                <SourceTag paths={["series", index, "number"]} what={`${label} number format`} name="Number format" />
+                <NumberFields name={name} value={series.number} labels={can.kpi} onChange={(number) => setSeries(index, { number })} />
+              </div>
             </fieldset>
           );
         })}
@@ -475,7 +514,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
       {!can.kpi ? (
         <>
           {can.labels ? (
-          <Section title="Data labels">
+          <Section title="Data labels" paths={["labels"]}>
             <Check label="Show values on the chart" checked={current.labels?.show ?? labelsByDefault} onChange={(checked) => set({ labels: { ...current.labels, show: checked === labelsByDefault ? undefined : checked } })} />
             <div className={styles.pair}>
               {can.round || can.funnel || can.cartesian ? (
@@ -514,7 +553,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           </Section>
           ) : null}
           {can.legend ? (
-          <Section title="Legend">
+          <Section title="Legend" paths={["legend"]}>
             <div className={styles.pair}>
               <Field label="Legend">
                 <select value={current.legend?.show ?? "auto"} onChange={(event) => set({ legend: { ...current.legend, show: event.target.value === "auto" ? undefined : (event.target.value as "show" | "hide") } })}>
@@ -536,7 +575,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           </Section>
           ) : null}
           {can.axes ? (
-            <Section title="Axes">
+            <Section title="Axes" paths={[["categoryAxis"], ["valueAxis"], ["rightAxis"], ["xAxis"]]}>
               {can.groupAxis ? (
               <fieldset className={styles.group}>
                 <legend>{visual === "bar" || visual === "bullet" ? "Group axis (down the side)" : "Group axis (along the bottom)"}</legend>
@@ -558,39 +597,32 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                 ) : null}
               </fieldset>
               ) : (
-                <AxisFields name="Across axis" value={current.xAxis} defaultGridlines onChange={(xAxis) => set({ xAxis })} />
+                <AxisFields name="Across axis" value={current.xAxis} defaultGridlines advanced={advanced} onChange={(xAxis) => set({ xAxis })} />
               )}
-              <AxisFields name={usesRight ? "Left axis" : can.scatter ? "Up axis" : can.histogram ? "Count axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
-              {usesRight ? <AxisFields name="Right axis" value={current.rightAxis} defaultGridlines={false} onChange={(rightAxis) => set({ rightAxis })} /> : null}
+              <AxisFields name={usesRight ? "Left axis" : can.scatter ? "Up axis" : can.histogram ? "Count axis" : "Value axis"} value={current.valueAxis} defaultGridlines advanced={advanced} onChange={(valueAxis) => set({ valueAxis })} />
+              {usesRight ? <AxisFields name="Right axis" value={current.rightAxis} defaultGridlines={false} advanced={advanced} onChange={(rightAxis) => set({ rightAxis })} /> : null}
             </Section>
           ) : null}
-          {can.axes ? (
-            <Section title="Gridlines and plot area">
+          {can.axes && advanced ? (
+            <Section title="Gridlines and plot area" paths={[["gridlines"], ["plot"]]}>
               <StyleSelect label="Gridline style" value={current.gridlines?.style} onChange={(style) => set({ gridlines: { ...current.gridlines, style } })} />
               <ColourInput label="Gridline colour" value={current.gridlines?.color} onChange={(color) => set({ gridlines: { ...current.gridlines, color } })} />
               <ColourInput label="Plot area background" value={current.plot?.background} onChange={(background) => set({ plot: { background } })} />
             </Section>
           ) : null}
-          {can.rules ? (
-            <Section title="Colour rules">
+          {can.rules && advanced ? (
+            <Section title="Colour rules" paths={["chartRules"]}>
               <ChartRuleFields values={values} format={current} set={set} />
             </Section>
           ) : null}
-          {can.cartesian ? (
-            <Section title="Reference lines">
+          {can.cartesian && advanced ? (
+            <Section title="Reference lines" paths={["referenceLines"]}>
               <p className={styles.note}>Lines across the {visual === "bar" ? "bottom" : "left"} axis: a fixed value or target, the average, median, lowest, highest or a percentile of a value, or a shaded band.</p>
               <ReferenceLines values={values} lines={current.referenceLines ?? []} onChange={(referenceLines) => set({ referenceLines: referenceLines?.length ? referenceLines : undefined })} />
             </Section>
           ) : null}
-          <Section title="Tooltip">
-            <Check label="Show tooltips" checked={current.tooltip?.show !== false} onChange={(checked) => set({ tooltip: { ...current.tooltip, show: checked ? undefined : false } })} />
-            {can.cartesian && values.length > 1 ? (
-              <Check label="Total of the values" checked={current.tooltip?.total === true} onChange={(checked) => set({ tooltip: { ...current.tooltip, total: checked || undefined } })} />
-            ) : null}
-            <p className={styles.note}>Each value can be left out of the tooltip, or shown only there, under Values.</p>
-          </Section>
           {can.stack || can.lines || can.donutTotal || can.thickness ? (
-            <Section title="Chart options">
+            <Section title="Chart options" paths={[["stack"], ["bars"], ["smooth"], ["markers"], ["donutTotal"]]}>
               {can.stack ? (
                 <Field label="Stacking">
                   <select value={current.stack ?? "none"} onChange={(event) => set({ stack: event.target.value === "none" ? undefined : (event.target.value as "stacked" | "percent") })}>
@@ -618,10 +650,11 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           ) : null}
         </>
       ) : null}
-      <Section title="Title and card">
+      <Section title="Title and card" paths={["card"]}>
         <CardFields format={current} set={set} />
       </Section>
     </div>
+    </SourceProvider>
   );
 }
 

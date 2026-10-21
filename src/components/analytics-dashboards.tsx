@@ -21,7 +21,7 @@ import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { formatOptionsFor, mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
 import { calendarHeight, calendarYears } from "@/lib/analytics/chart-relationships";
@@ -31,6 +31,9 @@ import { SmallMultiplesView } from "@/components/analytics/small-multiples";
 import { useTileResult } from "@/components/analytics/use-tile-result";
 import { ButtonItemView, ImageItemView, ItemEditor, ShapeItemView, TextItemView } from "@/components/analytics/items";
 import { isItemVisual, type ButtonAction } from "@/lib/analytics/items";
+import { PanelTabs } from "@/components/analytics/panel-tabs";
+import { ArrangeBar } from "@/components/analytics/arrange-bar";
+import { isSpecialistVisual, PANEL_TAB_LABELS, PANEL_TABS, type PanelTab } from "@/lib/analytics/editor-panels";
 
 /** Each small chart's height, by the tile's height. */
 const MULTIPLE_HEIGHTS: Record<TileHeight, number> = { small: 160, medium: 200, large: 260 };
@@ -290,6 +293,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [dragging, setDragging] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters | null>(null);
+  // Tiles chosen for lining up and sizing (decision 752).
+  const [chosenTiles, setChosenTiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -506,6 +511,15 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         />
       ) : null}
 
+      {editing && !editingTile ? (
+        <ArrangeBar
+          tiles={dashboard.tiles}
+          chosen={chosenTiles.filter((id) => dashboard.tiles.some((tile) => tile.id === id))}
+          onClear={() => setChosenTiles([])}
+          onArrange={(tiles) => void save({ ...dashboard, tiles })}
+        />
+      ) : null}
+
       {!editingTile && (dashboard.tiles.length === 0 ? (
         <Empty>{canEdit ? editing ? "Start your report with Add chart. Choose a source, a visual and the fields to show." : "This report is empty. Choose Edit to add a chart." : "No tiles yet."}</Empty>
       ) : (
@@ -518,7 +532,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             <section
               key={tile.id}
               style={look.card}
-              className={`${tileClass(shownTile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
+              className={`${tileClass(shownTile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""} ${editing && chosenTiles.includes(tile.id) ? styles.chosenTile : ""}`}
               draggable={editing && !busy}
               onDragStart={(event) => {
                 setDragging(index);
@@ -549,6 +563,15 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                 </div>
                 {editing ? (
                   <div className={styles.tileTools}>
+                    <label className={`${ui.checkbox} ${styles.chooseTile}`}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Choose ${tile.title} to line up or size`}
+                        checked={chosenTiles.includes(tile.id)}
+                        onChange={(event) => setChosenTiles((current) => (event.target.checked ? [...current, tile.id] : current.filter((id) => id !== tile.id)))}
+                      />{" "}
+                      Select
+                    </label>
                     <span className={styles.dragHandle} aria-hidden="true" title="Drag to move">⠿</span>
                     <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, index - 1)} disabled={busy || index === 0}>
                       ↑
@@ -1381,6 +1404,16 @@ function SecondGrouping({ visual, query, columns, onChange }: { visual: Visual; 
   );
 }
 
+/** Remembered in this browser only: whether the chart panel shows advanced settings (decision 751). */
+const ADVANCED_KEY = "tohyee.analytics.advancedSettings";
+function readAdvanced(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(ADVANCED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** Adding or changing a tile, with a live preview. */
 function TileEditor({
   saving,
@@ -1419,6 +1452,19 @@ function TileEditor({
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
   const [format, setFormat] = useState<ChartFormat | undefined>(tile?.format);
   const [savedVersion, setSavedVersion] = useState(0);
+  // The panel's tab, specialist chart types and advanced settings (#387, decisions 750-751).
+  const [tab, setTab] = useState<PanelTab>("data");
+  const [moreTypes, setMoreTypes] = useState(() => isSpecialistVisual(visual));
+  const [advanced, setAdvancedState] = useState(readAdvanced);
+  const setAdvanced = (on: boolean) => {
+    setAdvancedState(on);
+    try {
+      window.localStorage.setItem(ADVANCED_KEY, on ? "1" : "0");
+    } catch {
+      // Not remembered; it still applies to this chart.
+    }
+  };
+  const shownVisuals = VISUALS.filter((entry) => moreTypes || !isSpecialistVisual(entry.value) || entry.value === visual);
   const table = tables.find((entry) => entry.name === query.table);
   const columns = table?.columns ?? [];
   const numbers = columns.filter((column) => isNumber(column.type));
@@ -1531,7 +1577,10 @@ function TileEditor({
       </aside>
       <div className={styles.canvasPanel}>
         <div className={styles.canvasHeading}><span className={styles.eyebrow}>REPORT CANVAS · LIVE PREVIEW</span><h2>{title || "Untitled chart"}</h2><p className={ui.muted}>Using the report’s date range and filters</p></div>
-        <div className={styles.visualPicker} aria-label="Chart type">{VISUALS.map((entry) => <button type="button" key={entry.value} aria-pressed={visual === entry.value} onClick={() => changeVisual(entry.value)}>{entry.label}</button>)}</div>
+        <div className={styles.visualPicker} role="group" aria-label="Chart type">
+          {shownVisuals.map((entry) => <button type="button" key={entry.value} aria-pressed={visual === entry.value} onClick={() => changeVisual(entry.value)}>{entry.label}</button>)}
+          <button type="button" className={styles.moreTypes} aria-expanded={moreTypes} onClick={() => setMoreTypes(!moreTypes)}>{moreTypes ? "Fewer chart types" : "More chart types…"}</button>
+        </div>
       <h3 className={styles.subheading}>
         Preview {preview?.result?.truncated ? <Badge tone="amber">first 5,000 rows</Badge> : null}
       </h3>
@@ -1553,27 +1602,35 @@ function TileEditor({
         <Field label="Title">
           <input value={title} maxLength={100} placeholder="e.g. Sales by month" onChange={(event) => setTitle(event.target.value)} />
         </Field>
-        <Field label="Show as">
+        <Field label="Show as" hint={moreTypes ? undefined : "More chart types (waterfall, maps, Sankey and others) are under the preview."}>
           <select value={visual} onChange={(event) => changeVisual(event.target.value as Visual)}>
-            {VISUALS.map((entry) => (
+            {shownVisuals.filter((entry) => !isSpecialistVisual(entry.value)).map((entry) => (
               <option key={entry.value} value={entry.value}>
                 {entry.label}
               </option>
             ))}
+            {shownVisuals.some((entry) => isSpecialistVisual(entry.value)) ? (
+              <optgroup label="More chart types">
+                {shownVisuals.filter((entry) => isSpecialistVisual(entry.value)).map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </select>
         </Field>
-        <Field label="Width" hint="Of a row; on phones every chart is full width.">
-          <select value={width} onChange={(event) => setWidth(event.target.value as TileWidth)}>
-            {TILE_WIDTHS.map((entry) => <option key={entry} value={entry}>{WIDTH_LABELS[entry]}</option>)}
-          </select>
-        </Field>
-        {visual !== "kpi" && visual !== "table" && visual !== "pivot" ? (
-          <Field label="Height">
-            <select value={height} onChange={(event) => setHeight(event.target.value as TileHeight)}>
-              {TILE_HEIGHTS.map((entry) => <option key={entry} value={entry}>{HEIGHT_LABELS[entry]}</option>)}
-            </select>
-          </Field>
-        ) : null}
+      </div>
+      <PanelTabs
+        id={`chart-${tile?.id ?? "new"}`}
+        label="Chart settings"
+        tabs={PANEL_TABS.map((value) => ({ value, label: PANEL_TAB_LABELS[value] }))}
+        chosen={tab}
+        onChoose={setTab}
+        panels={{
+          data: (
+            <>
+      <div className={styles.propertyGrid}>
         <Field label="Data source" hint={tableDescription(query.table) || undefined}>
           <select value={query.table} onChange={(event) => setQuery(blankQuery(tables.find((entry) => entry.name === event.target.value)))}>
             {[...tables].sort((a, b) => tableLabel(a.name).localeCompare(tableLabel(b.name))).map((entry) => (
@@ -1913,8 +1970,29 @@ function TileEditor({
       <h3 className={styles.subheading}>Only include rows where</h3>
       <TileFilters organisationId={organisationId} table={query.table} columns={columns} filters={query.filters} onChange={(filters) => setQuery({ ...query, filters })} />
 
-      {visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} /> : null}
+      {visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} part="data" /> : null}
 
+            </>
+          ),
+          style: (
+            <>
+      <fieldset className={styles.sizeFields}>
+        <legend>Size in the report</legend>
+        <div className={styles.propertyGrid}>
+        <Field label="Width" hint="Of a row; on phones every chart is full width.">
+          <select value={width} onChange={(event) => setWidth(event.target.value as TileWidth)}>
+            {TILE_WIDTHS.map((entry) => <option key={entry} value={entry}>{WIDTH_LABELS[entry]}</option>)}
+          </select>
+        </Field>
+        {visual !== "kpi" && visual !== "table" && visual !== "pivot" ? (
+          <Field label="Height">
+            <select value={height} onChange={(event) => setHeight(event.target.value as TileHeight)}>
+              {TILE_HEIGHTS.map((entry) => <option key={entry} value={entry}>{HEIGHT_LABELS[entry]}</option>)}
+            </select>
+          </Field>
+        ) : null}
+        </div>
+      </fieldset>
       <ChartFormatPanel
         visual={visual}
         values={tileValueNames(query.measures)}
@@ -1928,10 +2006,37 @@ function TileEditor({
         groupName={query.groupBy ? fieldLabel(query.groupBy.field) : null}
         rowFields={(query.pivot?.rows ?? []).map((row) => fieldLabel(row.field))}
         smallMultiples={Boolean(query.breakdown)}
+        advanced={advanced}
+        extra={visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} part="style" /> : null}
       />
       {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 
-      <div className={ui.rowButtons}>
+      {formatOptionsFor(visual).axes || formatOptionsFor(visual).rules ? <label className={`${ui.checkbox} ${styles.advancedToggle}`}>
+        <input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} /> Show advanced settings
+        <span className={ui.muted}> (reference lines, trend and projection, colour rules, gridlines, log scale)</span>
+      </label> : null}
+            </>
+          ),
+          interactions: (
+            <>
+      <ChartFormatPanel
+        part="interactions"
+        visual={visual}
+        values={tileValueNames(query.measures)}
+        format={format}
+        onChange={setFormat}
+        inherited={defaults?.[visual]}
+        onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
+        theme={theme}
+      />
+      {visual === "pivot" ? <p className={ui.muted}>Clicking a number in the pivot table shows the rows behind it.</p> : null}
+      {visual === "kpi" || visual === "table" ? <p className={ui.muted}>{visual === "kpi" ? "Key figures" : "Tables"} have no tooltips or clicks to set.</p> : null}
+            </>
+          ),
+        }}
+      />
+
+      <div className={`${ui.rowButtons} ${styles.editorButtons}`}>
         <Button
           disabled={saving || !query.table || !preview?.result || Boolean(preview.error)}
           onClick={() =>

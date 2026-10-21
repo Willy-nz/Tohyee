@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ColourInput } from "@/components/analytics/colour-input";
+import { SettingSection } from "@/components/analytics/setting-source";
 import { Field, ui } from "@/components/ui";
 import type { BulletFormat, ChartFormat, FunnelFormat, GaugeFormat, WaterfallFormat } from "@/lib/analytics/chart-format";
 import type { Visual } from "@/lib/analytics/query";
@@ -15,12 +16,12 @@ import styles from "./chart-format-panel.module.css";
 
 type Props = { visual: Visual; values: string[]; format: ChartFormat; set: (patch: Partial<ChartFormat>) => void; smallMultiples?: boolean };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** Each chart type's own settings, open, saying where they come from (decision 750). */
+function Section({ title, children, paths }: { title: string; children: ReactNode; paths?: string[] }) {
   return (
-    <details className={styles.section} open>
-      <summary>{title}</summary>
-      <div className={styles.body}>{children}</div>
-    </details>
+    <SettingSection title={title} open paths={paths?.map((path) => [path])}>
+      {children}
+    </SettingSection>
   );
 }
 
@@ -61,7 +62,7 @@ function NumberText({ label, hint, value, onChange }: { label: string; hint?: st
 export function VisualSettings({ visual, values, format, set, smallMultiples = false }: Props) {
   if (smallMultiples && (visual === "column" || visual === "bar" || visual === "line")) {
     return (
-      <Section title="Small multiples">
+      <Section title="Small multiples" paths={["smallMultiples"]}>
         <p className={styles.note}>One small chart for each value of the second grouping, all with the same groups and the same scale. Past the most charts, the smaller ones are added together as &quot;Other&quot; (totals and counts only; other values are left out).</p>
         <Field label="Most small charts" hint="2 to 12">
           <select value={format.smallMultiples?.max ?? 6} onChange={(event) => set({ smallMultiples: Number(event.target.value) === 6 ? undefined : { max: Number(event.target.value) } })}>
@@ -75,7 +76,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
     const current: WaterfallFormat = format.waterfall ?? {};
     const update = (patch: Partial<WaterfallFormat>) => set({ waterfall: { ...current, ...patch } });
     return (
-      <Section title="Waterfall">
+      <Section title="Waterfall" paths={["waterfall"]}>
         <p className={styles.note}>Each group moves the running total up or down from where the last one ended; the total bar shows where it finished. Running totals are added exactly.</p>
         <Check label="Total bar at the end" checked={current.total !== false} onChange={(checked) => update({ total: checked ? undefined : false })} />
         {current.total !== false ? (
@@ -93,7 +94,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   if (visual === "funnel") {
     const current: FunnelFormat = format.funnel ?? {};
     return (
-      <Section title="Funnel">
+      <Section title="Funnel" paths={["funnel"]}>
         <p className={styles.note}>Stages are drawn in the tile&apos;s order (Order by), widest first if you order by the value, largest first.</p>
         <Field label="Percentage on each stage">
           <select value={current.percent ?? "first"} onChange={(event) => set({ funnel: { percent: event.target.value === "first" ? undefined : (event.target.value as FunnelFormat["percent"]) } })}>
@@ -109,7 +110,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
     const current: GaugeFormat = format.gauge ?? {};
     const update = (patch: Partial<GaugeFormat>) => set({ gauge: { ...current, ...patch } });
     return (
-      <Section title="Gauge">
+      <Section title="Gauge" paths={["gauge"]}>
         <div className={styles.pair}>
           <NumberText label="Minimum" hint="Left blank: 0" value={current.min} onChange={(min) => update({ min })} />
           <NumberText label="Maximum" hint="Left blank: twice the value, or the target if that's further" value={current.max} onChange={(max) => update({ max })} />
@@ -126,7 +127,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
     const current: BulletFormat = format.bullet ?? {};
     const update = (patch: Partial<BulletFormat>) => set({ bullet: { ...current, ...patch } });
     return (
-      <Section title="Bullet chart">
+      <Section title="Bullet chart" paths={["bullet"]}>
         <p className={styles.note}>Each bar is the first value; the upright line is the target; the grey bands behind show how far along it is.</p>
         {values.length > 1 ? (
           <p className={styles.note}>The target is the second value, {values[1] || "Value 2"}.</p>
@@ -139,7 +140,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   }
   if (visual === "filledmap") {
     return (
-      <Section title="Filled map">
+      <Section title="Filled map" paths={["map"]}>
         <p className={styles.note}>
           Group by a region or a district or city name, e.g. Waikato or Hamilton City; each is coloured by its {values[0] || "value"} on one blue scale (orange below zero and blue above when there are both). Spelling, macrons and words like &quot;Region&quot; or &quot;District&quot; don&apos;t matter. Names that aren&apos;t on the map are listed under it.
         </p>
@@ -165,7 +166,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   }
   if (visual === "scatter") {
     return (
-      <Section title="Scatter or bubble">
+      <Section title="Scatter or bubble" paths={["scatter"]}>
         <p className={styles.note}>
           Each group is a dot: {values[0] || "the first value"} across, {values[1] || "the second value"} up
           {values.length > 2 ? `, and ${values[2] || "the third value"} as the bubble's size (its area)` : ". Add a third value to size the dots as bubbles"}.
@@ -177,7 +178,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   if (visual === "histogram") {
     const current = format.histogram ?? {};
     return (
-      <Section title="Histogram">
+      <Section title="Histogram" paths={["histogram"]}>
         <p className={styles.note}>Counts how many groups&apos; {values[0] || "value"} falls in each range. Group by what each item is, e.g. invoice number, to count those. Each bin starts at its lower edge and goes up to, not including, the next.</p>
         <Field label="Bins">
           <select
@@ -227,7 +228,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   }
   if (visual === "boxplot") {
     return (
-      <Section title="Box plot">
+      <Section title="Box plot" paths={["boxplot"]}>
         <p className={styles.note}>Each box runs from the lower to the upper quartile with the median across it (quartiles as a spreadsheet&apos;s QUARTILE.INC); the whiskers reach the furthest values within 1.5 times the box&apos;s height, and values beyond are dots.</p>
         <Check label="Dots for values beyond the whiskers" checked={format.boxplot?.outliers !== false} onChange={(checked) => set({ boxplot: { outliers: checked ? undefined : false } })} />
       </Section>
