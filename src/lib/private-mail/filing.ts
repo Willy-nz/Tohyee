@@ -327,7 +327,7 @@ async function build(tx: OrgTx, owner: MailOwner, attachment: Attachment, destin
         case "bills_inbox": {
           contentType = checkInboxFile(fileName, attachment.content).contentType;
           const sha256 = createHash("sha256").update(attachment.content).digest("hex");
-          const same = await tx.query<{ id: string; bill_id: string | null }>("select id::text, bill_id::text from bill_inbox_items where sha256 = $1 and removed_at is null order by id", [sha256]);
+          const same = await tx.query<{ id: string; bill_id: string | null }>("select id::text, bill_id::text from bill_inbox_items where sha256 = $1 and removed_at is null order by bill_inbox_items.id", [sha256]);
           for (const row of same.rows) warnings.push(row.bill_id ? `This file was already made into a bill from inbox item ${row.id}.` : `This file is already in the bills inbox (item ${row.id}).`);
           shared.push({ label: "File", value: `${fileName} (${formatFileSize(attachment.content.length)})` }, { label: "Where", value: "The bills inbox, waiting for a bill to be made from it" }, { label: "Added by", value: by }, { label: "How it arrived", value: fromWords });
           break;
@@ -757,7 +757,7 @@ export const MAX_RULE_CHECKS = 2000;
  */
 export async function matchRules(tx: OrgTx, copy: { id: string; ownerUserId: string; keys: CopyKeys }): Promise<number> {
   const rules = await tx.query<{ id: string; seal_ref: string; criteria: Buffer; checked_through: string }>(
-    "select id::text, seal_ref, criteria, checked_through::text from private_mail_rules where copy_id = $1 and owner_user_id = $2 order by id for update",
+    "select id::text, seal_ref, criteria, checked_through::text from private_mail_rules where copy_id = $1 and owner_user_id = $2 order by private_mail_rules.id for update",
     [copy.id, copy.ownerUserId],
   );
   if (!rules.rows.length) return 0;
