@@ -1,6 +1,6 @@
 import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
-import { columnValues, getDashboard } from "@/lib/analytics/dashboards";
+import { columnValues, getDashboard, slicerPairs, type Tile } from "@/lib/analytics/dashboards";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
@@ -12,15 +12,20 @@ export const GET = route(async (request) => {
   const params = searchParams(request);
   const table = params.get("table") ?? "";
   const field = params.get("field") ?? "";
+  // A hierarchy slicer asks for its pairs with `child` (decision 757).
+  const child = params.get("child");
+  let viewerTiles: Tile[] | undefined;
   const organisationId = await withOrganisation(request, params.get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
     await requireAnalytics(tx);
     if (!roleAtLeast(membership.role, "viewer")) {
       const dashboard = await getDashboard(tx, params.get("dashboardId") ?? "", { userId: auth.user.id, reportViewer: true });
-      if (!dashboard.settings.slicers.some((slicer) => slicer.table === table && slicer.field === field)) {
+      if (!dashboard.settings.slicers.some((slicer) => slicer.table === table && slicer.field === field && (!child || (slicer.style === "hierarchy" && slicer.child === child)))) {
         throw new ForbiddenError("You can only see the dashboards shared with you.");
       }
+      viewerTiles = dashboard.tiles;
     }
     return tx.organisationId;
   });
+  if (child) return json({ pairs: await slicerPairs(organisationId, table, field, child, viewerTiles) });
   return json(await columnValues(organisationId, table, field));
 });

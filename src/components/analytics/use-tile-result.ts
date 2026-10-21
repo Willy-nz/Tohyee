@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import type { QueryResult, TileQuery } from "@/lib/analytics/query";
 import type { TileDrill, TileView } from "@/lib/analytics/report-view";
+import type { SlicerRange } from "@/lib/analytics/slicers";
 import { api, errorMessage } from "@/lib/client/api";
 
 /** The report's dates and slicer choices a tile is answered with. */
-export type TileFilters = { from: string; to: string; values: Record<string, string[]> };
+export type TileFilters = { from: string; to: string; values: Record<string, string[]>; ranges?: Record<string, SlicerRange> };
 
 /**
  * A tile's answer: its saved question (with `saved`), which is all a report
@@ -32,7 +33,7 @@ export function useTileResult(
       body: {
         organisationId,
         ...question,
-        filters: { from: filters.from || null, to: filters.to || null, values: filters.values },
+        filters: { from: filters.from || null, to: filters.to || null, values: filters.values, ...(filters.ranges && Object.keys(filters.ranges).length ? { ranges: filters.ranges } : {}) },
         ...(view ? { view: view.view, ...(saved ? {} : { viewTiles: view.tiles, viewDrill: view.drill }) } : {}),
       },
     }).then(

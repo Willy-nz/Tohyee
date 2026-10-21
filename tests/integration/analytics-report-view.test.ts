@@ -9,6 +9,7 @@ import * as sharesRoute from "@/app/api/analytics/dashboards/[dashboardId]/share
 import * as queryRoute from "@/app/api/analytics/query/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
+import * as valuesRoute from "@/app/api/analytics/values/route";
 import * as membersRoute from "@/app/api/organisations/[organisationId]/members/route";
 import * as settingsRoute from "@/app/api/organisations/[organisationId]/settings/route";
 import { closeAnalytics } from "@/lib/analytics/engine";
@@ -205,5 +206,66 @@ describeWithDatabase("analytics report pages and interactions", () => {
     // A report that isn't shared can't be used as a way in.
     const other = await create({ tiles: [{ id: "x", title: "X", visual: "bar", width: "half", query: query({ field: "note" }) }] });
     expect((await run(clientCookie, { dashboardId: other.data.dashboard.id, tileId: "x", view: { selections: [{ tileId: "x", value: "a" }] } })).status).toBe(404);
+  });
+
+  it("slicer styles, a page's filters and a tile's own dates, only narrowing for a report viewer (decisions 757-758)", async () => {
+    const shared = { field: "note", op: "eq", value: "shared" };
+    const made = await create({
+      settings: {
+        from: "2026-01-01",
+        to: "2026-12-31",
+        slicers: [
+          { table: "sales", field: "region", label: "Region", style: "hierarchy", child: "town" },
+          { table: "sales", field: "amount", label: "Amount", style: "range" },
+          { table: "sales", field: "sold_on", label: "Sold", style: "dates", pages: ["detail"] },
+        ],
+        pages: [{ id: "main", name: "Main" }, { id: "detail", name: "Detail", filters: [{ table: "sales", filter: { field: "product", op: "eq", value: "Milk" } }] }],
+      },
+      tiles: [
+        { id: "regions", title: "By region", visual: "bar", width: "half", query: query({ field: "region" }, { filters: [shared] }) },
+        { id: "products", title: "Products", visual: "table", width: "half", query: query({ field: "product" }), page: "detail" },
+        { id: "june", title: "June", visual: "kpi", width: "quarter", query: query(null), dates: { from: "2026-06-01", to: "2026-06-30" } },
+      ],
+    });
+    expect(made.status).toBe(201);
+    const id = made.data.dashboard.id;
+    const saved = (await read(id)).data.dashboard;
+    expect(saved.settings.slicers.map((slicer: { style?: string; child?: string; pages?: string[] }) => [slicer.style, slicer.child ?? null, slicer.pages ?? null])).toEqual([
+      ["hierarchy", "town", null],
+      ["range", null, null],
+      ["dates", null, ["detail"]],
+    ]);
+    expect(saved.settings.pages[1].filters).toEqual([{ table: "sales", filter: { field: "product", op: "eq", value: "Milk" } }]);
+    expect(saved.tiles[2].dates).toEqual({ from: "2026-06-01", to: "2026-06-30" });
+    await share(id);
+    const total = (result: { data: Record<string, unknown> }) => (result.data.rows as Array<Record<string, string>>).map((row) => [row.category ?? null, row.m0]);
+
+    // A range slicer: amounts from 6. A range on a column that isn't a range slicer is left out.
+    const big = await run(clientCookie, { dashboardId: id, tileId: "regions", filters: { ranges: { amount: { min: "6" }, note: { min: "a" } } } });
+    expect(total(big)).toEqual([["Otago", "30.00"]]);
+    // A hierarchy slicer's second level filters; a value for a column that isn't a slicer is dropped.
+    const dunedin = await run(clientCookie, { dashboardId: id, tileId: "regions", filters: { values: { town: ["Dunedin"], note: ["private canterbury"] } } });
+    expect(total(dunedin)).toEqual([["Otago", "11.25"]]);
+    // The date slicer is only on Detail, so it doesn't change Main's tiles.
+    const mainDates = await run(clientCookie, { dashboardId: id, tileId: "regions", filters: { ranges: { sold_on: { min: "2026-12-01" } } } });
+    expect(total(mainDates)).toEqual([["Otago", "31.25"]]);
+    // On Detail: the page's Milk filter and the date slicer.
+    const detail = await run(clientCookie, { dashboardId: id, tileId: "products", filters: { ranges: { sold_on: { min: "2026-06-01" } } } });
+    expect(total(detail)).toEqual([["Milk", "20.00"]]);
+    // The June tile keeps its own dates whatever the report's are.
+    const june = await run(clientCookie, { dashboardId: id, tileId: "june", filters: { from: "2026-12-01", to: "2026-12-31" } });
+    expect(total(june)).toEqual([[null, "20.00"]]);
+
+    // A hierarchy slicer's pairs for a report viewer come only from rows the report's tiles read.
+    const pairs = await body(await valuesRoute.GET(apiRequest(`/api/analytics/values?organisationId=${ORG}&dashboardId=${id}&table=sales&field=region&child=town`, { cookie: clientCookie }), noContext));
+    expect(pairs.status).toBe(200);
+    expect(pairs.data.pairs).toEqual([
+      ["Canterbury", "Timaru"],
+      ["Otago", "Dunedin"],
+      ["Otago", "Queenstown"],
+    ]);
+    // Products (on Detail) reads every row, so Canterbury shows; a second level that isn't the slicer's is refused.
+    const refused = await valuesRoute.GET(apiRequest(`/api/analytics/values?organisationId=${ORG}&dashboardId=${id}&table=sales&field=region&child=note`, { cookie: clientCookie }), noContext);
+    expect(refused.status).toBe(403);
   });
 });

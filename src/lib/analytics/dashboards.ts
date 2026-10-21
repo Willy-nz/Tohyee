@@ -10,7 +10,9 @@ import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
-import { pageForSaving, parsePages, type ReportPage } from "@/lib/analytics/pages";
+import { pageForSaving, parsePages, reportPages, type ReportPage } from "@/lib/analytics/pages";
+import { parseSlicerExtras, slicerValueFields, type SlicerSetting } from "@/lib/analytics/slicers";
+import { parsePageFilters, parseTileDates, type TileDates } from "@/lib/analytics/report-filters";
 import { DRILLABLE, INTERACTION_MODES, parseDrill, type InteractionMode, type TileDrill } from "@/lib/analytics/report-view";
 import {
   buildPivotDrillSql,
@@ -21,6 +23,7 @@ import {
   MAX_PIVOT_DRILL_ROWS,
   MAX_PIVOT_CELLS,
   MAX_ROWS,
+  parseFilter,
   parseTileQuery,
   type PivotColumn,
   type PivotDrillResult,
@@ -68,9 +71,12 @@ export type Tile = {
   drill?: TileDrill;
   /** How a click on this tile changes others, by their id (decision 754); left out, they're filtered. */
   interactions?: Record<string, InteractionMode>;
+  /** Its own dates, in place of the report's (decision 758). */
+  dates?: TileDates;
 };
 
-export type Slicer = { table: string; field: string; label: string };
+/** A slicer: its column, and its style, second level, pages and look (decision 757). */
+export type Slicer = SlicerSetting;
 
 export type DashboardSettings = {
   from: string | null;
@@ -228,7 +234,8 @@ export async function setDashboardShares(tx: OrgTx, id: string, input: unknown, 
  */
 export function allowedFilters(dashboard: Dashboard, filters: DashboardFilters, reader: DashboardReader): DashboardFilters {
   if (!reader.reportViewer) return filters;
-  const slicerFields = new Set(dashboard.settings.slicers.map((slicer) => slicer.field));
+  // A hierarchy slicer's second level too; range slicers go through `rangeFilters` (decision 757).
+  const slicerFields = slicerValueFields(dashboard.settings.slicers);
   const values = Object.fromEntries(Object.entries(filters.values ?? {}).filter(([field]) => slicerFields.has(field)));
   return { from: filters.from, to: filters.to, values };
 }
@@ -240,15 +247,24 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     if (typeof value !== "string" || !DATE.test(value)) throw new ValidationError(`${label} is YYYY-MM-DD.`);
     return value;
   };
+  const pages = parsePages(raw.pages);
+  const pageIds = new Set(reportPages(pages).map((page) => page.id));
   const slicers = (Array.isArray(raw.slicers) ? raw.slicers : []).map((entry, index): Slicer => {
     const slicer = (entry ?? {}) as Record<string, unknown>;
     const table = String(slicer.table ?? "");
     const field = String(slicer.field ?? "");
-    if (!tables.get(table)?.some((column) => column.name === field)) {
+    const column = tables.get(table)?.find((entry) => entry.name === field);
+    if (!column) {
       throw new ValidationError(`Slicer ${index + 1}: there's no column ${field} in ${table}.`);
     }
     const label = typeof slicer.label === "string" && slicer.label.trim() ? slicer.label.trim().slice(0, 60) : field;
-    return { table, field, label };
+    const columns = new Map(tables.get(table)!.map((entry) => [entry.name, entry.type]));
+    return { table, field, label, ...parseSlicerExtras(slicer, column.type, columns, pageIds, label) };
+  });
+  // Each page's own filters (decision 758), checked against the tables.
+  const pagesWithFilters = pages?.map((page, index) => {
+    const filters = parsePageFilters(((raw.pages as unknown[])[index] as Record<string, unknown>)?.filters, tables, parseFilter, page.name);
+    return filters ? { ...page, filters } : page;
   });
   if (slicers.length > 6) throw new ValidationError("A dashboard can have up to 6 slicers.");
   if (raw.preset !== undefined && raw.preset !== null && raw.preset !== "" && !isDatePreset(raw.preset)) {
@@ -257,7 +273,6 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
   const preset = isDatePreset(raw.preset) ? raw.preset : null;
   const theme = parseThemeChoice(raw.theme);
   const visualDefaults = parseVisualDefaults(raw.visualDefaults);
-  const pages = parsePages(raw.pages);
   return {
     from: date(raw.from, "From"),
     to: date(raw.to, "To"),
@@ -265,7 +280,7 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     slicers,
     ...(theme ? { theme } : {}),
     ...(visualDefaults ? { visualDefaults } : {}),
-    ...(pages ? { pages } : {}),
+    ...(pagesWithFilters ? { pages: pagesWithFilters } : {}),
   };
 }
 
@@ -383,6 +398,7 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       const types = new Map((tables.get(query.table) ?? []).map((column) => [column.name, column.type]));
       drill = parseDrill(tile.drill, query.groupBy, (field) => (types.has(field) ? isDateType(types.get(field)!) : undefined), title);
     }
+    const dates = query.dateField ? parseTileDates(tile.dates, title) : undefined;
     return {
       id,
       title,
@@ -392,6 +408,7 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       query,
       ...(format ? { format } : {}),
       ...(drill ? { drill } : {}),
+      ...(dates ? { dates } : {}),
     };
   }
 }
@@ -610,6 +627,43 @@ export async function columnValues(organisationId: string, table: string, field:
     [],
   );
   return { values: rows.map((row) => row.value ?? ""), type: column.type };
+}
+
+/**
+ * A hierarchy slicer's pairs (decision 757): each value of its column with
+ * the values of its second level under it (up to 1,000 pairs). With
+ * `tiles` (a report viewer's), only pairs in the rows those tiles read,
+ * after their own filters, so the list never names rows the report leaves
+ * out (decision 697).
+ */
+export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[]): Promise<Array<[string, string]>> {
+  const tables = await listTables(organisationId);
+  const found = new Map<string, [string, string]>();
+  const ask = async (query: TileQuery, columns: ColumnInfo[]) => {
+    const pairs: TileQuery = { ...query, groupBy: { field }, breakdown: { field: child }, pivot: null, measures: [{ label: "Rows", aggregate: "count" }], sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined };
+    const built = buildTileSql(pairs, columns, {});
+    for (const row of await runBuiltQuery(organisationId, built.sql, built.params)) {
+      if (row.category === null || row.breakdown === null || row.category === undefined || row.breakdown === undefined) continue;
+      found.set(JSON.stringify([row.category, row.breakdown]), [String(row.category), String(row.breakdown)]);
+      if (found.size >= 1000) return;
+    }
+  };
+  if (!tiles) {
+    const columns = tables.get(table);
+    if (!columns?.some((column) => column.name === field) || !columns.some((column) => column.name === child)) throw new ValidationError(`There's no column ${field} or ${child} in ${table}.`);
+    await ask({ table, groupBy: null, measures: [], filters: [], dateField: null, sort: { by: "category", direction: "asc" }, limit: null }, columns);
+  } else {
+    for (const tile of tiles) {
+      const columns = tile.query ? tables.get(tile.query.table) : undefined;
+      if (!tile.query || !columns?.some((column) => column.name === field) || !columns.some((column) => column.name === child)) continue;
+      try {
+        await ask(tile.query, columns);
+      } catch {
+        // A tile whose filters no longer fit its table can't show anything either.
+      }
+    }
+  }
+  return [...found.values()].sort((a, b) => (a[0] === b[0] ? (a[1] < b[1] ? -1 : 1) : a[0] < b[0] ? -1 : 1));
 }
 
 /** The loaded tables and their columns, for building tiles. */

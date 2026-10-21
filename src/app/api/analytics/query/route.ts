@@ -4,6 +4,11 @@ import { allowedFilters, dateContext, getDashboard, runPivotDrilldown, runTile, 
 import type { DashboardFilters, TileQuery } from "@/lib/analytics/query";
 import { parseTileView, viewQuery, type TileDrill } from "@/lib/analytics/report-view";
 import { requireAnalytics } from "@/lib/analytics/sources";
+import { reportPages, tilePage } from "@/lib/analytics/pages";
+import { effectiveDates } from "@/lib/analytics/report-filters";
+import { parseRanges, rangeFilters, slicerOnPage } from "@/lib/analytics/slicers";
+import { FILTER_OPS } from "@/lib/analytics/filters";
+import type { Filter } from "@/lib/analytics/query";
 import { ForbiddenError } from "@/lib/errors";
 
 function parseFilters(raw: Record<string, unknown>): DashboardFilters {
@@ -18,6 +23,26 @@ function parseFilters(raw: Record<string, unknown>): DashboardFilters {
     to: typeof raw.to === "string" && raw.to ? raw.to : null,
     values,
   };
+}
+
+/**
+ * More filters for a question being built (viewers and up, who can ask any
+ * question anyway): a draft tile's page filters and range slicers, worked
+ * out in the browser. Only known tests; each is checked against the
+ * column's type when the SQL is built.
+ */
+function extraFilters(input: unknown): Filter[] {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 20).flatMap((entry) => {
+    const raw = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
+    if (typeof raw.field !== "string" || !FILTER_OPS.includes(raw.op as Filter["op"])) return [];
+    const op = raw.op as Filter["op"];
+    const list = op === "in" || op === "not_in" || op === "between";
+    if (list !== Array.isArray(raw.value) || (op === "between" && (raw.value as unknown[]).length !== 2)) return [];
+    if ((op === "last_days" || op === "last_months") && !/^\d{1,4}$/.test(String(raw.value))) return [];
+    const value = Array.isArray(raw.value) ? raw.value.slice(0, 200).map(String) : String(raw.value ?? "");
+    return [{ field: raw.field, op, value }];
+  });
 }
 
 /**
@@ -40,16 +65,26 @@ export const POST = route(async (request) => {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
       const tile = tileOf(dashboard, body.tileId);
       const viewed = viewQuery(dashboard.tiles, tile, view);
-      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...allowedFilters(dashboard, filters, reader), dates, view: viewed.where } } };
+      // The tile's page: its slicers' ranges and its own filters (decisions 757-758), from the report as saved.
+      const pageId = tilePage(tile, dashboard.settings.pages);
+      const page = reportPages(dashboard.settings.pages).find((entry) => entry.id === pageId);
+      const ranges = rangeFilters(dashboard.settings.slicers.filter((slicer) => slicerOnPage(slicer, pageId)), parseRanges((body.filters as Record<string, unknown> | undefined)?.ranges));
+      const allowed = allowedFilters(dashboard, filters, reader);
+      // A tile with its own dates ignores the report's (decision 758).
+      const own = effectiveDates(tile.dates, allowed, dates.today, dates.yearEndMonth);
+      return {
+        organisationId: tx.organisationId,
+        query: { tile: { query: viewed.query }, filters: { ...allowed, ...own, dates, view: [...viewed.where, ...ranges, ...(page?.filters ?? []).map((entry) => entry.filter)] } },
+      };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
     // A question being built (viewers and up, who can ask any question): the other tiles are the ones sent, as drawn.
     if (view) {
       const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];
       const viewed = viewQuery(tiles, { id: String(body.tileId ?? "draft"), title: "This tile", query: body.query as TileQuery, drill: body.viewDrill as TileDrill | undefined }, view);
-      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: viewed.where } } };
+      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)] } } };
     }
-    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates } } };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where) } } };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));
   return json(await runTile(organisationId, query.tile.query, query.filters));
