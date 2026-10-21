@@ -12,13 +12,15 @@ type Supported = Extract<IncomeTaxReport, { supported: true }>;
 
 /**
  * True when this year's forecast has nothing to work from: no income or
- * expense from the books or the overall budget, no adjustments, no tax
- * depreciation and none of IRD's figures typed for the year. Its $0.00 is
+ * expense from the books or the overall budget, no adjustments, no asset
+ * with tax depreciation for the year and none of IRD's figures typed for
+ * the year. (The register lists every asset in every year; an asset counts
+ * only once it has figures for this year.) Its $0.00 is
  * then an empty input, not a worked-out zero. A year with any of those has
  * real inputs, so a zero it comes to is shown as a zero.
  */
 export function forecastIncomplete(report: Pick<Supported, "accounts" | "adjustments" | "taxAssets" | "typed">): boolean {
-  return report.accounts.length === 0 && report.adjustments.length === 0 && report.taxAssets.length === 0 && report.typed.version === 0;
+  return report.accounts.length === 0 && report.adjustments.length === 0 && !report.taxAssets.some((asset) => asset.year !== null) && report.typed.version === 0;
 }
 
 /** The due date row whose amount comes from this year's forecast (end-of-year tax for this income year). */
@@ -36,7 +38,8 @@ export type TaxTask = { key: string; text: string; view: "forecast" | "calculati
 /** What needs doing, from the report's own figures; empty when nothing does. */
 export function taxTasks(report: Supported): TaxTask[] {
   const tasks: TaxTask[] = [];
-  if (forecastIncomplete(report)) {
+  const incomplete = forecastIncomplete(report);
+  if (incomplete) {
     tasks.push({ key: "forecast", text: "No income or expenses were found for this year, in the books or the overall budget. Add them, or a budget, before relying on the forecast.", view: "forecast" });
   }
   const awaiting = report.payments.filter((payment) => !payment.reversed && !isZero(dec(payment.awaiting)));
@@ -46,7 +49,7 @@ export function taxTasks(report: Supported): TaxTask[] {
   if (!report.lastYear.typed && report.lastYear.rit !== null) {
     tasks.push({ key: "last-year", text: `Last year's residual income tax is Tohyee's estimate. Type IRD's assessed figure once you have it, because it sets this year's provisional tax.`, view: "payments" });
   }
-  if (report.ir10 || report.ir4 || report.ir3) {
+  if (!incomplete && (report.ir10 || report.ir4 || report.ir3)) {
     tasks.push({ key: "returns", text: `The ${report.incomeYear} income year has ended: its return figures are ready to check.`, view: "returns" });
   }
   return tasks;

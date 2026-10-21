@@ -6739,6 +6739,9 @@ accounting example is marked not yet reviewed.
      two clicks to reach anything and lost decision 580's settings
      shortcuts, so the landing pages were dropped. The CRM's grouping
      (decision 581) and the Shopify entry (decision 582) are untouched.
+     The bar is two menus longer, so from 1,320px wide the menus sit closer
+     and the search button drops its "Ctrl K", and the ☰ menu takes over
+     from 1,240px (was 1,180px): with Farm on, 1,200px no longer fitted.
 701. **No mountain photo** (Jess, 21 October 2026: "Get rid of mountain
      photo"). Replaces decision 598. Home's header no longer shows the
      Aoraki photo or keeps space for it, so the greeting is a normal
@@ -6753,26 +6756,29 @@ accounting example is marked not yet reviewed.
      dates), **Forecast** (the figures and what they're based on: actuals
      to which month, then which budget, and the notes), **Tax calculation**
      (the profit-to-tax working, adjustments, losses, credits and tax
-     depreciation), **Payments** (due dates, provisional tax, IRD's
-     figures and payments to IRD with their allocations from decision
-     620, payments found in the books, IRD's statements and their
-     proposals, and use-of-money interest), **Returns** (ICA, IR4 or IR3,
-     IR10, and a link to GST returns) and **Tax settings**. The figures,
-     rules and editors are the same ones as before: nothing about how tax
-     is worked out changed. "Needs attention" comes from the report itself:
-     no inputs for the year, payments to IRD not yet allocated, last
-     year's residual income tax still Tohyee's estimate, or a year that's
-     ended with return figures to check. **Forecast incomplete** replaces
-     an amount only when the year has nothing to work from: no income or
-     expense from the books or the overall budget, no adjustments, no tax
-     depreciation and none of IRD's figures typed. Then taxable income,
-     residual income tax and this year's end-of-year tax say "Forecast
-     incomplete" instead of $0.00 (or a refund of the provisional tax);
-     instalments, which come from last year's tax, still show. A year with
-     any input shows a zero it works out to as a zero. The "not yet
-     reviewed by an accountant" note stays at the top of every page, as a
-     line that opens to the full wording. Scenario comparisons, which the
-     issue mentions for Forecast, aren't built: they'd be a new feature.
+     depreciation), **Payments** (due dates, provisional tax, IRD's figures
+     and payments to IRD with their allocations from decision 620, payments
+     found in the books, IRD's statements and their proposals, and
+     use-of-money interest), **Returns** (ICA, IR4 or IR3, IR10, and a link
+     to GST returns) and **Tax settings**. The figures, rules and editors
+     are the same ones as before: nothing about how tax is worked out
+     changed. "Needs attention" comes from the report itself: no inputs for
+     the year, payments to IRD not yet allocated, last year's residual
+     income tax still Tohyee's estimate, or a year that's ended with return
+     figures to check (not when it had no inputs). **Forecast incomplete**
+     replaces an amount only when the year has nothing to work from: no
+     income or expense from the books or the overall budget, no
+     adjustments, no fixed asset with tax depreciation for that year (the
+     register lists every asset in every year, so an asset counts only once
+     it has figures for the year) and none of IRD's figures typed. Then
+     taxable income, residual income tax and this year's end-of-year tax
+     say "Forecast incomplete" instead of $0.00 (or a refund of the
+     provisional tax); instalments, which come from last year's tax, still
+     show. A year with any input shows a zero it works out to as a zero.
+     The "not yet reviewed by an accountant" note stays at the top of every
+     page, as a line that opens to the full wording. Scenario comparisons,
+     which the issue mentions for Forecast, aren't built: they'd be a new
+     feature.
 703. **Sans-serif page titles and bordered summary cards** (21 October
      2026). Issue #375. Page titles use the interface font (Inter), bold,
      replacing decision 475's serif titles. Home's four summary tiles are

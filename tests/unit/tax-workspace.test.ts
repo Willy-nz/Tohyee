@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IncomeTaxView, taxViewOf } from "@/components/income-tax";
 import { dependsOnForecast, forecastIncomplete, nextDue, taxTasks } from "@/lib/tax/income/workspace";
+import type { DueDate } from "@/lib/tax/income/service";
 
 /** The income tax workspace (#375, decision 702), with made-up figures. */
 const state = vi.hoisted(() => ({ path: "/operations/income-tax", report: {} as Record<string, unknown>, error: null as string | null }));
@@ -12,7 +13,7 @@ vi.mock("@/components/hooks", () => ({ useApiData: () => ({ data: state.error ? 
 vi.mock("@/components/modules", () => ({ useModules: () => ({ gst: true }) }));
 const render = () => renderToStaticMarkup(createElement(IncomeTaxView, { organisationId: "demo" }));
 
-const due = (key: string, dueDate: string, amount: string | null, estimate = true) => ({ key, label: key, dueDate, onTimeBy: { date: dueDate }, amount, estimate });
+const due = (key: string, dueDate: string, amount: string | null, estimate = true): DueDate => ({ key, label: key, dueDate, onTimeBy: { date: dueDate, holidaysChecked: true }, amount, estimate });
 
 function emptyYear(): Record<string, unknown> {
   return {
@@ -41,7 +42,9 @@ describe("which inputs are missing", () => {
     expect(forecastIncomplete(base)).toBe(true);
     expect(forecastIncomplete({ ...base, accounts: [{}] } as never)).toBe(false);
     expect(forecastIncomplete({ ...base, adjustments: [{}] } as never)).toBe(false);
-    expect(forecastIncomplete({ ...base, taxAssets: [{}] } as never)).toBe(false);
+    // The register lists assets in every year: only one with figures for this year is an input.
+    expect(forecastIncomplete({ ...base, taxAssets: [{ year: null }] } as never)).toBe(true);
+    expect(forecastIncomplete({ ...base, taxAssets: [{ year: { deduction: "100.00" } }] } as never)).toBe(false);
     expect(forecastIncomplete({ ...base, typed: { version: 2 } } as never)).toBe(false);
   });
   it("leaves instalments from last year's tax alone: only this year's end-of-year tax comes from the forecast", () => {
@@ -60,6 +63,9 @@ describe("which inputs are missing", () => {
     const report = { ...emptyYear(), payments: [{ reversed: false, awaiting: "500.00" }, { reversed: false, awaiting: "0.00" }, { reversed: true, awaiting: "90.00" }], lastYear: { rit: "3000.00", typed: false } } as never;
     expect(taxTasks(report).map((task) => [task.key, task.view])).toEqual([["forecast", "forecast"], ["allocate", "payments"], ["last-year", "payments"]]);
     expect(taxTasks({ ...emptyYear(), accounts: [{}] } as never)).toEqual([]);
+    // An ended year with nothing in it isn't "ready to check".
+    expect(taxTasks({ ...emptyYear(), ir4: {} } as never).map((task) => task.key)).toEqual(["forecast"]);
+    expect(taxTasks({ ...emptyYear(), accounts: [{}], ir4: {} } as never).map((task) => task.key)).toEqual(["returns"]);
   });
 });
 
@@ -105,6 +111,12 @@ describe("income tax workspace (#375)", () => {
     const html = render();
     for (const view of ["forecast", "calculation", "payments", "returns", "settings"]) expect(html).toContain(`href="/operations/income-tax/${view}?incomeYear=2027"`);
     expect(html).toContain('href="/operations/income-tax?incomeYear=2027"');
+  });
+  it("explains an incomplete forecast once: in Needs attention on Overview, in a notice on Forecast", () => {
+    expect(render()).not.toContain("<strong>Forecast incomplete.</strong>");
+    expect(render()).toContain("No income or expenses were found for this year");
+    state.path = "/operations/income-tax/forecast";
+    expect(render()).toContain("<strong>Forecast incomplete.</strong>");
   });
   it("links GST returns from Returns", () => {
     state.path = "/operations/income-tax/returns";

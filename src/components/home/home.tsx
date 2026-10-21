@@ -90,7 +90,7 @@ export function NextGstTile({ summary }: { summary: HomeSummary }) {
       {gst.status !== "ready" ? (
         <>
           <div className={styles.unavailable}>{gst.status === "none_filed" ? "No return filed yet" : "Position unavailable"}</div>
-          <p className={ui.muted}>{gst.status === "none_filed" ? "No filed GST return yet." : gst.message}</p>
+          <p className={ui.muted}>{gst.status === "none_filed" ? "The next period is worked out from the last filed GST return." : gst.message}</p>
         </>
       ) : (
         <>

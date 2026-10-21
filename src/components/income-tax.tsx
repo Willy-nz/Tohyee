@@ -1847,7 +1847,8 @@ function Report({ organisationId, report, reload, view, gst }: { organisationId:
   const incomplete = forecastIncomplete(report);
   return (
     <>
-      {incomplete && view !== "payments" && view !== "returns" ? (
+      {/* On Overview, Needs attention says the same, so the notice isn't repeated there. */}
+      {incomplete && (view === "forecast" || view === "calculation") ? (
         <Notice tone="warning">
           <strong>Forecast incomplete.</strong> No income or expenses were found for this year, in the books or the overall budget, and nothing&apos;s been typed or adjusted, so the tax isn&apos;t shown as $0.00.{" "}
           <Link href="/operations/budgets">Add a budget</Link> or <Link href={viewHref("calculation", report.incomeYear)}>check the calculation</Link>.
