@@ -3,6 +3,7 @@ import { roleAtLeast } from "@/lib/auth/roles";
 import { allowedFilters, dateContext, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
 import type { DashboardFilters, TileQuery } from "@/lib/analytics/query";
 import { parseTileView, viewQuery, type TileDrill } from "@/lib/analytics/report-view";
+import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { reportPages, tilePage } from "@/lib/analytics/pages";
 import { effectiveDates } from "@/lib/analytics/report-filters";
@@ -64,6 +65,7 @@ export const POST = route(async (request) => {
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
       const tile = tileOf(dashboard, body.tileId);
+      await requireAnalyticsTable(tx, (tile.query as { table?: unknown } | null | undefined)?.table);
       const viewed = viewQuery(dashboard.tiles, tile, view);
       // The tile's page: its slicers' ranges and its own filters (decisions 757-758), from the report as saved.
       const pageId = tilePage(tile, dashboard.settings.pages);
@@ -78,6 +80,7 @@ export const POST = route(async (request) => {
       };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
+    await requireAnalyticsTable(tx, (body.query as { table?: unknown } | undefined)?.table);
     // A question being built (viewers and up, who can ask any question): the other tiles are the ones sent, as drawn.
     if (view) {
       const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];
