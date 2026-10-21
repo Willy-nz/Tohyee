@@ -37,9 +37,9 @@ function useRun() {
   return { busy, error, run };
 }
 
-export function FertiliserHome({ organisationId, planId }: { organisationId: string; planId: string | null }) {
+export function FertiliserHome({ organisationId, planId, farmId = null }: { organisationId: string; planId: string | null; farmId?: string | null }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const { farm, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? []);
+  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   if (planId) return <PlanView key={planId} organisationId={organisationId} planId={planId} farms={farms.data.farms} />;
@@ -53,7 +53,7 @@ export function FertiliserHome({ organisationId, planId }: { organisationId: str
   }
   return (
     <>
-      <FarmSelector farms={active} farm={farm} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
       {farm ? <PlanList key={farm.id} organisationId={organisationId} farm={farm} /> : null}
       <Products organisationId={organisationId} />
     </>

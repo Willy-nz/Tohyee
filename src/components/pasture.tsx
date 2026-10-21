@@ -47,9 +47,9 @@ export function growthText(growth: Growth | null): string {
   return "Same day";
 }
 
-export function PastureHome({ organisationId }: { organisationId: string }) {
+export function PastureHome({ organisationId, farmId = null }: { organisationId: string; farmId?: string | null }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const { farm, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? []);
+  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
@@ -62,7 +62,7 @@ export function PastureHome({ organisationId }: { organisationId: string }) {
   }
   return (
     <>
-      <FarmSelector farms={active} farm={farm} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
       {farm ? <FarmPasture key={farm.id} organisationId={organisationId} farm={farm} /> : null}
     </>
   );

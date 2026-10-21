@@ -82,6 +82,12 @@ describeWithDatabase("farms and paddocks", () => {
     }
     expect(paddockIds.size).toBe(9);
     await expect(w.as((tx) => importBoundaries(tx, farms[8].id, { fileName: "again.geojson", content: file }))).rejects.toThrow("already imported");
+    // An archived farm can't be an import destination, even from a stale link or saved choice.
+    const other = JSON.stringify({ type: "FeatureCollection", features: [feature("Back", box(170.1))] });
+    await w.as((tx) => saveFarm(tx, { id: farms[8].id, name: farms[8].name, isActive: false }));
+    await expect(w.as((tx) => previewBoundaryImport(tx, farms[8].id, { fileName: "back.geojson", content: other }))).rejects.toThrow("archived");
+    await expect(w.as((tx) => importBoundaries(tx, farms[8].id, { fileName: "back.geojson", content: other }))).rejects.toThrow("archived");
+    expect((await w.as((tx) => previewBoundaryImport(tx, farms[7].id, { fileName: "back.geojson", content: other }))).counts.new).toBe(1);
   });
 
   it("Farming needs Accounting, and is off until turned on", async () => {

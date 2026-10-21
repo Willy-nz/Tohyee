@@ -135,7 +135,7 @@ function PastureCard({ farms }: { farms: FarmHomePasture[] }) {
     <Card title="Pasture and feed" href="/operations/farming/pasture" linkLabel="Open Pasture">
       {farms.map((farm) => (
         <div key={farm.farmId} className={styles.farm}>
-          {farms.length > 1 ? <h3 className={styles.farmName}>{farm.farmName}</h3> : null}
+          {farms.length > 1 ? <h3 className={styles.farmName}><Link href={`/operations/farming/pasture?farm=${encodeURIComponent(farm.farmId)}`}>{farm.farmName}</Link></h3> : null}
           {farm.latestReading ? (
             <>
               <div className={homeStyles.figure}>{int.format(farm.averageKgDmPerHa)} <span className={styles.unit}>kg DM/ha</span></div>
@@ -175,7 +175,7 @@ function FertiliserCard({ plans }: { plans: FarmHomeFertiliser[] }) {
     <Card title="Fertiliser" href="/operations/farming/fertiliser" linkLabel="Open the fertiliser plan">
       {plans.map((plan) => (
         <div key={plan.planId} className={styles.farm}>
-          <h3 className={styles.farmName}>{plans.length > 1 ? `${plan.farmName}: ` : ""}{plan.planName}</h3>
+          <h3 className={styles.farmName}><Link href={`/operations/farming/fertiliser?plan=${encodeURIComponent(plan.planId)}`}>{plans.length > 1 ? `${plan.farmName}: ` : ""}{plan.planName}</Link></h3>
           <div className={homeStyles.rows}>
             <div className={homeStyles.row}><span>Applied · planned</span><span>{formatQuantity(plan.appliedTonnes)} t · {formatQuantity(plan.plannedTonnes)} t</span></div>
             <div className={homeStyles.row}><span>Spent · planned</span><span><Money value={plan.appliedCost} /> · <Money value={plan.plannedCost} /></span></div>
@@ -244,9 +244,9 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 export function catchUpLine(item: FarmHomeCatchUpItem): { text: string; action: string; href: string } {
   switch (item.kind) {
     case "pasture_stale":
-      return { text: `${item.farmName}: last farm walk ${formatDate(item.latestReading)}, ${item.days} days ago`, action: "Add readings", href: "/operations/farming/pasture" };
+      return { text: `${item.farmName}: last farm walk ${formatDate(item.latestReading)}, ${item.days} days ago`, action: "Add readings", href: `/operations/farming/pasture?farm=${encodeURIComponent(item.farmId)}` };
     case "paddocks_unmeasured":
-      return { text: `${item.farmName}: ${plural(item.count, "paddock has", "paddocks have")} no cover reading`, action: "Add readings", href: "/operations/farming/pasture" };
+      return { text: `${item.farmName}: ${plural(item.count, "paddock has", "paddocks have")} no cover reading`, action: "Add readings", href: `/operations/farming/pasture?farm=${encodeURIComponent(item.farmId)}` };
     case "season_figures":
       return { text: `No kg MS, hectares, cows or stock units for the year to ${formatDate(item.yearEnd)}`, action: "Enter them", href: "/operations/farming/benchmarks" };
     case "bank_lines":

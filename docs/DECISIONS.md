@@ -6722,3 +6722,21 @@ accounting example is marked not yet reviewed.
      (they're the figures, not the look). While building this, numbers of
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
+
+### Several farms in one organisation (#390; decisions 740-749)
+
+740. **Choosing a farm** (21 October 2026, #390 and PR #392; Xero's rule
+     for archived tracking options, which stay on old records but can't be
+     picked for new ones). Maps, soil, pasture and fertiliser share one farm
+     choice per user, organisation and browser tab (session storage, kept
+     in memory if storage is blocked). With one active farm there is
+     nothing to choose and no selector shows. With two or more and no
+     choice yet, the page asks first rather than opening the first farm. A
+     remembered or linked farm that is archived, or isn't in this
+     organisation, is reported and never swapped for another farm. A link
+     can open a farm (`?farm=`): Home's pasture and catch-up lines and its
+     fertiliser plans link to the farm or plan they describe, and a valid
+     link becomes the tab's choice. Adding a farm opens it. Boundary
+     imports name their destination farm in the preview and import button,
+     and the server refuses an import into an archived farm. The selector
+     is a convenience, not an access boundary.

@@ -1572,9 +1572,12 @@ that something happened.
   multiple properties within one organisation. Maps, soil, pasture and
   fertiliser share the selected farm in the current browser tab, separately
   for each user and organisation. With multiple farms and no saved choice,
-  the user chooses before working; an unavailable saved farm never silently
-  falls back to another one. Boundary imports show their destination farm
-  in the preview and import button. Farm Home remains an all-farms overview:
+  the user chooses before working; an unavailable saved or linked farm never
+  silently falls back to another one, and the page says so. With one farm
+  there's no selector. Links can open a farm (`?farm=`); Home's pasture,
+  catch-up and fertiliser lines use them (decision 740). Boundary imports
+  show their destination farm in the preview and import button, and an
+  archived farm can't be imported into. Farm Home remains an all-farms overview:
   money, livestock and performance are organisation-wide, not separate books
   or farm profitability reports. A paddock's identity
   doesn't depend on its name, and its **effective area** (what plans use,

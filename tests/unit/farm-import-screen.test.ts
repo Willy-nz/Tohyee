@@ -14,9 +14,12 @@ describe("import destination for nine farms", () => {
   it("does not substitute the first farm for an invalid deep link", () => {
     const html = render("other-organisation-farm");
     expect(html).toContain('<option value="" disabled="" selected="">');
+    expect(html).toContain("The farm in that link is archived");
     expect(html).not.toMatch(/value="farm-\d" selected/);
   });
   it("honours a valid deep link to the ninth farm", () => {
-    expect(render("farm-9")).toContain('value="farm-9" selected=""');
+    const html = render("farm-9");
+    expect(html).toContain('value="farm-9" selected=""');
+    expect(html).not.toContain("The farm in that link is archived");
   });
 });

@@ -269,19 +269,19 @@ export function PaddockMap({
 
 // Farms and paddocks ------------------------------------------------------------------------
 
-export function FarmingHome({ organisationId }: { organisationId: string }) {
+export function FarmingHome({ organisationId, farmId = null }: { organisationId: string; farmId?: string | null }) {
   const { can } = useWorkspace();
   const farms = useFarms(organisationId);
   const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
-  const { farm, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? []);
+  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
   return (
     <>
-      <FarmSelector farms={active} farm={farm} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
       {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} onChanged={() => farms.reload()} /> : null}
-      {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} onSaved={() => farms.reload()} /> : null}
+      {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} knownIds={farms.data.farms.map((entry) => entry.id)} onSaved={(added) => { if (added) selectFarm(added); farms.reload(); }} /> : null}
       {can("admin") && settings.data ? <ImagerySettings organisationId={organisationId} imageryKey={settings.data.settings.imageryKey} onSaved={() => settings.reload()} /> : null}
     </>
   );
@@ -418,7 +418,7 @@ function DrawPaddock({
   );
 }
 
-function AddFarm({ organisationId, first, onSaved }: { organisationId: string; first: boolean; onSaved: () => void }) {
+function AddFarm({ organisationId, first, knownIds, onSaved }: { organisationId: string; first: boolean; knownIds: string[]; onSaved: (addedFarmId: string | null) => void }) {
   const [name, setName] = useState("");
   const { busy, error, run } = useRun();
   return (
@@ -431,10 +431,11 @@ function AddFarm({ organisationId, first, onSaved }: { organisationId: string; f
         <Button
           onClick={() =>
             void run(
-              () => api("/api/farming/farms", { method: "POST", body: { organisationId, name } }),
-              () => {
+              () => api<{ farms: Farm[] }>("/api/farming/farms", { method: "POST", body: { organisationId, name } }),
+              (result) => {
                 setName("");
-                onSaved();
+                // Show the farm just added, rather than leaving the page on another one.
+                onSaved(result.farms.find((entry) => !knownIds.includes(entry.id))?.id ?? null);
               },
             )
           }
@@ -869,6 +870,7 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
       >
         {error ? <Notice tone="error">{error}</Notice> : null}
         {done ? <Notice tone="success">{done}</Notice> : null}
+        {farmId !== null && farmId === initialFarm && !destination ? <Notice tone="warning">The farm in that link is archived or isn&apos;t in this organisation. Choose the destination farm.</Notice> : null}
         <div className={ui.inlineForm}>
           <Field label="Farm">
             <select value={chosenFarm} disabled={busy} onChange={(event) => { setFarmId(event.target.value); selectFarm(event.target.value); setPreview(null); setDone(null); }}>

@@ -18,4 +18,12 @@ describe("compact multi-farm selection", () => {
     expect(html).toContain("Choose a farm to view or add its records.");
     expect(html).not.toContain("Old property");
   });
+  it("stays out of the way when there's one farm and it's showing", () => {
+    expect(renderToStaticMarkup(createElement(FarmSelector, { farms: [farms[0]], farm: farms[0], onChange: () => {} }))).toBe("");
+  });
+  it("says why when a remembered or linked farm is archived or from elsewhere", () => {
+    const html = renderToStaticMarkup(createElement(FarmSelector, { farms, farm: null, stale: true, onChange: () => {} }));
+    expect(html).toContain("archived or isn&#x27;t in this organisation");
+    expect(html).toContain('<option value="" disabled="" selected="">');
+  });
 });
