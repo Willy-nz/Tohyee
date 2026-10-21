@@ -17631,6 +17631,88 @@ revenue) is 2,000,000.00. Expenses: Wages 6200 120,000.00, Animal health
   dash), never a guess. With no milk solids entered, every per kgMS figure
   is empty.
 
+## Farm-level reporting (#390; FR1-FR8, written by Claude 21 Oct 2026 as Xero does it with tracking categories, not yet reviewed)
+
+Tested in `tests/unit/farm-reporting.test.ts` and
+`tests/integration/farm-reporting.test.ts`. Nothing posts. In Xero a farm
+(or block) is a **tracking category** option, each income and expense line
+is tagged with it, and the profit and loss is run by that category with an
+"Unassigned" column; Xero never shares costs out by itself. Tohyee does the
+same with its own tracking categories (TC1-TC10), which already go onto
+every posted line. Separate legal entities stay separate organisations
+with their own books; this is for several farms in one set of books.
+
+**Setup.** FK's year, 1 Jun 2025 to 31 May 2026, with Advanced features
+on. A tracking category **Farm** has values Home farm, Runoff (with Hill
+block under it) and Head office. Farms **Home farm** and **Runoff**. Milk
+income 4000: 1,500,000.00 tagged Home farm and 500,000.00 tagged Runoff.
+Wages 6200: 80,000.00 Home farm, 30,000.00 Runoff, 10,000.00 Head office
+(the manager, who works across both). Animal health 6400: 24,000.00 Home
+farm, 10,000.00 Runoff and 2,000.00 Hill block. Depreciation 6300
+50,000.00 and interest 6090 30,000.00, untagged. FK1's groups. The
+organisation's figures are FK2's (200 ha, 600 cows, 4,800 su, 240,000 kg
+MS).
+
+- **FR1 Which category says the farm.** Under Farm › Benchmarks, Farm
+  reporting, a bookkeeper chooses the tracking category (needs Advanced
+  features on) and links each farm to one of its values. Values under a
+  farm's value count for that farm (Hill block counts for Runoff). A value
+  can be one farm's only, and can't sit under or above another farm's
+  value (a line would count twice): linking Old block to Home farm or to
+  Runoff › Hill block is refused. An archived value or one from another
+  category can't be chosen. Changing the category unlinks every farm,
+  recorded in the history. With no category, everything is Not allocated.
+- **FR2 A farm's income and expenses** are the year's posted lines on
+  revenue and expense accounts tagged with its value (or one under it).
+  Gross farm revenue, working-expense groups (FK1), farm working expenses
+  and operating surplus are worked out per farm exactly as FK3 does for
+  the organisation.
+- **FR3 Not allocated and the total.** Lines with no Farm tag, or a value
+  no farm is linked to (Head office), are **Not allocated**, in their own
+  column, never spread. The farms and Not allocated add up to the **total**,
+  which is FK3 (and the profit and loss):
+
+  | | Home farm | Runoff | Not allocated | Total |
+  |---|---:|---:|---:|---:|
+  | Gross farm revenue | 1,500,000.00 | 500,000.00 | 0.00 | 2,000,000.00 |
+  | Wages | 80,000.00 | 30,000.00 | 10,000.00 | 120,000.00 |
+  | Animal health | 24,000.00 | 12,000.00 | 0.00 | 36,000.00 |
+  | Farm working expenses | 104,000.00 | 42,000.00 | 10,000.00 | 156,000.00 |
+  | Operating surplus | 1,396,000.00 | 458,000.00 | -10,000.00 | 1,844,000.00 |
+
+  The screen says the 10,000.00 has no farm and that each farm's surplus is
+  before it. Depreciation and interest stay out (FK1).
+- **FR4 Production and headcount per farm.** Each farm's own figures for
+  the year are entered beside it: Home farm 150 ha, 450 peak cows, 3,600
+  su, 180,000 kg MS; Runoff 50 ha, 150 cows, 1,200 su, 60,000 kg MS. A
+  farm's per-unit amounts divide by **its own figures only**: Home farm's
+  working expenses 104,000.00 are 0.58 per kgMS, 693.33 per ha, 231.11 per
+  cow, 28.89 per su; Runoff's operating surplus 458,000.00 is 7.63 per
+  kgMS, 9,160.00 per ha, 3,053.33 per cow, 381.67 per su (rounded half up
+  to the cent, FK3). A farm figure that isn't entered gives a dash (FK4),
+  never the organisation's figure or a share of it. Not allocated has no
+  per-unit amounts. The total column's per-unit amounts are FK3's, from
+  the organisation's figures. Organisation-wide amounts are never divided
+  by one farm's area.
+- **FR5 Sharing out a shared cost** is a journal, as in Xero: Cr 6200
+  10,000.00 (Head office) / Dr 6200 7,500.00 (Home farm) / Dr 6200
+  2,500.00 (Runoff), on 31 May 2026. Wages become Home farm 87,500.00,
+  Runoff 32,500.00, Not allocated 0.00, total still 120,000.00. Tohyee
+  doesn't share costs out by itself (by hectares or anything else).
+- **FR6 Charging between farms** (Runoff grazing Home farm's heifers,
+  20,000.00 agreed) is a journal on one account: Dr 6500 Grazing
+  20,000.00 (Home farm) / Cr 6500 20,000.00 (Runoff). Home farm's grazing
+  is 20,000.00, Runoff's -20,000.00, the total 0.00; with FR5, operating
+  surplus is Home farm 1,368,500.00, Runoff 475,500.00, total 1,844,000.00.
+  The books' totals don't change.
+- **FR7 Which farms show.** Active farms linked to a value, and archived
+  ones only if they have amounts in the year. Active farms that aren't
+  linked are listed as not shown. Lines outside the year aren't counted.
+- **FR8 Not included:** sharing costs out automatically; head counts from
+  Livestock by farm (Livestock's locations aren't farms yet); a balance
+  sheet or cash by farm; Home's money and performance figures by farm
+  (they stay organisation-wide, labelled so).
+
 ## Tier 3 and Tier 4 performance reports (#259; NPR1-NPR10 chosen by Claude on 15 Oct 2026 when Jess said to use judgement, not yet reviewed)
 
 Tested in `tests/integration/performance-reports.test.ts`. From XRB's
