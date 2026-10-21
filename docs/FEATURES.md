@@ -2088,6 +2088,15 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: pivot table (matrix) improvements** (#376 phase 2, decision
+  682). A pivot can have up to three column fields nested inside each
+  other (e.g. year, then channel), with a total for each outer column; rows
+  can be laid out stepped (one indented column, each group's total as its
+  heading, as Power BI's matrix) or a column per field as before; each
+  group opens and closes (+ / −, with Open all and Close all), and the
+  report can choose how many levels are open to start with. Clicking a
+  cell under nested columns opens that cell's rows, and exports name each
+  column by its whole path.
 - **Analytics: small multiples** (#376 phase 2, decision 681). A column,
   bar or line chart can show "One small chart for each" value of a second
   field, e.g. a chart per region: every small chart has the same groups

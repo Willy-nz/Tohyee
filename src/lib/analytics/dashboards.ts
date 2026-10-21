@@ -400,19 +400,28 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       throw new ValidationError("Too many rows and columns; filter or group further");
     }
     const grouped = await runBuiltQuery(organisationId, built.sql, built.params);
-    // The grand total row has every column value, already in column order.
-    const columnValues = built.hasColumn
-      ? grouped.filter((row) => row.gc === "0" && built.rowFields.every((_field, index) => row[`g${index}`] === "1")).map((row) => row.pivot_column)
-      : [];
+    const levels = built.columnFields.length;
+    // How far down the column fields a result goes (0: the grand total column), and its values.
+    const columnDepth = (row: Record<string, string | null>) =>
+      built.columnFields.filter((_field, index) => row[index === 0 ? "gc" : `gc_${index}`] === "0").length;
+    const columnPath = (row: Record<string, string | null>) =>
+      built.columnFields.slice(0, columnDepth(row)).map((_field, index) => row[index === 0 ? "pivot_column" : `pivot_column_${index}`] ?? null);
+    // The grand total row has every column (and column subtotal), already in column order.
+    const grandRows = built.hasColumn ? grouped.filter((row) => built.rowFields.every((_field, index) => row[`g${index}`] === "1") && columnDepth(row) > 0) : [];
+    const paths = grandRows.map(columnPath);
+    const pathKeys = paths.map((path) => JSON.stringify(path));
+    // The outermost column field's values, in order.
+    const columnValues = paths.filter((path) => path.length === levels).map((path) => path[0]).filter((value, index, all) => all.indexOf(value) === index);
     const columns: PivotColumn[] = built.hasColumn
       ? [
-          ...columnValues.flatMap((pivotValue, columnIndex) =>
+          ...paths.flatMap((path, pathIndex) =>
             built.measures.map((measure, measureIndex) => ({
-              key: `c${columnIndex}_m${measureIndex}`,
-              label: pivotValue ?? "(blank)",
-              pivotValue,
+              key: `c${pathIndex}_m${measureIndex}`,
+              label: path[path.length - 1] ?? "(blank)",
+              pivotValue: path[0] ?? null,
               measure,
               total: false,
+              ...(levels > 1 ? { path, ...(path.length < levels ? { subtotal: true } : {}) } : {}),
             })),
           ),
           ...built.measures.map((measure, measureIndex) => ({
@@ -435,13 +444,10 @@ export async function runTile(organisationId: string, query: unknown, filters: D
         row = { key, kind, depth, dimensions, cells: {} };
         rows.set(key, row);
       }
+      const at = built.hasColumn && columnDepth(result) > 0 ? pathKeys.indexOf(JSON.stringify(columnPath(result))) : -1;
       for (let index = 0; index < built.measures.length; index += 1) {
         const measure = built.measures[index];
-        const cellKey = built.hasColumn
-          ? result.gc === "1"
-            ? `total_m${index}`
-            : `c${columnValues.indexOf(result.pivot_column)}_m${index}`
-          : measure.key;
+        const cellKey = built.hasColumn ? (at < 0 ? `total_m${index}` : `c${at}_m${index}`) : measure.key;
         row.cells[cellKey] = result[`m${index}`];
       }
     }
@@ -449,7 +455,14 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       columns: [...built.rowFields, ...built.measures],
       rows: [],
       truncated: false,
-      pivot: { rowFields: built.rowFields, columnField: built.columnField, columnValues, columns, rows: [...rows.values()] },
+      pivot: {
+        rowFields: built.rowFields,
+        columnField: built.columnField,
+        ...(levels > 1 ? { columnFields: built.columnFields } : {}),
+        columnValues,
+        columns,
+        rows: [...rows.values()],
+      },
     };
   }
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);

@@ -324,6 +324,10 @@ export type TableStyle = {
   totalsStyle?: "bold" | "shaded";
   /** Pivot subtotal levels to leave out (1 is the first row field). */
   subtotalsOff?: number[];
+  /** Pivot rows in a column per field (tabular, the default) or stepped: one indented column with each group's total as its heading (#376 phase 2). */
+  layout?: "tabular" | "stepped";
+  /** Pivot row groups shown open to start with, by level (1: only the first row field's groups are listed); left out, all open. */
+  expandTo?: number;
 };
 
 const NUMBER_TEXT = /^-?\d{1,15}(\.\d{1,6})?$/;
@@ -603,6 +607,8 @@ function parseTableStyle(input: unknown): TableStyle | undefined {
     totals: flag(raw.totals),
     totalsStyle: oneOf(raw.totalsStyle, ["bold", "shaded"] as const, "Totals style"),
     subtotalsOff,
+    layout: oneOf(raw.layout, ["tabular", "stepped"] as const, "Pivot layout"),
+    expandTo: whole(raw.expandTo, 1, 4, "Levels shown open"),
   });
 }
 

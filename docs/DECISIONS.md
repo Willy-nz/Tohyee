@@ -6830,3 +6830,22 @@ accounting example is marked not yet reviewed.
      smallest, largest, distinct counts and calculated values can't be
      added across charts, so then the rest are left out and the card says
      how many. Pinned tiles show up to four.
+682. **Matrix improvements** (21 October 2026, #376 phase 2; Power BI's
+     matrix visual; not yet reviewed by Jess). A pivot's column field can
+     have up to two more nested inside it (three levels, as many as fit on
+     a phone-scrolling table; the 2,000-cell limit still applies and now
+     counts the column totals). Each outer column value gets a "Total"
+     column after its inner ones, as Power BI's column subtotals do, worked
+     out by the database (grouping sets), never by adding cells on screen;
+     the grand total stays last. Drilling into a cell uses the whole column
+     path; exports name a column "Year: 2025 › Channel: Web". Rows can be
+     stepped (one indented column; each group's subtotal row moves above
+     its rows as the group's heading, as Power BI's default) or one column
+     per field (the existing look, still the default so saved reports are
+     unchanged). Every group with a subtotal opens and closes (a + / −
+     button with its name for screen readers, plus Open all / Close all);
+     what's open isn't saved (Power BI saves it with the report; here the
+     report saves only how many levels start open, "Groups open to start
+     with"), so a viewer can't change the report by looking at it. In the
+     stepped layout a level whose subtotal is turned off keeps its heading
+     row with blank figures.

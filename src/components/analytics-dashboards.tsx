@@ -14,6 +14,7 @@ import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/
 import { ThemePanel } from "@/components/analytics/theme-panel";
 import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
 import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/conditional";
+import { columnHeaderRows, columnPathText, initiallyCollapsed, isGroupRow, steppedRows, visibleWithCollapsed } from "@/lib/analytics/matrix";
 import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -43,6 +44,7 @@ import type {
   PivotData,
   PivotDrillResult,
   PivotDrillSelection,
+  PivotDimension,
   PivotGrain,
   PivotRow,
   QueryResult,
@@ -1074,7 +1076,15 @@ function pivotRowLabel(row: PivotRow, index: number, field: ResultColumn): strin
 function pivotColumnLabel(column: PivotColumn, pivot: PivotData): string {
   if (column.total) return "Grand total";
   if (!pivot.columnField) return column.measure.label;
+  if (column.path) return columnPathText(column, (level, value) => pivotValueLabel(pivot, level, value, false));
   return column.pivotValue === null ? "(blank)" : showValue(column.pivotValue, pivot.columnField);
+}
+
+/** A column field's value as shown, with its field's name in front for headings. */
+function pivotValueLabel(pivot: PivotData, level: number, value: string | null, named: boolean): string {
+  const field = pivot.columnFields?.[level] ?? pivot.columnField!;
+  const text = value === null ? "(blank)" : showValue(value, field);
+  return named ? `${fieldLabel(field.label)}: ${text}` : text;
 }
 
 /** The pivot as a report table for the existing CSV/Excel export (`/api/reports/export`), exact values kept as text. */
@@ -1082,7 +1092,16 @@ export function pivotExportTable(pivot: PivotData): ReportExportTable {
   const columns = [
     ...pivot.rowFields.map((field) => fieldLabel(field.label)),
     ...pivot.columns.map((column) =>
-      [column.total ? "Grand total" : pivot.columnField ? `${fieldLabel(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}` : "", column.measure.label]
+      [
+        column.total
+          ? "Grand total"
+          : column.path
+            ? columnPathText(column, (level, value) => pivotValueLabel(pivot, level, value, true))
+            : pivot.columnField
+              ? `${fieldLabel(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}`
+              : "",
+        column.measure.label,
+      ]
         .filter(Boolean)
         .join(" · "),
     ),
@@ -1156,7 +1175,7 @@ export function PivotTable({
     const columnValue = column.total ? "Grand total" : pivot.columnField ? pivotColumnLabel(column, pivot) : "";
     const drillTitle = [rowValues.join(" · "), columnValue, column.measure.label].filter(Boolean).join(" · ") || "Grand total";
     onDrill(
-      { depth: row.depth, dimensions: row.dimensions, pivotValue: column.pivotValue, total: column.total },
+      { depth: row.depth, dimensions: row.dimensions, pivotValue: column.pivotValue, total: column.total, ...(column.path ? { pivotPath: column.path } : {}) },
       `Rows · ${drillTitle}`,
     );
   };
@@ -1165,13 +1184,56 @@ export function PivotTable({
   const measureKeys = [...new Set(pivot.columns.map((column) => column.measure.key))];
   const detailRows = pivot.rows.filter((row) => row.kind === "detail");
   const ranges = new Map(pivot.columns.map((column) => [column.key, columnRange(detailRows.map((row) => row.cells[column.key] ?? null))]));
-  const shownRows = visiblePivotRows(pivot.rows, format?.table);
+  // Matrix layout (#376 phase 2): stepped rows, and groups that open and close.
+  const levels = pivot.rowFields.length;
+  const stepped = format?.table?.layout === "stepped" && levels > 0;
+  const offLevels = new Set(format?.table?.subtotalsOff ?? []);
+  const ordered = stepped ? steppedRows(pivot.rows.filter((row) => row.kind !== "grand_total" || format?.table?.totals !== false), levels) : visiblePivotRows(pivot.rows, format?.table);
+  const groupsKey = JSON.stringify([pivot.rows.map((row) => row.key), format?.table?.expandTo]);
+  const [collapsedState, setCollapsed] = useState<{ key: string; set: Set<string> } | null>(null);
+  const collapsed = collapsedState?.key === groupsKey ? collapsedState.set : initiallyCollapsed(pivot.rows, levels, format?.table?.expandTo);
+  const toggle = (row: PivotRow) => {
+    const next = new Set(collapsed);
+    if (next.has(row.key)) next.delete(row.key);
+    else next.add(row.key);
+    setCollapsed({ key: groupsKey, set: next });
+  };
+  const groups = ordered.filter((row) => isGroupRow(row, levels));
+  const shownRows = visibleWithCollapsed(ordered, collapsed);
+  const headerRows = pivot.columnField ? columnHeaderRows(pivot, (level, value) => pivotValueLabel(pivot, level, value, true)) : [];
+  const headerDepth = headerRows.length + 1;
+  const rowLabel = (row: PivotRow): string => {
+    if (row.kind === "grand_total") return "Grand total";
+    const level = Math.max(0, row.depth - 1);
+    const value = row.dimensions[level];
+    return value === null ? "(blank)" : showValue(value, pivot.rowFields[level]);
+  };
+  const toggleButton = (row: PivotRow) => {
+    if (!isGroupRow(row, levels)) return null;
+    const open = !collapsed.has(row.key);
+    const name = row.dimensions.slice(0, row.depth).map((value, index) => (value === null ? "(blank)" : showValue(value, pivot.rowFields[index]))).join(" · ");
+    return (
+      <button type="button" className={styles.pivotToggle} aria-expanded={open} aria-label={`${open ? "Close" : "Open"} ${name}`} onClick={() => toggle(row)}>
+        <span aria-hidden="true">{open ? "−" : "+"}</span>
+      </button>
+    );
+  };
   return (
     <div className={styles.pivot}>
-      {exportFor ? (
+      {exportFor || groups.length ? (
         <div className={styles.pivotTools}>
-          <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("csv")}>Export CSV</Button>
-          <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("xlsx")}>Export Excel</Button>
+          {groups.length ? (
+            <>
+              <Button size="small" variant="secondary" disabled={collapsed.size === 0} onClick={() => setCollapsed({ key: groupsKey, set: new Set() })}>Open all</Button>
+              <Button size="small" variant="secondary" disabled={collapsed.size === groups.length} onClick={() => setCollapsed({ key: groupsKey, set: new Set(groups.map((row) => row.key)) })}>Close all</Button>
+            </>
+          ) : null}
+          {exportFor ? (
+            <>
+              <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("csv")}>Export CSV</Button>
+              <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("xlsx")}>Export Excel</Button>
+            </>
+          ) : null}
         </div>
       ) : null}
       {exportError ? <Notice tone="error">{exportError}</Notice> : null}
@@ -1181,33 +1243,50 @@ export function PivotTable({
           <thead>
             {pivot.columnField ? (
               <>
-                <tr>
-                  {pivot.rowFields.map((field) => <th key={field.key} scope="col" rowSpan={2}>{fieldLabel(field.label)}</th>)}
-                  {pivot.columnValues.map((value, index) => {
-                    const column = pivot.columns.find((entry) => !entry.total && entry.pivotValue === value)!;
-                    const count = pivot.columns.filter((entry) => !entry.total && entry.pivotValue === value).length;
-                    return <th key={`column-${index}`} scope="colgroup" colSpan={count}>{fieldLabel(pivot.columnField!.label)}: {pivotColumnLabel(column, pivot)}</th>;
-                  })}
-                  {pivot.columns.some((column) => column.total) ? (
-                    <th scope="colgroup" colSpan={pivot.columns.filter((column) => column.total).length}>Grand total</th>
-                  ) : null}
-                </tr>
+                {headerRows.map((cells, level) => (
+                  <tr key={`level-${level}`}>
+                    {level === 0
+                      ? stepped
+                        ? <th scope="col" rowSpan={headerDepth}>{pivot.rowFields.map((field) => fieldLabel(field.label)).join(" › ")}</th>
+                        : pivot.rowFields.map((field) => <th key={field.key} scope="col" rowSpan={headerDepth}>{fieldLabel(field.label)}</th>)
+                      : null}
+                    {cells.map((cell) => (
+                      <th key={cell.key} scope="colgroup" colSpan={cell.colSpan} rowSpan={cell.rowSpan}>{cell.text}</th>
+                    ))}
+                  </tr>
+                ))}
                 <tr>{pivot.columns.map((column) => <th key={column.key} scope="col" className={ui.num}>{column.measure.label}</th>)}</tr>
               </>
             ) : (
               <tr>
-                {pivot.rowFields.map((field) => <th key={field.key} scope="col">{fieldLabel(field.label)}</th>)}
+                {stepped
+                  ? <th scope="col">{pivot.rowFields.map((field) => fieldLabel(field.label)).join(" › ")}</th>
+                  : pivot.rowFields.map((field) => <th key={field.key} scope="col">{fieldLabel(field.label)}</th>)}
                 {pivot.columns.map((column) => <th key={column.key} scope="col" className={ui.num}>{column.measure.label}</th>)}
               </tr>
             )}
           </thead>
           <tbody>
-            {shownRows.map((row) => (
-              <tr key={row.key} className={row.kind !== "detail" ? totalRowClass(format?.table, styles.pivotTotal) : undefined}>
-                {pivot.rowFields.map((field, index) => (
-                  <th key={field.key} scope="row">{pivotRowLabel(row, index, field)}</th>
-                ))}
+            {shownRows.map((row) => {
+              // In the stepped layout a group's row is its heading; with its subtotal turned off, its figures are left blank.
+              const blank = stepped && row.kind === "subtotal" && offLevels.has(row.depth);
+              return (
+              <tr key={row.key} className={row.kind !== "detail" && !(stepped && row.kind === "subtotal" && blank) ? totalRowClass(format?.table, styles.pivotTotal) : undefined}>
+                {stepped ? (
+                  <th scope="row" className={styles.pivotStep} style={{ paddingInlineStart: `${8 + Math.max(0, row.depth - 1) * 16}px` }}>
+                    {toggleButton(row)}
+                    {rowLabel(row)}
+                  </th>
+                ) : (
+                  pivot.rowFields.map((field, index) => (
+                    <th key={field.key} scope="row">
+                      {row.kind === "subtotal" && index === row.depth ? toggleButton(row) : null}
+                      {pivotRowLabel(row, index, field)}
+                    </th>
+                  ))
+                )}
                 {pivot.columns.map((column) => (
+                  blank ? <td key={column.key} className={ui.num} /> :
                   <FormattedCell
                     key={column.key}
                     className={ui.num}
@@ -1221,7 +1300,7 @@ export function PivotTable({
                       <button
                         type="button"
                         className={styles.pivotCell}
-                        aria-label={`Show rows for ${pivot.rowFields.map((field, index) => pivotRowLabel(row, index, field)).filter(Boolean).join(" · ")}, ${pivotColumnLabel(column, pivot)}, ${column.measure.label}`}
+                        aria-label={`Show rows for ${stepped ? rowLabel(row) : pivot.rowFields.map((field, index) => pivotRowLabel(row, index, field)).filter(Boolean).join(" · ")}, ${pivotColumnLabel(column, pivot)}, ${column.measure.label}`}
                         onClick={() => click(row, column)}
                       >
                         {showValue(row.cells[column.key] ?? null, column.measure)}
@@ -1232,7 +1311,8 @@ export function PivotTable({
                   </FormattedCell>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1341,7 +1421,8 @@ function TileEditor({
   const numbers = columns.filter((column) => isNumber(column.type));
   const groupType = columns.find((column) => column.name === query.groupBy?.field)?.type ?? "";
   const pivotRows = query.pivot?.rows ?? [];
-  const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : [])]);
+  const subColumns = query.pivot?.subColumns ?? [];
+  const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : []), ...subColumns.map((dimension) => dimension.field)]);
   const preview = useTileResult(organisationId, query.table ? query : null, filters);
   // The preview's groups, for colouring a group and limiting a date axis (#376).
   const groupValues = preview?.result && query.groupBy ? preview.result.rows.map((row) => row.category) : null;
@@ -1488,7 +1569,7 @@ function TileEditor({
                       const type = columns.find((column) => column.name === field)?.type ?? "";
                       const rows = [...pivotRows];
                       rows[index] = { field, ...(isDate(type) ? { grain: "month" } : {}) };
-                      setQuery({ ...query, pivot: { rows, column: query.pivot?.column ?? null } });
+                      setQuery({ ...query, pivot: { ...query.pivot, rows, column: query.pivot?.column ?? null } });
                     }}
                   >
                     {columnOptions(columns.filter((column) => !usedPivotFields.has(column.name) || column.name === dimension.field))}
@@ -1502,7 +1583,7 @@ function TileEditor({
                       onChange={(event) => {
                         const rows = [...pivotRows];
                         rows[index] = { ...dimension, grain: event.target.value as PivotGrain };
-                        setQuery({ ...query, pivot: { rows, column: query.pivot?.column ?? null } });
+                        setQuery({ ...query, pivot: { ...query.pivot, rows, column: query.pivot?.column ?? null } });
                       }}
                     >
                       {PIVOT_GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
@@ -1514,7 +1595,7 @@ function TileEditor({
                   variant="danger"
                   aria-label={`Remove pivot row ${index + 1}`}
                   disabled={pivotRows.length === 1}
-                  onClick={() => setQuery({ ...query, pivot: { rows: pivotRows.filter((_row, at) => at !== index), column: query.pivot?.column ?? null } })}
+                  onClick={() => setQuery({ ...query, pivot: { ...query.pivot, rows: pivotRows.filter((_row, at) => at !== index), column: query.pivot?.column ?? null } })}
                 >
                   Remove row
                 </Button>
@@ -1531,6 +1612,7 @@ function TileEditor({
                   setQuery({
                     ...query,
                     pivot: {
+                      ...query.pivot,
                       rows: [...pivotRows, { field: column.name, ...(isDate(column.type) ? { grain: "month" as const } : {}) }],
                       column: query.pivot?.column ?? null,
                     },
@@ -1551,6 +1633,8 @@ function TileEditor({
                     pivot: {
                       rows: pivotRows,
                       column: field ? { field, ...(isDate(type) ? { grain: "month" as const } : {}) } : null,
+                      // Columns inside need an outer one; a field can only be used once.
+                      ...(field && subColumns.some((entry) => entry.field !== field) ? { subColumns: subColumns.filter((entry) => entry.field !== field) } : {}),
                     },
                   });
                 }}
@@ -1565,12 +1649,64 @@ function TileEditor({
                   value={query.pivot.column.grain ?? "month"}
                   onChange={(event) => setQuery({
                     ...query,
-                    pivot: { rows: pivotRows, column: { ...query.pivot!.column!, grain: event.target.value as PivotGrain } },
+                    pivot: { ...query.pivot, rows: pivotRows, column: { ...query.pivot!.column!, grain: event.target.value as PivotGrain } },
                   })}
                 >
                   {PIVOT_GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
                 </select>
               </Field>
+            ) : null}
+            {query.pivot?.column ? (
+              <>
+                {subColumns.map((dimension, index) => {
+                  const setSub = (next: PivotDimension | null) => {
+                    const list = [...subColumns];
+                    if (next) list[index] = next;
+                    else list.splice(index, 1);
+                    setQuery({ ...query, pivot: { ...query.pivot!, subColumns: list.length ? list : undefined } });
+                  };
+                  const type = columns.find((column) => column.name === dimension.field)?.type ?? "";
+                  return (
+                    <div className={styles.pivotField} key={`sub-${index}`}>
+                      <Field label={`Pivot column ${index + 2} (inside)`}>
+                        <select
+                          aria-label={`Pivot column ${index + 2}`}
+                          value={dimension.field}
+                          onChange={(event) => {
+                            const field = event.target.value;
+                            const fieldType = columns.find((column) => column.name === field)?.type ?? "";
+                            setSub({ field, ...(isDate(fieldType) ? { grain: "month" as const } : {}) });
+                          }}
+                        >
+                          {columnOptions(columns.filter((column) => !usedPivotFields.has(column.name) || column.name === dimension.field))}
+                        </select>
+                      </Field>
+                      {isDate(type) ? (
+                        <Field label="Group by">
+                          <select aria-label={`Pivot column ${index + 2} date grouping`} value={dimension.grain ?? "month"} onChange={(event) => setSub({ ...dimension, grain: event.target.value as PivotGrain })}>
+                            {PIVOT_GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
+                          </select>
+                        </Field>
+                      ) : null}
+                      <Button size="small" variant="danger" aria-label={`Remove pivot column ${index + 2}`} onClick={() => setSub(null)}>Remove column</Button>
+                    </div>
+                  );
+                })}
+                <div className={styles.addRow}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={subColumns.length >= 2 || columns.every((column) => usedPivotFields.has(column.name))}
+                    onClick={() => {
+                      const column = columns.find((entry) => !usedPivotFields.has(entry.name));
+                      if (!column) return;
+                      setQuery({ ...query, pivot: { ...query.pivot!, subColumns: [...subColumns, { field: column.name, ...(isDate(column.type) ? { grain: "month" as const } : {}) }] } });
+                    }}
+                  >
+                    Add a column inside
+                  </Button>
+                </div>
+              </>
             ) : null}
           </>
         ) : visual === "gauge" ? null : (
