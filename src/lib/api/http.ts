@@ -33,7 +33,7 @@ const CLIENT_PG_ERRORS: Record<string, number> = {
 /** Turns any thrown error into a JSON response. Unexpected errors are logged, not leaked. */
 export function errorResponse(error: unknown): NextResponse {
   if (error instanceof HttpError) {
-    return json({ error: error.message, code: error.code }, { status: error.status });
+    return json({ error: error.message, code: error.code, ...(error.details ? { details: error.details } : {}) }, { status: error.status });
   }
   const pgCode = (error as { code?: unknown })?.code;
   if (typeof pgCode === "string" && CLIENT_PG_ERRORS[pgCode]) {
