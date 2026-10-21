@@ -2389,6 +2389,23 @@ that something happened.
   beside the current figures and the document, and accepts or declines it;
   payments already typed aren't added twice. Tohyee calls no AI and never
   touches myIR.
+- **Importing IRD account files** (#292, #360 item 3; examples ITX-IMP1 to
+  ITX-IMP12, decisions 710-716, tenant migration 0179; Codex, delegated by
+  owner, 20 October 2026, as delegated, not yet reviewed): on the Income
+  tax page, owners and admins bring in a CSV or Excel file of an IRD
+  account's transactions, saying whether it was downloaded from myIR or is
+  another spreadsheet. They pick the columns (no IRD layout is assumed),
+  say what each value in the type and instalment columns means, and see
+  every row with any problem before importing; mappings can be saved and
+  are chosen again for a file with the same headings. The file is kept as
+  an IRD document, optionally linked to a PDF. Each row waits for a person
+  to accept or decline it. An accepted payment is added (or linked to the
+  same payment already in Tohyee) and allocated only when the row says
+  which instalment (confirmed by IRD for a myIR file, with evidence for
+  another spreadsheet); otherwise it's awaiting reconciliation. An
+  assessment becomes the assessed RIT only when the person says so, with
+  the filing date. Interest, penalties, credits and refunds are recorded
+  and totalled for the year. No IRD connection, filing or payments.
 - **IRD payments from the books** (#292 stage 6; examples ITX36-ITX40,
   decision 550, tenant migration 0155): owners and admins choose the
   accounts income tax payments are coded to; payments to them from a bank
