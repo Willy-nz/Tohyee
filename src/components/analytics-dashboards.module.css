@@ -373,3 +373,7 @@
   white-space: nowrap;
 }
 .mapNote { margin: 4px 0 0; color: var(--report-text-muted, var(--text-muted)); font-size: var(--text-xs, 12px); }
+
+/* Whether the report's draft is saved (decision 690). */
+.saveState { margin: -4px 0 12px; color: var(--text-muted); font-size: var(--text-sm); }
+.conflictActions { margin-top: 8px; }

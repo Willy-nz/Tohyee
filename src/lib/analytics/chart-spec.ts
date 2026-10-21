@@ -17,6 +17,7 @@ import { barRadius, echartsBase, MARKS, tooltipHtml, type ChartTheme, type Toolt
 import { adaptForDark, isDarkSurface } from "@/lib/charts/colour-check";
 import { ruleMatches } from "@/lib/analytics/conditional";
 import { dec, sub, sum, toFixedString, toPlainString } from "@/lib/money/decimal";
+import { projectionNote, projectionPlan, type ProjectionPlan, type ProjectionSource } from "@/lib/analytics/projection";
 import { EXTRA_KINDS, extraOption, type ChartKit, type ExtraKind } from "@/lib/analytics/chart-visuals";
 
 export type ChartKind = "bar" | "column" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | ExtraKind;
@@ -44,6 +45,8 @@ export type ChartSpec = {
   compact?: boolean;
   /** How it looks (#333); series settings are by position. */
   format?: ChartFormat;
+  /** Where the groups came from, so a linear projection can tell whether they're a regular run of dates (decision 692). */
+  projection?: ProjectionSource;
 };
 
 export type { ChartTheme };
@@ -248,7 +251,11 @@ export function referenceValue(line: Pick<ReferenceLine, "kind" | "value" | "per
 
 const tidy = (value: number) => Math.round(value * 1e9) / 1e9;
 
-/** A straight line through the values (least squares, by position), carried on `extra` places: the trend and a simple forecast. */
+/**
+ * A straight line through the values (least squares, by position; gaps are
+ * left out of the fit but keep their place), carried on `extra` places: the
+ * trend, and the linear projection (decision 692).
+ */
 export function trendLine(values: Array<number | null>, extra: number): Array<number | null> {
   const points = values.flatMap((value, index) => (value === null ? [] : [[index, value] as const]));
   if (points.length < 2) return [...values, ...Array<null>(extra).fill(null)];
@@ -260,23 +267,50 @@ export function trendLine(values: Array<number | null>, extra: number): Array<nu
   return Array.from({ length: values.length + extra }, (_unused, index) => tidy(intercept + slope * index));
 }
 
-/** The next groups after the last one, for a forecast: months or days on from dates, otherwise "+1", "+2"... */
-function nextCategories(values: unknown[], count: number): unknown[] {
-  if (count === 0) return [];
-  const dates = values.length >= 2 && values.every(isoDate) ? (values as string[]) : null;
-  if (!dates) return Array.from({ length: count }, (_unused, index) => `+${index + 1}`);
-  const last = new Date(`${dates[dates.length - 1]}T00:00:00Z`);
-  const before = new Date(`${dates[dates.length - 2]}T00:00:00Z`);
-  const monthly = dates.every((value) => value.endsWith("-01"));
-  const step = monthly
-    ? (last.getUTCFullYear() - before.getUTCFullYear()) * 12 + last.getUTCMonth() - before.getUTCMonth()
-    : Math.round((last.getTime() - before.getTime()) / 86400000);
-  return Array.from({ length: count }, (_unused, index) => {
-    const next = new Date(last);
-    if (monthly) next.setUTCMonth(next.getUTCMonth() + step * (index + 1));
-    else next.setUTCDate(next.getUTCDate() + step * (index + 1));
-    return next.toISOString().slice(0, 10);
+/**
+ * The rows a chart draws (only the dates asked for, when the groups are
+ * dates), and its linear projection: whether it can be drawn, and if so with
+ * missing periods put back as empty rows (no value, never zero).
+ */
+export function chartRows(spec: ChartSpec, allRows: ChartRow[]): { rows: ChartRow[]; projection: { plan: ProjectionPlan; length: number; note: string } | null } {
+  const format = spec.format ?? {};
+  const from = format.categoryAxis?.from;
+  const to = format.categoryAxis?.to;
+  const dated = allRows.length > 0 && allRows.every((row) => isoDate(row[spec.category]));
+  const rows = dated && (from || to)
+    ? allRows.filter((row) => {
+        const value = row[spec.category] as string;
+        return (!from || value >= from) && (!to || value <= to);
+      })
+    : allRows;
+  // Only columns, bars, lines and areas project; pies, key figures and the extra visuals (waterfall, gauge...) don't.
+  const round = spec.kind === "pie" || spec.kind === "donut" || spec.kind === "kpi" || EXTRA_KINDS.has(spec.kind as ExtraKind);
+  const projected = round ? [] : spec.series.flatMap((series, index) => ((format.series?.[index]?.forecast ?? 0) > 0 ? [series] : []));
+  if (projected.length === 0) return { rows, projection: null };
+  const length = Math.max(...projected.map((series) => format.series?.[spec.series.indexOf(series)]?.forecast ?? 0));
+  const usable = rows.map((row) => projected.some((series) => displayNumber(row[series.field]) !== null));
+  const plan = projectionPlan(rows.map((row) => row[spec.category]), usable, length, spec.projection);
+  const projection = { plan, length, note: projectionNote(plan, length) };
+  if (!plan.ok || plan.missing.length === 0) return { rows, projection };
+  const byDate = new Map(rows.map((row) => [row[spec.category] as string, row]));
+  const empty = Object.fromEntries(spec.series.map((series) => [series.field, null]));
+  return { rows: plan.periods.map((period) => byDate.get(period) ?? { ...empty, [spec.category]: period }), projection };
+}
+
+/**
+ * The projected figures, for the chart's table (screen readers) and anything
+ * else that lists the chart's numbers: one entry per projected period, each
+ * value's projection or null. They're positions on a chart, not amounts.
+ */
+export function projectedRows(spec: ChartSpec, allRows: ChartRow[]): Array<{ period: string; values: Array<number | null> }> {
+  const { rows, projection } = chartRows(spec, allRows);
+  if (!projection?.plan.ok) return [];
+  const plan = projection.plan;
+  const fitted = spec.series.map((series, index) => {
+    const own = spec.format?.series?.[index]?.forecast ?? 0;
+    return own > 0 ? trendLine(rows.map((row) => displayNumber(row[series.field])), own) : [];
   });
+  return plan.future.map((period, offset) => ({ period, values: fitted.map((line) => line[rows.length + offset] ?? null) }));
 }
 
 const REFERENCE_NAMES: Record<ReferenceLine["kind"], string> = {
@@ -387,22 +421,16 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
   const base = echartsBase(theme);
   const secondaryText = theme.secondaryText ?? theme.text;
   const format = forMode(spec.format ?? {}, theme);
-  // Only the dates asked for, when the groups are dates (#376).
-  const from = format.categoryAxis?.from;
-  const to = format.categoryAxis?.to;
-  const dated = allRows.length > 0 && allRows.every((row) => isoDate(row[spec.category]));
-  const rows = dated && (from || to)
-    ? allRows.filter((row) => {
-        const value = row[spec.category] as string;
-        return (!from || value >= from) && (!to || value <= to);
-      })
-    : allRows;
+  // Only the dates asked for, when the groups are dates (#376), with missing periods back as gaps for a projection (decision 692).
+  const { rows, projection } = chartRows(spec, allRows);
+  const plan = projection?.plan.ok ? projection.plan : null;
   const horizontal = spec.kind === "bar";
   const round = spec.kind === "pie" || spec.kind === "donut";
   const seriesFormat = (index: number): SeriesFormat => format.series?.[index] ?? {};
-  // A forecast adds groups after the last one; the values themselves have nothing there.
-  const forecastLength = round || EXTRA_KINDS.has(spec.kind as ExtraKind) ? 0 : Math.max(0, ...spec.series.map((_item, index) => seriesFormat(index).forecast ?? 0));
-  const categoryValues = [...rows.map((row) => row[spec.category]), ...nextCategories(rows.map((row) => row[spec.category]), forecastLength)];
+  // A linear projection adds the next periods after the last one; the values themselves have nothing there.
+  const forecastLength = plan ? projection!.length : 0;
+  const projectedLength = (index: number) => (plan ? seriesFormat(index).forecast ?? 0 : 0);
+  const categoryValues = [...rows.map((row) => row[spec.category]), ...(plan ? plan.future : [])];
   const categories = formatCategories(categoryValues);
   const placeOf = (index: number) => {
     const item = spec.series[index];
@@ -674,7 +702,7 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
 
   const percentLabel = makeNumberFormatter({ style: "percent", decimals: 0 }, "number");
   const padding = Array<null>(forecastLength).fill(null);
-  type Meta = { kind: "value" | "trend"; index: number };
+  type Meta = { kind: "value" | "trend" | "projection"; index: number };
   const meta: Meta[] = [];
   const series: Array<Record<string, unknown>> = drawn.map((index) => {
     meta.push({ kind: "value", index });
@@ -769,24 +797,59 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
     };
   });
 
-  // Trend lines and forecasts (#376): dashed, in the value's colour, on its axis.
+  // Trend lines (#376), dashed over the dates shown, and linear projections
+  // (decision 692), dotted with open dots over the shaded projected periods;
+  // both in the value's colour, on its axis.
+  let shaded = false;
   for (const index of drawn) {
     const own = seriesFormat(index);
-    if (!own.trend && !own.forecast) continue;
+    const extra = projectedLength(index);
+    if (!own.trend && !extra) continue;
     if (shares && isStacked(index)) continue;
     const values = rows.map((_row, rowIndex) => valueAt(index, rowIndex));
-    const fitted = trendLine(values, own.forecast ?? 0);
+    const fitted = trendLine(values, extra);
     meta.push({ kind: "trend", index });
     series.push({
       name: `${spec.series[index].label} trend`,
       type: "line",
-      data: [...fitted, ...Array<null>(forecastLength - (own.forecast ?? 0)).fill(null)],
+      data: [...fitted.slice(0, rows.length), ...padding],
       showSymbol: false,
       symbol: "none",
       lineStyle: { color: seriesColour(index), width: 2, type: "dashed" },
       itemStyle: { color: seriesColour(index) },
       ...(hasRightAxis ? { yAxisIndex: placeOf(index).axis === "right" ? 1 : 0 } : {}),
     });
+    if (!extra || fitted[rows.length] === null || fitted[rows.length] === undefined) continue;
+    meta.push({ kind: "projection", index });
+    const axisKey = horizontal ? "yAxis" : "xAxis";
+    series.push({
+      name: `${spec.series[index].label} linear projection`,
+      type: "line",
+      // From the last date shown (so the line joins up) through the projected periods.
+      data: [
+        ...Array<null>(rows.length - 1).fill(null),
+        fitted[rows.length - 1],
+        ...fitted.slice(rows.length),
+        ...Array<null>(forecastLength - extra).fill(null),
+      ],
+      showSymbol: true,
+      symbol: "emptyCircle",
+      symbolSize: 6,
+      lineStyle: { color: seriesColour(index), width: 2, type: "dotted" },
+      itemStyle: { color: seriesColour(index) },
+      ...(hasRightAxis ? { yAxisIndex: placeOf(index).axis === "right" ? 1 : 0 } : {}),
+      ...(!shaded
+        ? {
+            markArea: {
+              silent: true,
+              itemStyle: { color: /^#[0-9a-f]{6}$/i.test(theme.mutedText) ? rgba(theme.mutedText, 0.08) : "rgba(128, 128, 128, 0.08)" },
+              label: { show: true, position: horizontal ? "insideRight" : "insideTop", formatter: "Projected", color: theme.mutedText, fontSize: 11 },
+              data: [[{ [axisKey]: categories[rows.length] }, { [axisKey]: categories[categories.length - 1] }]],
+            },
+          }
+        : {}),
+    });
+    shaded = true;
   }
 
   // Reference lines and bands (#376), on the left (or bottom) value axis.
@@ -841,8 +904,10 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
   // Every value in its own format, keyed by a short mark in its colour (a line for lines).
   (common.tooltip as Record<string, unknown>).formatter = (params: unknown) => {
     const list = (Array.isArray(params) ? params : [params]) as TooltipEntry[];
-    const heading = list[0]?.axisValueLabel ?? "";
     const dataIndex = list[0]?.dataIndex ?? 0;
+    // A projected period says so in its heading and on each figure (decision 692).
+    const inFuture = dataIndex >= rows.length;
+    const heading = `${list[0]?.axisValueLabel ?? ""}${inFuture ? " (projected)" : ""}`;
     const row = rows[dataIndex];
     const tooltipRows: TooltipRow[] = [];
     const counted: Array<string | number> = [];
@@ -851,8 +916,15 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
       if (!info) continue;
       const index = info.index;
       if (info.kind === "trend") {
+        if (inFuture) continue;
         const value = typeof entry.value === "number" ? fullFormatters[index](entry.value) : "—";
         tooltipRows.push({ colour: seriesColour(index), name: entry.seriesName ?? "", value, line: true });
+        continue;
+      }
+      if (info.kind === "projection") {
+        // On the last date shown, the projection only joins the trend; the trend is the figure there.
+        if (!inFuture || typeof entry.value !== "number") continue;
+        tooltipRows.push({ colour: seriesColour(index), name: entry.seriesName ?? "", value: fullFormatters[index](entry.value), note: "(projected, not an actual)", line: true });
         continue;
       }
       if (hiddenFromTooltip(index)) continue;

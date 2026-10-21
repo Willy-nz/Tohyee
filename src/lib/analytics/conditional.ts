@@ -142,15 +142,27 @@ export function cellLook(format: ChartFormat | undefined, valueIndex: number, va
 const ADDITIVE = new Set(["sum", "count"]);
 
 /**
- * A table's totals row: values that add up (totals and counts) are added
- * exactly; others (averages, smallest, largest, distinct counts, calculated
- * values) are left blank, since adding them up would be wrong.
+ * A table's totals row. With the server's totals (every row worked out
+ * again as one total, decision 694), each value is that: a calculated value
+ * or average from the totals (10/100 and 90/300 total 25%, not 20%), and
+ * amounts in two currencies blank. Without them (Top N, or cut short):
+ * totals and counts of the rows shown are added exactly; the others are
+ * left blank, since adding them up would be wrong.
  */
-export function tableTotals(columns: ResultColumn[], rows: Array<Record<string, string | null>>, aggregates: string[]): Record<string, string | null> {
+export function tableTotals(
+  columns: ResultColumn[],
+  rows: Array<Record<string, string | null>>,
+  aggregates: string[],
+  serverTotals?: Record<string, string | null>,
+): Record<string, string | null> {
   const measures = columns.filter((column) => column.role === "measure");
   const totals: Record<string, string | null> = {};
   for (const column of columns) {
     const index = measures.indexOf(column);
+    if (index >= 0 && serverTotals) {
+      totals[column.key] = serverTotals[column.key] ?? null;
+      continue;
+    }
     if (index < 0 || !ADDITIVE.has(aggregates[index] ?? "")) {
       totals[column.key] = null;
       continue;

@@ -75,6 +75,19 @@ export type BaseMeasure = {
   where?: Filter[];
   /** A balance: everything up to the dashboard's To date, whatever the From date (#337). */
   asAt?: boolean;
+  /**
+   * The column naming each row's currency (#387, decision 694): amounts in
+   * different currencies aren't added together. Left out, a `foreign_...`
+   * column on a table with a `currency` column uses that one.
+   */
+  currencyField?: string;
+  /**
+   * Each row is a balance recorded on its date (a snapshot), not a
+   * movement (decision 695): the latest row in each period (for each `per`
+   * value, e.g. each account) is used, and those are added up. Snapshots
+   * are never added across dates.
+   */
+  snapshot?: { per?: string };
 };
 
 /** A named value a formula uses that isn't one of the tile's own values (from a saved or built-in value). */
@@ -97,6 +110,8 @@ export type Measure = {
   negate?: boolean;
   where?: Filter[];
   asAt?: boolean;
+  currencyField?: string;
+  snapshot?: { per?: string };
   /** A calculated value: e.g. "[Sales] - [Cost of sales]". [Names] are the tile's other values or `inputs`. */
   formula?: string;
   inputs?: FormulaInput[];
@@ -170,7 +185,21 @@ export type PivotDrillSelection = {
 export type PivotDrillResult = { columns: ResultColumn[]; rows: Array<Record<string, string | null>>; truncated: boolean };
 /** A key figure's first value by month (oldest first), for its sparkline. */
 export type TrendPoint = { month: string; value: string | null };
-export type QueryResult = { columns: ResultColumn[]; rows: Array<Record<string, string | null>>; truncated: boolean; pivot?: PivotData; trend?: TrendPoint[] };
+export type QueryResult = {
+  columns: ResultColumn[];
+  rows: Array<Record<string, string | null>>;
+  truncated: boolean;
+  pivot?: PivotData;
+  trend?: TrendPoint[];
+  /**
+   * Every row's values worked out again as one total (decision 694), for a
+   * table's totals row: a calculated value or an average is worked out from
+   * the totals, not added up or averaged from the rows.
+   */
+  totals?: Record<string, string | null>;
+  /** What the figures can't show, e.g. amounts in more than one currency left blank. */
+  notes?: string[];
+};
 
 /** What a dashboard adds on top of each tile's own filters. */
 export type DashboardFilters = {
@@ -267,7 +296,7 @@ function parseFilter(entry: unknown, columns: Map<string, string>, what: string,
 }
 
 /** Checks a value worked out from rows: what's added up, of which column, and which rows count. */
-function parseBaseMeasure(measure: Record<string, unknown>, columns: Map<string, string>, label: string, pivot: boolean): BaseMeasure {
+function parseBaseMeasure(measure: Record<string, unknown>, columns: Map<string, string>, label: string, pivot: boolean, input = false): BaseMeasure {
   const aggregate = measure.aggregate as Aggregate;
   if (!AGGREGATES.includes(aggregate)) throw new ValidationError(`${label}: choose how to add it up.`);
   if (pivot && aggregate === "count_distinct") throw new ValidationError(`${label}: pivot values can be summed, counted, averaged, or compared by smallest or largest.`);
@@ -297,7 +326,31 @@ function parseBaseMeasure(measure: Record<string, unknown>, columns: Map<string,
     if (pivot) throw new ValidationError(`${label}: a pivot table can't show balances.`);
     result.asAt = true;
   }
+  if (measure.currencyField !== undefined && measure.currencyField !== null && measure.currencyField !== "") {
+    result.currencyField = column(columns, measure.currencyField, `${label} currency`);
+    if (formatOfType(columns.get(result.currencyField)!) !== "text") throw new ValidationError(`${label}: ${result.currencyField} isn't text, so it can't name a currency.`);
+  }
+  if (measure.snapshot !== undefined && measure.snapshot !== null && measure.snapshot !== false) {
+    const snapshot = (typeof measure.snapshot === "object" ? measure.snapshot : {}) as Record<string, unknown>;
+    if (pivot) throw new ValidationError(`${label}: a pivot table can't show balances recorded on each date yet.`);
+    if (input) throw new ValidationError(`${label}: a formula can't use a balance recorded on each date yet.`);
+    if (aggregate !== "sum") throw new ValidationError(`${label}: a balance recorded on each date is added up as a total of the latest balances.`);
+    if (result.asAt) throw new ValidationError(`${label}: choose either a balance up to the To date or a balance recorded on each date.`);
+    result.snapshot = snapshot.per ? { per: column(columns, snapshot.per, `${label} balance for each`) } : {};
+  }
   return result;
+}
+
+/**
+ * The column naming a value's currency (decision 694): the one it chose, or
+ * for a `foreign_...` amount on a table with a `currency` column (the books
+ * copy's foreign totals and amounts), that one. Null: one currency.
+ */
+export function currencyFieldOf(measure: BaseMeasure, columns: Map<string, string>): string | null {
+  if (measure.aggregate === "count" || measure.aggregate === "count_distinct") return null;
+  if (measure.currencyField) return measure.currencyField;
+  const foreign = [measure.field, measure.times].some((field) => field?.startsWith("foreign_"));
+  return foreign && columns.has("currency") ? "currency" : null;
 }
 
 /** Checks a tile's question against the table's columns. */
@@ -385,7 +438,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
           const name = typeof raw.name === "string" ? raw.name.trim().slice(0, 80) : "";
           if (!name || names.has(name)) throw new ValidationError(`${label}: each value a formula uses needs its own name.`);
           names.add(name);
-          return { name, ...parseBaseMeasure(raw, columns, `${label} › ${name}`, false) };
+          return { name, ...parseBaseMeasure(raw, columns, `${label} › ${name}`, false, true) };
         });
         if (inputs.length) result.inputs = inputs;
       }
@@ -435,6 +488,9 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
   const balances = measures.some((measure) => measure.asAt || measure.inputs?.some((input) => input.asAt));
   if (balances && groupBy?.grain) throw new ValidationError("A balance can't be grouped by date; group by something else or show one total.");
   if (balances && !dateField) throw new ValidationError("A balance needs a date the dashboard's To date applies to.");
+  if (measures.some((measure) => measure.snapshot) && !dateField) {
+    throw new ValidationError("A balance recorded on each date needs the date it was recorded: choose it as the tile's date.");
+  }
   if (!groupBy && !pivot && !dateField && measures.some((measure) => measure.compare)) {
     throw new ValidationError("Comparing with another period needs a date the dashboard's dates apply to.");
   }
@@ -582,12 +638,29 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   const balances = query.measures.some((measure) => measure.asAt || measure.inputs?.some((input) => input.asAt));
   const conditions = (shiftYears: number, dates: DashboardFilters = dashboard) => filterSql(query, types, dates, param, shiftYears, balances);
 
-  const baseSql = (measure: BaseMeasure, dates: DashboardFilters) => {
+  /** Which rows count towards a value: its own conditions, and with a balance on the tile, the From date. */
+  const ruleSql = (measure: BaseMeasure, dates: DashboardFilters) => {
     const rules = (measure.where ?? []).map((filter) => conditionSql(filter, types, param, dashboard.dates ?? todayDates()));
     if (balances && !measure.asAt && query.dateField && dates.from) {
       if (!DATE.test(dates.from)) throw new ValidationError("The From date is YYYY-MM-DD.");
       rules.push(`cast(${q(query.dateField)} as DATE) >= cast(${param(dates.from)} as DATE)`);
     }
+    return rules;
+  };
+  // Balances recorded on each date (decision 695): each one's latest date in its group, worked out by a window over the rows.
+  const snapshots = new Map<BaseMeasure, string>();
+  query.measures.forEach((measure, index) => {
+    if (measure.snapshot) snapshots.set(measure as BaseMeasure, `_tohyee_latest_${index}`);
+  });
+  const recordedOn = `cast(${q(query.dateField ?? "")} as DATE)`;
+  const conditionsOf = (measure: BaseMeasure, dates: DashboardFilters) => {
+    const rules = ruleSql(measure, dates);
+    const latest = snapshots.get(measure);
+    if (latest) rules.push(`${recordedOn} = ${q(latest)}`);
+    return rules;
+  };
+  const baseSql = (measure: BaseMeasure, dates: DashboardFilters) => {
+    const rules = conditionsOf(measure, dates);
     const only = (sql: string) => (rules.length ? `(case when ${rules.join(" and ")} then ${sql} end)` : sql);
     if (measure.aggregate === "count") return measure.field ? `count(${only(q(measure.field))})` : rules.length ? `count(${only("1")})` : "count(*)";
     if (measure.aggregate === "count_distinct") return `count(distinct ${only(q(measure.field!))})`;
@@ -598,6 +671,29 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   };
   const inputOf = (measure: Measure, name: string): BaseMeasure =>
     measure.inputs?.find((input) => input.name === name) ?? (query.measures.find((other) => other.aggregate !== "formula" && other.label === name) as BaseMeasure);
+  /**
+   * Amounts in more than one currency aren't added together (decision 694):
+   * alongside a value whose rows name their currency, how many currencies
+   * it has in each group (unless the tile is grouped by the currency).
+   */
+  const currencyOf = (measure: BaseMeasure) => {
+    const field = currencyFieldOf(measure, types);
+    return field && query.groupBy?.field !== field ? field : null;
+  };
+  const checkedInputs = (measure: Measure): BaseMeasure[] =>
+    measure.aggregate === "formula"
+      ? formulaRefs(parseFormula(measure.formula!)).map((name) => inputOf(measure, name)).filter((input) => currencyOf(input))
+      : currencyOf(measure as BaseMeasure)
+        ? [measure as BaseMeasure]
+        : [];
+  const checked = query.measures.map((measure) => checkedInputs(measure).length > 0);
+  const currencyCheckSql = (measure: Measure, dates: DashboardFilters) => {
+    const counts = checkedInputs(measure).map((input) => {
+      const rules = [...conditionsOf(input, dates), `${q(input.field!)} is not null`];
+      return `count(distinct case when ${rules.join(" and ")} then ${q(currencyOf(input)!)} end)`;
+    });
+    return counts.length === 1 ? counts[0] : `greatest(${counts.join(", ")})`;
+  };
   /** A calculated value in exact decimals (DECIMAL(38,6)); dividing by zero gives no value. */
   const formulaSql = (measure: Measure, dates: DashboardFilters) => {
     const decimal = (sql: string) => `cast(${sql} as ${DECIMAL_RESULT})`;
@@ -679,8 +775,20 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       ...(query.groupBy ? [`${shiftedCategory} as category`] : []),
       ...(second ? [`${second} as breakdown`] : []),
       ...query.measures.map((measure, index) => `${measureSql(measure, dates)} as m${index}`),
+      ...query.measures.flatMap((measure, index) => (checked[index] ? [`${currencyCheckSql(measure, dates)} as m${index}_ccy`] : [])),
     ];
-    return `select ${parts.join(", ")} from ${q(query.table)}${conditions(shiftYears, dates)}${query.groupBy ? " group by all" : ""}`;
+    let from = `${q(query.table)}${conditions(shiftYears, dates)}`;
+    if (snapshots.size) {
+      // The latest date each snapshot balance has in its group (and for each `per` value), over the tile's rows.
+      const windows = [...snapshots].map(([measure, alias]) => {
+        const rules = ruleSql(measure, dates);
+        const partition = [...(query.groupBy ? [shiftedCategory] : []), ...(measure.snapshot?.per ? [q(measure.snapshot.per)] : [])];
+        const date = rules.length ? `case when ${rules.join(" and ")} then ${recordedOn} end` : recordedOn;
+        return `max(${date}) over (${partition.length ? `partition by ${partition.join(", ")}` : ""}) as ${q(alias)}`;
+      });
+      from = `(select *, ${windows.join(", ")} from ${from}) as ${q("_tohyee_rows")}`;
+    }
+    return `select ${parts.join(", ")} from ${from}${query.groupBy ? " group by all" : ""}`;
   };
 
   const order = (alias: string) => {
@@ -696,9 +804,9 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   let sql: string;
   if (compares && query.groupBy) {
     const previous = query.measures
-      .map((measure, index) => (measure.compare ? `, previous.m${index} as m${index}_py` : ""))
+      .map((measure, index) => (measure.compare ? `, previous.m${index} as m${index}_py${checked[index] ? `, previous.m${index}_ccy as m${index}_py_ccy` : ""}` : ""))
       .join("");
-    const current = query.measures.map((_measure, index) => `, current.m${index}`).join("");
+    const current = query.measures.map((_measure, index) => `, current.m${index}${checked[index] ? `, current.m${index}_ccy` : ""}`).join("");
     sql = `with current as (${select(0)}), previous as (${select(1)}) select current.category${current}${previous} from current left join previous on previous.category = current.category${order("current.")}${limit}`;
   } else if (compares) {
     // One total compared with another date range (decision 594): the same question asked of those dates.
@@ -706,6 +814,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     const ctes: string[] = [`current as (${select(0)})`];
     query.measures.forEach((measure, index) => {
       parts.push(`current.m${index}`);
+      if (checked[index]) parts.push(`current.m${index}_ccy`);
       if (!measure.compare) return;
       const suffix = measure.compare === "previous_year" ? "py" : "pp";
       const range = measure.compare === "previous_year" ? previousYear(dashboard.from, dashboard.to) : previousPeriod(dashboard.from, dashboard.to);
@@ -716,6 +825,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       const name = `${suffix}${index}`;
       ctes.push(`${name} as (${select(0, { ...dashboard, from: range.from, to: range.to })})`);
       parts.push(`${name}.m${index} as m${index}_${suffix}`);
+      if (checked[index]) parts.push(`${name}.m${index}_ccy as m${index}_${suffix}_ccy`);
     });
     const joined = ctes.map((cte) => cte.slice(0, cte.indexOf(" as ("))).join(" cross join ");
     sql = `with ${ctes.join(", ")} select ${parts.join(", ")} from ${joined}`;
@@ -833,6 +943,11 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
         ])
       : [`null::VARCHAR as pivot_column`, "0 as gc"]),
     ...query.measures.map((measure, index) => `${aggregate(measure)} as ${q(`m${index}`)}`),
+    // How many currencies each cell adds up (decision 694), so a subtotal over two currencies is left blank.
+    ...query.measures.flatMap((measure, index) => {
+      const currency = measure.aggregate === "formula" ? null : currencyFieldOf(measure as BaseMeasure, types);
+      return currency ? [`count(distinct case when ${q(measure.field!)} is not null then ${q(currency)} end) as ${q(`m${index}_ccy`)}`] : [];
+    }),
   ];
   // Each group's rows, then its subtotal, then the next group; the grand total last. Rows sort by
   // their fields, smallest first (the editor has no order for a pivot: each column has its own values).
