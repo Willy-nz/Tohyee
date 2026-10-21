@@ -35,6 +35,29 @@ The supplied Looker Studio screenshots informed the source library, connector pi
 - https://www.metabase.com/docs/latest/dashboards/introduction
 - https://superset.apache.org/docs/using-superset/exploring-data/
 
+## Who can see what: the access contract (#387, decision 697)
+
+Every figure, row and file Analytics gives out goes through one server-side check of who's asking. Nothing on the page (a slicer, a hidden field, a tile left off, an address like `?edit=1`) is a boundary: the server decides.
+
+| Who | What they can ask for |
+| --- | --- |
+| Viewers and up (viewer, bookkeeper, admin, owner) | Any question of any loaded table (they can see the tables), every report, slicer values over a whole column. Bookkeepers and up change reports and share them. |
+| Report viewers (decision 360) | Only the reports shared with them, and only by report and tile: the tile's saved question, run on the server. Never a typed question, the tables, the sources, the books copy or saved values. |
+
+For a report viewer, every way in uses that same scope (the report, shared with them, and its saved tile):
+
+- **Figures, tooltips and totals.** `POST /api/analytics/query` with `dashboardId` and `tileId` runs the saved tile; a typed `query` is refused (403); an unshared or other organisation's report is "not found" (404). Tooltips, a table's totals row and a key figure's comparison are worked out from that same answer, so they can't show more. Only the report's own slicer fields can narrow the answer; any other filter sent is dropped. The tile's own filters always apply, so choosing a slicer value outside them gives nothing. Dates aren't a boundary: viewers can change them on the page.
+- **Detail rows.** A pivot's drill-through (`drill` with `dashboardId` and `tileId`) gives only the pivot's own fields for that cell, under the same filters, up to 500 rows; a hidden column of the table is never in it.
+- **Slicer values.** `GET /api/analytics/values` only for a slicer on a report shared with them, and only values in the rows the report's tiles read after their own filters, not the whole column (so a slicer can't name rows the tiles leave out). Tiles on farm tables a member can't use (decision 744) add no values.
+- **CSV and Excel.** A pivot's file is made from the figures already on the page (`/api/reports/export`, `analytics-pivot` only, CSV or Excel); the endpoint reads no data itself, so it can't give more than the page.
+- **Pinned tiles.** A pin is a report and tile, run through the same query path; once the report is unshared the pin is hidden and its tile returns 404 (decision 378).
+- **Bookmarks and addresses.** A report's address carries only its id and `?edit=1`; report viewers stay in viewing mode and a save from them is refused (403). There are no public links.
+- **Caches.** There are none: every answer is worked out for the request.
+- **Scheduled outputs.** None exist yet (report emails collect files into Analytics; they don't send reports). When scheduled reports are built, each must run as its recipient, with the recipient's access checked at send time, so an unshared report or a removed member gets nothing on the next run.
+- **Email.** Report emails read only the mailbox folder an admin chose for them, run as that admin while they're still an admin, and save attachments (not messages); farm mail stays private to its member (decision 571).
+
+Row-level rules (some report viewers seeing only some rows) aren't built (phase 5 of #376); when they are, they go into this same server-side scope. Tested in `tests/integration/analytics-sharing.test.ts`.
+
 ## Database sources: read only
 
 Tohyee only reads from an external database. A typed query must be a single SELECT (or WITH ... SELECT); comments are removed before it's checked and sent, and words that change data (INSERT, UPDATE, DELETE, INTO, EXEC, SET, ...) or functions that write, lock or read the server's files are refused outside quotes. The query then runs inside Tohyee's own outer SELECT, which also applies the row limit; in PostgreSQL the session and each transaction are read only, and in MySQL each read is a `START TRANSACTION READ ONLY` in a read-only session. SQL Server has no read-only session, so the screens ask for a login with read rights only (such as `db_datareader`). Every screen that adds a connection recommends a read-only user.
