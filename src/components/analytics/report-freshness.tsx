@@ -26,7 +26,8 @@ export function freshnessText(source: SourceFreshness): string {
 export function ReportFreshnessLine({ organisationId, dashboardId, version }: { organisationId: string; dashboardId: string; version?: string }) {
   const loaded = useApiData<ReportFreshness>(`/api/analytics/dashboards/${dashboardId}/freshness`, { organisationId, ...(version ? { version } : {}) });
   const freshness = loaded.data;
-  if (!freshness || freshness.sources.length === 0) return null;
+  // Anything unexpected (an older server, a failed request) shows nothing rather than breaking the report.
+  if (!freshness || !Array.isArray(freshness.sources) || freshness.sources.length === 0) return null;
   const stale = freshness.sources.filter((source) => source.failedAt);
   const fine = freshness.sources.filter((source) => !source.failedAt);
   return (
