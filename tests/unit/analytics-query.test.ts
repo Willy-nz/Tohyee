@@ -118,6 +118,38 @@ describe("analytics tile queries (step 3)", () => {
     ]);
   });
 
+  it("groups a second time inside each group, in order (#376 phase 2)", async () => {
+    const result = await runTile(ORG, {
+      table: "sales",
+      groupBy: { field: "region" },
+      breakdown: { field: "customer" },
+      measures: [sales],
+      sort: { by: "category", direction: "asc" },
+    });
+    expect(result.columns.map((column) => [column.key, column.role])).toEqual([
+      ["category", "category"],
+      ["breakdown", "category"],
+      ["m0", "measure"],
+    ]);
+    expect(result.rows).toEqual([
+      { category: "Canterbury", breakdown: "Alpha", m0: "100.000000" },
+      { category: "Canterbury", breakdown: "Beta", m0: "100.000000" },
+      { category: "Canterbury", breakdown: "Gamma", m0: "100.000000" },
+      { category: "Otago", breakdown: "Alpha", m0: "0.400000" },
+      { category: "Otago", breakdown: "Beta", m0: "10.190000" },
+    ]);
+    const byMonth = await runTile(ORG, { table: "sales", groupBy: { field: "region" }, breakdown: { field: "order_date", grain: "year" }, measures: [{ label: "Orders", aggregate: "count" }] });
+    expect(byMonth.rows.filter((row) => row.category === "Otago")).toEqual([
+      { category: "Otago", breakdown: "2025-01-01", m0: "2" },
+      { category: "Otago", breakdown: "2026-01-01", m0: "2" },
+    ]);
+    await expect(runTile(ORG, { table: "sales", groupBy: null, breakdown: { field: "customer" }, measures: [sales] })).rejects.toThrow(/needs a first one/);
+    await expect(runTile(ORG, { table: "sales", groupBy: { field: "region" }, breakdown: { field: "region" }, measures: [sales] })).rejects.toThrow(/different/);
+    await expect(
+      runTile(ORG, { table: "sales", groupBy: { field: "order_date", grain: "month" }, breakdown: { field: "region" }, measures: [{ ...sales, compare: "previous_year" }] }),
+    ).rejects.toThrow(/second grouping can't compare/);
+  });
+
   it("totals without grouping (a KPI) and applies slicers", async () => {
     const all = await runTile(ORG, { table: "sales", groupBy: null, measures: [sales] });
     expect(all.rows).toEqual([{ m0: "310.590000" }]);
