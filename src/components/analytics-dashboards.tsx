@@ -20,9 +20,10 @@ import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { mergeFormats, pasteFormat, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
+import { calendarHeight, calendarYears } from "@/lib/analytics/chart-relationships";
 import type { ReportTheme } from "@/lib/charts/report-themes";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
@@ -72,6 +73,13 @@ const VISUALS: Array<{ value: Visual; label: string }> = [
   { value: "funnel", label: "Funnel" },
   { value: "gauge", label: "Gauge" },
   { value: "bullet", label: "Bullet chart" },
+  { value: "scatter", label: "Scatter or bubble" },
+  { value: "histogram", label: "Histogram" },
+  { value: "boxplot", label: "Box plot" },
+  { value: "treemap", label: "Treemap" },
+  { value: "heatmap", label: "Heat map" },
+  { value: "calendar", label: "Calendar heat map" },
+  { value: "sankey", label: "Sankey" },
 ];
 
 const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
@@ -1040,7 +1048,11 @@ function TileResult({
       </div>
     );
   }
-  return <Chart spec={spec} rows={rows} height={CHART_HEIGHTS[tile.height ?? "medium"]} />;
+  // A calendar heat map is as tall as the years it shows (up to three).
+  const height = tile.visual === "calendar"
+    ? Math.max(CHART_HEIGHTS[tile.height ?? "medium"], calendarHeight(calendarYears(rows.map((row) => String(row.category ?? ""))).length))
+    : CHART_HEIGHTS[tile.height ?? "medium"];
+  return <Chart spec={spec} rows={rows} height={height} />;
 }
 
 function pivotRowLabel(row: PivotRow, index: number, field: ResultColumn): string {
@@ -1246,6 +1258,37 @@ function blankQuery(table: TableInfo | undefined): TileQuery {
   };
 }
 
+/** A second grouping inside the first (#376 phase 2), for the chart types that use one. */
+function SecondGrouping({ visual, query, columns, onChange }: { visual: Visual; query: TileQuery; columns: ColumnInfo[]; onChange: (query: TileQuery) => void }) {
+  const setting = SECOND_GROUPING[visual];
+  if (!setting || !query.groupBy) return null;
+  const type = columns.find((column) => column.name === query.breakdown?.field)?.type ?? "";
+  return (
+    <>
+      <Field label={setting.label} hint={setting.hint}>
+        <select
+          value={query.breakdown?.field ?? ""}
+          onChange={(event) => {
+            const field = event.target.value;
+            const fieldType = columns.find((column) => column.name === field)?.type ?? "";
+            onChange({ ...query, breakdown: field ? { field, ...(isDate(fieldType) ? { grain: "month" as Grain } : {}) } : null, measures: query.measures.map((measure) => ({ ...measure, compare: undefined })) });
+          }}
+        >
+          {setting.none ? <option value="">{setting.none}</option> : <option value="">Choose a field</option>}
+          {columnOptions(columns.filter((column) => column.name !== query.groupBy?.field || isDate(column.type)))}
+        </select>
+      </Field>
+      {query.breakdown && isDate(type) ? (
+        <Field label="By">
+          <select aria-label={`${setting.label} by`} value={query.breakdown.grain ?? "month"} onChange={(event) => onChange({ ...query, breakdown: { field: query.breakdown!.field, grain: event.target.value as Grain } })}>
+            {GRAINS.map((grain) => <option key={grain.value} value={grain.value}>{grain.label}</option>)}
+          </select>
+        </Field>
+      ) : null}
+    </>
+  );
+}
+
 /** Adding or changing a tile, with a live preview. */
 function TileEditor({
   saving,
@@ -1322,6 +1365,28 @@ function TileEditor({
         pivot: null,
         groupBy: first ? { field: first.field, ...(first.grain ? { grain: first.grain } : {}) } : null,
       });
+    }
+    if (query.breakdown && !SECOND_GROUPING[next]) {
+      // Only some chart types use a second grouping.
+      setQuery((current) => ({ ...current, breakdown: null }));
+    }
+    if (SECOND_GROUPING_REQUIRED.includes(next) && !query.breakdown) {
+      // A heat map or Sankey needs a second grouping: start with the first other text field.
+      const first = query.groupBy ?? (columns[0] ? { field: columns[0].name } : null);
+      const other = columns.find((column) => column.name !== first?.field && !isDate(column.type) && !isNumber(column.type)) ?? columns.find((column) => column.name !== first?.field);
+      if (first && other) {
+        setQuery((current) => ({
+          ...current,
+          groupBy: current.groupBy ?? first,
+          breakdown: { field: other.name, ...(isDate(other.type) ? { grain: "month" as Grain } : {}) },
+          measures: current.measures.map((measure) => ({ ...measure, compare: undefined })),
+        }));
+      }
+    }
+    if (next === "calendar") {
+      // A calendar heat map is grouped by a date, by day.
+      const date = columns.find((column) => column.name === query.groupBy?.field && isDate(column.type)) ?? columns.find((column) => isDate(column.type));
+      if (date) setQuery((current) => ({ ...current, groupBy: { field: date.name, grain: "day" }, breakdown: null, measures: current.measures.map((measure) => ({ ...measure, compare: undefined })) }));
     }
     if (next === "gauge" && query.groupBy) {
       // A gauge shows one total.
@@ -1510,6 +1575,7 @@ function TileEditor({
                   setQuery({
                     ...query,
                     groupBy: field ? { field, ...(isDate(type) ? { grain: "month" as Grain } : {}) } : null,
+                    breakdown: field && field !== query.breakdown?.field ? query.breakdown : null,
                     // Grouped by a date, a value can compare with last year; the previous period and the trend are for one total.
                     measures: query.measures.map((measure) => ({
                       ...measure,
@@ -1530,6 +1596,7 @@ function TileEditor({
                 </select>
               </Field>
             ) : null}
+            <SecondGrouping visual={visual} query={query} columns={columns} onChange={setQuery} />
           </>
         )}
         <Field label="Date range applies to" hint="The dashboard's From and To.">

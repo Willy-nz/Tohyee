@@ -35,7 +35,28 @@ export type FilterOp =
   | "last_months"
   | "this_financial_year"
   | "last_financial_year";
-export type Visual = "column" | "bar" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | "table" | "pivot" | "waterfall" | "funnel" | "gauge" | "bullet";
+export type Visual =
+  | "column"
+  | "bar"
+  | "line"
+  | "area"
+  | "combo"
+  | "pie"
+  | "donut"
+  | "kpi"
+  | "table"
+  | "pivot"
+  | "waterfall"
+  | "funnel"
+  | "gauge"
+  | "bullet"
+  | "scatter"
+  | "histogram"
+  | "boxplot"
+  | "treemap"
+  | "heatmap"
+  | "calendar"
+  | "sankey";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
 export type PivotSpec = { rows: PivotDimension[]; column: PivotDimension | null };
@@ -85,6 +106,12 @@ export type QueryDates = { today: string; yearEndMonth: number };
 export type TileQuery = {
   table: string;
   groupBy: { field: string; grain?: Grain } | null;
+  /**
+   * A second grouping inside the first (#376 phase 2): the items in each box
+   * of a box plot, a heat map's other axis, a Sankey's targets, or one small
+   * chart each. Its values come back as the `breakdown` column.
+   */
+  breakdown?: { field: string; grain?: Grain } | null;
   pivot?: PivotSpec | null;
   measures: Measure[];
   filters: Filter[];
@@ -268,6 +295,19 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     groupBy = { field, ...(grain ? { grain } : {}) };
   }
 
+  let breakdown: TileQuery["breakdown"] = null;
+  if (raw.breakdown) {
+    if (!groupBy) throw new ValidationError("A second grouping needs a first one: choose what to group by.");
+    const second = raw.breakdown as Record<string, unknown>;
+    const field = column(columns, second.field, "Second grouping");
+    let grain: Grain | undefined;
+    if (isDateType(columns.get(field)!)) {
+      grain = GRAINS.includes(second.grain as Grain) ? (second.grain as Grain) : "month";
+    }
+    if (field === groupBy.field && grain === groupBy.grain) throw new ValidationError("The second grouping should be different from the first.");
+    breakdown = { field, ...(grain ? { grain } : {}) };
+  }
+
   let pivot: PivotSpec | null = null;
   if (raw.pivot !== undefined && raw.pivot !== null) {
     if (groupBy) throw new ValidationError("A pivot table uses its own row and column fields.");
@@ -324,6 +364,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     }
     if (measure.compare === "previous_year" || measure.compare === "previous_period") {
       if (pivot) throw new ValidationError(`${label}: a pivot table can't compare with another period.`);
+      if (breakdown) throw new ValidationError(`${label}: a chart with a second grouping can't compare with another period.`);
       if (groupBy && measure.compare === "previous_period") throw new ValidationError(`${label}: comparing with the previous period is for one total.`);
       if (groupBy && !groupBy.grain) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
       result.compare = measure.compare;
@@ -381,7 +422,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     limit = Number(raw.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ROWS) throw new ValidationError(`Top N must be a whole number from 1 to ${MAX_ROWS}.`);
   }
-  return { table, groupBy, pivot, measures, filters, dateField, sort, limit, ...(raw.sparkline === true ? { sparkline: true } : {}) };
+  return { table, groupBy, ...(breakdown ? { breakdown } : {}), pivot, measures, filters, dateField, sort, limit, ...(raw.sparkline === true ? { sparkline: true } : {}) };
 }
 
 type Built = { sql: string; params: unknown[]; columns: ResultColumn[] };
@@ -582,6 +623,17 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       role: "category",
     });
   }
+  let second = "";
+  if (query.groupBy && query.breakdown) {
+    const field = q(query.breakdown.field);
+    second = query.breakdown.grain ? `cast(date_trunc('${query.breakdown.grain}', ${field}) as DATE)` : field;
+    columns.push({
+      key: "breakdown",
+      label: query.breakdown.field,
+      format: query.breakdown.grain ? "date" : formatOfType(types.get(query.breakdown.field)!),
+      role: "category",
+    });
+  }
   query.measures.forEach((measure, index) => {
     columns.push({ key: `m${index}`, label: measure.label, format: measureFormat(measure), role: "measure" });
     if (measure.compare === "previous_year") columns.push({ key: `m${index}_py`, label: `${measure.label} last year`, format: measureFormat(measure), role: "measure" });
@@ -595,6 +647,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
         : category;
     const parts = [
       ...(query.groupBy ? [`${shiftedCategory} as category`] : []),
+      ...(second ? [`${second} as breakdown`] : []),
       ...query.measures.map((measure, index) => `${measureSql(measure, dates)} as m${index}`),
     ];
     return `select ${parts.join(", ")} from ${q(query.table)}${conditions(shiftYears, dates)}${query.groupBy ? " group by all" : ""}`;
@@ -603,7 +656,9 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   const order = (alias: string) => {
     if (!query.groupBy) return "";
     const by = query.sort.by === "value" ? `${alias}m0` : `${alias}category`;
-    return ` order by ${by} ${query.sort.direction} nulls last`;
+    // With a second grouping, its values come in order within each group.
+    const then = second ? (query.sort.by === "value" ? `, ${alias}category asc nulls last, ${alias}breakdown asc nulls last` : `, ${alias}breakdown asc nulls last`) : "";
+    return ` order by ${by} ${query.sort.direction} nulls last${then}`;
   };
   const limit = ` limit ${Math.min(query.limit ?? MAX_ROWS + 1, MAX_ROWS + 1)}`;
 
