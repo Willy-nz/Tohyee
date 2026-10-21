@@ -515,6 +515,48 @@ describeWithDatabase("analytics dashboards", () => {
     expect(removed.status).toBe(200);
   });
 
+  it("refuses a save from an older version, so one editor can't silently overwrite another (#387, decision 690)", async () => {
+    const read = async () => body(await dashboardRoute.GET(apiRequest(`/api/analytics/dashboards/${dashboardId}?organisationId=${ORG}`, { cookie: ownerCookie }), params({ dashboardId })));
+    const save = async (changes: Record<string, unknown>) =>
+      body(
+        await dashboardRoute.PATCH(
+          apiRequest(`/api/analytics/dashboards/${dashboardId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, ...changes } }),
+          params({ dashboardId }),
+        ),
+      );
+    // Sessions A and B open the same report.
+    const opened = (await read()).data.dashboard;
+    const startedAt = opened.version as number;
+    expect(startedAt).toBeGreaterThanOrEqual(1);
+
+    // A saves first.
+    const a = await save({ expectedVersion: startedAt, name: "Saved by A", tiles: [{ ...tile, title: "A's chart" }] });
+    expect(a.status).toBe(200);
+    expect(a.data.dashboard.version).toBe(startedAt + 1);
+
+    // B saves the older definition it opened: refused, nothing changed, and B is told who saved and when.
+    const b = await save({ expectedVersion: startedAt, name: "Saved by B", tiles: [{ ...tile, title: "B's chart" }] });
+    expect(b.status).toBe(409);
+    expect(b.data.code).toBe("dashboard_conflict");
+    expect(b.data.error).toMatch(/owner@example.com saved this report/);
+    expect(b.data.details).toMatchObject({ version: startedAt + 1, updatedByEmail: "owner@example.com" });
+    const after = (await read()).data.dashboard;
+    expect(after.name).toBe("Saved by A");
+    expect(after.tiles[0].title).toBe("A's chart");
+    expect(after.version).toBe(startedAt + 1);
+
+    // After reloading, B's save from the new version goes ahead.
+    const retried = await save({ expectedVersion: startedAt + 1, name: "Saved by B" });
+    expect(retried.status).toBe(200);
+    expect(retried.data.dashboard.version).toBe(startedAt + 2);
+
+    expect((await save({ expectedVersion: "2" })).status).toBe(400);
+    expect((await save({ expectedVersion: 0 })).status).toBe(400);
+    // A refused save that names a version that never existed changes nothing either.
+    expect((await save({ expectedVersion: startedAt + 99, name: "Nope" })).status).toBe(409);
+    await save({ name: "Monthly sales", tiles: [tile] });
+  });
+
   it("says how fresh the report's data is, and shows a failed refresh as stale (#387, decision 698)", async () => {
     const freshness = async () =>
       body(await freshnessRoute.GET(apiRequest(`/api/analytics/dashboards/${dashboardId}/freshness?organisationId=${ORG}`, { cookie: viewerCookie }), params({ dashboardId })));

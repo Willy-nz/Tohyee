@@ -12,13 +12,20 @@ export type TileFilters = { from: string; to: string; values: Record<string, str
  * viewer may run, or a question being built. Kept until the question or the
  * filters change.
  */
-export function useTileResult(organisationId: string, query: TileQuery | null, filters: TileFilters, saved?: { dashboardId: string; tileId: string }) {
+export function useTileResult(
+  organisationId: string,
+  query: TileQuery | null,
+  filters: TileFilters,
+  saved?: { dashboardId: string; tileId: string },
+  /** A table with a totals row being built asks for the whole answer as one total too (decision 694); a saved one's tile says so. */
+  totals = false,
+) {
   const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
-  const key = JSON.stringify({ query, filters, saved });
+  const key = JSON.stringify({ query, filters, saved, totals });
   useEffect(() => {
     if (!query) return;
     let cancelled = false;
-    const question = saved ? { dashboardId: saved.dashboardId, tileId: saved.tileId } : { query };
+    const question = saved ? { dashboardId: saved.dashboardId, tileId: saved.tileId } : { query, ...(totals ? { totals: true } : {}) };
     api<QueryResult>("/api/analytics/query", {
       method: "POST",
       body: { organisationId, ...question, filters: { from: filters.from || null, to: filters.to || null, values: filters.values } },

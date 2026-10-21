@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { NotFoundError, ValidationError } from "@/lib/errors";
+import { HttpError, NotFoundError, ValidationError } from "@/lib/errors";
 import { parseChartFormat, parseVisualDefaults, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { findTheme } from "@/lib/analytics/themes";
 import { parseButton, parseImage, parseShape, type ButtonItem, type ImageItem, type ItemVisual, type ShapeItem } from "@/lib/analytics/items";
@@ -11,6 +11,7 @@ import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import {
+  buildDistinctValuesSql,
   buildPivotDrillSql,
   buildPivotSql,
   buildTileSql,
@@ -24,6 +25,7 @@ import {
   type PivotDrillResult,
   type PivotDrillSelection,
   type PivotRow,
+  type QueryDates,
   type QueryResult,
   quoteIdentifier,
   type TileQuery,
@@ -91,6 +93,8 @@ export type Dashboard = {
   tiles: Tile[];
   /** The organisation's theme the report uses, when it uses one (read with the report, so report viewers see it too). */
   customTheme?: ReportTheme | null;
+  /** Goes up by one with every save (decision 690); a save names the version it started from. */
+  version: number;
   createdByEmail: string;
   createdAt: string;
   updatedByEmail: string;
@@ -109,6 +113,7 @@ type Row = {
   description: string | null;
   settings: Partial<DashboardSettings>;
   tiles: Tile[];
+  version: number;
   created_by_email: string;
   created_at: Date;
   updated_by_email: string;
@@ -130,6 +135,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
       ...(row.settings.visualDefaults ? { visualDefaults: row.settings.visualDefaults } : {}),
     },
     tiles: row.tiles,
+    version: Number(row.version),
     createdByEmail: row.created_by_email,
     createdAt: new Date(row.created_at).toISOString(),
     updatedByEmail: row.updated_by_email,
@@ -137,7 +143,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
   };
 }
 
-const COLUMNS = "id::text, name, description, settings, tiles, created_by_email, created_at, updated_by_email, updated_at";
+const COLUMNS = "id::text, name, description, settings, tiles, version, created_by_email, created_at, updated_by_email, updated_at";
 
 /**
  * Who's looking: a report viewer (decision 360) sees only the dashboards
@@ -395,9 +401,39 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   return getDashboard(tx, id);
 }
 
+/**
+ * Someone else saved the report after this save's starting version
+ * (decision 690). The response carries who and when, so the editor can say
+ * so and offer Reload or Save a copy; nothing was changed.
+ */
+export class DashboardConflictError extends HttpError {
+  constructor(current: Dashboard) {
+    super(
+      409,
+      "dashboard_conflict",
+      `${current.updatedByEmail} saved this report after you started changing it. Your changes haven't been saved, and they're still here: reload to see theirs, or save yours as a copy.`,
+      { version: current.version, updatedByEmail: current.updatedByEmail, updatedAt: current.updatedAt },
+    );
+  }
+}
+
+function parseExpectedVersion(input: unknown): number | null {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== "number" || !Number.isInteger(input) || input < 1) throw new ValidationError("expectedVersion is a whole number.");
+  return input;
+}
+
+/**
+ * Saves changes to a report. With `expectedVersion` (the editor always sends
+ * it) the save only goes ahead if nobody has saved since that version; the
+ * check is in the update itself, so two saves at the same moment can't both
+ * win. Without it the save replaces what's there, as before.
+ */
 export async function updateDashboard(tx: OrgTx, id: string, input: Record<string, unknown>): Promise<Dashboard> {
   await requireAnalytics(tx);
+  const expectedVersion = parseExpectedVersion(input.expectedVersion);
   const current = await getDashboard(tx, id);
+  if (expectedVersion !== null && expectedVersion !== current.version) throw new DashboardConflictError(current);
   const tables = await listTables(tx.organisationId);
   const name = input.name === undefined ? current.name : parseName(input.name);
   const description = input.description === undefined ? current.description : parseDescription(input.description);
@@ -407,16 +443,18 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
   if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
-  await tx.query(
+  const updated = await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
-            updated_by_email = $6, updated_at = now() where id = $1`,
-    [current.id, name, description, JSON.stringify(settings), JSON.stringify(tiles), tx.actor.email],
+            updated_by_email = $6, updated_at = now(), version = version + 1 where id = $1 and version = $7`,
+    [current.id, name, description, JSON.stringify(settings), JSON.stringify(tiles), tx.actor.email, current.version],
   );
+  // Another save got in between reading and writing.
+  if (updated.rowCount === 0) throw new DashboardConflictError(await getDashboard(tx, current.id));
   await writeAuditEvent(tx, {
     eventType: "analytics.dashboard_updated",
     entityType: "analytics_dashboard",
     entityId: current.id,
-    details: { name, tiles: tiles.length },
+    details: { name, tiles: tiles.length, version: current.version + 1 },
   });
   return getDashboard(tx, current.id);
 }
@@ -436,7 +474,13 @@ export async function deleteDashboard(tx: OrgTx, id: string): Promise<void> {
 }
 
 /** Works out one tile's answer. Run outside any PostgreSQL transaction. */
-export async function runTile(organisationId: string, query: unknown, filters: DashboardFilters = {}): Promise<QueryResult> {
+export async function runTile(
+  organisationId: string,
+  query: unknown,
+  filters: DashboardFilters = {},
+  /** `totals`: work out the whole answer as one total too, for a table's totals row. */
+  options: { totals?: boolean } = {},
+): Promise<QueryResult> {
   const tables = await listTables(organisationId);
   const parsed = parseTileQuery(query, tables);
   if (parsed.pivot) {
@@ -482,6 +526,7 @@ export async function runTile(organisationId: string, query: unknown, filters: D
         ]
       : built.measures.map((measure) => ({ key: measure.key, label: measure.label, pivotValue: null, measure, total: false }));
     const rows = new Map<string, PivotRow>();
+    const mixedLabels = new Set<string>();
     for (const result of grouped) {
       const dimensions = built.rowFields.map((_field, index) => result[`r${index}`] ?? null);
       const depth = built.rowFields.filter((_field, index) => result[`g${index}`] === "0").length;
@@ -496,9 +541,13 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       for (let index = 0; index < built.measures.length; index += 1) {
         const measure = built.measures[index];
         const cellKey = built.hasColumn ? (at < 0 ? `total_m${index}` : `c${at}_m${index}`) : measure.key;
-        row.cells[cellKey] = result[`m${index}`];
+        // Amounts in more than one currency aren't added together (decision 694).
+        const mixed = Number(result[`m${index}_ccy`] ?? 0) > 1;
+        if (mixed) mixedLabels.add(measure.label);
+        row.cells[cellKey] = mixed ? null : result[`m${index}`];
       }
     }
+    const notes = mixedCurrencyNotes([...mixedLabels]);
     return {
       columns: [...built.rowFields, ...built.measures],
       rows: [],
@@ -511,13 +560,54 @@ export async function runTile(organisationId: string, query: unknown, filters: D
         columns,
         rows: [...rows.values()],
       },
+      ...(notes.length ? { notes } : {}),
     };
   }
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);
-  const rows = await runBuiltQuery(organisationId, built.sql, built.params);
+  const answer = await runBuiltQuery(organisationId, built.sql, built.params);
+  const mixed = new Set<string>();
+  const rows = blankMixedCurrencies(answer, built.columns, mixed);
   const result: QueryResult = { columns: built.columns, rows: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS };
   if (parsed.sparkline && parsed.dateField) result.trend = await runTrend(organisationId, parsed, tables.get(parsed.table)!, filters);
+  // A table's totals row (decision 694): every row worked out again as one total, so a calculated value
+  // or an average is worked out from the totals. Only when every group is shown (no Top N, not cut short).
+  if (options.totals && parsed.groupBy && !parsed.limit && !result.truncated) {
+    const whole = buildTileSql({ ...parsed, groupBy: null, sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined }, tables.get(parsed.table)!, filters);
+    const [totals] = blankMixedCurrencies(await runBuiltQuery(organisationId, whole.sql, whole.params), whole.columns, mixed);
+    if (totals) result.totals = totals;
+  }
+  const notes = mixedCurrencyNotes([...mixed]);
+  if (notes.length) result.notes = notes;
   return result;
+}
+
+/**
+ * Leaves a value blank where its rows are in more than one currency
+ * (decision 694), noting which values those were, and drops the counts of
+ * currencies the query added.
+ */
+function blankMixedCurrencies(rows: Array<Record<string, string | null>>, columns: QueryResult["columns"], mixed: Set<string>): Array<Record<string, string | null>> {
+  return rows.map((row) => {
+    const clean: Record<string, string | null> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (key.endsWith("_ccy")) continue;
+      const count = row[`${key}_ccy`];
+      if (count !== undefined && Number(count ?? 0) > 1) {
+        clean[key] = null;
+        mixed.add(columns.find((column) => column.key === key)?.label ?? key);
+      } else {
+        clean[key] = value;
+      }
+    }
+    return clean;
+  });
+}
+
+function mixedCurrencyNotes(labels: string[]): string[] {
+  return labels.map(
+    (label) =>
+      `${label} has amounts in more than one currency, so they aren't added together: it's blank where they'd mix. Group or filter by the currency, or use the amount in the organisation's currency.`,
+  );
 }
 
 /** A key figure's first value by month, the latest 24 months in the dashboard's dates, oldest first (#334). */
@@ -569,6 +659,45 @@ export async function columnValues(organisationId: string, table: string, field:
     [],
   );
   return { values: rows.map((row) => row.value ?? ""), type: column.type };
+}
+
+/**
+ * A slicer's values for a report viewer (#387, decision 697): only values
+ * the report's own tiles can show, i.e. the distinct values of the field in
+ * the rows each tile on a table with that field reads, after the tile's own
+ * filters. Listing the whole table's values would name rows the tiles
+ * leave out. Dates aren't applied: the viewer can change them anyway.
+ */
+export async function slicerValuesFor(
+  organisationId: string,
+  dashboard: Dashboard,
+  field: string,
+  dates: QueryDates,
+  /** Tables this person can't read (farm tables, decision 744): their tiles are left out. */
+  skip: ReadonlySet<string> = new Set(),
+): Promise<{ values: string[]; type: string }> {
+  const tables = await listTables(organisationId);
+  const found = new Set<string>();
+  let type = "VARCHAR";
+  for (const tile of dashboard.tiles) {
+    if (!tile.query || skip.has(tile.query.table)) continue;
+    const columns = tables.get(tile.query.table);
+    const column = columns?.find((entry) => entry.name === field);
+    if (!columns || !column) continue;
+    type = column.type;
+    let rows: Array<Record<string, string | null>>;
+    try {
+      const built = buildDistinctValuesSql(tile.query, columns, field, { dates });
+      rows = await runBuiltQuery(organisationId, built.sql, built.params);
+    } catch {
+      // A tile whose filters no longer fit its table can't show anything either.
+      continue;
+    }
+    for (const row of rows) {
+      if (row.value !== null && row.value !== undefined) found.add(row.value);
+    }
+  }
+  return { values: [...found].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, 500), type };
 }
 
 /** The loaded tables and their columns, for building tiles. */

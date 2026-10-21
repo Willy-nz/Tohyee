@@ -6,7 +6,8 @@ import { useApiData } from "@/components/hooks";
 import { Button, Field, Notice, ui } from "@/components/ui";
 import type { NumberFormat } from "@/lib/analytics/chart-format";
 import { definitionToSave, measureFromSaved, type SavedMeasure } from "@/lib/analytics/measure-library";
-import type { Filter, Measure } from "@/lib/analytics/query";
+import { describeMeasure } from "@/lib/analytics/measure-definition";
+import { formatOfType, type ColumnInfo, type Filter, type Measure } from "@/lib/analytics/query";
 import { api, errorMessage } from "@/lib/client/api";
 import styles from "./chart-format-panel.module.css";
 
@@ -39,10 +40,98 @@ export function ValueRules({ measure }: { measure: Measure }) {
   const rules = [
     ...(measure.where ?? []).map(describeFilter),
     ...(measure.asAt ? ["a balance as at the To date"] : []),
+    ...(measure.snapshot ? [`the latest balance in each period${measure.snapshot.per ? ` for each ${measure.snapshot.per.replaceAll("_", " ")}` : ""}`] : []),
     ...(measure.inputs?.length ? [`uses ${measure.inputs.map((input) => input.name).join(", ")}`] : []),
   ];
   if (!rules.length) return null;
   return <p className={ui.muted}>Only counts: {rules.join(" · ")}</p>;
+}
+
+/** What a value means (decision 696), worked out from its definition: shown folded under the value. */
+export function ValueMeaning({ measure, table, columns, dateField }: { measure: Measure; table: string; columns: ColumnInfo[]; dateField: string | null }) {
+  if (!table) return null;
+  const meaning = describeMeasure(measure, table, columns, dateField);
+  return (
+    <details className={styles.meaning}>
+      <summary>What {measure.label || "this value"} means</summary>
+      <dl>
+        <dt>One row is</dt>
+        <dd>{meaning.row}</dd>
+        <dt>Worked out as</dt>
+        <dd>{meaning.aggregation}</dd>
+        <dt>Unit</dt>
+        <dd>{meaning.unit}</dd>
+        <dt>Movement or balance</dt>
+        <dd>{meaning.kind}</dd>
+        <dt>Dates</dt>
+        <dd>{meaning.date}</dd>
+        <dt>Blanks and zero</dt>
+        <dd>{meaning.blanks}</dd>
+        <dt>Totals</dt>
+        <dd>{meaning.totals}</dd>
+      </dl>
+    </details>
+  );
+}
+
+/**
+ * A value's currency column and whether each row is a balance recorded on
+ * its date (decisions 694-695), folded away under the value.
+ */
+export function ValueKindFields({
+  index,
+  measure,
+  columns,
+  pivot,
+  onChange,
+}: {
+  index: number;
+  measure: Measure;
+  columns: ColumnInfo[];
+  pivot: boolean;
+  onChange: (patch: Partial<Measure>) => void;
+}) {
+  if (!["sum", "avg", "min", "max"].includes(measure.aggregate)) return null;
+  const texts = columns.filter((column) => formatOfType(column.type) === "text");
+  return (
+    <details className={styles.meaning}>
+      <summary>Currency and balances</summary>
+      <Field label="Amounts are in the currency named in" hint="Amounts in different currencies are never added together. Leave as one currency when every row is in the same one.">
+        <select aria-label={`Value ${index + 1} currency column`} value={measure.currencyField ?? ""} onChange={(event) => onChange({ currencyField: event.target.value || undefined })}>
+          <option value="">One currency (or the table&apos;s own currency column)</option>
+          {texts.map((column) => (
+            <option key={column.name} value={column.name}>
+              {column.name.replaceAll("_", " ")}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {measure.aggregate === "sum" && !pivot ? (
+        <>
+          <label className={ui.checkbox}>
+            <input
+              type="checkbox"
+              checked={Boolean(measure.snapshot)}
+              onChange={(event) => onChange({ snapshot: event.target.checked ? {} : undefined, ...(event.target.checked ? { asAt: undefined } : {}) })}
+            />{" "}
+            Each row is a balance on its date (use the latest in each period; don&apos;t add dates up)
+          </label>
+          {measure.snapshot ? (
+            <Field label="Latest balance for each" hint="E.g. each account. Leave blank when there's one balance a date.">
+              <select aria-label={`Value ${index + 1} balance for each`} value={measure.snapshot.per ?? ""} onChange={(event) => onChange({ snapshot: event.target.value ? { per: event.target.value } : {} })}>
+                <option value="">One balance a date</option>
+                {texts.map((column) => (
+                  <option key={column.name} value={column.name}>
+                    {column.name.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+        </>
+      ) : null}
+    </details>
+  );
 }
 
 /** A calculated value's formula (#337): the other values by name in square brackets, + - * / and brackets. */
