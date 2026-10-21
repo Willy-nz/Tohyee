@@ -262,6 +262,8 @@ export type ChartFormat = {
   histogram?: { bins?: number; width?: string };
   /** Box plot: dots for values beyond the whiskers; on unless turned off. */
   boxplot?: { outliers?: boolean };
+  /** Small multiples: the most small charts (2-12, left out 6); the rest become "Other". */
+  smallMultiples?: { max?: number };
 };
 
 export type WaterfallFormat = {
@@ -740,6 +742,7 @@ export function parseChartFormat(input: unknown): ChartFormat | undefined {
     scatter: compact({ trend: flag(object(raw.scatter).trend) }),
     histogram: parseHistogram(raw.histogram),
     boxplot: compact({ outliers: flag(object(raw.boxplot).outliers) }),
+    smallMultiples: compact({ max: whole(object(raw.smallMultiples).max, 2, 12, "Most small charts") }),
   });
 }
 
@@ -875,6 +878,9 @@ export function formatOptionsFor(visual: string) {
 
 /** Chart types that use a second grouping inside the first (#376 phase 2), and what it's called for each. */
 export const SECOND_GROUPING: Partial<Record<string, { label: string; none: string | null; hint: string }>> = {
+  column: { label: "One small chart for each", none: "Nothing (one chart)", hint: "Small multiples: e.g. a chart for each region, all on the same scale" },
+  bar: { label: "One small chart for each", none: "Nothing (one chart)", hint: "Small multiples: e.g. a chart for each region, all on the same scale" },
+  line: { label: "One small chart for each", none: "Nothing (one chart)", hint: "Small multiples: e.g. a chart for each region, all on the same scale" },
   boxplot: { label: "Each box is made of", none: "Nothing: one box of every group's value", hint: "e.g. boxes by region, each made of its customers' totals" },
   treemap: { label: "Inside each box", none: "Nothing", hint: "e.g. regions, each split into its products" },
   heatmap: { label: "Down the side", none: null, hint: "The groups go across; e.g. months across, products down" },
