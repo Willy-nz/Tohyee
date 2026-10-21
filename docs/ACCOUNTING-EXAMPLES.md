@@ -19066,7 +19066,7 @@ Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
 
-## My mail: an Owner's private copy of their own mail (PM1-PM19; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
+## My mail: an Owner's private copy of their own mail (PM1-PM29; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
 
 Not accounting: a private store of an Owner's own email, for them and
 their own AI. Xero and NetSuite keep nothing like it, so the rules are
@@ -19191,13 +19191,92 @@ Drafts, Spam and Trash. Nothing here has been tried with a real mailbox.
 - **PM19 It only looks.** The key with the scope has no write tools, and
   its mail tools run read-only.
 
-Not included (#250's next part): filing an attachment into shared data
-(the bills inbox, soil tests) with a preview of what others will see; and
-attachment files through the AI (it gets their names). Tests:
+### Filing an attachment into shared data (PM20-PM29; built by Claude 21 Oct 2026, Claude's rules, not yet reviewed)
+
+Jess, 13 Oct 2026 (#250): "Nothing from email reaches shared data
+automatically. The owner files an attachment (for example 'use this as a
+soil test for paddock 12'), or sets up a rule they've approved (for example
+'attachments from the soil lab'). Before anything is shared, the owner sees
+a preview of exactly what will become visible to others. Filed items are
+copies; the email itself stays private." Decisions 720-726. Made-up:
+Kōwhai Dairies has Farming on and a farm, Home farm, with paddocks 12 and
+14. Jess's copy holds an email from "Rangi at the lab
+<rangi@soillab.example>", subject "Confidential results and your mortgage
+question", with three attachments: Soil results P12.csv (pH and Olsen P for
+samples 12, 14 and 99), Invoice 4471 Rangi.pdf and Board minutes.pdf.
+
+- **PM20 Into the bills inbox.** Jess clicks **File…** on the invoice,
+  chooses the bills inbox, renames it Invoice 4471.pdf and types the note
+  "Lab invoice for the September tests". **Preview what others will see**
+  shows: File "Invoice 4471.pdf (29 bytes)"; Where "The bills inbox,
+  waiting for a bill to be made from it"; Added by her; How it arrived
+  "Filed from a private email by you (nothing of the email is shared)";
+  and her note. Stays private: the email's subject, sender, recipients,
+  date and text; its other 2 attachments; the mailbox and folder; and the
+  attachment's own name. Nothing is saved until **File it**. Then Sam (the
+  bookkeeper) sees the item in the bills inbox, "Filed from a private email
+  by Jess", with the note; no sender, subject or date, and none of
+  "Rangi", "soillab", "mortgage" anywhere he can see, the audit trail
+  included (it says "attachment filed" to the bills inbox).
+- **PM21 As soil tests.** She files the CSV as soil tests on Home farm, lab
+  "Made-up Labs". The preview is the soil import's own: lines 2 and 3
+  (paddocks 12 and 14, 15 Aug 2026, two results each) are added; line 4,
+  sample 99, isn't ("There's no current paddock 99 on this farm"); results
+  are read from pH and Olsen P (mg/L); each test's source will be
+  "Imported from Soil results.csv, filed from a private email"; and the file
+  itself isn't shared, only the rows. A note is refused for an import. Sam
+  sees the two tests with that source. Filing the same file again is
+  refused in the preview ("already imported ... on <date>"), and the board
+  minutes PDF can't be imported ("Only CSV or Excel (.xlsx) files can be
+  imported. To keep a PDF or picture, attach it to a record instead").
+- **PM22 The name.** The filed name is the attachment's own unless she
+  types another, which must keep the ending (.pdf), with no slashes.
+- **PM23 Onto a record.** She searches contacts for "soil labs", chooses
+  Made-up Soil Labs Ltd and files the invoice with the note "Their
+  September invoice". Sam sees the file on the contact marked "Filed from a
+  private email", the note as an ordinary note, and the history "File
+  added: Invoice 4471.pdf (29 bytes), filed from a private email".
+- **PM24 Exactly what was previewed.** Changing the note or the name after
+  the preview and filing anyway is refused: "What would be filed has
+  changed since the preview. Check the preview again before filing." The
+  same goes for an import whose rows changed (a paddock added, say).
+- **PM25 Only Jess.** Mere (admin) and Sam get "not found" from every
+  filing route: the Filing card, a preview, filing, the record search,
+  making or deleting a rule, dismissing. Ana, another Owner, gets her own
+  empty Filing card and can search records, but can't preview, file or
+  touch Jess's rules or To file. An AI key acting as Jess is refused too.
+- **PM26 A rule.** Jess adds a rule: from @SoilLab.example, named *.csv,
+  to soil tests on Home farm, ticking "Also look at emails already copied".
+  The rule shows as "Attachments from anyone at soillab.example named
+  *.csv, to Soil tests on Home farm · 1 waiting", and To file lists Soil
+  results P12.csv with the email's sender, subject and date (for her eyes
+  only). Nothing has been shared. **Preview and file…** shows the same
+  preview as PM21; filing it adds the two tests and moves it to Filed
+  ("from a rule"). The rule's sender and pattern are encrypted in the
+  database. A rule needs a sender or a pattern; "not an address" is
+  refused. A new rule without the tick waits for new mail.
+- **PM27 After a sync.** With a rule for *.pdf to the bills inbox, a new
+  email with Statement.pdf arrives; after the next sync it's in To file and
+  not in the bills inbox. **Not this one** takes it off, and later syncs
+  don't bring it back.
+- **PM28 Copies stay.** After filing the invoice and the soil tests, Jess
+  deletes her imported history. The inbox item (with its file) and the two
+  soil tests stay; her list of what she filed, her rules and To file go
+  with the copy.
+- **PM29 Only while an Owner.** Made an admin, Jess can't file (even with a
+  preview she'd already seen): "not found". Made an Owner again, she can.
+
+Not included: making the bill itself while filing (the inbox's usual step
+does it); choosing the soil or pasture import's columns from My mail (the
+import's guess is used; the import page is there for a file that needs
+choices); notes with imports; rules that file without asking (decision 723
+says it can be loosened); attachment files through the AI. Tests:
 `tests/integration/private-mail.test.ts` (PM1-PM3, PM5-PM14),
-`tests/integration/private-mail-ai.test.ts` (PM15-PM19)
-and `tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
-nothing else names the private tables).
+`tests/integration/private-mail-ai.test.ts` (PM15-PM19),
+`tests/integration/private-mail-filing.test.ts` (PM20-PM29),
+`tests/unit/private-mail.test.ts` (PM3, PM4, PM9, encryption, and that
+nothing else names the private tables) and
+`tests/unit/private-mail-filing.test.ts` (PM21, PM22, PM26).
 ## Farming (#327): the co-op share register (CSR1-CSR10; Codex, delegated by owner, 20 October 2026, not yet reviewed)
 
 From the answer to item 15 in issue #360: a factual register and

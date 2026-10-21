@@ -568,7 +568,8 @@ that something happened.
   date of a repeat, and repeats read from email wording. The private copy
   (My mail, #250) uses the same connection and folder choice.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
-  #250 with #340, PM1-PM14, decisions 610-617, tenant migration 0168, not
+  #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
+  migrations 0168, 0169 and 0180, not
   yet reviewed; not tried with a real mailbox): an Owner of any
   organisation keeps a copy of their own Gmail or Microsoft mail, from the
   folders or labels they tick on the farm calendar's one connection and
@@ -588,8 +589,17 @@ that something happened.
   Delete imported history are separate. Since PM15-PM19 (decisions 618,
   619, tenant migration 0169): the Owner can let their own Look only AI
   keys search and read it over MCP (search_my_mail, read_my_mail), citing
-  each email; no other key is offered the tools. Not yet: filing an
-  attachment into shared data with a preview.
+  each email; no other key is offered the tools. Since PM20-PM29
+  (decisions 720-726, tenant migration 0180): **File…** on an attachment
+  files a copy into the bills inbox, a soil test, pasture reading or
+  fertiliser application import, or an existing record's files, after a
+  preview of exactly what others will see and what stays private (each
+  feature's own import preview and checks; refused if anything changed
+  since). Filed copies say "filed from a private email" and carry nothing of
+  the email. Rules (sender or @domain and/or a file name pattern) put
+  matches in **To file** for the Owner to confirm one by one. Not yet:
+  making the bill while filing, choosing import columns from My mail, rules
+  that file without asking.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
