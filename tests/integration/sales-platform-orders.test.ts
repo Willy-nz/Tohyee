@@ -1,4 +1,11 @@
+import fs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { refreshBooks } from "@/lib/analytics/books";
+import { runTile } from "@/lib/analytics/dashboards";
+import { closeAnalytics, listTables } from "@/lib/analytics/engine";
+import { builtInMeasures, measureFromSaved } from "@/lib/analytics/measure-library";
 import * as connectionRoute from "@/app/api/sales-platforms/connections/[connectionId]/route";
 import * as logRoute from "@/app/api/sales-platforms/connections/[connectionId]/log/route";
 import * as webhookRoute from "@/app/api/sales-platforms/webhooks/[organisationId]/[webhookKey]/route";
@@ -436,6 +443,33 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
       action: "posted",
       message: "Posted payout 70006 on 2027-03-11: 54.62 from 1010 to 1000; 1.38 to 6020 paid out of 1010; 10.00 released from 1015.",
     });
+  });
+
+  it("MD5: a Shopify order reaches Analytics once, as the invoice made from it (#387)", async () => {
+    const w = await setup();
+    await w.sync("2026-10-01T01:00:00Z");
+    w.state.orders.push(order1001());
+    expect(await w.orderHook("orders/paid", order1001(), "W-MD5")).toEqual({ status: 200, message: "Done." });
+    const savedDir = process.env.TOHYEE_ANALYTICS_DIR;
+    const folder = fs.mkdtempSync(nodePath.join(os.tmpdir(), "tohyee-md5-"));
+    process.env.TOHYEE_ANALYTICS_DIR = folder;
+    try {
+      await w.as((tx) => updateOrganisationSettings(tx, { analyticsEnabled: true }));
+      expect((await refreshBooks(w.record, w.actor, "manual")).status).toBe("ok");
+      // The books copy has the invoice and its journal; the order itself (sales order, platform record) isn't copied.
+      const tables = [...(await listTables(w.org)).keys()];
+      expect(tables.filter((name) => /order|platform|shopify/.test(name))).toEqual([]);
+      const invoices = await runTile(w.org, { table: "tohyee_invoices", groupBy: null, measures: [{ label: "Invoices", aggregate: "count" }, { label: "Total", aggregate: "sum", field: "total" }], filters: [{ field: "reference", op: "eq", value: "#1001" }] });
+      expect(invoices.rows[0]).toEqual({ m0: "1", m1: "46.00" });
+      // Sales (the books copy's built-in value) counts the order once: 40.00 excluding GST.
+      const sales = builtInMeasures("tohyee_ledger_lines", (await listTables(w.org)).get("tohyee_ledger_lines")!).find((measure) => measure.name === "Sales")!;
+      const month = await runTile(w.org, { table: "tohyee_ledger_lines", groupBy: null, dateField: "posting_date", measures: [measureFromSaved(sales)], filters: [] }, { from: "2026-10-01", to: "2026-10-31" });
+      expect(month.rows[0].m0).toBe("40.00");
+    } finally {
+      await closeAnalytics(w.org);
+      process.env.TOHYEE_ANALYTICS_DIR = savedDir;
+      fs.rmSync(folder, { recursive: true, force: true });
+    }
   });
 
   it("SPC12: a non-GST-registered organisation's order has no tax, and the log says why", async () => {

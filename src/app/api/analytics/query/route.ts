@@ -36,13 +36,16 @@ export const POST = route(async (request) => {
     const dates = await dateContext(tx);
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
-      await requireAnalyticsTable(tx, (tileOf(dashboard, body.tileId).query as { table?: unknown } | undefined)?.table);
-      return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId), filters: { ...allowedFilters(dashboard, filters, reader), dates } } };
+      const tile = tileOf(dashboard, body.tileId);
+      await requireAnalyticsTable(tx, (tile.query as { table?: unknown } | undefined)?.table);
+      // A table with a totals row gets the whole answer as one total too (decision 694).
+      const totals = tile.visual === "table" && tile.format?.table?.totals === true;
+      return { organisationId: tx.organisationId, query: { tile, filters: { ...allowedFilters(dashboard, filters, reader), dates }, totals } };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
     await requireAnalyticsTable(tx, (body.query as { table?: unknown } | undefined)?.table);
-    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates } } };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates }, totals: body.totals === true } };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));
-  return json(await runTile(organisationId, query.tile.query, query.filters));
+  return json(await runTile(organisationId, query.tile.query, query.filters, { totals: query.totals }));
 });

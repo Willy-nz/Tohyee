@@ -173,3 +173,11 @@
   margin: 0;
   padding-left: 18px;
 }
+
+/* A value's meaning and its currency and balance settings (decisions 694-696), folded under it. */
+.meaning { flex-basis: 100%; font-size: var(--text-sm); }
+.meaning summary { cursor: pointer; color: var(--text-muted); }
+.meaning dl { display: grid; grid-template-columns: minmax(8rem, max-content) 1fr; gap: 2px 12px; margin: 6px 0 0; }
+.meaning dt { color: var(--text-muted); }
+.meaning dd { margin: 0; }
+@media (max-width: 480px) { .meaning dl { grid-template-columns: 1fr; } .meaning dd { margin-bottom: 4px; } }
