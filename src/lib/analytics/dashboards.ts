@@ -16,6 +16,7 @@ import { parseBookmarks, type Bookmark } from "@/lib/analytics/bookmarks";
 import { parsePageFilters, parseTileDates, type TileDates } from "@/lib/analytics/report-filters";
 import { DRILLABLE, INTERACTION_MODES, parseDrill, type InteractionMode, type TileDrill } from "@/lib/analytics/report-view";
 import {
+  buildDistinctValuesSql,
   buildPivotDrillSql,
   buildPivotSql,
   buildTileSql,
@@ -30,6 +31,7 @@ import {
   type PivotDrillResult,
   type PivotDrillSelection,
   type PivotRow,
+  type QueryDates,
   type QueryResult,
   quoteIdentifier,
   type TileQuery,
@@ -747,18 +749,57 @@ export async function columnValues(organisationId: string, table: string, field:
 }
 
 /**
+ * A slicer's values for a report viewer (#387, decision 697): only values
+ * the report's own tiles can show, i.e. the distinct values of the field in
+ * the rows each tile on a table with that field reads, after the tile's own
+ * filters. Listing the whole table's values would name rows the tiles
+ * leave out. Dates aren't applied: the viewer can change them anyway.
+ */
+export async function slicerValuesFor(
+  organisationId: string,
+  dashboard: Dashboard,
+  field: string,
+  dates: QueryDates,
+  /** Tables this person can't read (farm tables, decision 744): their tiles are left out. */
+  skip: ReadonlySet<string> = new Set(),
+): Promise<{ values: string[]; type: string }> {
+  const tables = await listTables(organisationId);
+  const found = new Set<string>();
+  let type = "VARCHAR";
+  for (const tile of dashboard.tiles) {
+    if (!tile.query || skip.has(tile.query.table)) continue;
+    const columns = tables.get(tile.query.table);
+    const column = columns?.find((entry) => entry.name === field);
+    if (!columns || !column) continue;
+    type = column.type;
+    let rows: Array<Record<string, string | null>>;
+    try {
+      const built = buildDistinctValuesSql(tile.query, columns, field, { dates });
+      rows = await runBuiltQuery(organisationId, built.sql, built.params);
+    } catch {
+      // A tile whose filters no longer fit its table can't show anything either.
+      continue;
+    }
+    for (const row of rows) {
+      if (row.value !== null && row.value !== undefined) found.add(row.value);
+    }
+  }
+  return { values: [...found].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, 500), type };
+}
+
+/**
  * A hierarchy slicer's pairs (decision 757): each value of its column with
  * the values of its second level under it (up to 1,000 pairs). With
  * `tiles` (a report viewer's), only pairs in the rows those tiles read,
  * after their own filters, so the list never names rows the report leaves
  * out (decision 697).
  */
-export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[]): Promise<Array<[string, string]>> {
+export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[], dates?: QueryDates): Promise<Array<[string, string]>> {
   const tables = await listTables(organisationId);
   const found = new Map<string, [string, string]>();
   const ask = async (query: TileQuery, columns: ColumnInfo[]) => {
     const pairs: TileQuery = { ...query, groupBy: { field }, breakdown: { field: child }, pivot: null, measures: [{ label: "Rows", aggregate: "count" }], sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined };
-    const built = buildTileSql(pairs, columns, {});
+    const built = buildTileSql(pairs, columns, dates ? { dates } : {});
     for (const row of await runBuiltQuery(organisationId, built.sql, built.params)) {
       if (row.category === null || row.breakdown === null || row.category === undefined || row.breakdown === undefined) continue;
       found.set(JSON.stringify([row.category, row.breakdown]), [String(row.category), String(row.breakdown)]);

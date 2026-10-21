@@ -2190,6 +2190,12 @@ that something happened.
   on each date, using the latest in each period rather than adding dates
   up. A shaped table's Merge is refused when it would repeat rows or
   numbers, and the preview says how many rows had no match.
+- **Analytics: one access check for every output** (#387, decision 697).
+  The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
+  figures, tooltips, totals, drill-through rows, slicer values, CSV and
+  Excel, pinned tiles and addresses all use the same server-side check. A
+  report viewer's slicer now lists only values in the rows the report's
+  tiles read, not the whole column.
 - **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into
