@@ -331,6 +331,7 @@ describeWithDatabase("analytics dashboards", () => {
         { ...tile, id: "m", visual: "heatmap", query: { ...byRegion, breakdown: { field: "order_date", grain: "month" } } },
         { ...tile, id: "c", visual: "calendar", query: { ...byRegion, groupBy: { field: "order_date", grain: "day" } } },
         { ...tile, id: "k", visual: "sankey", query: { ...byRegion, breakdown: { field: "order_date", grain: "year" } } },
+        { ...tile, id: "sm", visual: "line", query: { ...byRegion, breakdown: { field: "order_date", grain: "year" } }, format: { smallMultiples: { max: 3 } } },
       ]),
     );
     expect(saved.status).toBe(200);
@@ -342,7 +343,7 @@ describeWithDatabase("analytics dashboards", () => {
     expect(answer.data.columns.map((column: { key: string }) => column.key)).toEqual(["category", "breakdown", "m0"]);
 
     const refusals: Array<[unknown, RegExp]> = [
-      [{ ...tile, visual: "column", query: { ...byRegion, breakdown: { field: "order_date", grain: "day" } } }, /doesn't use a second grouping/],
+      [{ ...tile, visual: "pie", query: { ...byRegion, breakdown: { field: "order_date", grain: "day" } } }, /doesn't use a second grouping/],
       [{ ...tile, visual: "scatter", query: byRegion }, /needs two values/],
       [{ ...tile, visual: "histogram", query: { ...byRegion, measures: [qty, qty] } }, /spread of one value/],
       [{ ...tile, visual: "histogram", query: byRegion, format: { histogram: { bins: 2, width: "1" } } }, /not both/],
