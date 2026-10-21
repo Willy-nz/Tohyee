@@ -6097,7 +6097,7 @@ testing) and #154's code signing (later, Jess).
      exports, and a test checks no other part of Tohyee names the private
      tables. Filing an attachment into shared data (the bills inbox, soil
      tests), with a preview of what becomes visible, is #250's next part
-     and isn't built. PM7.
+     and isn't built. PM7. Later: built, decisions 720-726.
 618. **The AI reads an Owner's mail only through their own Look only key**
      (20 October 2026). #250 part 2: "a private-mail scope that only the
      owner's own key can be given". On My mail (Your AI) the copy's Owner
@@ -6723,6 +6723,73 @@ accounting example is marked not yet reviewed.
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
 
+### Importing IRD account files (#360 item 3; decisions 710-716)
+
+710. **Imports first, with no IRD layout assumed** (21 October 2026; #292,
+     #360 item 3). **Who decided:** Codex, delegated by owner, 20 October
+     2026 ("imports and reviewable forecasts first: accept structured
+     CSV/Excel through mapping and preview; retain PDF source documents").
+     IRD's pages (read 21 Oct 2026) describe PDF downloads of the income
+     summary, Excel exports of tax agents' reports, and on-screen
+     "Returns and transactions" by period, but no page gives the columns
+     of a downloaded account transaction list. So Tohyee assumes no
+     columns: the person maps Date, Amount (or Debit and Credit), Type,
+     Period, Instalment, Effective date, Description and Reference, says
+     what each Type and Instalment value means (or skips rows), and sees
+     every row with any problem before anything is saved, like Tohyee's
+     other imports (NetSuite's import assistant). Type suggestions come
+     only from plain words and are shown as suggestions. ITX-IMP1 to
+     ITX-IMP5, as delegated, not yet reviewed.
+711. **Saved mappings** (21 October 2026; Codex, delegated by owner, 20
+     October 2026). A mapping is saved under a name with the headings it
+     was made for, and chosen again for a file with the same headings
+     (case and spaces ignored). Several can be kept (an income tax account
+     and a provisional tax list may differ). ITX-IMP3.
+712. **The file is the source** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). The imported file is kept as an IRD document
+     and can be opened; it can be linked to a PDF already under IRD
+     documents. The same file can't be imported twice. Removing the file
+     keeps its rows and what they did. PDFs aren't imported here; they stay
+     IRD documents (decision 549). ITX-IMP1, ITX-IMP12.
+713. **Rows are proposals until a person accepts them** (21 October 2026;
+     Codex, delegated by owner, 20 October 2026; following decision 549).
+     Each row is accepted or declined (with a reason) once, by a person,
+     never an AI key. Waiting rows change nothing and aren't called IRD's.
+     A row that looks the same as one already accepted from another file
+     (same kind, year, date, direction and amount) can't be accepted
+     again. ITX-IMP6, ITX-IMP10.
+714. **Only IRD's own file confirms** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). The person says whether the file was
+     downloaded from myIR or is another spreadsheet. An accepted payment
+     row that says its instalment is allocated **confirmed by IRD** (naming
+     the imported file as the IRD document, decision 620) only for a myIR
+     file; for another spreadsheet it's allocated **with evidence** (the
+     file and row). Accepted rows are "IRD's figures" only from a myIR
+     file. Tohyee can't check that a file really came from myIR, as with
+     PDFs (decision 549): it's the person's statement, shown with the file.
+     ITX-IMP7, ITX-IMP11.
+715. **Payments feed the allocation model only when the row says**
+     (21 October 2026; Codex, delegated by owner, 20 October 2026;
+     decisions 620-623). A payment with no instalment in the file is
+     **awaiting reconciliation**, whatever its date. A payment already in
+     Tohyee for the same income year and amount, paid on IRD's date or up
+     to 7 days before it (bank payments take days to reach IRD), is linked
+     rather than added, so it isn't counted twice; the person can add it as
+     a new payment instead. An existing allocation is never replaced by an
+     import. The file's effective date, when it has one, is IRD's effective
+     date; otherwise the file's date is used for the payment and IRD's
+     effective date stays blank. A payment row going the other way
+     (reversed or refunded) is recorded only. ITX-IMP7, ITX-IMP8.
+716. **Assessments and the rest** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). An assessment becomes the year's assessed RIT
+     only when the person says so and gives the date the return was filed
+     (as typing it, ITX3); otherwise it's recorded. Interest, penalties,
+     credits, refunds and other rows are recorded as IRD's figures for the
+     year and totalled (debits, credits, net), changing nothing else: the
+     use-of-money interest estimate (552) stays Tohyee's estimate, and
+     credits transferred in still aren't payments (623). No IRD connection,
+     filing or payment (#360 items 3 and 4). ITX-IMP9 to ITX-IMP11.
+
 ### More visuals (#376 phase 2; decisions 676-689)
 
 676. **Waterfall, funnel, gauge and bullet chart** (21 October 2026, #376
@@ -6813,6 +6880,207 @@ accounting example is marked not yet reviewed.
      kept apart so a flow can't loop back; names that would overlap are
      left to the tooltip. Treemaps and Sankeys leave out amounts of zero or
      less (they have no size), as Power BI does.
+681. **Small multiples** (21 October 2026, #376 phase 2; Power BI's small
+     multiples; not yet reviewed by Jess). Column, bar and line charts can
+     have a second grouping, "One small chart for each". Every small chart
+     is the tile's own chart (theme, format, labels, colour rules all
+     apply) for one value of it, with the same groups along the axis (blank
+     where a chart has none) and the same value scale, from the lowest to
+     the highest point drawn (stack totals when stacked) rounded out, so
+     they can be compared; a range chosen on the value axis wins. One
+     legend sits above the grid so every plot is the same size. The grid
+     fits as many as the card's width allows (one across on a phone). The
+     most small charts is 6 by default (2-12, Power BI's grid tops out
+     similarly); the largest by the first value's total are kept, in the
+     answer's order, and the rest are added together as "Other" exactly in
+     decimals, but only when every value is a total or a count. Averages,
+     smallest, largest, distinct counts and calculated values can't be
+     added across charts, so then the rest are left out and the card says
+     how many. Pinned tiles show up to four.
+682. **Matrix improvements** (21 October 2026, #376 phase 2; Power BI's
+     matrix visual; not yet reviewed by Jess). A pivot's column field can
+     have up to two more nested inside it (three levels, as many as fit on
+     a phone-scrolling table; the 2,000-cell limit still applies and now
+     counts the column totals). Each outer column value gets a "Total"
+     column after its inner ones, as Power BI's column subtotals do, worked
+     out by the database (grouping sets), never by adding cells on screen;
+     the grand total stays last. Drilling into a cell uses the whole column
+     path; exports name a column "Year: 2025 › Channel: Web". Rows can be
+     stepped (one indented column; each group's subtotal row moves above
+     its rows as the group's heading, as Power BI's default) or one column
+     per field (the existing look, still the default so saved reports are
+     unchanged). Every group with a subtotal opens and closes (a + / −
+     button with its name for screen readers, plus Open all / Close all);
+     what's open isn't saved (Power BI saves it with the report; here the
+     report saves only how many levels start open, "Groups open to start
+     with"), so a viewer can't change the report by looking at it. In the
+     stepped layout a level whose subtotal is turned off keeps its heading
+     row with blank figures.
+683. **Rich text with values** (21 October 2026, #376 phase 2; Power BI's
+     text box with dynamic values, Looker Studio's text; not yet reviewed
+     by Jess). A text item's words can use a small, safe set of marks:
+     `**bold**`, `*italic*`, `[words](https://link)`, lines starting "- " or
+     "1. " for lists, a blank line between paragraphs, and `{Value name}`
+     for one of the item's values, e.g. "Sales this month: {Sales}". The
+     values are the text item's own question: up to six totals from one
+     data source over the report's dates and slicers, no grouping and no
+     comparison with another period, run the same way as a key figure (a
+     report viewer runs only the saved question). A value shows formatted
+     as in a table; a name with no value stays as typed, so the person can
+     see what to fix, and the editor warns. The text is parsed into a tree
+     that the page draws as React elements, never as HTML: anything typed,
+     and any value, is always text. Only http, https and mailto links are
+     made into links (they open in a new tab with no referrer); anything
+     else, such as `javascript:`, is left as plain text. Existing text
+     cards stay plain text until "Formatting" is turned on; new ones start
+     with it on. Up to 4,000 characters (plain notes keep their 2,000).
+684. **Images on reports** (21 October 2026, #376 phase 2; Power BI's and
+     Looker Studio's image item; not yet reviewed by Jess). An image is
+     uploaded to a saved report (so a new report is saved first), stored in
+     the organisation's own database like record attachments, checked the
+     same way (the type from its name, confirmed by its contents), JPG or
+     PNG only, up to 5 MB and 40 per report. It belongs to that report:
+     it's served only through the report, to people who can see the report
+     (a report viewer only when it's shared with them, decision 360), with
+     the same headers as attachments so it can't run as a page. There are
+     no links to images from outside Tohyee (still no public links). A
+     tile can only use its own report's images; saving the report removes
+     images no tile uses any more, and deleting the report deletes them.
+     An image has a description for screen readers (blank only for
+     decoration) and fits inside the tile or fills it.
+685. **Shapes and lines** (21 October 2026, #376 phase 2; Power BI's shapes;
+     not yet reviewed by Jess). Rectangle, rounded rectangle, circle or
+     oval, line and arrow (across, down or corner to corner), with a fill
+     colour (not for lines), a line colour and width (0-12 pixels) and,
+     on a filled shape, a few words. Left alone they use the report
+     theme's first colour (a light wash inside); a chosen colour is
+     checked as a hex colour and drawn as its worked-out dark version in
+     dark mode (decision 672). Shapes are decoration, hidden from screen
+     readers except for their words. They sit in the report's grid like
+     every other tile; placing them freely over other tiles waits for the
+     free-position canvas (phase 3).
+686. **Buttons** (21 October 2026, #376 phase 2; Power BI's buttons; not yet
+     reviewed by Jess). A button has a label and an action. The only
+     action today is "Reset the filters" (back to the report's saved dates
+     and slicers, as Power BI's "reset to default"); "Go to a page" and
+     "Open a bookmark" are listed as coming and refused when saved, until
+     report pages and bookmarks exist (phase 3). Adding an action means
+     listing it in `BUTTON_ACTIONS` (`src/lib/analytics/items.ts`),
+     accepting it in `parseButton` and handling it in the report's
+     `runButtonAction`. A button is an ordinary button for the keyboard
+     and screen readers, and works the same while the report is being
+     changed (its Edit button opens it for changing).
+687. **New Zealand maps** (22 October 2026, #376 phase 2; Power BI's filled
+     map and map visuals; not yet reviewed by Jess). Two chart types, drawn
+     without any outside map or tile service (the issue: "no external map
+     tiles unless agreed"). A **filled map** is grouped by a region or a
+     district or city name and colours each area by one value on the
+     sequential scale (diverging when amounts are both sides of zero), as
+     heat maps do; names match whatever their macrons,
+     apostrophes, case and words like "Region", "District" or "Council",
+     plus a few other names people use (Wanganui, Hutt, Tairāwhiti). Regions
+     or territorial authorities are chosen, or worked out from which more of
+     the names match. Totals for names that land on the same area are added
+     exactly. Names that aren't areas are listed under the map, not
+     guessed. A **map with points** is grouped by anything and needs a
+     latitude and a longitude (two values, normally averages), with a third
+     value sizing the points as bubbles; points outside New Zealand are left
+     out and counted under the map. The boundaries are Stats NZ's regional
+     council (2017) and territorial authority (2021) generalised layers,
+     CC BY 4.0, simplified to under 70 KB each, shipped with Tohyee and
+     loaded only when a map is drawn; every map says "Boundaries: Stats NZ,
+     CC BY 4.0." under it, and `licenses/nz-boundaries/NOTICE` records the
+     source and changes. CC BY 4.0 only asks for attribution, so it can be
+     distributed with Tohyee's AGPLv3 code. The Chatham Islands are drawn
+     6.5° closer to the mainland as an inset (as Stats NZ's own maps do);
+     points there move with them. Maps don't zoom or pan (the whole country
+     always shows); suburbs, wards and meshblocks aren't included.
+### Filing from My mail into shared data (#250; decisions 720-726)
+
+720. **Nothing from mail is shared unless its Owner files it, after a
+     preview** (Jess, 13 October 2026, #250: "Nothing from email reaches
+     shared data automatically. The owner files an attachment ... or sets up
+     a rule they've approved ... Before anything is shared, the owner sees a
+     preview of exactly what will become visible to others. Filed items are
+     copies; the email itself stays private"; and Codex, delegated by owner,
+     20 October 2026, #360 item 10: "Share only an explicitly previewed
+     extract or attachment"). On an attachment in My mail, **File…** lets
+     the copy's own Owner choose: the bills inbox, a soil test import, a
+     pasture reading import, a fertiliser application import (each where the
+     farm, plan and Farming are there), or an existing record's files (a
+     bill, invoice, contact, fixed asset, soil test or co-op shareholding,
+     found by a search). **Preview what others will see** lists every field
+     another member will be able to see (the file and its size, where it
+     goes, who added it, that it was filed from a private email, the note
+     if any) and, for an import, the rows that would be added; and lists
+     what stays private (the email's subject, sender, recipients, date and
+     text, its other attachments, the mailbox and folder, and the
+     attachment's own name when it was renamed). **File it** files exactly
+     that: the preview carries a fingerprint of everything it showed and of
+     the file, and filing is refused ("changed since the preview") if
+     anything differs, including an import's rows. PM20-PM24, Claude's
+     rules, not yet reviewed (Xero and NetSuite have no private mailbox to
+     file from; Xero's Files inbox, where a file is moved to a bill, is the
+     nearest).
+721. **Filed items are copies, marked, and go through each feature's own
+     path** (20 October 2026). The bills inbox gets an item with source
+     "my_mail" (tenant migration 0180), no email sender, subject or date,
+     and the note if the Owner typed one; the inbox shows "Filed from a
+     private email by Jess". A record gets the file (marked
+     filed_from_private_mail, shown on the file and in its history as
+     "filed from a private email") and the note as an ordinary note. Imports
+     run the soil test, pasture reading and fertiliser application imports
+     themselves (the same file checks, paddock matching, "already imported"
+     and row errors), so only the rows are shared, not the file, and each
+     row's source says "Imported from <name>, filed from a private email".
+     The bills inbox takes PDF and pictures, records the usual file types,
+     imports CSV (and .xlsx for soil tests and pasture readings), all up to
+     their usual sizes. The filed name can be changed (an attachment's name
+     can say more than the Owner wants shared) but keeps its ending, so the
+     content check still applies. Making a bill from a filed inbox item is
+     the inbox's usual step, by whoever does bills; filing doesn't make the
+     bill itself, because a bill needs its supplier and lines, which aren't
+     in the preview.
+722. **No notes with imports** (20 October 2026). A note is shared only
+     where there's one place for it: the bills inbox item, or the record's
+     notes. An import adds many rows, so the preview refuses a note there
+     ("Add one on the records afterwards") rather than copying it onto
+     every row.
+723. **Rules are approved once; each filing is still confirmed** (20
+     October 2026). Jess said "sets up a rule they've approved". Read as:
+     the Owner approves the rule once (a sender address or @domain, and/or
+     a file name pattern with * and ?, to one destination), and every match
+     waits in **To file** on My mail with the email it came from (shown
+     only to the Owner) until they **Preview and file…** it (the same
+     preview and fingerprint as decision 720) or say **Not this one**.
+     Nothing is ever shared by a rule on its own. Rules run after each sync
+     (and when made, over email already copied only if "Also look at emails
+     already copied" is ticked), at most 2,000 attachments a time, and a
+     dismissed match doesn't come back. This is the cautious reading; it
+     can be loosened (a rule that files without asking) if Jess says so.
+     Claude's rule, not yet reviewed.
+724. **Filing stays private on the mail side** (20 October 2026). The
+     Owner's own list of what they filed (private_mail_filings), their rules
+     and To file are private like the copy: only the Owner sees them, every
+     route gives everyone else "not found", and a rule's sender and pattern
+     are encrypted with the copy's key (decision 612). Another Owner sees
+     only their own (empty) Filing card. Only the Owner on Tohyee's own
+     screens can file or make a rule: not an AI key or app key acting for
+     them (the AI's mail scope is Look only, decision 618). The audit trail
+     says "attachment filed" with only the kind of destination, and "rule
+     added" or "deleted" with no details; the shared side's own audit
+     events (inbox item added, file attached, rows imported) say only what
+     the preview showed.
+725. **Deleting the copy doesn't delete what was filed** (20 October 2026).
+     Delete imported history deletes the copy's emails and attachments and,
+     with them, the Owner's list of what was filed, their rules and To file.
+     The filed copies (inbox items, files on records, imported rows) stay:
+     they're shared data now, removed the usual way for each.
+726. **Who can file** (20 October 2026). Only the copy's Owner while
+     they're an Owner (decision 611). An Owner may file into anything an
+     Owner can change, so no further role check is needed; the modules
+     still apply (no bills inbox with Accounting off, no farm imports with
+     Farming off), and the preview says so.
 
 ### Simpler navigation, tax workspace and lined-up forms (#375; decisions 700-705)
 

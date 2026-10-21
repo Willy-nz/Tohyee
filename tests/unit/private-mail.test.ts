@@ -72,6 +72,7 @@ describe("private mail", () => {
     const allowed = new Set([
       "lib/private-mail/store.ts",
       "lib/private-mail/sync.ts",
+      "lib/private-mail/filing.ts",
       "lib/farming/calendar.ts",
       "lib/db/migrations/tenant.ts",
     ]);

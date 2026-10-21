@@ -26,6 +26,7 @@ import { TAX_DEPRECIATION_METHOD_LABELS, TAX_DEPRECIATION_METHODS, type TaxDepre
 import type { IncomeTaxReport, IncomeTaxSettings, IncomeTaxYear, ReportAccount, TaxPayment } from "@/lib/tax/income/service";
 import { dependsOnForecast, forecastIncomplete, nextDue, taxTasks } from "@/lib/tax/income/workspace";
 import { useModules } from "@/components/modules";
+import { IrdImports } from "@/components/ird-imports";
 
 /**
  * Income tax, stage 1 (examples ITX1-ITX10, decision 545): taxable income
@@ -1890,6 +1891,7 @@ function Report({ organisationId, report, reload, view, gst }: { organisationId:
           <YearFigures key={`${report.typed.version}-${report.paidTotal}-${report.lastYear.rit}`} organisationId={organisationId} incomeYear={report.incomeYear} type={report.settings.taxpayerType} years={report.years} endMonth={report.endMonth} onSaved={reload} />
           <BookPayments organisationId={organisationId} years={report.years} onChanged={reload} />
           <IrdDocuments organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} endMonth={report.endMonth} onChanged={reload} />
+          <IrdImports organisationId={organisationId} incomeYear={report.incomeYear} years={report.years} onChanged={reload} />
           <InterestCard report={report} />
         </>
       ) : null}
