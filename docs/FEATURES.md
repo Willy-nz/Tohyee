@@ -2166,6 +2166,20 @@ that something happened.
   the consent screen and `/api/analytics/google/callback` to the redirect
   URIs; while the app is in Testing, Google ends sign-ins after 7 days.
   Tested with canned Google responses only, not a real GA4 property.
+- **Analytics: safe report editing** (#387, decisions 690-691, tenant
+  migration 0178). While a report is being edited, every change (adding,
+  changing, moving, duplicating or removing tiles, pasting a format, the
+  theme, dates, slicers, name and description) goes into a draft that only
+  **Save** or **Save and view** saves; viewers keep seeing the report as
+  last saved. The toolbar says whether everything is saved. **Undo** and
+  **Redo** (also Ctrl+Z and Ctrl+Shift+Z or Ctrl+Y) step back and forward
+  through this session's changes, each named ("Undo remove Sales"), and
+  **Discard changes** goes back to the saved report (and can itself be
+  undone). Closing the tab or following a link with unsaved changes asks
+  first. Every saved report has a version: a save from an older version
+  (someone else saved in the meantime) is refused, saying who saved and
+  when, and offers **Save mine as a copy** or **Reload the saved report**;
+  a refused or failed save keeps the draft.
 - **Analytics: values that say what they mean** (#387, decisions
   693-696, examples MD1-MD6). Each value in the chart editor has "What it
   means": what a row is, how it's added up, its unit, movement or balance,
@@ -2306,7 +2320,9 @@ that something happened.
   gridlines in a chosen colour and a plot area colour; tooltips off, with a
   total, and values left out of the tooltip or shown only there; reference
   lines (a value, target, average, median, lowest, highest, percentile or a
-  shaded band); a trend line and simple forecast per value; column
+  shaded band); a trend line and a linear projection per value (#387,
+  decision 692: only on a regular run of dates, oldest first, with missing
+  periods shown as gaps; not the cash flow forecast); column
   thickness, gaps and square ends; each line's width, style, step and dots.
   Chosen colours get a dark version in dark mode, and the editor warns
   when one fails the colour checks.
