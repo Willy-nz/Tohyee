@@ -6813,6 +6813,24 @@ accounting example is marked not yet reviewed.
      kept apart so a flow can't loop back; names that would overlap are
      left to the tooltip. Treemaps and Sankeys leave out amounts of zero or
      less (they have no size), as Power BI does.
+681. **Small multiples** (21 October 2026, #376 phase 2; Power BI's small
+     multiples; not yet reviewed by Jess). Column, bar and line charts can
+     have a second grouping, "One small chart for each". Every small chart
+     is the tile's own chart (theme, format, labels, colour rules all
+     apply) for one value of it, with the same groups along the axis (blank
+     where a chart has none) and the same value scale, from the lowest to
+     the highest point drawn (stack totals when stacked) rounded out, so
+     they can be compared; a range chosen on the value axis wins. One
+     legend sits above the grid so every plot is the same size. The grid
+     fits as many as the card's width allows (one across on a phone). The
+     most small charts is 6 by default (2-12, Power BI's grid tops out
+     similarly); the largest by the first value's total are kept, in the
+     answer's order, and the rest are added together as "Other" exactly in
+     decimals, but only when every value is a total or a count. Averages,
+     smallest, largest, distinct counts and calculated values can't be
+     added across charts, so then the rest are left out and the card says
+     how many. Pinned tiles show up to four.
+
 
 
 ### Several farms in one organisation (#390; decisions 740-749)
