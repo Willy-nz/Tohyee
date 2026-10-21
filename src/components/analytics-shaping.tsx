@@ -14,7 +14,8 @@ import styles from "./analytics-shaping.module.css";
 
 type TableInfo = { name: string; columns: ShapeColumn[] };
 type ShapeOverview = { shapes: ShapedTable[]; tables: TableInfo[] };
-type Preview = { columns: ShapeColumn[]; rows: Array<Record<string, string | null>> };
+/** `notes`: what a Merge step did with rows that had no match (decision 693). */
+type Preview = { columns: ShapeColumn[]; rows: Array<Record<string, string | null>>; notes?: string[] };
 type StepKind = "filter" | "columns" | "rename" | "type" | "split" | "unpivot" | "group" | "calculated" | "merge" | "append";
 
 const STEP_KINDS: Array<{ value: StepKind; label: string }> = [
@@ -375,6 +376,7 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
                 description={selectedStep >= 0 ? `First 100 rows after step ${selectedStep + 1}.` : "First 100 rows from the selected base table."}
               >
                 {visiblePreviewError ? <Notice tone="error">{visiblePreviewError}</Notice> : null}
+                {preview?.notes?.map((note) => <Notice key={note} tone="warning">{note}</Notice>)}
                 {preview ? (
                   <div className={styles.previewTable}>
                     <table>

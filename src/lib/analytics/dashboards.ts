@@ -530,7 +530,13 @@ export async function deleteDashboard(tx: OrgTx, id: string): Promise<void> {
 }
 
 /** Works out one tile's answer. Run outside any PostgreSQL transaction. */
-export async function runTile(organisationId: string, query: unknown, filters: DashboardFilters = {}): Promise<QueryResult> {
+export async function runTile(
+  organisationId: string,
+  query: unknown,
+  filters: DashboardFilters = {},
+  /** `totals`: work out the whole answer as one total too, for a table's totals row. */
+  options: { totals?: boolean } = {},
+): Promise<QueryResult> {
   const tables = await listTables(organisationId);
   const parsed = parseTileQuery(query, tables);
   if (parsed.pivot) {
@@ -576,6 +582,7 @@ export async function runTile(organisationId: string, query: unknown, filters: D
         ]
       : built.measures.map((measure) => ({ key: measure.key, label: measure.label, pivotValue: null, measure, total: false }));
     const rows = new Map<string, PivotRow>();
+    const mixedLabels = new Set<string>();
     for (const result of grouped) {
       const dimensions = built.rowFields.map((_field, index) => result[`r${index}`] ?? null);
       const depth = built.rowFields.filter((_field, index) => result[`g${index}`] === "0").length;
@@ -590,9 +597,13 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       for (let index = 0; index < built.measures.length; index += 1) {
         const measure = built.measures[index];
         const cellKey = built.hasColumn ? (at < 0 ? `total_m${index}` : `c${at}_m${index}`) : measure.key;
-        row.cells[cellKey] = result[`m${index}`];
+        // Amounts in more than one currency aren't added together (decision 694).
+        const mixed = Number(result[`m${index}_ccy`] ?? 0) > 1;
+        if (mixed) mixedLabels.add(measure.label);
+        row.cells[cellKey] = mixed ? null : result[`m${index}`];
       }
     }
+    const notes = mixedCurrencyNotes([...mixedLabels]);
     return {
       columns: [...built.rowFields, ...built.measures],
       rows: [],
@@ -605,13 +616,54 @@ export async function runTile(organisationId: string, query: unknown, filters: D
         columns,
         rows: [...rows.values()],
       },
+      ...(notes.length ? { notes } : {}),
     };
   }
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);
-  const rows = await runBuiltQuery(organisationId, built.sql, built.params);
+  const answer = await runBuiltQuery(organisationId, built.sql, built.params);
+  const mixed = new Set<string>();
+  const rows = blankMixedCurrencies(answer, built.columns, mixed);
   const result: QueryResult = { columns: built.columns, rows: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS };
   if (parsed.sparkline && parsed.dateField) result.trend = await runTrend(organisationId, parsed, tables.get(parsed.table)!, filters);
+  // A table's totals row (decision 694): every row worked out again as one total, so a calculated value
+  // or an average is worked out from the totals. Only when every group is shown (no Top N, not cut short).
+  if (options.totals && parsed.groupBy && !parsed.limit && !result.truncated) {
+    const whole = buildTileSql({ ...parsed, groupBy: null, sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined }, tables.get(parsed.table)!, filters);
+    const [totals] = blankMixedCurrencies(await runBuiltQuery(organisationId, whole.sql, whole.params), whole.columns, mixed);
+    if (totals) result.totals = totals;
+  }
+  const notes = mixedCurrencyNotes([...mixed]);
+  if (notes.length) result.notes = notes;
   return result;
+}
+
+/**
+ * Leaves a value blank where its rows are in more than one currency
+ * (decision 694), noting which values those were, and drops the counts of
+ * currencies the query added.
+ */
+function blankMixedCurrencies(rows: Array<Record<string, string | null>>, columns: QueryResult["columns"], mixed: Set<string>): Array<Record<string, string | null>> {
+  return rows.map((row) => {
+    const clean: Record<string, string | null> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (key.endsWith("_ccy")) continue;
+      const count = row[`${key}_ccy`];
+      if (count !== undefined && Number(count ?? 0) > 1) {
+        clean[key] = null;
+        mixed.add(columns.find((column) => column.key === key)?.label ?? key);
+      } else {
+        clean[key] = value;
+      }
+    }
+    return clean;
+  });
+}
+
+function mixedCurrencyNotes(labels: string[]): string[] {
+  return labels.map(
+    (label) =>
+      `${label} has amounts in more than one currency, so they aren't added together: it's blank where they'd mix. Group or filter by the currency, or use the amount in the organisation's currency.`,
+  );
 }
 
 /** A key figure's first value by month, the latest 24 months in the dashboard's dates, oldest first (#334). */

@@ -16003,6 +16003,93 @@ sale of 300.00 on 1 July and AB10's 900.00 pay run on 10 July.
 
 Tested in `tests/integration/analytics-books.test.ts`.
 
+## Analytics: what a value means, and joins that don't double count (examples MD1-MD6; as Power BI does, not yet reviewed)
+
+Issue #387 asked that values say what they count and that totals, balances,
+currencies and joins can't quietly give wrong figures. Jess hasn't answered
+how; these follow Power BI and Looker Studio, as the issue names them
+(decision 537's rule for analytics), and the books copy's existing rules
+(AB1-AB11, BM1-BM4). **As Power BI does, not yet reviewed.** They change no
+accounting: nothing here is posted, and the books copy is unchanged.
+
+**Rules:**
+
+- A **calculated value** is worked out again for every total: each group,
+  each subtotal and the totals row work the formula out from their own
+  totals of the values it names, never by adding up or averaging the
+  groups' results. An **average** in a total is of all the rows; smallest,
+  largest and counts of different values are of all the rows too. A table's
+  totals row uses the server's total of every row; with a Top N, or an
+  answer cut at the row limit, only totals and counts of the rows shown are
+  added and the rest are left blank.
+- A value can be a **balance recorded on each date** (a snapshot, e.g. a
+  daily bank balance export): in each period, the latest row (for each
+  account, when it says "for each") is used and those are added; rows are
+  never added across dates. As one figure it's each one's latest balance in
+  the dashboard's dates. A period counts only balances recorded in it.
+  (The books copy's own balances, BM2-BM4, add every ledger line up to the
+  To date: that's a different kind, a balance of movements.)
+- **Currencies**: a value whose rows name their currency (a `foreign_...`
+  amount on a table with a `currency` column, as the books copy's
+  `foreign_total` and `foreign_amount`, or a currency column chosen on the
+  value) is never added across currencies. Where a group, subtotal or total
+  would mix them it's blank, with a note saying to group or filter by the
+  currency or use the amount in the organisation's currency (`total`,
+  `amount`: converted at each document's rate, AB7). There's no other
+  conversion.
+- **Blanks and zero**: with no rows, a total, average, smallest or largest
+  is blank, not 0.00, and a count is 0. In a formula, a value with no rows
+  counts as 0.00 (BM rules); dividing by zero gives no value.
+- **Joins**: a tile reads one table; Tohyee joins tables only in a shaped
+  table's Merge step. A merge is refused when the other table has more than
+  one row for a match (it would repeat this table's rows), and when this
+  table has several rows for one match and a number would be brought in
+  (the number would repeat on each). Rows with no match are counted and
+  said.
+- **Sales platforms**: a Shopify or WooCommerce order reaches Analytics
+  only through what it became in the books (its invoice, payment and their
+  journals). The books copy has no orders table, so an order and its
+  invoice can't both be counted.
+
+Setup: made-up tables loaded from CSV, as in the tests.
+
+- **MD1** Margins: North sales **100.00**, gross profit **10.00**; South
+  sales **300.00**, gross profit **90.00**. Gross profit / Sales by region:
+  **10%** and **30%**. The total is 100.00 / 400.00 = **25%**, not the
+  average of the two (**20%**). The average sale is **200.00** (of the two
+  rows).
+- **MD2** Balances recorded: Main **1,000.00** (1 June), **1,200.00**
+  (2 June), **900.00** (30 June), **700.00** (15 July); Savings
+  **5,000.00** (30 June). By month, for each account: June **5,900.00**
+  (900.00 + 5,000.00; adding every row would give 8,100.00), July
+  **700.00** (only Main has a July balance). As one figure for 1 June to
+  31 July: **5,700.00** (Main 700.00 + Savings 5,000.00); for June alone
+  **5,900.00**.
+- **MD3** Invoices INV-1 USD **100.00** (NZD **160.00**), INV-2 AUD
+  **50.00** (NZD **55.00**), INV-3 USD **20.00** (NZD **32.00**): the
+  foreign total of all three is blank, with the note; by currency AUD
+  **50.00** and USD **120.00**, and their totals row blank; filtered to USD
+  **120.00**; the NZD total **247.00**. A pivot by currency shows AUD 50.00
+  and USD 120.00 with its grand total blank.
+- **MD4** Invoice INV-1 for **100.00** with three lines (30.00, 30.00,
+  40.00): merging its lines into the invoices is refused (it would make
+  INV-1's total **300.00**); merging the invoices into the lines to bring
+  in the invoice number is allowed (the lines still add to **100.00**), but
+  bringing in the invoice's total is refused; grouping the lines by invoice
+  first and then bringing in the total is allowed (**100.00** and
+  **100.00**). A merge where 1 of 2 rows has no match says "1 of 2 rows ...
+  have no match".
+- **MD5** Shopify order #1001 (SPC11, **46.00** including GST) after a
+  books copy refresh: `tohyee_invoices` has **1** invoice with reference
+  #1001 for **46.00**, no table holds the order itself, and October's Sales
+  is **40.00**.
+- **MD6** With no rows: Sales blank, a count of rows **0**, and Sales /
+  that count no value.
+
+Tested in `tests/unit/analytics-measure-definitions.test.ts` (MD1-MD3,
+MD6), `tests/unit/analytics-merge-checks.test.ts` (MD4) and
+`tests/integration/sales-platform-orders.test.ts` (MD5).
+
 ## Issues #180-#183, 8 Oct 2026 (approved by Jess)
 
 Drafted before anything was built, as AGENTS.md asks, then approved by Jess
