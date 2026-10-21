@@ -1566,6 +1566,15 @@ that something happened.
   lump sum indicator, the finish date of a final pay and redundancy (not
   liable for the ACC earners' levy) are filled in. No file has been
   through myIR's checker yet.
+- **Farm benchmarks by farm** (Farm › Benchmarks; #390, FR1-FR8, decision
+  743, tenant migration 0182, not yet reviewed): as Xero does with tracking
+  categories, a chosen tracking category carries the farm and each farm is
+  linked to a value. The year's gross farm revenue, working expenses and
+  operating surplus are split by farm, with **Not allocated** shown (never
+  spread) and a total that is the organisation's benchmarks. Each farm's
+  own hectares, cows, stock units and milk solids are entered for the year,
+  and its per-unit amounts use only those. Shared costs and charges
+  between farms are moved with journals. Needs Advanced features on.
 - **Farms and paddocks** (Farm menu; #249 stage 1, decision 514, tenant
   migration 0133): an optional module, part of Accounting, turned on in
   Settings, Modules. **Farms** hold **paddocks**. A paddock's identity
