@@ -7363,6 +7363,27 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      uses Home's 14 days. Only operational figures: no money until the
      farm reporting rules exist (#390). Reads the farms in turn like Home
      does; batching waits for a measured need.
+743. **Farm-level reporting goes through tracking categories** (21 October
+     2026, #390, FR1-FR8; as Xero does, not yet reviewed). Before any farm
+     profitability, the definitions: a farm's income and expenses are the
+     ledger lines tagged with its value in the tracking category Farming
+     is told carries the farm (Xero's tracking categories; Tohyee's own
+     already tag every posted line, so no second way of tagging was
+     added). Lines without a farm are **Not allocated**, shown in their own
+     column and never spread; the farms and Not allocated add up to the
+     organisation's benchmarks and the profit and loss. Sharing out costs
+     and charges between farms are journals, because Xero has no automatic
+     allocation (NetSuite's allocation schedules were considered; the Xero
+     rule wins, and journals keep every figure traceable to the books).
+     Production and headcount are each farm's own entered figures for the
+     year; per-unit amounts divide a farm's amounts by its own figures
+     only, and the total's by the organisation's (FK2). Checked while
+     doing this: today's benchmarks divide organisation-wide amounts by the
+     organisation's entered figures (the hectares offered are all active
+     farms' paddocks), and Home's performance card uses the same, so no
+     screen divided organisation-wide figures by one farm's area; nothing
+     needed fixing there. Migration 0182 adds the category setting, each
+     farm's value and each farm's year figures.
 
 
 ### Keeping the chart editor manageable (#387; decisions 750-752)
