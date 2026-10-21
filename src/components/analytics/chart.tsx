@@ -109,7 +109,9 @@ export function Chart({ spec, rows, height }: ChartProps) {
       ) : (
         <div ref={containerRef} className={styles.canvas} style={height ? { height, minHeight: height } : undefined} role="img" aria-label={title} />
       )}
-      <table className={styles.visuallyHidden}>
+      {/* A table can't be squeezed to 1px, so it's hidden inside a box that can (otherwise a long one stretches the page). */}
+      <div className={styles.visuallyHidden}>
+      <table>
         <caption>{title} data</caption>
         <thead>
           <tr>
@@ -128,6 +130,7 @@ export function Chart({ spec, rows, height }: ChartProps) {
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }
