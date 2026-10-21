@@ -92,6 +92,7 @@ describeWithDatabase("backups: evidence, checks and keeping good copies (#389 pa
     // that was made and checked under that name.
     await fs.writeFile(file, original);
     const [second] = await backUpNow({ trigger: "manual", requestedByEmail: owner.email, organisationId: ORG });
+    expect(second.filePath).not.toBe(file); // even in the same second, a new backup never takes an existing file's name
     await fs.copyFile(second.filePath!, file);
     await fs.rm(second.filePath!);
     [check] = await checkStoredBackups({ requestedByEmail: owner.email, organisationId: ORG });

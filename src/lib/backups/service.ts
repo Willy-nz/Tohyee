@@ -297,7 +297,13 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
   );
   const runId = run.rows[0].id;
   const folder = folderFor(root, target);
-  const finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date()).stamp}${BACKUP_EXTENSION}`);
+  // Never the name of a file already there (two backups in the same second): a checked file is never replaced.
+  let when = Date.now();
+  let finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date(when)).stamp}${BACKUP_EXTENSION}`);
+  while (await fs.stat(finalPath).then(() => true, () => false)) {
+    when += 1000;
+    finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date(when)).stamp}${BACKUP_EXTENSION}`);
+  }
   const partial = `${finalPath}.partial`;
   try {
     await ensureRoot(root);
