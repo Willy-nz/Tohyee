@@ -476,6 +476,27 @@ function filterSql(
   return where.length ? ` where ${where.join(" and ")}` : "";
 }
 
+/**
+ * A field's different values (up to 500) in the rows a tile reads, after
+ * the tile's own filters (decision 697: a report viewer's slicer values).
+ * The dashboard's dates and slicers aren't applied: only `dates` for
+ * relative filters ("this financial year").
+ */
+export function buildDistinctValuesSql(query: TileQuery, tableColumns: ColumnInfo[], field: string, dashboard: Pick<DashboardFilters, "dates">): Built {
+  const types = new Map(tableColumns.map((entry) => [entry.name, entry.type]));
+  if (!types.has(field)) throw new ValidationError(`There's no column ${field} in ${query.table}.`);
+  const params: unknown[] = [];
+  const param = (value: unknown) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  const q = quoteIdentifier;
+  const where = filterSql({ ...query, dateField: null }, types, { dates: dashboard.dates }, param);
+  const notBlank = `${q(field)} is not null`;
+  const sql = `select distinct cast(${q(field)} as VARCHAR) as value from ${q(query.table)}${where ? `${where} and ${notBlank}` : ` where ${notBlank}`} order by 1 limit 500`;
+  return { sql, params, columns: [] };
+}
+
 /** The SQL for a tile, with the dashboard's date range and slicers applied. */
 export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashboard: DashboardFilters = {}): Built {
   const types = new Map(tableColumns.map((entry) => [entry.name, entry.type]));

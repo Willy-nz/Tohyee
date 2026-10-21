@@ -362,6 +362,46 @@ describeWithDatabase("analytics dashboard sharing", () => {
     expect((await values(`table=sales&field=channel&dashboardId=${privateId}`)).status).toBe(404);
   });
 
+  it("lists a slicer's values only from rows the report's tiles show, and can't be edited by a report viewer (#387, decision 697)", async () => {
+    // Tiles that only read web sales; slicers on region and on the private note column.
+    const webOnly = { ...tile("web"), query: { ...tile("web").query, filters: [{ field: "channel", op: "eq", value: "Web" }] } };
+    const made = await body(
+      await dashboardsRoute.POST(
+        apiRequest("/api/analytics/dashboards", {
+          method: "POST",
+          cookie: ownerCookie,
+          body: {
+            organisationId: ORG,
+            name: "Web only",
+            settings: { slicers: [{ table: "sales", field: "region", label: "Region" }, { table: "sales", field: "private_note", label: "Note" }] },
+            tiles: [webOnly],
+          },
+        }),
+        noContext,
+      ),
+    );
+    const webId = String(made.data.dashboard.id);
+    await share(webId, [client.id]);
+    const values = (field: string, cookie = clientCookie) =>
+      valuesRoute.GET(apiRequest(`/api/analytics/values?organisationId=${ORG}&table=sales&field=${field}&dashboardId=${webId}`, { cookie }), noContext);
+    // Only Otago has web sales: Canterbury, and the notes of shop sales, aren't named to the report viewer.
+    expect((await body(await values("region"))).data.values).toEqual(["Otago"]);
+    expect((await body(await values("private_note"))).data.values).toEqual(["private web"]);
+    // Everyone else in the organisation can see the tables, so they get the whole column's values, as before.
+    expect((await body(await values("region", ownerCookie))).data.values).toEqual(["Canterbury", "Otago"]);
+    // Choosing a value outside the report's rows can't bring rows back: the tile's own filter still applies.
+    const asked = await body(await runTile(clientCookie, { dashboardId: webId, tileId: "web", filters: { values: { region: ["Canterbury"] } } }));
+    expect(asked.data.rows).toEqual([]);
+    // Nor can a report viewer change the report, whatever the page's address says (?edit=1).
+    const edited = await dashboardRoute.PATCH(
+      apiRequest(`/api/analytics/dashboards/${webId}`, { method: "PATCH", cookie: clientCookie, body: { organisationId: ORG, tiles: [tile("web")] } }),
+      params({ dashboardId: webId }),
+    );
+    expect(edited.status).toBe(403);
+    await share(webId, []);
+    expect((await values("region")).status).toBe(404);
+  });
+
   it("keeps report viewers out of the tables, the sources and the books", async () => {
     const tables = await tablesRoute.GET(apiRequest(`/api/analytics/tables?organisationId=${ORG}`, { cookie: clientCookie }), noContext);
     expect(tables.status).toBe(403);
