@@ -130,6 +130,8 @@ export type ChartTheme = {
   muted?: string;
   /** One hue, light to dark, for amounts (--chart-seq-1 to 7), e.g. heat maps. */
   sequential?: string[];
+  /** Below and above a midpoint with a grey middle (--chart-diverging-*), for amounts either side of zero. */
+  diverging?: { below: string; middle: string; above: string };
 };
 
 export function chartThemeFromTokens(tokens: ChartTokens, font?: string): ChartTheme {
@@ -146,6 +148,7 @@ export function chartThemeFromTokens(tokens: ChartTokens, font?: string): ChartT
     negative: tokens.status.critical,
     muted: tokens.muted,
     sequential: tokens.sequential,
+    diverging: tokens.diverging,
     ...(font ? { font } : {}),
   };
 }
@@ -181,6 +184,11 @@ export function readChartTheme(read: (name: string) => string): ChartTheme {
     negative: value("--chart-negative", fallback.status.critical),
     muted: value("--chart-muted", fallback.muted),
     sequential: fallback.sequential.map((colour, index) => value(`--chart-seq-${index + 1}`, colour)),
+    diverging: {
+      below: value("--chart-diverging-below", fallback.diverging.below),
+      middle: value("--chart-diverging-middle", fallback.diverging.middle),
+      above: value("--chart-diverging-above", fallback.diverging.above),
+    },
     ...(font ? { font } : {}),
     ...(labelSize ? { labelSize } : {}),
     ...(axisSize ? { axisSize } : {}),
