@@ -1617,7 +1617,18 @@ that something happened.
   through myIR's checker yet.
 - **Farms and paddocks** (Farm menu; #249 stage 1, decision 514, tenant
   migration 0133): an optional module, part of Accounting, turned on in
-  Settings, Modules. **Farms** hold **paddocks**. A paddock's identity
+  Settings, Modules. **Farms** hold **paddocks**. The farm selector supports
+  multiple properties within one organisation. Maps, soil, pasture and
+  fertiliser share the selected farm in the current browser tab, separately
+  for each user and organisation. With multiple farms and no saved choice,
+  the user chooses before working; an unavailable saved or linked farm never
+  silently falls back to another one, and the page says so. With one farm
+  there's no selector. Links can open a farm (`?farm=`); Home's pasture,
+  catch-up and fertiliser lines use them (decision 740). Boundary imports
+  show their destination farm in the preview and import button, and an
+  archived farm can't be imported into. Farm Home remains an all-farms overview:
+  money, livestock and performance are organisation-wide, not separate books
+  or farm profitability reports. A paddock's identity
   doesn't depend on its name, and its **effective area** (what plans use,
   FB1) sits beside its **mapped area**. The mapped area is worked out from
   its boundary, geodesically on WGS84 with GeographicLib, with no PostGIS.

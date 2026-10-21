@@ -2,6 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
+import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { PaddockPastureSummary } from "@/components/pasture";
@@ -9,6 +10,7 @@ import { PaddockRecords } from "@/components/soil";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
+import { resolveSelectedFarm } from "@/lib/client/farm-selection";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import { areaHectares, bounds, fitBox, hectaresText, linzAerialTileUrl, mapViewAt, outlinesOverlap, type PaddockGeometry, parseGeometry, type Position } from "@/lib/farming/geometry";
 import type { BoundaryVersion, Farm, FarmingSettings, ImportPreview, Paddock } from "@/lib/farming/paddocks";
@@ -267,28 +269,19 @@ export function PaddockMap({
 
 // Farms and paddocks ------------------------------------------------------------------------
 
-export function FarmingHome({ organisationId }: { organisationId: string }) {
+export function FarmingHome({ organisationId, farmId = null }: { organisationId: string; farmId?: string | null }) {
   const { can } = useWorkspace();
   const farms = useFarms(organisationId);
   const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
-  const [farmId, setFarmId] = useState<string | null>(null);
+  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
-  const farm = active.find((entry) => entry.id === farmId) ?? active[0] ?? null;
   return (
     <>
-      {active.length > 1 ? (
-        <div className={ui.tabs} role="tablist" aria-label="Farms">
-          {active.map((entry) => (
-            <button key={entry.id} type="button" role="tab" aria-selected={entry.id === farm?.id} className={`${ui.tab} ${entry.id === farm?.id ? ui.tabActive : ""}`} onClick={() => setFarmId(entry.id)}>
-              {entry.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
       {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} onChanged={() => farms.reload()} /> : null}
-      {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} onSaved={() => farms.reload()} /> : null}
+      {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} knownIds={farms.data.farms.map((entry) => entry.id)} onSaved={(added) => { if (added) selectFarm(added); farms.reload(); }} /> : null}
       {can("admin") && settings.data ? <ImagerySettings organisationId={organisationId} imageryKey={settings.data.settings.imageryKey} onSaved={() => settings.reload()} /> : null}
     </>
   );
@@ -425,7 +418,7 @@ function DrawPaddock({
   );
 }
 
-function AddFarm({ organisationId, first, onSaved }: { organisationId: string; first: boolean; onSaved: () => void }) {
+function AddFarm({ organisationId, first, knownIds, onSaved }: { organisationId: string; first: boolean; knownIds: string[]; onSaved: (addedFarmId: string | null) => void }) {
   const [name, setName] = useState("");
   const { busy, error, run } = useRun();
   return (
@@ -438,10 +431,11 @@ function AddFarm({ organisationId, first, onSaved }: { organisationId: string; f
         <Button
           onClick={() =>
             void run(
-              () => api("/api/farming/farms", { method: "POST", body: { organisationId, name } }),
-              () => {
+              () => api<{ farms: Farm[] }>("/api/farming/farms", { method: "POST", body: { organisationId, name } }),
+              (result) => {
                 setName("");
-                onSaved();
+                // Show the farm just added, rather than leaving the page on another one.
+                onSaved(result.farms.find((entry) => !knownIds.includes(entry.id))?.id ?? null);
               },
             )
           }
@@ -809,15 +803,18 @@ const ACTION_TEXT: Record<ImportPreview["rows"][number]["action"], { label: stri
 
 export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organisationId: string; farmId: string | null }) {
   const farms = useFarms(organisationId);
-  const [farmId, setFarmId] = useState(initialFarm ?? "");
+  const { farm: rememberedFarm, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? []);
+  const [farmId, setFarmId] = useState<string | null>(initialFarm);
   const [file, setFile] = useState<{ name: string; content?: string; contentBase64?: string } | null>(null);
   const [nameProperty, setNameProperty] = useState("");
   const [effectiveProperty, setEffectiveProperty] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [previewFarmId, setPreviewFarmId] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const { busy, error, run } = useRun();
   const active = (farms.data?.farms ?? []).filter((farm) => farm.isActive);
-  const chosenFarm = farmId || active[0]?.id || "";
+  const destination = farmId === null ? rememberedFarm : resolveSelectedFarm(active, farmId);
+  const chosenFarm = destination?.id ?? "";
   const body = (extra: Record<string, unknown> = {}) => ({
     organisationId,
     fileName: file?.name,
@@ -827,7 +824,10 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
     effectiveProperty: effectiveProperty || null,
     ...extra,
   });
-  const check = (names = { nameProperty, effectiveProperty }) =>
+  const check = (names = { nameProperty, effectiveProperty }) => {
+    if (!chosenFarm || !file || busy) return;
+    selectFarm(chosenFarm);
+    setPreview(null);
     void run(
       () =>
         api<{ preview: ImportPreview }>(`/api/farming/farms/${chosenFarm}/import`, {
@@ -836,24 +836,32 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
         }),
       (result) => {
         setPreview(result.preview);
+        setPreviewFarmId(chosenFarm);
         setNameProperty(result.preview.nameProperty ?? "");
         setEffectiveProperty(result.preview.effectiveProperty ?? "");
       },
     );
-  const pick = async (picked: File | undefined) => {
+  };
+  const pick = (picked: File | undefined) => {
     setPreview(null);
     setDone(null);
-    if (!picked) return setFile(null);
-    // KMZ and zipped shapefiles are binary: sent as base64. GeoJSON and KML are text.
-    if (/\.(kmz|zip|shp)$/i.test(picked.name)) {
-      const bytes = new Uint8Array(await picked.arrayBuffer());
-      let binary = "";
-      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      setFile({ name: picked.name, contentBase64: btoa(binary) });
-    } else {
-      setFile({ name: picked.name, content: await picked.text() });
-    }
+    setFile(null);
+    if (!picked) return;
+    void run(async () => {
+      // Binary mapping formats are sent as base64; no stale file can be checked while reading.
+      if (/\.(kmz|zip|shp)$/i.test(picked.name)) {
+        const bytes = new Uint8Array(await picked.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return { name: picked.name, contentBase64: btoa(binary) };
+      }
+      return { name: picked.name, content: await picked.text() };
+    }, setFile);
   };
+  if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
+  if (!farms.data) return <p className={ui.muted}>Loading…</p>;
+  if (!active.length) return <Empty>Add a farm under <Link href="/operations/farming">Farms and paddocks</Link> before importing.</Empty>;
+
   return (
     <>
       <Card
@@ -862,9 +870,11 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
       >
         {error ? <Notice tone="error">{error}</Notice> : null}
         {done ? <Notice tone="success">{done}</Notice> : null}
+        {farmId !== null && farmId === initialFarm && !destination ? <Notice tone="warning">The farm in that link is archived or isn&apos;t in this organisation. Choose the destination farm.</Notice> : null}
         <div className={ui.inlineForm}>
           <Field label="Farm">
-            <select value={chosenFarm} onChange={(event) => (setFarmId(event.target.value), setPreview(null))}>
+            <select value={chosenFarm} disabled={busy} onChange={(event) => { setFarmId(event.target.value); selectFarm(event.target.value); setPreview(null); setDone(null); }}>
+              <option value="" disabled>Choose the destination farm…</option>
               {active.map((farm) => (
                 <option key={farm.id} value={farm.id}>
                   {farm.name}
@@ -873,7 +883,7 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
             </select>
           </Field>
           <Field label="File">
-            <input type="file" accept=".geojson,.json,.kml,.kmz,.zip,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/zip" onChange={(event) => void pick(event.target.files?.[0])} />
+            <input type="file" disabled={busy} accept=".geojson,.json,.kml,.kmz,.zip,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/zip" onChange={(event) => void pick(event.target.files?.[0])} />
           </Field>
           <Button onClick={() => check({ nameProperty: "", effectiveProperty: "" })} disabled={busy || !file || !chosenFarm}>
             Check the file
@@ -881,16 +891,16 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
         </div>
         <p className={ui.muted}>Shapes in other projections (such as the old NZ Map Grid) aren&apos;t converted: export them in WGS84 or NZTM2000 from your mapping app first.</p>
       </Card>
-      {preview ? (
+      {preview && destination && previewFarmId === chosenFarm ? (
         <Card
-          title={preview.fileName}
+          title={`${preview.fileName} → ${destination.name}`}
           description={`${preview.counts.new} new, ${preview.counts.newBoundary} with a new boundary, ${preview.counts.unchanged} unchanged, ${preview.counts.errors} skipped.`}
         >
           {preview.note ? <Notice tone="info">{preview.format}: {preview.note}</Notice> : null}
           {preview.alreadyImportedOn ? <Notice tone="warning">This file was already imported on {formatDate(preview.alreadyImportedOn.slice(0, 10))}.</Notice> : null}
           <div className={ui.inlineForm}>
             <Field label="Name is in">
-              <select value={nameProperty} onChange={(event) => (setNameProperty(event.target.value), check({ nameProperty: event.target.value, effectiveProperty }))}>
+              <select disabled={busy} value={nameProperty} onChange={(event) => (setNameProperty(event.target.value), check({ nameProperty: event.target.value, effectiveProperty }))}>
                 <option value="">Choose…</option>
                 {preview.properties.map((property) => (
                   <option key={property} value={property}>
@@ -900,7 +910,7 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
               </select>
             </Field>
             <Field label="Effective ha is in">
-              <select value={effectiveProperty} onChange={(event) => (setEffectiveProperty(event.target.value), check({ nameProperty, effectiveProperty: event.target.value }))}>
+              <select disabled={busy} value={effectiveProperty} onChange={(event) => (setEffectiveProperty(event.target.value), check({ nameProperty, effectiveProperty: event.target.value }))}>
                 <option value="">Not in the file</option>
                 {preview.properties.map((property) => (
                   <option key={property} value={property}>
@@ -947,16 +957,16 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
                   (result) => {
                     setPreview(null);
                     setFile(null);
-                    setDone(`Imported: ${result.preview.counts.new} new paddocks and ${result.preview.counts.newBoundary} new boundaries.`);
+                    setDone(`Imported into ${destination.name}: ${result.preview.counts.new} new paddocks and ${result.preview.counts.newBoundary} new boundaries.`);
                     farms.reload();
                   },
                 )
               }
               disabled={busy || Boolean(preview.alreadyImportedOn) || preview.counts.new + preview.counts.newBoundary === 0}
             >
-              Import {preview.counts.new + preview.counts.newBoundary} shape{preview.counts.new + preview.counts.newBoundary === 1 ? "" : "s"}
+              Import {preview.counts.new + preview.counts.newBoundary} shape{preview.counts.new + preview.counts.newBoundary === 1 ? "" : "s"} into {destination.name}
             </Button>
-            <Link href="/operations/farming">Back to the farm</Link>
+            <Link href="/operations/farming" onClick={() => selectFarm(chosenFarm)}>Back to the farm</Link>
           </div>
         </Card>
       ) : null}
