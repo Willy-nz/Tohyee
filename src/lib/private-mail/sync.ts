@@ -4,6 +4,7 @@ import { listFolderMailIds, type FolderListing, type MailFolder } from "@/lib/fa
 import { listAllOrganisations } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { isActiveOwner } from "@/lib/private-mail/access";
+import { matchRules } from "@/lib/private-mail/filing";
 import { copyKeys, type CopyKeys, emailTokens, seal, sealJson, threadKey } from "@/lib/private-mail/crypto";
 import { decodeBase64Url, deletedItemsFolderId, fetchPrivateAttachment, fetchPrivateMail, listPrivateFolders, MAX_ATTACHMENT_BYTES, type PrivateMail, privateMailWhereabouts } from "@/lib/private-mail/providers";
 import type { AttachmentMeta, Envelope } from "@/lib/private-mail/store";
@@ -230,13 +231,14 @@ async function copyNow(organisation: OrganisationRecord, copy: CopyRow, now: Dat
   const deletedItems = left.length ? await deletedItemsFolderId(access.provider, token) : null;
   const whereabouts = new Map<string, "deleted" | "elsewhere">();
   for (const id of left) whereabouts.set(id, await privateMailWhereabouts(access.provider, token, id, deletedItems));
-  return withOrganisationTransaction(organisation, PRIVATE_MAIL_ACTOR, async (tx) => finishSync(tx, copy, listings, inFolders, stored, whereabouts, now, copied));
+  return withOrganisationTransaction(organisation, PRIVATE_MAIL_ACTOR, async (tx) => finishSync(tx, copy, keys, listings, inFolders, stored, whereabouts, now, copied));
 }
 
 /** PM6, PM7: what the sync found about folders, emails moved out and emails deleted in the mailbox (decisions 585, 616). */
 async function finishSync(
   tx: OrgTx,
   copy: CopyRow,
+  keys: CopyKeys,
   listings: Array<{ folderId: string; listing: FolderListing }>,
   inFolders: Map<string, Set<string>>,
   stored: Map<string, string>,
@@ -271,6 +273,8 @@ async function finishSync(
       where id = $1`,
     [copy.id, listed.length, listings.some(({ listing }) => !listing.complete), now.toISOString()],
   );
+  // The owner's approved rules (decision 723): matches wait in "To file" for them to confirm; nothing is filed here.
+  await matchRules(tx, { id: copy.id, ownerUserId: copy.owner_user_id, keys });
   return { copied, removed: gone.rowCount ?? 0, ...(deleted.length ? { deletedInMailbox: deleted.length } : {}) };
 }
 
