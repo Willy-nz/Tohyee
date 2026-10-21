@@ -205,7 +205,7 @@ describeWithDatabase("filing from My mail", () => {
       { cells: ["3", "14", "2026-08-15", "14", "2"], error: null },
       { cells: ["4", "99", "2026-08-15", "99", "2"], error: "There's no current paddock 99 on this farm." },
     ]);
-    expect(shown.shared).toContainEqual({ label: "Soil tests added", value: "2 (1 rows with problems are left out)" });
+    expect(shown.shared).toContainEqual({ label: "Soil tests added", value: "2 (1 row with problems left out)" });
     expect(shown.shared).toContainEqual({ label: "Results read from", value: "pH, Olsen P (mg/L)" });
     expect(shown.shared).toContainEqual({ label: "Source on each test", value: "Imported from Soil results.csv, filed from a private email" });
     expect(shown.notShared).toContain("The file itself: only the rows below are added");

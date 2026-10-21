@@ -32,6 +32,9 @@ function nzDate(value: string): string {
   return new Date(value).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "Pacific/Auckland" });
 }
 
+/** "The bills inbox" mid-sentence. */
+const lowerThe = (label: string) => label.replace(/^The /, "the ");
+
 function kindsFor(options: FilingOptions): FilingKind[] {
   const kinds: FilingKind[] = [];
   if (options.accounting) kinds.push("bills_inbox");
@@ -275,7 +278,7 @@ export function FilePanel({
           Filed {fileName}
         </h4>
         <Notice tone="success">
-          {done.summary}. {done.link ? <Link href={done.link}>Open {done.destinationLabel.replace(/^The /, "the ")}</Link> : null}
+          {done.summary}. {done.link ? <Link href={done.link}>Open {lowerThe(done.destinationLabel)}</Link> : null}
         </Notice>
         <p className={ui.muted}>The email itself stays private. Deleting your copy of it later doesn&apos;t delete what you filed.</p>
         <span>
@@ -417,7 +420,7 @@ export function FilingCard({ organisationId, overview, copies, onChanged }: { or
                   {entry.from ?? "(no sender)"} · {entry.subject || "(no subject)"} · {nzDate(entry.sentAt)}
                 </div>
                 <div className={styles.meta}>
-                  {entry.ruleText}, to {entry.destinationLabel}
+                  {entry.ruleText}, to {lowerThe(entry.destinationLabel)}
                 </div>
               </div>
               {filing === entry.id ? (
@@ -454,7 +457,7 @@ export function FilingCard({ organisationId, overview, copies, onChanged }: { or
           {overview.rules.map((rule) => (
             <li key={rule.id} className={styles.toFileRow}>
               <div>
-                {ruleText(rule)}, to {rule.destinationLabel}
+                {ruleText(rule)}, to {lowerThe(rule.destinationLabel)}
                 <div className={styles.meta}>
                   {rule.mailbox}
                   {rule.waiting ? ` · ${rule.waiting} waiting` : ""}

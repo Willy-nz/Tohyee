@@ -350,7 +350,7 @@ async function build(tx: OrgTx, owner: MailOwner, attachment: Attachment, destin
           const measures = preview.columns.filter((column) => column.role === "measure").map((column) => `${column.measure}${column.unit ? ` (${column.unit})` : ""}`);
           shared.push(
             { label: "Where", value: label },
-            { label: "Soil tests added", value: `${preview.counts.tests}${preview.counts.errors ? ` (${preview.counts.errors} rows with problems are left out)` : ""}` },
+            { label: "Soil tests added", value: `${preview.counts.tests}${preview.counts.errors ? ` (${preview.counts.errors} ${preview.counts.errors === 1 ? "row" : "rows"} with problems left out)` : ""}` },
             { label: "Results read from", value: measures.join(", ") || "(no result columns)" },
             ...(destination.lab ? [{ label: "Lab", value: destination.lab }] : []),
             ...(destination.sampledOn ? [{ label: "Date sampled (for rows without one)", value: destination.sampledOn }] : []),
@@ -367,7 +367,7 @@ async function build(tx: OrgTx, owner: MailOwner, attachment: Attachment, destin
           else if (!preview.counts.readings) problem = "None of its rows can be imported. Check the file with Import on the pasture page.";
           shared.push(
             { label: "Where", value: label },
-            { label: "Readings added", value: `${preview.counts.readings}${preview.counts.errors ? ` (${preview.counts.errors} rows with problems are left out)` : ""}` },
+            { label: "Readings added", value: `${preview.counts.readings}${preview.counts.errors ? ` (${preview.counts.errors} ${preview.counts.errors === 1 ? "row" : "rows"} with problems left out)` : ""}` },
             ...(destination.method ? [{ label: "Method (for rows without one)", value: PASTURE_METHOD_LABELS[destination.method as PastureMethod] }] : []),
             { label: "Source on each reading", value: importSource(fileName, { filedFromPrivateMail: true }) },
             { label: "Added by", value: by },
@@ -385,7 +385,7 @@ async function build(tx: OrgTx, owner: MailOwner, attachment: Attachment, destin
           else if (!preview.valid) problem = "None of its rows can be imported. Check the file with Import on the fertiliser page.";
           shared.push(
             { label: "Where", value: label },
-            { label: "Applications added", value: `${preview.valid}${preview.errors ? ` (${preview.errors} rows with problems are left out)` : ""}` },
+            { label: "Applications added", value: `${preview.valid}${preview.errors ? ` (${preview.errors} ${preview.errors === 1 ? "row" : "rows"} with problems left out)` : ""}` },
             { label: "Source on each application", value: importSource(fileName, { filedFromPrivateMail: true }) },
             { label: "Added by", value: by },
           );
