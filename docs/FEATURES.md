@@ -45,8 +45,16 @@ that something happened.
   recorded; a file changed, replaced or deleted afterwards fails the check.
   Damaged files are never counted towards or deleted by pruning; a missing
   folder or a disk that's clearly too full fails the backup at once with a
-  message saying what to do, keeping the older backups. Design for the
-  recovery kit and restore wizard: `docs/BACKUP-RECOVERY.md`.
+  message saying what to do, keeping the older backups. **The recovery kit**
+  (#389 part 2): backups are encrypted with a recovery key of their own
+  (format 2), kept apart from the server's live secrets; the kit is that
+  key alone, as a recovery code or a passphrase-protected recovery file
+  (optional random name, said to be a convenience only), got with the
+  password again and checked by giving it back, per key version. A new
+  recovery key can be made; older backups keep opening and the status says
+  which earlier kit to keep until when. Backups from before keep opening
+  with the older backup key. Design and what's next (the restore wizard):
+  `docs/BACKUP-RECOVERY.md`.
 - **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
   across the top (Contacts under Sales/Purchases; Tax and Accounting under
   Accountant), each opening to its overview, lists and settings; a ☰ menu with

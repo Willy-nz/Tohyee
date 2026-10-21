@@ -9,8 +9,8 @@ second backup system. It's built in three pull requests:
 
 | Part | What | State |
 | --- | --- | --- |
-| 1 | Managed backups and an evidence-based status panel | Built (this PR) |
-| 2 | A backup recovery key of its own, and the recovery kit | Designed here, next PR |
+| 1 | Managed backups and an evidence-based status panel | Built |
+| 2 | A backup recovery key of its own, and the recovery kit | Built |
 | 3 | The restore wizard for a replacement computer | Designed here, after part 2 |
 
 Only standard, reviewed building blocks from Node's `crypto` are used:

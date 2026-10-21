@@ -28,6 +28,8 @@ namespace Tohyee.Tray
         private readonly ListView _files = Ui.List("Made", "Organisation", "Size", "File");
         private readonly Label _message = Ui.Status();
         private readonly Label _keyState = Ui.State();
+        private readonly Label _kitState = Ui.State();
+        private Card _legacyKey;
         private string _defaultFolder;
 
         public BackupsPage(TohyeeApi api)
@@ -74,7 +76,16 @@ namespace Tohyee.Tray
             nightly.Body.Controls.Add(settingsButtons);
             nightly.Body.Controls.Add(_message);
 
-            var key = Ui.Card(page, "Your backup key", "Backups can only be opened with this server's backup key. If this computer is lost or rebuilt, you'll need a copy of the key to restore them, so save one somewhere safe that isn't the backup folder, such as a password manager. Then paste it back here so Tohyee can check your copy is exactly right.");
+            // The recovery kit (#389, decisions 735-736): made, downloaded and checked in the browser, where saving and choosing a file is natural.
+            var kit = Ui.Card(page, "Recovery kit", "The one thing you need, with the backup files, to get the books back on another computer. It holds this server's recovery key and nothing else. Save it in a password manager (or print it), not in the backup folder, then check your saved copy.");
+            kit.Body.Controls.Add(_kitState);
+            var kitButtons = Ui.Row();
+            kitButtons.Controls.Add(Ui.Btn("Save recovery kit…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups#recovery-kit")));
+            kitButtons.Controls.Add(Ui.Btn("Check recovery kit…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups#recovery-kit")));
+            kit.Body.Controls.Add(kitButtons);
+
+            var key = Ui.Card(page, "Older backups' key", "Backups made before recovery kits can only be opened on another computer with this server's older backup key (its TOHYEE_SECRET_KEY). Save a copy somewhere safe that isn't the backup folder, then paste it back here so Tohyee can check it. Once those older backups have aged out (up to 12 months), it isn't needed for them any more.");
+            _legacyKey = key;
             key.Body.Controls.Add(_keyState);
             var keyButtons = Ui.Row();
             keyButtons.Controls.Add(Ui.Btn("Show the key…", async (s, e) => await ShowKey()));
@@ -151,6 +162,30 @@ namespace Tohyee.Tray
             _files.EndUpdate();
 
             ShowOverview(J.Obj(result, "overview"));
+
+            var recoveryKit = J.Obj(result, "recoveryKit");
+            if (recoveryKit == null || !J.Bool(recoveryKit, "keySet"))
+            {
+                _kitState.Text = recoveryKit == null ? "This server doesn't make recovery kits yet: update Tohyee." : "There's no TOHYEE_SECRET_KEY on this server, so there's no recovery key.";
+                _kitState.ForeColor = Ui.Danger;
+            }
+            else if (J.Str(recoveryKit, "version") == null)
+            {
+                _kitState.Text = "There's no recovery key yet: the first backup makes one.";
+                _kitState.ForeColor = Theme.Text;
+            }
+            else if (J.Str(recoveryKit, "checkedAt") == null)
+            {
+                _kitState.Text = "Not checked: nobody has checked a saved kit for recovery key version " + J.Str(recoveryKit, "version") + ".";
+                _kitState.ForeColor = Ui.Danger;
+            }
+            else
+            {
+                _kitState.Text = "Version " + J.Str(recoveryKit, "version") + ": " + J.Str(recoveryKit, "checkedByEmail") + " checked a saved kit on " + J.When(J.Str(recoveryKit, "checkedAt")) + ". That proves it was right then, not that it's still there.";
+                _kitState.ForeColor = Ui.Success;
+            }
+            // Only while backups from before recovery kits are kept (or the server is older).
+            _legacyKey.Visible = recoveryKit == null || J.Obj(J.Obj(J.Obj(result, "overview"), "recoveryKit"), "legacyFiles") != null;
 
             var keyStatus = J.Obj(result, "keyStatus");
             if (!J.Bool(keyStatus, "keySet"))

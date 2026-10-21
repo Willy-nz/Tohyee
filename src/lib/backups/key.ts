@@ -60,29 +60,43 @@ export async function backupKeyNeedsSaving(): Promise<boolean> {
  * password again first (a signed-in window left open isn't enough). The
  * command-line tool (no user) runs on the server, where the key already is.
  */
+/** Wrong passwords for showing the backup key or exporting a recovery kit: 5 in 15 minutes blocks both. */
+const REFUSED_EVENTS = ["server.backup_key_show_refused", "server.recovery_kit_export_refused"];
+
+/**
+ * A server admin types their password again before a secret leaves the
+ * server (a signed-in window left open isn't enough). The command-line tool
+ * (no user) runs on the server, where the secrets already are. A wrong
+ * password is audited as `refusedEvent`.
+ */
+export async function confirmAdminPassword(auth: ServerAdminAuth, password: unknown, refusedEvent: string, entityId: string): Promise<void> {
+  if (!auth.user.id) return;
+  const actor = { userId: auth.user.id, email: auth.user.email };
+  const recent = await coreQuery<{ n: string }>(
+    `select count(*)::text as n from admin_audit_events
+      where event_type = any($2::text[]) and actor_user_id = $1 and created_at > now() - interval '15 minutes'`,
+    [auth.user.id, REFUSED_EVENTS],
+  );
+  if (Number(recent.rows[0]?.n ?? 0) >= 5) {
+    throw new ForbiddenError("Too many wrong passwords. Wait 15 minutes and try again.");
+  }
+  const found = await coreQuery<{ password_hash: string }>("select password_hash from users where id = $1 and is_active", [auth.user.id]);
+  const ok = typeof password === "string" && found.rows[0] ? await verifyPassword(password, found.rows[0].password_hash) : false;
+  if (!ok) {
+    await writeAdminAuditEvent({ query: coreQuery }, actor, { eventType: refusedEvent, entityType: "server_setting", entityId });
+    throw new ForbiddenError("That password isn't right.");
+  }
+}
+
+/**
+ * The key itself, for a server admin to copy somewhere safe. They type their
+ * password again first. Since #389 this is the key for older backups
+ * (format 1); newer ones need the recovery kit.
+ */
 export async function revealBackupKey(auth: ServerAdminAuth, password: unknown): Promise<{ key: string; keyId: string }> {
   if (!auth.user.isServerAdmin) throw new ForbiddenError("Only a server admin can see the backup key.");
   const actor = { userId: auth.user.id, email: auth.user.email };
-  if (auth.user.id) {
-    const recent = await coreQuery<{ n: string }>(
-      `select count(*)::text as n from admin_audit_events
-        where event_type = 'server.backup_key_show_refused' and actor_user_id = $1 and created_at > now() - interval '15 minutes'`,
-      [auth.user.id],
-    );
-    if (Number(recent.rows[0]?.n ?? 0) >= 5) {
-      throw new ForbiddenError("Too many wrong passwords. Wait 15 minutes and try again.");
-    }
-    const found = await coreQuery<{ password_hash: string }>("select password_hash from users where id = $1 and is_active", [auth.user.id]);
-    const ok = typeof password === "string" && found.rows[0] ? await verifyPassword(password, found.rows[0].password_hash) : false;
-    if (!ok) {
-      await writeAdminAuditEvent({ query: coreQuery }, actor, {
-        eventType: "server.backup_key_show_refused",
-        entityType: "server_setting",
-        entityId: "backup_key",
-      });
-      throw new ForbiddenError("That password isn't right.");
-    }
-  }
+  await confirmAdminPassword(auth, password, "server.backup_key_show_refused", "backup_key");
   const key = rawSecretKey();
   await writeAdminAuditEvent({ query: coreQuery }, actor, {
     eventType: "server.backup_key_shown",

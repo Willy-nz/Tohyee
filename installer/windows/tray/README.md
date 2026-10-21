@@ -38,7 +38,7 @@ Tohyee (the books) are at the bottom.
   2026): the title with the server's state beside it (running, version, how
   long it's been up when Windows lets the app see the service's process) and
   Open Tohyee; a **Needs attention** card, only when something does (the
-  server isn't running, no backup key or no saved copy of it, a failed backup,
+  server isn't running, no secret key or no checked recovery kit, a failed backup,
   nightly backups off, an update out or an organisation not upgraded, an
   organisation that couldn't be set up, remote access on but not connected),
   each with a button to its page; quick looks at the last backup, remote
@@ -67,7 +67,8 @@ Tohyee (the books) are at the bottom.
 - **Backups**: a Status card (latest backup and its age, when the newest
   files were last checked again, off-site "not verified", space used and
   free, what needs attention, and a warning when OneDrive isn't running for
-  you), Check backups now, nightly backups, the backup key, each
+  you), Check backups now, nightly backups, the recovery kit (Save and Check
+  open the Backups page in the browser), the older backups' key, each
   organisation's last backup, and the backup files (restore as a copy). Until a saved copy of the
   key has been checked, the window opens on Backups with a reminder.
 - **Analytics**: each organisation's CSV folder on this computer, whether
