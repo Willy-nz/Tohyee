@@ -13,7 +13,7 @@ import styles from "./chart-format-panel.module.css";
  * sections. Everything is saved through `parseChartFormat` like the rest.
  */
 
-type Props = { visual: Visual; values: string[]; format: ChartFormat; set: (patch: Partial<ChartFormat>) => void };
+type Props = { visual: Visual; values: string[]; format: ChartFormat; set: (patch: Partial<ChartFormat>) => void; smallMultiples?: boolean };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -58,7 +58,19 @@ function NumberText({ label, hint, value, onChange }: { label: string; hint?: st
   );
 }
 
-export function VisualSettings({ visual, values, format, set }: Props) {
+export function VisualSettings({ visual, values, format, set, smallMultiples = false }: Props) {
+  if (smallMultiples && (visual === "column" || visual === "bar" || visual === "line")) {
+    return (
+      <Section title="Small multiples">
+        <p className={styles.note}>One small chart for each value of the second grouping, all with the same groups and the same scale. Past the most charts, the smaller ones are added together as &quot;Other&quot; (totals and counts only; other values are left out).</p>
+        <Field label="Most small charts" hint="2 to 12">
+          <select value={format.smallMultiples?.max ?? 6} onChange={(event) => set({ smallMultiples: Number(event.target.value) === 6 ? undefined : { max: Number(event.target.value) } })}>
+            {Array.from({ length: 11 }, (_unused, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
+          </select>
+        </Field>
+      </Section>
+    );
+  }
   if (visual === "waterfall") {
     const current: WaterfallFormat = format.waterfall ?? {};
     const update = (patch: Partial<WaterfallFormat>) => set({ waterfall: { ...current, ...patch } });
@@ -122,6 +134,102 @@ export function VisualSettings({ visual, values, format, set }: Props) {
           <NumberText label="Target" hint="The same for every group. Or add a second value to use as each group's target." value={current.target} onChange={(target) => update({ target })} />
         )}
         <BandsField bands={current.bands} onChange={(bands) => update({ bands })} />
+      </Section>
+    );
+  }
+  if (visual === "filledmap") {
+    return (
+      <Section title="Filled map">
+        <p className={styles.note}>
+          Group by a region or a district or city name, e.g. Waikato or Hamilton City; each is coloured by its {values[0] || "value"} on one blue scale (orange below zero and blue above when there are both). Spelling, macrons and words like &quot;Region&quot; or &quot;District&quot; don&apos;t matter. Names that aren&apos;t on the map are listed under it.
+        </p>
+        <Field label="Areas">
+          <select value={format.map?.areas ?? ""} onChange={(event) => set({ map: event.target.value ? { areas: event.target.value as "regions" | "districts" } : undefined })}>
+            <option value="">Work it out from the names</option>
+            <option value="regions">Regions (16 and the Chatham Islands)</option>
+            <option value="districts">Districts and cities (territorial authorities)</option>
+          </select>
+        </Field>
+      </Section>
+    );
+  }
+  if (visual === "pointmap") {
+    return (
+      <Section title="Map with points">
+        <p className={styles.note}>
+          Each group is a dot at its {values[0] || "first value"} (latitude) and {values[1] || "second value"} (longitude), e.g. the average of each farm&apos;s
+          {values.length > 2 ? `; ${values[2] || "the third value"} sizes the dots (their area)` : ". Add a third value to size the dots"}. Places outside New Zealand are left out and counted under the map. The Chatham Islands are drawn closer to the mainland.
+        </p>
+      </Section>
+    );
+  }
+  if (visual === "scatter") {
+    return (
+      <Section title="Scatter or bubble">
+        <p className={styles.note}>
+          Each group is a dot: {values[0] || "the first value"} across, {values[1] || "the second value"} up
+          {values.length > 2 ? `, and ${values[2] || "the third value"} as the bubble's size (its area)` : ". Add a third value to size the dots as bubbles"}.
+        </p>
+        <Check label="Trend line (straight, least squares)" checked={format.scatter?.trend === true} onChange={(checked) => set({ scatter: { trend: checked || undefined } })} />
+      </Section>
+    );
+  }
+  if (visual === "histogram") {
+    const current = format.histogram ?? {};
+    return (
+      <Section title="Histogram">
+        <p className={styles.note}>Counts how many groups&apos; {values[0] || "value"} falls in each range. Group by what each item is, e.g. invoice number, to count those. Each bin starts at its lower edge and goes up to, not including, the next.</p>
+        <Field label="Bins">
+          <select
+            value={current.width !== undefined ? "width" : current.bins !== undefined ? "count" : "auto"}
+            onChange={(event) => set({ histogram: event.target.value === "count" ? { bins: 10 } : event.target.value === "width" ? { width: "100" } : undefined })}
+          >
+            <option value="auto">Automatic</option>
+            <option value="count">A number of bins</option>
+            <option value="width">A bin width</option>
+          </select>
+        </Field>
+        {current.bins !== undefined ? (
+          <Field label="Number of bins" hint="2 to 50; widths are rounded to 1, 2, 2.5 or 5 times 10, 100…">
+            <input type="number" min={2} max={50} value={current.bins} onChange={(event) => {
+              const bins = Number(event.target.value);
+              if (Number.isInteger(bins) && bins >= 2 && bins <= 50) set({ histogram: { bins } });
+            }} />
+          </Field>
+        ) : null}
+        {current.width !== undefined ? <NumberText label="Bin width" hint="e.g. 100 or 0.5" value={current.width} onChange={(width) => set({ histogram: width && Number(width) > 0 ? { width } : undefined })} /> : null}
+      </Section>
+    );
+  }
+  if (visual === "heatmap" || visual === "calendar") {
+    return (
+      <Section title={visual === "heatmap" ? "Heat map" : "Calendar heat map"}>
+        <p className={styles.note}>
+          {visual === "heatmap"
+            ? "Each cell is the total for a group (across) and a value of the second grouping (down)."
+            : "Each day is coloured by its total. Up to the three latest years with data are shown, newest first."}{" "}
+          Cells are coloured on one blue scale from light (small) to dark (large); with amounts both below and above zero, orange below and blue above with grey at zero. The scale is under the chart.
+        </p>
+      </Section>
+    );
+  }
+  if (visual === "treemap" || visual === "sankey") {
+    return (
+      <Section title={visual === "treemap" ? "Treemap" : "Sankey"}>
+        <p className={styles.note}>
+          {visual === "treemap"
+            ? "Each box's area is its total, largest first. Only amounts above zero have an area, so others are left out."
+            : "Each group flows to the values of the second grouping; a flow's width is its total. Only amounts above zero can flow."}{" "}
+          Groups take the theme&apos;s colours in order; after the last colour they&apos;re grey. Colour a group yourself under Colours.
+        </p>
+      </Section>
+    );
+  }
+  if (visual === "boxplot") {
+    return (
+      <Section title="Box plot">
+        <p className={styles.note}>Each box runs from the lower to the upper quartile with the median across it (quartiles as a spreadsheet&apos;s QUARTILE.INC); the whiskers reach the furthest values within 1.5 times the box&apos;s height, and values beyond are dots.</p>
+        <Check label="Dots for values beyond the whiskers" checked={format.boxplot?.outliers !== false} onChange={(checked) => set({ boxplot: { outliers: checked ? undefined : false } })} />
       </Section>
     );
   }

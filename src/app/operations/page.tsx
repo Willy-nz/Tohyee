@@ -36,7 +36,6 @@ function Overview({ organisationId }: { organisationId: string }) {
   return (
     <>
       <PageHeader
-        decorated
         title={`${greeting}, ${user.displayName.trim().split(/\s+/)[0] || user.displayName}`}
         description={<>{current?.displayName}{yearEnd ? ` · Financial year ending ${formatDate(yearEnd)}` : ""}</>}
       />

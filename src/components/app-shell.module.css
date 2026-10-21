@@ -567,13 +567,27 @@
     display: none;
   }
 
+  /* Accounting, Tax and Settings made the bar three menus longer (#375, decision 700). */
+  .menuButton {
+    padding: 0 6px;
+  }
+
+  .menuButtonActive::after {
+    left: 6px;
+    right: 6px;
+  }
+
+  .searchButton .kbd {
+    display: none;
+  }
+
   .aiLink {
     padding: 0 8px;
   }
 }
 
-/* Phones and narrower windows: the menus move behind the ☰ button. */
-@media (max-width: 1180px) {
+/* Phones and narrower windows: the menus move behind the ☰ button (from 1,240px since #375 added two menus). */
+@media (max-width: 1240px) {
   .topRow {
     gap: 8px;
     padding: 0 12px 0 16px;

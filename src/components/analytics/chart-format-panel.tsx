@@ -52,6 +52,8 @@ type Props = {
   /** A table's group column, or a pivot's row fields, by name. */
   groupName?: string | null;
   rowFields?: string[];
+  /** The tile shows small multiples (a column, bar or line chart with a second grouping). */
+  smallMultiples?: boolean;
 };
 
 /** Removes settings left at their default, so Reset and "nothing changed" are the same thing. */
@@ -315,7 +317,7 @@ function ReferenceLines({ values, lines, onChange }: { values: string[]; lines: 
 }
 
 /** The Format section of the chart panel (#331, #333, #376): every change shows in the preview straight away. */
-export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [] }: Props) {
+export function ChartFormatPanel({ visual, values, format, onChange, inherited, onSetDefault, theme = BUILT_IN_THEMES.tohyee, groups = [], datedGroups = false, groupName = null, rowFields = [], smallMultiples = false }: Props) {
   // What the chart shows: the report's default for its type with the tile's own settings over it.
   const current = mergeFormats(inherited, format) ?? {};
   const can = formatOptionsFor(visual);
@@ -361,7 +363,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
     const others = (current.categoryColors ?? []).filter((entry) => entry.name !== name);
     set({ categoryColors: color ? [...others, { name, color }] : others.length ? others : undefined });
   };
-  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
+  const groupColoursAllowed = (can.round || can.funnel || can.waterfall || can.bullet || can.treemap || can.sankey || can.pointmap || ((visual === "column" || visual === "bar") && values.length === 1)) && groups.length > 0;
   // Funnels show their labels unless turned off, like pies.
   const labelsByDefault = can.round || can.funnel;
 
@@ -421,7 +423,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </select>
                 </Field>
               ) : null}
-              {!can.round && !can.kpi && !(current.colorByCategory && values.length === 1) ? (
+              {!can.round && !can.kpi && !can.scale && !can.treemap && !can.sankey && !(current.colorByCategory && values.length === 1) ? (
                 <>
                   <div className={styles.colourRow}>
                     <Swatch hue={series.color} hex={series.hex} />
@@ -469,7 +471,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           );
         })}
       </Section>
-      <VisualSettings visual={visual} values={values} format={current} set={set} />
+      <VisualSettings visual={visual} values={values} format={current} set={set} smallMultiples={smallMultiples} />
       {!can.kpi ? (
         <>
           {can.labels ? (
@@ -535,6 +537,7 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
           ) : null}
           {can.axes ? (
             <Section title="Axes">
+              {can.groupAxis ? (
               <fieldset className={styles.group}>
                 <legend>{visual === "bar" || visual === "bullet" ? "Group axis (down the side)" : "Group axis (along the bottom)"}</legend>
                 <Field label="Title">
@@ -554,7 +557,10 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
                   </div>
                 ) : null}
               </fieldset>
-              <AxisFields name={usesRight ? "Left axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
+              ) : (
+                <AxisFields name="Across axis" value={current.xAxis} defaultGridlines onChange={(xAxis) => set({ xAxis })} />
+              )}
+              <AxisFields name={usesRight ? "Left axis" : can.scatter ? "Up axis" : can.histogram ? "Count axis" : "Value axis"} value={current.valueAxis} defaultGridlines onChange={(valueAxis) => set({ valueAxis })} />
               {usesRight ? <AxisFields name="Right axis" value={current.rightAxis} defaultGridlines={false} onChange={(rightAxis) => set({ rightAxis })} /> : null}
             </Section>
           ) : null}

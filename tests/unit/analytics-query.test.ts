@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runTile, sliceValues } from "@/lib/analytics/dashboards";
 import { closeAnalytics, loadCsv } from "@/lib/analytics/engine";
-import { formatOfType } from "@/lib/analytics/query";
+import { buildPivotDrillSql, formatOfType, parseTileQuery } from "@/lib/analytics/query";
 import { cmp, dec, sum } from "@/lib/money/decimal";
 
 const ORG = "query-test";
@@ -118,6 +118,38 @@ describe("analytics tile queries (step 3)", () => {
     ]);
   });
 
+  it("groups a second time inside each group, in order (#376 phase 2)", async () => {
+    const result = await runTile(ORG, {
+      table: "sales",
+      groupBy: { field: "region" },
+      breakdown: { field: "customer" },
+      measures: [sales],
+      sort: { by: "category", direction: "asc" },
+    });
+    expect(result.columns.map((column) => [column.key, column.role])).toEqual([
+      ["category", "category"],
+      ["breakdown", "category"],
+      ["m0", "measure"],
+    ]);
+    expect(result.rows).toEqual([
+      { category: "Canterbury", breakdown: "Alpha", m0: "100.000000" },
+      { category: "Canterbury", breakdown: "Beta", m0: "100.000000" },
+      { category: "Canterbury", breakdown: "Gamma", m0: "100.000000" },
+      { category: "Otago", breakdown: "Alpha", m0: "0.400000" },
+      { category: "Otago", breakdown: "Beta", m0: "10.190000" },
+    ]);
+    const byMonth = await runTile(ORG, { table: "sales", groupBy: { field: "region" }, breakdown: { field: "order_date", grain: "year" }, measures: [{ label: "Orders", aggregate: "count" }] });
+    expect(byMonth.rows.filter((row) => row.category === "Otago")).toEqual([
+      { category: "Otago", breakdown: "2025-01-01", m0: "2" },
+      { category: "Otago", breakdown: "2026-01-01", m0: "2" },
+    ]);
+    await expect(runTile(ORG, { table: "sales", groupBy: null, breakdown: { field: "customer" }, measures: [sales] })).rejects.toThrow(/needs a first one/);
+    await expect(runTile(ORG, { table: "sales", groupBy: { field: "region" }, breakdown: { field: "region" }, measures: [sales] })).rejects.toThrow(/different/);
+    await expect(
+      runTile(ORG, { table: "sales", groupBy: { field: "order_date", grain: "month" }, breakdown: { field: "region" }, measures: [{ ...sales, compare: "previous_year" }] }),
+    ).rejects.toThrow(/second grouping can't compare/);
+  });
+
   it("totals without grouping (a KPI) and applies slicers", async () => {
     const all = await runTile(ORG, { table: "sales", groupBy: null, measures: [sales] });
     expect(all.rows).toEqual([{ m0: "310.590000" }]);
@@ -201,6 +233,43 @@ describe("analytics tile queries (step 3)", () => {
       kind: "grand_total",
       cells: { total_m0: "1000000000000000.90", total_m1: "142857142857142.985714" },
     });
+  });
+
+  it("nests pivot column fields with a subtotal for each outer column, added exactly (#376 phase 2)", async () => {
+    const result = await runTile(ORG, {
+      table: "pivot_sales",
+      pivot: { rows: [{ field: "region" }], column: { field: "date", grain: "month" }, subColumns: [{ field: "product" }] },
+      measures: [{ label: "Sales", aggregate: "sum", field: "amount" }],
+    });
+    const pivot = result.pivot!;
+    expect(pivot.columnFields?.map((field) => [field.key, field.label])).toEqual([
+      ["pivot_column", "date"],
+      ["pivot_column_1", "product"],
+    ]);
+    expect(pivot.columnValues).toEqual(["2025-01-01", "2025-02-01"]);
+    // Each month's products, then that month's subtotal, then the grand total.
+    expect(pivot.columns.map((column) => [column.key, column.path ?? null, column.subtotal ?? false, column.total])).toEqual([
+      ["c0_m0", ["2025-01-01", "Gadgets"], false, false],
+      ["c1_m0", ["2025-01-01", "Widgets"], false, false],
+      ["c2_m0", ["2025-01-01"], true, false],
+      ["c3_m0", ["2025-02-01", "Gadgets"], false, false],
+      ["c4_m0", ["2025-02-01", "Widgets"], false, false],
+      ["c5_m0", ["2025-02-01"], true, false],
+      ["total_m0", null, false, true],
+    ]);
+    const otago = pivot.rows.find((row) => row.kind === "detail" && row.dimensions[0] === "Otago")!;
+    // January's Otago widgets: 0.10 + 0.20 = 0.30 exactly; January subtotal adds the gadgets.
+    expect(otago.cells).toMatchObject({ c1_m0: "0.30", c0_m0: "999999999999999.99", c2_m0: "1000000000000000.29", c3_m0: "0.01", c5_m0: "0.01", total_m0: "1000000000000000.30" });
+    expect(pivot.rows.at(-1)?.cells).toMatchObject({ c4_m0: "0.10", c5_m0: "0.31", total_m0: "1000000000000000.90" });
+
+    // A cell's rows: the whole column path, or a column subtotal's shorter one.
+    const tables = new Map([["pivot_sales", [{ name: "date", type: "DATE" }, { name: "region", type: "VARCHAR" }, { name: "product", type: "VARCHAR" }, { name: "amount", type: "DECIMAL(18,2)" }]]]);
+    const query = parseTileQuery({ table: "pivot_sales", pivot: { rows: [{ field: "region" }], column: { field: "date", grain: "month" }, subColumns: [{ field: "product" }] }, measures: [{ label: "Sales", aggregate: "sum", field: "amount" }] }, tables);
+    const drill = buildPivotDrillSql(query, tables.get("pivot_sales")!, {}, { depth: 1, dimensions: ["Otago"], pivotValue: "2025-01-01", total: false, pivotPath: ["2025-01-01", "Widgets"] });
+    expect(drill.params).toEqual(["Otago", "2025-01-01", "Widgets"]);
+    expect(() => buildPivotDrillSql(query, tables.get("pivot_sales")!, {}, { depth: 1, dimensions: ["Otago"], pivotValue: null, total: false, pivotPath: ["a", "b", "c"] })).toThrow(/can't be opened/);
+    expect(() => parseTileQuery({ table: "pivot_sales", pivot: { rows: [{ field: "region" }], column: null, subColumns: [{ field: "product" }] }, measures: [{ label: "S", aggregate: "count" }] }, tables)).toThrow(/first pivot column/);
+    expect(() => parseTileQuery({ table: "pivot_sales", pivot: { rows: [{ field: "region" }], column: { field: "product" }, subColumns: [{ field: "region" }] }, measures: [{ label: "S", aggregate: "count" }] }, tables)).toThrow(/only be used once/);
   });
 
   it("orders pivot rows under their subtotals and columns by value, with totals equal to their rows", async () => {

@@ -146,6 +146,7 @@ export function inboxItemSummary(item: InboxItem) {
     source: item.source,
     emailFrom: item.emailFrom,
     emailSubject: item.emailSubject,
+    note: item.note,
     billId: item.billId,
     billNumber: item.billNumber,
     removedReason: item.removedReason,
