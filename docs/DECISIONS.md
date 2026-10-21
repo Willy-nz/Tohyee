@@ -6723,6 +6723,42 @@ accounting example is marked not yet reviewed.
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
 
+### More visuals (#376 phase 2; decisions 676-689)
+
+676. **Waterfall, funnel, gauge and bullet chart** (21 October 2026, #376
+     phase 2; Power BI's visuals of the same names, as the issue names
+     Power BI and Looker Studio as the references; not yet reviewed by
+     Jess). They are new tile visuals beside the ten already there, saved
+     the same way, so existing reports are unchanged. A waterfall and a
+     funnel show one value grouped by something; a gauge shows one total
+     (it can't be grouped) and a bullet chart one total or one bar per
+     group; both can take a second value as the target, or a typed
+     target. Neither compares with last year or the previous period (the
+     target is their comparison). The waterfall works out each bar's start
+     and end, and the total bar, exactly in decimals (a bridge must add up
+     to the cent); only the drawing turns them into numbers. Rises use the
+     value's colour (the theme's first) and falls the theme's second, which
+     in Tohyee's theme are the diverging pair's blue and orange (decision
+     599); the total is the muted grey. As Power BI, the total bar is on
+     and can be named or turned off; thin hairlines join the bars. The
+     funnel keeps the tile's order (Order by) rather than sorting itself,
+     and shows each stage's share of the first stage (Power BI's default)
+     or of the stage before. The gauge runs from 0 to twice the value
+     (Power BI) unless a range is chosen; with a target it runs a little
+     past the target or the value instead, so the target is never off the
+     dial. The bullet chart follows Stephen Few's design (as Power BI's
+     bullet visual does): grey bands at percentages of each group's target
+     (60% and 80% unless changed; up to three), the last running on to
+     120% of the target or the value, a thin bar for the value and an
+     upright line for the target. All four use the report theme,
+     `parseChartFormat` for their settings (unknown dropped, bad refused),
+     colour rules and per-group colours, number formats and data labels.
+677. **Targets and ranges aren't part of a copied look** (21 October 2026).
+     Like the key figure's target (decision 671), a gauge's range and
+     target and a bullet chart's typed target are numbers about the data,
+     so the format painter and chart type defaults leave them out, and
+     pasting keeps the tile's own.
+
 ### Several farms in one organisation (#390; decisions 740-749)
 
 744. **Farm staff see only their farms** (Jess, 21 October 2026: "Yes,
