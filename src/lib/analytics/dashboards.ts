@@ -91,7 +91,9 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet"];
+/** Charts that can show one total, with no grouping. */
+const UNGROUPED: TileVisual[] = ["table", "kpi", "pivot", "gauge", "bullet"];
 export const MAX_TILES = 40;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -283,8 +285,13 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     }
     if (visual === "pivot" && !query.pivot) throw new ValidationError(`${title}: choose at least one pivot row field.`);
     if (visual !== "pivot" && query.pivot) throw new ValidationError(`${title}: pivot fields can only be used with a pivot table.`);
-    if (visual !== "table" && visual !== "kpi" && visual !== "pivot" && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
+    if (!UNGROUPED.includes(visual) && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
     if ((visual === "pie" || visual === "donut") && query.measures.length !== 1) throw new ValidationError(`${title}: a pie shows one value.`);
+    // #376 phase 2 (decision 676).
+    if ((visual === "waterfall" || visual === "funnel") && query.measures.length !== 1) throw new ValidationError(`${title}: a ${visual} shows one value.`);
+    if (visual === "gauge" && query.groupBy) throw new ValidationError(`${title}: a gauge shows one total, so it can't be grouped.`);
+    if ((visual === "gauge" || visual === "bullet") && query.measures.length > 2) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} shows a value and, if you like, a target: up to two values.`);
+    if ((visual === "gauge" || visual === "bullet") && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} compares with its target, not last year or the previous period.`);
     let format: ChartFormat | undefined;
     try {
       format = parseChartFormat(tile.format);
