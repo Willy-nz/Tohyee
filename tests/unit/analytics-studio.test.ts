@@ -25,7 +25,7 @@ describe("Analytics workspace access and connectors", () => {
   });
 });
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/modules", () => ({ useModules: () => ({ analytics: true }) }));
 vi.mock("@/components/confirm-dialog", () => ({ useConfirm: () => vi.fn() }));
 vi.mock("@/components/hooks", () => ({ useApiData: () => ({ data: { dashboard: { id: "report", name: "Client report", description: null, settings: { from: null, to: null, slicers: [] }, tiles: [] } }, reload: vi.fn() }) }));
