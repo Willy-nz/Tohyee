@@ -117,7 +117,7 @@ export function PinnedAnalyticsTile({ organisationId, dashboardId, tileId }: { o
 function PinnedTileResult({ tile, result }: { tile: Tile; result: QueryResult }) {
   const measures = useMemo(() => result.columns.filter((column) => column.role === "measure"), [result.columns]);
   // The same chart as on the dashboard (with its format), with small margins.
-  const spec = useMemo(() => tileChartSpec(tile, measures, { compact: true }), [tile, measures]);
+  const spec = useMemo(() => tileChartSpec(tile, measures, { compact: true, query: tile.query, truncated: result.truncated }), [tile, measures, result.truncated]);
 
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   if (tile.visual === "kpi" && measures.length > 0) return <KeyFigureView result={result} format={tile.format} compact />;

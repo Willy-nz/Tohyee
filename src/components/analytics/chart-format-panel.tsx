@@ -505,7 +505,15 @@ export function ChartFormatPanel({ visual, values, format, onChange, inherited, 
               {can.cartesian && current.stack !== "percent" && (advanced || series.trend || series.forecast) ? (
                 <div className={styles.pair}>
                   <Check label="Trend line" checked={series.trend === true} onChange={(checked) => setSeries(index, { trend: checked || undefined })} />
-                  <NumberBox label="Forecast" hint="Groups to carry the trend on (1 to 12)" value={series.forecast} min={1} max={12} placeholder="None" onChange={(forecast) => setSeries(index, { forecast })} />
+                  <NumberBox
+                    label="Linear projection"
+                    hint="Periods to carry the straight-line trend on after the last date (1 to 12). Needs groups by date, oldest first, without Top N. It isn't the cash flow forecast."
+                    value={series.forecast}
+                    min={1}
+                    max={12}
+                    placeholder="None"
+                    onChange={(forecast) => setSeries(index, { forecast })}
+                  />
                 </div>
               ) : null}
               <div className={styles.group}>
