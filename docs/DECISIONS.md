@@ -6723,6 +6723,211 @@ accounting example is marked not yet reviewed.
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
 
+### More visuals (#376 phase 2; decisions 676-689)
+
+676. **Waterfall, funnel, gauge and bullet chart** (21 October 2026, #376
+     phase 2; Power BI's visuals of the same names, as the issue names
+     Power BI and Looker Studio as the references; not yet reviewed by
+     Jess). They are new tile visuals beside the ten already there, saved
+     the same way, so existing reports are unchanged. A waterfall and a
+     funnel show one value grouped by something; a gauge shows one total
+     (it can't be grouped) and a bullet chart one total or one bar per
+     group; both can take a second value as the target, or a typed
+     target. Neither compares with last year or the previous period (the
+     target is their comparison). The waterfall works out each bar's start
+     and end, and the total bar, exactly in decimals (a bridge must add up
+     to the cent); only the drawing turns them into numbers. Rises use the
+     value's colour (the theme's first) and falls the theme's second, which
+     in Tohyee's theme are the diverging pair's blue and orange (decision
+     599); the total is the muted grey. As Power BI, the total bar is on
+     and can be named or turned off; thin hairlines join the bars. The
+     funnel keeps the tile's order (Order by) rather than sorting itself,
+     and shows each stage's share of the first stage (Power BI's default)
+     or of the stage before. The gauge runs from 0 to twice the value
+     (Power BI) unless a range is chosen; with a target it runs a little
+     past the target or the value instead, so the target is never off the
+     dial. The bullet chart follows Stephen Few's design (as Power BI's
+     bullet visual does): grey bands at percentages of each group's target
+     (60% and 80% unless changed; up to three), the last running on to
+     120% of the target or the value, a thin bar for the value and an
+     upright line for the target. All four use the report theme,
+     `parseChartFormat` for their settings (unknown dropped, bad refused),
+     colour rules and per-group colours, number formats and data labels.
+677. **Targets and ranges aren't part of a copied look** (21 October 2026).
+     Like the key figure's target (decision 671), a gauge's range and
+     target and a bullet chart's typed target are numbers about the data,
+     so the format painter and chart type defaults leave them out, and
+     pasting keeps the tile's own.
+678. **Scatter and bubble, histogram, box plot** (21 October 2026, #376
+     phase 2; Power BI's scatter chart, Excel's histogram and box and
+     whisker charts, as Power BI has no built-in histogram or box plot; not
+     yet reviewed by Jess). Scatter: each group is a dot, the first value
+     across and the second up; a third value sizes the dots as bubbles with
+     area in proportion to it (Power BI's "Size"), zero or less the
+     smallest; one colour (the first value's) with colour rules and group
+     colours; an optional least-squares trend line; names by the dots are
+     optional and sit to the left on the right-hand half so they stay on
+     the card. Histogram: counts how many groups' (rows') first value falls
+     in each bin, so grouping by an invoice number counts invoices. Bins
+     run from their start up to, not including, the next; the first starts
+     at a whole number of widths at or below the smallest value; the width
+     is chosen, or worked out from a chosen number of bins (2-50) or from
+     Sturges' rule (1 + log2 of the count) and rounded to 1, 2, 2.5 or 5
+     times a power of ten, as Excel and most tools do. Binning is done
+     exactly in decimals so a value on an edge (0.3) is never put in the
+     bin below by rounding; a width that would make more than 100 bins
+     falls back to the automatic one. Box plot: quartiles by linear
+     interpolation (Excel's QUARTILE.INC, the same rule as the reference
+     line percentiles, decision 673), worked out exactly; whiskers to the
+     furthest values within 1.5 times the interquartile range (Tukey, Excel's
+     default) and dots beyond, which can be turned off.
+679. **A second grouping inside the first** (21 October 2026). Box plots
+     (and, in later #376 phase 2 work, heat maps, Sankey diagrams and small
+     multiples) need two groupings, which a tile didn't have. A tile's
+     question can now have `breakdown` (a field, by day to year for dates)
+     inside its group by; it comes back as a second group column and rows
+     are ordered by the group, then the second grouping. It's refused
+     without a first grouping, when it's the same as the first, with
+     last-year or previous-period comparisons (they join on the one
+     group), and on chart types that don't use it. Existing tiles have
+     none and are unchanged. The 5,000 row limit and Top N apply to the
+     rows, as before.
+680. **Treemap, heat map, calendar heat map, Sankey** (21 October 2026,
+     #376 phase 2; Power BI's treemap and the usual heat map, calendar and
+     Sankey designs; not yet reviewed by Jess). All four show one value.
+     Treemap: a box per group sized by its total, largest first, with an
+     optional second grouping inside each box; top groups take the theme's
+     colours in order and, past the last colour, grey (never a made-up
+     colour, decision 599); boxes inside a group share its colour. Heat
+     map: groups across, the second grouping down (required), each cell's
+     total added exactly; colour is magnitude, so one hue light to dark
+     (Tohyee's sequential blues, which flip in dark mode so small amounts
+     sit near the dark card), or, when amounts are both below and above
+     zero, the diverging orange-grey-blue centred on zero; the scale is
+     shown under the chart. Calendar heat map: grouped by a date by day
+     (refused otherwise); each day coloured the same way; up to the three
+     latest years with data, newest first, Monday first, the year down the
+     left so it never covers the months on a phone; the tile grows to fit.
+     Sankey: each group flows to the values of the second grouping
+     (required); flows are totals added exactly; a name on both sides is
+     kept apart so a flow can't loop back; names that would overlap are
+     left to the tooltip. Treemaps and Sankeys leave out amounts of zero or
+     less (they have no size), as Power BI does.
+681. **Small multiples** (21 October 2026, #376 phase 2; Power BI's small
+     multiples; not yet reviewed by Jess). Column, bar and line charts can
+     have a second grouping, "One small chart for each". Every small chart
+     is the tile's own chart (theme, format, labels, colour rules all
+     apply) for one value of it, with the same groups along the axis (blank
+     where a chart has none) and the same value scale, from the lowest to
+     the highest point drawn (stack totals when stacked) rounded out, so
+     they can be compared; a range chosen on the value axis wins. One
+     legend sits above the grid so every plot is the same size. The grid
+     fits as many as the card's width allows (one across on a phone). The
+     most small charts is 6 by default (2-12, Power BI's grid tops out
+     similarly); the largest by the first value's total are kept, in the
+     answer's order, and the rest are added together as "Other" exactly in
+     decimals, but only when every value is a total or a count. Averages,
+     smallest, largest, distinct counts and calculated values can't be
+     added across charts, so then the rest are left out and the card says
+     how many. Pinned tiles show up to four.
+682. **Matrix improvements** (21 October 2026, #376 phase 2; Power BI's
+     matrix visual; not yet reviewed by Jess). A pivot's column field can
+     have up to two more nested inside it (three levels, as many as fit on
+     a phone-scrolling table; the 2,000-cell limit still applies and now
+     counts the column totals). Each outer column value gets a "Total"
+     column after its inner ones, as Power BI's column subtotals do, worked
+     out by the database (grouping sets), never by adding cells on screen;
+     the grand total stays last. Drilling into a cell uses the whole column
+     path; exports name a column "Year: 2025 › Channel: Web". Rows can be
+     stepped (one indented column; each group's subtotal row moves above
+     its rows as the group's heading, as Power BI's default) or one column
+     per field (the existing look, still the default so saved reports are
+     unchanged). Every group with a subtotal opens and closes (a + / −
+     button with its name for screen readers, plus Open all / Close all);
+     what's open isn't saved (Power BI saves it with the report; here the
+     report saves only how many levels start open, "Groups open to start
+     with"), so a viewer can't change the report by looking at it. In the
+     stepped layout a level whose subtotal is turned off keeps its heading
+     row with blank figures.
+683. **Rich text with values** (21 October 2026, #376 phase 2; Power BI's
+     text box with dynamic values, Looker Studio's text; not yet reviewed
+     by Jess). A text item's words can use a small, safe set of marks:
+     `**bold**`, `*italic*`, `[words](https://link)`, lines starting "- " or
+     "1. " for lists, a blank line between paragraphs, and `{Value name}`
+     for one of the item's values, e.g. "Sales this month: {Sales}". The
+     values are the text item's own question: up to six totals from one
+     data source over the report's dates and slicers, no grouping and no
+     comparison with another period, run the same way as a key figure (a
+     report viewer runs only the saved question). A value shows formatted
+     as in a table; a name with no value stays as typed, so the person can
+     see what to fix, and the editor warns. The text is parsed into a tree
+     that the page draws as React elements, never as HTML: anything typed,
+     and any value, is always text. Only http, https and mailto links are
+     made into links (they open in a new tab with no referrer); anything
+     else, such as `javascript:`, is left as plain text. Existing text
+     cards stay plain text until "Formatting" is turned on; new ones start
+     with it on. Up to 4,000 characters (plain notes keep their 2,000).
+684. **Images on reports** (21 October 2026, #376 phase 2; Power BI's and
+     Looker Studio's image item; not yet reviewed by Jess). An image is
+     uploaded to a saved report (so a new report is saved first), stored in
+     the organisation's own database like record attachments, checked the
+     same way (the type from its name, confirmed by its contents), JPG or
+     PNG only, up to 5 MB and 40 per report. It belongs to that report:
+     it's served only through the report, to people who can see the report
+     (a report viewer only when it's shared with them, decision 360), with
+     the same headers as attachments so it can't run as a page. There are
+     no links to images from outside Tohyee (still no public links). A
+     tile can only use its own report's images; saving the report removes
+     images no tile uses any more, and deleting the report deletes them.
+     An image has a description for screen readers (blank only for
+     decoration) and fits inside the tile or fills it.
+685. **Shapes and lines** (21 October 2026, #376 phase 2; Power BI's shapes;
+     not yet reviewed by Jess). Rectangle, rounded rectangle, circle or
+     oval, line and arrow (across, down or corner to corner), with a fill
+     colour (not for lines), a line colour and width (0-12 pixels) and,
+     on a filled shape, a few words. Left alone they use the report
+     theme's first colour (a light wash inside); a chosen colour is
+     checked as a hex colour and drawn as its worked-out dark version in
+     dark mode (decision 672). Shapes are decoration, hidden from screen
+     readers except for their words. They sit in the report's grid like
+     every other tile; placing them freely over other tiles waits for the
+     free-position canvas (phase 3).
+686. **Buttons** (21 October 2026, #376 phase 2; Power BI's buttons; not yet
+     reviewed by Jess). A button has a label and an action. The only
+     action today is "Reset the filters" (back to the report's saved dates
+     and slicers, as Power BI's "reset to default"); "Go to a page" and
+     "Open a bookmark" are listed as coming and refused when saved, until
+     report pages and bookmarks exist (phase 3). Adding an action means
+     listing it in `BUTTON_ACTIONS` (`src/lib/analytics/items.ts`),
+     accepting it in `parseButton` and handling it in the report's
+     `runButtonAction`. A button is an ordinary button for the keyboard
+     and screen readers, and works the same while the report is being
+     changed (its Edit button opens it for changing).
+687. **New Zealand maps** (22 October 2026, #376 phase 2; Power BI's filled
+     map and map visuals; not yet reviewed by Jess). Two chart types, drawn
+     without any outside map or tile service (the issue: "no external map
+     tiles unless agreed"). A **filled map** is grouped by a region or a
+     district or city name and colours each area by one value on the
+     sequential scale (diverging when amounts are both sides of zero), as
+     heat maps do; names match whatever their macrons,
+     apostrophes, case and words like "Region", "District" or "Council",
+     plus a few other names people use (Wanganui, Hutt, Tairāwhiti). Regions
+     or territorial authorities are chosen, or worked out from which more of
+     the names match. Totals for names that land on the same area are added
+     exactly. Names that aren't areas are listed under the map, not
+     guessed. A **map with points** is grouped by anything and needs a
+     latitude and a longitude (two values, normally averages), with a third
+     value sizing the points as bubbles; points outside New Zealand are left
+     out and counted under the map. The boundaries are Stats NZ's regional
+     council (2017) and territorial authority (2021) generalised layers,
+     CC BY 4.0, simplified to under 70 KB each, shipped with Tohyee and
+     loaded only when a map is drawn; every map says "Boundaries: Stats NZ,
+     CC BY 4.0." under it, and `licenses/nz-boundaries/NOTICE` records the
+     source and changes. CC BY 4.0 only asks for attribution, so it can be
+     distributed with Tohyee's AGPLv3 code. The Chatham Islands are drawn
+     6.5° closer to the mainland as an inset (as Stats NZ's own maps do);
+     points there move with them. Maps don't zoom or pan (the whole country
+     always shows); suburbs, wards and meshblocks aren't included.
 ### Filing from My mail into shared data (#250; decisions 720-726)
 
 720. **Nothing from mail is shared unless its Owner files it, after a

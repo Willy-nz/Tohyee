@@ -222,6 +222,7 @@
 
 .pivotTools {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
 }
@@ -344,3 +345,31 @@
 @media (max-width: 640px) { .themed { padding: 8px; } }
 /* The title's own block, so a centred or right-aligned title (#376) lines up across the card. */
 .tileHeader > div:first-child { flex: 1 1 auto; min-width: 0; }
+
+/* Pivot (matrix) rows that open and close, and the stepped layout (#376 phase 2). */
+.pivotToggle {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-inline-end: 6px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.pivotToggle:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+
+.pivotStep {
+  white-space: nowrap;
+}
+.mapNote { margin: 4px 0 0; color: var(--report-text-muted, var(--text-muted)); font-size: var(--text-xs, 12px); }

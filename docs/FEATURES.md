@@ -2096,8 +2096,83 @@ that something happened.
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into
   place (the arrows still work from the keyboard), duplicated, or clicked
-  to open, and **+ Add text** adds a heading with notes to split a
-  dashboard into sections. Up to 40 tiles.
+  to open, and **+ Add text or item** adds a heading with notes to split a
+  dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: New Zealand maps** (#376 phase 2, decision 687). A
+  **filled map** colours New Zealand's regions or districts and cities by a
+  value, e.g. sales by region; names are matched however they're spelt
+  (macrons, "Region", "District" and so on), and names that aren't on the
+  map are listed under it. A **map with points** puts a dot at each
+  latitude and longitude, sized by a third value if you like. The
+  boundaries come with Tohyee (Stats NZ, CC BY 4.0), so no outside map
+  service is used.
+- **Analytics: text, images, shapes and buttons** (#376 phase 2, decisions
+  683-686). **+ Add text or item** adds one of four things to a report.
+  **Text** can use **bold**, *italic*, links, lists and values from the
+  data, e.g. "Sales this month: {Sales}", worked out over the report's
+  dates and slicers; whatever is typed always shows as text, and only web
+  and email links become links. An **image** (JPG or PNG, up to 5 MB) is
+  stored with the report and only people who can see the report can see
+  it. A **shape or line** (rectangle, rounded, circle, line or arrow) uses
+  the report's theme colours unless others are chosen. A **button** resets
+  the report's filters; going to another page and opening a bookmark will
+  come with report pages and bookmarks.
+- **Analytics: pivot table (matrix) improvements** (#376 phase 2, decision
+  682). A pivot can have up to three column fields nested inside each
+  other (e.g. year, then channel), with a total for each outer column; rows
+  can be laid out stepped (one indented column, each group's total as its
+  heading, as Power BI's matrix) or a column per field as before; each
+  group opens and closes (+ / −, with Open all and Close all), and the
+  report can choose how many levels are open to start with. Clicking a
+  cell under nested columns opens that cell's rows, and exports name each
+  column by its whole path.
+- **Analytics: small multiples** (#376 phase 2, decision 681). A column,
+  bar or line chart can show "One small chart for each" value of a second
+  field, e.g. a chart per region: every small chart has the same groups
+  along the axis and the same value scale, one legend above them all, and
+  up to 6 charts (2 to 12 can be chosen). Past that the smaller ones are
+  added together exactly as "Other" when the values are totals or counts;
+  averages and other values that can't be added are left out, and the
+  card says so. Pinned tiles show up to four.
+- **Analytics: treemap, heat map, calendar heat map and Sankey** (#376
+  phase 2, decision 680). A **treemap** shows each group as a box sized by
+  its total, optionally split into a second grouping ("Inside each box"),
+  groups in the theme's colours in order. A **heat map** puts the groups
+  across and a second grouping down, each cell coloured on one blue scale
+  (or orange-grey-blue when amounts are both sides of zero), with the
+  scale under it. A **calendar heat map** colours each day of up to the
+  three latest years with data. A **Sankey** diagram shows each group
+  flowing to the values of a second grouping ("Flows to"), widths by
+  total. Totals are added exactly; treemaps and Sankeys leave out amounts
+  of zero or less, which have no size.
+- **Analytics: scatter and bubble, histogram and box plot** (#376 phase 2,
+  decisions 678-679). A **scatter** chart puts each group at its first
+  value across and its second up; a third value makes it a **bubble**
+  chart (bubble area in proportion), with an optional straight trend line
+  and names by the dots. A **histogram** counts how many groups' value
+  falls in each range: bins chosen automatically (round widths), by number
+  or by width, worked out exactly so a value on an edge is always in the
+  bin it starts. A **box plot** shows the spread of a value: quartiles as
+  a spreadsheet's QUARTILE.INC, whiskers to 1.5 box heights and dots
+  beyond. With "Each box is made of" (a second grouping, e.g. boxes by
+  region made of their customers' totals) there's a box per group;
+  without it, one box of every group's value.
+- **Analytics: waterfall, funnel, gauge and bullet chart** (#376 phase 2,
+  decisions 676-677). New chart types in the chart editor. A **waterfall**
+  (a P&L bridge) moves a running total up and down group by group, added
+  exactly in decimals, and ends with a total bar (named as you like, or
+  left off), with rises, falls and the total in their own colours and thin
+  lines joining the bars. A **funnel** draws its stages in the tile's
+  order with each stage's share of the first stage or the one before. A
+  **gauge** shows one total on a dial from 0 (or a chosen minimum) to a
+  chosen maximum, or twice the value, with a target from a second value or
+  a typed number. A **bullet chart** shows each group's value as a thin
+  bar over grey bands at percentages of its target (60% and 80% unless
+  changed), with the target as an upright line. All four use the report's
+  theme and the Format panel: number formats, data labels, colours (any
+  hex, per group, colour rules), axes and gridlines where they have them,
+  tooltips, the card and title. Copying a format or a chart type default
+  leaves out a gauge's range and the targets.
 - **Analytics: key figure formatting** (#376 phase 1, decision 674). Under
   Key figure › Number style: the number's size (small to extra large, or
   exact pixels), colour, alignment, weight and the value's name above or

@@ -35,10 +35,35 @@ export type FilterOp =
   | "last_months"
   | "this_financial_year"
   | "last_financial_year";
-export type Visual = "column" | "bar" | "line" | "area" | "combo" | "pie" | "donut" | "kpi" | "table" | "pivot";
+export type Visual =
+  | "column"
+  | "bar"
+  | "line"
+  | "area"
+  | "combo"
+  | "pie"
+  | "donut"
+  | "kpi"
+  | "table"
+  | "pivot"
+  | "waterfall"
+  | "funnel"
+  | "gauge"
+  | "bullet"
+  | "scatter"
+  | "histogram"
+  | "boxplot"
+  | "treemap"
+  | "heatmap"
+  | "calendar"
+  | "sankey"
+  | "filledmap"
+  | "pointmap";
 
 export type PivotDimension = { field: string; grain?: PivotGrain };
-export type PivotSpec = { rows: PivotDimension[]; column: PivotDimension | null };
+/** `subColumns` nest under `column` (#376 phase 2, a matrix's column hierarchy); up to two. */
+export type PivotSpec = { rows: PivotDimension[]; column: PivotDimension | null; subColumns?: PivotDimension[] };
+export const MAX_PIVOT_SUB_COLUMNS = 2;
 
 /** A value worked out from the table's rows (not a formula). */
 export type BaseMeasure = {
@@ -85,6 +110,12 @@ export type QueryDates = { today: string; yearEndMonth: number };
 export type TileQuery = {
   table: string;
   groupBy: { field: string; grain?: Grain } | null;
+  /**
+   * A second grouping inside the first (#376 phase 2): the items in each box
+   * of a box plot, a heat map's other axis, a Sankey's targets, or one small
+   * chart each. Its values come back as the `breakdown` column.
+   */
+  breakdown?: { field: string; grain?: Grain } | null;
   pivot?: PivotSpec | null;
   measures: Measure[];
   filters: Filter[];
@@ -100,7 +131,18 @@ export type TileQuery = {
 export type ColumnInfo = { name: string; type: string };
 export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
 export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure" };
-export type PivotColumn = { key: string; label: string; pivotValue: string | null; measure: ResultColumn; total: boolean };
+export type PivotColumn = {
+  key: string;
+  label: string;
+  /** The first column field's value (the only one with a single column field). */
+  pivotValue: string | null;
+  measure: ResultColumn;
+  /** The grand total column. */
+  total: boolean;
+  /** With nested column fields: the values down the column hierarchy; shorter than the fields for a column subtotal. */
+  path?: Array<string | null>;
+  subtotal?: boolean;
+};
 export type PivotRow = {
   key: string;
   kind: "detail" | "subtotal" | "grand_total";
@@ -111,11 +153,20 @@ export type PivotRow = {
 export type PivotData = {
   rowFields: ResultColumn[];
   columnField: ResultColumn | null;
+  /** Every column field, outermost first, when there are nested ones (#376 phase 2). */
+  columnFields?: ResultColumn[];
   columnValues: Array<string | null>;
   columns: PivotColumn[];
   rows: PivotRow[];
 };
-export type PivotDrillSelection = { depth: number; dimensions: Array<string | null>; pivotValue: string | null; total: boolean };
+export type PivotDrillSelection = {
+  depth: number;
+  dimensions: Array<string | null>;
+  pivotValue: string | null;
+  total: boolean;
+  /** With nested column fields: the column's values, outermost first (shorter for a column subtotal). */
+  pivotPath?: Array<string | null>;
+};
 export type PivotDrillResult = { columns: ResultColumn[]; rows: Array<Record<string, string | null>>; truncated: boolean };
 /** A key figure's first value by month (oldest first), for its sparkline. */
 export type TrendPoint = { month: string; value: string | null };
@@ -268,6 +319,19 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     groupBy = { field, ...(grain ? { grain } : {}) };
   }
 
+  let breakdown: TileQuery["breakdown"] = null;
+  if (raw.breakdown) {
+    if (!groupBy) throw new ValidationError("A second grouping needs a first one: choose what to group by.");
+    const second = raw.breakdown as Record<string, unknown>;
+    const field = column(columns, second.field, "Second grouping");
+    let grain: Grain | undefined;
+    if (isDateType(columns.get(field)!)) {
+      grain = GRAINS.includes(second.grain as Grain) ? (second.grain as Grain) : "month";
+    }
+    if (field === groupBy.field && grain === groupBy.grain) throw new ValidationError("The second grouping should be different from the first.");
+    breakdown = { field, ...(grain ? { grain } : {}) };
+  }
+
   let pivot: PivotSpec | null = null;
   if (raw.pivot !== undefined && raw.pivot !== null) {
     if (groupBy) throw new ValidationError("A pivot table uses its own row and column fields.");
@@ -285,9 +349,15 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     const rows = rawPivot.rows.map((entry, index) => dimension(entry, `Pivot row ${index + 1}`));
     const rawColumn = rawPivot.column;
     const pivotColumn = rawColumn === null || rawColumn === undefined || rawColumn === "" ? null : dimension(rawColumn, "Pivot column");
-    const fields = [...rows.map((entry) => entry.field), ...(pivotColumn ? [pivotColumn.field] : [])];
+    let subColumns: PivotDimension[] = [];
+    if (rawPivot.subColumns !== undefined && rawPivot.subColumns !== null) {
+      if (!Array.isArray(rawPivot.subColumns) || rawPivot.subColumns.length > MAX_PIVOT_SUB_COLUMNS) throw new ValidationError(`A pivot table can have up to ${MAX_PIVOT_SUB_COLUMNS + 1} column fields.`);
+      if (rawPivot.subColumns.length && !pivotColumn) throw new ValidationError("Choose the first pivot column before the ones inside it.");
+      subColumns = rawPivot.subColumns.map((entry, index) => dimension(entry, `Pivot column ${index + 2}`));
+    }
+    const fields = [...rows.map((entry) => entry.field), ...(pivotColumn ? [pivotColumn.field] : []), ...subColumns.map((entry) => entry.field)];
     if (new Set(fields).size !== fields.length) throw new ValidationError("A pivot field can only be used once.");
-    pivot = { rows, column: pivotColumn };
+    pivot = { rows, column: pivotColumn, ...(subColumns.length ? { subColumns } : {}) };
   }
 
   if (!Array.isArray(raw.measures) || raw.measures.length === 0) throw new ValidationError("Add at least one value to show.");
@@ -324,6 +394,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     }
     if (measure.compare === "previous_year" || measure.compare === "previous_period") {
       if (pivot) throw new ValidationError(`${label}: a pivot table can't compare with another period.`);
+      if (breakdown) throw new ValidationError(`${label}: a chart with a second grouping can't compare with another period.`);
       if (groupBy && measure.compare === "previous_period") throw new ValidationError(`${label}: comparing with the previous period is for one total.`);
       if (groupBy && !groupBy.grain) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
       result.compare = measure.compare;
@@ -381,7 +452,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
     limit = Number(raw.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ROWS) throw new ValidationError(`Top N must be a whole number from 1 to ${MAX_ROWS}.`);
   }
-  return { table, groupBy, pivot, measures, filters, dateField, sort, limit, ...(raw.sparkline === true ? { sparkline: true } : {}) };
+  return { table, groupBy, ...(breakdown ? { breakdown } : {}), pivot, measures, filters, dateField, sort, limit, ...(raw.sparkline === true ? { sparkline: true } : {}) };
 }
 
 type Built = { sql: string; params: unknown[]; columns: ResultColumn[] };
@@ -561,6 +632,17 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       role: "category",
     });
   }
+  let second = "";
+  if (query.groupBy && query.breakdown) {
+    const field = q(query.breakdown.field);
+    second = query.breakdown.grain ? `cast(date_trunc('${query.breakdown.grain}', ${field}) as DATE)` : field;
+    columns.push({
+      key: "breakdown",
+      label: query.breakdown.field,
+      format: query.breakdown.grain ? "date" : formatOfType(types.get(query.breakdown.field)!),
+      role: "category",
+    });
+  }
   query.measures.forEach((measure, index) => {
     columns.push({ key: `m${index}`, label: measure.label, format: measureFormat(measure), role: "measure" });
     if (measure.compare === "previous_year") columns.push({ key: `m${index}_py`, label: `${measure.label} last year`, format: measureFormat(measure), role: "measure" });
@@ -574,6 +656,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
         : category;
     const parts = [
       ...(query.groupBy ? [`${shiftedCategory} as category`] : []),
+      ...(second ? [`${second} as breakdown`] : []),
       ...query.measures.map((measure, index) => `${measureSql(measure, dates)} as m${index}`),
     ];
     return `select ${parts.join(", ")} from ${q(query.table)}${conditions(shiftYears, dates)}${query.groupBy ? " group by all" : ""}`;
@@ -582,7 +665,9 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   const order = (alias: string) => {
     if (!query.groupBy) return "";
     const by = query.sort.by === "value" ? `${alias}m0` : `${alias}category`;
-    return ` order by ${by} ${query.sort.direction} nulls last`;
+    // With a second grouping, its values come in order within each group.
+    const then = second ? (query.sort.by === "value" ? `, ${alias}category asc nulls last, ${alias}breakdown asc nulls last` : `, ${alias}breakdown asc nulls last`) : "";
+    return ` order by ${by} ${query.sort.direction} nulls last${then}`;
   };
   const limit = ` limit ${Math.min(query.limit ?? MAX_ROWS + 1, MAX_ROWS + 1)}`;
 
@@ -625,6 +710,7 @@ export type PivotBuilt = {
   params: unknown[];
   rowFields: ResultColumn[];
   columnField: ResultColumn | null;
+  columnFields: ResultColumn[];
   measures: ResultColumn[];
   hasColumn: boolean;
 };
@@ -650,32 +736,39 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
     return dimension.grain ? `cast(date_trunc('${dimension.grain}', ${field}) as DATE)` : field;
   };
   const rowExpressions = pivot.rows.map(expression);
-  const columnExpression = pivot.column ? expression(pivot.column) : null;
+  // The column fields, outermost first (#376 phase 2: up to three, nested).
+  const columnDimensions = pivot.column ? [pivot.column, ...(pivot.subColumns ?? [])] : [];
+  const columnExpressions = columnDimensions.map(expression);
+  const columnExpression = columnExpressions[0] ?? null;
   const rowAliases = pivot.rows.map((_dimension, index) => internalAlias(`_tohyee_pivot_row_${index}`));
-  const pivotAlias = internalAlias("_tohyee_pivot_column");
+  const columnAliases = columnDimensions.map((_dimension, index) => internalAlias(index === 0 ? "_tohyee_pivot_column" : `_tohyee_pivot_column_${index}`));
   const filter = filterSql(query, types, dashboard, param);
   const filteredColumns = [
     "*",
     ...rowExpressions.map((entry, index) => `${entry} as ${q(rowAliases[index])}`),
-    ...(columnExpression ? [`${columnExpression} as ${q(pivotAlias)}`] : []),
+    ...columnExpressions.map((entry, index) => `${entry} as ${q(columnAliases[index])}`),
   ];
   const filtered = `with filtered as (select ${filteredColumns.join(", ")} from ${q(query.table)}${filter})`;
   const rowGroups = (depth: number) => rowAliases.slice(0, depth).map(q);
+  const columnGroups = (depth: number) => columnAliases.slice(0, depth).map(q);
   const rowGroupingSets = Array.from({ length: pivot.rows.length + 1 }, (_, index) => {
     const fields = rowGroups(pivot.rows.length - index);
     return `(${fields.join(", ")})`;
   });
+  // Every column, and with nested fields every column subtotal, counts towards the size limit.
+  const columnGroupsSql =
+    columnAliases.length === 1
+      ? `select ${q(columnAliases[0])} from filtered group by ${q(columnAliases[0])}`
+      : `select ${columnAliases.map(q).join(", ")} from filtered group by grouping sets (${Array.from({ length: columnAliases.length }, (_, index) => `(${columnGroups(columnAliases.length - index).join(", ")})`).join(", ")})`;
   const countSql = `${filtered}, row_groups as (select ${rowAliases.map(q).join(", ")} from filtered group by grouping sets (${rowGroupingSets.join(", ")}))` +
-    `${columnExpression ? `, column_groups as (select ${q(pivotAlias)} from filtered group by ${q(pivotAlias)})` : ""} ` +
+    `${columnExpression ? `, column_groups as (${columnGroupsSql})` : ""} ` +
     `select (select count(*) from row_groups) as row_groups${columnExpression ? ", (select count(*) from column_groups) as column_groups" : ""}`;
 
   const groupingSets: string[] = [];
   for (let depth = pivot.rows.length; depth >= 0; depth -= 1) {
     const prefix = rowGroups(depth);
-    if (columnExpression) {
-      groupingSets.push(`(${[...prefix, q(pivotAlias)].join(", ")})`, `(${prefix.join(", ")})`);
-    } else {
-      groupingSets.push(`(${prefix.join(", ")})`);
+    for (let columnDepth = columnAliases.length; columnDepth >= 0; columnDepth -= 1) {
+      groupingSets.push(`(${[...prefix, ...columnGroups(columnDepth)].join(", ")})`);
     }
   }
   const aggregate = (measure: Measure) => {
@@ -697,14 +790,13 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
     format: dimension.grain ? "date" : formatOfType(types.get(dimension.field)!),
     role: "category",
   }));
-  const columnField = pivot.column
-    ? {
-        key: "pivot_column",
-        label: pivot.column.field,
-        format: pivot.column.grain ? "date" as const : formatOfType(types.get(pivot.column.field)!),
-        role: "category" as const,
-      }
-    : null;
+  const columnFields = columnDimensions.map((dimension, index): ResultColumn => ({
+    key: index === 0 ? "pivot_column" : `pivot_column_${index}`,
+    label: dimension.field,
+    format: dimension.grain ? "date" : formatOfType(types.get(dimension.field)!),
+    role: "category",
+  }));
+  const columnField = columnFields[0] ?? null;
   const measures = query.measures.map((measure, index): ResultColumn => ({
     key: `m${index}`,
     label: measure.label,
@@ -714,17 +806,21 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
   const grouped = [
     ...rowAliases.map((alias, index) => `cast(${q(alias)} as VARCHAR) as ${q(`r${index}`)}, grouping(${q(alias)}) as ${q(`g${index}`)}`),
     ...(columnExpression
-      ? [`cast(${q(pivotAlias)} as VARCHAR) as pivot_column`, `grouping(${q(pivotAlias)}) as gc`]
+      ? columnAliases.flatMap((alias, index) => [
+          `cast(${q(alias)} as VARCHAR) as ${index === 0 ? "pivot_column" : `pivot_column_${index}`}`,
+          `grouping(${q(alias)}) as ${index === 0 ? "gc" : `gc_${index}`}`,
+        ])
       : [`null::VARCHAR as pivot_column`, "0 as gc"]),
     ...query.measures.map((measure, index) => `${aggregate(measure)} as ${q(`m${index}`)}`),
   ];
   // Each group's rows, then its subtotal, then the next group; the grand total last. Rows sort by
   // their fields, smallest first (the editor has no order for a pivot: each column has its own values).
   const rowOrder = rowAliases.map((alias) => `grouping(${q(alias)}), ${q(alias)} asc nulls last`);
-  const columnOrder = columnExpression ? [`grouping(${q(pivotAlias)})`, `${q(pivotAlias)} asc nulls last`] : [];
+  // A column's subtotal comes after the columns inside it.
+  const columnOrder = columnAliases.flatMap((alias) => [`grouping(${q(alias)})`, `${q(alias)} asc nulls last`]);
   const sql = `${filtered} select ${grouped.join(", ")} from filtered group by grouping sets (${groupingSets.join(", ")}) ` +
     `order by ${[...rowOrder, ...columnOrder].join(", ")}`;
-  return { sql, countSql, params, rowFields, columnField, measures, hasColumn: columnExpression !== null };
+  return { sql, countSql, params, rowFields, columnField, columnFields, measures, hasColumn: columnExpression !== null };
 }
 
 export type PivotDrillBuilt = { sql: string; params: unknown[]; columns: ResultColumn[] };
@@ -745,7 +841,13 @@ export function buildPivotDrillSql(
     selection.dimensions.length !== query.pivot.rows.length ||
     selection.dimensions.some((value) => value !== null && typeof value !== "string") ||
     typeof selection.total !== "boolean" ||
-    (query.pivot.column ? (selection.pivotValue !== null && typeof selection.pivotValue !== "string") : selection.total || selection.pivotValue !== null)
+    (query.pivot.column ? (selection.pivotValue !== null && typeof selection.pivotValue !== "string") : selection.total || selection.pivotValue !== null) ||
+    (selection.pivotPath !== undefined &&
+      (!Array.isArray(selection.pivotPath) ||
+        selection.pivotPath.length < 1 ||
+        selection.pivotPath.length > 1 + (query.pivot.subColumns?.length ?? 0) ||
+        !query.pivot.column ||
+        selection.pivotPath.some((value) => value !== null && typeof value !== "string")))
   ) {
     throw new ValidationError("That pivot cell can't be opened.");
   }
@@ -769,12 +871,13 @@ export function buildPivotDrillSql(
     extra.push(value === null ? `${field} is null` : `cast(${field} as VARCHAR) = ${param(value)}`);
   }
   if (query.pivot.column && !selection.total) {
-    const field = expression(query.pivot.column);
-    extra.push(
-      selection.pivotValue === null
-        ? `${field} is null`
-        : `cast(${field} as VARCHAR) = ${param(selection.pivotValue)}`,
-    );
+    // With nested column fields, every value down the column's path; otherwise the one column value.
+    const columnDimensions = [query.pivot.column, ...(query.pivot.subColumns ?? [])];
+    const path = selection.pivotPath ?? [selection.pivotValue];
+    path.forEach((value, index) => {
+      const field = expression(columnDimensions[index]);
+      extra.push(value === null ? `${field} is null` : `cast(${field} as VARCHAR) = ${param(value)}`);
+    });
   }
   const where = conditions
     ? `${conditions}${extra.length ? ` and ${extra.join(" and ")}` : ""}`
@@ -784,6 +887,7 @@ export function buildPivotDrillSql(
   const fields = [
     ...query.pivot.rows.map((dimension) => dimension.field),
     ...(query.pivot.column ? [query.pivot.column.field] : []),
+    ...(query.pivot.subColumns ?? []).map((dimension) => dimension.field),
     ...query.measures.flatMap((measure) => [measure.field, measure.times].filter((field): field is string => Boolean(field))),
     ...(query.dateField ? [query.dateField] : []),
   ].filter((field, index, all) => all.indexOf(field) === index);

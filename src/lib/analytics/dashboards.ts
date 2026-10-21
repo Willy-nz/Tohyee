@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { parseChartFormat, parseVisualDefaults, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { parseChartFormat, parseVisualDefaults, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { findTheme } from "@/lib/analytics/themes";
+import { parseButton, parseImage, parseShape, type ButtonItem, type ImageItem, type ItemVisual, type ShapeItem } from "@/lib/analytics/items";
+import { MAX_RICH_TEXT } from "@/lib/analytics/rich-text";
+import { checkDashboardImages } from "@/lib/analytics/images";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
@@ -36,8 +39,8 @@ import { getOrganisationSettings } from "@/lib/organisations/settings";
 
 export type { TileHeight, TileWidth } from "@/lib/analytics/layout";
 
-/** A chart or table, or a text card (a heading and notes, no data). */
-export type TileVisual = Visual | "text";
+/** A chart or table, or a non-data item: text (with values), an image, a shape or a button (#376 phase 2). */
+export type TileVisual = Visual | ItemVisual;
 
 export type Tile = {
   id: string;
@@ -46,10 +49,15 @@ export type Tile = {
   width: TileWidth;
   /** Left out: medium. */
   height?: TileHeight;
-  /** A text card has no question. */
+  /** A text card's question is optional: one total per value, for {Value} in its text. Images, shapes and buttons have none. */
   query: TileQuery | null;
   /** A text card's notes (plain text; blank lines start a new paragraph). */
   text?: string;
+  /** "rich": the notes use bold, italic, links, lists and {Value} (decision 683); left out, plain text as before. */
+  textFormat?: "rich";
+  image?: ImageItem;
+  shape?: ShapeItem;
+  button?: ButtonItem;
   /** How the chart looks (#331, #333); left out, it looks as it always has. */
   format?: ChartFormat;
 };
@@ -89,7 +97,9 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text"];
+const VISUALS: TileVisual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot", "text", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap", "image", "shape", "button"];
+/** Charts that can show one total, with no grouping. */
+const UNGROUPED: TileVisual[] = ["table", "kpi", "pivot", "gauge", "bullet"];
 export const MAX_TILES = 40;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -267,11 +277,42 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     seen.add(id);
     const width: TileWidth = TILE_WIDTHS.includes(tile.width as TileWidth) ? (tile.width as TileWidth) : "half";
     const height = TILE_HEIGHTS.includes(tile.height as TileHeight) && tile.height !== "medium" ? (tile.height as TileHeight) : undefined;
+    const what = title;
     if (visual === "text") {
       if (tile.text !== undefined && tile.text !== null && typeof tile.text !== "string") throw new ValidationError(`${title}: the notes should be text.`);
       const text = typeof tile.text === "string" ? tile.text.replace(/\r\n/g, "\n").trim() : "";
-      if (text.length > 2000) throw new ValidationError(`${title}: the notes can be up to 2,000 characters.`);
-      return { id, title, visual, width, query: null, ...(text ? { text } : {}) };
+      const rich = tile.textFormat === "rich";
+      const most = rich ? MAX_RICH_TEXT : 2000;
+      if (text.length > most) throw new ValidationError(`${title}: the notes can be up to ${most.toLocaleString("en-NZ")} characters.`);
+      // Values for {Value} in rich text: one total each, no grouping (decision 683).
+      let query: TileQuery | null = null;
+      if (rich && tile.query !== undefined && tile.query !== null) {
+        try {
+          query = parseTileQuery(tile.query, tables);
+        } catch (error) {
+          throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (query.groupBy || query.pivot || query.breakdown) throw new ValidationError(`${title}: values in text are one total each, so they can't be grouped.`);
+        if (query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: values in text can't compare with another period yet.`);
+      }
+      let format: ChartFormat | undefined;
+      try {
+        format = parseChartFormat(tile.format);
+      } catch (error) {
+        throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return { id, title, visual, width, query, ...(text ? { text } : {}), ...(rich ? { textFormat: "rich" as const } : {}), ...(format ? { format } : {}) };
+    }
+    if (visual === "image" || visual === "shape" || visual === "button") {
+      let format: ChartFormat | undefined;
+      try {
+        format = parseChartFormat(tile.format);
+      } catch (error) {
+        throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const item =
+        visual === "image" ? { image: parseImage(tile.image, what) } : visual === "shape" ? { shape: parseShape(tile.shape, what) } : { button: parseButton(tile.button, what) };
+      return { id, title, visual, width, ...(height ? { height } : {}), query: null, ...item, ...(format ? { format } : {}) };
     }
     let query: TileQuery;
     try {
@@ -281,8 +322,25 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     }
     if (visual === "pivot" && !query.pivot) throw new ValidationError(`${title}: choose at least one pivot row field.`);
     if (visual !== "pivot" && query.pivot) throw new ValidationError(`${title}: pivot fields can only be used with a pivot table.`);
-    if (visual !== "table" && visual !== "kpi" && visual !== "pivot" && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
+    if (!UNGROUPED.includes(visual) && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
     if ((visual === "pie" || visual === "donut") && query.measures.length !== 1) throw new ValidationError(`${title}: a pie shows one value.`);
+    // #376 phase 2 (decision 676).
+    if ((visual === "waterfall" || visual === "funnel") && query.measures.length !== 1) throw new ValidationError(`${title}: a ${visual} shows one value.`);
+    if (visual === "gauge" && query.groupBy) throw new ValidationError(`${title}: a gauge shows one total, so it can't be grouped.`);
+    if ((visual === "gauge" || visual === "bullet") && query.measures.length > 2) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} shows a value and, if you like, a target: up to two values.`);
+    if (query.breakdown && !SECOND_GROUPING[visual]) throw new ValidationError(`${title}: this chart type doesn't use a second grouping.`);
+    if (visual === "scatter" && (query.measures.length < 2 || query.measures.length > 3)) throw new ValidationError(`${title}: a scatter chart needs two values (across and up), and a third for bubble sizes.`);
+    if (SECOND_GROUPING_REQUIRED.includes(visual) && !query.breakdown) throw new ValidationError(`${title}: choose ${visual === "sankey" ? "what each group flows to" : "what goes down the side"}.`);
+    if (["treemap", "heatmap", "calendar", "sankey"].includes(visual) && query.measures.length !== 1) throw new ValidationError(`${title}: this chart type shows one value.`);
+    if (visual === "calendar" && query.groupBy?.grain !== "day") throw new ValidationError(`${title}: a calendar heat map is grouped by a date, by day.`);
+    if (["treemap", "heatmap", "calendar", "sankey"].includes(visual) && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: this chart type can't compare with last year.`);
+    // Maps (decision 687): a filled map colours each area by one value; a map with points needs a latitude and a longitude, and a third value sizes the points.
+    if (visual === "filledmap" && query.measures.length !== 1) throw new ValidationError(`${title}: a filled map shows one value for each region or district.`);
+    if (visual === "pointmap" && (query.measures.length < 2 || query.measures.length > 3)) throw new ValidationError(`${title}: a map with points needs a latitude and a longitude, and a third value to size the points.`);
+    if ((visual === "filledmap" || visual === "pointmap") && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: a map can't compare with last year.`);
+    if ((visual === "histogram" || visual === "boxplot") && query.measures.length !== 1) throw new ValidationError(`${title}: a ${visual === "histogram" ? "histogram" : "box plot"} shows the spread of one value.`);
+    if (["scatter", "histogram", "boxplot"].includes(visual) && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: this chart type can't compare with last year.`);
+    if ((visual === "gauge" || visual === "bullet") && query.measures.some((measure) => measure.compare)) throw new ValidationError(`${title}: a ${visual === "gauge" ? "gauge" : "bullet chart"} compares with its target, not last year or the previous period.`);
     let format: ChartFormat | undefined;
     try {
       format = parseChartFormat(tile.format);
@@ -318,6 +376,9 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
+  const tiles = parseTiles(input.tiles ?? [], tables);
+  // An image is uploaded to a report that's already saved.
+  if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
   const result = await tx.query<{ id: string }>(
     `insert into analytics_dashboards (name, description, settings, tiles, created_by_email, updated_by_email)
      values ($1, $2, $3::jsonb, $4::jsonb, $5, $5) returning id::text`,
@@ -325,7 +386,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
       name,
       parseDescription(input.description),
       JSON.stringify(settings),
-      JSON.stringify(parseTiles(input.tiles ?? [], tables)),
+      JSON.stringify(tiles),
       tx.actor.email,
     ],
   );
@@ -344,6 +405,8 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
   const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables);
+  // Images must be this report's own; ones no tile uses any more are removed (decision 684).
+  if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
   await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
             updated_by_email = $6, updated_at = now() where id = $1`,
@@ -385,19 +448,28 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       throw new ValidationError("Too many rows and columns; filter or group further");
     }
     const grouped = await runBuiltQuery(organisationId, built.sql, built.params);
-    // The grand total row has every column value, already in column order.
-    const columnValues = built.hasColumn
-      ? grouped.filter((row) => row.gc === "0" && built.rowFields.every((_field, index) => row[`g${index}`] === "1")).map((row) => row.pivot_column)
-      : [];
+    const levels = built.columnFields.length;
+    // How far down the column fields a result goes (0: the grand total column), and its values.
+    const columnDepth = (row: Record<string, string | null>) =>
+      built.columnFields.filter((_field, index) => row[index === 0 ? "gc" : `gc_${index}`] === "0").length;
+    const columnPath = (row: Record<string, string | null>) =>
+      built.columnFields.slice(0, columnDepth(row)).map((_field, index) => row[index === 0 ? "pivot_column" : `pivot_column_${index}`] ?? null);
+    // The grand total row has every column (and column subtotal), already in column order.
+    const grandRows = built.hasColumn ? grouped.filter((row) => built.rowFields.every((_field, index) => row[`g${index}`] === "1") && columnDepth(row) > 0) : [];
+    const paths = grandRows.map(columnPath);
+    const pathKeys = paths.map((path) => JSON.stringify(path));
+    // The outermost column field's values, in order.
+    const columnValues = paths.filter((path) => path.length === levels).map((path) => path[0]).filter((value, index, all) => all.indexOf(value) === index);
     const columns: PivotColumn[] = built.hasColumn
       ? [
-          ...columnValues.flatMap((pivotValue, columnIndex) =>
+          ...paths.flatMap((path, pathIndex) =>
             built.measures.map((measure, measureIndex) => ({
-              key: `c${columnIndex}_m${measureIndex}`,
-              label: pivotValue ?? "(blank)",
-              pivotValue,
+              key: `c${pathIndex}_m${measureIndex}`,
+              label: path[path.length - 1] ?? "(blank)",
+              pivotValue: path[0] ?? null,
               measure,
               total: false,
+              ...(levels > 1 ? { path, ...(path.length < levels ? { subtotal: true } : {}) } : {}),
             })),
           ),
           ...built.measures.map((measure, measureIndex) => ({
@@ -420,13 +492,10 @@ export async function runTile(organisationId: string, query: unknown, filters: D
         row = { key, kind, depth, dimensions, cells: {} };
         rows.set(key, row);
       }
+      const at = built.hasColumn && columnDepth(result) > 0 ? pathKeys.indexOf(JSON.stringify(columnPath(result))) : -1;
       for (let index = 0; index < built.measures.length; index += 1) {
         const measure = built.measures[index];
-        const cellKey = built.hasColumn
-          ? result.gc === "1"
-            ? `total_m${index}`
-            : `c${columnValues.indexOf(result.pivot_column)}_m${index}`
-          : measure.key;
+        const cellKey = built.hasColumn ? (at < 0 ? `total_m${index}` : `c${at}_m${index}`) : measure.key;
         row.cells[cellKey] = result[`m${index}`];
       }
     }
@@ -434,7 +503,14 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       columns: [...built.rowFields, ...built.measures],
       rows: [],
       truncated: false,
-      pivot: { rowFields: built.rowFields, columnField: built.columnField, columnValues, columns, rows: [...rows.values()] },
+      pivot: {
+        rowFields: built.rowFields,
+        columnField: built.columnField,
+        ...(levels > 1 ? { columnFields: built.columnFields } : {}),
+        columnValues,
+        columns,
+        rows: [...rows.values()],
+      },
     };
   }
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);
