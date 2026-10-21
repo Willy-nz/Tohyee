@@ -6,12 +6,15 @@
 export class HttpError extends Error {
   readonly status: number;
   readonly code: string;
+  /** Extra facts for the caller (never internal detail), sent with the message. */
+  readonly details?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details?: Record<string, unknown>) {
     super(message);
     this.name = new.target.name;
     this.status = status;
     this.code = code;
+    if (details) this.details = details;
   }
 }
 

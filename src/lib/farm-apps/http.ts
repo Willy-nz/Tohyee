@@ -58,7 +58,7 @@ export function farmAppEndpoint(scope: FarmAppScope | null, work: Work, options:
     const people = await loadMemberNames(organisation.id);
     const result = await withOrganisationTransaction(
       organisation,
-      { userId: identity.user.id, email: identity.user.email, via: farmAppVia(identity) },
+      { userId: identity.user.id, email: identity.user.email, via: farmAppVia(identity), role: identity.membership.role },
       (tx) => work(tx, { url: new URL(request.url), body, params, identity }),
       { people, readOnly: !options.writes },
     );

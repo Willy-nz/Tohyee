@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { requireAllFarms } from "@/lib/farming/access";
 import { parseOptionalIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
@@ -47,6 +48,8 @@ const toEntry = (row: Row): NotebookEntry => ({
 
 /** Notes, newest first; optionally one category and words to look for in the title or text. */
 export async function listNotebook(tx: OrgTx, input: { category?: unknown; search?: unknown; limit?: number } = {}): Promise<NotebookEntry[]> {
+  // The notebook is about every farm, so it's for members who see them all (decision 744).
+  await requireAllFarms(tx, "The farm notebook");
   const category = input.category === undefined || input.category === null || input.category === "" ? null : requireOneOf(input.category, "category", NOTEBOOK_CATEGORIES);
   const search = typeof input.search === "string" && input.search.trim() !== "" ? `%${input.search.trim().replace(/[\\%_]/g, (match) => `\\${match}`)}%` : null;
   const rows = await tx.query<Row>(
@@ -59,6 +62,8 @@ export async function listNotebook(tx: OrgTx, input: { category?: unknown; searc
 }
 
 export async function getNotebookEntry(tx: OrgTx, idInput: unknown): Promise<NotebookEntry> {
+  // The notebook is about every farm, so it's for members who see them all (decision 744).
+  await requireAllFarms(tx, "The farm notebook");
   const id = requireId(idInput, "noteId");
   const row = (await tx.query<Row>(`select ${COLUMNS} from farm_notebook where id = $1 and archived_at is null`, [id])).rows[0];
   if (!row) throw new NotFoundError("Note not found.");
@@ -80,6 +85,8 @@ export async function addNotebookEntry(
   input: { category: unknown; title: unknown; body: unknown; happenedOn?: unknown },
   writtenBy: "person" | "ai" = "person",
 ): Promise<NotebookEntry> {
+  // The notebook is about every farm, so it's for members who see them all (decision 744).
+  await requireAllFarms(tx, "The farm notebook");
   const note = parseNote(input);
   const count = await tx.query<{ n: number }>("select count(*)::int as n from farm_notebook where archived_at is null");
   if (count.rows[0].n >= 5000) throw new ValidationError("The notebook is full (5,000 notes). Archive some first.");
@@ -98,6 +105,8 @@ export async function updateNotebookEntry(
   idInput: unknown,
   input: { category: unknown; title: unknown; body: unknown; happenedOn?: unknown },
 ): Promise<NotebookEntry> {
+  // The notebook is about every farm, so it's for members who see them all (decision 744).
+  await requireAllFarms(tx, "The farm notebook");
   const existing = await getNotebookEntry(tx, idInput);
   const note = parseNote(input);
   await tx.query(
@@ -110,6 +119,8 @@ export async function updateNotebookEntry(
 
 /** Archives a note (people only: the AI never removes anything). */
 export async function archiveNotebookEntry(tx: OrgTx, idInput: unknown): Promise<void> {
+  // The notebook is about every farm, so it's for members who see them all (decision 744).
+  await requireAllFarms(tx, "The farm notebook");
   const existing = await getNotebookEntry(tx, idInput);
   await tx.query("update farm_notebook set archived_at = now(), updated_by_email = $2, updated_at = now() where id = $1", [existing.id, tx.actor.email]);
   await writeAuditEvent(tx, { eventType: "farm_notebook.archived", entityType: "farm_notebook", entityId: existing.id, details: { title: existing.title } });
