@@ -28,6 +28,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ''
-Write-Host 'Backed up. The files are encrypted with the backup key.' -ForegroundColor Green
+Write-Host 'Backed up. The files are encrypted with the recovery key.' -ForegroundColor Green
 Write-Host "/backups above is $BackupFolder on this computer (unless the backup folder was changed in Tohyee's backup settings)."
-Write-Host 'Copy that folder somewhere off this computer too (a USB drive or cloud storage), and keep the backup key somewhere else.'
+Write-Host 'Copy that folder somewhere off this computer too (a USB drive or cloud storage), and keep the recovery kit somewhere else (backups kit show).'

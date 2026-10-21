@@ -3,6 +3,7 @@ import { requireServerAdmin } from "@/lib/auth/guard";
 import { recentChecks } from "@/lib/backups/checks";
 import { backupKeyStatus } from "@/lib/backups/key";
 import { backupOverview } from "@/lib/backups/overview";
+import { recoveryKitStatus } from "@/lib/backups/recovery-kit";
 import { backUpNow, backupStatus, getBackupSettings, recentBackupRuns, updateBackupSettings } from "@/lib/backups/service";
 
 /**
@@ -18,6 +19,7 @@ export const GET = route(async (request) => {
     settings: await getBackupSettings(),
     overview,
     keyStatus: await backupKeyStatus(),
+    recoveryKit: await recoveryKitStatus(),
     status: await backupStatus(),
     runs: (await recentBackupRuns(30)).map(({ filePath, ...run }) => ({ ...run, fileName: filePath ? relativeName(filePath) : null })),
     checks: await recentChecks(30),

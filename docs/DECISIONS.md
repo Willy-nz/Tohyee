@@ -6781,3 +6781,47 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      attention" and "Not proven yet" lists. Every line is from work the
      server did. Parts 2 and 3 add the recovery kit's check and the last
      test restore to it.
+734. **Backup format 2 and the recovery key** (21 October 2026, #389 part
+     2; not yet reviewed by Jess). New backups are `TOHYEE-BACKUP 2`: the
+     file key is HKDF-SHA256(recovery key, a random 32-byte salt), and the
+     header holds the recovery key's version and fingerprint and the live
+     key encrypted with HKDF(recovery key, salt, a second label), all
+     authenticated as the GCM additional data. The recovery key (32 random
+     bytes, version 1 made by the first backup) is kept in
+     `server_settings` (`backup_recovery_keys`), encrypted with the live
+     key; if those can't be read (the live key was changed) no new key is
+     made over them and backups fail with a message instead. Restoring
+     takes a recovery code as the "key" (or, for a format 1 file, the
+     older backup key), and says which kit version and fingerprint a
+     backup needs. Format 1 files open as before.
+735. **The recovery kit: a code or a passphrase file, and nothing else**
+     (21 October 2026, #389 part 2; not yet reviewed by Jess). The code is
+     the key in Crockford base32 plus a 4-character check (`RK<version>-`
+     and 14 groups of four), forgiving case, spaces and O/0, I/L/1. The
+     file (`.tohyee-recovery`, JSON) holds the code encrypted with
+     AES-256-GCM under scrypt (N = 2^17, r = 8, p = 1) of a passphrase of
+     at least 14 characters (the page can suggest one, about 125 bits);
+     its version, fingerprint, date and scrypt settings are in the clear
+     and authenticated, and only Tohyee's own scrypt settings are accepted
+     when opening. A random file name can be chosen; the page says it's a
+     convenience, not security, and a kit is recognised by its contents.
+     Getting the kit needs the server admin's password again (5 wrong in
+     15 minutes blocks it, counted with the backup key's), works only on
+     the local server settings address, and is audited without the key.
+     The page explains where to keep it: a password manager, or printed;
+     not beside the backups; OneDrive Personal Vault isn't independent of
+     the Microsoft account.
+736. **A kit is checked by giving it back, per key version; new keys don't
+     strand old backups** (21 October 2026, #389 part 2; not yet reviewed
+     by Jess). Checking opens the code or file and compares the key with
+     the one held for that version (timing-safe); only a match is
+     recorded (`backup_recovery_kit_checks`: version, fingerprint, when,
+     who, code or file). The reminder on every page is now for the
+     current version's kit. "Make a new recovery key" (password again)
+     starts version n+1 for new backups; earlier versions are kept on the
+     server and never deleted automatically, the status lists backups
+     still needing an earlier kit and until about when (a year after the
+     newest, as monthly backups are kept 12 months), and the page says a
+     new key can't take back copies already taken with their kit. The
+     older backup key (show and check) stays, labelled for backups made
+     before recovery kits, while any are kept.

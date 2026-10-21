@@ -6,6 +6,7 @@ import { useWorkspace } from "@/components/workspace";
 import { ageText } from "@/lib/backups/age";
 import type { BackupKeyStatus } from "@/lib/backups/key";
 import type { BackupOverview, TargetSummary } from "@/lib/backups/overview";
+import type { RecoveryKitStatus } from "@/lib/backups/recovery-kit";
 import type { BackupSettings } from "@/lib/backups/service";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
@@ -16,6 +17,7 @@ type Details = {
   settings: BackupSettings;
   overview: BackupOverview;
   keyStatus: BackupKeyStatus;
+  recoveryKit: RecoveryKitStatus;
   files: FileRow[];
 };
 
@@ -132,8 +134,9 @@ export default function ServerBackupsPage() {
       {details ? <Destination details={details} onSaved={load} /> : null}
       {details ? <Databases overview={details.overview} /> : null}
       {details ? <Files files={details.files} /> : null}
+      {details ? <RecoveryKit details={details} onChanged={load} /> : null}
       <IndependentCopy />
-      {details ? <BackupKey keyStatus={details.keyStatus} onChecked={load} /> : null}
+      {details?.overview.recoveryKit.legacyFiles ? <BackupKey keyStatus={details.keyStatus} legacy={details.overview.recoveryKit.legacyFiles} onChecked={load} /> : null}
     </Page>
   );
 }
@@ -175,14 +178,18 @@ function Status({ details }: { details: Details }) {
           </dd>
         </div>
         <div className={ui.recordField}>
-          <dt>Backup key</dt>
+          <dt>Recovery kit</dt>
           <dd>
             {!keyStatus.keySet ? (
-              <Badge tone="red">No key on this server</Badge>
-            ) : keyStatus.savedCopyCheckedAt ? (
-              `A saved copy was checked ${formatDateTime(keyStatus.savedCopyCheckedAt)} by ${keyStatus.savedCopyCheckedByEmail ?? "someone"}. That proves it was right then, not that it's still there.`
+              <Badge tone="red">No TOHYEE_SECRET_KEY on this server</Badge>
+            ) : !details.recoveryKit.version ? (
+              "There's no recovery key yet: the first backup makes one."
+            ) : details.recoveryKit.checkedAt ? (
+              `Version ${details.recoveryKit.version}: a saved kit was checked ${formatDateTime(details.recoveryKit.checkedAt)} by ${details.recoveryKit.checkedByEmail ?? "someone"}. That proves it was right then, not that it's still there.`
             ) : (
-              <Badge tone="red">No saved copy checked</Badge>
+              <>
+                <Badge tone="red">Not checked</Badge> <span className={ui.muted}>Version {details.recoveryKit.version}: nobody has checked a saved kit.</span>
+              </>
             )}
           </dd>
         </div>
@@ -373,14 +380,22 @@ function IndependentCopy() {
         </p>
         <p style={{ margin: 0 }}>
           Now and then (once a month, say), copy the whole backup folder to a USB drive and keep it unplugged, somewhere other than this computer. The files are
-          encrypted, so the drive alone doesn&apos;t give anyone your books; they still need the backup key.
+          encrypted, so the drive alone doesn&apos;t give anyone your books; they still need the recovery kit.
         </p>
       </div>
     </Card>
   );
 }
 
-function BackupKey({ keyStatus, onChecked }: { keyStatus: BackupKeyStatus; onChecked: () => Promise<void> }) {
+function BackupKey({
+  keyStatus,
+  legacy,
+  onChecked,
+}: {
+  keyStatus: BackupKeyStatus;
+  legacy: NonNullable<BackupOverview["recoveryKit"]["legacyFiles"]>;
+  onChecked: () => Promise<void>;
+}) {
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState<string | null>(null);
   const [pasted, setPasted] = useState("");
@@ -422,8 +437,8 @@ function BackupKey({ keyStatus, onChecked }: { keyStatus: BackupKeyStatus; onChe
   if (!keyStatus.keySet) return null;
   return (
     <Card
-      title="Backup key"
-      description="Backups can only be opened with this server's backup key. If this computer is lost, you need a copy of it to restore them, so save one somewhere that isn't the backup folder, such as a password manager, then paste it back here to check it."
+      title="Older backups' key"
+      description={`${legacy.files} ${legacy.files === 1 ? "backup" : "backups"} in the folder were made before recovery kits. On another computer they open only with this server's older backup key (its TOHYEE_SECRET_KEY), not the recovery kit. The newest was made ${formatDateTime(legacy.newestMadeAt)}, so they're kept until about ${legacy.keepKeyUntilAbout}. ${keyStatus.savedCopyCheckedAt ? `A saved copy was checked ${formatDateTime(keyStatus.savedCopyCheckedAt)}.` : "Nobody has checked a saved copy of it."}`}
     >
       <div style={{ display: "grid", gap: 12 }}>
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
@@ -449,6 +464,274 @@ function BackupKey({ keyStatus, onChecked }: { keyStatus: BackupKeyStatus; onChe
             Check it
           </Button>
         </form>
+      </div>
+    </Card>
+  );
+}
+
+type KitResult = { form: "code"; version: number; id: string; code: string } | { form: "file"; version: number; id: string; fileName: string; content: string };
+
+/**
+ * The recovery kit (decisions 735 and 736): the recovery key as a code or a
+ * passphrase-protected file; checking a saved one by giving it back; making
+ * a new recovery key.
+ */
+function RecoveryKit({ details, onChanged }: { details: Details; onChanged: () => Promise<void> }) {
+  const status = details.recoveryKit;
+  const older = details.overview.recoveryKit.olderVersions;
+  const [form, setForm] = useState<"code" | "file">("code");
+  const [password, setPassword] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [passphraseAgain, setPassphraseAgain] = useState("");
+  const [randomName, setRandomName] = useState(false);
+  const [result, setResult] = useState<KitResult | null>(null);
+  const [checkForm, setCheckForm] = useState<"code" | "file">("code");
+  const [code, setCode] = useState("");
+  const [fileText, setFileText] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [filePassphrase, setFilePassphrase] = useState("");
+  const [rotatePassword, setRotatePassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<Message>(null);
+
+  if (!status.keySet) return null;
+
+  async function run(work: () => Promise<void>) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await work();
+    } catch (caught) {
+      setMessage({ tone: "error", text: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const suggest = () =>
+    run(async () => {
+      const { suggestedPassphrase } = await api<{ suggestedPassphrase: string }>("/api/admin/backups/recovery-kit");
+      setPassphrase(suggestedPassphrase);
+      setPassphraseAgain(suggestedPassphrase);
+      setMessage({ tone: "info", text: "Tohyee suggested a passphrase. Save it in your password manager (not next to the file) before you get the file." });
+    });
+
+  const get = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void run(async () => {
+      if (form === "file" && passphrase !== passphraseAgain) throw new Error("The two passphrases aren't the same.");
+      const { kit } = await api<{ kit: KitResult }>("/api/admin/backups/recovery-kit", { method: "POST", body: { password, form, passphrase: form === "file" ? passphrase : undefined, randomName } });
+      setPassword("");
+      setResult(kit);
+      if (kit.form === "file") {
+        const url = URL.createObjectURL(new Blob([kit.content], { type: "application/json" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = kit.fileName;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setPassphrase("");
+        setPassphraseAgain("");
+      }
+      await onChanged();
+    });
+  };
+
+  const check = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void run(async () => {
+      await api("/api/admin/backups/recovery-kit/check", {
+        method: "POST",
+        body: checkForm === "code" ? { code } : { file: fileText ?? "", passphrase: filePassphrase },
+      });
+      setCode("");
+      setFilePassphrase("");
+      setResult(null);
+      await onChanged();
+      setMessage({ tone: "success", text: "That's the right recovery kit. Your saved copy was right just now; keep it where it is." });
+    });
+  };
+
+  const rotate = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void run(async () => {
+      const { recoveryKit } = await api<{ recoveryKit: RecoveryKitStatus }>("/api/admin/backups/recovery-kit/rotate", { method: "POST", body: { password: rotatePassword } });
+      setRotatePassword("");
+      setResult(null);
+      await onChanged();
+      setMessage({ tone: "success", text: `Made recovery key version ${recoveryKit.version}. Backups from now on use it: save its kit now. Keep the earlier kit until the backups made with it age out.` });
+    });
+  };
+
+  return (
+    <Card
+      title="Recovery kit"
+      description="The one thing you need, with the backup files, to get the books back on another computer. It holds this server's recovery key and nothing else: not its passwords or settings."
+    >
+      <div style={{ display: "grid", gap: 16 }} id="recovery-kit">
+        {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+        <p style={{ margin: 0 }}>
+          {status.version
+            ? `Recovery key version ${status.version} (fingerprint ${status.id}), made ${formatDateTime(status.createdAt)}. `
+            : "There's no recovery key yet; getting the kit makes one. "}
+          {status.checkedAt ? `A saved kit was checked ${formatDateTime(status.checkedAt)} by ${status.checkedByEmail}.` : "Nobody has checked a saved kit for it yet."}
+        </p>
+        {older.length > 0 ? (
+          <Notice tone="warning">
+            {older.map((entry) => `${entry.files} ${entry.files === 1 ? "backup needs" : "backups need"} recovery key version ${entry.version} (fingerprint ${entry.id}): keep that kit until about ${entry.keepKitUntilAbout}.`).join(" ")}
+          </Notice>
+        ) : null}
+
+        <form onSubmit={get} style={{ display: "grid", gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: "var(--text-md)" }}>Save the recovery kit</h3>
+          <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 6 }}>
+            <legend className={ui.muted} style={{ marginBottom: 4 }}>As</legend>
+            <label className={ui.checkbox}>
+              <input type="radio" name="kit-form" checked={form === "code"} onChange={() => setForm("code")} /> A recovery code, to put in a password manager or print
+            </label>
+            <label className={ui.checkbox}>
+              <input type="radio" name="kit-form" checked={form === "file"} onChange={() => setForm("file")} /> A recovery file, locked with a passphrase you keep somewhere else
+            </label>
+          </fieldset>
+          {form === "file" ? (
+            <>
+              <div className={ui.grid2}>
+                <Field label="Passphrase for the file" hint="At least 14 characters. If every copy of it is lost, the file can't be opened.">
+                  <input type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} />
+                </Field>
+                <Field label="The passphrase again">
+                  <input type="password" autoComplete="new-password" value={passphraseAgain} onChange={(event) => setPassphraseAgain(event.target.value)} />
+                </Field>
+              </div>
+              {passphrase && passphrase === passphraseAgain ? (
+                <p className={ui.muted} style={{ margin: 0 }}>
+                  Passphrase: <code style={{ fontFamily: "var(--mono)", overflowWrap: "anywhere" }}>{passphrase}</code>
+                </p>
+              ) : null}
+              <div>
+                <Button variant="secondary" size="small" onClick={() => void suggest()} disabled={busy}>
+                  Suggest a passphrase
+                </Button>
+              </div>
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={randomName} onChange={(event) => setRandomName(event.target.checked)} /> Give the file a random name
+              </label>
+              {randomName ? (
+                <p className={ui.muted} style={{ margin: 0 }}>
+                  Only a convenience: anyone who can open the file can see what it is, and try it. Tohyee recognises the file by what&apos;s in it, so you don&apos;t need to remember the name.
+                </p>
+              ) : null}
+            </>
+          ) : null}
+          <Field label="Your password" hint="Typed again, because the kit can open the backups.">
+            <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          </Field>
+          <div>
+            <Button type="submit" disabled={busy || !password}>
+              {form === "code" ? "Show the recovery code" : "Download the recovery file"}
+            </Button>
+          </div>
+        </form>
+
+        {result?.form === "code" ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            <Field label={`Recovery code, version ${result.version}`} hint="Anyone with this code and the backup files can read the books. Copy it into your password manager now, or print it, then check it below.">
+              <input readOnly value={result.code} onFocus={(event) => event.target.select()} style={{ fontFamily: "var(--mono)" }} />
+            </Field>
+            <div>
+              <Button variant="secondary" size="small" onClick={() => void navigator.clipboard?.writeText(result.code)}>
+                Copy
+              </Button>{" "}
+              <Button variant="secondary" size="small" onClick={() => setResult(null)}>
+                Hide it
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {result?.form === "file" ? (
+          <Notice tone="success">
+            Downloaded {result.fileName} (recovery key version {result.version}). Keep it somewhere other than the backup folder, and the passphrase somewhere other than the file. Then check it below.
+          </Notice>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 6 }}>
+          <h3 style={{ margin: 0, fontSize: "var(--text-md)" }}>Where to keep it</h3>
+          <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
+            <li>Best: a password manager, as a secure note (the code) or attachment (the file).</li>
+            <li>Good as well: printed, and kept somewhere safe away from this computer.</li>
+            <li>
+              Not beside the backups: anyone who can read both can read the books. A recovery file is encrypted, so it can go in ordinary OneDrive, but its
+              passphrase can&apos;t.
+            </li>
+            <li>
+              OneDrive Personal Vault (personal Microsoft accounts; a free account holds only a few files) adds a second sign-in step, but it&apos;s part of the
+              same Microsoft account as the backups, so it isn&apos;t independent of them.
+            </li>
+          </ul>
+        </div>
+
+        <form onSubmit={check} style={{ display: "grid", gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: "var(--text-md)" }}>Check a saved kit</h3>
+          <p className={ui.muted} style={{ margin: 0 }}>
+            Give Tohyee your saved copy and it checks it against the key it holds. That proves the copy is right now; it can&apos;t prove the copy will still be
+            there later.
+          </p>
+          <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 6 }}>
+            <legend className={ui.muted} style={{ marginBottom: 4 }}>Check</legend>
+            <label className={ui.checkbox}>
+              <input type="radio" name="check-form" checked={checkForm === "code"} onChange={() => setCheckForm("code")} /> A recovery code
+            </label>
+            <label className={ui.checkbox}>
+              <input type="radio" name="check-form" checked={checkForm === "file"} onChange={() => setCheckForm("file")} /> A recovery file
+            </label>
+          </fieldset>
+          {checkForm === "code" ? (
+            <Field label="Recovery code">
+              <input autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} placeholder="RK1-…" style={{ fontFamily: "var(--mono)" }} />
+            </Field>
+          ) : (
+            <div className={ui.grid2}>
+              <Field label="Recovery file" hint={fileName ? `Chosen: ${fileName}` : "Its name doesn't matter."}>
+                <input
+                  type="file"
+                  onChange={(event) => {
+                    const chosen = event.target.files?.[0];
+                    setFileName(chosen?.name ?? "");
+                    setFileText(null);
+                    if (chosen) void chosen.text().then(setFileText);
+                  }}
+                />
+              </Field>
+              <Field label="Its passphrase">
+                <input type="password" autoComplete="off" value={filePassphrase} onChange={(event) => setFilePassphrase(event.target.value)} />
+              </Field>
+            </div>
+          )}
+          <div>
+            <Button type="submit" variant="secondary" disabled={busy || (checkForm === "code" ? !code : !fileText || !filePassphrase)}>
+              Check it
+            </Button>
+          </div>
+        </form>
+
+        <details className={ui.collapsible}>
+          <summary>Make a new recovery key</summary>
+          <form onSubmit={rotate} style={{ display: "grid", gap: 12, marginTop: 8 }}>
+            <p style={{ margin: 0 }}>
+              If a kit was lost or someone else may have seen it, make a new recovery key. Backups from now on use it, and you save its kit. This server keeps the
+              earlier key, so its older backups still open here; on another computer they still need the earlier kit until they age out (up to 12 months). A new
+              key can&apos;t take back copies of older backups that someone already has with their kit.
+            </p>
+            <Field label="Your password">
+              <input type="password" autoComplete="current-password" value={rotatePassword} onChange={(event) => setRotatePassword(event.target.value)} />
+            </Field>
+            <div>
+              <Button type="submit" variant="danger" disabled={busy || !rotatePassword}>
+                Make a new recovery key
+              </Button>
+            </div>
+          </form>
+        </details>
       </div>
     </Card>
   );

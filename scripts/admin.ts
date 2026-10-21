@@ -8,6 +8,8 @@
  * (without showing what you type), so they don't end up in shell history.
  * Every change is recorded in the server's audit trail as "cli".
  */
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 import { COMMAND_LINE_ADMIN } from "@/lib/audit";
@@ -33,6 +35,7 @@ import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
 import { checkStoredBackups } from "@/lib/backups/checks";
 import { backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
 import { backupOverview } from "@/lib/backups/overview";
+import { checkRecoveryKit, exportRecoveryKit, recoveryKitStatus, rotateRecoveryKey } from "@/lib/backups/recovery-kit";
 import {
   backUpNow,
   backupStatus,
@@ -90,7 +93,7 @@ Email (for security alerts and two-step reset links)
   email local-relay [--on|--off]            let organisations send through a mail server on this
                                             computer or its local network (off by default)
 
-Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere safe)
+Backups (encrypted with the server's recovery key: save the recovery kit somewhere safe, not with the backups)
   backups status [--json]                   each database's latest and last good backup, the checks, and
                                             what isn't proven (such as off-site copies)
   backups verify [--id ORGANISATION]        read the newest backup files back and check them again
@@ -105,7 +108,14 @@ Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere saf
                                             a plain pg_dump file, for a database administrator
                                             --other-key: the backup was made on another server; its key
                                             from TOHYEE_BACKUP_KEY or asked
-  backups key show                          the backup key, to save somewhere safe (not with the backups)
+  backups kit show                          the recovery kit as a recovery code, to save somewhere safe
+  backups kit file --out PATH [--random-name]
+                                            the recovery kit as a file encrypted with a passphrase
+                                            (TOHYEE_KIT_PASSPHRASE or asked); keep the passphrase elsewhere
+  backups kit check [--file PATH]           checks your saved kit: the code (TOHYEE_RECOVERY_CODE or
+                                            asked), or the file and its passphrase
+  backups kit new                           a new recovery key for backups from now on
+  backups key show                          the older backups' key (made before recovery kits)
   backups key check                         checks your saved copy (TOHYEE_BACKUP_KEY or asked)
   analytics folders [--json]                each organisation's analytics folder (decision 358)
   analytics folder --id ORGANISATION --folder PATH   choose it (--folder "" clears it)
@@ -511,10 +521,15 @@ async function email(command: string | undefined, args: string[]) {
   throw new UsageError(`Unknown email command${command ? ` "${command}"` : ""}.`);
 }
 
-/** With --other-key: the backup key of the server that made the backup. */
+/**
+ * With --other-key: the recovery code of the server that made the backup
+ * (TOHYEE_RECOVERY_CODE), or for a backup made before recovery kits, its
+ * backup key (TOHYEE_BACKUP_KEY); asked when neither is set.
+ */
 async function otherKey(args: string[]): Promise<string | undefined> {
   if (!flag(args, "other-key")) return undefined;
-  return secret("TOHYEE_BACKUP_KEY", "The backup key of the server that made this backup: ");
+  if (process.env.TOHYEE_RECOVERY_CODE !== undefined) return process.env.TOHYEE_RECOVERY_CODE;
+  return secret("TOHYEE_BACKUP_KEY", "The recovery code (or, for an older backup, the backup key) of the server that made this backup: ");
 }
 
 function megabytes(bytes: number | null): string {
@@ -645,11 +660,53 @@ async function backups(command: string | undefined, args: string[]) {
     console.log(`Wrote ${out}: a pg_dump (custom format) of ${header.databaseName}. Restore it with pg_restore. It isn't encrypted, so delete it when you're done.`);
     return;
   }
+  if (command === "kit") {
+    const [what] = args;
+    if (what === "show") {
+      const kit = await exportRecoveryKit(COMMAND_LINE_ADMIN, { form: "code" });
+      if (kit.form !== "code") throw new Error("unexpected");
+      console.log(`The recovery kit: recovery key version ${kit.version} (fingerprint ${kit.id}). The backups can be opened on another computer with it.`);
+      console.log("Save it somewhere safe that isn't the backup folder (a password manager, or printed and kept safe), then run: backups kit check");
+      console.log("");
+      console.log(kit.code);
+      return;
+    }
+    if (what === "file") {
+      const out = required(args, "out");
+      const passphrase = await secret("TOHYEE_KIT_PASSPHRASE", "A passphrase for the file (14+ characters; keep it somewhere other than the file): ");
+      if (process.env.TOHYEE_KIT_PASSPHRASE === undefined && (await askSecret("The passphrase again: ")) !== passphrase) throw new UsageError("The passphrases don't match.");
+      const kit = await exportRecoveryKit(COMMAND_LINE_ADMIN, { form: "file", passphrase, randomName: flag(args, "random-name") });
+      if (kit.form !== "file") throw new Error("unexpected");
+      const target = existsSync(out) && statSync(out).isDirectory() ? path.join(out, kit.fileName) : out;
+      writeFileSync(target, kit.content, { mode: 0o600, flag: "wx" });
+      console.log(`Wrote ${target}: recovery key version ${kit.version} (fingerprint ${kit.id}), encrypted with your passphrase.`);
+      console.log("Keep the passphrase somewhere other than the file. If every copy of the passphrase is lost, the file can't be opened. Then run: backups kit check --file " + target);
+      return;
+    }
+    if (what === "check") {
+      const file = option(args, "file");
+      const status = file
+        ? await checkRecoveryKit(COMMAND_LINE_ADMIN, { file: readFileSync(file, "utf8"), passphrase: await secret("TOHYEE_KIT_PASSPHRASE", "The recovery file's passphrase: ") })
+        : await checkRecoveryKit(COMMAND_LINE_ADMIN, { code: await secret("TOHYEE_RECOVERY_CODE", "Paste or type the recovery code: ") });
+      console.log(`That's the right kit for recovery key version ${status.version} (fingerprint ${status.id}). This proves your copy was right just now, not that it will still be there.`);
+      return;
+    }
+    if (what === "new") {
+      const status = await rotateRecoveryKey(COMMAND_LINE_ADMIN, undefined);
+      console.log(`Made recovery key version ${status.version} (fingerprint ${status.id}). Backups from now on use it: save its kit (backups kit show), and keep the earlier kits until the backups made with them age out (up to 12 months).`);
+      return;
+    }
+    const status = await recoveryKitStatus();
+    if (!status.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so there's no recovery key yet.");
+    else if (!status.version) console.log("There's no recovery key yet: the first backup (or backups kit show) makes one.");
+    else console.log(status.checkedAt ? `Recovery key version ${status.version}: a saved kit was checked ${when(status.checkedAt)} by ${status.checkedByEmail}.` : `Recovery key version ${status.version}: nobody has checked a saved kit yet. Run backups kit show, save it, then backups kit check.`);
+    return;
+  }
   if (command === "key") {
     const [what] = args;
     if (what === "show") {
       const { key, keyId } = await revealBackupKey(COMMAND_LINE_ADMIN, undefined);
-      console.log("The backup key (this server's TOHYEE_SECRET_KEY). Backups can only be opened with it.");
+      console.log("The older backups' key (this server's TOHYEE_SECRET_KEY). Backups made before recovery kits can only be opened with it; newer ones need the recovery kit (backups kit show).");
       console.log("Save it somewhere safe that isn't the backup folder (a password manager), then run: backups key check");
       console.log("");
       console.log(key);

@@ -6,7 +6,8 @@ import { Writable } from "node:stream";
 import packageJson from "../../../package.json";
 import { type AdminActor, type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail } from "@/lib/auth/service";
-import { BACKUP_EXTENSION, type BackupHeader, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { BACKUP_EXTENSION, type BackupHeader, materialFromText, type RecoveryMaterial, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { currentRecoveryKey, type RecoveryKey } from "@/lib/backups/recovery-key";
 import { diskSpace, explainBackupError, formatBytes, notEnoughSpace } from "@/lib/backups/destination";
 import { startPgTool } from "@/lib/backups/pg-tools";
 import { folderAccessHint } from "@/lib/server-admin/folder-access";
@@ -249,8 +250,12 @@ function toTarget(o: OrganisationRecord): Target {
   return { organisationId: o.id, displayName: o.displayName, databaseName: o.databaseName, schemaVersion: o.schemaVersion };
 }
 
-/** Decrypts a backup into `pg_restore --list`: proves the key opens it, nothing was changed, and PostgreSQL can read it. */
-export async function checkBackup(file: string, otherKey?: string): Promise<BackupHeader> {
+/**
+ * Decrypts a backup into `pg_restore --list`: proves the key opens it,
+ * nothing was changed, and PostgreSQL can read it. `material` is the
+ * recovery kit (or older backup key) when this server didn't make it.
+ */
+export async function checkBackup(file: string, material?: RecoveryMaterial): Promise<BackupHeader> {
   const restore = startPgTool("pg_restore", ["--list"], "postgres");
   restore.child.stdout?.resume();
   // pg_restore --list stops reading after the table of contents, but the whole
@@ -281,11 +286,11 @@ export async function checkBackup(file: string, otherKey?: string): Promise<Back
       callback();
     },
   });
-  const [header] = await Promise.all([readDecrypted(file, feed, otherKey), restore.done]);
+  const [header] = await Promise.all([readDecrypted(file, feed, material), restore.done]);
   return header;
 }
 
-async function backUpTarget(root: string, target: Target, trigger: BackupRun["trigger"], requestedByEmail: string | null): Promise<BackupRun> {
+async function backUpTarget(root: string, target: Target, trigger: BackupRun["trigger"], requestedByEmail: string | null, recovery: RecoveryKey): Promise<BackupRun> {
   const run = await coreQuery<{ id: string }>(
     "insert into backup_runs (organisation_id, trigger, requested_by_email) values ($1, $2, $3) returning id::text as id",
     [target.organisationId, trigger, requestedByEmail],
@@ -323,7 +328,7 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
         schemaVersion: target.schemaVersion,
         createdAt: new Date().toISOString(),
         tohyeeVersion: packageJson.version,
-      }),
+      }, recovery),
       dump.done,
     ]).catch(async (error) => {
       out.destroy();
@@ -441,8 +446,25 @@ export async function backUpNow(options: {
     let list = await targets(organisationId);
     if (options.only) list = list.filter((t) => options.only!.includes(t.organisationId));
     const runs: BackupRun[] = [];
+    // Format 2: encrypted with the current recovery key, made (version 1) the first time (decision 734).
+    let recovery: RecoveryKey;
+    try {
+      recovery = await currentRecoveryKey();
+    } catch (error) {
+      // Recorded as a failed backup of each database, so the status shows it and the scheduler retries.
+      const message = `${error instanceof Error ? error.message : String(error)} The older backups were kept.`;
+      for (const target of list) {
+        const failed = await coreQuery<RunRow>(
+          `insert into backup_runs (organisation_id, trigger, requested_by_email, status, finished_at, error)
+           values ($1, $2, $3, 'failed', now(), $4) returning ${RUN_COLUMNS}`,
+          [target.organisationId, options.trigger, options.requestedByEmail, message.slice(0, 2000)],
+        );
+        runs.push(toRun(failed.rows[0]));
+      }
+      return runs;
+    }
     for (const target of list) {
-      runs.push(await backUpTarget(settings.folder, target, options.trigger, options.requestedByEmail));
+      runs.push(await backUpTarget(settings.folder, target, options.trigger, options.requestedByEmail, recovery));
     }
     return runs;
   });
@@ -582,9 +604,9 @@ export async function restoreBackupAsCopy(
   actor: AdminActor,
   input: { file: string; id?: unknown; displayName?: unknown; ownerEmail?: unknown; key?: unknown },
 ): Promise<OrganisationRecord> {
-  // The backup key of the server that made it, when that isn't this one.
-  const otherKey = typeof input.key === "string" && input.key.trim() ? input.key.trim() : undefined;
-  if (!otherKey && !secretsAvailable()) throw new UnavailableError("Restoring needs the backup key the backup was made with.");
+  // The recovery code (or, for an older backup, the backup key) of the server that made it, when that isn't this one.
+  const material = materialFromText(input.key);
+  if (!material && !secretsAvailable()) throw new UnavailableError("Restoring needs the recovery kit (or, for an older backup, the backup key) the backup was made with.");
   const { header } = await readBackupHeader(input.file);
   if (header.kind !== "organisation" || !header.organisationId) {
     throw new ValidationError("That's a backup of the server's own database (users and settings), not of an organisation. Restoring it is a job for a database administrator (see docs/ARCHITECTURE.md).");
@@ -593,7 +615,7 @@ export async function restoreBackupAsCopy(
     throw new ValidationError(`That backup was made by a newer version of Tohyee (${header.tohyeeVersion}). Update this server first.`);
   }
   // Proves the key is right and the file is whole before anything is created.
-  await checkBackup(input.file, otherKey);
+  await checkBackup(input.file, material);
 
   const made = localParts(new Date(header.createdAt));
   const id = parseOrganisationId(
@@ -651,7 +673,7 @@ export async function restoreBackupAsCopy(
     created = true;
     const restore = startPgTool("pg_restore", ["--no-owner", "--no-privileges", "--exit-on-error", `--dbname=${databaseName}`], databaseName);
     restore.child.stdout?.resume();
-    const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!, otherKey), restore.done]);
+    const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!, material), restore.done]);
     // If pg_restore stopped, its own message says why (feeding it then fails with a broken pipe).
     if (restored.status === "rejected") throw restored.reason;
     if (fed.status === "rejected") throw fed.reason;
@@ -682,7 +704,8 @@ export async function restoreBackupAsCopy(
 
 /** Decrypts a backup to a plain pg_dump file, for a database administrator (e.g. restoring the server's own database). */
 export async function decryptBackupTo(file: string, outFile: string, otherKey?: string): Promise<BackupHeader> {
-  await checkBackup(file, otherKey);
+  const material = materialFromText(otherKey);
+  await checkBackup(file, material);
   const out = createWriteStream(outFile, { mode: 0o600, flags: "wx" });
-  return readDecrypted(file, out, otherKey);
+  return readDecrypted(file, out, material);
 }

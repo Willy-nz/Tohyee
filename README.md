@@ -429,8 +429,8 @@ links.
 
 **Backups:** every night (2am by default) Tohyee backs up each organisation,
 and its own database of users and settings, into files in the backup folder:
-one sub-folder per organisation, encrypted with the server's
-`TOHYEE_SECRET_KEY`, each checked after it's written, keeping the last 14
+one sub-folder per organisation, encrypted with the server's own recovery
+key, each checked after it's written, keeping the last 14
 daily and 12 monthly backups, and reading the newest ones back to check them
 again every week. Point the folder at a OneDrive (or other cloud-synced)
 folder to get copies off the computer; Tohyee can't see whether OneDrive
@@ -438,12 +438,16 @@ uploaded them, so its status says off-site is "not verified", and a copy on a
 USB drive kept elsewhere now and then is still worth having. Restoring makes a copy of
 the organisation, with the same people, so the current books are never
 overwritten. It's all in the server settings under **Backups** (or
-`backups ...` in the command-line tool). **Keep a copy of the backup key
-somewhere safe that isn't the backup folder**: without it the backups can't be
-opened. The server app's Backups tab shows the key (after your password) and
-checks your saved copy when you paste it back; until someone has, server admins
-see a reminder on every page. To restore on a new server, give the old
-server's key when restoring (the new server keeps its own). pg_dump and pg_restore come with the Windows installer and the Docker
+`backups ...` in the command-line tool). **Save the recovery kit somewhere
+safe that isn't the backup folder**, such as a password manager: without it
+the backups can't be opened on another computer. It's a recovery code, or a
+file locked with a passphrase you keep elsewhere, and holds nothing but the
+recovery key. Backups shows it (after your password) and checks your saved
+copy when you give it back; until someone has, server admins see a reminder
+on every page. To restore on a new server, give the recovery code when
+restoring (the new server keeps its own keys); backups made before recovery
+kits need the old server's backup key instead. See
+[docs/BACKUP-RECOVERY.md](docs/BACKUP-RECOVERY.md). pg_dump and pg_restore come with the Windows installer and the Docker
 image; elsewhere they need to be on the PATH (or set `TOHYEE_PG_BIN`).
 
 ### Server settings from the command line

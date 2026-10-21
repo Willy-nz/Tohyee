@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { type BackupKeyStatus, backupKeyStatus } from "@/lib/backups/key";
+import { type RecoveryKitStatus, recoveryKitStatus } from "@/lib/backups/recovery-kit";
 import { type BackupCheck, latestChecks } from "@/lib/backups/checks";
 import { classifyDestination, type Destination, type DiskSpace, diskSpace, describeDestination, formatBytes, offSiteNote } from "@/lib/backups/destination";
 import { type BackupFile, type BackupRun, type BackupSettings, backupStatus, getBackupSettings, listBackupFiles } from "@/lib/backups/service";
@@ -44,6 +45,17 @@ export type BackupOverview = {
     /** About how big the next full backup will be: the newest good backup of each database added up. */
     nextBackupBytes: number;
   };
+  /** The recovery kit (decision 736): the current key version and its last checked kit. */
+  recoveryKit: {
+    version: number | null;
+    id: string | null;
+    checkedAt: string | null;
+    checkedByEmail: string | null;
+    /** Backups in the folder made with an earlier recovery key version: keep that version's kit until they age out. */
+    olderVersions: { version: number; id: string; files: number; newestMadeAt: string; keepKitUntilAbout: string }[];
+    /** Backups in the older format (before recovery kits), which need the older backup key (TOHYEE_SECRET_KEY). */
+    legacyFiles: { files: number; newestMadeAt: string; keepKeyUntilAbout: string; keyCheckedAt: string | null } | null;
+  };
   attention: Attention[];
   /** Things a recovery would depend on that nothing has proven yet. */
   notProven: string[];
@@ -54,11 +66,19 @@ export type OverviewInput = {
   settings: Pick<BackupSettings, "enabled" | "keySet" | "folder" | "time">;
   folderExists: boolean;
   space: DiskSpace | null;
-  files: Pick<BackupFile, "name" | "sizeBytes" | "problem">[];
+  files: Pick<BackupFile, "name" | "sizeBytes" | "problem" | "header">[];
   status: { organisationId: string | null; displayName: string | null; latest: BackupRun | null; lastGood: BackupRun | null }[];
   checks: BackupCheck[];
   keyStatus: Pick<BackupKeyStatus, "keySet" | "savedCopyCheckedAt">;
+  kit: Pick<RecoveryKitStatus, "keySet" | "version" | "id" | "checkedAt" | "checkedByEmail">;
 };
+
+/** Backups are kept up to 12 months (the first of each month), so a kit or key is needed until about a year after the newest backup made with it. */
+function aYearAfter(iso: string): string {
+  const date = new Date(iso);
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
 
 /** A good backup older than this (when nightly backups are on) needs looking at. */
 const STALE_HOURS = 36;
@@ -140,9 +160,36 @@ export function summariseBackups(input: OverviewInput): BackupOverview {
   }
   notProven.push(`Off-site copy: ${destination.synced ? `Tohyee can't see whether ${destination.provider} uploaded the files` : "no off-site copy that Tohyee knows of"}.`);
 
-  if (settings.keySet && !input.keyStatus.savedCopyCheckedAt) {
-    attention.push({ level: "warning", text: "Nobody has checked a saved copy of the backup key. Without one, the backups can't be opened on another computer." });
-    notProven.push("A saved copy of the backup key.");
+  const kit = input.kit;
+  if (settings.keySet && kit.keySet && !kit.checkedAt) {
+    attention.push({
+      level: "warning",
+      text: `Nobody has checked a saved recovery kit${kit.version ? ` for recovery key version ${kit.version}` : ""}. Without one, the backups can't be opened on another computer if this one is lost.`,
+    });
+    notProven.push(`A saved recovery kit${kit.version ? ` for recovery key version ${kit.version}` : ""}.`);
+  }
+  const older = new Map<string, { version: number; id: string; files: number; newestMadeAt: string }>();
+  const legacyCount = { files: 0, newestMadeAt: "" };
+  for (const file of input.files) {
+    const header = file.header;
+    if (!header) continue;
+    if (header.format === 1) {
+      legacyCount.files += 1;
+      if (header.createdAt > legacyCount.newestMadeAt) legacyCount.newestMadeAt = header.createdAt;
+    } else if (header.recoveryKey.id !== kit.id) {
+      const name = `${header.recoveryKey.version}:${header.recoveryKey.id}`;
+      const entry = older.get(name) ?? { version: header.recoveryKey.version, id: header.recoveryKey.id, files: 0, newestMadeAt: header.createdAt };
+      entry.files += 1;
+      if (header.createdAt > entry.newestMadeAt) entry.newestMadeAt = header.createdAt;
+      older.set(name, entry);
+    }
+  }
+  const legacy = legacyCount.files > 0 ? legacyCount : null;
+  if (legacy && !input.keyStatus.savedCopyCheckedAt) {
+    attention.push({
+      level: "warning",
+      text: `${legacy.files} older ${legacy.files === 1 ? "backup was" : "backups were"} made before recovery kits and can only be opened on another computer with the older backup key (this server's TOHYEE_SECRET_KEY). Nobody has checked a saved copy of it: save one, or rely on the newer backups.`,
+    });
   }
 
   const goodTimes = targets.map((t) => t.lastGoodAt);
@@ -172,6 +219,14 @@ export function summariseBackups(input: OverviewInput): BackupOverview {
       freeBytes,
       nextBackupBytes,
     },
+    recoveryKit: {
+      version: kit.version,
+      id: kit.id,
+      checkedAt: kit.checkedAt,
+      checkedByEmail: kit.checkedByEmail,
+      olderVersions: [...older.values()].sort((a, b) => b.version - a.version).map((entry) => ({ ...entry, keepKitUntilAbout: aYearAfter(entry.newestMadeAt) })),
+      legacyFiles: legacy ? { ...legacy, keepKeyUntilAbout: aYearAfter(legacy.newestMadeAt), keyCheckedAt: input.keyStatus.savedCopyCheckedAt } : null,
+    },
     attention,
     notProven,
   };
@@ -196,6 +251,7 @@ export async function backupOverview(now = new Date()): Promise<{ overview: Back
     status: await backupStatus(),
     checks: await latestChecks("integrity"),
     keyStatus: await backupKeyStatus(),
+    kit: await recoveryKitStatus(),
   });
   return { overview, files };
 }

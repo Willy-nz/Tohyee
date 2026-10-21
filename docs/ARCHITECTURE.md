@@ -1682,19 +1682,27 @@ wizard, what's tested) is in `docs/BACKUP-RECOVERY.md` (#389, decisions
 database) is dumped with `pg_dump --format=custom --no-owner --no-privileges`
 as the admin login, straight into an encrypted file:
 
-- **Format** (`format.ts`): `TOHYEE-BACKUP 1\n`, a JSON header line (what's
-  inside: organisation, database, schema version, Tohyee version, when, a
-  fingerprint of the key), then a 12-byte IV, the AES-256-GCM ciphertext and
-  its 16-byte tag. The header is the GCM additional data, so it can't be
-  changed either. The key is HKDF-SHA256 of `TOHYEE_SECRET_KEY` ("tohyee
-  backups v1"), separate from the key for stored secrets. Losing
-  `TOHYEE_SECRET_KEY` means losing the backups, so (`key.ts`) a server admin
-  can see it after typing their password again (5 wrong tries in 15 minutes
-  blocks it), and proves a saved copy by pasting it back: the server compares
-  it and records when, for that key's fingerprint, in `server_settings`
-  (`backup_key`). Until a saved copy of the current key has been checked,
-  server admins see a reminder on every page and the server app opens on
-  Backups. The key never goes in the audit trail.
+- **Format** (`format.ts`): `TOHYEE-BACKUP 2\n`, a JSON header line (what's
+  inside: organisation, database, schema version, Tohyee version, when, the
+  recovery key's version and fingerprint, a salt, and the live key
+  encrypted with the recovery key), then a 12-byte IV, the AES-256-GCM
+  ciphertext and its 16-byte tag. The header is the GCM additional data, so
+  it can't be changed either. The file key is HKDF-SHA256(recovery key,
+  salt). The **recovery key** (`recovery-key.ts`, decision 734) is 32
+  random bytes, versioned, kept in `server_settings` encrypted with
+  `TOHYEE_SECRET_KEY`; the **recovery kit** (`recovery-code.ts`,
+  `recovery-kit.ts`, decisions 735-736) is that key as a code or a
+  passphrase-protected file (scrypt), exported with the password again and
+  checked by giving it back. Format 1 files (`TOHYEE-BACKUP 1`, key HKDF of
+  `TOHYEE_SECRET_KEY`, "tohyee backups v1") made before still open with the
+  key they were made with. For those, (`key.ts`) a server admin
+  can see that key after typing their password again (5 wrong tries in 15
+  minutes blocks it, counted with the kit's), and proves a saved copy by
+  pasting it back: the server compares it and records when, for that key's
+  fingerprint, in `server_settings` (`backup_key`). Until a saved kit for the
+  current recovery key version has been checked, server admins see a
+  reminder on every page and the server app opens on Backups. No key ever
+  goes in the audit trail or the logs.
 - **Where**: the backup folder (a server setting; default
   `TOHYEE_BACKUP_DIR`, else `%ProgramData%\Tohyee\backups` on Windows or
   `./backups`), one sub-folder per organisation and `_server` for the core

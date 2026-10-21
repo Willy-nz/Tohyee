@@ -12,6 +12,7 @@ import { runDueBackups } from "@/lib/backups/scheduler";
 import * as keyRoute from "@/app/api/admin/backups/key/route";
 import * as keyCheckRoute from "@/app/api/admin/backups/key/check/route";
 import { backupKeyNeedsSaving, backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
+import { exportRecoveryKit } from "@/lib/backups/recovery-kit";
 import { backUpNow, checkBackup, listBackupFiles, restoreBackupAsCopy, updateBackupSettings } from "@/lib/backups/service";
 import type { Actor } from "@/lib/db/org-transaction";
 import { databaseNameFor } from "@/lib/organisations/admin";
@@ -98,7 +99,7 @@ describeWithDatabase("backups and restores", () => {
     expect(orgRun.sizeBytes).toBeGreaterThan(1000);
 
     const bytes = await fs.readFile(orgRun.filePath!);
-    expect(bytes.subarray(0, 16).toString()).toBe("TOHYEE-BACKUP 1\n");
+    expect(bytes.subarray(0, 16).toString()).toBe("TOHYEE-BACKUP 2\n");
     expect(bytes.includes(Buffer.from("SECRET-REF-1"))).toBe(false);
     expect(bytes.includes(Buffer.from("ledger_journals"))).toBe(false);
 
@@ -154,7 +155,7 @@ describeWithDatabase("backups and restores", () => {
     await fs.rm(changed);
 
     process.env.TOHYEE_SECRET_KEY = "a-different-key-0123456789abcdefghijklmnop";
-    await expect(checkBackup(file.path)).rejects.toThrow(/made with a different key/);
+    await expect(checkBackup(file.path)).rejects.toThrow(/Give that server's recovery kit/);
     process.env.TOHYEE_SECRET_KEY = KEY;
 
     const [serverFile] = await listBackupFiles().then((all) => all.filter((f) => f.header?.kind === "server"));
@@ -302,17 +303,19 @@ describeWithDatabase("backups and restores", () => {
     expect(((await blocked.json()) as { error: string }).error).toMatch(/Too many wrong passwords/);
   });
 
-  it("restores a backup made on another server, given that server's key", async () => {
+  it("restores a backup made on another server, given that server's recovery code", async () => {
     const [file] = await listBackupFiles(ORG);
+    const kit = await exportRecoveryKit({ user: owner }, { password: TEST_PASSWORD, form: "code" });
+    if (kit.form !== "code") throw new Error("expected a code");
     process.env.TOHYEE_SECRET_KEY = "the-new-servers-own-key-0123456789abcdefgh";
     try {
       await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "from-old-server" })).rejects.toThrow(
-        /made with a different key/,
+        /Give that server's recovery kit/,
       );
       await expect(
         restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "from-old-server", key: "not-the-key-0123456789abcdefghijklmn" }),
-      ).rejects.toThrow(/isn't the key this backup was made with/);
-      const copy = await restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "from-old-server", key: KEY });
+      ).rejects.toThrow(/needs a recovery kit/);
+      const copy = await restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "from-old-server", key: kit.code });
       expect(copy).toMatchObject({ id: "from-old-server", provisioningStatus: "ready" });
     } finally {
       process.env.TOHYEE_SECRET_KEY = KEY;
