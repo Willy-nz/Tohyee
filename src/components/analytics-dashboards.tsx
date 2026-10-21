@@ -69,6 +69,11 @@ const VISUALS: Array<{ value: Visual; label: string }> = [
   { value: "kpi", label: "Key figure" },
   { value: "table", label: "Table" },
   { value: "pivot", label: "Pivot table" },
+  // #376 phase 2 (decision 676).
+  { value: "waterfall", label: "Waterfall" },
+  { value: "funnel", label: "Funnel" },
+  { value: "gauge", label: "Gauge" },
+  { value: "bullet", label: "Bullet chart" },
 ];
 
 const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
@@ -1474,6 +1479,10 @@ function TileEditor({
         groupBy: first ? { field: first.field, ...(first.grain ? { grain: first.grain } : {}) } : null,
       });
     }
+    if (next === "gauge" && query.groupBy) {
+      // A gauge shows one total.
+      setQuery((current) => ({ ...current, groupBy: null, measures: current.measures.map((measure) => ({ ...measure, compare: undefined })) }));
+    }
     if (visual === "kpi" && next !== "kpi") {
       // The previous period, a target and the trend belong to key figures.
       setQuery((current) => ({
@@ -1646,7 +1655,7 @@ function TileEditor({
               </Field>
             ) : null}
           </>
-        ) : (
+        ) : visual === "gauge" ? null : (
           <>
             <Field label="Group by">
               <select
