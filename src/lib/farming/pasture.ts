@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { requireFarmAccess, requirePaddockAccess, requireRecordAccess } from "./access";
 import { parseBankDate } from "@/lib/bank/formats/common";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -50,6 +51,7 @@ async function requireFarm(tx: OrgTx, farmIdInput: unknown): Promise<string> {
   const farmId = requireId(farmIdInput, "farmId");
   const farm = await tx.query("select 1 from farms where id = $1", [farmId]);
   if (!farm.rowCount) throw new NotFoundError("Farm not found.");
+  await requireFarmAccess(tx, farmId);
   return farmId;
 }
 
@@ -57,6 +59,7 @@ async function requireActivePaddock(tx: OrgTx, input: unknown): Promise<PaddockR
   await requireFarming(tx);
   const paddock = (await paddockRows(tx, "p.id = $1", [requireId(input, "paddockId")]))[0];
   if (!paddock) throw new NotFoundError("Paddock not found.");
+  await requireFarmAccess(tx, paddock.farm_id, "Paddock not found.");
   if (paddock.status !== "active") throw new ValidationError(`${paddock.name} is retired.`);
   return paddock;
 }
@@ -124,6 +127,7 @@ export async function addReading(tx: OrgTx, input: { paddockId: unknown; measure
 export async function removeReading(tx: OrgTx, idInput: unknown): Promise<void> {
   await requireFarming(tx);
   const id = requireId(idInput, "readingId");
+  await requireRecordAccess(tx, "pasture_readings", id, "Pasture reading not found, or already removed.");
   const removed = await tx.query("update pasture_readings set status = 'removed' where id = $1 and status = 'active' returning id", [id]);
   if (!removed.rowCount) throw new NotFoundError("Pasture reading not found, or already removed.");
   await writeAuditEvent(tx, { eventType: "farming.pasture_reading_removed", entityType: "pasture_reading", entityId: id, details: {} });
@@ -316,6 +320,7 @@ export async function addGrazing(tx: OrgTx, input: { paddockId: unknown; mob: un
 export async function closeGrazing(tx: OrgTx, idInput: unknown, input: { outOn: unknown; postCover?: unknown }): Promise<GrazingRecord> {
   await requireFarming(tx);
   const id = requireId(idInput, "grazingId");
+  await requireRecordAccess(tx, "grazings", id, "Grazing not found.");
   const current = await tx.query<{ in_on: string; out_on: string | null }>("select in_on::text, out_on::text from grazings where id = $1 and status = 'active' for update", [id]);
   if (!current.rows[0]) throw new NotFoundError("Grazing not found.");
   if (current.rows[0].out_on !== null) throw new ConflictError("That mob's day out is already recorded.");
@@ -330,6 +335,7 @@ export async function closeGrazing(tx: OrgTx, idInput: unknown, input: { outOn: 
 export async function removeGrazing(tx: OrgTx, idInput: unknown): Promise<void> {
   await requireFarming(tx);
   const id = requireId(idInput, "grazingId");
+  await requireRecordAccess(tx, "grazings", id, "Grazing not found, or already removed.");
   const removed = await tx.query("update grazings set status = 'removed' where id = $1 and status = 'active' returning id", [id]);
   if (!removed.rowCount) throw new NotFoundError("Grazing not found, or already removed.");
   await writeAuditEvent(tx, { eventType: "farming.grazing_removed", entityType: "grazing", entityId: id, details: {} });
@@ -395,6 +401,7 @@ export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddock
 export async function removeSupplement(tx: OrgTx, idInput: unknown): Promise<void> {
   await requireFarming(tx);
   const id = requireId(idInput, "supplementId");
+  await requireRecordAccess(tx, "supplements_fed", id, "Supplement not found, or already removed.");
   const removed = await tx.query("update supplements_fed set status = 'removed' where id = $1 and status = 'active' returning id", [id]);
   if (!removed.rowCount) throw new NotFoundError("Supplement not found, or already removed.");
   await writeAuditEvent(tx, { eventType: "farming.supplement_removed", entityType: "supplement_fed", entityId: id, details: {} });
@@ -451,6 +458,7 @@ export async function paddockPasture(tx: OrgTx, paddockIdInput: unknown): Promis
   const paddockId = requireId(paddockIdInput, "paddockId");
   const found = await tx.query("select 1 from paddocks where id = $1", [paddockId]);
   if (!found.rowCount) throw new NotFoundError("Paddock not found.");
+  await requirePaddockAccess(tx, paddockId);
   const readings = await loadReadings(tx, "r.paddock_id = $1", [paddockId]);
   const grazings = await loadGrazings(tx, "g.paddock_id = $1", [paddockId]);
   const spans = grazings.map((grazing) => ({ paddockId: grazing.paddockId, inOn: grazing.inOn, outOn: grazing.outOn }));

@@ -1566,6 +1566,14 @@ that something happened.
   lump sum indicator, the finish date of a final pay and redundancy (not
   liable for the ACC earners' levy) are filled in. No file has been
   through myIR's checker yet.
+- **Farms each member works on** (People and roles; #390, FMA1-FMA8,
+  decision 744, tenant migration 0183; Jess: "Yes, assigned farms only"):
+  with two or more farms, viewers, bookkeepers and report viewers see and
+  record only for their farms (or all farms if chosen); owners and admins
+  see every farm. Not assigned yet means no farms, with a warning on the
+  screen. Enforced on the server for every farming route, Home's farm
+  cards, the shared farm calendar, farm apps and AI tools; the farm
+  notebook and Analytics' farm tables need all farms.
 - **Farms and paddocks** (Farm menu; #249 stage 1, decision 514, tenant
   migration 0133): an optional module, part of Accounting, turned on in
   Settings, Modules. **Farms** hold **paddocks**. A paddock's identity
