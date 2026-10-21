@@ -277,6 +277,7 @@ export function RecordExtrasPanel({
                         <td className={ui.num}>{formatFileSize(file.byteSize)}</td>
                         <td className={ui.muted}>
                           {personName(file, "createdBy")} · {formatDateTime(file.createdAt)}
+                          {file.filedFromPrivateMail ? <div>Filed from a private email</div> : null}
                         </td>
                         <td className={ui.num}>
                           <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
