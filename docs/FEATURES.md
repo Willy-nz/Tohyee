@@ -2097,6 +2097,22 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: waterfall, funnel, gauge and bullet chart** (#376 phase 2,
+  decisions 676-677). New chart types in the chart editor. A **waterfall**
+  (a P&L bridge) moves a running total up and down group by group, added
+  exactly in decimals, and ends with a total bar (named as you like, or
+  left off), with rises, falls and the total in their own colours and thin
+  lines joining the bars. A **funnel** draws its stages in the tile's
+  order with each stage's share of the first stage or the one before. A
+  **gauge** shows one total on a dial from 0 (or a chosen minimum) to a
+  chosen maximum, or twice the value, with a target from a second value or
+  a typed number. A **bullet chart** shows each group's value as a thin
+  bar over grey bands at percentages of its target (60% and 80% unless
+  changed), with the target as an upright line. All four use the report's
+  theme and the Format panel: number formats, data labels, colours (any
+  hex, per group, colour rules), axes and gridlines where they have them,
+  tooltips, the card and title. Copying a format or a chart type default
+  leaves out a gauge's range and the targets.
 - **Analytics: key figure formatting** (#376 phase 1, decision 674). Under
   Key figure › Number style: the number's size (small to extra large, or
   exact pixels), colour, alignment, weight and the value's name above or
