@@ -1,6 +1,7 @@
 import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { columnValues, getDashboard, slicerPairs, type Tile } from "@/lib/analytics/dashboards";
+import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
@@ -24,6 +25,7 @@ export const GET = route(async (request) => {
       }
       viewerTiles = dashboard.tiles;
     }
+    await requireAnalyticsTable(tx, table);
     return tx.organisationId;
   });
   if (child) return json({ pairs: await slicerPairs(organisationId, table, field, child, viewerTiles) });

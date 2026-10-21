@@ -17340,4 +17340,37 @@ create table farm_year_figures_by_farm (
 );
 `,
   },
+  {
+    version: "0183",
+    name: "farm_member_access",
+    sql: `
+-- Which farms each member works on (#390, decision 744; Jess, 21 October
+-- 2026: "Yes, assigned farms only"). With two or more farms, viewers and
+-- bookkeepers see and record only for their farms; owners and admins see
+-- every farm. A member with no row here has no farms yet. Members live in the
+-- core database, so these rows name the user by id; they're removed when the
+-- member leaves.
+create table farm_member_scopes (
+  user_id uuid primary key,
+  all_farms boolean not null,
+  updated_by_email text not null,
+  updated_at timestamptz not null default now()
+);
+create table farm_member_farms (
+  user_id uuid not null references farm_member_scopes(user_id) on delete cascade,
+  farm_id bigint not null references farms(id),
+  primary key (user_id, farm_id)
+);
+`,
+  },
+  {
+    version: "0178",
+    name: "analytics_dashboard_versions",
+    sql: `
+-- Each saved report has a version (#387, decision 690). A save names the
+-- version it started from and is refused when someone else has saved since,
+-- so two people editing one report can't silently overwrite each other.
+alter table analytics_dashboards add column version integer not null default 1 check (version >= 1);
+`,
+  },
 ];
