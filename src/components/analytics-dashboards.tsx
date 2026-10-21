@@ -37,6 +37,7 @@ import { PageTabs, pageStyle } from "@/components/analytics/report-pages";
 import { SlicerControl } from "@/components/analytics/slicer-control";
 import { SLICER_STYLE_LABELS, slicerOnPage, stylesFor, type SlicerRange, type SlicerStyle } from "@/lib/analytics/slicers";
 import { effectiveDates, tileDatesText, type PageFilter, type TileDates } from "@/lib/analytics/report-filters";
+import { bookmarkName, type Bookmark, type BookmarkState } from "@/lib/analytics/bookmarks";
 import { addPage, movePage, openingPage, removePage, reportPages, tilePage, tilesOnPage, withPage, type ReportPage } from "@/lib/analytics/pages";
 import { isSpecialistVisual, PANEL_TAB_LABELS, PANEL_TABS, type PanelTab } from "@/lib/analytics/editor-panels";
 import { dateHierarchy, DRILLABLE, INTERACTION_LABELS, INTERACTION_MODES, MAX_DRILL_LEVELS, drillDown, drillUp, drillView, expandAll, interactionMode, periodLabel, selectionLevel, TOP, type DrillState, type InteractionMode, type Selection, type TileDrill, type TileView } from "@/lib/analytics/report-view";
@@ -312,6 +313,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [drillMode, setDrillMode] = useState<Record<string, boolean>>({});
   const [picked, setPicked] = useState<(Selection & { label: string; tileTitle: string }) | null>(null);
   const [through, setThrough] = useState<{ selection: Selection; label: string; from: string; to: string } | null>(null);
+  // A bookmark's hidden tiles, the bookmark shown, and the pages seen before, for Back (decision 759).
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [bookmarkShown, setBookmarkShown] = useState<string | null>(null);
+  const [pageHistory, setPageHistory] = useState<string[]>([]);
 
   const dashboard = draft ?? loaded.data?.dashboard ?? null;
   const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
@@ -328,9 +333,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     setDrills({});
     setPicked(null);
     setThrough(null);
-  };
-  const runButtonAction = (action: ButtonAction) => {
-    if (action === "reset_filters") resetView();
+    setHidden([]);
+    setBookmarkShown(null);
   };
 
   async function save(next: Dashboard) {
@@ -399,7 +403,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const page = openingPage(pages, pageChoice);
   const pageTiles = tilesOnPage(dashboard.tiles, pages, page.id);
   const look = pageStyle(page);
-  const choosePage = (pageId: string) => {
+  const choosePage = (pageId: string, remember = true) => {
+    if (remember && pageId !== page.id) setPageHistory((history) => [...history.slice(-19), page.id]);
     setPageChoice(pageId);
     setChosenTiles([]);
     const params = new URLSearchParams(window.location.search);
@@ -476,7 +481,35 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     setPicked(null);
     choosePage(target.id);
   };
-  const viewChanged = Boolean(filters || picked || through || Object.keys(drills).length);
+  const viewChanged = Boolean(filters || picked || through || Object.keys(drills).length || hidden.length);
+  /** Opens a bookmark: its page, dates, slicer choices and hidden tiles; nothing clicked or drilled (decision 759). */
+  const openBookmark = (id: string) => {
+    const bookmark = dashboard.settings.bookmarks?.find((entry) => entry.id === id);
+    if (!bookmark) return;
+    const state = bookmark.state;
+    const range = state.preset ? presetRange(state.preset, dates.today, dates.financialYearEndMonth) : { from: state.from, to: state.to };
+    setFilters({ from: range.from ?? "", to: range.to ?? "", preset: state.preset, values: state.values, ranges: state.ranges });
+    setDrills({});
+    setPicked(null);
+    setThrough(null);
+    setHidden(state.hidden ?? []);
+    setBookmarkShown(bookmark.id);
+    choosePage(state.page);
+  };
+  const goBack = () => {
+    const previous = pageHistory[pageHistory.length - 1];
+    if (!previous) return;
+    setPageHistory(pageHistory.slice(0, -1));
+    if (through) setThrough(null);
+    choosePage(previous, false);
+  };
+  /** What a report's buttons do (decisions 686 and 759). */
+  const runButtonAction = (action: ButtonAction, target?: string) => {
+    if (action === "reset_filters") resetView();
+    else if (action === "go_to_page" && target) choosePage(target);
+    else if (action === "bookmark" && target) openBookmark(target);
+    else if (action === "back") goBack();
+  };
 
   /** A tile added or changed, on the page shown. */
   const placed = (tile: Tile): Tile => {
@@ -556,7 +589,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         dashboardId={dashboard.id}
         settings={dashboard.settings}
         filters={shown}
-        onChange={setFilters}
+        onChange={(next) => {
+          setFilters(next);
+          setBookmarkShown(null);
+        }}
         editing={editing}
         tables={tables.data?.tables ?? []}
         dates={dates}
@@ -600,6 +636,28 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         }}
       />
 
+      <BookmarkBar
+        bookmarks={dashboard.settings.bookmarks ?? []}
+        shown={bookmarkShown}
+        editing={editing}
+        pageTiles={pageTiles}
+        onOpen={openBookmark}
+        current={(): BookmarkState => ({
+          page: page.id,
+          from: shown.preset ? null : shown.from || null,
+          to: shown.preset ? null : shown.to || null,
+          preset: shown.preset ?? null,
+          values: Object.fromEntries(Object.entries(shown.values).filter(([, list]) => list.length)),
+          ranges: shown.ranges ?? {},
+          ...(hidden.length ? { hidden } : {}),
+        })}
+        onChange={(bookmarks) => {
+          const settings = { ...dashboard.settings };
+          delete settings.bookmarks;
+          setDraft({ ...dashboard, settings: bookmarks.length ? { ...settings, bookmarks } : settings });
+        }}
+      />
+
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
       {theming && editing && canEdit ? (
@@ -633,6 +691,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           tables={tables.data?.tables ?? []}
           filters={shown}
           onCancel={() => setEditingTile(null)}
+          targets={{ pages: reportPages(pages).map((entry) => ({ id: entry.id, name: entry.name })), bookmarks: (dashboard.settings.bookmarks ?? []).map((entry) => ({ id: entry.id, name: entry.name })) }}
           onSave={async (given) => {
             const tile = placed(given);
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
@@ -698,7 +757,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       ) : (
         <div id={`report-page-${dashboard.id}`} role={pages?.length ? "tabpanel" : undefined} aria-label={pages?.length ? page.name : undefined} style={look.style} className={`${styles.grid} ${themeClass} ${look.tinted ? styles.tintedPage : ""} ${look.style.background ? styles.colouredPage : ""}`}>
           {dashboard.tiles.map((tile, index) => {
-            if (!pageTiles.includes(tile)) return null;
+            if (!pageTiles.includes(tile) || (!editing && hidden.includes(tile.id))) return null;
             // Moving goes past the tiles of other pages.
             const before = dashboard.tiles.lastIndexOf(pageTiles[pageTiles.indexOf(tile) - 1]);
             const after = dashboard.tiles.indexOf(pageTiles[pageTiles.indexOf(tile) + 1]);
@@ -955,6 +1014,64 @@ function ShareCard({ organisationId, dashboardId }: { organisationId: string; da
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Bookmarks (decision 759): open one to see its page, dates, slicer
+ * choices and hidden tiles. In edit mode, add one from the view shown,
+ * update, rename or remove it, and choose tiles it hides.
+ */
+function BookmarkBar({ bookmarks, shown, editing, pageTiles, onOpen, current, onChange }: { bookmarks: Bookmark[]; shown: string | null; editing: boolean; pageTiles: Tile[]; onOpen: (id: string) => void; current: () => BookmarkState; onChange: (bookmarks: Bookmark[]) => void }) {
+  if (!editing && !bookmarks.length) return null;
+  const update = (id: string, patch: Partial<Bookmark>) => onChange(bookmarks.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+  return (
+    <div className={styles.bookmarks}>
+      {bookmarks.length ? (
+        <div className={styles.bookmarkList} role="group" aria-label="Bookmarks">
+          <span className={styles.bookmarkLabel}>Bookmarks</span>
+          {bookmarks.map((bookmark) => (
+            <Button key={bookmark.id} size="small" variant="secondary" aria-pressed={shown === bookmark.id} onClick={() => onOpen(bookmark.id)}>{bookmark.name}</Button>
+          ))}
+        </div>
+      ) : null}
+      {editing ? (
+        <details className={styles.slicerSettings}>
+          <summary>Bookmark settings</summary>
+          <div className={styles.slicerSettingsBody}>
+            <p className={ui.muted}>A bookmark keeps the page shown, its dates and slicer choices, and any tiles you hide in it. Choose a bookmark above to see it.</p>
+            {bookmarks.map((bookmark) => (
+              <fieldset key={bookmark.id} className={styles.slicerPages}>
+                <legend>{bookmark.name}</legend>
+                <Field label="Name"><input value={bookmark.name} maxLength={60} onChange={(event) => update(bookmark.id, { name: event.target.value })} /></Field>
+                {bookmark.state.page === current().page && pageTiles.length ? (
+                  <div className={styles.hiddenList}>
+                    <span className={styles.bookmarkLabel}>Hidden in this bookmark</span>
+                    {pageTiles.map((tile) => (
+                      <label key={tile.id} className={ui.checkbox}>
+                        <input type="checkbox" checked={bookmark.state.hidden?.includes(tile.id) ?? false} onChange={(event) => {
+                          const list = event.target.checked ? [...(bookmark.state.hidden ?? []), tile.id] : (bookmark.state.hidden ?? []).filter((id) => id !== tile.id);
+                          const state = { ...bookmark.state };
+                          delete state.hidden;
+                          update(bookmark.id, { state: list.length ? { ...state, hidden: list } : state });
+                        }} /> {tile.title}
+                      </label>
+                    ))}
+                  </div>
+                ) : <p className={ui.muted}>Go to its page to choose the tiles it hides.</p>}
+                <div className={ui.rowButtons}>
+                  <Button size="small" variant="secondary" onClick={() => update(bookmark.id, { state: { ...current(), ...(bookmark.state.hidden && bookmark.state.page === current().page ? { hidden: bookmark.state.hidden } : {}) } })}>Update to the view shown</Button>
+                  <Button size="small" variant="danger" onClick={() => onChange(bookmarks.filter((entry) => entry.id !== bookmark.id))}>Remove</Button>
+                </div>
+              </fieldset>
+            ))}
+            <div>
+              <Button size="small" variant="secondary" disabled={bookmarks.length >= 20} onClick={() => onChange([...bookmarks, { id: `b${Date.now().toString(36)}`, name: bookmarkName(bookmarks), state: current() }])}>+ Add a bookmark of the view shown</Button>
+            </div>
+          </div>
+        </details>
+      ) : null}
+    </div>
   );
 }
 

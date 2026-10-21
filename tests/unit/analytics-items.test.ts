@@ -72,9 +72,14 @@ describe("item settings", () => {
     expect(() => parseShape({ kind: "star" }, "Star")).toThrow(/choose a shape/);
     expect(() => parseShape({ kind: "line", strokeWidth: 20 }, "Line")).toThrow(/0 to 12/);
     expect(parseButton({ label: " Reset ", action: "reset_filters" }, "Reset")).toEqual({ label: "Reset", action: "reset_filters" });
-    // Pages and bookmarks are listed as coming, and refused until they exist.
-    expect(BUTTON_ACTIONS.go_to_page.available).toBe(false);
-    expect(() => parseButton({ label: "Next", action: "go_to_page" }, "Next")).toThrow(/isn't available yet/);
+    // Pages and bookmarks (decision 759): the page or bookmark must be the report's own.
+    expect(BUTTON_ACTIONS.go_to_page.available).toBe(true);
+    const targets = { pages: new Set(["detail"]), bookmarks: new Set(["otago"]) };
+    expect(parseButton({ label: "Next", action: "go_to_page", target: "detail" }, "Next", targets)).toEqual({ label: "Next", action: "go_to_page", target: "detail" });
+    expect(parseButton({ label: "Otago", action: "bookmark", target: "otago" }, "Otago", targets)).toEqual({ label: "Otago", action: "bookmark", target: "otago" });
+    expect(parseButton({ label: "Back", action: "back", target: "ignored" }, "Back", targets)).toEqual({ label: "Back", action: "back" });
+    expect(() => parseButton({ label: "Next", action: "go_to_page", target: "elsewhere" }, "Next", targets)).toThrow(/choose the page/);
+    expect(() => parseButton({ label: "Next", action: "bookmark" }, "Next", targets)).toThrow(/choose the bookmark/);
     expect(() => parseButton({ label: "Go", action: "launch" }, "Go")).toThrow(/what the button does/);
   });
 });

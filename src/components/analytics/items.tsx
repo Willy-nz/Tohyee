@@ -157,10 +157,10 @@ export function ShapeItemView({ shape, height }: { shape: ShapeItem; height: num
 
 // ------------------------------------------------------------------- Button
 
-export function ButtonItemView({ button, onAction }: { button: ButtonItem; onAction?: (action: ButtonAction) => void }) {
+export function ButtonItemView({ button, onAction }: { button: ButtonItem; onAction?: (action: ButtonAction, target?: string) => void }) {
   return (
     <div className={styles.buttonBox}>
-      <Button variant="secondary" onClick={() => onAction?.(button.action)} disabled={!onAction}>
+      <Button variant="secondary" onClick={() => onAction?.(button.action, button.target)} disabled={!onAction}>
         {button.label}
       </Button>
     </div>
@@ -215,6 +215,7 @@ export function ItemEditor({
   filters,
   onSave,
   onCancel,
+  targets = { pages: [], bookmarks: [] },
 }: {
   saving: boolean;
   tile: Tile | null;
@@ -224,6 +225,8 @@ export function ItemEditor({
   filters: TileFilters;
   onSave: (tile: Tile) => void;
   onCancel: () => void;
+  /** The report's pages and bookmarks, for a button that opens one (decision 759). */
+  targets?: { pages: Array<{ id: string; name: string }>; bookmarks: Array<{ id: string; name: string }> };
 }) {
   const [kind, setKind] = useState<ItemVisual>(tile && (tile.visual === "text" || tile.visual === "image" || tile.visual === "shape" || tile.visual === "button") ? tile.visual : "text");
   const [title, setTitle] = useState(tile?.title ?? "");
@@ -272,7 +275,7 @@ export function ItemEditor({
     if (!query) return;
     setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? { ...measure, ...patch } : measure)) });
   };
-  const ready = kind === "image" ? Boolean(image) : kind === "button" ? button.label.trim().length > 0 : true;
+  const ready = kind === "image" ? Boolean(image) : kind === "button" ? button.label.trim().length > 0 && (!BUTTON_ACTIONS[button.action].target || Boolean(button.target)) : true;
   const save = () => {
     // The heading can be hidden (the card's "show the title"); the rest of a saved look is kept.
     const format: ChartFormat = { ...tile?.format };
@@ -478,13 +481,24 @@ export function ItemEditor({
               <Field label="Label">
                 <input maxLength={40} value={button.label} onChange={(event) => setButton({ ...button, label: event.target.value })} />
               </Field>
-              <Field label="When it's pressed" hint="Going to another page and opening a bookmark will come with report pages and bookmarks.">
-                <select value={button.action} onChange={(event) => setButton({ ...button, action: event.target.value as ButtonAction })}>
+              <Field label="When it's pressed" hint={button.action === "back" ? "Back to the page shown before (after a drill-through or another button)." : button.action === "reset_filters" ? "The report's own dates and slicers, nothing clicked, drilled or hidden." : undefined}>
+                <select value={button.action} onChange={(event) => {
+                  const action = event.target.value as ButtonAction;
+                  const list = BUTTON_ACTIONS[action].target === "page" ? targets.pages : BUTTON_ACTIONS[action].target === "bookmark" ? targets.bookmarks : [];
+                  setButton({ label: button.label, action, ...(list.length ? { target: list[0].id } : {}) });
+                }}>
                   {(Object.keys(BUTTON_ACTIONS) as ButtonAction[]).map((action) => (
-                    <option key={action} value={action} disabled={!BUTTON_ACTIONS[action].available}>{BUTTON_ACTIONS[action].label}</option>
+                    <option key={action} value={action} disabled={(BUTTON_ACTIONS[action].target === "page" && targets.pages.length < 2) || (BUTTON_ACTIONS[action].target === "bookmark" && !targets.bookmarks.length)}>{BUTTON_ACTIONS[action].label}</option>
                   ))}
                 </select>
               </Field>
+              {BUTTON_ACTIONS[button.action].target ? (
+                <Field label={BUTTON_ACTIONS[button.action].target === "page" ? "Page" : "Bookmark"}>
+                  <select value={button.target ?? ""} onChange={(event) => setButton({ ...button, target: event.target.value })}>
+                    {(BUTTON_ACTIONS[button.action].target === "page" ? targets.pages : targets.bookmarks).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                  </select>
+                </Field>
+              ) : null}
             </>
           ) : null}
 

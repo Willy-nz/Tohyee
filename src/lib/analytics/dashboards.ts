@@ -11,7 +11,8 @@ import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import { pageForSaving, parsePages, reportPages, type ReportPage } from "@/lib/analytics/pages";
-import { parseSlicerExtras, slicerValueFields, type SlicerSetting } from "@/lib/analytics/slicers";
+import { isRangeStyle, parseSlicerExtras, slicerValueFields, type SlicerSetting } from "@/lib/analytics/slicers";
+import { parseBookmarks, type Bookmark } from "@/lib/analytics/bookmarks";
 import { parsePageFilters, parseTileDates, type TileDates } from "@/lib/analytics/report-filters";
 import { DRILLABLE, INTERACTION_MODES, parseDrill, type InteractionMode, type TileDrill } from "@/lib/analytics/report-view";
 import {
@@ -90,6 +91,8 @@ export type DashboardSettings = {
   visualDefaults?: VisualDefaults;
   /** The report's pages (#376 phase 3, decision 753); left out, one page. */
   pages?: ReportPage[];
+  /** Saved views of the report: a page, dates, slicer choices and hidden tiles (decision 759). */
+  bookmarks?: Bookmark[];
 };
 
 /** Today and the organisation's balance date, for dates that move (decision 577). */
@@ -145,6 +148,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
       ...(row.settings.theme ? { theme: row.settings.theme } : {}),
       ...(row.settings.visualDefaults ? { visualDefaults: row.settings.visualDefaults } : {}),
       ...(row.settings.pages?.length ? { pages: row.settings.pages } : {}),
+      ...(row.settings.bookmarks?.length ? { bookmarks: row.settings.bookmarks } : {}),
     },
     tiles: row.tiles,
     createdByEmail: row.created_by_email,
@@ -273,6 +277,13 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
   const preset = isDatePreset(raw.preset) ? raw.preset : null;
   const theme = parseThemeChoice(raw.theme);
   const visualDefaults = parseVisualDefaults(raw.visualDefaults);
+  // Bookmarks keep only the report's own slicers' choices (decision 759); hidden tiles are checked with the tiles.
+  const bookmarks = parseBookmarks(raw.bookmarks, {
+    pageIds,
+    tileIds: new Set(Array.isArray(raw.bookmarks) ? raw.bookmarks.flatMap((entry) => (Array.isArray((entry as { state?: { hidden?: unknown } })?.state?.hidden) ? ((entry as { state: { hidden: unknown[] } }).state.hidden.map(String)) : [])) : []),
+    valueFields: slicerValueFields(slicers),
+    rangeFields: new Set(slicers.filter((slicer) => isRangeStyle(slicer.style)).map((slicer) => slicer.field)),
+  });
   return {
     from: date(raw.from, "From"),
     to: date(raw.to, "To"),
@@ -281,6 +292,22 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     ...(theme ? { theme } : {}),
     ...(visualDefaults ? { visualDefaults } : {}),
     ...(pagesWithFilters ? { pages: pagesWithFilters } : {}),
+    ...(bookmarks ? { bookmarks } : {}),
+  };
+}
+
+/** A bookmark's hidden tiles are the report's own (decision 759). */
+function keepTileBookmarks(settings: DashboardSettings, tiles: Tile[]): DashboardSettings {
+  if (!settings.bookmarks) return settings;
+  const ids = new Set(tiles.map((tile) => tile.id));
+  return {
+    ...settings,
+    bookmarks: settings.bookmarks.map((bookmark) => {
+      const hidden = (bookmark.state.hidden ?? []).filter((id) => ids.has(id));
+      const state = { ...bookmark.state };
+      delete state.hidden;
+      return { ...bookmark, state: hidden.length ? { ...state, hidden } : state };
+    }),
   };
 }
 
@@ -290,7 +317,9 @@ async function checkTheme(tx: OrgTx, settings: DashboardSettings): Promise<void>
   if (custom && !(await findTheme(tx, custom))) throw new ValidationError("That theme wasn't found. Choose another.");
 }
 
-function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: ReportPage[]): Tile[] {
+function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: ReportPage[], bookmarks?: Bookmark[]): Tile[] {
+  // What a button may open: one of the report's pages or bookmarks (decision 759).
+  const targets = { pages: new Set(reportPages(pages).map((page) => page.id)), bookmarks: new Set((bookmarks ?? []).map((bookmark) => bookmark.id)) };
   if (!Array.isArray(input)) throw new ValidationError("tiles must be a list.");
   if (input.length > MAX_TILES) throw new ValidationError(`A dashboard can have up to ${MAX_TILES} charts, tables and text cards.`);
   const seen = new Set<string>();
@@ -355,7 +384,7 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
         throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
       }
       const item =
-        visual === "image" ? { image: parseImage(tile.image, what) } : visual === "shape" ? { shape: parseShape(tile.shape, what) } : { button: parseButton(tile.button, what) };
+        visual === "image" ? { image: parseImage(tile.image, what) } : visual === "shape" ? { shape: parseShape(tile.shape, what) } : { button: parseButton(tile.button, what, targets) };
       return { id, title, visual, width, ...(height ? { height } : {}), query: null, ...item, ...(format ? { format } : {}) };
     }
     let query: TileQuery;
@@ -434,7 +463,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
-  const tiles = parseTiles(input.tiles ?? [], tables, settings.pages);
+  const tiles = parseTiles(input.tiles ?? [], tables, settings.pages, settings.bookmarks);
   // An image is uploaded to a report that's already saved.
   if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
   const result = await tx.query<{ id: string }>(
@@ -443,7 +472,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
     [
       name,
       parseDescription(input.description),
-      JSON.stringify(settings),
+      JSON.stringify(keepTileBookmarks(settings, tiles)),
       JSON.stringify(tiles),
       tx.actor.email,
     ],
@@ -462,13 +491,13 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings, tables);
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
-  const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables, settings.pages);
+  const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables, settings.pages, settings.bookmarks);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
   if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
   await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
             updated_by_email = $6, updated_at = now() where id = $1`,
-    [current.id, name, description, JSON.stringify(settings), JSON.stringify(tiles), tx.actor.email],
+    [current.id, name, description, JSON.stringify(keepTileBookmarks(settings, tiles)), JSON.stringify(tiles), tx.actor.email],
   );
   await writeAuditEvent(tx, {
     eventType: "analytics.dashboard_updated",

@@ -41,19 +41,21 @@ export type ShapeItem = {
 };
 
 /**
- * What a button does. Only resetting the filters works today; going to
- * another page and opening a bookmark come with #376 phase 3 (pages and
- * bookmarks), so they're listed here as not yet available and refused when
- * saved. Adding one: give it a label here, accept it in `parseButton`, and
- * handle it in the report's `runButtonAction` (analytics-dashboards.tsx).
+ * What a button does (decisions 686 and 759): reset the filters, go to a
+ * page, open a bookmark, or go back to the page before (after a
+ * drill-through or another button). Adding one: give it a label here,
+ * accept it in `parseButton`, and handle it in the report's
+ * `runButtonAction` (analytics-dashboards.tsx).
  */
 export const BUTTON_ACTIONS = {
-  reset_filters: { label: "Reset the filters", available: true },
-  go_to_page: { label: "Go to a page (coming with report pages)", available: false },
-  bookmark: { label: "Open a bookmark (coming with bookmarks)", available: false },
+  reset_filters: { label: "Reset to the report's default", available: true, target: null },
+  go_to_page: { label: "Go to a page", available: true, target: "page" },
+  bookmark: { label: "Open a bookmark", available: true, target: "bookmark" },
+  back: { label: "Go back", available: true, target: null },
 } as const;
 export type ButtonAction = keyof typeof BUTTON_ACTIONS;
-export type ButtonItem = { label: string; action: ButtonAction };
+/** `target`: the page or bookmark a "go to a page" or "open a bookmark" button opens. */
+export type ButtonItem = { label: string; action: ButtonAction; target?: string };
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -93,12 +95,15 @@ export function parseShape(input: unknown, what: string): ShapeItem {
   };
 }
 
-export function parseButton(input: unknown, what: string): ButtonItem {
+export function parseButton(input: unknown, what: string, targets: { pages: Set<string>; bookmarks: Set<string> } = { pages: new Set(), bookmarks: new Set() }): ButtonItem {
   const raw = object(input);
   const label = typeof raw.label === "string" ? raw.label.trim() : "";
   if (!label || label.length > 40) throw new ValidationError(`${what}: give the button a label (up to 40 characters).`);
   const action = raw.action as ButtonAction;
   if (!(action in BUTTON_ACTIONS)) throw new ValidationError(`${what}: choose what the button does.`);
-  if (!BUTTON_ACTIONS[action].available) throw new ValidationError(`${what}: "${BUTTON_ACTIONS[action].label}" isn't available yet.`);
-  return { label, action };
+  const kind = BUTTON_ACTIONS[action].target;
+  if (kind === null) return { label, action };
+  const target = typeof raw.target === "string" ? raw.target : "";
+  if (!(kind === "page" ? targets.pages : targets.bookmarks).has(target)) throw new ValidationError(`${what}: choose the ${kind} the button opens.`);
+  return { label, action, target };
 }
