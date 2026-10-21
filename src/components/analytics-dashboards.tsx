@@ -3,7 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
@@ -17,6 +17,8 @@ import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/cond
 import { columnHeaderRows, columnPathText, initiallyCollapsed, isGroupRow, steppedRows, visibleWithCollapsed } from "@/lib/analytics/matrix";
 import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
+import { useLeaveWarning } from "@/components/use-leave-warning";
+import { copyName, hasUnsavedChanges, recordChange, redo, redoLabel, replaceSaved, startHistory, undo, undoLabel, type EditHistory } from "@/lib/analytics/edit-history";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -61,7 +63,7 @@ import type {
   TileQuery,
   Visual,
 } from "@/lib/analytics/query";
-import { api, apiDownload, errorMessage } from "@/lib/client/api";
+import { api, apiDownload, ApiError, errorMessage } from "@/lib/client/api";
 import { DATE_PRESETS, type DatePreset, isDatePreset, matchingPreset, presetRange } from "@/lib/analytics/date-ranges";
 import { booleanText, showValue } from "@/lib/analytics/display";
 import { filterComplete } from "@/lib/analytics/filters";
@@ -284,7 +286,12 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const confirm = useConfirm();
   const loaded = useApiData<{ dashboard: Dashboard } & Partial<DateContext>>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
   const tables = useApiData<{ tables: TableInfo[] }>(can("bookkeeper") ? "/api/analytics/tables" : null, { organisationId });
-  const [draft, setDraft] = useState<Dashboard | null>(null);
+  // What the server has (the last save, or the report as loaded), and this
+  // editing session's draft with its Undo and Redo (decisions 690-691).
+  const [saved, setSaved] = useState<Dashboard | null>(null);
+  const [history, setHistory] = useState<EditHistory<Dashboard> | null>(null);
+  // Someone else saved first (decision 690): who and when, until Reload or Save a copy.
+  const [conflict, setConflict] = useState<{ updatedByEmail: string; updatedAt: string } | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
   const [sharing, setSharing] = useState(false);
   const [theming, setTheming] = useState(false);
@@ -303,7 +310,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const search = useSearchParams();
   const [pageChoice, setPageChoice] = useState<string | null>(() => search.get("page"));
 
-  const dashboard = draft ?? loaded.data?.dashboard ?? null;
+  const base = saved ?? loaded.data?.dashboard ?? null;
+  const dashboard = history?.present ?? base;
+  const unsaved = Boolean(base && dashboard && hasUnsavedChanges(base, dashboard));
+  // Each saved tile's question, to tell which tiles in the draft are as saved.
+  const savedQueries = useMemo(() => new Map((base?.tiles ?? []).map((tile) => [tile.id, JSON.stringify(tile.query)])), [base]);
   const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
   const dates: DateContext = { today: loaded.data?.today ?? todayInBrowser(), financialYearEndMonth: loaded.data?.financialYearEndMonth ?? 3 };
   const canEdit = can("bookkeeper");
@@ -316,22 +327,114 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     if (action === "reset_filters") setFilters(null);
   };
 
-  async function save(next: Dashboard) {
+  useLeaveWarning(unsaved, () =>
+    confirm("Your changes to this report aren't saved. Leave without saving them?", { title: "Leave without saving?", confirmLabel: "Leave", danger: true }),
+  );
+
+  /** A change to the draft, named for Undo (e.g. "remove Sales by month"); `key` makes a run of the same change (typing) one step. */
+  function change(next: Dashboard, label: string, key?: string) {
+    if (!base) return;
+    setHistory((current) => recordChange(current ?? startHistory(base), next, label, key));
+  }
+
+  const step = useCallback((direction: "undo" | "redo") => {
+    setHistory((current) => (current ? (direction === "undo" ? undo(current) : redo(current)) : current));
+  }, []);
+
+  // Ctrl+Z / Cmd+Z and Ctrl+Shift+Z / Ctrl+Y while editing, except in a text box (which has its own Undo).
+  useEffect(() => {
+    if (!editing || editingTile) return;
+    const keydown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) step("undo");
+      else if ((key === "z" && event.shiftKey) || key === "y") step("redo");
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [editing, editingTile, step]);
+
+  /**
+   * Saves the draft, naming the version it started from (decision 690). A
+   * save that fails, or is refused because someone else saved first, leaves
+   * the draft as it is.
+   */
+  async function save(): Promise<boolean> {
+    if (!dashboard || !base) return false;
+    if (!unsaved) return true;
+    const sent = dashboard;
     setBusy(true);
     setError(null);
+    setConflict(null);
     try {
-      const { dashboard: saved } = await api<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, {
+      const { dashboard: result } = await api<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, {
         method: "PATCH",
-        body: { organisationId, name: next.name, description: next.description, settings: next.settings, tiles: next.tiles },
+        body: { organisationId, expectedVersion: base.version, name: sent.name, description: sent.description, settings: sent.settings, tiles: sent.tiles },
       });
-      setDraft(saved);
+      setSaved(result);
+      setHistory((current) => (current ? replaceSaved(current, sent, result) : current));
       return true;
     } catch (caught) {
-      setError(errorMessage(caught));
+      if (caught instanceof ApiError && caught.code === "dashboard_conflict") {
+        setConflict({ updatedByEmail: String(caught.details?.updatedByEmail ?? "Someone"), updatedAt: String(caught.details?.updatedAt ?? "") });
+      } else {
+        setError(`${errorMessage(caught)} Your changes haven't been saved; they're still here, so you can try again.`);
+      }
       return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  /** The report as it's saved now, in place of the draft (after a conflict, or on starting to edit). */
+  async function reloadSaved(ask: boolean) {
+    if (ask && unsaved) {
+      const ok = await confirm("Your changes will be replaced by the report as it's saved now. To keep them, save them as a copy first.", {
+        title: "Reload the saved report?",
+        confirmLabel: "Reload",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    try {
+      const { dashboard: fresh } = await api<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, { query: { organisationId } });
+      setSaved(fresh);
+      setHistory(null);
+      setConflict(null);
+      setError(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  /** The draft as a new report (after a conflict), so nobody's work is lost. It isn't shared with anyone yet. */
+  async function saveCopy() {
+    if (!dashboard) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { dashboard: copy } = await api<{ dashboard: Dashboard }>("/api/analytics/dashboards", {
+        method: "POST",
+        body: { organisationId, name: copyName(dashboard.name), description: dashboard.description, settings: dashboard.settings, tiles: dashboard.tiles },
+      });
+      setHistory(null);
+      setConflict(null);
+      router.push(`/analytics/dashboards/${copy.id}?edit=1`);
+    } catch (caught) {
+      setError(`${errorMessage(caught)} Your changes are still here.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function beginEditing() {
+    // Start from the latest save, so a report left open a while isn't a stale starting point.
+    if (!history) await reloadSaved(false);
+    setEditing(true);
   }
 
   async function remove() {
@@ -340,6 +443,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     if (!ok) return;
     try {
       await api(`/api/analytics/dashboards/${dashboardId}`, { method: "DELETE", query: { organisationId } });
+      setHistory(null);
       router.push("/analytics");
     } catch (caught) {
       setError(errorMessage(caught));
@@ -356,7 +460,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       delete next.format;
       return format ? { ...next, format } : next;
     });
-    void save({ ...dashboard, tiles });
+    change({ ...dashboard, tiles }, `paste the format on ${tile.title}`);
   }
 
   /** Keeps (or with undefined, clears) the report's default look for a chart type. */
@@ -367,13 +471,24 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     else delete defaults[visual];
     const settings = { ...dashboard.settings };
     delete settings.visualDefaults;
-    setDraft({ ...dashboard, settings: Object.keys(defaults).length ? { ...settings, visualDefaults: defaults } : settings });
+    change(
+      { ...dashboard, settings: Object.keys(defaults).length ? { ...settings, visualDefaults: defaults } : settings },
+      format ? `set the default for ${VISUAL_NAMES[visual]}` : `reset the default for ${VISUAL_NAMES[visual]}`,
+    );
   }
 
   function moveTile(index: number, to: number) {
     if (!dashboard) return;
     const tiles = moveTileTo(dashboard.tiles, index, to);
-    if (tiles !== dashboard.tiles) void save({ ...dashboard, tiles });
+    if (tiles !== dashboard.tiles) change({ ...dashboard, tiles }, `move ${dashboard.tiles[index].title}`);
+  }
+
+  function putTile(tile: Tile) {
+    if (!dashboard) return;
+    const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
+    const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
+    change({ ...dashboard, tiles }, exists ? `change ${tile.title}` : `add ${tile.title}`);
+    setEditingTile(null);
   }
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
@@ -389,10 +504,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     params.set("page", pageId);
     window.history.replaceState(null, "", `?${params.toString()}`);
   };
-  const setPages = (next: { pages: ReportPage[] | undefined; tiles: Tile[] }) => {
+  /** A change to the pages, as one draft step (decision 691); `key` makes typing a page's name one step. */
+  const setPages = (next: { pages: ReportPage[] | undefined; tiles: Tile[] }, label: string, key?: string) => {
     const settings = { ...dashboard.settings };
     delete settings.pages;
-    setDraft({ ...dashboard, settings: next.pages ? { ...settings, pages: next.pages } : settings, tiles: next.tiles });
+    change({ ...dashboard, settings: next.pages ? { ...settings, pages: next.pages } : settings, tiles: next.tiles }, label, key);
   };
   /** A tile added or changed, on the page shown. */
   const placed = (tile: Tile): Tile => {
@@ -414,10 +530,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           {editing ? (
             <div className={ui.grid3}>
               <Field label="Name">
-                <input value={dashboard.name} maxLength={100} onChange={(event) => setDraft({ ...dashboard, name: event.target.value })} />
+                <input value={dashboard.name} maxLength={100} onChange={(event) => change({ ...dashboard, name: event.target.value }, "rename the report", "name")} />
               </Field>
               <Field label="Description">
-                <input value={dashboard.description ?? ""} maxLength={500} onChange={(event) => setDraft({ ...dashboard, description: event.target.value })} />
+                <input value={dashboard.description ?? ""} maxLength={500} onChange={(event) => change({ ...dashboard, description: event.target.value }, "change the description", "description")} />
               </Field>
             </div>
           ) : (
@@ -441,27 +557,69 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                 Theme: {theme.name}
               </Button>
               <Button
+                variant="secondary"
+                onClick={() => step("undo")}
+                disabled={busy || Boolean(editingTile) || !history || !undoLabel(history)}
+                aria-label={history && undoLabel(history) ? `Undo ${undoLabel(history)}` : "Undo"}
+                title={history && undoLabel(history) ? `Undo ${undoLabel(history)} (Ctrl+Z)` : "Nothing to undo"}
+              >
+                Undo
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => step("redo")}
+                disabled={busy || Boolean(editingTile) || !history || !redoLabel(history)}
+                aria-label={history && redoLabel(history) ? `Redo ${redoLabel(history)}` : "Redo"}
+                title={history && redoLabel(history) ? `Redo ${redoLabel(history)} (Ctrl+Shift+Z)` : "Nothing to redo"}
+              >
+                Redo
+              </Button>
+              <Button onClick={() => void save()} disabled={busy || Boolean(editingTile) || !unsaved}>
+                {busy ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={async () => {
-                  if (await save(dashboard)) {
+                  if (await save()) {
                     setEditing(false);
                     setEditingTile(null);
                   }
                 }}
                 disabled={busy || Boolean(editingTile)}
               >
-                {busy ? "Saving…" : "Save and view"}
+                {unsaved ? "Save and view" : "View"}
               </Button>
+              {unsaved ? (
+                <Button variant="secondary" onClick={() => base && change(base, "discard the changes")} disabled={busy || Boolean(editingTile)}>
+                  Discard changes
+                </Button>
+              ) : null}
               <Button variant="danger" onClick={() => void remove()} disabled={busy || Boolean(editingTile)}>
                 Delete
               </Button>
             </>
           ) : canEdit ? (
-            <Button variant="secondary" onClick={() => setEditing(true)}>
+            <Button variant="secondary" onClick={() => void beginEditing()}>
               Edit
             </Button>
           ) : null}
         </div>
       </div>
+      {editing ? (
+        <p className={styles.saveState} role="status" aria-live="polite">
+          {busy ? "Saving…" : conflict || error ? "Not saved" : unsaved ? "Unsaved changes: Save to keep them. Viewers see the report as last saved." : "All changes saved"}
+        </p>
+      ) : null}
+      {conflict ? (
+        <Notice tone="error">
+          <strong>Not saved.</strong> {conflict.updatedByEmail} saved this report{conflict.updatedAt ? ` at ${formatDateTime(conflict.updatedAt)}` : ""}, after you started changing it. Your changes
+          are still here. Save them as a new report, or reload to see the saved version (your changes are then lost).
+          <div className={`${ui.rowButtons} ${styles.conflictActions}`}>
+            <Button size="small" onClick={() => void saveCopy()} disabled={busy}>Save mine as a copy</Button>
+            <Button size="small" variant="secondary" onClick={() => void reloadSaved(true)} disabled={busy}>Reload the saved report</Button>
+          </div>
+        </Notice>
+      ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {editing && tables.error ? <Notice tone="error">{tables.error}</Notice> : null}
       {editing && tables.data?.tables.length === 0 ? <Notice tone="info">Connect and load a <Link href="/analytics/sources">data source</Link> to start adding charts.</Notice> : null}
@@ -475,7 +633,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         editing={editing}
         tables={tables.data?.tables ?? []}
         dates={dates}
-        onSettings={(settings) => setDraft({ ...dashboard, settings })}
+        onSettings={(settings) => change({ ...dashboard, settings }, "change the dates and slicers", "settings")}
       />
 
       <PageTabs
@@ -486,16 +644,16 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         panelId={`report-page-${dashboard.id}`}
         onAdd={() => {
           const id = `p${Date.now().toString(36)}`;
-          setPages(addPage(pages, dashboard.tiles, id));
+          setPages(addPage(pages, dashboard.tiles, id), "add a page");
           choosePage(id);
         }}
-        onUpdate={(changed) => setPages({ pages: (pages?.length ? pages : [page]).map((entry) => (entry.id === changed.id ? changed : entry)), tiles: dashboard.tiles })}
-        onMove={(pageId, by) => setPages(movePage(pages, dashboard.tiles, pageId, by))}
+        onUpdate={(changed) => setPages({ pages: (pages?.length ? pages : [page]).map((entry) => (entry.id === changed.id ? changed : entry)), tiles: dashboard.tiles }, `change the ${changed.name || "page"} page`, `page-${changed.id}`)}
+        onMove={(pageId, by) => setPages(movePage(pages, dashboard.tiles, pageId, by), "move a page")}
         onRemove={async (gone) => {
           const count = tilesOnPage(dashboard.tiles, pages, gone.id).length;
-          const ok = await confirm(count ? `Remove the ${gone.name} page and its ${count} ${count === 1 ? "tile" : "tiles"}? Nothing is saved until you choose Save and view.` : `Remove the ${gone.name} page?`, { title: "Remove page?", confirmLabel: "Remove", danger: true });
+          const ok = await confirm(count ? `Remove the ${gone.name} page and its ${count} ${count === 1 ? "tile" : "tiles"}? Nothing is saved until you choose Save.` : `Remove the ${gone.name} page?`, { title: "Remove page?", confirmLabel: "Remove", danger: true });
           if (!ok) return;
-          setPages(removePage(pages, dashboard.tiles, gone.id));
+          setPages(removePage(pages, dashboard.tiles, gone.id), `remove the ${gone.name} page`);
           setPageChoice(null);
         }}
       />
@@ -511,7 +669,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           onChoose={(choice, chosen) => {
             const settings = { ...dashboard.settings };
             delete settings.theme;
-            setDraft({ ...dashboard, settings: choice ? { ...settings, theme: choice } : settings, customTheme: choice?.startsWith("custom:") ? chosen : null });
+            change({ ...dashboard, settings: choice ? { ...settings, theme: choice } : settings, customTheme: choice?.startsWith("custom:") ? chosen : null }, `choose the ${chosen.name} theme`);
           }}
         />
       ) : null}
@@ -533,12 +691,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           tables={tables.data?.tables ?? []}
           filters={shown}
           onCancel={() => setEditingTile(null)}
-          onSave={async (given) => {
-            const tile = placed(given);
-            const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
-            const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
-            if (await save({ ...dashboard, tiles })) setEditingTile(null);
-          }}
+          onSave={(given) => putTile(placed(given))}
         />
       ) : chartTile && canEdit ? (
         <TileEditor
@@ -553,12 +706,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           theme={theme}
           onSetDefault={setVisualDefault}
           onCancel={() => setEditingTile(null)}
-          onSave={async (given) => {
-            const tile = placed(given);
-            const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
-            const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
-            if (await save({ ...dashboard, tiles })) setEditingTile(null);
-          }}
+          onSave={(given) => putTile(placed(given))}
         />
       ) : null}
 
@@ -567,7 +715,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           tiles={pageTiles}
           chosen={chosenTiles.filter((id) => pageTiles.some((tile) => tile.id === id))}
           onClear={() => setChosenTiles([])}
-          onArrange={(tiles) => void save({ ...dashboard, tiles: [...tiles, ...dashboard.tiles.filter((tile) => !pageTiles.includes(tile))] })}
+          onArrange={(tiles, label) => change({ ...dashboard, tiles: [...tiles, ...dashboard.tiles.filter((tile) => !pageTiles.includes(tile))] }, label)}
         />
       ) : null}
 
@@ -663,7 +811,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       size="small"
                       variant="secondary"
                       aria-label={`Duplicate ${tile.title}`}
-                      onClick={() => void save({ ...dashboard, tiles: duplicateTile(dashboard.tiles, index, `t${Date.now().toString(36)}`) })}
+                      onClick={() => change({ ...dashboard, tiles: duplicateTile(dashboard.tiles, index, `t${Date.now().toString(36)}`) }, `duplicate ${tile.title}`)}
                       disabled={busy || dashboard.tiles.length >= 40}
                     >
                       Duplicate
@@ -671,7 +819,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     <Button
                       size="small"
                       variant="danger"
-                      onClick={() => void save({ ...dashboard, tiles: dashboard.tiles.filter((entry) => entry.id !== tile.id) })}
+                      aria-label={`Remove ${tile.title}`}
+                      onClick={() => change({ ...dashboard, tiles: dashboard.tiles.filter((entry) => entry.id !== tile.id) }, `remove ${tile.title}`)}
                       disabled={busy}
                     >
                       Remove
@@ -692,10 +841,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} onAction={runButtonAction} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} onAction={runButtonAction} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} />
               )}
             </section>
             );
@@ -971,18 +1120,25 @@ function SlicerControl({
 }
 
 /** A tile's answer: its saved question (`saved`, all a report viewer can run) or a question being built (`query`). */
-function TileBody(props: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; onAction?: (action: ButtonAction) => void }) {
+/**
+ * `asSaved`: the tile's question is the saved one, so it's run by the
+ * report and tile (what report viewers can do). A tile added or changed in
+ * the draft isn't saved yet, so its question is sent as it is.
+ */
+type TileBodyProps = { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; asSaved: boolean; onAction?: (action: ButtonAction) => void };
+
+function TileBody(props: TileBodyProps) {
   const { tile } = props;
   const height = CHART_HEIGHTS[tile.height ?? "small"];
-  if (tile.visual === "text") return <TextItemView organisationId={props.organisationId} dashboardId={props.dashboardId} tile={tile} filters={props.filters} />;
+  if (tile.visual === "text") return <TextItemView organisationId={props.organisationId} dashboardId={props.dashboardId} tile={tile} filters={props.filters} saved={props.asSaved} />;
   if (tile.visual === "image" && tile.image) return <ImageItemView organisationId={props.organisationId} dashboardId={props.dashboardId} image={tile.image} height={height} />;
   if (tile.visual === "shape" && tile.shape) return <ShapeItemView shape={tile.shape} height={height} />;
   if (tile.visual === "button" && tile.button) return <ButtonItemView button={tile.button} onAction={props.onAction} />;
   return <QueryTileBody {...props} />;
 }
 
-function QueryTileBody({ organisationId, dashboardId, tile, filters }: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
-  const state = useTileResult(organisationId, tile.query, filters, { dashboardId, tileId: tile.id });
+function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved }: TileBodyProps) {
+  const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined);
   const { current } = useWorkspace();
   const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
   const [drillError, setDrillError] = useState<string | null>(null);
@@ -999,8 +1155,7 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters }: { organis
         method: "POST",
         body: {
           organisationId,
-          dashboardId,
-          tileId: tile.id,
+          ...(asSaved ? { dashboardId, tileId: tile.id } : { query: tile.query }),
           filters: { from: filters.from || null, to: filters.to || null, values: filters.values },
           drill: selection,
         },
