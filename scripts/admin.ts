@@ -43,9 +43,11 @@ import {
   decryptBackupTo,
   getBackupSettings,
   listBackupFiles,
-  restoreBackupAsCopy,
+  restoreBackup,
+  resumeOrganisationJobs,
   updateBackupSettings,
 } from "@/lib/backups/service";
+import { recoverPeople, recoveryMaterial, testRestore } from "@/lib/backups/recovery";
 import { listUsers, updateUser } from "@/lib/users/admin";
 
 const actor = COMMAND_LINE_ADMIN.user;
@@ -102,8 +104,14 @@ Backups (encrypted with the server's recovery key: save the recovery kit somewhe
   backups run [--id ORGANISATION]           back up now (everything, or one organisation)
   backups list [--id ORGANISATION] [--json]
   backups check --file FILE                 prove a backup opens and PostgreSQL can read it
-  backups restore --file FILE [--id NEW-ID] [--name NAME] [--owner EMAIL] [--other-key]
-                                            restores as a new organisation (a copy); nothing is overwritten
+  backups restore --file FILE [--id NEW-ID] [--name NAME] [--owner EMAIL] [--other-key | --kit-file PATH]
+                                            restores as a new organisation (a copy); nothing is overwritten;
+                                            stored secrets re-encrypted for this server; automatic jobs paused
+  backups resume --id ORGANISATION          turns on a restored copy's automatic jobs
+  backups test-restore [--id ORGANISATION]  restores the newest backups into a scratch database, checks, removes
+  backups recover-people --file SERVER-BACKUP [--other-key | --kit-file PATH] [--replace EMAIL,…] [--apply]
+                                            a replacement computer: people, logins and memberships from a
+                                            server backup (without --apply it only says what it would do)
   backups decrypt --file FILE --out DUMP [--other-key]
                                             a plain pg_dump file, for a database administrator
                                             --other-key: the backup was made on another server; its key
@@ -532,6 +540,15 @@ async function otherKey(args: string[]): Promise<string | undefined> {
   return secret("TOHYEE_BACKUP_KEY", "The recovery code (or, for an older backup, the backup key) of the server that made this backup: ");
 }
 
+/** --other-key (a recovery code or older backup key) or --kit-file PATH with its passphrase (TOHYEE_KIT_PASSPHRASE or asked). */
+async function cliMaterial(args: string[]) {
+  const kitFile = option(args, "kit-file");
+  if (kitFile) {
+    return recoveryMaterial({ kitFile: readFileSync(kitFile, "utf8"), passphrase: await secret("TOHYEE_KIT_PASSPHRASE", "The recovery file's passphrase: ") });
+  }
+  return recoveryMaterial({ key: await otherKey(args) });
+}
+
 function megabytes(bytes: number | null): string {
   return bytes === null ? "" : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
@@ -642,15 +659,47 @@ async function backups(command: string | undefined, args: string[]) {
   }
   if (command === "restore") {
     const file = required(args, "file");
-    const key = await otherKey(args);
-    const organisation = await restoreBackupAsCopy(COMMAND_LINE_ADMIN.user, {
+    const { organisation, report } = await restoreBackup(COMMAND_LINE_ADMIN.user, {
       file,
-      key,
+      material: await cliMaterial(args),
       id: option(args, "id") ?? undefined,
       displayName: option(args, "name") ?? undefined,
       ownerEmail: option(args, "owner") ?? undefined,
     });
     console.log(`Restored as ${organisation.displayName} (${organisation.id}). Check it in the books; the original hasn't been touched.`);
+    console.log(`Stored secrets: ${report.secrets.reEncrypted} re-encrypted for this server, ${report.secrets.current} already readable, ${report.secrets.unreadable} unreadable${report.reconnect.length ? ` (connect again: ${report.reconnect.join(", ")})` : ""}.`);
+    console.log(`Private mail copies: ${report.privateMail.copies}, still their owners'${report.privateMail.ownersNotHere ? `; ${report.privateMail.ownersNotHere} belong to people not on this server yet (backups recover-people)` : ""}.`);
+    console.log(`Automatic jobs are paused (${report.queuedEmails} queued emails). Once the original isn't running them: backups resume --id ${organisation.id}`);
+    return;
+  }
+  if (command === "resume") {
+    await resumeOrganisationJobs(COMMAND_LINE_ADMIN, required(args, "id"));
+    console.log("Automatic jobs are on.");
+    return;
+  }
+  if (command === "test-restore") {
+    const checks = await testRestore({ requestedByEmail: "cli", organisationId: option(args, "id") ?? undefined });
+    if (checks.length === 0) console.log("There are no backups to test yet.");
+    for (const check of checks) {
+      console.log(check.status === "ok" ? `${check.organisationId ?? "server"}: OK, ${check.fileName} restored into a scratch database, checked and removed` : `${check.organisationId ?? "server"}: FAILED: ${check.error}`);
+    }
+    if (checks.some((check) => check.status !== "ok")) process.exitCode = 1;
+    return;
+  }
+  if (command === "recover-people") {
+    const plan = await recoverPeople(COMMAND_LINE_ADMIN, {
+      file: required(args, "file"),
+      material: await cliMaterial(args),
+      apply: flag(args, "apply"),
+      replace: (option(args, "replace") ?? "").split(",").map((e) => e.trim()).filter(Boolean),
+    });
+    console.log(`${plan.applied ? "Added" : "Would add"}: ${plan.add.map((p) => p.email).join(", ") || "nobody"}`);
+    if (plan.alreadyHere.length) console.log(`Already here: ${plan.alreadyHere.join(", ")}`);
+    for (const conflict of plan.conflicts) console.log(`Here under another account: ${conflict.email}${conflict.replacing ? " (replaced)" : " (left alone; --replace it to use the backup's)"}`);
+    console.log(`Memberships ${plan.applied ? "added" : "to add"}: ${plan.memberships.length}`);
+    if (plan.organisationsNotHere.length) console.log(`Not restored here yet: ${plan.organisationsNotHere.map((o) => o.id).join(", ")} (restore each keeping its ID, then run this again)`);
+    if (plan.settingsNotCopied.length) console.log(`Server settings not copied (set them up again): ${plan.settingsNotCopied.join(", ")}`);
+    if (!plan.applied) console.log("Nothing was changed. Run again with --apply to do it.");
     return;
   }
   if (command === "decrypt") {

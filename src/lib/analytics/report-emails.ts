@@ -413,7 +413,7 @@ export async function checkReportMailbox(
 }
 export async function runDueReportEmailChecks(now = new Date()): Promise<ReportEmailCheck[]> {
   const organisations = await coreQuery<{ id: string }>(
-    "select id from organisations where is_active and provisioning_status='ready' and migration_status='current' order by id");
+    "select id from organisations where is_active and provisioning_status='ready' and migration_status='current' and jobs_paused_at is null order by id");
   const made: ReportEmailCheck[] = [];
   for (const { id: organisationId } of organisations.rows) {
     const organisation = await getOrganisation(organisationId);

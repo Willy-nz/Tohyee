@@ -3,7 +3,7 @@ import { type BackupKeyStatus, backupKeyStatus } from "@/lib/backups/key";
 import { type RecoveryKitStatus, recoveryKitStatus } from "@/lib/backups/recovery-kit";
 import { type BackupCheck, latestChecks } from "@/lib/backups/checks";
 import { classifyDestination, type Destination, type DiskSpace, diskSpace, describeDestination, formatBytes, offSiteNote } from "@/lib/backups/destination";
-import { type BackupFile, type BackupRun, type BackupSettings, backupStatus, getBackupSettings, listBackupFiles } from "@/lib/backups/service";
+import { type BackupFile, type BackupRun, type BackupSettings, backupStatus, getBackupSettings, listBackupFiles, pausedOrganisations } from "@/lib/backups/service";
 
 /**
  * The Backups panel (#389, decision 733): what's known about the backups and
@@ -56,6 +56,10 @@ export type BackupOverview = {
     /** Backups in the older format (before recovery kits), which need the older backup key (TOHYEE_SECRET_KEY). */
     legacyFiles: { files: number; newestMadeAt: string; keepKeyUntilAbout: string; keyCheckedAt: string | null } | null;
   };
+  /** The last test restore (decision 739): the oldest of each database's latest, so it's when everything was last test-restored. */
+  testRestore: { lastAt: string | null; allAt: string | null; failed: number; failures: { organisationId: string | null; error: string | null }[] };
+  /** Restored copies whose automatic jobs are paused until a server admin turns them on (decision 738). */
+  pausedCopies: { id: string; displayName: string; pausedAt: string; reason: string | null }[];
   attention: Attention[];
   /** Things a recovery would depend on that nothing has proven yet. */
   notProven: string[];
@@ -69,6 +73,8 @@ export type OverviewInput = {
   files: Pick<BackupFile, "name" | "sizeBytes" | "problem" | "header">[];
   status: { organisationId: string | null; displayName: string | null; latest: BackupRun | null; lastGood: BackupRun | null }[];
   checks: BackupCheck[];
+  testRestores?: BackupCheck[];
+  pausedCopies?: BackupOverview["pausedCopies"];
   keyStatus: Pick<BackupKeyStatus, "keySet" | "savedCopyCheckedAt">;
   kit: Pick<RecoveryKitStatus, "keySet" | "version" | "id" | "checkedAt" | "checkedByEmail">;
 };
@@ -205,6 +211,21 @@ export function summariseBackups(input: OverviewInput): BackupOverview {
     notProven.push("That the backup files are still whole: they haven't all been checked again in the last week.");
   }
 
+  const tests = (input.testRestores ?? []).filter((t) => backedUp.some((b) => b.organisationId === t.organisationId));
+  const testTimes = backedUp.map((t) => tests.find((r) => r.organisationId === t.organisationId)?.finishedAt ?? null);
+  const testAllAt = backedUp.length > 0 && testTimes.every(Boolean) ? (testTimes as string[]).sort()[0] : null;
+  const testFailures = tests.filter((t) => t.status === "failed");
+  for (const failure of testFailures) {
+    attention.push({ level: "error", text: `The last test restore of ${nameOf(targets.find((t) => t.organisationId === failure.organisationId) ?? { organisationId: failure.organisationId, displayName: null })} failed: ${failure.error ?? "no message"}` });
+  }
+  if (backedUp.length > 0 && (!testAllAt || now.getTime() - new Date(testAllAt).getTime() > 31 * 24 * HOUR)) {
+    notProven.push(testAllAt || tests.length > 0 ? "That every backup restores: not all have had a test restore in the last month." : "That the backups restore: no test restore has been done yet.");
+  }
+  const pausedCopies = input.pausedCopies ?? [];
+  for (const copy of pausedCopies) {
+    attention.push({ level: "warning", text: `${copy.displayName} is a restored copy with its automatic jobs paused (email sending, feeds, mailbox checks). Turn them on once the original isn't running them.` });
+  }
+
   return {
     everythingBackedUpAt,
     newestBackupAt,
@@ -227,6 +248,13 @@ export function summariseBackups(input: OverviewInput): BackupOverview {
       olderVersions: [...older.values()].sort((a, b) => b.version - a.version).map((entry) => ({ ...entry, keepKitUntilAbout: aYearAfter(entry.newestMadeAt) })),
       legacyFiles: legacy ? { ...legacy, keepKeyUntilAbout: aYearAfter(legacy.newestMadeAt), keyCheckedAt: input.keyStatus.savedCopyCheckedAt } : null,
     },
+    testRestore: {
+      lastAt: tests.map((t) => t.finishedAt ?? t.startedAt).sort().at(-1) ?? null,
+      allAt: testAllAt,
+      failed: testFailures.length,
+      failures: testFailures.map((t) => ({ organisationId: t.organisationId, error: t.error })),
+    },
+    pausedCopies,
     attention,
     notProven,
   };
@@ -250,6 +278,8 @@ export async function backupOverview(now = new Date()): Promise<{ overview: Back
     files,
     status: await backupStatus(),
     checks: await latestChecks("integrity"),
+    testRestores: await latestChecks("test_restore"),
+    pausedCopies: await pausedOrganisations(),
     keyStatus: await backupKeyStatus(),
     kit: await recoveryKitStatus(),
   });

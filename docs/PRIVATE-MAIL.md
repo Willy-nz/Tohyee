@@ -151,7 +151,14 @@ a recovery design first; it isn't built.
   copy is gone from every backup about 12 months later. A backup file
   copied elsewhere is outside Tohyee's reach.
 - **Restoring** a backup as a new organisation brings the copy with it,
-  still owned by the same person; nobody else can read it there either.
+  still owned by the same person; nobody else can read it there either,
+  including the server admin who restored it (they become an Owner of the
+  copy, and still get "not found"). On another computer the copy's key is
+  re-encrypted with that computer's `TOHYEE_SECRET_KEY` as part of the
+  restore (decision 737). If the owner isn't on that server, the copy is
+  kept and nobody can read it until their account is recovered from the
+  server backup with the same ID (decision 738); it's never handed to
+  anyone else.
 
 ## Not tried with a real mailbox
 

@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { ageText } from "@/lib/backups/age";
@@ -52,6 +54,7 @@ export default function ServerBackupsPage() {
   const [details, setDetails] = useState<Details | null>(null);
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => setDetails(await api<Details>("/api/admin/backups")), []);
 
@@ -73,7 +76,17 @@ export default function ServerBackupsPage() {
 
   async function act(name: string, work: () => Promise<string>) {
     setBusy(name);
-    setMessage({ tone: "info", text: name === "backup" ? "Backing up… this can take a few minutes." : name === "check" ? "Checking the newest backup files… this can take a few minutes." : "Working…" });
+    setMessage({
+      tone: "info",
+      text:
+        name === "backup"
+          ? "Backing up… this can take a few minutes."
+          : name === "check"
+            ? "Checking the newest backup files… this can take a few minutes."
+            : name === "test"
+              ? "Restoring the newest backups into a scratch database to test them… this can take a few minutes."
+              : "Working…",
+    });
     try {
       const text = await work();
       await load();
@@ -104,6 +117,24 @@ export default function ServerBackupsPage() {
         : `!${failed.length} of ${checks.length} failed: ${failed[0].error ?? "no message"}`;
     });
 
+  const testRestore = () =>
+    act("test", async () => {
+      const { checks } = await api<{ checks: { status: string; error: string | null }[] }>("/api/admin/backups/test-restore", { method: "POST", body: {} });
+      const failed = checks.filter((one) => one.status !== "ok");
+      if (checks.length === 0) return "There are no backups to test yet.";
+      return failed.length === 0
+        ? `Restored the newest backup of ${checks.length} ${checks.length === 1 ? "database" : "databases"} into a scratch database, checked it and removed it: all good.`
+        : `!${failed.length} of ${checks.length} test restores failed: ${failed[0].error ?? "no message"}`;
+    });
+
+  const resume = async (copy: { id: string; displayName: string }) => {
+    if (!(await confirm(`Turn on ${copy.displayName}'s automatic jobs? Queued emails are sent, and bank, payment and mailbox feeds start importing. Only do this once the original isn't running them, or the same things are sent and imported twice.`))) return;
+    await act("resume", async () => {
+      await api("/api/admin/backups/restore/resume", { method: "POST", body: { organisationId: copy.id } });
+      return `Automatic jobs are on for ${copy.displayName}.`;
+    });
+  };
+
   if (!user.isServerAdmin) {
     return (
       <Page>
@@ -126,11 +157,31 @@ export default function ServerBackupsPage() {
             <Button variant="secondary" onClick={() => void check()} disabled={busy !== null}>
               {busy === "check" ? "Checking…" : "Check backups now"}
             </Button>
+            <Button variant="secondary" onClick={() => void testRestore()} disabled={busy !== null}>
+              {busy === "test" ? "Testing…" : "Test a restore"}
+            </Button>
+            <Link href="/server/backups/restore" className={`${ui.button} ${ui.secondary}`}>
+              Restore on this computer
+            </Link>
           </>
         }
       />
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {details ? <Status details={details} /> : <p className={ui.muted}>Loading…</p>}
+      {details && details.overview.pausedCopies.length > 0 ? (
+        <Card title="Restored copies with paused jobs" description="Their automatic jobs (sending emails, feeds, mailbox checks, repeating invoices, analytics loads) are off until you turn them on, so they can't send or import the same things as the original.">
+          <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8 }}>
+            {details.overview.pausedCopies.map((copy) => (
+              <li key={copy.id}>
+                <strong>{copy.displayName}</strong> ({copy.id}), paused {formatDateTime(copy.pausedAt)}. {copy.reason}{" "}
+                <Button variant="secondary" size="small" onClick={() => void resume(copy)} disabled={busy !== null}>
+                  Turn on automatic jobs
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       {details ? <Destination details={details} onSaved={load} /> : null}
       {details ? <Databases overview={details.overview} /> : null}
       {details ? <Files files={details.files} /> : null}
@@ -176,6 +227,20 @@ function Status({ details }: { details: Details }) {
           <dd>
             {overview.destination.synced || overview.destination.kind === "network" ? <Badge tone="amber">Not verified</Badge> : <Badge tone="red">None</Badge>}{" "}
             <span className={ui.muted}>{overview.offSite.note}</span>
+          </dd>
+        </div>
+        <div className={ui.recordField}>
+          <dt>Last test restore</dt>
+          <dd>
+            {overview.testRestore.failed > 0 ? (
+              <Badge tone="red">{overview.testRestore.failed} failed</Badge>
+            ) : overview.testRestore.allAt ? (
+              `Every database's newest backup restored and checked ${ageText(overview.testRestore.allAt, now)}`
+            ) : overview.testRestore.lastAt ? (
+              `Some, ${ageText(overview.testRestore.lastAt, now)}; not all yet`
+            ) : (
+              "Never: press Test a restore"
+            )}
           </dd>
         </div>
         <div className={ui.recordField}>
@@ -339,7 +404,7 @@ function Databases({ overview }: { overview: BackupOverview }) {
 
 function Files({ files }: { files: FileRow[] }) {
   return (
-    <Card title="Backup files" description="Restoring one makes a new organisation (a copy), so the current books are never overwritten. On Windows, restore from the Tohyee server app; elsewhere, with the command-line tool's backups restore.">
+    <Card title="Backup files" description="Restoring one makes a new organisation (a copy), so the current books are never overwritten: use Restore on this computer.">
       {files.length === 0 ? (
         <p className={ui.muted}>There are no backup files in the folder yet.</p>
       ) : (

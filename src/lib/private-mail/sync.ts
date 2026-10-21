@@ -1,7 +1,7 @@
 import { type OrgTx, withOrganisationTransaction, type Actor } from "@/lib/db/org-transaction";
 import { mailboxAccessToken } from "@/lib/farming/calendar";
 import { listFolderMailIds, type FolderListing, type MailFolder } from "@/lib/farming/mail-providers";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { isActiveOwner } from "@/lib/private-mail/access";
 import { matchRules } from "@/lib/private-mail/filing";
@@ -287,7 +287,7 @@ export async function syncAllPrivateMail(): Promise<{ synced: number; failed: nu
   let synced = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let ids: string[] = [];
       try {

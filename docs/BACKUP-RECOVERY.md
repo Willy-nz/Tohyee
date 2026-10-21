@@ -11,7 +11,7 @@ second backup system. It's built in three pull requests:
 | --- | --- | --- |
 | 1 | Managed backups and an evidence-based status panel | Built |
 | 2 | A backup recovery key of its own, and the recovery kit | Built |
-| 3 | The restore wizard for a replacement computer | Designed here, after part 2 |
+| 3 | The restore wizard for a replacement computer | Built |
 
 Only standard, reviewed building blocks from Node's `crypto` are used:
 AES-256-GCM, HKDF-SHA256, SHA-256 and scrypt. Nothing is invented.
@@ -229,6 +229,9 @@ open Server settings, Backups, Restore on this computer.
 5. **Restore as a new organisation** (the default ID is the original's when
    it isn't on this server, otherwise `<id>-<date>`). Existing organisations
    are never overwritten or deleted. Encrypted fields are re-encrypted (above).
+   The same is on the command line: `backups restore --kit-file` or
+   `--other-key`, `backups recover-people`, `backups resume`,
+   `backups test-restore`.
 6. **Automatic jobs stay paused** on the restored copy (email sending, bank
    and payment feeds, mailbox checks, repeating invoices, analytics loads)
    until a server admin turns them on, so it can't send the same invoices or
@@ -270,9 +273,34 @@ afterwards, recorded in `backup_checks`; the status shows the last one.
 
 ## Tested and not tested
 
-Automated tests (vitest, against real PostgreSQL and real `pg_dump` /
-`pg_restore` on Linux) are listed in each pull request. No real Windows
-installer run, real OneDrive account or real disaster-recovery exercise
-(a second computer restoring from OneDrive with only the kit) has been done
-for any of this. The Windows installer workflow builds and installs on a
-GitHub Windows runner; that isn't the same as a person recovering a server.
+**Automated tests** (vitest, on Linux, against real PostgreSQL with real
+`pg_dump` and `pg_restore`; made-up data only):
+
+- `tests/unit/backup-destination.test.ts`, `backup-overview.test.ts`,
+  `backup-recovery-code.test.ts`, `backup-wizard.test.ts`,
+  `backup-schedule.test.ts`.
+- `tests/integration/backup-evidence.test.ts`: hashes, integrity checks
+  (changed, replaced, deleted files), safe pruning, missing folder and full
+  disk, the weekly check, the API.
+- `tests/integration/backup-recovery-kit.test.ts`: format 2, kit export
+  (password, local address, audit without the key), checking, recovery
+  files, rotation, a replacement server with and without the kit, format 1
+  still restoring, the command line, nothing secret logged.
+- `tests/integration/backup-restore-wizard.test.ts`: finding backups,
+  restoring with paused jobs and private mail boundaries, damaged, cut-short
+  and newer backups refused with nothing made, an interrupted restore
+  cleaned up, test restores, a replacement computer with a wrong or missing
+  kit and then the kit (secrets re-encrypted and usable), and a whole
+  server lost and recovered with only the backup folder and the recovery
+  code (people with their IDs, passwords and two-step sign-in, memberships,
+  private mail only its owner's).
+- `tests/integration/backups.test.ts` (the earlier tests) still pass.
+
+**Not done**: no real Windows installer run of any of this, no real
+OneDrive account (paused, signed out, full, or files only online), no
+OneDrive Personal Vault, and no real disaster-recovery exercise with a
+second computer. The "OneDrive isn't running" warning and Windows folder
+permissions for a OneDrive folder have only been compiled, not seen
+working. The Windows installer workflow builds the server app and installs
+on a GitHub Windows runner; that isn't the same as a person recovering a
+server. These need doing before anyone relies on them.

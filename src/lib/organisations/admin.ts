@@ -31,6 +31,19 @@ export async function listAllOrganisations(): Promise<OrganisationAdminView[]> {
   }));
 }
 
+/**
+ * The organisations the scheduled jobs (email sending, feeds, mailbox
+ * checks, repeating invoices and the rest) work on: every one except a
+ * restored copy whose jobs are paused until a server admin turns them on
+ * (#389, decision 738), so a copy can't send or import the same things as
+ * the original while both exist. Each job still checks the rest (ready,
+ * current, its own settings) itself.
+ */
+export async function listOrganisationsForJobs(): Promise<OrganisationAdminView[]> {
+  const paused = new Set((await coreQuery<{ id: string }>("select id from organisations where jobs_paused_at is not null")).rows.map((row) => row.id));
+  return (await listAllOrganisations()).filter((organisation) => !paused.has(organisation.id));
+}
+
 /** Database name for a new organisation: prefix + slug with dashes as underscores. */
 export function databaseNameFor(organisationId: string): string {
   return `${organisationDatabasePrefix()}${organisationId.replace(/-/g, "_")}`;

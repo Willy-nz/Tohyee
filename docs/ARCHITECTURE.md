@@ -1750,9 +1750,17 @@ as the admin login, straight into an encrypted file:
   (migrations up to this server's version, runtime-login grants). Any failure
   drops the new database and registry row. A backup from a newer Tohyee is
   refused. A backup made on another server (or before the key changed) is
-  restored by giving that server's key with the request; this server's own
-  key is never replaced. The core database isn't restored by the app: `backups decrypt`
-  turns a file into a plain pg_dump for a database administrator.
+  restored by giving that server's recovery code (or, for format 1, its
+  key) with the request; this server's own keys are never replaced. Stored
+  secrets (`*_ciphertext`) are re-encrypted with this server's key before
+  the copy is ready (`rewrap.ts`), and the copy starts with
+  `jobs_paused_at` set, so every scheduled job skips it
+  (`listOrganisationsForJobs`) until a server admin turns them on. The
+  core database is never replaced: `recoverPeople` (`recovery.ts`) restores
+  a `_server` backup into a scratch database and adds the users who aren't
+  here (same IDs) and their memberships. Test restores use the same scratch
+  databases. `backups decrypt` still turns a file into a plain pg_dump for a
+  database administrator.
 - Tests (`tests/integration/backups.test.ts`) back up and restore real
   organisations, with one login and with a separate runtime login, and check
   that a changed file or the wrong key is refused.
@@ -1899,8 +1907,10 @@ run time.
 
 - Canonical production HTTPS origin and local/offline access model.
 - Break-glass recovery ownership beyond the admin CLI.
-- Backup key custody beyond "keep a copy of TOHYEE_SECRET_KEY", and recovery
-  targets. Restoring the core database is still manual.
+- Recovery targets (how old a backup may be, how fast a restore must be).
+  Changing `TOHYEE_SECRET_KEY` itself on a running server (re-encrypting
+  every stored secret) isn't built. Backup custody and recovery are in
+  `docs/BACKUP-RECOVERY.md`.
 - Remote BI connectivity.
 - GST on standard-rated foreign-currency spend and receive money, and the
   reverse charge on imported services. (Foreign-currency documents, their
