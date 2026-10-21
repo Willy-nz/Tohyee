@@ -6722,3 +6722,63 @@ accounting example is marked not yet reviewed.
      (they're the figures, not the look). While building this, numbers of
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
+
+### What a value means, and joins that don't double count (#387; decisions 693-696; examples MD1-MD6)
+
+693. **A Merge step can't repeat rows or numbers** (21 October 2026, #387;
+     Power BI's relationship cardinality as the reference, settled at the
+     lead's direction, not yet confirmed by Jess). Tohyee has no
+     relationships between tables yet (phase 4 of #376): a tile reads one
+     table, and the only join is a shaped table's Merge. Before a preview
+     and before every rebuild, each merge is checked on the data: if the
+     other table has more than one row for a match (one-to-many or
+     many-to-many), the merge is refused, since every matching row would
+     be repeated and its amounts counted again (MD4: 100.00 would become
+     300.00); if this table has several rows for one match (many-to-one) a
+     merge may bring in text, dates and Yes/No but not numbers, which would
+     repeat on each row. Grouping first is the way round both. Rows with no
+     match are counted and shown in the preview ("left out" for an inner
+     merge, "blank" for a left one). Blank match values never match and
+     aren't counted as repeats. A rebuild whose data now fails the check
+     fails like any other, keeping the last good copy.
+694. **Totals are worked out again; currencies aren't mixed** (21 October
+     2026, #387; Power BI's totals and Looker Studio's re-aggregation as
+     the reference). A table's totals row now uses the server's answer for
+     all the rows as one total, so a calculated value (MD1: 25%, not 20%),
+     an average, smallest, largest and count of different values are
+     right, where before they were left blank. With a Top N or a cut-short
+     answer the old rule stays (add the rows shown; the rest blank). Pivot
+     subtotals and key figures already worked values out per group. A value
+     whose rows name their currency (`currencyField`, or a `foreign_...`
+     column beside a `currency` column, which covers the books copy) is
+     counted by currency in each group; where a group, subtotal or total
+     would mix currencies it's blank, with a note, unless the tile is
+     grouped by the currency. No conversion is offered beyond the
+     organisation-currency amounts the books copy already has; a chosen
+     conversion would need its own decision on rates.
+695. **A balance recorded on each date isn't added across dates**
+     (21 October 2026, #387; Power BI's semi-additive LASTNONBLANK pattern
+     as the reference). A sum can be marked "each row is a balance on its
+     date", optionally "for each" a column (e.g. account). In each period
+     the latest date (for each value of that column) is found with a window
+     over the tile's rows, and only those rows are added (MD2). It needs the
+     tile's date, and isn't offered yet in pivots or inside formulas, or as
+     an average. A period counts only balances recorded in it (no carrying
+     forward), which is said in the value's meaning. The books copy's
+     balances (decision 597's `asAt`, a sum of movements up to the To date)
+     are unchanged.
+696. **Each value says what it means, worked out from its definition**
+     (21 October 2026, #387). Under each value in the chart editor, "What
+     <value> means" lists what one row is (the books copy's tables have
+     their own words, e.g. "one posted journal line"; others "one row of
+     <table>, as it was loaded"), how it's worked out, its unit (money in
+     NZD, money in each row's currency, a count, a number), movement or
+     balance, the date it goes by, blanks and zero (no rows is blank, a
+     count is 0, a formula's missing value is 0, dividing by zero is blank)
+     and how totals work. Nothing is typed in, so it can't drift from what
+     the query does. Saved values are still copied into charts (decision
+     597); a linked mode, where changing a saved value changes every chart
+     using it, isn't built: it would need an impact preview first. A
+     Shopify or WooCommerce order is in Analytics only as its invoice and
+     journals (MD5): the books copy has no orders table, so nothing can
+     count both.

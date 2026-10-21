@@ -3,8 +3,8 @@ import { isGaTable } from "@/lib/analytics/google-analytics-reports";
 import type { Actor, OrgTx } from "@/lib/db/org-transaction";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { buildShapeQuery, parseShapeSteps, type ShapeColumn, type ShapeStep } from "@/lib/analytics/shaping";
-import { dropTable, listTables, previewSelect, replaceTableFromSelect, type CsvLoadResult } from "@/lib/analytics/engine";
+import { buildShapeQuery, mergeCheckOutcome, mergeCheckSql, parseShapeSteps, type ShapeColumn, type ShapeStep } from "@/lib/analytics/shaping";
+import { dropTable, listTables, previewSelect, replaceTableFromSelect, runBuiltQuery, type CsvLoadResult } from "@/lib/analytics/engine";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 
 export type ShapedLoadRun = {
@@ -266,11 +266,28 @@ export async function previewShapedTable(
   baseTable: string,
   steps: unknown,
   throughStep?: number,
-): Promise<{ columns: ShapeColumn[]; rows: Array<Record<string, string | null>> }> {
+): Promise<{ columns: ShapeColumn[]; rows: Array<Record<string, string | null>>; notes: string[] }> {
   const tables = await listTables(organisationId);
   const available = new Map([...tables].map(([table, columns]) => [table, columns.map((column) => ({ name: column.name, type: column.type }))]));
   const built = buildShapeQuery({ baseTable, tables: available, steps, throughStep });
-  return { columns: built.columns, rows: await previewSelect(organisationId, built.sql, built.params) };
+  const notes = await checkMerges(organisationId, baseTable, built);
+  return { columns: built.columns, rows: await previewSelect(organisationId, built.sql, built.params), notes };
+}
+
+/**
+ * Runs each Merge step's checks (decision 693): a merge that would repeat
+ * rows (or numbers) is refused before anything is built; otherwise the
+ * notes say how many rows had no match.
+ */
+async function checkMerges(organisationId: string, baseTable: string, built: ReturnType<typeof buildShapeQuery>): Promise<string[]> {
+  const notes: string[] = [];
+  for (const check of built.merges) {
+    const [answer] = await runBuiltQuery(organisationId, mergeCheckSql(built.ctes, check), built.params, {
+      tooLong: `Checking step ${check.step}'s merge took more than 30 seconds, so it was stopped.`,
+    });
+    notes.push(...mergeCheckOutcome(check, baseTable, answer as Parameters<typeof mergeCheckOutcome>[2]));
+  }
+  return notes;
 }
 
 async function recordShapeLoad(
@@ -311,6 +328,8 @@ export async function runShapedTable(
     const tables = await listTables(organisation.id);
     const available = new Map([...tables].map(([table, columns]) => [table, columns.map((column) => ({ name: column.name, type: column.type }))]));
     const built = buildShapeQuery({ baseTable: started.shape.baseTable, tables: available, steps: started.shape.steps });
+    // A merge that would repeat rows is refused here too, so a change to the data can't start double counting (decision 693).
+    await checkMerges(organisation.id, started.shape.baseTable, built);
     outcome = await replaceTableFromSelect(organisation.id, started.shape.tableName, built.sql, built.params);
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
