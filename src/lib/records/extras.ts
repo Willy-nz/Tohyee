@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { requireRecordAccess } from "@/lib/farming/access";
 import { writeAuditEvent } from "@/lib/audit";
 import { isSalesRole, type Role, roleAtLeast } from "@/lib/auth/roles";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -83,6 +84,8 @@ export async function resolveRecord(
   if (found.rowCount === 0) {
     throw new NotFoundError(`${label} not found.`);
   }
+  // A soil test's notes and lab reports go with its farm (decision 744).
+  if (recordType === "soil_test") await requireRecordAccess(tx, "soil_tests", recordId, `${label} not found.`);
   return { recordType, recordId };
 }
 

@@ -18779,6 +18779,58 @@ in `tests/unit/pasture.test.ts` and `tests/integration/pasture.test.ts`.
   `tests/unit/farm-comparison.test.ts` and
   `tests/integration/farm-comparison.test.ts`.
 
+## Farming: the farms each member works on (FMA1-FMA8; Jess, 21 October 2026: "Yes, assigned farms only"; the details are Claude's, not yet reviewed)
+
+Tested in `tests/integration/farm-access.test.ts`. Not accounting: who sees
+which farm's records. Xero has no farm records to compare; its nearest rule
+(tracking categories don't limit what a user sees) doesn't apply, because
+Jess asked for the opposite.
+
+**Setup.** Kōwhai Dairies has two farms, **Home farm** and **Runoff**, each
+with a paddock called 1. Jess is the owner, Rangi an admin, Mere a
+bookkeeper working on Home farm, Aroha a bookkeeper (the accountant) given
+all farms, and Tama a viewer not assigned yet.
+
+- **FMA1 Who sees which farms.** Owners and admins see every farm. Viewers,
+  bookkeepers and report viewers see the farms chosen for them under
+  People and roles: "All farms", "Only the farms ticked", or "Not assigned
+  yet". Not assigned yet means **no farms**: the safe default, so a new
+  member doesn't see every property by accident. The screen warns, by
+  name, about anyone not assigned. With fewer than two farms (archived ones
+  count) there's nothing to keep apart and everyone sees the farm. Mere's
+  farm list is Home farm; Tama's is empty; Jess's, Rangi's and Aroha's are
+  both.
+- **FMA2 Choosing.** Only owners and admins choose, and only for viewers,
+  bookkeepers and report viewers ("Owners and admins see every farm" for
+  anyone else). The choice is recorded in the history.
+- **FMA3 Enforced on the server.** Every farm-scoped route refuses another
+  farm's records as "not found", so a farm's existence isn't given away:
+  paddocks, maps and boundaries, boundary imports, soil tests, samples and
+  the soil summary, pasture readings, grazings and supplements, fertiliser
+  plans and applications, and each record's removal. Mere asking for
+  Runoff's paddock 1 gets "Paddock not found"; her own paddock 1 works.
+  She can't add a farm (she couldn't see it). The farm selector on screens
+  is only a convenience.
+- **FMA4 Everywhere else farm records go.** Home's pasture, fertiliser and
+  catch-up cards, the Farming API for apps (a key acts as its owner), and
+  the AI's farm tools give Mere Home farm only.
+- **FMA5 Things that cover every farm** need All farms: the farm notebook
+  (it has no farm on each note) and Analytics' farm tables (`tohyee_farm_*`
+  and tables shaped from them), which hold every farm's records. Mere
+  doesn't see them; Aroha does. A soil test's notes and lab reports go with
+  its farm.
+- **FMA6 The farm calendar.** Members' own calendars stay private (FC1,
+  decision 571). An item someone shares with the team shows for Mere only
+  if it's for Home farm or has no farm. She can't put her own items under
+  Runoff.
+- **FMA7 Leaving.** A member who leaves the organisation loses their farm
+  choices with everything else.
+- **FMA8 Not changed:** money, accounting reports, benchmarks and Home's
+  money and performance figures (they follow the member's role, as
+  before); livestock (its locations aren't farms); co-op shares (the
+  organisation's). Analytics report emails go to whoever they're addressed
+  to.
+
 ## Farming (#249) stage 5: the Farming API for people's own apps (FA1-FA8; chosen by Claude 19 Oct 2026 when Jess said "Yea do those", not yet reviewed)
 
 A small, versioned API (`/api/farm-apps/v1`) so an app someone builds,

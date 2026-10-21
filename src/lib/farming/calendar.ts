@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { forgetMemberFarmAccess, requireFarmAccess, visibleFarmIds } from "./access";
 import { writeAuditEvent } from "@/lib/audit";
 import { googleApp, microsoftApp } from "@/lib/crm/mail/service";
 import { exchangeCode, MAIL_PROVIDERS, type MailProvider, mailboxAddress, type ProviderApp, refreshAccess, authorisationUrl } from "@/lib/crm/mail/providers";
@@ -91,6 +92,7 @@ async function farmIdOrNull(tx: OrgTx, input: unknown): Promise<string | null> {
   if (!/^[1-9][0-9]{0,18}$/.test(id)) throw new ValidationError("Choose a farm.");
   const found = await tx.query("select 1 from farms where id = $1", [id]);
   if (!found.rowCount) throw new NotFoundError("Farm not found.");
+  await requireFarmAccess(tx, id);
   return id;
 }
 
@@ -313,6 +315,8 @@ export async function disconnectMemberFarmMail(organisation: OrganisationRecord,
     await tx.query("update farm_calendar_items set replaced_by = null where user_id = $1", [userId]);
     await tx.query("delete from farm_calendar_items where user_id = $1", [userId]);
     await tx.query("delete from farm_calendar_links where user_id = $1", [userId]);
+    // Which farms they worked on (decision 744).
+    await forgetMemberFarmAccess(tx, userId);
     return ids.rows.length;
   });
 }
@@ -957,6 +961,15 @@ const NEEDS_CHECKING = "(i.state = 'open' and i.checked_at is null and (i.item_d
 /** FC21: the member's own items, and what others shared; hidden ones aren't shown. */
 const VISIBLE = "(i.user_id = $1 or i.shared_at is not null) and i.state <> 'dismissed'";
 
+/**
+ * Someone else's shared item shows only if its farm is one this member works
+ * on, or it has no farm (decision 744). The member's own items always show.
+ */
+async function farmsShown(tx: OrgTx, userId: string): Promise<(row: CalendarRow) => boolean> {
+  const visible = await visibleFarmIds(tx);
+  return (row) => row.user_id === userId || visible === null || row.farm_id === null || visible.includes(row.farm_id);
+}
+
 /** One item as `viewer` may see it (FC20): someone else's is only what the team sees. `date` is a repeat's date. */
 function toItem(row: CalendarRow, viewer: string, date: string | null = row.item_date): CalendarItem {
   const needsChecking = row.state === "open" && row.checked_at === null && (row.item_date === null || row.check_reasons.length > 0);
@@ -1027,7 +1040,8 @@ async function itemsInRange(tx: OrgTx, userId: string, from: string, to: string,
     params,
   );
   const items: CalendarItem[] = [];
-  for (const row of rows.rows) {
+  const shown = await farmsShown(tx, userId);
+  for (const row of rows.rows.filter(shown)) {
     if (!row.repeat) items.push(toItem(row, userId));
     else for (const date of repeatDates(row.item_date!, row.repeat, row.repeat_until, row.repeat_skips, from, to)) items.push(toItem(row, userId, date));
   }
@@ -1326,9 +1340,10 @@ export async function calendarLinkFeed(organisationInput: string, fileInput: str
     if (on.rows[0]?.enabled !== true) return null;
     return (await tx.query<{ user_id: string }>("select user_id::text from farm_calendar_links where token_hash = $1", [hash])).rows[0] ?? null;
   });
-  if (!link || !(await getMembership(organisationId, link.user_id))) return null;
+  const member = link ? await getMembership(organisationId, link.user_id) : null;
+  if (!link || !member) return null;
   const name = await memberName(link.user_id);
-  return withOrganisationTransaction(organisation, { userId: link.user_id, email: "calendar-link@tohyee" }, async (tx) => {
+  return withOrganisationTransaction(organisation, { userId: link.user_id, email: "calendar-link@tohyee", role: member.role }, async (tx) => {
     await tx.query("update farm_calendar_links set last_used_at = now() where user_id = $1", [link.user_id]);
     const from = new Date(now.getTime() - FEED_DAYS_BACK * 86_400_000).toISOString().slice(0, 10);
     // Moved ones are left out: their new date is its own item (FC22).
@@ -1339,7 +1354,7 @@ export async function calendarLinkFeed(organisationInput: string, fileInput: str
         order by i.item_date, i.id`,
       [link.user_id, from],
     );
-    const events: FeedEvent[] = rows.rows.map((row) => {
+    const events: FeedEvent[] = rows.rows.filter(await farmsShown(tx, link.user_id)).map((row) => {
       const shown = toItem(row, link.user_id);
       return {
         uid: `farm-${organisationId}-${row.id}@tohyee`,
