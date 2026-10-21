@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { requireFarmAccess, requirePaddockAccess, requireRecordAccess } from "./access";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -254,6 +255,7 @@ async function requireFarm(tx: OrgTx, farmIdInput: unknown): Promise<string> {
   const farmId = requireId(farmIdInput, "farmId");
   const farm = await tx.query("select 1 from farms where id = $1", [farmId]);
   if (!farm.rowCount) throw new NotFoundError("Farm not found.");
+  await requireFarmAccess(tx, farmId);
   return farmId;
 }
 
@@ -505,6 +507,7 @@ export async function addSoilTest(
     )
   ).rows[0];
   if (!paddock) throw new NotFoundError("Paddock not found.");
+  await requireFarmAccess(tx, paddock.farm_id, "Paddock not found.");
   if (paddock.status !== "active")
     throw new ValidationError(`${paddock.name} is retired.`);
   const results: SoilResult[] = [];
@@ -562,6 +565,7 @@ export async function removeSoilTest(
 ): Promise<void> {
   await requireFarming(tx);
   const id = requireId(idInput, "soilTestId");
+  await requireRecordAccess(tx, "soil_tests", id, "Soil test not found, or already removed.");
   const row = await tx.query(
     "update soil_tests set status = 'removed' where id = $1 and status = 'active'",
     [id],
@@ -576,6 +580,15 @@ export async function removeSoilTest(
 }
 
 // Importing ----------------------------------------------------------------------------------------
+
+/** Where an import came from: filed by an Owner from their private mail (decision 721), or not. */
+export type ImportOrigin = { filedFromPrivateMail?: boolean };
+
+/** The source others see on each imported row; a filed file says so, and nothing of the email. */
+export function importSource(fileName: string, origin: ImportOrigin = {}): string {
+  const suffix = origin.filedFromPrivateMail ? ", filed from a private email" : "";
+  return `Imported from ${fileName.slice(0, 200 - 14 - suffix.length)}${suffix}`;
+}
 
 export type SoilImportColumn = {
   index: number;
@@ -887,6 +900,7 @@ export async function importSoilTests(
   tx: OrgTx,
   farmIdInput: unknown,
   input: ImportInput,
+  options: ImportOrigin = {},
 ): Promise<SoilTest[]> {
   const farmId = await requireFarm(tx, farmIdInput);
   await tx.query("select 1 from farms where id = $1 for update", [farmId]);
@@ -908,7 +922,7 @@ export async function importSoilTests(
         lab: read.lab,
         labReference: row.labReference,
         depth: row.depth,
-        source: `Imported from ${read.fileName}`,
+        source: importSource(read.fileName, options),
         results: row.results,
       }),
     );
@@ -922,6 +936,7 @@ export async function importSoilTests(
       JSON.stringify({
         imported: good.length,
         skipped: read.rows.length - good.length,
+        ...(options.filedFromPrivateMail ? { filedFromPrivateMail: true } : {}),
       }),
       tx.actor.email,
     ],
@@ -930,7 +945,7 @@ export async function importSoilTests(
     eventType: "farming.soil_tests_imported",
     entityType: "farm",
     entityId: farmId,
-    details: { fileName: read.fileName, imported: good.length },
+    details: { fileName: read.fileName, imported: good.length, ...(options.filedFromPrivateMail ? { filedFromPrivateMail: true } : {}) },
   });
   return loadTests(tx, "t.id = any($1::bigint[])", [ids]);
 }
@@ -961,6 +976,7 @@ export async function paddockHistory(
     paddockId,
   ]);
   if (!found.rowCount) throw new NotFoundError("Paddock not found.");
+  await requirePaddockAccess(tx, paddockId);
   const applications = await tx.query<{
     id: string;
     plan_id: string;

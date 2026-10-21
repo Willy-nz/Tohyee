@@ -41,10 +41,10 @@ WHERE THINGS ARE KEPT
   outside Docker Desktop, so they survive if Docker Desktop is reset or
   removed. See BACKUPS below.
 - Passwords: %LOCALAPPDATA%\Tohyee\tohyee.env
-  It holds the database password and the backup key (TOHYEE_SECRET_KEY).
-  Keep it private, and keep a copy somewhere safe that ISN'T the backup
-  folder (a password manager, say). Don't delete it: a new one won't open
-  your existing data or your backups.
+  It holds the database password and the server's secret key
+  (TOHYEE_SECRET_KEY). Keep it private. Don't delete it: a new one won't
+  open the secrets stored in your existing data. To open your backups on
+  another computer you need the RECOVERY KIT (see BACKUPS), not this file.
 
 
 BACKUPS
@@ -64,19 +64,22 @@ Install-Tohyee.cmd again. A cloud-synced folder (OneDrive) gets copies off
 this computer by itself; otherwise copy the folder to a USB drive or cloud
 storage now and then. Don't delete this folder when you update Tohyee.
 
-THE BACKUP KEY: backups are encrypted with this server's TOHYEE_SECRET_KEY
-(in tohyee.env). Without it they can't be opened, so if this computer is
-lost, so are your backups unless you kept a copy of the key. To see it and
-save it (in a password manager, not with the backups), open a Command
-Prompt in this folder and run:
+THE RECOVERY KIT: backups are encrypted with this server's recovery key.
+Without it they can't be opened on another computer, so if this computer is
+lost, so are your backups unless you saved the recovery kit. It holds the
+recovery key and nothing else. To see it and save it (in a password manager,
+or printed, not with the backups), open a Command Prompt in this folder and
+run:
 
-  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups key show
+  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups kit show
 
 then check your saved copy (paste it when asked):
 
-  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups key check
+  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups kit check
 
-Until someone has done that, Tohyee shows server admins a reminder.
+Until someone has done that, Tohyee shows server admins a reminder. Backups
+made before recovery kits open with the older backup key instead (backups
+key show / backups key check) until they age out, up to 12 months.
 
 RESTORING: restoring makes a copy of an organisation (with the same people)
 next to the current one, so nothing is overwritten. In a Command Prompt in

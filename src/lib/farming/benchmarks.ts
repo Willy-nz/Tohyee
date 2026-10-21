@@ -3,9 +3,10 @@ import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { addDays, financialYearEnd, financialYearStart } from "@/lib/financial-year";
-import { add, dec, type Decimal, divide, isPositive, isZero, parseDecimalInput, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, type Decimal, isZero, parseDecimalInput, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
 import { requireOneOf, requireString } from "@/lib/validation";
+import { type PerUnit, perUnit } from "./farm-reporting-rules";
 import { requireFarming } from "./paddocks";
 
 /*
@@ -53,8 +54,7 @@ export type YearFigures = {
   paddockHa: string | null;
 };
 
-/** An amount, and per kgMS, hectare, cow and stock unit (null when that figure isn't entered). */
-export type PerUnit = { amount: string; perKgMs: string | null; perHa: string | null; perCow: string | null; perSu: string | null };
+export type { PerUnit };
 
 export type FarmBenchmarks = {
   /** The current financial year's end and the four before it, newest first, to choose from. */
@@ -71,7 +71,7 @@ export type FarmBenchmarks = {
   ungrouped: Array<{ code: string; name: string; amount: string }>;
 };
 
-function yearEndOf(input: unknown, yearEndMonth: number): string {
+export function yearEndOf(input: unknown, yearEndMonth: number): string {
   const date = parseIsoDate(input, "The year end");
   if (financialYearEnd(date, yearEndMonth) !== date) throw new ValidationError("That isn't a financial year end.");
   return date;
@@ -99,13 +99,8 @@ export async function getYearFigures(tx: OrgTx, yearEndInput: unknown): Promise<
   };
 }
 
-/** Saves a year's physical figures (FK2); an empty value clears it. */
-export async function setYearFigures(
-  tx: OrgTx,
-  input: { yearEnd: unknown; effectiveHa?: unknown; peakCows?: unknown; stockUnits?: unknown; milkSolidsKg?: unknown },
-): Promise<YearFigures> {
-  await requireFarming(tx);
-  const yearEnd = yearEndOf(input.yearEnd, await financialYearEndMonth(tx));
+/** A year's physical figures as typed (FK2); an empty value is null. */
+export function parseFigures(input: { effectiveHa?: unknown; peakCows?: unknown; stockUnits?: unknown; milkSolidsKg?: unknown }) {
   const blank = (value: unknown) => value === undefined || value === null || value === "";
   const decimal = (value: unknown, label: string, scale: number) => (blank(value) ? null : parseDecimalInput(value, label, { maxScale: scale }));
   const effectiveHa = decimal(input.effectiveHa, "Effective hectares", 2);
@@ -116,6 +111,17 @@ export async function setYearFigures(
     peakCows = Number(input.peakCows);
     if (!Number.isInteger(peakCows) || peakCows <= 0 || peakCows > 100000) throw new ValidationError("Peak cows milked must be a whole number above 0.");
   }
+  return { effectiveHa, peakCows, stockUnits, milkSolidsKg };
+}
+
+/** Saves a year's physical figures (FK2); an empty value clears it. */
+export async function setYearFigures(
+  tx: OrgTx,
+  input: { yearEnd: unknown; effectiveHa?: unknown; peakCows?: unknown; stockUnits?: unknown; milkSolidsKg?: unknown },
+): Promise<YearFigures> {
+  await requireFarming(tx);
+  const yearEnd = yearEndOf(input.yearEnd, await financialYearEndMonth(tx));
+  const { effectiveHa, peakCows, stockUnits, milkSolidsKg } = parseFigures(input);
   await tx.query(
     `insert into farm_year_figures (year_end, effective_ha, peak_cows, stock_units, milk_solids_kg, updated_by_email)
      values ($1, $2::numeric, $3, $4::numeric, $5::numeric, $6)
@@ -163,18 +169,6 @@ export async function setExpenseGroup(tx: OrgTx, input: { accountCode: unknown; 
   }
   await writeAuditEvent(tx, { eventType: "farming.expense_group_set", entityType: "account", entityId: account.id, details: { group: input.group ?? null } });
   return listExpenseGroups(tx);
-}
-
-/** Per kgMS, ha, cow and su, rounded to 2 places; null where a figure isn't entered (FK3). */
-function perUnit(amount: Decimal, figures: YearFigures): PerUnit {
-  const per = (figure: string | number | null) => (figure === null || !isPositive(dec(String(figure))) ? null : toFixedString(divide(amount, dec(String(figure)), 2), 2));
-  return {
-    amount: toFixedString(amount, 2),
-    perKgMs: per(figures.milkSolidsKg),
-    perHa: per(figures.effectiveHa),
-    perCow: per(figures.peakCows),
-    perSu: per(figures.stockUnits),
-  };
 }
 
 /** The year's farm working expenses by group, gross farm revenue and operating surplus, in total and per unit (FK1-FK4). */

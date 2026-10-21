@@ -36,6 +36,12 @@ namespace Tohyee.Tray
 
         public string SignedInEmail { get; private set; }
 
+        /// <summary>The local server settings address, e.g. http://127.0.0.1:3001.</summary>
+        public string BaseUrl
+        {
+            get { return _baseUrl; }
+        }
+
         /// <summary>The screenshots mode: answers come from sample data, nothing goes over the network.</summary>
         public bool IsDemo
         {

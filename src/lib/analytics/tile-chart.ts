@@ -2,7 +2,7 @@ import { mergeFormats, type ChartFormat, type DefaultableVisual, type VisualDefa
 import type { ChartSpec } from "@/lib/analytics/chart-spec";
 import type { Measure, ResultColumn, Visual } from "@/lib/analytics/query";
 
-const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey"]);
+const CHARTS: ReadonlySet<Visual> = new Set(["column", "bar", "line", "area", "combo", "pie", "donut", "waterfall", "funnel", "gauge", "bullet", "scatter", "histogram", "boxplot", "treemap", "heatmap", "calendar", "sankey", "filledmap", "pointmap"]);
 
 /**
  * A tile's chart, from its answer's value columns and its saved format. The

@@ -2,6 +2,7 @@ import { json, readJson, route, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { allowedFilters, dateContext, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
 import type { DashboardFilters } from "@/lib/analytics/query";
+import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
@@ -35,9 +36,11 @@ export const POST = route(async (request) => {
     const dates = await dateContext(tx);
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
+      await requireAnalyticsTable(tx, (tileOf(dashboard, body.tileId).query as { table?: unknown } | undefined)?.table);
       return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId), filters: { ...allowedFilters(dashboard, filters, reader), dates } } };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
+    await requireAnalyticsTable(tx, (body.query as { table?: unknown } | undefined)?.table);
     return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates } } };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));

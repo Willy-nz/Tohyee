@@ -137,6 +137,32 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
       </Section>
     );
   }
+  if (visual === "filledmap") {
+    return (
+      <Section title="Filled map">
+        <p className={styles.note}>
+          Group by a region or a district or city name, e.g. Waikato or Hamilton City; each is coloured by its {values[0] || "value"} on one blue scale (orange below zero and blue above when there are both). Spelling, macrons and words like &quot;Region&quot; or &quot;District&quot; don&apos;t matter. Names that aren&apos;t on the map are listed under it.
+        </p>
+        <Field label="Areas">
+          <select value={format.map?.areas ?? ""} onChange={(event) => set({ map: event.target.value ? { areas: event.target.value as "regions" | "districts" } : undefined })}>
+            <option value="">Work it out from the names</option>
+            <option value="regions">Regions (16 and the Chatham Islands)</option>
+            <option value="districts">Districts and cities (territorial authorities)</option>
+          </select>
+        </Field>
+      </Section>
+    );
+  }
+  if (visual === "pointmap") {
+    return (
+      <Section title="Map with points">
+        <p className={styles.note}>
+          Each group is a dot at its {values[0] || "first value"} (latitude) and {values[1] || "second value"} (longitude), e.g. the average of each farm&apos;s
+          {values.length > 2 ? `; ${values[2] || "the third value"} sizes the dots (their area)` : ". Add a third value to size the dots"}. Places outside New Zealand are left out and counted under the map. The Chatham Islands are drawn closer to the mainland.
+        </p>
+      </Section>
+    );
+  }
   if (visual === "scatter") {
     return (
       <Section title="Scatter or bubble">
