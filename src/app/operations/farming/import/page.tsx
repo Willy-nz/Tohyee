@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 
 function ImportForFarm() {
   const farm = useSearchParams().get("farm");
-  return <RequireOrganisation>{(organisationId) => <ImportPaddocks key={organisationId} organisationId={organisationId} farmId={farm} />}</RequireOrganisation>;
+  return <RequireOrganisation>{(organisationId) => <ImportPaddocks key={`${organisationId}:${farm ?? ""}`} organisationId={organisationId} farmId={farm} />}</RequireOrganisation>;
 }
 
 export default function ImportPaddocksPage() {

@@ -6097,7 +6097,7 @@ testing) and #154's code signing (later, Jess).
      exports, and a test checks no other part of Tohyee names the private
      tables. Filing an attachment into shared data (the bills inbox, soil
      tests), with a preview of what becomes visible, is #250's next part
-     and isn't built. PM7.
+     and isn't built. PM7. Later: built, decisions 720-726.
 618. **The AI reads an Owner's mail only through their own Look only key**
      (20 October 2026). #250 part 2: "a private-mail scope that only the
      owner's own key can be given". On My mail (Your AI) the copy's Owner
@@ -6723,6 +6723,73 @@ accounting example is marked not yet reviewed.
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
 
+### Importing IRD account files (#360 item 3; decisions 710-716)
+
+710. **Imports first, with no IRD layout assumed** (21 October 2026; #292,
+     #360 item 3). **Who decided:** Codex, delegated by owner, 20 October
+     2026 ("imports and reviewable forecasts first: accept structured
+     CSV/Excel through mapping and preview; retain PDF source documents").
+     IRD's pages (read 21 Oct 2026) describe PDF downloads of the income
+     summary, Excel exports of tax agents' reports, and on-screen
+     "Returns and transactions" by period, but no page gives the columns
+     of a downloaded account transaction list. So Tohyee assumes no
+     columns: the person maps Date, Amount (or Debit and Credit), Type,
+     Period, Instalment, Effective date, Description and Reference, says
+     what each Type and Instalment value means (or skips rows), and sees
+     every row with any problem before anything is saved, like Tohyee's
+     other imports (NetSuite's import assistant). Type suggestions come
+     only from plain words and are shown as suggestions. ITX-IMP1 to
+     ITX-IMP5, as delegated, not yet reviewed.
+711. **Saved mappings** (21 October 2026; Codex, delegated by owner, 20
+     October 2026). A mapping is saved under a name with the headings it
+     was made for, and chosen again for a file with the same headings
+     (case and spaces ignored). Several can be kept (an income tax account
+     and a provisional tax list may differ). ITX-IMP3.
+712. **The file is the source** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). The imported file is kept as an IRD document
+     and can be opened; it can be linked to a PDF already under IRD
+     documents. The same file can't be imported twice. Removing the file
+     keeps its rows and what they did. PDFs aren't imported here; they stay
+     IRD documents (decision 549). ITX-IMP1, ITX-IMP12.
+713. **Rows are proposals until a person accepts them** (21 October 2026;
+     Codex, delegated by owner, 20 October 2026; following decision 549).
+     Each row is accepted or declined (with a reason) once, by a person,
+     never an AI key. Waiting rows change nothing and aren't called IRD's.
+     A row that looks the same as one already accepted from another file
+     (same kind, year, date, direction and amount) can't be accepted
+     again. ITX-IMP6, ITX-IMP10.
+714. **Only IRD's own file confirms** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). The person says whether the file was
+     downloaded from myIR or is another spreadsheet. An accepted payment
+     row that says its instalment is allocated **confirmed by IRD** (naming
+     the imported file as the IRD document, decision 620) only for a myIR
+     file; for another spreadsheet it's allocated **with evidence** (the
+     file and row). Accepted rows are "IRD's figures" only from a myIR
+     file. Tohyee can't check that a file really came from myIR, as with
+     PDFs (decision 549): it's the person's statement, shown with the file.
+     ITX-IMP7, ITX-IMP11.
+715. **Payments feed the allocation model only when the row says**
+     (21 October 2026; Codex, delegated by owner, 20 October 2026;
+     decisions 620-623). A payment with no instalment in the file is
+     **awaiting reconciliation**, whatever its date. A payment already in
+     Tohyee for the same income year and amount, paid on IRD's date or up
+     to 7 days before it (bank payments take days to reach IRD), is linked
+     rather than added, so it isn't counted twice; the person can add it as
+     a new payment instead. An existing allocation is never replaced by an
+     import. The file's effective date, when it has one, is IRD's effective
+     date; otherwise the file's date is used for the payment and IRD's
+     effective date stays blank. A payment row going the other way
+     (reversed or refunded) is recorded only. ITX-IMP7, ITX-IMP8.
+716. **Assessments and the rest** (21 October 2026; Codex, delegated by
+     owner, 20 October 2026). An assessment becomes the year's assessed RIT
+     only when the person says so and gives the date the return was filed
+     (as typing it, ITX3); otherwise it's recorded. Interest, penalties,
+     credits, refunds and other rows are recorded as IRD's figures for the
+     year and totalled (debits, credits, net), changing nothing else: the
+     use-of-money interest estimate (552) stays Tohyee's estimate, and
+     credits transferred in still aren't payments (623). No IRD connection,
+     filing or payment (#360 items 3 and 4). ITX-IMP9 to ITX-IMP11.
+
 ### More visuals (#376 phase 2; decisions 676-689)
 
 676. **Waterfall, funnel, gauge and bullet chart** (21 October 2026, #376
@@ -6830,11 +6897,472 @@ accounting example is marked not yet reviewed.
      smallest, largest, distinct counts and calculated values can't be
      added across charts, so then the rest are left out and the card says
      how many. Pinned tiles show up to four.
+682. **Matrix improvements** (21 October 2026, #376 phase 2; Power BI's
+     matrix visual; not yet reviewed by Jess). A pivot's column field can
+     have up to two more nested inside it (three levels, as many as fit on
+     a phone-scrolling table; the 2,000-cell limit still applies and now
+     counts the column totals). Each outer column value gets a "Total"
+     column after its inner ones, as Power BI's column subtotals do, worked
+     out by the database (grouping sets), never by adding cells on screen;
+     the grand total stays last. Drilling into a cell uses the whole column
+     path; exports name a column "Year: 2025 › Channel: Web". Rows can be
+     stepped (one indented column; each group's subtotal row moves above
+     its rows as the group's heading, as Power BI's default) or one column
+     per field (the existing look, still the default so saved reports are
+     unchanged). Every group with a subtotal opens and closes (a + / −
+     button with its name for screen readers, plus Open all / Close all);
+     what's open isn't saved (Power BI saves it with the report; here the
+     report saves only how many levels start open, "Groups open to start
+     with"), so a viewer can't change the report by looking at it. In the
+     stepped layout a level whose subtotal is turned off keeps its heading
+     row with blank figures.
+683. **Rich text with values** (21 October 2026, #376 phase 2; Power BI's
+     text box with dynamic values, Looker Studio's text; not yet reviewed
+     by Jess). A text item's words can use a small, safe set of marks:
+     `**bold**`, `*italic*`, `[words](https://link)`, lines starting "- " or
+     "1. " for lists, a blank line between paragraphs, and `{Value name}`
+     for one of the item's values, e.g. "Sales this month: {Sales}". The
+     values are the text item's own question: up to six totals from one
+     data source over the report's dates and slicers, no grouping and no
+     comparison with another period, run the same way as a key figure (a
+     report viewer runs only the saved question). A value shows formatted
+     as in a table; a name with no value stays as typed, so the person can
+     see what to fix, and the editor warns. The text is parsed into a tree
+     that the page draws as React elements, never as HTML: anything typed,
+     and any value, is always text. Only http, https and mailto links are
+     made into links (they open in a new tab with no referrer); anything
+     else, such as `javascript:`, is left as plain text. Existing text
+     cards stay plain text until "Formatting" is turned on; new ones start
+     with it on. Up to 4,000 characters (plain notes keep their 2,000).
+684. **Images on reports** (21 October 2026, #376 phase 2; Power BI's and
+     Looker Studio's image item; not yet reviewed by Jess). An image is
+     uploaded to a saved report (so a new report is saved first), stored in
+     the organisation's own database like record attachments, checked the
+     same way (the type from its name, confirmed by its contents), JPG or
+     PNG only, up to 5 MB and 40 per report. It belongs to that report:
+     it's served only through the report, to people who can see the report
+     (a report viewer only when it's shared with them, decision 360), with
+     the same headers as attachments so it can't run as a page. There are
+     no links to images from outside Tohyee (still no public links). A
+     tile can only use its own report's images; saving the report removes
+     images no tile uses any more, and deleting the report deletes them.
+     An image has a description for screen readers (blank only for
+     decoration) and fits inside the tile or fills it.
+685. **Shapes and lines** (21 October 2026, #376 phase 2; Power BI's shapes;
+     not yet reviewed by Jess). Rectangle, rounded rectangle, circle or
+     oval, line and arrow (across, down or corner to corner), with a fill
+     colour (not for lines), a line colour and width (0-12 pixels) and,
+     on a filled shape, a few words. Left alone they use the report
+     theme's first colour (a light wash inside); a chosen colour is
+     checked as a hex colour and drawn as its worked-out dark version in
+     dark mode (decision 672). Shapes are decoration, hidden from screen
+     readers except for their words. They sit in the report's grid like
+     every other tile; placing them freely over other tiles waits for the
+     free-position canvas (phase 3).
+686. **Buttons** (21 October 2026, #376 phase 2; Power BI's buttons; not yet
+     reviewed by Jess). A button has a label and an action. The only
+     action today is "Reset the filters" (back to the report's saved dates
+     and slicers, as Power BI's "reset to default"); "Go to a page" and
+     "Open a bookmark" are listed as coming and refused when saved, until
+     report pages and bookmarks exist (phase 3). Adding an action means
+     listing it in `BUTTON_ACTIONS` (`src/lib/analytics/items.ts`),
+     accepting it in `parseButton` and handling it in the report's
+     `runButtonAction`. A button is an ordinary button for the keyboard
+     and screen readers, and works the same while the report is being
+     changed (its Edit button opens it for changing).
+687. **New Zealand maps** (22 October 2026, #376 phase 2; Power BI's filled
+     map and map visuals; not yet reviewed by Jess). Two chart types, drawn
+     without any outside map or tile service (the issue: "no external map
+     tiles unless agreed"). A **filled map** is grouped by a region or a
+     district or city name and colours each area by one value on the
+     sequential scale (diverging when amounts are both sides of zero), as
+     heat maps do; names match whatever their macrons,
+     apostrophes, case and words like "Region", "District" or "Council",
+     plus a few other names people use (Wanganui, Hutt, Tairāwhiti). Regions
+     or territorial authorities are chosen, or worked out from which more of
+     the names match. Totals for names that land on the same area are added
+     exactly. Names that aren't areas are listed under the map, not
+     guessed. A **map with points** is grouped by anything and needs a
+     latitude and a longitude (two values, normally averages), with a third
+     value sizing the points as bubbles; points outside New Zealand are left
+     out and counted under the map. The boundaries are Stats NZ's regional
+     council (2017) and territorial authority (2021) generalised layers,
+     CC BY 4.0, simplified to under 70 KB each, shipped with Tohyee and
+     loaded only when a map is drawn; every map says "Boundaries: Stats NZ,
+     CC BY 4.0." under it, and `licenses/nz-boundaries/NOTICE` records the
+     source and changes. CC BY 4.0 only asks for attribution, so it can be
+     distributed with Tohyee's AGPLv3 code. The Chatham Islands are drawn
+     6.5° closer to the mainland as an inset (as Stats NZ's own maps do);
+     points there move with them. Maps don't zoom or pan (the whole country
+     always shows); suburbs, wards and meshblocks aren't included.
+### Filing from My mail into shared data (#250; decisions 720-726)
+
+720. **Nothing from mail is shared unless its Owner files it, after a
+     preview** (Jess, 13 October 2026, #250: "Nothing from email reaches
+     shared data automatically. The owner files an attachment ... or sets up
+     a rule they've approved ... Before anything is shared, the owner sees a
+     preview of exactly what will become visible to others. Filed items are
+     copies; the email itself stays private"; and Codex, delegated by owner,
+     20 October 2026, #360 item 10: "Share only an explicitly previewed
+     extract or attachment"). On an attachment in My mail, **File…** lets
+     the copy's own Owner choose: the bills inbox, a soil test import, a
+     pasture reading import, a fertiliser application import (each where the
+     farm, plan and Farming are there), or an existing record's files (a
+     bill, invoice, contact, fixed asset, soil test or co-op shareholding,
+     found by a search). **Preview what others will see** lists every field
+     another member will be able to see (the file and its size, where it
+     goes, who added it, that it was filed from a private email, the note
+     if any) and, for an import, the rows that would be added; and lists
+     what stays private (the email's subject, sender, recipients, date and
+     text, its other attachments, the mailbox and folder, and the
+     attachment's own name when it was renamed). **File it** files exactly
+     that: the preview carries a fingerprint of everything it showed and of
+     the file, and filing is refused ("changed since the preview") if
+     anything differs, including an import's rows. PM20-PM24, Claude's
+     rules, not yet reviewed (Xero and NetSuite have no private mailbox to
+     file from; Xero's Files inbox, where a file is moved to a bill, is the
+     nearest).
+721. **Filed items are copies, marked, and go through each feature's own
+     path** (20 October 2026). The bills inbox gets an item with source
+     "my_mail" (tenant migration 0180), no email sender, subject or date,
+     and the note if the Owner typed one; the inbox shows "Filed from a
+     private email by Jess". A record gets the file (marked
+     filed_from_private_mail, shown on the file and in its history as
+     "filed from a private email") and the note as an ordinary note. Imports
+     run the soil test, pasture reading and fertiliser application imports
+     themselves (the same file checks, paddock matching, "already imported"
+     and row errors), so only the rows are shared, not the file, and each
+     row's source says "Imported from <name>, filed from a private email".
+     The bills inbox takes PDF and pictures, records the usual file types,
+     imports CSV (and .xlsx for soil tests and pasture readings), all up to
+     their usual sizes. The filed name can be changed (an attachment's name
+     can say more than the Owner wants shared) but keeps its ending, so the
+     content check still applies. Making a bill from a filed inbox item is
+     the inbox's usual step, by whoever does bills; filing doesn't make the
+     bill itself, because a bill needs its supplier and lines, which aren't
+     in the preview.
+722. **No notes with imports** (20 October 2026). A note is shared only
+     where there's one place for it: the bills inbox item, or the record's
+     notes. An import adds many rows, so the preview refuses a note there
+     ("Add one on the records afterwards") rather than copying it onto
+     every row.
+723. **Rules are approved once; each filing is still confirmed** (20
+     October 2026). Jess said "sets up a rule they've approved". Read as:
+     the Owner approves the rule once (a sender address or @domain, and/or
+     a file name pattern with * and ?, to one destination), and every match
+     waits in **To file** on My mail with the email it came from (shown
+     only to the Owner) until they **Preview and file…** it (the same
+     preview and fingerprint as decision 720) or say **Not this one**.
+     Nothing is ever shared by a rule on its own. Rules run after each sync
+     (and when made, over email already copied only if "Also look at emails
+     already copied" is ticked), at most 2,000 attachments a time, and a
+     dismissed match doesn't come back. This is the cautious reading; it
+     can be loosened (a rule that files without asking) if Jess says so.
+     Claude's rule, not yet reviewed.
+724. **Filing stays private on the mail side** (20 October 2026). The
+     Owner's own list of what they filed (private_mail_filings), their rules
+     and To file are private like the copy: only the Owner sees them, every
+     route gives everyone else "not found", and a rule's sender and pattern
+     are encrypted with the copy's key (decision 612). Another Owner sees
+     only their own (empty) Filing card. Only the Owner on Tohyee's own
+     screens can file or make a rule: not an AI key or app key acting for
+     them (the AI's mail scope is Look only, decision 618). The audit trail
+     says "attachment filed" with only the kind of destination, and "rule
+     added" or "deleted" with no details; the shared side's own audit
+     events (inbox item added, file attached, rows imported) say only what
+     the preview showed.
+725. **Deleting the copy doesn't delete what was filed** (20 October 2026).
+     Delete imported history deletes the copy's emails and attachments and,
+     with them, the Owner's list of what was filed, their rules and To file.
+     The filed copies (inbox items, files on records, imported rows) stay:
+     they're shared data now, removed the usual way for each.
+726. **Who can file** (20 October 2026). Only the copy's Owner while
+     they're an Owner (decision 611). An Owner may file into anything an
+     Owner can change, so no further role check is needed; the modules
+     still apply (no bills inbox with Accounting off, no farm imports with
+     Farming off), and the preview says so.
+
+### Simpler navigation, tax workspace and lined-up forms (#375; decisions 700-705)
+
+700. **Accounting, Tax and Settings instead of Accountant** (21 October
+     2026). Issue #375 (owner feedback on screenshots, 20 October 2026: the
+     four-column Accountant menu was hard to scan). The Accountant menu
+     becomes three dropdowns, as in Xero's top bar: **Accounting** (Ledger:
+     journals, chart of accounts, year end and inventory; Assets: fixed
+     assets and livestock), **Tax** (one short column: GST, Income tax and
+     R&D) and **Settings** (decision 580's five most used and All
+     settings, unchanged). Every link keeps its address, role and module,
+     the sub-headings of decision 580 stay, and the search (Ctrl K) names
+     the new menu ("Tax › GST"). The first draft (PR #381) made these
+     three plain links to new landing pages of the same links; that took
+     two clicks to reach anything and lost decision 580's settings
+     shortcuts, so the landing pages were dropped. The CRM's grouping
+     (decision 581) and the Shopify entry (decision 582) are untouched.
+     The bar is two menus longer, so from 1,320px wide the menus sit closer
+     and the search button drops its "Ctrl K", and the ☰ menu takes over
+     from 1,240px (was 1,180px): with Farm on, 1,200px no longer fitted.
+701. **No mountain photo** (Jess, 21 October 2026: "Get rid of mountain
+     photo"). Replaces decision 598. Home's header no longer shows the
+     Aoraki photo or keeps space for it, so the greeting is a normal
+     compact page header and the figures start near the top. The photo
+     file and its CSS are removed; nothing else used them. The website's
+     own images are separate and unchanged.
+702. **Income tax is a workspace of pages** (21 October 2026). Issue #375.
+     The one long page becomes six, each its own address so Back and
+     bookmarks work, with the income year kept in every link
+     (`?incomeYear=`) and chosen beside the title: **Overview** (the three
+     key figures, the next payment to IRD, what needs doing, and the due
+     dates), **Forecast** (the figures and what they're based on: actuals
+     to which month, then which budget, and the notes), **Tax calculation**
+     (the profit-to-tax working, adjustments, losses, credits and tax
+     depreciation), **Payments** (due dates, provisional tax, IRD's figures
+     and payments to IRD with their allocations from decision 620, payments
+     found in the books, IRD's statements and their proposals, and
+     use-of-money interest), **Returns** (ICA, IR4 or IR3, IR10, and a link
+     to GST returns) and **Tax settings**. The figures, rules and editors
+     are the same ones as before: nothing about how tax is worked out
+     changed. "Needs attention" comes from the report itself: no inputs for
+     the year, payments to IRD not yet allocated, last year's residual
+     income tax still Tohyee's estimate, or a year that's ended with return
+     figures to check (not when it had no inputs). **Forecast incomplete**
+     replaces an amount only when the year has nothing to work from: no
+     income or expense from the books or the overall budget, no
+     adjustments, no fixed asset with tax depreciation for that year (the
+     register lists every asset in every year, so an asset counts only once
+     it has figures for the year) and none of IRD's figures typed. Then
+     taxable income, residual income tax and this year's end-of-year tax
+     say "Forecast incomplete" instead of $0.00 (or a refund of the
+     provisional tax); instalments, which come from last year's tax, still
+     show. A year with any input shows a zero it works out to as a zero.
+     The "not yet reviewed by an accountant" note stays at the top of every
+     page, as a line that opens to the full wording. Scenario comparisons,
+     which the issue mentions for Forecast, aren't built: they'd be a new
+     feature.
+703. **Sans-serif page titles and bordered summary cards** (21 October
+     2026). Issue #375. Page titles use the interface font (Inter), bold,
+     replacing decision 475's serif titles. Home's four summary tiles are
+     bordered cards with a 28px figure, and Needs attention comes before
+     the profit chart (beside it from 1,440px wide, above it below that).
+     A GST tile that can't be worked out says "No return filed yet" or
+     "Position unavailable" in body-size text, with the reason under it,
+     instead of a large "Unavailable".
+704. **Fields in a row line up by their controls** (21 October 2026). Issue
+     #375. In an inline form or toolbar, fields line up at the top and
+     anything beside them (buttons, the date range) drops by one line of
+     label, so inputs, dropdowns and buttons share a line and help or
+     error text under one field doesn't move its neighbours. Controls in
+     those rows are at least 40px high, the same as buttons. A label long
+     enough to wrap still pushes its own control down: keep labels in
+     rows short.
+705. **The farm calendar comes first** (21 October 2026). Issue #375. The
+     mailbox setup opens from **Manage mailboxes**; someone with no
+     mailbox sees a one-line prompt with **Connect a mailbox** instead of
+     the whole setup. The provider field is called **Email provider**,
+     the sender filter **Email sender** (keeping "Who the email came from,
+     not who does the work" under it), and an empty week offers **Add an
+     item**. The redirect addresses and permissions an administrator adds
+     for farm mail moved to Settings › Email, beside the rest of the app
+     setup; the calendar just says an administrator sets it up. Who can
+     see a mailbox is unchanged (decision 571).
+
+### Backups and recovery (#389; decisions 730-739)
+
+Jess asked for automatic managed backups, one separately saved recovery
+key, a restore wizard for a replacement computer and an evidence-based
+status (#389). There was no answer from Jess on the details, so these are
+Claude's design choices from the issue's requirements, not yet reviewed by
+Jess. The design is in `docs/BACKUP-RECOVERY.md`.
+
+730. **A backup recovery key of its own, kept apart from the live secrets**
+     (21 October 2026, #389; not yet reviewed by Jess). Backups stop being
+     encrypted with a key worked out from `TOHYEE_SECRET_KEY` (format 1)
+     and use a random 256-bit recovery key the server makes and numbers
+     (format 2, part 2 of #389). The server keeps it encrypted with the
+     live key, so backups stay unattended. Each backup carries the live key
+     its stored secrets were encrypted with, encrypted with the recovery
+     key, so a restore on a new computer can re-encrypt every `*_ciphertext`
+     value with that computer's own key (part 3). The recovery kit is the
+     recovery key alone: never the environment file, the PostgreSQL
+     passwords or the setup token. Format 1 files stay readable for good
+     with the key they were made with. Only AES-256-GCM, HKDF-SHA256,
+     SHA-256 and scrypt from Node's `crypto`. Windows-protected storage
+     (DPAPI) was considered for the live key and not used: it doesn't stop
+     a running service reading its own secrets, and it doesn't move to a
+     new computer.
+731. **Off-site is never "confirmed" from a write to a synced folder**
+     (21 October 2026, #389; not yet reviewed by Jess). Tohyee writes the
+     files; it can't see whether OneDrive, Google Drive or Dropbox uploaded
+     them (paused, signed out, out of storage, or only running while
+     someone is signed in). So off-site always shows "not verified", with
+     what to check. The kind of folder is worked out from its path
+     (`destination.ts`). The server app, which runs as the signed-in
+     person, warns when OneDrive isn't running. A chosen backup folder
+     that's gone isn't made again by a backup (a removed OneDrive folder
+     made again would be a plain folder nothing uploads), and failures say
+     what to do: plug in the drive, sign in to the sync app, the `icacls`
+     command, a full disk. The page explains that sync copies deletions
+     and ransomware too, and suggests a monthly copy to a USB drive kept
+     unplugged elsewhere; provider version history may help but isn't
+     promised.
+732. **Keeping good copies** (21 October 2026, #389; core migration 0016;
+     not yet reviewed by Jess). Each backup's SHA-256 is recorded. Weekly,
+     and on request, the newest file of each database is read back,
+     decrypted in full into `pg_restore --list` and its hash compared, so a
+     file changed, replaced or deleted after it was made is found
+     (`backup_checks`, emailed to server admins). Pruning counts and
+     deletes only files whose header reads as that database's: a damaged
+     file can't push out a good one and is left for a person. A backup that
+     clearly won't fit (less free space than the last backup's size plus
+     64 MB) fails before anything is written or deleted.
+733. **The status says what's proven, never "safe"** (21 October 2026,
+     #389; not yet reviewed by Jess). A Backups page in Server settings
+     (`/server/backups`, local address only, like the other server pages),
+     a Status card in the server app and `backups status` show the latest
+     backup and its age, the last check, off-site "not verified", space
+     used and free, the backup key's last checked copy, then "Needs
+     attention" and "Not proven yet" lists. Every line is from work the
+     server did. Parts 2 and 3 add the recovery kit's check and the last
+     test restore to it.
+734. **Backup format 2 and the recovery key** (21 October 2026, #389 part
+     2; not yet reviewed by Jess). New backups are `TOHYEE-BACKUP 2`: the
+     file key is HKDF-SHA256(recovery key, a random 32-byte salt), and the
+     header holds the recovery key's version and fingerprint and the live
+     key encrypted with HKDF(recovery key, salt, a second label), all
+     authenticated as the GCM additional data. The recovery key (32 random
+     bytes, version 1 made by the first backup) is kept in
+     `server_settings` (`backup_recovery_keys`), encrypted with the live
+     key; if those can't be read (the live key was changed) no new key is
+     made over them and backups fail with a message instead. Restoring
+     takes a recovery code as the "key" (or, for a format 1 file, the
+     older backup key), and says which kit version and fingerprint a
+     backup needs. Format 1 files open as before.
+735. **The recovery kit: a code or a passphrase file, and nothing else**
+     (21 October 2026, #389 part 2; not yet reviewed by Jess). The code is
+     the key in Crockford base32 plus a 4-character check (`RK<version>-`
+     and 14 groups of four), forgiving case, spaces and O/0, I/L/1. The
+     file (`.tohyee-recovery`, JSON) holds the code encrypted with
+     AES-256-GCM under scrypt (N = 2^17, r = 8, p = 1) of a passphrase of
+     at least 14 characters (the page can suggest one, about 125 bits);
+     its version, fingerprint, date and scrypt settings are in the clear
+     and authenticated, and only Tohyee's own scrypt settings are accepted
+     when opening. A random file name can be chosen; the page says it's a
+     convenience, not security, and a kit is recognised by its contents.
+     Getting the kit needs the server admin's password again (5 wrong in
+     15 minutes blocks it, counted with the backup key's), works only on
+     the local server settings address, and is audited without the key.
+     The page explains where to keep it: a password manager, or printed;
+     not beside the backups; OneDrive Personal Vault isn't independent of
+     the Microsoft account.
+736. **A kit is checked by giving it back, per key version; new keys don't
+     strand old backups** (21 October 2026, #389 part 2; not yet reviewed
+     by Jess). Checking opens the code or file and compares the key with
+     the one held for that version (timing-safe); only a match is
+     recorded (`backup_recovery_kit_checks`: version, fingerprint, when,
+     who, code or file). The reminder on every page is now for the
+     current version's kit. "Make a new recovery key" (password again)
+     starts version n+1 for new backups; earlier versions are kept on the
+     server and never deleted automatically, the status lists backups
+     still needing an earlier kit and until about when (a year after the
+     newest, as monthly backups are kept 12 months), and the page says a
+     new key can't take back copies already taken with their kit. The
+     older backup key (show and check) stays, labelled for backups made
+     before recovery kits, while any are kept.
+737. **A restore re-encrypts stored secrets for the computer it's on**
+     (21 October 2026, #389 part 3; not yet reviewed by Jess). After
+     `pg_restore` into the new database, and before it's made ready, every
+     text column named `*_ciphertext` (the rule every stored secret
+     follows) is read in one transaction: values this server's key opens
+     are left, values the backup's live key opens (from a format 2 header,
+     or the older backup key given for a format 1 file) are re-encrypted
+     with this server's key, and the rest are counted and listed as
+     "connect again". The old live key isn't kept. The restore wizard
+     (`/server/backups/restore`, `src/lib/backups/recovery.ts`) finds
+     `.tohyee-backup` files in any folder on this computer (headers only),
+     takes no material, a recovery code, a recovery file and passphrase,
+     or an older backup key, checks the whole file and its version before
+     anything is made, then restores as a new organisation (keeping the
+     original's ID when this server doesn't have it). Nothing existing is
+     overwritten or deleted, and it ends with a cutover checklist.
+738. **Restored copies start with their automatic jobs paused; people come
+     back with their own IDs** (21 October 2026, #389 part 3; core
+     migration 0016 `organisations.jobs_paused_at`; not yet reviewed by
+     Jess). Every scheduled job that sends or imports (email outbox, bank,
+     payment and sales feeds, mailbox and calendar checks, private mail
+     sync, repeating invoices, follow-ups, exchange rates, analytics loads
+     and report emails) skips a paused organisation
+     (`listOrganisationsForJobs`), so a copy can't send the same invoices
+     or import the same transactions as the original while both exist. A
+     server admin turns them on after a confirmation that says how many
+     emails are queued. Things people do by hand in the copy still happen.
+     **Recover people from a server backup** restores the `_server` backup
+     into a scratch database and adds each user who isn't here with the
+     same ID, password hash, two-step secret (re-encrypted) and unused
+     backup codes, plus their memberships of organisations here with the
+     same ID; it previews first and can be run again. A person already here
+     under the same email (usually the admin made at set-up) is left alone
+     unless the server admin ticks them; then the backup's account takes
+     its place and its memberships. It refuses to leave no active server
+     admin. Sessions, AI and app keys and server settings (email, remote
+     access, folders) aren't copied: the old tunnel token would compete
+     with the original. Private mail stays its owner's (#250): the copy
+     keeps `owner_user_id`, the restoring admin gets "not found" for it,
+     and a copy whose owner isn't on this server is unreadable until that
+     person is recovered.
+739. **Interrupted restores are cleaned up; test restores are evidence**
+     (21 October 2026, #389 part 3; not yet reviewed by Jess). Each
+     restore is a `backup_checks` row while it runs. One still running
+     from before the server started is marked failed, and the organisation
+     it was making is removed with its database only if it's still
+     "pending" (never made ready). **Test a restore** restores each
+     database's newest backup into a scratch database
+     (`<core>_scratch_<random>`, always dropped), checks it's the
+     organisation it says, counts its journals, files and private mail
+     copies and that its stored secrets open with the backup's key, and
+     records the result; the status shows the last one and lists "no test
+     restore" as not proven. Two backups in the same second never share a
+     file name, so a checked file is never replaced.
 
 
 
 ### Several farms in one organisation (#390; decisions 740-749)
 
+740. **Choosing a farm** (21 October 2026, #390 and PR #392; Xero's rule
+     for archived tracking options, which stay on old records but can't be
+     picked for new ones). Maps, soil, pasture and fertiliser share one farm
+     choice per user, organisation and browser tab (session storage, kept
+     in memory if storage is blocked). With one active farm there is
+     nothing to choose and no selector shows. With two or more and no
+     choice yet, the page asks first rather than opening the first farm. A
+     remembered or linked farm that is archived, or isn't in this
+     organisation, is reported and never swapped for another farm. A link
+     can open a farm (`?farm=`): Home's pasture and catch-up lines and its
+     fertiliser plans link to the farm or plan they describe, and a valid
+     link becomes the tab's choice. Adding a farm opens it. Boundary
+     imports name their destination farm in the preview and import button,
+     and the server refuses an import into an archived farm. The selector
+     is a convenience, not an access boundary.
+741. **A mailbox's usual farm is a guess** (21 October 2026, #390, FC32;
+     Claude's rule, Xero and NetSuite having nothing similar). With two or
+     more active farms, an item placed only because of the mailbox's
+     "farm when none is named" still goes under that farm, so the farm
+     filter shows it where it most likely belongs, but waits in Needs
+     checking with the reason, until the member checks it. Leaving it
+     under No farm instead was considered: it hides the most likely farm
+     and makes more work when the guess is right. A farm the email names,
+     or the only active farm, is used without a check. An archived usual
+     farm isn't used. No farm is never filled in from anything else.
+
+742. **All farms compared** (21 October 2026, #390, PF9; Claude's rule
+     kept to PF3's arithmetic). A separate page rather than a tab on Home:
+     Home stays the organisation-wide overview, and nine or more farms need
+     a table. The all-farms cover is worked from every paddock's area and
+     reading, so a big farm counts for its hectares; averaging the farms'
+     averages would give a small block the same weight as a large one.
+     Missing data is shown, not filled in: "No readings", paddocks with no
+     reading or no area, and the dates the readings came from. "Not fresh"
+     uses Home's 14 days. Only operational figures: no money until the
+     farm reporting rules exist (#390). Reads the farms in turn like Home
+     does; batching waits for a measured need.
 743. **Farm-level reporting goes through tracking categories** (21 October
      2026, #390, FR1-FR8; as Xero does, not yet reviewed). Before any farm
      profitability, the definitions: a farm's income and expenses are the

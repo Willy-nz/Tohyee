@@ -5,7 +5,7 @@ import { crmEnabled, requireCrm } from "@/lib/crm/switch";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { listMembers } from "@/lib/organisations/members";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
@@ -612,7 +612,7 @@ export async function syncAllMail(): Promise<{ synced: number; failed: number }>
   let synced = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let ids: string[] = [];
       try {

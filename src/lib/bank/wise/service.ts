@@ -19,7 +19,7 @@ import { businessTimeZone, parseIsoDate } from "@/lib/dates";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { add, cmp, dec, neg, sub, toFixedString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { newLoginName, pickLogin } from "@/lib/bank/logins";
@@ -569,7 +569,7 @@ export async function syncDueWise(): Promise<{ synced: number; failed: number }>
   let synced = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due: string[] = [];
       try {

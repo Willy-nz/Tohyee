@@ -46,7 +46,7 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
   const made: LoadRun[] = [];
   try {
     const organisations = await coreQuery<{ id: string }>(
-      "select id from organisations where is_active and provisioning_status = 'ready' and migration_status = 'current' order by id",
+      "select id from organisations where is_active and provisioning_status = 'ready' and migration_status = 'current' and jobs_paused_at is null order by id",
     );
     for (const { id } of organisations.rows) {
       const hasFolder = Boolean(await organisationSourceFolder(id));
