@@ -157,6 +157,18 @@ namespace Tohyee.Tray
             }
         }
 
+        /// <summary>
+        /// Whether nobody has checked a saved recovery kit for the current recovery key (#389). A server from
+        /// before recovery kits only says whether a saved copy of its backup key was checked.
+        /// </summary>
+        internal static bool RecoveryKitNeedsSaving(Dictionary<string, object> backups)
+        {
+            var kit = J.Obj(backups, "recoveryKit");
+            if (kit != null) return J.Bool(kit, "keySet") && J.Bool(kit, "needsSaving");
+            var keyStatus = J.Obj(backups, "keyStatus");
+            return keyStatus != null && J.Bool(keyStatus, "keySet") && J.Str(keyStatus, "savedCopyCheckedAt") == null;
+        }
+
         private async Task ShowBackup()
         {
             var problems = new List<Attention>();
@@ -164,7 +176,6 @@ namespace Tohyee.Tray
             {
                 var result = await _app.Api.Get("/api/admin/backups");
                 var settings = J.Obj(result, "settings");
-                var keyStatus = J.Obj(result, "keyStatus");
                 DateTime? last = null;
                 var failed = false;
                 var never = false;
@@ -192,9 +203,9 @@ namespace Tohyee.Tray
                 {
                     problems.Add(new Attention("There's no backup key on this server.", "Backups can't be made until one is set.", "Open Backups", "backups", Theme.Warning));
                 }
-                else if (keyStatus != null && J.Bool(keyStatus, "keySet") && J.Str(keyStatus, "savedCopyCheckedAt") == null)
+                else if (RecoveryKitNeedsSaving(result))
                 {
-                    problems.Add(new Attention("Save a copy of your backup key.", "Backups can't be restored without it.", "Show the key", "backups", Theme.Warning));
+                    problems.Add(new Attention("Save the recovery kit.", "Without it, the backups can't be opened on another computer.", "Open Backups", "backups", Theme.Warning));
                 }
                 if (failed) problems.Add(new Attention("The last backup failed.", "The Backups page says why.", "Open Backups", "backups", Theme.Danger));
                 else if (keySet && !J.Bool(settings, "enabled")) problems.Add(new Attention("Nightly backups are off.", "Nothing is backed up until they're on again or you back up by hand.", "Open Backups", "backups", Theme.Warning));

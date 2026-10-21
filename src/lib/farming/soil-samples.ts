@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { requireFarmAccess, requireRecordAccess } from "./access";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
@@ -58,6 +59,7 @@ async function load(tx: OrgTx, where: string, params: unknown[]): Promise<SoilSa
 export async function listSoilSamples(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown }): Promise<SoilSample[]> {
   await requireFarming(tx);
   const farmId = requireId(input.farmId, "farmId");
+  await requireFarmAccess(tx, farmId);
   if (input.paddockId) return load(tx, "s.farm_id = $1 and s.paddock_id = $2", [farmId, requireId(input.paddockId, "paddockId")]);
   return load(tx, "s.farm_id = $1", [farmId]);
 }
@@ -76,6 +78,7 @@ export async function addSoilSample(tx: OrgTx, input: { paddockId: unknown; take
   const paddockId = requireId(input.paddockId, "paddockId");
   const paddock = (await tx.query<{ farm_id: string; name: string; status: string }>("select farm_id::text, name, status from paddocks where id = $1", [paddockId])).rows[0];
   if (!paddock) throw new NotFoundError("Paddock not found.");
+  await requireFarmAccess(tx, paddock.farm_id, "Paddock not found.");
   if (paddock.status !== "active") throw new ValidationError(`${paddock.name} is retired.`);
   const latitude = coordinate(input.latitude, "Latitude", 90);
   const longitude = coordinate(input.longitude, "Longitude", 180);
@@ -103,6 +106,7 @@ export async function addSoilSample(tx: OrgTx, input: { paddockId: unknown; take
 export async function removeSoilSample(tx: OrgTx, idInput: unknown): Promise<void> {
   await requireFarming(tx);
   const id = requireId(idInput, "sampleId");
+  await requireRecordAccess(tx, "soil_samples", id, "Soil sample not found, or already removed.");
   const removed = await tx.query("update soil_samples set status = 'removed' where id = $1 and status = 'active' returning id", [id]);
   if (!removed.rowCount) throw new NotFoundError("Soil sample not found, or already removed.");
   await writeAuditEvent(tx, { eventType: "farming.soil_sample_removed", entityType: "soil_sample", entityId: id, details: {} });

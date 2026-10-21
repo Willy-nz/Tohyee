@@ -7,7 +7,7 @@ import { recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { getInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
 import { add, cmp, type Decimal, dec, divide, neg, toFixedString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import {
@@ -774,7 +774,7 @@ export async function checkDueGoCardless(): Promise<{ checked: number; failed: n
   let checked = 0;
   let failed = 0;
   try {
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due = false;
       try {

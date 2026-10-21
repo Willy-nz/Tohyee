@@ -162,7 +162,7 @@ export function heatCells(rows: Row[], across: string[], field: string, detail: 
   return { across: xs, down: ys, cells };
 }
 
-function visualMap(kit: ChartKit, values: number[], extra: Record<string, unknown> = {}) {
+export function visualMap(kit: ChartKit, values: number[], extra: Record<string, unknown> = {}) {
   const scale = scaleFor(kit, values);
   return {
     type: "continuous" as const,

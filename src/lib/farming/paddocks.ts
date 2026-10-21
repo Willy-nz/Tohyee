@@ -2,6 +2,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { requireAllFarms, requireFarmAccess, visibleFarmIds } from "./access";
 import { ensureFertiliserAccounts } from "@/lib/farming/fertiliser";
 import { readShapeFile, type ShapeFile } from "@/lib/farming/formats";
 import { areaHectares, GeometryError, hectaresText, type PaddockGeometry, parseGeometry } from "@/lib/farming/geometry";
@@ -126,6 +127,8 @@ export async function requireFarming(tx: OrgTx): Promise<void> {
 
 export async function listFarms(tx: OrgTx): Promise<Farm[]> {
   await requireFarming(tx);
+  // Only the farms this person works on (decision 744).
+  const visible = await visibleFarmIds(tx);
   const rows = await tx.query<{ id: string; name: string; notes: string | null; is_active: boolean; active_paddocks: number; effective_ha: string | null; mapped_ha: string | null }>(
     `select f.id::text, f.name, f.notes, f.is_active,
             (select count(*)::int from paddocks p where p.farm_id = f.id and p.status = 'active') as active_paddocks,
@@ -133,7 +136,8 @@ export async function listFarms(tx: OrgTx): Promise<Farm[]> {
             (select sum(b.mapped_ha)::text from paddocks p
                join lateral (select mapped_ha from paddock_boundaries b where b.paddock_id = p.id order by b.id desc limit 1) b on true
               where p.farm_id = f.id and p.status = 'active') as mapped_ha
-       from farms f order by not f.is_active, lower(f.name), f.id`,
+       from farms f where ($1::bigint[] is null or f.id = any($1::bigint[])) order by not f.is_active, lower(f.name), f.id`,
+    [visible],
   );
   return rows.rows.map((row) => ({
     id: row.id,
@@ -152,6 +156,8 @@ export async function saveFarm(tx: OrgTx, input: { id?: unknown; name: unknown; 
   const name = requireString(input.name, "Farm name", { maxLength: 100 });
   const notes = optionalString(input.notes, "Notes", { maxLength: 1000 });
   const id = input.id ? requireId(input.id, "farmId") : null;
+  if (id) await requireFarmAccess(tx, id);
+  else await requireAllFarms(tx, "Adding a farm");
   const clash = await tx.query("select 1 from farms where lower(name) = lower($1) and ($2::bigint is null or id <> $2)", [name, id]);
   if (clash.rowCount) throw new ValidationError(`There's already a farm called ${name}.`);
   if (id) {
@@ -170,7 +176,16 @@ async function requireFarm(tx: OrgTx, farmIdInput: unknown): Promise<{ id: strin
   const id = requireId(farmIdInput, "farmId");
   const row = await tx.query<{ id: string; name: string }>("select id::text, name from farms where id = $1", [id]);
   if (!row.rows[0]) throw new NotFoundError("Farm not found.");
+  await requireFarmAccess(tx, id);
   return row.rows[0];
+}
+
+/** Imports only go into a farm in use: an archived farm's map stays as it was archived. */
+async function requireActiveFarm(tx: OrgTx, farmIdInput: unknown): Promise<{ id: string; name: string }> {
+  const farm = await requireFarm(tx, farmIdInput);
+  const active = await tx.query<{ is_active: boolean }>("select is_active from farms where id = $1", [farm.id]);
+  if (!active.rows[0].is_active) throw new ValidationError(`${farm.name} is archived. Choose a farm in use to import into.`);
+  return farm;
 }
 
 // Paddocks ----------------------------------------------------------------------------------
@@ -235,6 +250,7 @@ export async function getPaddock(tx: OrgTx, idInput: unknown): Promise<Paddock &
   const id = requireId(idInput, "paddockId");
   const rows = await tx.query<PaddockRow>(`${PADDOCK_SELECT} where p.id = $1`, [id]);
   if (!rows.rows[0]) throw new NotFoundError("Paddock not found.");
+  await requireFarmAccess(tx, rows.rows[0].farm_id, "Paddock not found.");
   const [paddock] = await toPaddocks(tx, rows.rows);
   const boundaries = await tx.query<{ id: string; mapped_ha: string; source: string; created_by_email: string; created_at: string; geometry: PaddockGeometry }>(
     `select id::text, mapped_ha::text, source, created_by_email, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at, geometry from paddock_boundaries where paddock_id = $1 order by paddock_boundaries.id desc`,
@@ -299,6 +315,7 @@ async function requireActivePaddock(tx: OrgTx, idInput: unknown): Promise<Paddoc
   const id = requireId(idInput, "paddockId");
   const row = await tx.query<PaddockRow>(`${PADDOCK_SELECT} where p.id = $1 for update of p`, [id]);
   if (!row.rows[0]) throw new NotFoundError("Paddock not found.");
+  await requireFarmAccess(tx, row.rows[0].farm_id, "Paddock not found.");
   if (row.rows[0].status !== "active") throw new ConflictError(`${row.rows[0].name} was retired on ${row.rows[0].retired_on}.`);
   return row.rows[0];
 }
@@ -499,7 +516,7 @@ export async function previewBoundaryImport(
   farmIdInput: unknown,
   input: BoundaryImportInput,
 ): Promise<ImportPreview> {
-  const farm = await requireFarm(tx, farmIdInput);
+  const farm = await requireActiveFarm(tx, farmIdInput);
   return (await buildPreview(tx, farm.id, input)).preview;
 }
 
@@ -513,7 +530,7 @@ export async function importBoundaries(
   farmIdInput: unknown,
   input: BoundaryImportInput & { onDate?: unknown },
 ): Promise<{ preview: ImportPreview; paddocks: Paddock[] }> {
-  const farm = await requireFarm(tx, farmIdInput);
+  const farm = await requireActiveFarm(tx, farmIdInput);
   await tx.query("select 1 from farms where id = $1 for update", [farm.id]);
   const { preview, features } = await buildPreview(tx, farm.id, input);
   if (preview.alreadyImportedOn) throw new ConflictError(`This file was already imported on ${preview.alreadyImportedOn.slice(0, 10)}.`);

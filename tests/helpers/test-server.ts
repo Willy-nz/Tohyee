@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { describe } from "vitest";
+import type { Role } from "@/lib/auth/roles";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession, SESSION_COOKIE, type SessionUser } from "@/lib/auth/sessions";
 import { migrateCoreDatabase } from "@/lib/db/migrations";
@@ -194,7 +195,13 @@ export async function inOrganisation<T>(
 ): Promise<T> {
   const organisation = await getOrganisation(organisationId);
   if (!organisation) throw new Error(`No organisation ${organisationId}`);
-  return withOrganisationTransaction(organisation, actor, work);
+  // As a route would: the member's role rides on the actor (decision 744).
+  let withRole = actor;
+  if (actor.userId && !actor.role) {
+    const member = await coreQuery<{ role: Role }>("select role from organisation_members where organisation_id = $1 and user_id = $2", [organisationId, actor.userId]);
+    if (member.rows[0]) withRole = { ...actor, role: member.rows[0].role };
+  }
+  return withOrganisationTransaction(organisation, withRole, work);
 }
 
 /**

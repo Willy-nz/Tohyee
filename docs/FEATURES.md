@@ -32,13 +32,48 @@ that something happened.
   key. **Keeping the key**: server admins can see the backup key (with their
   password) and check a saved copy by pasting it back; they're reminded on
   every page until someone has.
+- **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports, Accounting,
+  Tax and Settings across the top (Contacts under Sales/Purchases; #375,
+  decision 700), each opening to its overview, lists and settings; a ☰ menu with
+  every page until someone has. **Managed backups** (#389 part 1): a
+  **Backups** page in Server settings (and a Status card in the server app)
+  shows the latest backup and its age, when the newest files were last read
+  back and checked again (weekly, or **Check backups now**), off-site as
+  **not verified** (Tohyee can't see OneDrive uploads; the server app warns
+  when OneDrive isn't running), the space used and free, and what needs
+  attention or isn't proven, with no "safe" badge. Each file's SHA-256 is
+  recorded; a file changed, replaced or deleted afterwards fails the check.
+  Damaged files are never counted towards or deleted by pruning; a missing
+  folder or a disk that's clearly too full fails the backup at once with a
+  message saying what to do, keeping the older backups. **The recovery kit**
+  (#389 part 2): backups are encrypted with a recovery key of their own
+  (format 2), kept apart from the server's live secrets; the kit is that
+  key alone, as a recovery code or a passphrase-protected recovery file
+  (optional random name, said to be a convenience only), got with the
+  password again and checked by giving it back, per key version. A new
+  recovery key can be made; older backups keep opening and the status says
+  which earlier kit to keep until when. Backups from before keep opening
+  with the older backup key. **Restore on this computer** (#389 part 3): a
+  wizard finds backups in any folder (OneDrive, a USB drive), takes the
+  recovery code or file, checks the whole backup and its version first,
+  restores as a new organisation (keeping its ID on a replacement
+  computer), re-encrypts stored secrets for this computer, and starts the
+  copy with its automatic jobs paused until a server admin turns them on.
+  **Recover people** brings users, passwords, two-step sign-in and
+  memberships back from a server backup with their own IDs, so private
+  mail stays its owner's. **Test a restore** proves the newest backups
+  restore, in a scratch database. An interrupted restore is cleaned up.
+  Design: `docs/BACKUP-RECOVERY.md`.
 - **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
   across the top (Contacts under Sales/Purchases; Tax and Accounting under
   Accountant), each opening to its overview, lists and settings; a ☰ menu with
   the same sections on phones, where line editors stack each line's fields.
   Long columns have grey sub-headings so each group is two to six links, and
-  settings live on an **All settings** page of cards (Accountant › Settings ›
-  All settings) with the five most used left in the menu (#338, decision 580).
+  settings live on an **All settings** page of cards (Settings › All settings)
+  with the five most used left in the menu (#338, decision 580). Page titles
+  use the interface font and Home has a compact header with no picture
+  (decisions 701 and 703). Fields in a row line up by their controls, so help
+  and error text under one doesn't move the others (decision 704).
   **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
   you; Bills to pay with due-this-week; Next GST return), net profit by month,
   a To do card and recent activity. With Farming on, Home is the **farm
@@ -160,7 +195,7 @@ that something happened.
   goes) with a journal moving the value between the locations on the
   inventory account, whose total never changes; the negative stock
   setting, backdating and period locks are respected.
-- **Year-end pack** (Accountant, Year-end pack; #258, decision 522): one
+- **Year-end pack** (Accounting › Year end › Year-end pack; #258, decision 522): one
   ZIP for the accountant for a financial year. It holds:
   - the trial balance, profit and loss, balance sheet and general ledger
     (CSV)
@@ -564,11 +599,18 @@ that something happened.
   connected earlier stopped until their member chooses); the chosen folders
   show on the mailbox with Change folders; taking a folder off deletes what
   was taken from it, and emails moved out of the chosen folders drop at the
-  next check (moved in, they're read). Not yet: attachments, changing one
+  next check (moved in, they're read). Since FC32 (#390, decision 741): with
+  two or more farms, an item placed only by the mailbox's usual farm waits
+  in Needs checking with the reason; No farm stays No farm. Not yet: attachments, changing one
   date of a repeat, and repeats read from email wording. The private copy
-  (My mail, #250) uses the same connection and folder choice.
+  (My mail, #250) uses the same connection and folder choice. Since #375
+  (decision 705) the calendar comes first: mailbox setup opens from Manage
+  mailboxes, someone with no mailbox gets a one-line Connect a mailbox
+  prompt, an empty week offers Add an item, and the redirect addresses an
+  administrator needs are under Settings › Email.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
-  #250 with #340, PM1-PM14, decisions 610-617, tenant migration 0168, not
+  #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
+  migrations 0168, 0169 and 0180, not
   yet reviewed; not tried with a real mailbox): an Owner of any
   organisation keeps a copy of their own Gmail or Microsoft mail, from the
   folders or labels they tick on the farm calendar's one connection and
@@ -588,8 +630,17 @@ that something happened.
   Delete imported history are separate. Since PM15-PM19 (decisions 618,
   619, tenant migration 0169): the Owner can let their own Look only AI
   keys search and read it over MCP (search_my_mail, read_my_mail), citing
-  each email; no other key is offered the tools. Not yet: filing an
-  attachment into shared data with a preview.
+  each email; no other key is offered the tools. Since PM20-PM29
+  (decisions 720-726, tenant migration 0180): **File…** on an attachment
+  files a copy into the bills inbox, a soil test, pasture reading or
+  fertiliser application import, or an existing record's files, after a
+  preview of exactly what others will see and what stays private (each
+  feature's own import preview and checks; refused if anything changed
+  since). Filed copies say "filed from a private email" and carry nothing of
+  the email. Rules (sender or @domain and/or a file name pattern) put
+  matches in **To file** for the Owner to confirm one by one. Not yet:
+  making the bill while filing, choosing import columns from My mail, rules
+  that file without asking.
 - **Consolidation** (Reports, Consolidation; CO1-CO12, decisions 437-445, 563,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with
@@ -1186,7 +1237,7 @@ that something happened.
     - Herd value ratios, including Chatham Islands.
     - Bought young stock under NSC at cost.
     - High-priced livestock, with IRD's rate typed by the accountant.
-  - **Screens** under Accountant › Assets › Livestock: the head count,
+  - **Screens** under Accounting › Assets › Livestock: the head count,
     movements, and the valuation with a step for each. Livestock's
     settings (opening, elections, rates, accounts, locations) are under
     Settings.
@@ -1566,9 +1617,42 @@ that something happened.
   lump sum indicator, the finish date of a final pay and redundancy (not
   liable for the ACC earners' levy) are filled in. No file has been
   through myIR's checker yet.
+- **Farm benchmarks by farm** (Farm › Benchmarks; #390, FR1-FR8, decision
+  743, tenant migration 0182, not yet reviewed): as Xero does with tracking
+  categories, a chosen tracking category carries the farm and each farm is
+  linked to a value. The year's gross farm revenue, working expenses and
+  operating surplus are split by farm, with **Not allocated** shown (never
+  spread) and a total that is the organisation's benchmarks. Each farm's
+  own hectares, cows, stock units and milk solids are entered for the year,
+  and its per-unit amounts use only those. Shared costs and charges
+  between farms are moved with journals. Needs Advanced features on.
+- **Farms each member works on** (People and roles; #390, FMA1-FMA8,
+  decision 744, tenant migration 0183; Jess: "Yes, assigned farms only"):
+  with two or more farms, viewers, bookkeepers and report viewers see and
+  record only for their farms (or all farms if chosen); owners and admins
+  see every farm. Not assigned yet means no farms, with a warning on the
+  screen. Enforced on the server for every farming route, Home's farm
+  cards, the shared farm calendar, farm apps and AI tools; the farm
+  notebook and Analytics' farm tables need all farms.
 - **Farms and paddocks** (Farm menu; #249 stage 1, decision 514, tenant
   migration 0133): an optional module, part of Accounting, turned on in
-  Settings, Modules. **Farms** hold **paddocks**. A paddock's identity
+  Settings, Modules. **Farms** hold **paddocks**. The farm selector supports
+  multiple properties within one organisation. Maps, soil, pasture and
+  fertiliser share the selected farm in the current browser tab, separately
+  for each user and organisation. With multiple farms and no saved choice,
+  the user chooses before working; an unavailable saved or linked farm never
+  silently falls back to another one, and the page says so. With one farm
+  there's no selector. Links can open a farm (`?farm=`); Home's pasture,
+  catch-up and fertiliser lines use them (decision 740). Boundary imports
+  show their destination farm in the preview and import button, and an
+  archived farm can't be imported into. Farm Home remains an all-farms overview:
+  money, livestock and performance are organisation-wide, not separate books
+  or farm profitability reports. **All farms compared** (Farm menu, and
+  from the farm selector; #390, PF9, decision 742): each active farm's
+  area, pasture cover with its reading dates and freshness, paddocks
+  missing readings, and latest fertiliser plan, with links to that farm's
+  records, and a total row worked from every paddock (not an average of
+  averages). No money figures. A paddock's identity
   doesn't depend on its name, and its **effective area** (what plans use,
   FB1) sits beside its **mapped area**. The mapped area is worked out from
   its boundary, geodesically on WGS84 with GeographicLib, with no PostGIS.
@@ -2092,8 +2176,36 @@ that something happened.
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into
   place (the arrows still work from the keyboard), duplicated, or clicked
-  to open, and **+ Add text** adds a heading with notes to split a
-  dashboard into sections. Up to 40 tiles.
+  to open, and **+ Add text or item** adds a heading with notes to split a
+  dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: New Zealand maps** (#376 phase 2, decision 687). A
+  **filled map** colours New Zealand's regions or districts and cities by a
+  value, e.g. sales by region; names are matched however they're spelt
+  (macrons, "Region", "District" and so on), and names that aren't on the
+  map are listed under it. A **map with points** puts a dot at each
+  latitude and longitude, sized by a third value if you like. The
+  boundaries come with Tohyee (Stats NZ, CC BY 4.0), so no outside map
+  service is used.
+- **Analytics: text, images, shapes and buttons** (#376 phase 2, decisions
+  683-686). **+ Add text or item** adds one of four things to a report.
+  **Text** can use **bold**, *italic*, links, lists and values from the
+  data, e.g. "Sales this month: {Sales}", worked out over the report's
+  dates and slicers; whatever is typed always shows as text, and only web
+  and email links become links. An **image** (JPG or PNG, up to 5 MB) is
+  stored with the report and only people who can see the report can see
+  it. A **shape or line** (rectangle, rounded, circle, line or arrow) uses
+  the report's theme colours unless others are chosen. A **button** resets
+  the report's filters; going to another page and opening a bookmark will
+  come with report pages and bookmarks.
+- **Analytics: pivot table (matrix) improvements** (#376 phase 2, decision
+  682). A pivot can have up to three column fields nested inside each
+  other (e.g. year, then channel), with a total for each outer column; rows
+  can be laid out stepped (one indented column, each group's total as its
+  heading, as Power BI's matrix) or a column per field as before; each
+  group opens and closes (+ / −, with Open all and Close all), and the
+  report can choose how many levels are open to start with. Clicking a
+  cell under nested columns opens that cell's rows, and exports name each
+  column by its whole path.
 - **Analytics: small multiples** (#376 phase 2, decision 681). A column,
   bar or line chart can show "One small chart for each" value of a second
   field, e.g. a chart per region: every small chart has the same groups
@@ -2291,8 +2403,12 @@ that something happened.
 - **Income tax, stage 1** (#292; examples ITX1-ITX10, decision 545, tenant
   migration 0150), from IRD's published rules and **not yet reviewed by an
   accountant** (the screen says so): for a company or a sole trader with a
-  31 March balance date, from the 2025 income year. Accountant › Income tax
-  (owners and admins): taxable income from the books, with each income or
+  31 March balance date, from the 2025 income year. Tax › Income tax
+  (owners and admins), a workspace of pages since #375 (decision 702):
+  Overview (next payment, what needs doing, due dates), Forecast, Tax
+  calculation, Payments, Returns and Tax settings, keeping the income year
+  between them, with "Forecast incomplete" instead of $0.00 when the year has
+  no inputs at all. Taxable income comes from the books, with each income or
   expense account counting in full, not deductible, entertainment 50%,
   business use % or not taxable, plus typed adjustments, losses brought
   forward, other income and tax credits; actuals to the last whole month
@@ -2305,7 +2421,7 @@ that something happened.
 - **Provisional tax payments and where they go** (#292; examples
   ITX6A-ITX6H, decisions 620-623, tenant migration 0170; Codex, delegated by
   owner (via Will), 20 Oct 2026; not yet reviewed by an accountant). On the
-  Income tax page, each payment to IRD has its bank date and IRD's effective
+  Income tax › Payments page, each payment to IRD has its bank date and IRD's effective
   date, and is allocated to an instalment or the end-of-year tax as
   confirmed by IRD (naming an IRD document), allocated with evidence, or a
   forecast assumption. Unallocated payments are awaiting reconciliation and
@@ -2357,6 +2473,23 @@ that something happened.
   beside the current figures and the document, and accepts or declines it;
   payments already typed aren't added twice. Tohyee calls no AI and never
   touches myIR.
+- **Importing IRD account files** (#292, #360 item 3; examples ITX-IMP1 to
+  ITX-IMP12, decisions 710-716, tenant migration 0179; Codex, delegated by
+  owner, 20 October 2026, as delegated, not yet reviewed): on the Income
+  tax page, owners and admins bring in a CSV or Excel file of an IRD
+  account's transactions, saying whether it was downloaded from myIR or is
+  another spreadsheet. They pick the columns (no IRD layout is assumed),
+  say what each value in the type and instalment columns means, and see
+  every row with any problem before importing; mappings can be saved and
+  are chosen again for a file with the same headings. The file is kept as
+  an IRD document, optionally linked to a PDF. Each row waits for a person
+  to accept or decline it. An accepted payment is added (or linked to the
+  same payment already in Tohyee) and allocated only when the row says
+  which instalment (confirmed by IRD for a myIR file, with evidence for
+  another spreadsheet); otherwise it's awaiting reconciliation. An
+  assessment becomes the assessed RIT only when the person says so, with
+  the filing date. Interest, penalties, credits and refunds are recorded
+  and totalled for the year. No IRD connection, filing or payments.
 - **IRD payments from the books** (#292 stage 6; examples ITX36-ITX40,
   decision 550, tenant migration 0155): owners and admins choose the
   accounts income tax payments are coded to; payments to them from a bank

@@ -20,3 +20,13 @@ fence in the foreground are left out. It isn't edited or AI-restored, only
 cropped and saved as WebP (about 8 KB). The CSS is unchanged apart from the
 image: 28% opacity, all edges faded, a solid canvas behind the greeting, and
 hidden below 768px and in print. The earlier AI-restored image was removed.
+
+## 21 October 2026: removed from the app
+
+Jess decided to remove the mountain photo ("Get rid of mountain photo", 21
+October 2026; decision 701, replacing decision 598). Home's header no longer
+shows it, and `public/images/aoraki-pukaki.webp`, the `MountainWatermark`
+component and its CSS were removed (#375). The full photo is still kept with
+the design review in `docs/design/2026-review/mountain-photo.png`.
+`public/images/aoraki-strip.jpg`, the earlier strip, wasn't used by the app
+before this change either and is left as it was.

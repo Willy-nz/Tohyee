@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  gap: 32px;
+  gap: 24px;
   width: min(1440px, 100%);
   margin-inline: auto;
 }
@@ -25,60 +25,10 @@
   min-width: 0;
 }
 
-/* Home's header: a softly blended crop of the owner's Aoraki / Lake Pukaki photo (#339). */
-.pageHeaderDecorated {
-  position: relative;
-  isolation: isolate;
-  min-height: 150px;
-  padding-top: 24px;
-}
-
-.watermark {
-  position: absolute;
-  inset: auto 0 0 auto;
-  z-index: -1;
-  width: min(520px, 55%);
-  aspect-ratio: 700 / 202;
-  pointer-events: none;
-  /* Preserve the cool photographic colours instead of flattening them into blue. */
-  background: url("/images/aoraki-pukaki.webp") center 50% / cover no-repeat;
-  opacity: 0.28;
-  /* Fade every edge; keep the central peak legible without a rectangular sky patch. */
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 28%, #000 92%, transparent), linear-gradient(to bottom, transparent, #000 22%, #000 65%, transparent);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent, #000 28%, #000 92%, transparent), linear-gradient(to bottom, transparent, #000 22%, #000 65%, transparent);
-  mask-composite: intersect;
-}
-
-/* Long greetings and utility controls always stay on the page's solid canvas. */
-.pageHeaderDecorated > div:not(.watermark) {
-  position: relative;
-  background: var(--bg);
-  box-shadow: 12px 0 12px var(--bg);
-}
-
-/* On a phone the greeting wraps, so omit the decoration and its reserved space. */
-@media (max-width: 767px) {
-  .watermark {
-    display: none;
-  }
-
-  .pageHeaderDecorated {
-    min-height: 0;
-    padding-top: 0;
-  }
-}
-
-@media print {
-  .watermark {
-    display: none;
-  }
-}
-
 .pageTitle {
   font-size: var(--text-2xl);
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 500;
+  font-family: inherit;
+  font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.025em;
 }
@@ -123,6 +73,8 @@
 }
 
 .cardDescription {
+  max-width: 78ch;
+  overflow-wrap: anywhere;
   margin-top: 2px;
   color: var(--text-muted);
   font-size: var(--text-base);
@@ -156,6 +108,7 @@
 }
 
 .field {
+  min-width: 0;
   display: grid;
   gap: 6px;
   align-content: start;
@@ -592,15 +545,22 @@
   color: var(--text-muted);
 }
 
+/*
+ * A row of fields and buttons (#375, decision 704). Items line up at the
+ * top, and anything beside a field drops by one line of label, so the
+ * controls share a line whatever help or error text sits under a field.
+ */
 .inlineForm {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 10px;
 }
 
 .inlineForm > .field {
+  flex: 0 1 220px;
   min-width: 160px;
+  max-width: 100%;
 }
 
 /* A button that reads like a link, e.g. an amount that fills in a box when clicked. */
@@ -1166,4 +1126,26 @@
 
 .collapsible[open] > summary {
   margin-bottom: 12px;
+}
+
+/* #375 (decision 704): fields in a row or toolbar keep their controls on one line; see .inlineForm. */
+.inlineForm .fieldLabel,
+.toolbar .fieldLabel {
+  line-height: 1.5;
+}
+
+.inlineForm:has(> .field) > :not(.field),
+.toolbar:has(> .field) > :not(.field) {
+  margin-top: calc(1.5 * var(--text-sm) + 6px);
+}
+
+.inlineForm > .field > :is(input, select),
+.toolbar > .field > :is(input, select),
+.inlineForm:has(> .field) > :is(button, a),
+.toolbar:has(> .field) > :is(button, a) {
+  min-height: 40px;
+}
+
+.toolbar:has(> .field) {
+  align-items: flex-start;
 }
