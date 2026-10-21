@@ -981,7 +981,7 @@ function Mailboxes({
           <input inputMode="numeric" value={historyDays} onChange={(event) => setHistoryDays(event.target.value)} />
         </Field>
         {farms.length > 1 ? (
-          <Field label="Farm when none is named">
+          <Field label="Farm when none is named" hint="A guess: those items wait in Needs checking until you check them.">
             <select value={defaultFarmId} onChange={(event) => setDefaultFarmId(event.target.value)}>
               <option value="">No farm</option>
               {farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}

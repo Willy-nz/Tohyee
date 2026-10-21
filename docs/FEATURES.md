@@ -599,7 +599,9 @@ that something happened.
   connected earlier stopped until their member chooses); the chosen folders
   show on the mailbox with Change folders; taking a folder off deletes what
   was taken from it, and emails moved out of the chosen folders drop at the
-  next check (moved in, they're read). Not yet: attachments, changing one
+  next check (moved in, they're read). Since FC32 (#390, decision 741): with
+  two or more farms, an item placed only by the mailbox's usual farm waits
+  in Needs checking with the reason; No farm stays No farm. Not yet: attachments, changing one
   date of a repeat, and repeats read from email wording. The private copy
   (My mail, #250) uses the same connection and folder choice. Since #375
   (decision 705) the calendar comes first: mailbox setup opens from Manage

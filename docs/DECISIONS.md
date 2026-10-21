@@ -7341,3 +7341,13 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      imports name their destination farm in the preview and import button,
      and the server refuses an import into an archived farm. The selector
      is a convenience, not an access boundary.
+741. **A mailbox's usual farm is a guess** (21 October 2026, #390, FC32;
+     Claude's rule, Xero and NetSuite having nothing similar). With two or
+     more active farms, an item placed only because of the mailbox's
+     "farm when none is named" still goes under that farm, so the farm
+     filter shows it where it most likely belongs, but waits in Needs
+     checking with the reason, until the member checks it. Leaving it
+     under No farm instead was considered: it hides the most likely farm
+     and makes more work when the guess is right. A farm the email names,
+     or the only active farm, is used without a check. An archived usual
+     farm isn't used. No farm is never filled in from anything else.
