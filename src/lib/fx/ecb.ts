@@ -4,7 +4,7 @@ import { setRateSource } from "@/lib/fx/sources";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { dec, divide, toPlainString } from "@/lib/money/decimal";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { optionalBoolean, requireArray } from "@/lib/validation";
 
@@ -206,7 +206,7 @@ export async function refreshDueEcbRates(): Promise<number> {
   let refreshed = 0;
   try {
     let days: EcbDay[] | null = null;
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       const due = await withOrganisationTransaction(organisation, ACTOR, (tx) =>
         tx.query(`select 1 from ecb_rate_settings where enabled and ${ACCOUNTING_ON_SQL} and (last_run_at is null or last_run_at < now() - interval '6 hours')`),

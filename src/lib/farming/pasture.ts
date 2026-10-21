@@ -23,7 +23,7 @@ import {
   supplementTotals,
 } from "@/lib/farming/pasture-rules";
 import { requireFarming } from "@/lib/farming/paddocks";
-import { fileRows } from "@/lib/farming/soil";
+import { fileRows, type ImportOrigin, importSource } from "@/lib/farming/soil";
 import { optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
 
 /*
@@ -221,7 +221,7 @@ export async function previewReadingImport(tx: OrgTx, farmIdInput: unknown, inpu
   return { fileName: read.fileName, headings: read.headings, columns: read.columns, rows: read.rows, counts: { readings: read.rows.length - errors, errors }, alreadyImportedOn: read.alreadyImportedOn };
 }
 
-export async function importReadings(tx: OrgTx, farmIdInput: unknown, input: ImportInput): Promise<{ imported: number; skipped: number }> {
+export async function importReadings(tx: OrgTx, farmIdInput: unknown, input: ImportInput, options: ImportOrigin = {}): Promise<{ imported: number; skipped: number }> {
   const farmId = await requireFarm(tx, farmIdInput);
   await tx.query("select 1 from farms where id = $1 for update", [farmId]);
   const read = await readImport(tx, farmId, input);
@@ -231,12 +231,13 @@ export async function importReadings(tx: OrgTx, farmIdInput: unknown, input: Imp
   for (const row of good) {
     await tx.query(
       "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, source, created_by_email) values ($1, $2, $3, $4, $5, $6, $7)",
-      [farmId, row.paddockId, row.measuredOn, row.cover, row.method, `Imported from ${read.fileName}`.slice(0, 200), tx.actor.email],
+      [farmId, row.paddockId, row.measuredOn, row.cover, row.method, importSource(read.fileName, options), tx.actor.email],
     );
   }
   const summary = { imported: good.length, skipped: read.rows.length - good.length };
-  await tx.query("insert into farm_imports (farm_id, kind, file_name, sha256, summary, created_by_email) values ($1, 'pasture_readings', $2, $3, $4::jsonb, $5)", [farmId, read.fileName, read.sha256, JSON.stringify(summary), tx.actor.email]);
-  await writeAuditEvent(tx, { eventType: "farming.pasture_readings_imported", entityType: "farm", entityId: farmId, details: { fileName: read.fileName, ...summary } });
+  const origin = options.filedFromPrivateMail ? { filedFromPrivateMail: true } : {};
+  await tx.query("insert into farm_imports (farm_id, kind, file_name, sha256, summary, created_by_email) values ($1, 'pasture_readings', $2, $3, $4::jsonb, $5)", [farmId, read.fileName, read.sha256, JSON.stringify({ ...summary, ...origin }), tx.actor.email]);
+  await writeAuditEvent(tx, { eventType: "farming.pasture_readings_imported", entityType: "farm", entityId: farmId, details: { fileName: read.fileName, ...summary, ...origin } });
   return summary;
 }
 

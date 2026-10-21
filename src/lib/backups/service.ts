@@ -1,11 +1,15 @@
-import { createWriteStream, promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 import packageJson from "../../../package.json";
 import { type AdminActor, type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail } from "@/lib/auth/service";
-import { BACKUP_EXTENSION, type BackupHeader, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { BACKUP_EXTENSION, type BackupHeader, materialFromText, openBackupKeys, type RecoveryMaterial, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
+import { describeSecretColumn, reEncryptStoredSecrets, type SecretsReport } from "@/lib/backups/rewrap";
+import { currentRecoveryKey, type RecoveryKey } from "@/lib/backups/recovery-key";
+import { diskSpace, explainBackupError, formatBytes, notEnoughSpace } from "@/lib/backups/destination";
 import { startPgTool } from "@/lib/backups/pg-tools";
 import { folderAccessHint } from "@/lib/server-admin/folder-access";
 import { backupsToKeep } from "@/lib/backups/retention";
@@ -19,6 +23,7 @@ import { ConflictError, ForbiddenError, NotFoundError, UnavailableError, Validat
 import { databaseNameFor, listAllOrganisations } from "@/lib/organisations/admin";
 import { provisionOrganisation } from "@/lib/organisations/provisioning";
 import { getOrganisation, parseOrganisationId, type OrganisationRecord } from "@/lib/organisations/registry";
+import { privateMailCopyOwners } from "@/lib/private-mail/store";
 import { secretsAvailable } from "@/lib/secrets";
 import { deleteServerSetting, readServerSetting, writeServerSetting } from "@/lib/server-settings";
 
@@ -55,6 +60,8 @@ export type BackupRun = {
   finishedAt: string | null;
   filePath: string | null;
   sizeBytes: number | null;
+  /** The file's SHA-256 when it was made and checked (null before #389). */
+  sha256: string | null;
   error: string | null;
 };
 
@@ -188,14 +195,44 @@ export async function updateBackupSettings(
 
 // ------------------------------------------------------------------ making backups
 
-type Target = { organisationId: string | null; displayName: string | null; databaseName: string; schemaVersion: string | null };
+export type Target = { organisationId: string | null; displayName: string | null; databaseName: string; schemaVersion: string | null };
 
-function folderFor(root: string, target: Target): string {
+/** One database's sub-folder of the backup folder. */
+export function folderFor(root: string, target: { organisationId: string | null }): string {
   return path.join(/* turbopackIgnore: true */ root, target.organisationId ?? SERVER_FOLDER);
 }
 
-function filePrefix(target: Target): string {
+export function filePrefix(target: { organisationId: string | null }): string {
   return target.organisationId ?? "server";
+}
+
+/** The SHA-256 of a file, as hex. */
+export async function fileSha256(file: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(/* turbopackIgnore: true */ file)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
+
+/**
+ * The backup folder must already be there (decision 731): if it's a OneDrive
+ * folder and OneDrive has been removed, making it again would quietly put
+ * backups in a plain folder nothing uploads. Only the default folder, which
+ * Tohyee owns, is made when missing.
+ */
+async function ensureRoot(root: string): Promise<void> {
+  if (path.resolve(/* turbopackIgnore: true */ root) === path.resolve(/* turbopackIgnore: true */ defaultBackupFolder())) {
+    await fs.mkdir(root, { recursive: true });
+    return;
+  }
+  const stat = await fs.stat(root).catch((error: NodeJS.ErrnoException) => {
+    throw Object.assign(new Error(error.message), { code: error.code === "ENOTDIR" ? "ENOENT" : error.code });
+  });
+  if (!stat.isDirectory()) throw Object.assign(new Error(`${root} isn't a folder`), { code: "ENOENT" });
+}
+
+/** All the databases backed up (the server's own first), or one organisation. */
+export async function backupTargets(organisationId?: string): Promise<Target[]> {
+  return targets(organisationId);
 }
 
 async function targets(organisationId?: string): Promise<Target[]> {
@@ -215,8 +252,12 @@ function toTarget(o: OrganisationRecord): Target {
   return { organisationId: o.id, displayName: o.displayName, databaseName: o.databaseName, schemaVersion: o.schemaVersion };
 }
 
-/** Decrypts a backup into `pg_restore --list`: proves the key opens it, nothing was changed, and PostgreSQL can read it. */
-export async function checkBackup(file: string, otherKey?: string): Promise<BackupHeader> {
+/**
+ * Decrypts a backup into `pg_restore --list`: proves the key opens it,
+ * nothing was changed, and PostgreSQL can read it. `material` is the
+ * recovery kit (or older backup key) when this server didn't make it.
+ */
+export async function checkBackup(file: string, material?: RecoveryMaterial): Promise<BackupHeader> {
   const restore = startPgTool("pg_restore", ["--list"], "postgres");
   restore.child.stdout?.resume();
   // pg_restore --list stops reading after the table of contents, but the whole
@@ -247,21 +288,42 @@ export async function checkBackup(file: string, otherKey?: string): Promise<Back
       callback();
     },
   });
-  const [header] = await Promise.all([readDecrypted(file, feed, otherKey), restore.done]);
+  const [header] = await Promise.all([readDecrypted(file, feed, material), restore.done]);
   return header;
 }
 
-async function backUpTarget(root: string, target: Target, trigger: BackupRun["trigger"], requestedByEmail: string | null): Promise<BackupRun> {
+async function backUpTarget(root: string, target: Target, trigger: BackupRun["trigger"], requestedByEmail: string | null, recovery: RecoveryKey): Promise<BackupRun> {
   const run = await coreQuery<{ id: string }>(
     "insert into backup_runs (organisation_id, trigger, requested_by_email) values ($1, $2, $3) returning id::text as id",
     [target.organisationId, trigger, requestedByEmail],
   );
   const runId = run.rows[0].id;
   const folder = folderFor(root, target);
-  const finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date()).stamp}${BACKUP_EXTENSION}`);
+  // Never the name of a file already there (two backups in the same second): a checked file is never replaced.
+  let when = Date.now();
+  let finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date(when)).stamp}${BACKUP_EXTENSION}`);
+  while (await fs.stat(finalPath).then(() => true, () => false)) {
+    when += 1000;
+    finalPath = path.join(folder, `${filePrefix(target)}_${localParts(new Date(when)).stamp}${BACKUP_EXTENSION}`);
+  }
   const partial = `${finalPath}.partial`;
   try {
+    await ensureRoot(root);
     await fs.mkdir(folder, { recursive: true });
+    // A backup that clearly won't fit fails at once, before anything is written or deleted (decision 732).
+    const previous = await coreQuery<{ size_bytes: string }>(
+      `select size_bytes::text as size_bytes from backup_runs where status = 'ok' and organisation_id is not distinct from $1 and size_bytes is not null
+        order by started_at desc, id desc limit 1`,
+      [target.organisationId],
+    );
+    const expected = Number(previous.rows[0]?.size_bytes ?? 0);
+    const space = await diskSpace(folder);
+    if (notEnoughSpace(space, expected)) {
+      throw Object.assign(
+        new Error(`There isn't room for this backup in ${root}: about ${formatBytes(expected)} is needed and ${formatBytes(space!.freeBytes)} is free`),
+        { code: "ENOSPC_ESTIMATE" },
+      );
+    }
     const dump = startPgTool("pg_dump", ["--format=custom", "--no-owner", "--no-privileges"], target.databaseName);
     dump.child.stdin?.end();
     const out = createWriteStream(partial, { mode: 0o600 });
@@ -274,7 +336,7 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
         schemaVersion: target.schemaVersion,
         createdAt: new Date().toISOString(),
         tohyeeVersion: packageJson.version,
-      }),
+      }, recovery),
       dump.done,
     ]).catch(async (error) => {
       out.destroy();
@@ -283,16 +345,20 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
     await checkBackup(partial);
     await fs.rename(partial, finalPath);
     const { size } = await fs.stat(finalPath);
+    const sha256 = await fileSha256(finalPath);
     const done = await coreQuery<RunRow>(
-      `update backup_runs set status = 'ok', finished_at = now(), file_path = $2, size_bytes = $3
+      `update backup_runs set status = 'ok', finished_at = now(), file_path = $2, size_bytes = $3, sha256 = $4
         where id = $1 returning ${RUN_COLUMNS}`,
-      [runId, finalPath, size],
+      [runId, finalPath, size, sha256],
     );
-    await prune(folder, filePrefix(target));
+    await prune(folder, target);
     return toRun(done.rows[0]);
   } catch (error) {
     await fs.rm(partial, { force: true }).catch(() => undefined);
-    const message = error instanceof Error ? error.message : String(error);
+    const message =
+      (error as NodeJS.ErrnoException).code === "ENOSPC_ESTIMATE"
+        ? `${(error as Error).message}. Free up space or choose a folder on a bigger disk. The older backups were kept.`
+        : explainBackupError(error, root);
     const failed = await coreQuery<RunRow>(
       `update backup_runs set status = 'failed', finished_at = now(), error = $2 where id = $1 returning ${RUN_COLUMNS}`,
       [runId, message.slice(0, 2000)],
@@ -301,15 +367,40 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
   }
 }
 
-const BACKUP_NAME = /^([a-z0-9][a-z0-9-]*)_(\d{4}-\d{2}-\d{2}_\d{6})\.tohyee-backup$/;
+export const BACKUP_NAME = /^([a-z0-9][a-z0-9-]*)_(\d{4}-\d{2}-\d{2}_\d{6})\.tohyee-backup$/;
 
-/** Deletes old backups in one organisation's folder (only Tohyee backup files with that organisation's prefix). */
-async function prune(folder: string, prefix: string): Promise<string[]> {
-  const names = await fs.readdir(folder).catch(() => [] as string[]);
+/** One database's backup files in its folder, by name (newest first), with whether each one's header reads as that database's. */
+export async function datedBackupFiles(folder: string, target: { organisationId: string | null }): Promise<{ name: string; stamp: string; readable: boolean }[]> {
+  const prefix = filePrefix(target);
+  const names = await fs.readdir(/* turbopackIgnore: true */ folder).catch(() => [] as string[]);
   const dated = names
     .map((name) => ({ name, match: BACKUP_NAME.exec(name) }))
     .filter((entry) => entry.match && entry.match[1] === prefix)
-    .map((entry) => ({ name: entry.name, stamp: entry.match![2] }));
+    .map((entry) => ({ name: entry.name, stamp: entry.match![2] }))
+    .sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : 0));
+  const result: { name: string; stamp: string; readable: boolean }[] = [];
+  for (const entry of dated) {
+    let readable = false;
+    try {
+      const { header } = await readBackupHeader(path.join(folder, entry.name));
+      readable = header.organisationId === target.organisationId;
+    } catch {
+      readable = false;
+    }
+    result.push({ ...entry, readable });
+  }
+  return result;
+}
+
+/**
+ * Deletes old backups in one database's folder (decision 732). Only Tohyee
+ * backup files with that database's prefix are looked at, and only the ones
+ * whose header reads as that database's count: a damaged file never takes
+ * the place of a good one in the 14 days and 12 months, and pruning never
+ * deletes it either (it's reported instead, for a person to look at).
+ */
+async function prune(folder: string, target: { organisationId: string | null }): Promise<string[]> {
+  const dated = (await datedBackupFiles(folder, target)).filter((entry) => entry.readable);
   const keep = backupsToKeep(dated);
   const removed: string[] = [];
   for (const backup of dated) {
@@ -322,6 +413,25 @@ async function prune(folder: string, prefix: string): Promise<string[]> {
 }
 
 const BACKUP_LOCK = "tohyee:backups";
+
+/**
+ * Runs `work` holding the server-wide backup lock (one backup or check at a
+ * time); refused with `busyMessage` while another holds it.
+ */
+export async function withBackupLock<T>(busyMessage: string, work: () => Promise<T>): Promise<T> {
+  const lock = await getCorePool().connect();
+  try {
+    const locked = await lock.query<{ ok: boolean }>("select pg_try_advisory_lock(hashtext($1)) as ok", [BACKUP_LOCK]);
+    if (!locked.rows[0]?.ok) throw new ConflictError(busyMessage);
+    try {
+      return await work();
+    } finally {
+      await lock.query("select pg_advisory_unlock(hashtext($1))", [BACKUP_LOCK]);
+    }
+  } finally {
+    lock.release();
+  }
+}
 
 /**
  * Backs up every organisation and the server's own database (or one
@@ -339,25 +449,33 @@ export async function backUpNow(options: {
     throw new UnavailableError("Backups are encrypted with TOHYEE_SECRET_KEY, and it isn't set. Set it in the server's environment and restart Tohyee.");
   }
   const organisationId = options.organisationId ? parseOrganisationId(options.organisationId) : undefined;
-  const lock = await getCorePool().connect();
-  try {
-    const locked = await lock.query<{ ok: boolean }>("select pg_try_advisory_lock(hashtext($1)) as ok", [BACKUP_LOCK]);
-    if (!locked.rows[0]?.ok) throw new ConflictError("A backup is already running. Try again when it has finished.");
+  return withBackupLock("A backup or a check of the backups is already running. Try again when it has finished.", async () => {
+    const settings = await getBackupSettings();
+    let list = await targets(organisationId);
+    if (options.only) list = list.filter((t) => options.only!.includes(t.organisationId));
+    const runs: BackupRun[] = [];
+    // Format 2: encrypted with the current recovery key, made (version 1) the first time (decision 734).
+    let recovery: RecoveryKey;
     try {
-      const settings = await getBackupSettings();
-      let list = await targets(organisationId);
-      if (options.only) list = list.filter((t) => options.only!.includes(t.organisationId));
-      const runs: BackupRun[] = [];
+      recovery = await currentRecoveryKey();
+    } catch (error) {
+      // Recorded as a failed backup of each database, so the status shows it and the scheduler retries.
+      const message = `${error instanceof Error ? error.message : String(error)} The older backups were kept.`;
       for (const target of list) {
-        runs.push(await backUpTarget(settings.folder, target, options.trigger, options.requestedByEmail));
+        const failed = await coreQuery<RunRow>(
+          `insert into backup_runs (organisation_id, trigger, requested_by_email, status, finished_at, error)
+           values ($1, $2, $3, 'failed', now(), $4) returning ${RUN_COLUMNS}`,
+          [target.organisationId, options.trigger, options.requestedByEmail, message.slice(0, 2000)],
+        );
+        runs.push(toRun(failed.rows[0]));
       }
       return runs;
-    } finally {
-      await lock.query("select pg_advisory_unlock(hashtext($1))", [BACKUP_LOCK]);
     }
-  } finally {
-    lock.release();
-  }
+    for (const target of list) {
+      runs.push(await backUpTarget(settings.folder, target, options.trigger, options.requestedByEmail, recovery));
+    }
+    return runs;
+  });
 }
 
 // ------------------------------------------------------------------ what's there
@@ -371,9 +489,10 @@ type RunRow = {
   finished_at: Date | null;
   file_path: string | null;
   size_bytes: string | null;
+  sha256: string | null;
   error: string | null;
 };
-const RUN_COLUMNS = "id::text as id, organisation_id, trigger, status, started_at, finished_at, file_path, size_bytes::text as size_bytes, error";
+const RUN_COLUMNS = "id::text as id, organisation_id, trigger, status, started_at, finished_at, file_path, size_bytes::text as size_bytes, sha256, error";
 
 /**
  * Backups cut off by a restart (#137): a run still "running" that began
@@ -415,6 +534,7 @@ function toRun(row: RunRow): BackupRun {
     finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
     filePath: row.file_path,
     sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes),
+    sha256: row.sha256,
     error: row.error,
   };
 }
@@ -423,10 +543,10 @@ function toRun(row: RunRow): BackupRun {
 export async function backupStatus(): Promise<{ organisationId: string | null; displayName: string | null; latest: BackupRun | null; lastGood: BackupRun | null }[]> {
   const all = await targets();
   const latest = await coreQuery<RunRow>(
-    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs order by organisation_id, started_at desc, id desc`,
+    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs order by organisation_id, started_at desc, backup_runs.id desc`,
   );
   const good = await coreQuery<RunRow>(
-    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs where status = 'ok' order by organisation_id, started_at desc, id desc`,
+    `select distinct on (organisation_id) ${RUN_COLUMNS} from backup_runs where status = 'ok' order by organisation_id, started_at desc, backup_runs.id desc`,
   );
   const find = (rows: RunRow[], id: string | null) => {
     const row = rows.find((r) => r.organisation_id === id);
@@ -442,7 +562,7 @@ export async function backupStatus(): Promise<{ organisationId: string | null; d
 
 /** Recent backup attempts, newest first. */
 export async function recentBackupRuns(limit = 50): Promise<BackupRun[]> {
-  const result = await coreQuery<RunRow>(`select ${RUN_COLUMNS} from backup_runs order by started_at desc, id desc limit $1`, [limit]);
+  const result = await coreQuery<RunRow>(`select ${RUN_COLUMNS} from backup_runs order by started_at desc, backup_runs.id desc limit $1`, [limit]);
   return result.rows.map(toRun);
 }
 
@@ -482,33 +602,74 @@ export async function backupFileInFolder(name: unknown): Promise<string> {
 
 // ------------------------------------------------------------------ restoring
 
+/** What a restore checked and did (#389, decision 737), shown in the wizard and kept in `backup_checks`. */
+export type RestoreReport = {
+  organisationId: string;
+  from: { organisationId: string; displayName: string | null; madeAt: string; tohyeeVersion: string; format: 1 | 2; recoveryKeyVersion: number | null };
+  /** Stored secrets: re-encrypted for this server, already readable, or needing connecting again. */
+  secrets: SecretsReport;
+  /** Kinds of connection with values that couldn't be read. */
+  reconnect: string[];
+  privateMail: { copies: number; ownersHere: number; ownersNotHere: number };
+  /** Emails waiting to go in the copy's outbox: they'd be sent again if automatic jobs were turned on while the original still runs. */
+  queuedEmails: number;
+  attachments: number;
+  journals: number;
+  jobsPaused: true;
+};
+
+export type RestoreInput = {
+  file: string;
+  id?: unknown;
+  displayName?: unknown;
+  ownerEmail?: unknown;
+  /** A recovery code, or (format 1) the older backup key, as typed. */
+  key?: unknown;
+  /** Or the recovery kit already opened (a recovery file and its passphrase). */
+  material?: RecoveryMaterial;
+};
+
+/** The ID a restore suggests: the original's when it isn't on this server (a replacement computer), otherwise `<id>-<YYYYMMDD>`. */
+export async function suggestedRestoreId(header: Pick<BackupHeader, "organisationId" | "createdAt">): Promise<string> {
+  const original = header.organisationId!;
+  const here = await getOrganisation(original);
+  const taken = await getAdminPool().query("select 1 from pg_database where datname = $1", [databaseNameFor(original)]);
+  if (!here && !taken.rowCount) return original;
+  return `${original}-${localParts(new Date(header.createdAt)).date.replace(/-/g, "")}`.slice(0, 32);
+}
+
+async function countIn(client: { query: (sql: string) => Promise<{ rows: { n: string }[] }> }, table: string, where = "true"): Promise<number> {
+  const exists = await client.query(`select (to_regclass('public.${table}') is not null)::text as n`);
+  if (exists.rows[0]?.n !== "true") return 0;
+  return Number((await client.query(`select count(*)::text as n from ${table} where ${where}`)).rows[0]?.n ?? 0);
+}
+
 /**
  * Restores an organisation's backup as a new organisation (a copy), so the
  * current books are never overwritten. The copy gets the same members as the
- * original (or `ownerEmail`, when the original is gone), is brought up to this
- * server's version, and can be checked before anyone switches to it.
+ * original (or `ownerEmail`, or the person restoring, when the original
+ * isn't on this server), its stored secrets are re-encrypted with this
+ * server's key (decision 737), its automatic jobs start paused, and it's
+ * brought up to this server's version. A restore cut off part-way (a
+ * restart) is cleaned up when the server starts again (decision 739).
  */
-export async function restoreBackupAsCopy(
-  actor: AdminActor,
-  input: { file: string; id?: unknown; displayName?: unknown; ownerEmail?: unknown; key?: unknown },
-): Promise<OrganisationRecord> {
-  // The backup key of the server that made it, when that isn't this one.
-  const otherKey = typeof input.key === "string" && input.key.trim() ? input.key.trim() : undefined;
-  if (!otherKey && !secretsAvailable()) throw new UnavailableError("Restoring needs the backup key the backup was made with.");
+export async function restoreBackup(actor: AdminActor, input: RestoreInput): Promise<{ organisation: OrganisationRecord; report: RestoreReport }> {
+  // The recovery code (or, for an older backup, the backup key) of the server that made it, when that isn't this one.
+  const material = input.material ?? materialFromText(input.key);
+  if (!secretsAvailable()) throw new UnavailableError("Restoring needs this server's TOHYEE_SECRET_KEY (stored secrets are re-encrypted with it). Set it and restart Tohyee.");
   const { header } = await readBackupHeader(input.file);
   if (header.kind !== "organisation" || !header.organisationId) {
-    throw new ValidationError("That's a backup of the server's own database (users and settings), not of an organisation. Restoring it is a job for a database administrator (see docs/ARCHITECTURE.md).");
+    throw new ValidationError("That's a backup of the server's own database (people and settings), not of an organisation. Use Recover people from a server backup instead.");
   }
   if (header.schemaVersion && header.schemaVersion > LATEST_TENANT_VERSION) {
     throw new ValidationError(`That backup was made by a newer version of Tohyee (${header.tohyeeVersion}). Update this server first.`);
   }
   // Proves the key is right and the file is whole before anything is created.
-  await checkBackup(input.file, otherKey);
+  await checkBackup(input.file, material);
+  const { sourceLiveKey } = await openBackupKeys(input.file, material);
 
   const made = localParts(new Date(header.createdAt));
-  const id = parseOrganisationId(
-    input.id == null || input.id === "" ? `${header.organisationId}-${made.date.replace(/-/g, "")}`.slice(0, 32) : input.id,
-  );
+  const id = parseOrganisationId(input.id == null || input.id === "" ? await suggestedRestoreId(header) : input.id);
   const displayName =
     typeof input.displayName === "string" && input.displayName.trim()
       ? input.displayName.trim().slice(0, 150)
@@ -538,10 +699,11 @@ export async function restoreBackupAsCopy(
     if (!members.some((m) => m.role === "owner")) {
       throw new ValidationError("The original organisation is gone, so say who owns the copy (ownerEmail).");
     }
+    // Paused from the start (decision 738): nothing is sent or imported until a server admin turns its jobs on.
     await client.query(
-      `insert into organisations (id, display_name, database_name, base_currency, created_by)
-       values ($1, $2, $3, coalesce($4, 'NZD'), $5)`,
-      [id, displayName, databaseName, source?.baseCurrency ?? null, actor.id],
+      `insert into organisations (id, display_name, database_name, base_currency, created_by, jobs_paused_at, jobs_paused_reason)
+       values ($1, $2, $3, coalesce($4, 'NZD'), $5, now(), $6)`,
+      [id, displayName, databaseName, source?.baseCurrency ?? null, actor.id, `Restored from a backup made ${made.date}.`],
     );
     for (const member of members) {
       await client.query("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3)", [id, member.user_id, member.role]);
@@ -553,31 +715,76 @@ export async function restoreBackupAsCopy(
       details: { from: header.organisationId, backupMadeAt: header.createdAt, file: path.basename(input.file), displayName },
     });
   });
+  // Recorded as running, so a restore cut off by a restart is cleaned up later (decision 739).
+  const restoreRun = await coreQuery<{ id: string }>(
+    `insert into backup_checks (kind, organisation_id, file_name, details, requested_by_email) values ('restore', $1, $2, $3::jsonb, $4) returning id::text as id`,
+    [id, path.basename(input.file), JSON.stringify({ databaseName, from: header.organisationId }), actor.email],
+  );
 
   // Only a database this call made is dropped if the restore fails (#135).
   let created = false;
+  let report: RestoreReport;
   try {
     await getAdminPool().query(`create database ${quoteSqlIdentifier(databaseName)}`);
     created = true;
     const restore = startPgTool("pg_restore", ["--no-owner", "--no-privileges", "--exit-on-error", `--dbname=${databaseName}`], databaseName);
     restore.child.stdout?.resume();
-    const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!, otherKey), restore.done]);
+    const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!, material), restore.done]);
     // If pg_restore stopped, its own message says why (feeding it then fails with a broken pipe).
     if (restored.status === "rejected") throw restored.reason;
     if (fed.status === "rejected") throw fed.reason;
     const admin = await connectAsAdmin(databaseName);
+    let secrets: SecretsReport;
+    let privateOwners: string[] = [];
+    let counts = { queuedEmails: 0, attachments: 0, journals: 0 };
     try {
+      await admin.query("begin");
       await admin.query("update organisation_settings set organisation_id = $1, display_name = $2, updated_at = now() where id = true", [id, displayName]);
+      secrets = await reEncryptStoredSecrets(admin, sourceLiveKey);
+      await admin.query("commit");
+      privateOwners = await privateMailCopyOwners(admin);
+      counts = {
+        queuedEmails:
+          (await countIn(admin, "document_emails", "status in ('queued', 'sending')")) +
+          (await countIn(admin, "approval_emails", "status in ('queued', 'sending')")) +
+          (await countIn(admin, "roster_emails", "status in ('queued', 'sending')")),
+        attachments: await countIn(admin, "record_attachments"),
+        journals: await countIn(admin, "ledger_journals"),
+      };
+    } catch (error) {
+      await admin.query("rollback").catch(() => undefined);
+      throw error;
     } finally {
       await admin.end();
     }
+    const here = privateOwners.length
+      ? new Set((await coreQuery<{ id: string }>("select id::text from users where id = any($1::uuid[])", [privateOwners])).rows.map((row) => row.id))
+      : new Set<string>();
+    report = {
+      organisationId: id,
+      from: {
+        organisationId: header.organisationId,
+        displayName: header.displayName,
+        madeAt: header.createdAt,
+        tohyeeVersion: header.tohyeeVersion,
+        format: header.format,
+        recoveryKeyVersion: header.format === 2 ? header.recoveryKey.version : null,
+      },
+      secrets,
+      reconnect: [...new Set(secrets.columns.filter((c) => c.unreadable > 0).map((c) => describeSecretColumn(c.table)))],
+      privateMail: { copies: privateOwners.length, ownersHere: privateOwners.filter((o) => here.has(o)).length, ownersNotHere: privateOwners.filter((o) => !here.has(o)).length },
+      ...counts,
+      jobsPaused: true,
+    };
     await provisionOrganisation(id);
+    await coreQuery("update backup_checks set status = 'ok', finished_at = now(), details = details || $2::jsonb where id = $1", [restoreRun.rows[0].id, JSON.stringify({ report })]);
   } catch (error) {
     // Leave nothing half-restored behind.
     if (created) await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(databaseName)} with (force)`).catch(() => undefined);
     await withCoreTransaction(async (client) => {
       await client.query("delete from organisation_members where organisation_id = $1", [id]);
       await client.query("delete from organisations where id = $1", [id]);
+      await client.query("update backup_checks set status = 'failed', finished_at = now(), error = $2 where id = $1", [restoreRun.rows[0].id, error instanceof Error ? error.message.slice(0, 2000) : String(error)]);
       await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
         eventType: "organisation.restore_failed",
         entityType: "organisation",
@@ -587,12 +794,68 @@ export async function restoreBackupAsCopy(
     }).catch(() => undefined);
     throw error;
   }
-  return (await getOrganisation(id))!;
+  return { organisation: (await getOrganisation(id))!, report };
+}
+
+/** Restores an organisation's backup as a new organisation (a copy): `restoreBackup` without the report. */
+export async function restoreBackupAsCopy(actor: AdminActor, input: RestoreInput): Promise<OrganisationRecord> {
+  return (await restoreBackup(actor, input)).organisation;
+}
+
+/**
+ * Restores cut off part-way, by a restart or a power cut (decision 739): a
+ * restore still "running" from before this process started is marked
+ * failed, and the organisation it was making, if it's still "pending" (never
+ * made ready), is removed with its database. Nothing else is touched.
+ */
+export async function cleanUpInterruptedRestores(processStartedAt: Date): Promise<string[]> {
+  const stuck = await coreQuery<{ id: string; organisation_id: string; details: { databaseName?: string } }>(
+    "select id::text, organisation_id, details from backup_checks where kind = 'restore' and status = 'running' and started_at < $1",
+    [processStartedAt],
+  );
+  const cleaned: string[] = [];
+  for (const row of stuck.rows) {
+    const organisation = await getOrganisation(row.organisation_id);
+    if (organisation && organisation.provisioningStatus === "pending" && organisation.databaseName === row.details.databaseName) {
+      await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(organisation.databaseName)} with (force)`);
+      await withCoreTransaction(async (client) => {
+        await client.query("delete from organisation_members where organisation_id = $1", [organisation.id]);
+        await client.query("delete from organisations where id = $1 and provisioning_status = 'pending'", [organisation.id]);
+      });
+      cleaned.push(organisation.id);
+    }
+    await coreQuery("update backup_checks set status = 'failed', finished_at = now(), error = 'Interrupted: the server stopped while this restore ran. Nothing was kept from it; start it again.' where id = $1", [row.id]);
+  }
+  return cleaned;
+}
+
+/** Organisations whose automatic jobs are paused (restored copies, until a server admin turns them on). */
+export async function pausedOrganisations(): Promise<{ id: string; displayName: string; pausedAt: string; reason: string | null }[]> {
+  const result = await coreQuery<{ id: string; display_name: string; jobs_paused_at: Date; jobs_paused_reason: string | null }>(
+    "select id, display_name, jobs_paused_at, jobs_paused_reason from organisations where jobs_paused_at is not null order by display_name, organisations.id",
+  );
+  return result.rows.map((row) => ({ id: row.id, displayName: row.display_name, pausedAt: new Date(row.jobs_paused_at).toISOString(), reason: row.jobs_paused_reason }));
+}
+
+/**
+ * Turns a restored copy's automatic jobs on (decision 738): email sending,
+ * feeds, mailbox checks, repeating invoices and analytics loads. The server
+ * admin is shown first what will start; this is the action itself.
+ */
+export async function resumeOrganisationJobs(auth: ServerAdminAuth, organisationIdInput: unknown): Promise<void> {
+  if (!auth.user.isServerAdmin) throw new ForbiddenError("Only a server admin can turn on a restored copy's automatic jobs.");
+  const organisationId = parseOrganisationId(organisationIdInput);
+  await withCoreTransaction(async (client) => {
+    const updated = await client.query("update organisations set jobs_paused_at = null, jobs_paused_reason = null where id = $1 and jobs_paused_at is not null", [organisationId]);
+    if (!updated.rowCount) throw new NotFoundError(`${organisationId} has no paused jobs.`);
+    await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, { eventType: "organisation.jobs_resumed", entityType: "organisation", entityId: organisationId });
+  });
 }
 
 /** Decrypts a backup to a plain pg_dump file, for a database administrator (e.g. restoring the server's own database). */
 export async function decryptBackupTo(file: string, outFile: string, otherKey?: string): Promise<BackupHeader> {
-  await checkBackup(file, otherKey);
+  const material = materialFromText(otherKey);
+  await checkBackup(file, material);
   const out = createWriteStream(outFile, { mode: 0o600, flags: "wx" });
-  return readDecrypted(file, out, otherKey);
+  return readDecrypted(file, out, material);
 }

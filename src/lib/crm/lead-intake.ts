@@ -9,7 +9,7 @@ import { crmEnabled, requireCrm } from "@/lib/crm/switch";
 import { type Actor, assertOrganisationUsable, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { getOrganisation, type OrganisationRecord, parseOrganisationId } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { optionalBoolean, optionalString, requireId, requireString } from "@/lib/validation";
@@ -533,7 +533,7 @@ export async function checkDueLeadMailboxes(): Promise<{ checked: number; failed
   let failed = 0;
   try {
     if (!secretsAvailable()) return { checked, failed };
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due: string[] = [];
       try {

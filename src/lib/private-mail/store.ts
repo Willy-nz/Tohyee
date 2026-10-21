@@ -403,3 +403,15 @@ export async function myAttachment(tx: OrgTx, owner: MailOwner, attachmentInput:
   if (!row.content) throw new ValidationError(meta.notKept === "linked" ? "That's a linked Outlook item: open it in Outlook." : "That attachment was too big to keep: open it in your mailbox.");
   return { name: meta.name, contentType: meta.contentType, content: open(copy.keys, "attachment", external, row.content) };
 }
+
+/**
+ * For a restore or test restore (#389, decision 738): whose private mail
+ * copies a restored database holds, as owner IDs only (nothing of any
+ * email), so the wizard can say whether their owners are on this server.
+ * Takes the restored database's own admin connection, not a person's.
+ */
+export async function privateMailCopyOwners(client: { query<T>(sql: string): Promise<{ rows: T[] }> }): Promise<string[]> {
+  const exists = await client.query<{ ok: boolean }>("select to_regclass('public.private_mail_copies') is not null as ok");
+  if (!exists.rows[0]?.ok) return [];
+  return (await client.query<{ owner_user_id: string }>("select owner_user_id::text from private_mail_copies")).rows.map((row) => row.owner_user_id);
+}

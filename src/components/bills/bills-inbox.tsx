@@ -43,6 +43,14 @@ function arrived(item: InboxItem) {
       </>
     );
   }
+  if (item.source === "my_mail") {
+    return (
+      <>
+        <span className={ui.muted}>Filed from a private email by {personName(item, "createdBy") ?? item.createdByEmail}</span>
+        {item.note ? <div>{item.note}</div> : null}
+      </>
+    );
+  }
   return (
     <span className={ui.muted}>
       {item.source === "ai" ? "Added" : "Uploaded"} by {personName(item, "createdBy") ?? item.createdByEmail}
@@ -537,6 +545,12 @@ export function InboxItemPreview({ organisationId, itemId }: { organisationId: s
       {item.source === "mailbox" ? (
         <p className={ui.muted}>
           {item.emailFrom} · {item.emailSubject}
+        </p>
+      ) : null}
+      {item.source === "my_mail" ? (
+        <p className={ui.muted}>
+          Filed from a private email by {personName(item, "createdBy") ?? item.createdByEmail}
+          {item.note ? `: ${item.note}` : ""}
         </p>
       ) : null}
       {item.contentType === "application/pdf" ? (

@@ -124,12 +124,13 @@ type AttachmentRow = {
   created_by_email: string;
   created_at: string;
   removed_at: string | null;
+  filed_from_private_mail: boolean;
 };
 
 const NOTE_COLUMNS = `id::text, request_hash, body, version, created_by_user_id::text, created_by_email, created_at,
   updated_by_email, updated_at, deleted_at`;
 const ATTACHMENT_COLUMNS = `id::text, request_hash, file_name, content_type, byte_size, sha256, created_by_user_id::text,
-  created_by_email, created_at, removed_at`;
+  created_by_email, created_at, removed_at, filed_from_private_mail`;
 
 /** Whether the signed-in person wrote the note or added the file. */
 function isAuthor(tx: OrgTx, row: { created_by_user_id: string | null; created_by_email: string }): boolean {
@@ -168,6 +169,7 @@ function toAttachment(tx: OrgTx, role: Role, row: AttachmentRow): RecordAttachme
     sha256: row.sha256,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
+    filedFromPrivateMail: row.filed_from_private_mail,
     canRemove: canChange(tx, role, row),
   };
 }
@@ -225,7 +227,7 @@ function summarise(eventType: string, details: Record<string, unknown>): string 
     case "note.deleted":
       return "Note deleted";
     case "attachment.added":
-      return `File added: ${text(details.fileName) ?? "file"} (${formatFileSize(Number(details.byteSize ?? 0))})`;
+      return `File added: ${text(details.fileName) ?? "file"} (${formatFileSize(Number(details.byteSize ?? 0))})${details.filedFromPrivateMail === true ? ", filed from a private email" : ""}`;
     case "attachment.removed":
       return `File removed: ${text(details.fileName) ?? "file"} (${formatFileSize(Number(details.byteSize ?? 0))})`;
     case "credit_note.applied":
@@ -462,7 +464,7 @@ export async function addAttachment(
   role: Role,
   slugInput: unknown,
   recordIdInput: unknown,
-  input: { source?: unknown; idempotencyKey: unknown; fileName: unknown; content: Uint8Array },
+  input: { source?: unknown; idempotencyKey: unknown; fileName: unknown; content: Uint8Array; filedFromPrivateMail?: boolean },
 ): Promise<{ created: boolean; attachment: RecordAttachment }> {
   const { recordType, recordId } = await resolveRecord(tx, slugInput, recordIdInput);
   const source = optionalSource(input.source);
@@ -493,8 +495,8 @@ export async function addAttachment(
   }
   const inserted = await tx.query<AttachmentRow>(
     `insert into record_attachments (command_source, idempotency_key, request_hash, record_type, record_id, file_name,
-                                     content_type, byte_size, sha256, content, created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                                     content_type, byte_size, sha256, content, created_by_user_id, created_by_email, filed_from_private_mail)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      returning ${ATTACHMENT_COLUMNS}`,
     [
       source,
@@ -509,6 +511,7 @@ export async function addAttachment(
       Buffer.from(input.content.buffer, input.content.byteOffset, input.content.byteLength),
       tx.actor.userId,
       tx.actor.email,
+      input.filedFromPrivateMail === true,
     ],
   );
   const attachment = inserted.rows[0];
@@ -516,7 +519,7 @@ export async function addAttachment(
     eventType: "attachment.added",
     entityType: "record_attachment",
     entityId: attachment.id,
-    details: { recordType, recordId, fileName, contentType, byteSize: attachment.byte_size, sha256 },
+    details: { recordType, recordId, fileName, contentType, byteSize: attachment.byte_size, sha256, ...(input.filedFromPrivateMail ? { filedFromPrivateMail: true } : {}) },
   });
   return { created: true, attachment: toAttachment(tx, role, attachment) };
 }

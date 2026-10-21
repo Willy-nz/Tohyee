@@ -11,7 +11,7 @@ import { type InlineImage, newMessageId } from "@/lib/email/smtp";
 import type { EmailDocumentKind } from "@/lib/email/templates";
 import { HttpError } from "@/lib/errors";
 import { formatGstNumber } from "@/lib/format";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { emailLogo, getLogo } from "@/lib/organisations/logo";
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
@@ -386,7 +386,7 @@ export function kickEmailOutbox(organisationId: string): void {
 
 /** Finds organisations with emails waiting (after a restart, or retries). */
 async function scanAll(): Promise<void> {
-  for (const organisation of await listAllOrganisations()) {
+  for (const organisation of await listOrganisationsForJobs()) {
     if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
     try {
       const waiting = await withOrganisationTransaction(organisation, JOB_ACTOR, (tx) =>

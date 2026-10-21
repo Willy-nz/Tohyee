@@ -180,6 +180,14 @@ async function requireFarm(tx: OrgTx, farmIdInput: unknown): Promise<{ id: strin
   return row.rows[0];
 }
 
+/** Imports only go into a farm in use: an archived farm's map stays as it was archived. */
+async function requireActiveFarm(tx: OrgTx, farmIdInput: unknown): Promise<{ id: string; name: string }> {
+  const farm = await requireFarm(tx, farmIdInput);
+  const active = await tx.query<{ is_active: boolean }>("select is_active from farms where id = $1", [farm.id]);
+  if (!active.rows[0].is_active) throw new ValidationError(`${farm.name} is archived. Choose a farm in use to import into.`);
+  return farm;
+}
+
 // Paddocks ----------------------------------------------------------------------------------
 
 type PaddockRow = {
@@ -508,7 +516,7 @@ export async function previewBoundaryImport(
   farmIdInput: unknown,
   input: BoundaryImportInput,
 ): Promise<ImportPreview> {
-  const farm = await requireFarm(tx, farmIdInput);
+  const farm = await requireActiveFarm(tx, farmIdInput);
   return (await buildPreview(tx, farm.id, input)).preview;
 }
 
@@ -522,7 +530,7 @@ export async function importBoundaries(
   farmIdInput: unknown,
   input: BoundaryImportInput & { onDate?: unknown },
 ): Promise<{ preview: ImportPreview; paddocks: Paddock[] }> {
-  const farm = await requireFarm(tx, farmIdInput);
+  const farm = await requireActiveFarm(tx, farmIdInput);
   await tx.query("select 1 from farms where id = $1 for update", [farm.id]);
   const { preview, features } = await buildPreview(tx, farm.id, input);
   if (preview.alreadyImportedOn) throw new ConflictError(`This file was already imported on ${preview.alreadyImportedOn.slice(0, 10)}.`);

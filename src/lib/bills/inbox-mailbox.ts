@@ -11,7 +11,7 @@ import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/or
 import { coreQuery } from "@/lib/db/transactions";
 import { ConflictError, ForbiddenError, HttpError, NotFoundError, ValidationError } from "@/lib/errors";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/records/file-types";
-import { listAllOrganisations } from "@/lib/organisations/admin";
+import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { requireId, requireString } from "@/lib/validation";
@@ -327,7 +327,7 @@ export async function checkDueInboxMailboxes(): Promise<{ checked: number; faile
   try {
     // Mailbox passwords and tokens need the server's secret key.
     if (!secretsAvailable()) return { checked, failed };
-    for (const organisation of await listAllOrganisations()) {
+    for (const organisation of await listOrganisationsForJobs()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due: string[] = [];
       try {
