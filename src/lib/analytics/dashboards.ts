@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { NotFoundError, ValidationError } from "@/lib/errors";
+import { HttpError, NotFoundError, ValidationError } from "@/lib/errors";
 import { parseChartFormat, parseVisualDefaults, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { findTheme } from "@/lib/analytics/themes";
 import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
@@ -83,6 +83,8 @@ export type Dashboard = {
   tiles: Tile[];
   /** The organisation's theme the report uses, when it uses one (read with the report, so report viewers see it too). */
   customTheme?: ReportTheme | null;
+  /** Goes up by one with every save (decision 690); a save names the version it started from. */
+  version: number;
   createdByEmail: string;
   createdAt: string;
   updatedByEmail: string;
@@ -99,6 +101,7 @@ type Row = {
   description: string | null;
   settings: Partial<DashboardSettings>;
   tiles: Tile[];
+  version: number;
   created_by_email: string;
   created_at: Date;
   updated_by_email: string;
@@ -120,6 +123,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
       ...(row.settings.visualDefaults ? { visualDefaults: row.settings.visualDefaults } : {}),
     },
     tiles: row.tiles,
+    version: Number(row.version),
     createdByEmail: row.created_by_email,
     createdAt: new Date(row.created_at).toISOString(),
     updatedByEmail: row.updated_by_email,
@@ -127,7 +131,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
   };
 }
 
-const COLUMNS = "id::text, name, description, settings, tiles, created_by_email, created_at, updated_by_email, updated_at";
+const COLUMNS = "id::text, name, description, settings, tiles, version, created_by_email, created_at, updated_by_email, updated_at";
 
 /**
  * Who's looking: a report viewer (decision 360) sees only the dashboards
@@ -334,9 +338,39 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   return getDashboard(tx, id);
 }
 
+/**
+ * Someone else saved the report after this save's starting version
+ * (decision 690). The response carries who and when, so the editor can say
+ * so and offer Reload or Save a copy; nothing was changed.
+ */
+export class DashboardConflictError extends HttpError {
+  constructor(current: Dashboard) {
+    super(
+      409,
+      "dashboard_conflict",
+      `${current.updatedByEmail} saved this report after you started changing it. Your changes haven't been saved, and they're still here: reload to see theirs, or save yours as a copy.`,
+      { version: current.version, updatedByEmail: current.updatedByEmail, updatedAt: current.updatedAt },
+    );
+  }
+}
+
+function parseExpectedVersion(input: unknown): number | null {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== "number" || !Number.isInteger(input) || input < 1) throw new ValidationError("expectedVersion is a whole number.");
+  return input;
+}
+
+/**
+ * Saves changes to a report. With `expectedVersion` (the editor always sends
+ * it) the save only goes ahead if nobody has saved since that version; the
+ * check is in the update itself, so two saves at the same moment can't both
+ * win. Without it the save replaces what's there, as before.
+ */
 export async function updateDashboard(tx: OrgTx, id: string, input: Record<string, unknown>): Promise<Dashboard> {
   await requireAnalytics(tx);
+  const expectedVersion = parseExpectedVersion(input.expectedVersion);
   const current = await getDashboard(tx, id);
+  if (expectedVersion !== null && expectedVersion !== current.version) throw new DashboardConflictError(current);
   const tables = await listTables(tx.organisationId);
   const name = input.name === undefined ? current.name : parseName(input.name);
   const description = input.description === undefined ? current.description : parseDescription(input.description);
@@ -344,16 +378,18 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
   const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables);
-  await tx.query(
+  const updated = await tx.query(
     `update analytics_dashboards set name = $2, description = $3, settings = $4::jsonb, tiles = $5::jsonb,
-            updated_by_email = $6, updated_at = now() where id = $1`,
-    [current.id, name, description, JSON.stringify(settings), JSON.stringify(tiles), tx.actor.email],
+            updated_by_email = $6, updated_at = now(), version = version + 1 where id = $1 and version = $7`,
+    [current.id, name, description, JSON.stringify(settings), JSON.stringify(tiles), tx.actor.email, current.version],
   );
+  // Another save got in between reading and writing.
+  if (updated.rowCount === 0) throw new DashboardConflictError(await getDashboard(tx, current.id));
   await writeAuditEvent(tx, {
     eventType: "analytics.dashboard_updated",
     entityType: "analytics_dashboard",
     entityId: current.id,
-    details: { name, tiles: tiles.length },
+    details: { name, tiles: tiles.length, version: current.version + 1 },
   });
   return getDashboard(tx, current.id);
 }

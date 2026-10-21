@@ -344,3 +344,6 @@
 @media (max-width: 640px) { .themed { padding: 8px; } }
 /* The title's own block, so a centred or right-aligned title (#376) lines up across the card. */
 .tileHeader > div:first-child { flex: 1 1 auto; min-width: 0; }
+/* Whether the report's draft is saved (decision 690). */
+.saveState { margin: -4px 0 12px; color: var(--text-muted); font-size: var(--text-sm); }
+.conflictActions { margin-top: 8px; }

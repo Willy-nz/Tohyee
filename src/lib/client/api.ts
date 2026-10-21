@@ -2,11 +2,24 @@
 
 export class ApiError extends Error {
   readonly status: number;
+  /** The server's error code (e.g. "dashboard_conflict"), when it sent one. */
+  readonly code: string | null;
+  /** Extra facts the server sent with the error, when it sent any. */
+  readonly details: Record<string, unknown> | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null, details: Record<string, unknown> | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
+}
+
+function errorFields(payload: unknown): { code: string | null; details: Record<string, unknown> | null } {
+  if (!payload || typeof payload !== "object") return { code: null, details: null };
+  const record = payload as Record<string, unknown>;
+  const details = record.details && typeof record.details === "object" && !Array.isArray(record.details) ? (record.details as Record<string, unknown>) : null;
+  return { code: typeof record.code === "string" ? record.code : null, details };
 }
 
 type Options = {
@@ -45,7 +58,8 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
       payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
         ? payload.error
         : `Request failed (${response.status}).`;
-    throw new ApiError(message, response.status);
+    const { code, details } = errorFields(payload);
+    throw new ApiError(message, response.status, code, details);
   }
   return payload as T;
 }

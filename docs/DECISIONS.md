@@ -6722,3 +6722,42 @@ accounting example is marked not yet reviewed.
      (they're the figures, not the look). While building this, numbers of
      a thousand or more in tables were found showing four decimal places
      (1,203.0000); they now drop the trailing zeros like smaller numbers.
+
+### Safe report editing (#387; decisions 690-691)
+
+690. **A report save names the version it started from** (21 October
+     2026, #387; settled as the review proposes, at the lead's direction,
+     not yet confirmed by Jess). Every report has a version (tenant
+     migration 0178, `analytics_dashboards.version`, starting at 1 and
+     going up by one with each save). The editor sends `expectedVersion`
+     with each save; if anyone has saved since, the save is refused (409,
+     `dashboard_conflict`) with who saved and when, and nothing changes.
+     The check is part of the update (`where version = ...`), so two saves
+     at the same moment can't both win. The editor then offers **Save mine
+     as a copy** (a new report from the draft, not shared with anyone yet)
+     or **Reload the saved report** (asks first, because the draft is then
+     lost). There's no merging of two people's changes: like Power BI's
+     service, the second save is stopped rather than combined. A save
+     without `expectedVersion` (scripts, older tests) still replaces what's
+     there. Starting to edit reloads the report first, so a report left
+     open a while isn't a stale starting point.
+691. **Report edits are a draft, with Undo and Redo, until Save**
+     (21 October 2026, #387; Power BI Desktop's model). Until now some
+     changes (moving, duplicating, removing a tile, pasting a format,
+     Apply changes in the chart editor) saved the report at once and others
+     (name, dates, theme) waited for Save and view, so a failed save lost
+     the change and viewers saw half-finished edits. Now every change goes
+     into the draft and only Save or Save and view saves; this replaces
+     decision 671's "Paste format ... saves the report". A failed or
+     refused save keeps the draft. Undo and Redo keep up to 50 named steps
+     for this session in the browser only (typing in one box is one step);
+     they aren't version history, don't touch what's saved, and go when
+     the page is left. Discard changes is a step too, so it can be undone.
+     Unsaved changes are warned about on closing or reloading the tab and
+     on Tohyee's own links; the browser's Back button can't be held by the
+     app router, so it isn't covered. A separate Publish step (a saved
+     draft that viewers don't see until published) isn't built: it needs a
+     second stored definition per report, with pinned tiles, report emails
+     and the query route each choosing which one to read, and it isn't
+     needed to stop viewers seeing unfinished edits now that edits stay in
+     the browser until Save.
