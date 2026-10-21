@@ -1676,7 +1676,9 @@ Still to come for other jobs: a general transactional outbox.
 
 ## Backups and restore
 
-`src/lib/backups/`. Each database (every ready organisation, plus the core
+`src/lib/backups/`; the recovery design (keys, the recovery kit, the restore
+wizard, what's tested) is in `docs/BACKUP-RECOVERY.md` (#389, decisions
+730-739). Each database (every ready organisation, plus the core
 database) is dumped with `pg_dump --format=custom --no-owner --no-privileges`
 as the admin login, straight into an encrypted file:
 
@@ -1698,12 +1700,30 @@ as the admin login, straight into an encrypted file:
   `./backups`), one sub-folder per organisation and `_server` for the core
   database, files named `<id>_<YYYY-MM-DD_HHmmss>.tohyee-backup` in the
   business time zone. Saving the setting checks the server can write there.
-  It's written as `.partial` and renamed once checked.
+  A chosen folder that's gone when a backup runs isn't made again (it could
+  be an unplugged drive or a removed OneDrive folder): the backup fails with
+  a message saying what to do (`destination.ts`). A backup that clearly
+  won't fit in the free space fails before anything is written.
+  It's written as `.partial` and renamed once checked; its SHA-256 is kept
+  in `backup_runs.sha256` (core migration 0016).
 - **Checked** after writing: the whole file is decrypted (so the tag is
   verified) into `pg_restore --list`.
 - **Kept**: the newest of each of the last 14 days that have a backup and the
   first of each of the last 12 months (`retention.ts`); only files with that
-  organisation's prefix in its folder are ever deleted.
+  organisation's prefix in its folder whose header reads as that
+  organisation's are counted or deleted, so a damaged file never pushes out
+  a good one and is left for a person to look at.
+- **Checked again** (`checks.ts`): weekly (from the scheduler) and on request
+  ("Check backups now", `POST /api/admin/backups/check`, `backups verify`),
+  each database's newest file is read back, fully decrypted into
+  `pg_restore --list` and its SHA-256 compared with the recorded one; a
+  database with a good backup on record but no file fails. Each check is a
+  row in `backup_checks`; failures are emailed to server admins.
+- **Status** (`overview.ts`): the Backups page (`/server/backups`), the
+  server app and `backups status` show the latest backup and its age, the
+  last check, the space used and free, and off-site as "not verified" (a
+  file in a synced folder isn't proof of an upload), with what needs
+  attention and what isn't proven. No "safe" badge.
 - **Recorded**: every attempt is a row in `backup_runs` (core database),
   written by the code doing the work: started, ok or failed with the error,
   file and size.

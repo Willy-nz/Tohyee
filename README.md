@@ -431,8 +431,11 @@ links.
 and its own database of users and settings, into files in the backup folder:
 one sub-folder per organisation, encrypted with the server's
 `TOHYEE_SECRET_KEY`, each checked after it's written, keeping the last 14
-daily and 12 monthly backups. Point the folder at a OneDrive (or other
-cloud-synced) folder to get copies off the computer. Restoring makes a copy of
+daily and 12 monthly backups, and reading the newest ones back to check them
+again every week. Point the folder at a OneDrive (or other cloud-synced)
+folder to get copies off the computer; Tohyee can't see whether OneDrive
+uploaded them, so its status says off-site is "not verified", and a copy on a
+USB drive kept elsewhere now and then is still worth having. Restoring makes a copy of
 the organisation, with the same people, so the current books are never
 overwritten. It's all in the server settings under **Backups** (or
 `backups ...` in the command-line tool). **Keep a copy of the backup key

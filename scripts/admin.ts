@@ -30,7 +30,9 @@ import {
 } from "@/lib/organisations/admin";
 import { getRemoteAccess, getTohyeeAddress, releaseTohyeeAddress, updateRemoteAccess } from "@/lib/remote/settings";
 import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
+import { checkStoredBackups } from "@/lib/backups/checks";
 import { backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
+import { backupOverview } from "@/lib/backups/overview";
 import {
   backUpNow,
   backupStatus,
@@ -89,7 +91,9 @@ Email (for security alerts and two-step reset links)
                                             computer or its local network (off by default)
 
 Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere safe)
-  backups status [--json]                   each database's latest and last good backup
+  backups status [--json]                   each database's latest and last good backup, the checks, and
+                                            what isn't proven (such as off-site copies)
+  backups verify [--id ORGANISATION]        read the newest backup files back and check them again
   backups set [--on|--off] [--folder PATH] [--time 02:00]
                                             --folder "" goes back to the default folder
   backups run [--id ORGANISATION]           back up now (everything, or one organisation)
@@ -526,9 +530,15 @@ async function backups(command: string | undefined, args: string[]) {
     const settings = await getBackupSettings();
     const status = await backupStatus();
     const keyStatus = await backupKeyStatus();
-    show(args, { settings, keyStatus, status }, () => {
+    const { overview } = await backupOverview();
+    show(args, { settings, keyStatus, status, overview }, () => {
       console.log(`Nightly backups: ${settings.enabled ? `on, at ${settings.time} (${settings.timeZone})` : "off"}`);
-      console.log(`Folder: ${settings.folder}${settings.folder === settings.defaultFolder ? " (the default)" : ""}`);
+      console.log(`Folder: ${settings.folder}${settings.folder === settings.defaultFolder ? " (the default)" : ""}, ${overview.destination.description}`);
+      console.log(`Off-site: ${overview.offSite.note}`);
+      console.log(
+        `Files checked again: ${overview.integrity.failed > 0 ? `${overview.integrity.failed} FAILED` : overview.integrity.allCheckedAt ? `all, by ${when(overview.integrity.allCheckedAt)}` : "not all yet (backups verify)"}`,
+      );
+      console.log(`Space: ${overview.storage.fileCount} files, ${megabytes(overview.storage.usedBytes)}${overview.storage.freeBytes !== null ? `; ${megabytes(overview.storage.freeBytes)} free` : ""}`);
       if (!settings.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so backups can't be made (they're encrypted with it).");
       else if (!keyStatus.savedCopyCheckedAt) console.log("Nobody has checked a saved copy of the backup key yet. Without a copy, backups can't be opened if this server is lost: run backups key show.");
       console.log("");
@@ -538,9 +548,33 @@ async function backups(command: string | undefined, args: string[]) {
           "Last good backup": s.lastGood ? when(s.lastGood.finishedAt) : "never",
           Size: megabytes(s.lastGood?.sizeBytes ?? null),
           "Latest attempt": s.latest ? `${s.latest.status}${s.latest.status === "failed" ? `: ${s.latest.error}` : ""}` : "",
+          "Checked again": (() => {
+            const check = overview.targets.find((t) => t.organisationId === s.organisationId)?.lastCheck;
+            return check ? `${check.ok ? "ok" : `FAILED: ${check.error}`} ${when(check.at)}` : "";
+          })(),
         })),
       );
+      if (overview.attention.length > 0) {
+        console.log("");
+        console.log("Needs attention:");
+        for (const item of overview.attention) console.log(`- ${item.text}`);
+      }
+      if (overview.notProven.length > 0) {
+        console.log("");
+        console.log("Not proven yet:");
+        for (const item of overview.notProven) console.log(`- ${item}`);
+      }
     });
+    return;
+  }
+  if (command === "verify") {
+    const checks = await checkStoredBackups({ requestedByEmail: "cli", organisationId: option(args, "id") ?? undefined });
+    if (checks.length === 0) console.log("There are no backups to check yet.");
+    for (const check of checks) {
+      const name = check.organisationId ?? "server";
+      console.log(check.status === "ok" ? `${name}: OK, ${check.fileName} is whole and unchanged` : `${name}: FAILED: ${check.error}`);
+    }
+    if (checks.some((check) => check.status !== "ok")) process.exitCode = 1;
     return;
   }
   if (command === "set") {

@@ -43,7 +43,7 @@ export async function backupKeyStatus(): Promise<BackupKeyStatus> {
 
 /** Shown to server admins on every page until a saved copy of the key has been checked. */
 export const BACKUP_KEY_REMINDER =
-  "Save a copy of the backup key. Backups can only be opened with it, so if this server is lost without a copy, so are the backups. On the server, open Backups in the Tohyee server app (or run the command-line tool's backups key show), save the key somewhere safe away from the backups, such as a password manager, then check your saved copy there.";
+  "Save a copy of the backup key. Backups can only be opened with it, so if this server is lost without a copy, so are the backups. On the server, open Backups in the Tohyee server app or in Server settings (or run the command-line tool's backups key show), save the key somewhere safe away from the backups, such as a password manager, then check your saved copy there.";
 
 /** True when server admins should be reminded to save (and check) a copy of the key. */
 export async function backupKeyNeedsSaving(): Promise<boolean> {
