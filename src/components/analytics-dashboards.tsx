@@ -1470,6 +1470,16 @@ function FilterBar({
  * report and tile (what report viewers can do). A tile added or changed in
  * the draft isn't saved yet, so its question is sent as it is.
  */
+/** A tile as drilled: grouped by the level shown, so its chart (and projection) knows what it's showing. */
+function drilledTile(tile: Tile, drill: DrillState | undefined): Tile {
+  if (!drill || !tile.query) return tile;
+  try {
+    return { ...tile, query: { ...tile.query, groupBy: drillView(tile.query, tile.drill, drill, tile.title).groupBy } };
+  } catch {
+    return tile;
+  }
+}
+
 /** What a reader has done to a tile (decisions 754-756): its view for the server, a click handler and the group to highlight. */
 type TileInteraction = {
   view?: TileView;
@@ -1498,14 +1508,7 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilte
   const filters = !asSaved && tile.dates ? { ...reportFilters, ...effectiveDates(tile.dates, reportFilters, todayInBrowser(), yearEnd) } as Filters : reportFilters;
   const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, !asSaved && tile.visual === "table" && tile.format?.table?.totals === true, view || draftWhere?.length ? { view, tiles: viewTiles, drill: tile.drill, where: draftWhere } : undefined);
   // Drilled, the chart shows another level: say so to the chart (its projection works on what's shown).
-  const shownTile = useMemo(() => {
-    if (!view?.drill || !tile.query) return tile;
-    try {
-      return { ...tile, query: { ...tile.query, groupBy: drillView(tile.query, tile.drill, view.drill, tile.title).groupBy } };
-    } catch {
-      return tile;
-    }
-  }, [tile, view?.drill]);
+  const shownTile = drilledTile(tile, view?.drill);
   const { current } = useWorkspace();
   const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
   const [drillError, setDrillError] = useState<string | null>(null);
