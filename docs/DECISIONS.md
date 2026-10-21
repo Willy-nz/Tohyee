@@ -6564,3 +6564,161 @@ accounting example is marked not yet reviewed.
      accounting (decision 445: wholly owned members only). Being in a group
      isn't a tax consolidation election or a GST group: the workspace and
      the group's settings say so, and no tax figure is combined.
+
+### Report themes, chart type defaults and the format painter (#376 phase 1; decisions 668-671)
+
+668. **Tohyee's look stays the default; Analytics reports can choose
+     another** (20 October 2026, #376; settled as the issue proposes, at
+     the lead's direction, not yet confirmed by Jess). Decision 599 says
+     one chart look for the whole of Tohyee, and Power BI-style formatting
+     means people change that look. So: the Tohyee theme is the default
+     and is what every chart outside Analytics uses (Home, pinned tiles,
+     cash flow, farm pages). An Analytics report can choose another
+     built-in theme or one of its organisation's own, and later phases
+     add per-visual overrides on top. A theme is applied as CSS variables
+     (`--chart-*` and `--report-*`) on the report's tiles and the chart
+     editor's preview only, so the rest of the page keeps Tohyee's look,
+     and a report on the Tohyee theme gets no variables at all (it looks
+     exactly as before). Any hex colour is allowed. Every theme goes
+     through the same checks as decision 599, ported to TypeScript
+     (`src/lib/charts/colour-check.ts`, same thresholds and colour-vision
+     simulation; it reproduces 599's figures): lightness band, chroma,
+     colour-blind and normal-vision distance between neighbouring colours,
+     contrast of each colour and of the text against the card. Failing a
+     check warns, it never blocks saving. Light and dark still follow the
+     computer and the user menu: every theme has both, and a theme given in
+     light only gets dark worked out (each colour keeps its hue at a
+     dark-mode lightness; surfaces and text from Tohyee's dark ones), then
+     checked like any other.
+669. **Six built-in themes** (20 October 2026). Tohyee (the default),
+     Harbour (sea blues first, system font, soft shadow, rounder cards),
+     Kōwhai (gold first, Georgia, warm paper card), Bush (greens and earth),
+     Bright (the data-visualisation reference palette) and Strong contrast
+     (darker colours, black or white text, 2px borders, 13px labels). Each
+     colour order was chosen by trying every order with its first colour
+     fixed and keeping the one with the most separation that passed every
+     check in both modes. Worst neighbouring pair, colour-blind / normal
+     vision (target 8 / floor 15): Tohyee 15.1/22.7 light, 12.9/20.4 dark;
+     Harbour 10.3/23.6, 9.0/19.2; Kōwhai 12.4/26.5, 11.8/23.3; Bush
+     13.6/19.5, 9.1/17.1; Bright 9.1/19.6, 8.4/19.3; Strong contrast
+     9.9/23.8, 8.7/24.4. Under 3:1 against the light card, as with
+     Tohyee's own yellow: Harbour's and Bush's yellows and Bright's aqua,
+     yellow and pink (every chart has its table for screen readers and
+     tooltips). A unit test keeps them passing.
+670. **An organisation's own themes** (20 October 2026; tenant migration
+     0176, `analytics_themes`). In a report's edit mode, Theme opens the
+     theme list and "New theme from <current>" opens the editor: up to 12
+     series colours (any hex, for light and dark, with "Work out dark from
+     light"), page and card backgrounds, text and muted text, a font from a
+     safe list (Tohyee's Inter, system, Arial, Verdana, Trebuchet, Georgia),
+     title, label and axis text sizes, and the card's corner radius, border
+     width, shadow and padding, with a live preview in light or dark and
+     the colour checks. Saved themes belong to the organisation (bookkeepers
+     and up save, change or remove them, as for reports; viewers can list
+     them) and are checked by `parseReportTheme` (unknown settings dropped,
+     wrong values refused) before they're stored or put on a page. Changing
+     one changes every report using it. One a report uses can't be removed
+     (choose another theme for those reports first), so a report never
+     loses its look by surprise. Themes export as a JSON file and import
+     from one (the same checks; an import opens in the editor to save).
+     The report's choice is kept in its settings (`theme`: a built-in id or
+     `custom:<id>`; nothing for Tohyee) and read with the report, so report
+     viewers see it too.
+671. **Chart type defaults and the format painter** (20 October 2026;
+     Power BI's "set as default for this visual type in this report" and
+     its format painter). In a chart's Format section, "Set as default for
+     columns in this report" keeps what the chart looks like as the
+     report's default for that chart type (in the report's settings,
+     `visualDefaults`, checked like a tile's format); every chart of that
+     type in the report draws with it, and a tile's own settings go over it
+     one by one. Reset to default then means the report's default. Pinned
+     tiles use the defaults too (but not the theme, decision 668). In edit
+     mode each chart has Copy format; the other charts then show Paste
+     format, which gives them the same format and saves the report, until
+     Done pasting. Neither copies a key figure's target: that's a number
+     about the data, not how it looks.
+672. **A colour chosen on a chart gets a dark version** (20 October 2026,
+     #376). Power BI and Looker Studio have no dark mode, so a colour typed
+     on a chart is one hex. Tohyee follows the computer's light or dark, so
+     on a dark card each chosen colour is drawn as a dark version worked out
+     the way a theme's dark colours are (decision 668): a mark (a value's or
+     group's colour, a reference line, a border) keeps its hue at a
+     dark-mode lightness unless it already reads there; a background (the
+     card, the plot area, behind the title, gridlines) becomes a dark tint
+     of its hue; text that would be under 4.5:1 on the dark card is
+     lightened. Light mode shows the colour exactly as chosen. Cards use
+     CSS `light-dark()` with both. The colour checks warn about a chosen
+     colour under 3:1 against the card, or too close to its neighbour for
+     colour-blind or normal vision, in light (as chosen) and dark (as drawn).
+673. **Formatting each chart** (20 October 2026, #376 phase 1; Power BI's
+     format pane and Looker Studio's style tab as the reference). New
+     settings, all optional and checked by `parseChartFormat` (unknown
+     dropped, wrong values refused, so saved charts are unchanged): the
+     title's size, weight, italic, colour, alignment and a colour behind it,
+     and the subtitle's; the card's colour and how solid it is, border
+     colour and width, corners, shadow and padding; any colour for a value
+     (over the named colour; Reset goes back to the theme) and for chosen
+     groups (pie, donut, or columns and bars with one value); data labels'
+     size, colour and their own number format, which labels show (all,
+     only where they fit, first and last), and a pie's name, value and
+     percentage in any mix; each axis shown or hidden, text size, colour,
+     angle and reversed, the value axis's own number format and step, the
+     group axis's label interval and, for dates, a from and to date; the
+     legend in any side or corner with its own size and a title; gridlines
+     solid, dashed or dotted in a chosen colour; a plot area colour;
+     tooltips off, a total of the values (added exactly), and each value
+     shown, left out of the tooltip or only in it (then it isn't drawn, so
+     it doesn't stretch the axis); up to 8 reference lines (a fixed value,
+     a target, the average, median, lowest, highest or a percentile of a
+     value, or a shaded band), labelled; a straight trend line per value
+     and a forecast that carries it on for 1 to 12 groups (a least-squares
+     line on the drawn figures, shown dashed, not a forecasting model);
+     column thickness, the gap between groups and square or rounded ends;
+     and each line's width, style, step and dots. Reference lines,
+     percentiles (interpolated, as a spreadsheet's PERCENTILE.INC) and trends
+     are worked out from display numbers: they're positions on a chart,
+     never figures in the books.
+674. **Key figure formatting** (20 October 2026, #376 phase 1; Power BI's
+     card and new card visual, Looker Studio's scorecard). The number can be
+     small, medium, large, extra large or an exact size (16-96 pixels; it
+     shrinks to fit a narrow card or phone), any colour, left, centred or
+     right, bold or not, with the value's name above or below it. Its
+     colour can instead come from rules on its value (up to six, "at least",
+     "more than", "at most", "less than" or "exactly" a number, the first
+     match wins), compared exactly in decimals like the change itself, or
+     from the comparison: green when it's good news and red when not, with
+     the arrow and Up or Down still there so colour is never the only
+     sign. An arrow or a dot can sit by the number. The trend underneath
+     can be a line, an area or columns in any colour. "Every value as its
+     own number" shows all the tile's values side by side, each named
+     (Power BI's multi-row card); a value's previous period or last year
+     stays with the first value's change. As with charts, a chosen colour
+     gets a dark version in dark mode (decision 672). The format painter
+     and chart type defaults copy all of this except the target.
+675. **Conditional formatting and table styles** (20 October 2026, #376
+     phase 1; Power BI's conditional formatting and table/matrix style, as
+     the issue says). In a table or pivot, each value's cells can have
+     their background or text coloured by a two- or three-colour scale
+     (from the column's lowest to highest; the middle colour sits halfway),
+     by rules (up to six, compared exactly in decimals, first match wins)
+     or from a field holding colours (the group column: #rrggbb or a few
+     colour names, anything else left plain). Text on a coloured cell is
+     picked to read on it (white or near-black) unless a text colour was
+     chosen. Data bars grow from zero across the column's range; icons mark
+     the highest, middle and lowest thirds with a different shape as well
+     as colour (arrows, or circle, diamond and square), with the words for
+     screen readers. In a pivot only the detail rows are coloured, and the
+     range comes from them, so subtotals don't flatten the scale. Charts can
+     have colour rules too (columns and dots), e.g. red below a target,
+     for every value or one. Table and pivot style: header background and
+     text colours, banded rows and their colour, gridlines (rows and
+     columns, rows only, none), text size, narrowest column width, wrapping
+     long text, a totals row for tables (totals and counts added exactly;
+     averages, smallest, largest, distinct counts and calculated values left
+     blank, because adding them up would be wrong; "Total of the rows
+     shown" when the table was cut at 5,000 rows), the pivot's grand total
+     on or off, totals bold or shaded, and pivot subtotals per row field
+     level. Colours follow decision 672 in dark mode. Exports are unchanged
+     (they're the figures, not the look). While building this, numbers of
+     a thousand or more in tables were found showing four decimal places
+     (1,203.0000); they now drop the trailing zeros like smaller numbers.

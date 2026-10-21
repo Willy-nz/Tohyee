@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { parseChartFormat, type ChartFormat } from "@/lib/analytics/chart-format";
+import { parseChartFormat, parseVisualDefaults, type ChartFormat, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { findTheme } from "@/lib/analytics/themes";
+import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/report-themes";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import {
@@ -60,6 +62,10 @@ export type DashboardSettings = {
   /** Dates that move with today, e.g. "this financial year" (decision 577); `from` and `to` are then worked out when it's read. */
   preset: DatePreset | null;
   slicers: Slicer[];
+  /** The report's theme (#376, decision 668): a built-in theme's id or "custom:<id>"; left out, Tohyee's. */
+  theme?: string;
+  /** A default format per chart type for this report (Power BI's visual defaults); a tile's own settings win. */
+  visualDefaults?: VisualDefaults;
 };
 
 /** Today and the organisation's balance date, for dates that move (decision 577). */
@@ -75,6 +81,8 @@ export type Dashboard = {
   description: string | null;
   settings: DashboardSettings;
   tiles: Tile[];
+  /** The organisation's theme the report uses, when it uses one (read with the report, so report viewers see it too). */
+  customTheme?: ReportTheme | null;
   createdByEmail: string;
   createdAt: string;
   updatedByEmail: string;
@@ -104,7 +112,13 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
     id: row.id,
     name: row.name,
     description: row.description,
-    settings: { ...range, preset, slicers: row.settings.slicers ?? [] },
+    settings: {
+      ...range,
+      preset,
+      slicers: row.settings.slicers ?? [],
+      ...(row.settings.theme ? { theme: row.settings.theme } : {}),
+      ...(row.settings.visualDefaults ? { visualDefaults: row.settings.visualDefaults } : {}),
+    },
     tiles: row.tiles,
     createdByEmail: row.created_by_email,
     createdAt: new Date(row.created_at).toISOString(),
@@ -145,7 +159,9 @@ export async function getDashboard(tx: OrgTx, id: string, reader: DashboardReade
     const shared = await tx.query("select 1 from analytics_dashboard_shares where dashboard_id = $1 and user_id = $2", [dashboardId, reader.userId ?? ""]);
     if (shared.rows.length === 0) throw new NotFoundError("That dashboard wasn't found.");
   }
-  return toDashboard(result.rows[0], await dateContext(tx));
+  const dashboard = toDashboard(result.rows[0], await dateContext(tx));
+  const custom = customThemeId(dashboard.settings.theme);
+  return custom ? { ...dashboard, customTheme: await findTheme(tx, custom) } : dashboard;
 }
 
 /** The report viewers a dashboard is shared with (user ids). */
@@ -218,7 +234,22 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     throw new ValidationError("Choose dates from the list.");
   }
   const preset = isDatePreset(raw.preset) ? raw.preset : null;
-  return { from: date(raw.from, "From"), to: date(raw.to, "To"), preset, slicers };
+  const theme = parseThemeChoice(raw.theme);
+  const visualDefaults = parseVisualDefaults(raw.visualDefaults);
+  return {
+    from: date(raw.from, "From"),
+    to: date(raw.to, "To"),
+    preset,
+    slicers,
+    ...(theme ? { theme } : {}),
+    ...(visualDefaults ? { visualDefaults } : {}),
+  };
+}
+
+/** A report can only use one of the organisation's themes that exists. */
+async function checkTheme(tx: OrgTx, settings: DashboardSettings): Promise<void> {
+  const custom = customThemeId(settings.theme);
+  if (custom && !(await findTheme(tx, custom))) throw new ValidationError("That theme wasn't found. Choose another.");
 }
 
 function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
@@ -285,13 +316,15 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   await requireAnalytics(tx);
   const tables = await listTables(tx.organisationId);
   const name = parseName(input.name);
+  const settings = parseSettings(input.settings, tables);
+  await checkTheme(tx, settings);
   const result = await tx.query<{ id: string }>(
     `insert into analytics_dashboards (name, description, settings, tiles, created_by_email, updated_by_email)
      values ($1, $2, $3::jsonb, $4::jsonb, $5, $5) returning id::text`,
     [
       name,
       parseDescription(input.description),
-      JSON.stringify(parseSettings(input.settings, tables)),
+      JSON.stringify(settings),
       JSON.stringify(parseTiles(input.tiles ?? [], tables)),
       tx.actor.email,
     ],
@@ -308,6 +341,7 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const name = input.name === undefined ? current.name : parseName(input.name);
   const description = input.description === undefined ? current.description : parseDescription(input.description);
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings, tables);
+  if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
   const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables);
   await tx.query(

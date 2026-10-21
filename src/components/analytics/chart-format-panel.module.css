@@ -105,3 +105,71 @@
   color: var(--danger-text);
   font-size: var(--text-sm);
 }
+
+.defaults {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.colourInput {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.colourLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.colourControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.colourControls > input[type="color"] {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.hexBox {
+  flex: 1;
+  min-width: 0;
+  max-width: 120px;
+}
+
+.inner {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.inner > summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+}

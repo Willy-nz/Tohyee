@@ -2088,6 +2088,13 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text** adds a heading with notes to split a
   dashboard into sections. Up to 40 tiles.
+- **Analytics: key figure formatting** (#376 phase 1, decision 674). Under
+  Key figure › Number style: the number's size (small to extra large, or
+  exact pixels), colour, alignment, weight and the value's name above or
+  below; colour by rules on the value (e.g. green at 1,000 or more) or by
+  the comparison (green for good news, red if not); an arrow or dot by the
+  number; the trend as a line, area or columns in any colour; and every
+  value as its own number in one card.
 - **Analytics: richer key figures** (#334, decisions 594-595). A key
   figure can compare with the previous period (the same length before the
   dashboard's dates), the same period last year or a target, showing the
@@ -2095,6 +2102,45 @@ that something happened.
   or red ("Down is good" for costs). An optional trend by month sits under
   the number, and the number has its own format with words before or
   after it. Pinned key figures show the same.
+- **Analytics: conditional formatting and table styles** (#376 phase 1,
+  decision 675). Tables and pivots can colour each value's cells (background
+  or text) by a two- or three-colour scale, rules (e.g. red below zero) or a
+  field holding colours, and show data bars and icons (arrows or shapes).
+  Charts can colour columns and dots by rules, e.g. red below a target.
+  Table and pivot style: header colours, banded rows, gridlines, text size,
+  column width, word wrap, a totals row (added exactly) or the grand total,
+  totals bold or shaded, and subtotals per level.
+- **Analytics: report themes, chart type defaults and the format painter**
+  (#376 phase 1, decisions 668-671, tenant migration 0176). In a report's
+  edit mode, **Theme** chooses the report's look: Tohyee (the default, and
+  what every chart outside Analytics keeps), Harbour, Kōwhai, Bush, Bright
+  or Strong contrast (each checked for colour-blind readers in light and
+  dark), or one of the organisation's own. The theme editor sets up to 12
+  chart colours (any hex) for light and dark (or works dark out from
+  light), page and card backgrounds, text colours, a font from a safe
+  list, text sizes, and the cards' corners, border, shadow and padding,
+  with a live preview and colour checks that warn but don't block. Themes
+  are saved for the whole organisation, export to a JSON file and import
+  from one. "Set as default for columns in this report" (any chart type)
+  makes every chart of that type in the report start from that look, and
+  **Copy format** / **Paste format** copies a chart's look to others.
+- **Analytics: formatting each chart** (#376 phase 1, decisions 672-673).
+  The Format section now also has: title and subtitle styling (size,
+  weight, italic, colour, alignment, a colour behind the title); the card's
+  colour and transparency, border colour and width, corners, shadow and
+  padding; any colour for a value or a group, with Reset to the theme;
+  data label size, colour, own number format and which labels show (a pie
+  can show its name, value and percentage in any mix); axes shown or
+  hidden, text size, colour, angle, reversed, the value axis's own number
+  format and step, label interval and a date range for the group axis; the
+  legend in any side or corner, with a size and title; dashed or dotted
+  gridlines in a chosen colour and a plot area colour; tooltips off, with a
+  total, and values left out of the tooltip or shown only there; reference
+  lines (a value, target, average, median, lowest, highest, percentile or a
+  shaded band); a trend line and simple forecast per value; column
+  thickness, gaps and square ends; each line's width, style, step and dots.
+  Chosen colours get a dark version in dark mode, and the editor warns
+  when one fails the colour checks.
 - **Analytics: chart formatting and a second axis** (#331, #333,
   decisions 590-593). The chart panel has a Format section with a live
   preview and Reset to default: colour sets (Tohyee, Tohyee blues, Orange

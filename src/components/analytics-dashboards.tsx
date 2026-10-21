@@ -10,14 +10,20 @@ import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueRules } from "@/components/analytics/saved-values";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
+import { ThemePanel } from "@/components/analytics/theme-panel";
+import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
+import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/conditional";
 import { TileFilters } from "@/components/analytics/tile-filters";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import type { ChartFormat } from "@/lib/analytics/chart-format";
-import { tileChartSpec, tileValueNames } from "@/lib/analytics/tile-chart";
+import { mergeFormats, pasteFormat, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
+import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
+import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
+import type { ReportTheme } from "@/lib/charts/report-themes";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
 import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
@@ -248,6 +254,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [draft, setDraft] = useState<Dashboard | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
   const [sharing, setSharing] = useState(false);
+  const [theming, setTheming] = useState(false);
+  // The format painter (#376): a tile's format, copied to paste on others.
+  const [copied, setCopied] = useState<{ from: string; title: string; format: ChartFormat | undefined } | null>(null);
   const [editingTile, setEditingTile] = useState<Tile | "new" | "new-text" | null>(null);
   // Drag and drop (the arrows do the same from the keyboard).
   const [dragging, setDragging] = useState<number | null>(null);
@@ -291,6 +300,30 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     }
   }
 
+  /** Pastes the copied format on a tile (its key figure target stays its own). */
+  function paste(tile: Tile) {
+    if (!dashboard || !copied) return;
+    const format = pasteFormat(copied.format, tile.format);
+    const tiles = dashboard.tiles.map((entry) => {
+      if (entry.id !== tile.id) return entry;
+      const next = { ...entry };
+      delete next.format;
+      return format ? { ...next, format } : next;
+    });
+    void save({ ...dashboard, tiles });
+  }
+
+  /** Keeps (or with undefined, clears) the report's default look for a chart type. */
+  function setVisualDefault(visual: DefaultableVisual, format: ChartFormat | undefined) {
+    if (!dashboard) return;
+    const defaults: VisualDefaults = { ...dashboard.settings.visualDefaults };
+    if (format) defaults[visual] = format;
+    else delete defaults[visual];
+    const settings = { ...dashboard.settings };
+    delete settings.visualDefaults;
+    setDraft({ ...dashboard, settings: Object.keys(defaults).length ? { ...settings, visualDefaults: defaults } : settings });
+  }
+
   function moveTile(index: number, to: number) {
     if (!dashboard) return;
     const tiles = moveTileTo(dashboard.tiles, index, to);
@@ -301,9 +334,13 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
   const textTile = editingTile === "new-text" ? "new" : editingTile && editingTile !== "new" && editingTile.visual === "text" ? editingTile : null;
   const chartTile = textTile || editingTile === "new-text" ? null : editingTile;
+  // The report's theme (decision 668) is scoped to its tiles and the editor's preview.
+  const theme = reportTheme(dashboard.settings.theme, dashboard.customTheme);
+  const themeScope = `report-theme-${dashboard.id}`;
+  const themeClass = isTohyee(theme) ? themeScope : `${themeScope} ${styles.themed}`;
 
   return (
-    <>
+    <ReportThemeStyle theme={theme} scope={themeScope}>
       <div className={styles.header}>
         <div>
           {editing ? (
@@ -331,6 +368,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
               </Button>
               <Button variant="secondary" onClick={() => setEditingTile("new-text")} disabled={busy || Boolean(editingTile)}>
                 + Add text
+              </Button>
+              <Button variant="secondary" aria-expanded={theming} onClick={() => setTheming(!theming)} disabled={busy}>
+                Theme: {theme.name}
               </Button>
               <Button
                 onClick={async () => {
@@ -372,6 +412,27 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
+      {theming && editing && canEdit ? (
+        <ThemePanel
+          organisationId={organisationId}
+          choice={dashboard.settings.theme}
+          current={theme}
+          onClose={() => setTheming(false)}
+          onChoose={(choice, chosen) => {
+            const settings = { ...dashboard.settings };
+            delete settings.theme;
+            setDraft({ ...dashboard, settings: choice ? { ...settings, theme: choice } : settings, customTheme: choice?.startsWith("custom:") ? chosen : null });
+          }}
+        />
+      ) : null}
+
+      {copied && editing ? (
+        <Notice tone="info">
+          Format copied from {copied.title}. Choose <strong>Paste format</strong> on the tiles to give them the same look.{" "}
+          <Button size="small" variant="secondary" onClick={() => setCopied(null)}>Done pasting</Button>
+        </Notice>
+      ) : null}
+
       {canEdit && textTile ? (
         <TextTileEditor
           key={textTile === "new" ? "new-text" : textTile.id}
@@ -392,6 +453,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           tables={tables.data?.tables ?? []}
           tile={chartTile === "new" ? null : chartTile}
           filters={shown}
+          defaults={dashboard.settings.visualDefaults}
+          themeClass={themeClass}
+          theme={theme}
+          onSetDefault={setVisualDefault}
           onCancel={() => setEditingTile(null)}
           onSave={async (tile) => {
             const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
@@ -404,11 +469,16 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       {!editingTile && (dashboard.tiles.length === 0 ? (
         <Empty>{canEdit ? editing ? "Start your report with Add chart. Choose a source, a visual and the fields to show." : "This report is empty. Choose Edit to add a chart." : "No tiles yet."}</Empty>
       ) : (
-        <div className={styles.grid}>
-          {dashboard.tiles.map((tile, index) => (
+        <div className={`${styles.grid} ${themeClass}`}>
+          {dashboard.tiles.map((tile, index) => {
+            // Drawn with the report's default for its chart type under its own settings (#376).
+            const shownTile = tileWithDefaults(tile, dashboard.settings.visualDefaults);
+            const look = cardStyle(shownTile.format);
+            return (
             <section
               key={tile.id}
-              className={`${tileClass(tile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
+              style={look.card}
+              className={`${tileClass(shownTile)} ${dropAt === index && dragging !== null && dragging !== index ? styles.dropTarget : ""} ${dragging === index ? styles.dragging : ""}`}
               draggable={editing && !busy}
               onDragStart={(event) => {
                 setDragging(index);
@@ -434,8 +504,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             >
               <div className={styles.tileHeader}>
                 <div>
-                  <h2 className={tile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle}>{tile.title}</h2>
-                  {tile.format?.card?.subtitle ? <p className={styles.tileSubtitle}>{tile.format.card.subtitle}</p> : null}
+                  <h2 className={shownTile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle} style={shownTile.format?.card?.showTitle === false ? undefined : look.title}>{tile.title}</h2>
+                  {shownTile.format?.card?.subtitle ? <p className={styles.tileSubtitle} style={look.subtitle}>{shownTile.format.card.subtitle}</p> : null}
                 </div>
                 {editing ? (
                   <div className={styles.tileTools}>
@@ -455,6 +525,22 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     <Button size="small" variant="secondary" aria-label={`Edit ${tile.title}`} onClick={() => setEditingTile(tile)} disabled={busy}>
                       Edit
                     </Button>
+                    {tile.visual === "text" ? null : copied && copied.from !== tile.id ? (
+                      <Button size="small" variant="secondary" aria-label={`Paste format on ${tile.title}`} onClick={() => paste(tile)} disabled={busy}>
+                        Paste format
+                      </Button>
+                    ) : (
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        aria-label={`Copy the format of ${tile.title}`}
+                        aria-pressed={copied?.from === tile.id}
+                        onClick={() => setCopied(copied?.from === tile.id ? null : { from: tile.id, title: tile.title, format: tile.format })}
+                        disabled={busy}
+                      >
+                        {copied?.from === tile.id ? "Copied" : "Copy format"}
+                      </Button>
+                    )}
                     <Button
                       size="small"
                       variant="secondary"
@@ -488,16 +574,17 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} />
               )}
             </section>
-          ))}
+            );
+          })}
         </div>
       ))}
-    </>
+    </ReportThemeStyle>
   );
 }
 
@@ -881,7 +968,7 @@ function TileResult({
   onDrill,
   exportFor,
 }: {
-  tile: Pick<Tile, "title" | "visual" | "format" | "height">;
+  tile: Pick<Tile, "title" | "visual" | "format" | "height"> & { query?: TileQuery | null };
   result: QueryResult;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   exportFor?: PivotExportFor;
@@ -890,7 +977,7 @@ function TileResult({
   const spec = useMemo(() => tileChartSpec(tile, measures), [tile, measures]);
 
   if (tile.visual === "pivot") {
-    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
+    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} format={tile.format} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
   }
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   // Yes/No groups are named Yes and No on the chart too (decision 577).
@@ -899,9 +986,14 @@ function TileResult({
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(named, measures[0]?.key ?? "m0") : named;
   if (tile.visual === "kpi") return <KeyFigureView result={result} format={tile.format} />;
   if (!spec) {
+    // Table styles and conditional formatting (#376), by each value's position among the tile's values.
+    const look = tableLook(tile.format?.table);
+    const ranges = measures.map((column) => columnRange(result.rows.map((row) => row[column.key])));
+    const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
+    const totals = tile.format?.table?.totals ? tableTotals(result.columns, result.rows, aggregates) : null;
     return (
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table className={`${ui.table} ${look.className}`} style={look.style}>
           <thead>
             <tr>
               {result.columns.map((column) => (
@@ -914,14 +1006,30 @@ function TileResult({
           <tbody>
             {result.rows.map((row, index) => (
               <tr key={index}>
-                {result.columns.map((column) => (
-                  <td key={column.key} className={column.role === "measure" ? ui.num : undefined}>
-                    {showValue(row[column.key], column)}
-                  </td>
-                ))}
+                {result.columns.map((column) => {
+                  const valueIndex = measures.indexOf(column);
+                  return valueIndex < 0 ? (
+                    <td key={column.key}>{showValue(row[column.key], column)}</td>
+                  ) : (
+                    <FormattedCell key={column.key} className={ui.num} format={tile.format} valueIndex={valueIndex} value={row[column.key] ?? null} range={ranges[valueIndex]} field={row.category ?? null}>
+                      {showValue(row[column.key], column)}
+                    </FormattedCell>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
+          {totals ? (
+            <tfoot>
+              <tr className={totalRowClass(tile.format?.table, styles.pivotTotal)}>
+                {result.columns.map((column, index) => (
+                  <th key={column.key} scope={index === 0 ? "row" : undefined} className={column.role === "measure" ? ui.num : undefined}>
+                    {index === 0 ? (result.truncated ? "Total of the rows shown" : "Total") : totals[column.key] === null ? "" : showValue(totals[column.key], column)}
+                  </th>
+                ))}
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
         {result.truncated ? <p className={ui.muted}>Showing the first 5,000 rows.</p> : null}
       </div>
@@ -972,9 +1080,12 @@ export function PivotTable({
   pivot,
   onDrill,
   exportFor,
+  format,
 }: {
   title: string;
   pivot: PivotData;
+  /** Table style and conditional formatting (#376). */
+  format?: ChartFormat;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   /** Where the export comes from; without it (e.g. a preview) there's no export. */
   exportFor?: PivotExportFor;
@@ -1023,6 +1134,12 @@ export function PivotTable({
       `Rows · ${drillTitle}`,
     );
   };
+  const look = tableLook(format?.table);
+  // A value's position among the tile's values, for its conditional formatting.
+  const measureKeys = [...new Set(pivot.columns.map((column) => column.measure.key))];
+  const detailRows = pivot.rows.filter((row) => row.kind === "detail");
+  const ranges = new Map(pivot.columns.map((column) => [column.key, columnRange(detailRows.map((row) => row.cells[column.key] ?? null))]));
+  const shownRows = visiblePivotRows(pivot.rows, format?.table);
   return (
     <div className={styles.pivot}>
       {exportFor ? (
@@ -1033,7 +1150,7 @@ export function PivotTable({
       ) : null}
       {exportError ? <Notice tone="error">{exportError}</Notice> : null}
       <div className={`${ui.tableWrap} ${styles.pivotWrap}`}>
-        <table className={ui.table} aria-label={`${title} pivot table`}>
+        <table className={`${ui.table} ${look.className}`} style={look.style} aria-label={`${title} pivot table`}>
           <caption>{title}</caption>
           <thead>
             {pivot.columnField ? (
@@ -1059,13 +1176,21 @@ export function PivotTable({
             )}
           </thead>
           <tbody>
-            {pivot.rows.map((row) => (
-              <tr key={row.key} className={row.kind !== "detail" ? styles.pivotTotal : undefined}>
+            {shownRows.map((row) => (
+              <tr key={row.key} className={row.kind !== "detail" ? totalRowClass(format?.table, styles.pivotTotal) : undefined}>
                 {pivot.rowFields.map((field, index) => (
                   <th key={field.key} scope="row">{pivotRowLabel(row, index, field)}</th>
                 ))}
                 {pivot.columns.map((column) => (
-                  <td key={column.key} className={ui.num}>
+                  <FormattedCell
+                    key={column.key}
+                    className={ui.num}
+                    format={row.kind === "detail" ? format : undefined}
+                    valueIndex={measureKeys.indexOf(column.measure.key)}
+                    value={row.cells[column.key] ?? null}
+                    range={ranges.get(column.key) ?? null}
+                    field={row.dimensions[0] ?? null}
+                  >
                     {onDrill ? (
                       <button
                         type="button"
@@ -1078,7 +1203,7 @@ export function PivotTable({
                     ) : (
                       showValue(row.cells[column.key] ?? null, column.measure)
                     )}
-                  </td>
+                  </FormattedCell>
                 ))}
               </tr>
             ))}
@@ -1125,6 +1250,10 @@ function TileEditor({
   filters,
   onSave,
   onCancel,
+  defaults,
+  themeClass,
+  theme,
+  onSetDefault,
 }: {
   saving: boolean;
   organisationId: string;
@@ -1133,6 +1262,13 @@ function TileEditor({
   filters: Filters;
   onSave: (tile: Tile) => void;
   onCancel: () => void;
+  /** The report's default look per chart type (#376). */
+  defaults?: VisualDefaults;
+  /** The report theme's class, so the preview looks like the report. */
+  themeClass?: string;
+  /** The report's theme, for checking colours chosen on the chart. */
+  theme?: ReportTheme;
+  onSetDefault?: (visual: DefaultableVisual, format: ChartFormat | undefined) => void;
 }) {
   const { can } = useWorkspace();
   const [fieldSearch, setFieldSearch] = useState("");
@@ -1150,6 +1286,8 @@ function TileEditor({
   const pivotRows = query.pivot?.rows ?? [];
   const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : [])]);
   const preview = useTileResult(organisationId, query.table ? query : null, filters);
+  // The preview's groups, for colouring a group and limiting a date axis (#376).
+  const groupValues = preview?.result && query.groupBy ? preview.result.rows.map((row) => row.category) : null;
 
   // A label Tohyee filled in follows the value's column and calculation; a typed one stays (#329).
   const setMeasure = (index: number, patch: Partial<Measure>) =>
@@ -1206,13 +1344,13 @@ function TileEditor({
       <h3 className={styles.subheading}>
         Preview {preview?.result?.truncated ? <Badge tone="amber">first 5,000 rows</Badge> : null}
       </h3>
-      <div className={styles.preview}>
+      <div className={`${styles.preview} ${themeClass ?? ""}`}>
         {!preview ? (
           <p className={ui.muted}>Working it out…</p>
         ) : preview.error ? (
           <Notice tone="error">{preview.error}</Notice>
         ) : (
-          <TileResult tile={{ title: title || "Preview", visual, format, height }} result={preview.result!} />
+          <TileResult tile={{ title: title || "Preview", visual, format: mergeFormats(defaults?.[visual], format), height, query }} result={preview.result!} />
         )}
       </div>
 
@@ -1529,7 +1667,20 @@ function TileEditor({
 
       {visual === "kpi" ? <KeyFigureSettings query={query} onQuery={setQuery} format={format} onFormat={setFormat} /> : null}
 
-      <ChartFormatPanel visual={visual} values={tileValueNames(query.measures)} format={format} onChange={setFormat} />
+      <ChartFormatPanel
+        visual={visual}
+        values={tileValueNames(query.measures)}
+        format={format}
+        onChange={setFormat}
+        inherited={defaults?.[visual]}
+        onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
+        theme={theme}
+        groups={groupValues ? chartGroupNames(groupValues) : undefined}
+        datedGroups={groupValues ? datedGroups(groupValues) : false}
+        groupName={query.groupBy ? fieldLabel(query.groupBy.field) : null}
+        rowFields={(query.pivot?.rows ?? []).map((row) => fieldLabel(row.field))}
+      />
+      {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 
       <div className={ui.rowButtons}>
         <Button
