@@ -3,6 +3,7 @@ import { roleAtLeast } from "@/lib/auth/roles";
 import { allowedFilters, dateContext, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
 import type { DashboardFilters, TileQuery } from "@/lib/analytics/query";
 import { parseTileView, viewQuery, type TileDrill } from "@/lib/analytics/report-view";
+import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
@@ -39,10 +40,12 @@ export const POST = route(async (request) => {
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
       const tile = tileOf(dashboard, body.tileId);
+      await requireAnalyticsTable(tx, (tile.query as { table?: unknown } | null | undefined)?.table);
       const viewed = viewQuery(dashboard.tiles, tile, view);
       return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...allowedFilters(dashboard, filters, reader), dates, view: viewed.where } } };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
+    await requireAnalyticsTable(tx, (body.query as { table?: unknown } | undefined)?.table);
     // A question being built (viewers and up, who can ask any question): the other tiles are the ones sent, as drawn.
     if (view) {
       const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];

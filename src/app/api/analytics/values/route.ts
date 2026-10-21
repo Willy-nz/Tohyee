@@ -1,6 +1,7 @@
 import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { columnValues, getDashboard } from "@/lib/analytics/dashboards";
+import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
 
@@ -20,6 +21,7 @@ export const GET = route(async (request) => {
         throw new ForbiddenError("You can only see the dashboards shared with you.");
       }
     }
+    await requireAnalyticsTable(tx, table);
     return tx.organisationId;
   });
   return json(await columnValues(organisationId, table, field));
