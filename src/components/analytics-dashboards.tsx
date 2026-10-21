@@ -24,6 +24,11 @@ import { mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, V
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
 import { cardStyle, chartGroupNames, datedGroups } from "@/lib/analytics/chart-spec";
 import { calendarHeight, calendarYears } from "@/lib/analytics/chart-relationships";
+import { additiveValues } from "@/lib/analytics/small-multiples";
+import { SmallMultiplesView } from "@/components/analytics/small-multiples";
+
+/** Each small chart's height, by the tile's height. */
+const MULTIPLE_HEIGHTS: Record<TileHeight, number> = { small: 160, medium: 200, large: 260 };
 import type { ReportTheme } from "@/lib/charts/report-themes";
 import { buildTemplate, TEMPLATES, type TemplateId } from "@/lib/analytics/templates";
 import { todayIsoDate } from "@/lib/dates";
@@ -1048,6 +1053,10 @@ function TileResult({
       </div>
     );
   }
+  if (tile.query?.breakdown && (tile.visual === "column" || tile.visual === "bar" || tile.visual === "line")) {
+    // Small multiples (#376 phase 2): one small chart for each value of the second grouping.
+    return <SmallMultiplesView spec={spec} rows={rows} additive={additiveValues(tile.query.measures)} height={MULTIPLE_HEIGHTS[tile.height ?? "medium"]} />;
+  }
   // A calendar heat map is as tall as the years it shows (up to three).
   const height = tile.visual === "calendar"
     ? Math.max(CHART_HEIGHTS[tile.height ?? "medium"], calendarHeight(calendarYears(rows.map((row) => String(row.category ?? ""))).length))
@@ -1751,10 +1760,11 @@ function TileEditor({
         inherited={defaults?.[visual]}
         onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
         theme={theme}
-        groups={groupValues ? chartGroupNames(groupValues) : undefined}
+        groups={groupValues ? [...new Set(chartGroupNames(groupValues))] : undefined}
         datedGroups={groupValues ? datedGroups(groupValues) : false}
         groupName={query.groupBy ? fieldLabel(query.groupBy.field) : null}
         rowFields={(query.pivot?.rows ?? []).map((row) => fieldLabel(row.field))}
+        smallMultiples={Boolean(query.breakdown)}
       />
       {onSetDefault ? <p className={ui.muted}>A default for {VISUAL_NAMES[visual].toLowerCase()} charts is kept when you apply this chart or save the report.</p> : null}
 
