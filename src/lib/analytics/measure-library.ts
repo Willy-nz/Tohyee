@@ -107,11 +107,12 @@ export function measureFromSaved(saved: SavedMeasure, label = saved.name): Measu
  */
 export function definitionToSave(measure: Measure, siblings: Measure[]): MeasureDefinition {
   if (measure.aggregate !== "formula") {
-    const { label: _label, compare: _compare, formula: _formula, inputs: _inputs, ...rest } = measure;
+    const { label: _label, compare: _compare, formula: _formula, inputs: _inputs, quick: _quick, ...rest } = measure;
     void _label;
     void _compare;
     void _formula;
     void _inputs;
+    void _quick;
     return { kind: "base", ...(rest as BaseMeasure) };
   }
   const inputs = [...(measure.inputs ?? [])];
@@ -119,11 +120,12 @@ export function definitionToSave(measure: Measure, siblings: Measure[]): Measure
     if (inputs.some((input) => input.name === name)) continue;
     const sibling = siblings.find((other) => other !== measure && other.aggregate !== "formula" && other.label === name);
     if (!sibling) throw new Error(`[${name}] isn't one of this chart's values.`);
-    const { label: _label, compare: _compare, formula: _formula, inputs: _inputs, ...rest } = sibling;
+    const { label: _label, compare: _compare, formula: _formula, inputs: _inputs, quick: _quick, ...rest } = sibling;
     void _label;
     void _compare;
     void _formula;
     void _inputs;
+    void _quick;
     inputs.push({ name, ...(rest as BaseMeasure) });
   }
   return { kind: "formula", formula: measure.formula ?? "", inputs };

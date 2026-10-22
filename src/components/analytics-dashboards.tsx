@@ -9,6 +9,7 @@ import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, ValueMeaning, ValueRules } from "@/components/analytics/saved-values";
+import { QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
@@ -1669,7 +1670,8 @@ function TileFigures({
     // Table styles and conditional formatting (#376), by each value's position among the tile's values.
     const look = tableLook(tile.format?.table);
     const ranges = measures.map((column) => columnRange(result.rows.map((row) => row[column.key])));
-    const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
+    // A quick calculation (decision 770) is never added up from the rows shown.
+    const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.quick ? ["quick"] : measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
     const totals = tile.format?.table?.totals ? tableTotals(result.columns, result.rows, aggregates, result.totals) : null;
     return (
       <div className={ui.tableWrap}>
@@ -2543,6 +2545,8 @@ function TileEditor({
                     measures: query.measures.map((measure) => ({
                       ...measure,
                       compare: field ? (isDate(type) && measure.compare === "previous_year" ? measure.compare : undefined) : measure.compare,
+                      // A quick calculation needs a grouping (decision 770).
+                      ...(field ? {} : { quick: undefined, label: quickLabel(measure.label, undefined) }),
                     })),
                     sparkline: field ? undefined : query.sparkline,
                   });
@@ -2652,7 +2656,7 @@ function TileEditor({
               round
             </label>
           ) : null}
-          {query.groupBy?.grain && !(visual === "kpi" && index === 0) ? (
+          {query.groupBy?.grain && !(visual === "kpi" && index === 0) && !measure.quick ? (
             <label className={ui.checkbox}>
               <input
                 type="checkbox"
@@ -2662,9 +2666,15 @@ function TileEditor({
               and last year
             </label>
           ) : null}
+          <QuickCalcField
+            index={index}
+            measure={measure}
+            choices={quickChoices({ grouped: Boolean(query.groupBy), breakdown: Boolean(query.breakdown), pivot: visual === "pivot", pivotColumn: Boolean(query.pivot?.column) })}
+            onChange={(patch) => setMeasure(index, patch)}
+          />
           <ValueRules measure={measure} />
           <ValueKindFields index={index} measure={measure} columns={columns} pivot={visual === "pivot"} onChange={(patch) => setMeasure(index, patch)} />
-          <ValueMeaning measure={measure} table={query.table} columns={columns} dateField={query.dateField ?? (query.groupBy?.grain ? query.groupBy.field : null)} />
+          <ValueMeaning measure={measure} table={query.table} columns={columns} dateField={query.dateField ?? (query.groupBy?.grain ? query.groupBy.field : null)} place={{ dated: Boolean(query.groupBy?.grain), breakdown: Boolean(query.breakdown), pivot: visual === "pivot" }} />
           {visual !== "pivot" ? (
             <SaveValueButton
               organisationId={organisationId}

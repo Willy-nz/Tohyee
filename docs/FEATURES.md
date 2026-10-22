@@ -2190,6 +2190,13 @@ that something happened.
   on each date, using the latest in each period rather than adding dates
   up. A shaped table's Merge is refused when it would repeat rows or
   numbers, and the preview says how many rows had no match.
+- **Analytics: quick calculations** (#376 phase 4, decision 770, examples
+  QC1-QC8). Each value on a grouped chart or table has **Show as**: running
+  total, % of total, % of row or of column (with a second grouping or in a
+  pivot), rank, difference or % change from the previous period, or a
+  moving average. They're worked out over every group the filters leave
+  (before Top N), shares of the value worked out again for the whole, with
+  missing periods blank rather than 0; "What it means" says what each is of.
 - **Analytics: one access check for every output** (#387, decision 697).
   The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
   figures, tooltips, totals, drill-through rows, slicer values, CSV and

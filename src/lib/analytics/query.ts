@@ -6,6 +6,7 @@ import { columnKind, FILTER_OPS, MAX_LAST_DAYS, MAX_LAST_MONTHS, opAllowed, valu
 import { cmp, dec } from "@/lib/money/decimal";
 import { todayIsoDate } from "@/lib/dates";
 import { previousPeriod, previousYear } from "@/lib/analytics/periods";
+import { parseQuickCalc, quickIsPercent, type QuickCalc } from "@/lib/analytics/quick-calcs";
 
 /**
  * A dashboard tile's question, turned into SQL for DuckDB (analytics step 3).
@@ -116,6 +117,12 @@ export type Measure = {
   /** A calculated value: e.g. "[Sales] - [Cost of sales]". [Names] are the tile's other values or `inputs`. */
   formula?: string;
   inputs?: FormulaInput[];
+  /**
+   * A quick calculation shown instead of the value in each group (decision
+   * 770): a running total, a share, a rank, a difference or change from the
+   * previous group, or a moving average. Left out, the value itself.
+   */
+  quick?: QuickCalc;
 };
 
 export type Filter = { field: string; op: FilterOp; value: string | string[]; join?: "or" };
@@ -431,6 +438,7 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
 
   if (!Array.isArray(raw.measures) || raw.measures.length === 0) throw new ValidationError("Add at least one value to show.");
   if (raw.measures.length > 6) throw new ValidationError("A tile can show up to 6 values.");
+  const rawMeasures = raw.measures as unknown[];
   const labels = new Set<string>();
   const measures = raw.measures.map((entry, index): Measure => {
     const measure = (entry ?? {}) as Record<string, unknown>;
@@ -488,6 +496,26 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
   if (labels.size !== measures.length && measures.some((measure) => measure.aggregate === "formula")) {
     throw new ValidationError("Give each value its own name, so a formula knows which one it means.");
   }
+  // Quick calculations (decision 770), once every value and what its formula names is known.
+  const place = pivot ? { kind: "pivot" as const, column: Boolean(pivot.column) } : groupBy ? { kind: "grouped" as const, breakdown: Boolean(breakdown) } : { kind: "total" as const };
+  measures.forEach((measure, index) => {
+    const raw = ((rawMeasures[index] ?? {}) as Record<string, unknown>).quick;
+    if (raw === undefined || raw === null) return;
+    const named = measure.aggregate === "formula"
+      ? formulaRefs(parseFormula(measure.formula!)).map((name) => measure.inputs?.find((input) => input.name === name) ?? (measures.find((other) => other.aggregate !== "formula" && other.label === name) as BaseMeasure))
+      : [measure as BaseMeasure];
+    const quick = parseQuickCalc(raw, {
+      label: measure.label,
+      aggregate: measure.aggregate,
+      formula: measure.formula,
+      inputAggregates: named.map((input) => input.aggregate),
+      asAt: named.some((input) => input.asAt),
+      snapshot: named.find((input) => input.snapshot)?.snapshot,
+      compare: measure.compare,
+      currency: named.some((input) => currencyFieldOf(input, columns) !== null),
+    }, place);
+    if (quick) measure.quick = quick;
+  });
 
   const filters = (Array.isArray(raw.filters) ? raw.filters : []).map((entry, index): Filter => parseFilter(entry, columns, `Filter ${index + 1}`, index > 0));
   if (filters.length > 20) throw new ValidationError("A tile can have up to 20 filters.");
@@ -781,35 +809,59 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       role: "category",
     });
   }
+  /** A quick calculation's format (decision 770): a share as a percentage, a rank as a whole number, a money average as money. */
+  const shownFormat = (measure: Measure): ValueFormat => {
+    if (!query.groupBy || !measure.quick) return measureFormat(measure);
+    if (quickIsPercent(measure.quick)) return "percent";
+    if (measure.quick.kind === "rank") return "integer";
+    const base = measureFormat(measure);
+    return measure.quick.kind === "moving_average" && base === "integer" ? "number" : base;
+  };
   query.measures.forEach((measure, index) => {
-    columns.push({ key: `m${index}`, label: measure.label, format: measureFormat(measure), role: "measure" });
+    columns.push({ key: `m${index}`, label: measure.label, format: shownFormat(measure), role: "measure" });
     if (measure.compare === "previous_year") columns.push({ key: `m${index}_py`, label: `${measure.label} last year`, format: measureFormat(measure), role: "measure" });
     if (measure.compare === "previous_period") columns.push({ key: `m${index}_pp`, label: `${measure.label} previous period`, format: measureFormat(measure), role: "measure" });
   });
 
-  const select = (shiftYears: number, dates: DashboardFilters = dashboard) => {
+  /**
+   * The grouped question. `level` (quick calculations, decision 770) asks it
+   * of fewer groupings: "category" by the first only, "breakdown" by the
+   * second only, "none" as one total, for the wholes a share is of.
+   * `inputs` adds each value a running total's formula names, per group.
+   */
+  const select = (shiftYears: number, dates: DashboardFilters = dashboard, level: "all" | "category" | "breakdown" | "none" = "all", inputs = false) => {
     const shiftedCategory =
       shiftYears && query.groupBy?.grain
         ? grainSql(query.groupBy.grain, `${q(query.groupBy.field)} + interval ${shiftYears} year`, yearEnd)
         : category;
+    const byCategory = Boolean(query.groupBy) && (level === "all" || level === "category");
+    const bySecond = Boolean(second) && (level === "all" || level === "breakdown");
     const parts = [
-      ...(query.groupBy ? [`${shiftedCategory} as category`] : []),
-      ...(second ? [`${second} as breakdown`] : []),
+      ...(byCategory ? [`${shiftedCategory} as category`] : []),
+      ...(bySecond ? [`${second} as breakdown`] : []),
       ...query.measures.map((measure, index) => `${measureSql(measure, dates)} as m${index}`),
       ...query.measures.flatMap((measure, index) => (checked[index] ? [`${currencyCheckSql(measure, dates)} as m${index}_ccy`] : [])),
+      ...(inputs
+        ? query.measures.flatMap((measure, index) =>
+            measure.quick?.kind === "running_total" && measure.aggregate === "formula"
+              ? formulaRefs(parseFormula(measure.formula!)).map((name, at) => `${baseSql(inputOf(measure, name), dates)} as ${q(`i${index}_${at}`)}`)
+              : [],
+          )
+        : []),
     ];
     let from = `${q(query.table)}${conditions(shiftYears, dates)}`;
     if (snapshots.size) {
       // The latest date each snapshot balance has in its group (and for each `per` value), over the tile's rows.
       const windows = [...snapshots].map(([measure, alias]) => {
         const rules = ruleSql(measure, dates);
-        const partition = [...(query.groupBy ? [shiftedCategory] : []), ...(measure.snapshot?.per ? [q(measure.snapshot.per)] : [])];
+        const groups = level === "all" || level === "category" ? (query.groupBy ? [shiftedCategory] : []) : level === "breakdown" && second ? [second] : [];
+        const partition = [...groups, ...(measure.snapshot?.per ? [q(measure.snapshot.per)] : [])];
         const date = rules.length ? `case when ${rules.join(" and ")} then ${recordedOn} end` : recordedOn;
         return `max(${date}) over (${partition.length ? `partition by ${partition.join(", ")}` : ""}) as ${q(alias)}`;
       });
       from = `(select *, ${windows.join(", ")} from ${from}) as ${q("_tohyee_rows")}`;
     }
-    return `select ${parts.join(", ")} from ${from}${query.groupBy ? " group by all" : ""}`;
+    return `select ${parts.join(", ")} from ${from}${byCategory || bySecond ? " group by all" : ""}`;
   };
 
   const order = (alias: string) => {
@@ -850,10 +902,106 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     });
     const joined = ctes.map((cte) => cte.slice(0, cte.indexOf(" as ("))).join(" cross join ");
     sql = `with ${ctes.join(", ")} select ${parts.join(", ")} from ${joined}`;
+  } else if (query.groupBy && query.measures.some((measure) => measure.quick)) {
+    sql = `${quickSql()}${order("")}${limit}`;
   } else {
     sql = `${select(0)}${order("")}${limit}`;
   }
   return { sql, params, columns };
+
+  /**
+   * Quick calculations (decision 770): the grouped answer for every group
+   * (before Top N), then each value's calculation over those groups, then the
+   * order and Top N. Shares are of the value worked out again for the whole
+   * (or the first or second group's whole), so a ratio's share is of its own
+   * total, not of its groups added up. Runs go oldest period (or A to Z)
+   * first, separately for each value of a second grouping; the period before
+   * a date group is the calendar one (a missing period is blank).
+   */
+  function quickSql(): string {
+    const grain = query.groupBy?.grain;
+    // How far back one step is, for a date group.
+    const step = grain ? ({ day: [1, "day"], week: [7, "day"], month: [1, "month"], quarter: [3, "month"], fquarter: [3, "month"], year: [12, "month"], fyear: [12, "month"] } as const)[grain] : null;
+    const back = (steps: number) => `cast(n.category - interval ${step![0] * steps} ${step![1]} as DATE)`;
+    const sameSecond = second ? " and p.breakdown is not distinct from n.breakdown" : "";
+    const partition = second ? "partition by n.breakdown " : "";
+    const run = `over (${partition}order by n.category asc nulls last rows between unbounded preceding and current row)`;
+    const previous = (column: string) =>
+      `(select max(p.${column}) from n as p where ${step ? `p.category = ${back(1)}` : "p._tohyee_rn = n._tohyee_rn - 1"}${sameSecond})`;
+    const needs = { total: false, row: false, column: false };
+    const shown = query.measures.map((measure, index) => {
+      const value = `n.m${index}`;
+      const quick = measure.quick;
+      if (!quick) return value;
+      switch (quick.kind) {
+        case "running_total": {
+          if (measure.aggregate !== "formula") return `sum(${value}) ${run}`;
+          // A formula of running totals: each value it names is run, then the formula worked out from those.
+          const names = formulaRefs(parseFormula(measure.formula!));
+          const decimal = (sql: string) => `cast(${sql} as ${DECIMAL_RESULT})`;
+          const days = dashboard.from && dashboard.to && DATE.test(dashboard.from) && DATE.test(dashboard.to)
+            ? Math.round((Date.parse(`${dashboard.to}T00:00:00Z`) - Date.parse(`${dashboard.from}T00:00:00Z`)) / 86_400_000) + 1
+            : null;
+          const compile = (node: FormulaNode): string => {
+            switch (node.kind) {
+              case "number":
+                return decimal(param(node.value));
+              case "ref":
+                return decimal(`coalesce(sum(n.${q(`i${index}_${names.indexOf(node.name)}`)}) ${run}, 0)`);
+              case "days":
+                return days === null || days < 1 ? `cast(null as ${DECIMAL_RESULT})` : decimal(param(String(days)));
+              case "negate":
+                return `(-(${compile(node.operand)}))`;
+              case "binary":
+                return node.op === "/" ? exactDivideSql(compile(node.left), compile(node.right)) : decimal(`(${compile(node.left)} ${node.op} ${compile(node.right)})`);
+            }
+          };
+          return compile(parseFormula(measure.formula!));
+        }
+        case "percent_of_total":
+          needs.total = true;
+          return exactDivideSql(value, `t.m${index}`);
+        case "percent_of_row":
+          needs.row = true;
+          return exactDivideSql(value, `rt.m${index}`);
+        case "percent_of_column":
+          needs.column = true;
+          return exactDivideSql(value, `ct.m${index}`);
+        case "rank":
+          return `case when ${value} is null then null else rank() over (order by ${value} ${quick.smallestFirst ? "asc" : "desc"} nulls last) end`;
+        case "difference":
+          return `(${value} - ${previous(`m${index}`)})`;
+        case "percent_change": {
+          const before = previous(`m${index}`);
+          return exactDivideSql(`(${value} - ${before})`, before);
+        }
+        case "moving_average": {
+          const periods = quick.periods ?? 3;
+          const window = step ? `p.category > ${back(periods)} and p.category <= n.category` : `p._tohyee_rn between n._tohyee_rn - ${periods - 1} and n._tohyee_rn`;
+          return `(select ${exactDivideSql(`sum(p.m${index})`, `count(p.m${index})`)} from n as p where ${window}${sameSecond})`;
+        }
+      }
+    });
+    const ctes = [
+      `g as (${select(0, dashboard, "all", true)})`,
+      `n as (select *, row_number() over (${second ? "partition by breakdown " : ""}order by category asc nulls last) as _tohyee_rn from g)`,
+      ...(needs.total ? [`t as (${select(0, dashboard, "none")})`] : []),
+      ...(needs.row ? [`rt as (${select(0, dashboard, "category")})`] : []),
+      ...(needs.column ? [`ct as (${select(0, dashboard, "breakdown")})`] : []),
+    ];
+    const joins = [
+      ...(needs.total ? [" cross join t"] : []),
+      ...(needs.row ? [" left join rt on rt.category is not distinct from n.category"] : []),
+      ...(needs.column ? [" left join ct on ct.breakdown is not distinct from n.breakdown"] : []),
+    ].join("");
+    const parts = [
+      "n.category as category",
+      ...(second ? ["n.breakdown as breakdown"] : []),
+      ...shown.map((sql, index) => `${sql} as m${index}`),
+      ...query.measures.flatMap((_measure, index) => (checked[index] ? [`n.m${index}_ccy as m${index}_ccy`] : [])),
+    ];
+    return `with ${ctes.join(", ")} select * from (select ${parts.join(", ")} from n${joins}) as ${q("_tohyee_quick")}`;
+  }
 }
 
 export type PivotBuilt = {
@@ -952,7 +1100,8 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
   const measures = query.measures.map((measure, index): ResultColumn => ({
     key: `m${index}`,
     label: measure.label,
-    format: measureFormat(measure),
+    // A share (decision 770) is worked out from the cells after the query.
+    format: quickIsPercent(measure.quick) ? "percent" : measureFormat(measure),
     role: "measure",
   }));
   const grouped = [

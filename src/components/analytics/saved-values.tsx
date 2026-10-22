@@ -7,6 +7,7 @@ import { Button, Field, Notice, ui } from "@/components/ui";
 import type { NumberFormat } from "@/lib/analytics/chart-format";
 import { definitionToSave, measureFromSaved, type SavedMeasure } from "@/lib/analytics/measure-library";
 import { describeMeasure } from "@/lib/analytics/measure-definition";
+import { describeQuickCalc, quickTotalsText, quickUnit } from "@/lib/analytics/quick-calcs";
 import { formatOfType, type ColumnInfo, type Filter, type Measure } from "@/lib/analytics/query";
 import { api, errorMessage } from "@/lib/client/api";
 import styles from "./chart-format-panel.module.css";
@@ -48,9 +49,23 @@ export function ValueRules({ measure }: { measure: Measure }) {
 }
 
 /** What a value means (decision 696), worked out from its definition: shown folded under the value. */
-export function ValueMeaning({ measure, table, columns, dateField }: { measure: Measure; table: string; columns: ColumnInfo[]; dateField: string | null }) {
+export function ValueMeaning({
+  measure,
+  table,
+  columns,
+  dateField,
+  place,
+}: {
+  measure: Measure;
+  table: string;
+  columns: ColumnInfo[];
+  dateField: string | null;
+  /** Where the value is, for what its quick calculation (decision 770) is of. */
+  place?: { dated: boolean; breakdown: boolean; pivot: boolean };
+}) {
   if (!table) return null;
   const meaning = describeMeasure(measure, table, columns, dateField);
+  const shown = measure.quick ? describeQuickCalc(measure.quick, place ?? { dated: false, breakdown: false, pivot: false }) : null;
   return (
     <details className={styles.meaning}>
       <summary>What {measure.label || "this value"} means</summary>
@@ -60,7 +75,7 @@ export function ValueMeaning({ measure, table, columns, dateField }: { measure: 
         <dt>Worked out as</dt>
         <dd>{meaning.aggregation}</dd>
         <dt>Unit</dt>
-        <dd>{meaning.unit}</dd>
+        <dd>{measure.quick ? quickUnit(measure.quick, meaning.unit) : meaning.unit}</dd>
         <dt>Movement or balance</dt>
         <dd>{meaning.kind}</dd>
         <dt>Dates</dt>
@@ -68,7 +83,13 @@ export function ValueMeaning({ measure, table, columns, dateField }: { measure: 
         <dt>Blanks and zero</dt>
         <dd>{meaning.blanks}</dd>
         <dt>Totals</dt>
-        <dd>{meaning.totals}</dd>
+        <dd>{shown ? quickTotalsText(measure.quick!.kind) : meaning.totals}</dd>
+        {shown ? (
+          <>
+            <dt>Shown as</dt>
+            <dd>{shown}</dd>
+          </>
+        ) : null}
       </dl>
     </details>
   );
