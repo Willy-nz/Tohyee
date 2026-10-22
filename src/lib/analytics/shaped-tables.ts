@@ -4,7 +4,8 @@ import type { Actor, OrgTx } from "@/lib/db/org-transaction";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { buildShapeQuery, mergeCheckOutcome, mergeCheckSql, parseShapeSteps, type ShapeColumn, type ShapeStep } from "@/lib/analytics/shaping";
-import { dropTable, listTables, previewSelect, replaceTableFromSelect, runBuiltQuery, type CsvLoadResult } from "@/lib/analytics/engine";
+import { dropTable, listTables, PREVIEW_TIME_LIMIT_MS, previewSelect, replaceTableFromSelect, runBuiltQuery, type CsvLoadResult } from "@/lib/analytics/engine";
+import { getOrganisationSettings } from "@/lib/organisations/settings";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 
 export type ShapedLoadRun = {
@@ -261,17 +262,60 @@ export async function removeShapedTable(organisation: OrganisationRecord, actor:
   await dropTable(organisation.id, tableName);
 }
 
+/** Rows after each step (index 0 is the base table), worked out from the same steps (#376 phase 4, decision 798). */
+export type StepCounts = string[];
+
+function availableTables(tables: Awaited<ReturnType<typeof listTables>>): Map<string, ShapeColumn[]> {
+  return new Map([...tables].map(([table, columns]) => [table, columns.map((column) => ({ name: column.name, type: column.type }))]));
+}
+
+/**
+ * The columns after `throughStep` (or the base table's when it's -1),
+ * without running anything: what a step's settings can choose from.
+ */
+export async function shapeColumnsAt(organisationId: string, baseTable: string, steps: unknown, throughStep: number): Promise<ShapeColumn[]> {
+  const available = availableTables(await listTables(organisationId));
+  const parsed = parseShapeSteps(steps);
+  if (!Number.isInteger(throughStep) || throughStep < -1 || throughStep >= parsed.length) throw new ValidationError("Choose a step.");
+  if (throughStep === -1) {
+    const base = available.get(baseTable);
+    if (!base) throw new ValidationError(`There's no loaded table called ${baseTable}.`);
+    return base;
+  }
+  return buildShapeQuery({ baseTable, tables: available, steps: parsed, throughStep }).columns;
+}
+
 export async function previewShapedTable(
   organisationId: string,
   baseTable: string,
   steps: unknown,
   throughStep?: number,
-): Promise<{ columns: ShapeColumn[]; rows: Array<Record<string, string | null>>; notes: string[] }> {
-  const tables = await listTables(organisationId);
-  const available = new Map([...tables].map(([table, columns]) => [table, columns.map((column) => ({ name: column.name, type: column.type }))]));
-  const built = buildShapeQuery({ baseTable, tables: available, steps, throughStep });
+  yearEndMonth?: number,
+): Promise<{ columns: ShapeColumn[]; rows: Array<Record<string, string | null>>; notes: string[]; counts: StepCounts }> {
+  const available = availableTables(await listTables(organisationId));
+  const built = buildShapeQuery({ baseTable, tables: available, steps, throughStep, yearEndMonth });
   const notes = await checkMerges(organisationId, baseTable, built);
-  return { columns: built.columns, rows: await previewSelect(organisationId, built.sql, built.params), notes };
+  const rows = await previewSelect(organisationId, built.sql, built.params);
+  // Counts for every step when they all build, so the list shows them all; otherwise up to the one shown.
+  let counted = built;
+  if (throughStep !== undefined) {
+    try {
+      counted = buildShapeQuery({ baseTable, tables: available, steps, yearEndMonth });
+    } catch {
+      counted = built;
+    }
+  }
+  return { columns: built.columns, rows, notes, counts: await stepCounts(organisationId, counted) };
+}
+
+/** One query counting the rows after each step. */
+async function stepCounts(organisationId: string, built: ReturnType<typeof buildShapeQuery>): Promise<StepCounts> {
+  const counts = Array.from({ length: built.steps + 1 }, (_, index) => `(select count(*) from shape${index}) as c${index}`);
+  const [answer] = await runBuiltQuery(organisationId, `with ${built.ctes} select ${counts.join(", ")}`, built.params, {
+    timeLimitMs: PREVIEW_TIME_LIMIT_MS,
+    tooLong: "Counting the rows after each step took too long. Filter or group the data sooner, or use fewer merges.",
+  });
+  return Array.from({ length: built.steps + 1 }, (_, index) => answer[`c${index}`] ?? "0");
 }
 
 /**
@@ -295,7 +339,7 @@ async function recordShapeLoad(
   actor: Actor,
   id: string,
   trigger: "schedule" | "manual",
-): Promise<{ runId: string; shape: ShapedTable }> {
+): Promise<{ runId: string; shape: ShapedTable; yearEndMonth: number }> {
   return withOrganisationTransaction(organisation, actor, async (tx) => {
     await requireAnalytics(tx);
     await tx.query(
@@ -311,7 +355,7 @@ async function recordShapeLoad(
        values ($1, $2, $3, $4, $5, $6) returning id::text`,
       [shape.id, shape.name, shape.tableName, shape.baseTable, trigger, trigger === "manual" ? actor.email : null],
     );
-    return { runId: result.rows[0].id, shape };
+    return { runId: result.rows[0].id, shape, yearEndMonth: (await getOrganisationSettings(tx)).financialYearEndMonth };
   });
 }
 
@@ -325,9 +369,8 @@ export async function runShapedTable(
   let outcome: CsvLoadResult | null = null;
   let error: string | null = null;
   try {
-    const tables = await listTables(organisation.id);
-    const available = new Map([...tables].map(([table, columns]) => [table, columns.map((column) => ({ name: column.name, type: column.type }))]));
-    const built = buildShapeQuery({ baseTable: started.shape.baseTable, tables: available, steps: started.shape.steps });
+    const available = availableTables(await listTables(organisation.id));
+    const built = buildShapeQuery({ baseTable: started.shape.baseTable, tables: available, steps: started.shape.steps, yearEndMonth: started.yearEndMonth });
     // A merge that would repeat rows is refused here too, so a change to the data can't start double counting (decision 693).
     await checkMerges(organisation.id, started.shape.baseTable, built);
     outcome = await replaceTableFromSelect(organisation.id, started.shape.tableName, built.sql, built.params);
