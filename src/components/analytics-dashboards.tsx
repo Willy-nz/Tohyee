@@ -3,7 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
@@ -39,6 +39,7 @@ import { ArrangeBar } from "@/components/analytics/arrange-bar";
 import { PageTabs, pageStyle } from "@/components/analytics/report-pages";
 import { addPage, movePage, openingPage, removePage, tilePage, tilesOnPage, withPage, type ReportPage } from "@/lib/analytics/pages";
 import { isSpecialistVisual, PANEL_TAB_LABELS, PANEL_TABS, type PanelTab } from "@/lib/analytics/editor-panels";
+import { dateHierarchy, DRILLABLE, INTERACTION_LABELS, INTERACTION_MODES, MAX_DRILL_LEVELS, drillDown, drillUp, drillView, expandAll, interactionMode, periodLabel, selectionLevel, TOP, type DrillState, type InteractionMode, type Selection, type TileDrill, type TileView } from "@/lib/analytics/report-view";
 
 /** Each small chart's height, by the tile's height. */
 const MULTIPLE_HEIGHTS: Record<TileHeight, number> = { small: 160, medium: 200, large: 260 };
@@ -310,6 +311,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   // The page shown (decision 753), kept in the address (?page=) so a link opens it.
   const search = useSearchParams();
   const [pageChoice, setPageChoice] = useState<string | null>(() => search.get("page"));
+  // What the reader has drilled to, clicked and drilled through to (decisions 754-756); none of it is saved.
+  const [drills, setDrills] = useState<Record<string, DrillState>>({});
+  const [drillMode, setDrillMode] = useState<Record<string, boolean>>({});
+  const [picked, setPicked] = useState<(Selection & { label: string; tileTitle: string }) | null>(null);
+  const [through, setThrough] = useState<{ selection: Selection; label: string; from: string; to: string } | null>(null);
 
   const base = saved ?? loaded.data?.dashboard ?? null;
   const dashboard = history?.present ?? base;
@@ -324,8 +330,15 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
    * the filters exists so far; pages and bookmarks (phase 3) add their
    * actions here and in BUTTON_ACTIONS.
    */
+  /** Back to the report as it opens: its dates and slicers, nothing clicked, drilled or drilled through (decision 756). */
+  const resetView = () => {
+    setFilters(null);
+    setDrills({});
+    setPicked(null);
+    setThrough(null);
+  };
   const runButtonAction = (action: ButtonAction) => {
-    if (action === "reset_filters") setFilters(null);
+    if (action === "reset_filters") resetView();
   };
 
   useLeaveWarning(unsaved, () =>
@@ -511,6 +524,73 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     delete settings.pages;
     change({ ...dashboard, settings: next.pages ? { ...settings, pages: next.pages } : settings, tiles: next.tiles }, label, key);
   };
+  // Clicks and drills (decisions 754-756), worked out the same way the server checks them.
+  const grouping = (tile: Tile) => {
+    if (!tile.query) return null;
+    try {
+      return drillView(tile.query, tile.drill, drills[tile.id], tile.title).groupBy;
+    } catch {
+      return tile.query.groupBy;
+    }
+  };
+  const groupText = (tile: Tile, value: string | null) => {
+    const level = grouping(tile);
+    if (!level) return value ?? "(blank)";
+    const shownValue = value === null ? "(blank)" : level.grain ? periodLabel(value, level.grain, dates.financialYearEndMonth) : value === "true" || value === "false" ? booleanText(value) : value;
+    return `${fieldLabel(level.field)}: ${shownValue}`;
+  };
+  const pickedTile = picked ? pageTiles.find((tile) => tile.id === picked.tileId) : undefined;
+  const selectionOnly = (selection: Selection): Selection => ({ tileId: selection.tileId, value: selection.value, ...(selection.drill ? { drill: selection.drill } : {}) });
+  const pick = (tile: Tile, value: string | null) => {
+    const levels = tile.drill?.levels.length ?? 1;
+    const state = drills[tile.id] ?? TOP;
+    if (drillMode[tile.id] && tile.drill && state.level < levels - 1) {
+      setDrills({ ...drills, [tile.id]: drillDown(state, value, levels) });
+      if (picked?.tileId === tile.id) setPicked(null);
+      return;
+    }
+    if (picked?.tileId === tile.id && picked.value === value) return setPicked(null);
+    setPicked({ tileId: tile.id, value, ...(drills[tile.id] ? { drill: drills[tile.id] } : {}), label: groupText(tile, value), tileTitle: tile.title });
+  };
+  const setDrill = (tile: Tile, next: DrillState) => {
+    const copy = { ...drills };
+    if (next.level === 0) delete copy[tile.id];
+    else copy[tile.id] = next;
+    setDrills(copy);
+    if (picked?.tileId === tile.id) setPicked(null);
+  };
+  const interactionFor = (tile: Tile): TileInteraction => {
+    const selections: Selection[] = [];
+    let highlight: { value: string | null } | null = null;
+    if (picked && pickedTile && picked.tileId !== tile.id) {
+      const mode = interactionMode(pickedTile, tile.id);
+      let level = null;
+      try {
+        level = selectionLevel(dashboard.tiles, picked).level;
+      } catch {
+        level = null;
+      }
+      const mine = grouping(tile);
+      // Highlight works on a tile grouped the same way; on any other it filters (decision 754).
+      if (mode === "highlight" && level && mine && mine.field === level.field && (mine.grain ?? null) === (level.grain ?? null)) highlight = { value: picked.value };
+      else if (mode !== "none") selections.push(selectionOnly(picked));
+    }
+    if (picked?.tileId === tile.id) highlight = { value: picked.value };
+    const drill = drills[tile.id];
+    const throughList = through && through.to === page.id && through.selection.tileId !== tile.id ? [through.selection] : [];
+    const view: TileView | undefined = drill || selections.length || throughList.length ? { ...(drill ? { drill } : {}), ...(selections.length ? { selections } : {}), ...(throughList.length ? { through: throughList } : {}) } : undefined;
+    const canPick = !editing && DRILLABLE.includes(tile.visual) && Boolean(tile.query?.groupBy) && !tile.query?.breakdown;
+    return { view, viewTiles: dashboard.tiles, highlight, onPick: canPick ? (value) => pick(tile, value) : undefined };
+  };
+  const drillPages = (pages ?? []).filter((entry) => entry.drillThrough && entry.id !== page.id);
+  const drillThrough = (target: ReportPage) => {
+    if (!picked) return;
+    setThrough({ selection: selectionOnly(picked), label: picked.label, from: page.id, to: target.id });
+    setPicked(null);
+    choosePage(target.id);
+  };
+  const viewChanged = Boolean(filters || picked || through || Object.keys(drills).length);
+
   /** A tile added or changed, on the page shown. */
   const placed = (tile: Tile): Tile => {
     // The editors build the tile afresh: a changed tile stays on its page, a new one goes on the page shown.
@@ -526,6 +606,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
   return (
     <ReportThemeStyle theme={theme} scope={themeScope}>
+      <YearEndMonth.Provider value={dates.financialYearEndMonth}>
       <div className={styles.header}>
         <div>
           {editing ? (
@@ -707,9 +788,31 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           themeClass={themeClass}
           theme={theme}
           onSetDefault={setVisualDefault}
+          others={pageTiles.filter((entry) => entry.id !== (chartTile === "new" ? "" : chartTile.id) && !isItemVisual(entry.visual)).map((entry) => ({ id: entry.id, title: entry.title }))}
           onCancel={() => setEditingTile(null)}
           onSave={(given) => putTile(placed(given))}
         />
+      ) : null}
+
+      {!editing && (picked || (through && through.to === page.id) || viewChanged) ? (
+        <div className={styles.trail} role="region" aria-label="What this page is filtered by">
+          {through && through.to === page.id ? (
+            <span className={styles.crumb}>
+              Drilled through to {page.name}: <strong>{through.label}</strong>
+              <Button size="small" variant="secondary" onClick={() => { const back = through.from; setThrough(null); choosePage(back); }}>← Back</Button>
+            </span>
+          ) : null}
+          {picked ? (
+            <span className={styles.crumb}>
+              Filtered by <strong>{picked.label}</strong> <span className={ui.muted}>(chosen on {picked.tileTitle})</span>
+              <Button size="small" variant="secondary" aria-label={`Clear ${picked.label}`} onClick={() => setPicked(null)}>Clear</Button>
+              {drillPages.map((target) => (
+                <Button key={target.id} size="small" variant="secondary" onClick={() => drillThrough(target)}>Drill through to {target.name}</Button>
+              ))}
+            </span>
+          ) : null}
+          {viewChanged ? <Button size="small" variant="secondary" onClick={resetView}>Reset to default</Button> : null}
+        </div>
       ) : null}
 
       {editing && !editingTile ? (
@@ -833,6 +936,26 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                   <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
                 )}
               </div>
+              {!editing ? (
+                <>
+                  {tile.drill ? (
+                      <DrillTools
+                        title={tile.title}
+                        levels={tile.drill.levels.length}
+                        state={drills[tile.id] ?? TOP}
+                        on={drillMode[tile.id] === true}
+                        path={(drills[tile.id]?.path ?? []).map((value, at) => {
+                          const level = tile.drill!.levels[at];
+                          return value === null ? "(blank)" : level.grain ? periodLabel(value, level.grain, dates.financialYearEndMonth) : value;
+                        })}
+                        current={levelName(grouping(tile))}
+                        onToggle={() => setDrillMode({ ...drillMode, [tile.id]: !drillMode[tile.id] })}
+                        onUp={() => setDrill(tile, drillUp(drills[tile.id] ?? TOP))}
+                        onExpand={() => setDrill(tile, expandAll(drills[tile.id] ?? TOP, tile.drill!.levels.length))}
+                      />
+                    ) : null}
+                </>
+              ) : null}
               {editing ? (
                 // Clicking a tile opens it for changing (the Edit button does the same from the keyboard).
                 <div
@@ -843,17 +966,42 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(tile);
                   }}
                 >
-                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} />
+                  <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} {...interactionFor(tile)} />
                 </div>
               ) : (
-                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} />
+                <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={shownTile} filters={shown} asSaved={savedQueries.get(tile.id) === JSON.stringify(tile.query)} onAction={runButtonAction} {...interactionFor(tile)} />
               )}
             </section>
             );
           })}
         </div>
       ))}
+      </YearEndMonth.Provider>
     </ReportThemeStyle>
+  );
+}
+
+const GRAIN_NAMES: Record<string, string> = { fyear: "financial year", fquarter: "quarter", year: "year", quarter: "quarter", month: "month", week: "week", day: "day" };
+
+/** A drill level as a reader sees it: "Account name", or "Posting date by quarter". */
+function levelName(level: { field: string; grain?: string } | null): string {
+  if (!level) return "";
+  return level.grain ? `${fieldLabel(level.field)} by ${GRAIN_NAMES[level.grain] ?? level.grain}` : fieldLabel(level.field);
+}
+
+/** A tile's drill-down (decision 755): drill on click, up a level, the next level for all, and where it's drilled to. */
+function DrillTools({ title, levels, state, on, path, current, onToggle, onUp, onExpand }: { title: string; levels: number; state: DrillState; on: boolean; path: string[]; current: string; onToggle: () => void; onUp: () => void; onExpand: () => void }) {
+  return (
+    <div className={styles.drillTools} role="group" aria-label={`Drill down ${title}`}>
+      <Button size="small" variant="secondary" aria-pressed={on} title="When on, clicking a group shows the next level inside it" onClick={onToggle}>
+        Drill down on click
+      </Button>
+      <Button size="small" variant="secondary" disabled={state.level === 0} aria-label={`Up a level on ${title}`} onClick={onUp}>↑ Up</Button>
+      <Button size="small" variant="secondary" disabled={state.level >= levels - 1} title="The next level for every group" aria-label={`Next level for all on ${title}`} onClick={onExpand}>Next level for all</Button>
+      <span className={styles.drillPath} aria-live="polite">
+        {state.level === 0 ? current : `${state.all && path.length < state.level ? "All" : path.join(" › ")} › ${current}`}
+      </span>
+    </div>
   );
 }
 
@@ -1127,7 +1275,25 @@ function SlicerControl({
  * report and tile (what report viewers can do). A tile added or changed in
  * the draft isn't saved yet, so its question is sent as it is.
  */
-type TileBodyProps = { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; asSaved: boolean; onAction?: (action: ButtonAction) => void };
+/** A tile as drilled: grouped by the level shown, so its chart (and projection) knows what it's showing. */
+function drilledTile(tile: Tile, drill: DrillState | undefined): Tile {
+  if (!drill || !tile.query) return tile;
+  try {
+    return { ...tile, query: { ...tile.query, groupBy: drillView(tile.query, tile.drill, drill, tile.title).groupBy } };
+  } catch {
+    return tile;
+  }
+}
+
+/** What a reader has done to a tile (decisions 754-756): its view for the server, a click handler and the group to highlight. */
+type TileInteraction = {
+  view?: TileView;
+  /** The draft's tiles, for a view on a tile that isn't saved yet (sent with its question). */
+  viewTiles?: Tile[];
+  onPick?: (value: string | null) => void;
+  highlight?: { value: string | null } | null;
+};
+type TileBodyProps = { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; asSaved: boolean; onAction?: (action: ButtonAction, target?: string) => void } & TileInteraction;
 
 function TileBody(props: TileBodyProps) {
   const { tile } = props;
@@ -1139,13 +1305,15 @@ function TileBody(props: TileBodyProps) {
   return <QueryTileBody {...props} />;
 }
 
-function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved }: TileBodyProps) {
-  const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined);
+function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved, view, viewTiles, onPick, highlight }: TileBodyProps) {
+  const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, !asSaved && tile.visual === "table" && tile.format?.table?.totals === true, view ? { view, tiles: viewTiles, drill: tile.drill } : undefined);
+  // Drilled, the chart shows another level: say so to the chart (its projection works on what's shown).
+  const shownTile = drilledTile(tile, view?.drill);
   const { current } = useWorkspace();
   const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
   const [drillError, setDrillError] = useState<string | null>(null);
   // Rows opened under other dates or slicers no longer match the tile, so they're put away.
-  const filtersKey = JSON.stringify(filters);
+  const filtersKey = JSON.stringify([filters, view]);
   const drill = opened?.filtersKey === filtersKey ? opened : null;
   if (!state) return <p className={ui.muted}>Working it out…</p>;
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
@@ -1160,6 +1328,7 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved }: 
           ...(asSaved ? { dashboardId, tileId: tile.id } : { query: tile.query }),
           filters: { from: filters.from || null, to: filters.to || null, values: filters.values },
           drill: selection,
+          ...(view ? { view, ...(asSaved ? {} : { viewTiles, viewDrill: tile.drill }) } : {}),
         },
       });
       setDrill({ title, result, filtersKey });
@@ -1171,9 +1340,11 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved }: 
     <>
       {drillError ? <Notice tone="error">{drillError}</Notice> : null}
       <TileResult
-        tile={tile}
+        tile={shownTile}
         result={state.result!}
         onDrill={tile.visual === "pivot" ? (selection, title) => void openDrill(selection, title) : undefined}
+        onPick={onPick}
+        highlight={highlight}
         exportFor={{ organisationId, organisationName: current?.id === organisationId ? current.displayName : "Organisation", filters }}
       />
       {drill ? (
@@ -1209,19 +1380,36 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved }: 
   );
 }
 
+/** The organisation's balance month, for naming financial years and quarters (decision 755). */
+const YearEndMonth = createContext(3);
+
+/** Periods named for people: "FY2027", "Q3 2026" (months and days keep the chart's own names). */
+const NAMED_GRAINS = new Set(["year", "quarter", "fyear", "fquarter", "week"]);
+
 function TileResult({
   tile,
   result,
   onDrill,
   exportFor,
+  onPick,
+  highlight,
 }: {
   tile: Pick<Tile, "title" | "visual" | "format" | "height"> & { query?: TileQuery | null };
   result: QueryResult;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
   exportFor?: PivotExportFor;
+  /** A group clicked (its value as the server gave it), to filter other tiles or drill down (decision 754). */
+  onPick?: (value: string | null) => void;
+  /** The group to show at full strength, the rest faded. */
+  highlight?: { value: string | null } | null;
 }) {
   const measures = result.columns.filter((column) => column.role === "measure");
-  const spec = useMemo(() => tileChartSpec(tile, measures, { query: tile.query, truncated: result.truncated }), [tile, measures, result.truncated]);
+  const yearEndMonth = useContext(YearEndMonth);
+  const periodGrain = result.columns.find((column) => column.key === "category")?.grain;
+  const spec = useMemo(() => {
+    const built = tileChartSpec(tile, measures, { query: tile.query, truncated: result.truncated });
+    return built && periodGrain && NAMED_GRAINS.has(periodGrain) ? { ...built, periodName: (value: string) => periodLabel(value, periodGrain, yearEndMonth) } : built;
+  }, [tile, measures, result.truncated, periodGrain, yearEndMonth]);
 
   if (tile.visual === "pivot") {
     return result.pivot ? (
@@ -1238,7 +1426,7 @@ function TileResult({
     <>
       {/* What the figures can't show, e.g. amounts in two currencies left blank (decision 694). */}
       {result.notes?.map((note) => <Notice key={note} tone="warning">{note}</Notice>)}
-      <TileFigures tile={tile} result={result} measures={measures} spec={spec} />
+      <TileFigures tile={tile} result={result} measures={measures} spec={spec} onPick={onPick} highlight={highlight} />
     </>
   );
 }
@@ -1248,16 +1436,32 @@ function TileFigures({
   result,
   measures,
   spec,
+  onPick,
+  highlight,
 }: {
   tile: Pick<Tile, "title" | "visual" | "format" | "height"> & { query?: TileQuery | null };
   result: QueryResult;
   measures: ResultColumn[];
   spec: ReturnType<typeof tileChartSpec>;
+  onPick?: (value: string | null) => void;
+  highlight?: { value: string | null } | null;
 }) {
+  const yearEndMonth = useContext(YearEndMonth);
   // Yes/No groups are named Yes and No on the chart too (decision 577).
   const yesNo = result.columns.some((column) => column.key === "category" && column.format === "boolean");
+  const grain = result.columns.find((column) => column.key === "category")?.grain;
+  // Year, quarter and week groups are named for people on the chart; the rows keep their dates (for projections and clicks).
   const named = yesNo ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : booleanText(row.category) })) : result.rows;
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(named, measures[0]?.key ?? "m0") : named;
+  // Each group as drawn, back to its value as the server gave it (for clicks), and which to highlight.
+  const rawOf = new Map(named.map((row, index) => [String(row.category), result.rows[index].category ?? null]));
+  const pickRow = onPick
+    ? (index: number) => {
+        const label = rows[index]?.category;
+        if (label !== undefined && rawOf.has(String(label))) onPick(rawOf.get(String(label)) ?? null);
+      }
+    : undefined;
+  const highlighted = highlight ? rows.map((row, index) => (rawOf.get(String(row.category)) === highlight.value ? index : -1)).filter((index) => index >= 0) : null;
   if (tile.visual === "kpi") return <KeyFigureView result={result} format={tile.format} />;
   if (!spec) {
     // Table styles and conditional formatting (#376), by each value's position among the tile's values.
@@ -1283,7 +1487,13 @@ function TileFigures({
                 {result.columns.map((column) => {
                   const valueIndex = measures.indexOf(column);
                   return valueIndex < 0 ? (
-                    <td key={column.key}>{showValue(row[column.key], column)}</td>
+                    <td key={column.key} className={highlight && column.key === "category" && row.category !== highlight.value ? styles.fadedCell : undefined}>
+                      {onPick && column.key === "category" ? (
+                        <button type="button" className={styles.groupButton} aria-pressed={highlight ? row.category === highlight.value : undefined} onClick={() => onPick(row.category ?? null)}>
+                          {grain && NAMED_GRAINS.has(grain) && row.category ? periodLabel(row.category, grain, yearEndMonth) : showValue(row[column.key], column)}
+                        </button>
+                      ) : grain && NAMED_GRAINS.has(grain) && column.key === "category" && row.category ? periodLabel(row.category, grain, yearEndMonth) : showValue(row[column.key], column)}
+                    </td>
                   ) : (
                     <FormattedCell key={column.key} className={ui.num} format={tile.format} valueIndex={valueIndex} value={row[column.key] ?? null} range={ranges[valueIndex]} field={row.category ?? null}>
                       {showValue(row[column.key], column)}
@@ -1318,7 +1528,7 @@ function TileFigures({
     const note = mapNote(tile.visual, rows, chartGroupNames(rows.map((row) => row.category)), measures.map((column) => column.key), tile.format?.map?.areas);
     return (
       <>
-        <Chart spec={spec} rows={rows} height={CHART_HEIGHTS[tile.height ?? "medium"]} />
+        <Chart spec={spec} rows={rows} height={CHART_HEIGHTS[tile.height ?? "medium"]} onPick={pickRow} highlight={highlighted} />
         {note ? <p className={styles.mapNote}>{note}</p> : null}
         <p className={styles.mapNote}>{MAP_ATTRIBUTION}</p>
       </>
@@ -1328,7 +1538,25 @@ function TileFigures({
   const height = tile.visual === "calendar"
     ? Math.max(CHART_HEIGHTS[tile.height ?? "medium"], calendarHeight(calendarYears(rows.map((row) => String(row.category ?? ""))).length))
     : CHART_HEIGHTS[tile.height ?? "medium"];
-  return <Chart spec={spec} rows={rows} height={height} />;
+  return (
+    <>
+      {pickRow ? <GroupChooser names={spec.periodName && rows.every((row) => typeof row.category === "string") ? rows.map((row) => spec.periodName!(String(row.category))) : chartGroupNames(rows.map((row) => row.category))} chosen={highlighted?.length === 1 ? highlighted[0] : null} onChoose={pickRow} /> : null}
+      <Chart spec={spec} rows={rows} height={height} onPick={pickRow} highlight={highlighted} />
+    </>
+  );
+}
+
+/** Choosing a chart's group from the keyboard, as a click on it does (decision 754). */
+function GroupChooser({ names, chosen, onChoose }: { names: string[]; chosen: number | null; onChoose: (index: number) => void }) {
+  return (
+    <label className={styles.groupChooser}>
+      <span className={styles.visuallyHidden}>Choose a group to filter by or drill into</span>
+      <select value={chosen ?? ""} onChange={(event) => event.target.value !== "" && onChoose(Number(event.target.value))}>
+        <option value="">Choose a group…</option>
+        {names.map((name, index) => (name === "Other" ? null : <option key={index} value={index}>{name || "(blank)"}</option>))}
+      </select>
+    </label>
+  );
 }
 
 function pivotRowLabel(row: PivotRow, index: number, field: ResultColumn): string {
@@ -1643,6 +1871,61 @@ function SecondGrouping({ visual, query, columns, onChange }: { visual: Visual; 
   );
 }
 
+/** A chart's drill-down levels (decision 755): dates by financial or calendar year, or fields one inside another. */
+function DrillSettings({ drill, usable, query, columns, onChange }: { drill: TileDrill | undefined; usable: boolean; query: TileQuery; columns: ColumnInfo[]; onChange: (drill: TileDrill | undefined) => void }) {
+  const groupField = query.groupBy?.field ?? "";
+  const dated = isDate(columns.find((column) => column.name === groupField)?.type ?? "");
+  const kind = !drill ? "" : drill.levels[0].grain === "fyear" ? "fyear" : drill.levels[0].grain ? "year" : "fields";
+  const choose = (value: string) => {
+    if (!value) return onChange(undefined);
+    if (value === "fyear" || value === "year") return onChange({ levels: dateHierarchy(groupField, value === "fyear") });
+    const next = columns.find((column) => column.name !== groupField && !isNumber(column.type));
+    onChange({ levels: [{ field: groupField, ...(query.groupBy?.grain ? { grain: query.groupBy.grain } : {}) }, ...(next ? [{ field: next.name, ...(isDate(next.type) ? { grain: "month" as Grain } : {}) }] : [])] });
+  };
+  return (
+    <fieldset className={styles.sizeFields}>
+      <legend>Drill down</legend>
+      {!usable ? <p className={ui.muted}>Group the chart by something (with no second grouping) to drill down.</p> : (
+        <>
+          <Field label="Levels" hint={kind === "fyear" ? "Financial years follow the balance date in Settings, named by the year they end (FY2027)." : "Readers choose Drill down on click, then a group, to see the next level inside it."}>
+            <select value={kind} onChange={(event) => choose(event.target.value)}>
+              <option value="">None</option>
+              {dated ? <option value="fyear">Financial year, quarter, month, day</option> : null}
+              {dated ? <option value="year">Calendar year, quarter, month, day</option> : null}
+              <option value="fields">{fieldLabel(groupField)}, then other fields</option>
+            </select>
+          </Field>
+          {kind === "fields" && drill ? (
+            <>
+              {drill.levels.slice(1).map((level, index) => (
+                <div key={index} className={styles.pivotField}>
+                  <Field label={`Level ${index + 2}`}>
+                    <select value={level.field} onChange={(event) => {
+                      const column = columns.find((entry) => entry.name === event.target.value);
+                      const levels = [...drill.levels];
+                      levels[index + 1] = { field: event.target.value, ...(column && isDate(column.type) ? { grain: "month" as Grain } : {}) };
+                      onChange({ levels });
+                    }}>
+                      {columnOptions(columns.filter((column) => !isNumber(column.type) && (column.name === level.field || !drill.levels.some((entry) => entry.field === column.name))))}
+                    </select>
+                  </Field>
+                  <Button size="small" variant="danger" aria-label={`Remove level ${index + 2}`} disabled={drill.levels.length <= 2} onClick={() => onChange({ levels: drill.levels.filter((_entry, at) => at !== index + 1) })}>Remove</Button>
+                </div>
+              ))}
+              <div className={styles.addRow}>
+                <Button size="small" variant="secondary" disabled={drill.levels.length >= MAX_DRILL_LEVELS} onClick={() => {
+                  const column = columns.find((entry) => !isNumber(entry.type) && !drill.levels.some((level) => level.field === entry.name));
+                  if (column) onChange({ levels: [...drill.levels, { field: column.name, ...(isDate(column.type) ? { grain: "month" as Grain } : {}) }] });
+                }}>Add a level</Button>
+              </div>
+            </>
+          ) : null}
+        </>
+      )}
+    </fieldset>
+  );
+}
+
 /** Remembered in this browser only: whether the chart panel shows advanced settings (decision 751). */
 const ADVANCED_KEY = "tohyee.analytics.advancedSettings";
 function readAdvanced(): boolean {
@@ -1666,6 +1949,7 @@ function TileEditor({
   themeClass,
   theme,
   onSetDefault,
+  others = [],
 }: {
   saving: boolean;
   organisationId: string;
@@ -1681,6 +1965,8 @@ function TileEditor({
   /** The report's theme, for checking colours chosen on the chart. */
   theme?: ReportTheme;
   onSetDefault?: (visual: DefaultableVisual, format: ChartFormat | undefined) => void;
+  /** The page's other tiles, for how a click on this one changes them (decision 754). */
+  others?: Array<{ id: string; title: string }>;
 }) {
   const { can } = useWorkspace();
   const [fieldSearch, setFieldSearch] = useState("");
@@ -1690,6 +1976,9 @@ function TileEditor({
   const [height, setHeight] = useState<TileHeight>(tile?.height ?? "medium");
   const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
   const [format, setFormat] = useState<ChartFormat | undefined>(tile?.format);
+  // Drill-down levels and how clicks change other tiles (decisions 754-755).
+  const [drill, setDrill] = useState<TileDrill | undefined>(tile?.drill);
+  const [interactions, setInteractions] = useState<Record<string, InteractionMode>>(tile?.interactions ?? {});
   const [savedVersion, setSavedVersion] = useState(0);
   // The panel's tab, specialist chart types and advanced settings (#387, decisions 750-751).
   const [tab, setTab] = useState<PanelTab>("data");
@@ -1703,6 +1992,7 @@ function TileEditor({
       // Not remembered; it still applies to this chart.
     }
   };
+  const drillUsable = DRILLABLE.includes(visual) && Boolean(query.groupBy) && !query.breakdown;
   const shownVisuals = VISUALS.filter((entry) => moreTypes || !isSpecialistVisual(entry.value) || entry.value === visual);
   const table = tables.find((entry) => entry.name === query.table);
   const columns = table?.columns ?? [];
@@ -2270,6 +2560,33 @@ function TileEditor({
         onSetDefault={onSetDefault ? (look) => onSetDefault(visual, look) : undefined}
         theme={theme}
       />
+      {DRILLABLE.includes(visual) ? (
+        <DrillSettings drill={drill} usable={drillUsable} query={query} columns={columns} onChange={(next) => {
+          setDrill(next);
+          // The first level is what the chart is grouped by.
+          if (next && query.groupBy && (next.levels[0].field !== query.groupBy.field || next.levels[0].grain !== query.groupBy.grain)) setQuery({ ...query, groupBy: next.levels[0] });
+        }} />
+      ) : null}
+      {DRILLABLE.includes(visual) && others.length ? (
+        <fieldset className={styles.sizeFields}>
+          <legend>When a group on this chart is clicked</legend>
+          <p className={ui.muted}>Filter shows only that group&apos;s rows; Highlight fades the other groups on a chart grouped the same way (on any other it filters).</p>
+          <div className={styles.propertyGrid}>
+            {others.map((other) => (
+              <Field key={other.id} label={other.title}>
+                <select value={interactions[other.id] ?? "filter"} onChange={(event) => {
+                  const next = { ...interactions };
+                  if (event.target.value === "filter") delete next[other.id];
+                  else next[other.id] = event.target.value as InteractionMode;
+                  setInteractions(next);
+                }}>
+                  {INTERACTION_MODES.map((mode) => <option key={mode} value={mode}>{INTERACTION_LABELS[mode]}</option>)}
+                </select>
+              </Field>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
       {visual === "pivot" ? <p className={ui.muted}>Clicking a number in the pivot table shows the rows behind it.</p> : null}
       {visual === "kpi" || visual === "table" ? <p className={ui.muted}>{visual === "kpi" ? "Key figures" : "Tables"} have no tooltips or clicks to set.</p> : null}
             </>
@@ -2289,6 +2606,8 @@ function TileEditor({
               ...(height !== "medium" ? { height } : {}),
               query: { ...query, filters: query.filters.filter(filterComplete) },
               ...(format ? { format } : {}),
+              ...(drillUsable && drill ? { drill } : {}),
+              ...(DRILLABLE.includes(visual) && Object.keys(interactions).length ? { interactions } : {}),
             })
           }
         >

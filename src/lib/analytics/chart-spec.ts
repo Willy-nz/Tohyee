@@ -47,6 +47,8 @@ export type ChartSpec = {
   format?: ChartFormat;
   /** Where the groups came from, so a linear projection can tell whether they're a regular run of dates (decision 692). */
   projection?: ProjectionSource;
+  /** Names date groups for people ("FY2027", "Q3 2026"; decision 755); left out, months and days as before. */
+  periodName?: (value: string) => string;
 };
 
 export type { ChartTheme };
@@ -123,8 +125,9 @@ function isoDate(value: unknown): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function formatCategories(values: unknown[]): string[] {
+function formatCategories(values: unknown[], periodName?: (value: string) => string): string[] {
   if (!values.every(isoDate)) return values.map((value) => String(value ?? ""));
+  if (periodName) return values.map((value) => periodName(value));
   const months = values.every((value) => value.slice(-2) === "01");
   const formatter = new Intl.DateTimeFormat("en-NZ", months ? { month: "short", year: "numeric", timeZone: "UTC" } : { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   return values.map((value) => formatter.format(new Date(`${value}T00:00:00.000Z`)));
@@ -431,7 +434,7 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
   const forecastLength = plan ? projection!.length : 0;
   const projectedLength = (index: number) => (plan ? seriesFormat(index).forecast ?? 0 : 0);
   const categoryValues = [...rows.map((row) => row[spec.category]), ...(plan ? plan.future : [])];
-  const categories = formatCategories(categoryValues);
+  const categories = formatCategories(categoryValues, spec.periodName);
   const placeOf = (index: number) => {
     const item = spec.series[index];
     const as = spec.kind === "combo" ? seriesFormat(index).as ?? item.as ?? "bar" : spec.kind === "line" || spec.kind === "area" ? "line" : "bar";

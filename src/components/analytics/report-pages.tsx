@@ -113,6 +113,10 @@ export function PageTabs({
             <input type="checkbox" checked={page.hidden === true} disabled={!page.hidden && list.filter((entry) => !entry.hidden).length <= 1} onChange={(event) => onUpdate({ ...withoutKey(page, "hidden"), ...(event.target.checked ? { hidden: true } : {}) })} />{" "}
             Hide from the page tabs (opened by drill-through or a button)
           </label>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={page.drillThrough === true} onChange={(event) => onUpdate({ ...withoutKey(page, "drillThrough"), ...(event.target.checked ? { drillThrough: true } : {}) })} />{" "}
+            Drill-through page: a group chosen on another page can open this page, showing only that group
+          </label>
           <div className={ui.rowButtons}>
             <Button size="small" variant="secondary" disabled={index === 0} onClick={() => onMove?.(page.id, -1)} aria-label={`Move ${page.name} earlier`}>Move earlier</Button>
             <Button size="small" variant="secondary" disabled={index === list.length - 1} onClick={() => onMove?.(page.id, 1)} aria-label={`Move ${page.name} later`}>Move later</Button>

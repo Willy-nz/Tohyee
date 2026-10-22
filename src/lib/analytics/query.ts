@@ -15,7 +15,8 @@ import { previousPeriod, previousYear } from "@/lib/analytics/periods";
  * decimals come back as decimal strings.
  */
 
-export type Grain = "day" | "week" | "month" | "quarter" | "year";
+/** "fquarter" and "fyear" follow the organisation's balance date (decision 755). */
+export type Grain = "day" | "week" | "month" | "quarter" | "year" | "fquarter" | "fyear";
 export type PivotGrain = "month" | "quarter" | "year";
 export type Aggregate = "sum" | "avg" | "min" | "max" | "count" | "count_distinct";
 export type FilterOp =
@@ -145,7 +146,7 @@ export type TileQuery = {
 
 export type ColumnInfo = { name: string; type: string };
 export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
-export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure" };
+export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure"; /** A date group's period, for naming it ("FY2027 Q1"). */ grain?: Grain };
 export type PivotColumn = {
   key: string;
   label: string;
@@ -209,7 +210,21 @@ export type DashboardFilters = {
   values?: Record<string, string[]>;
   /** Today and the balance date for relative date filters; set by the server, never taken from a request. */
   dates?: QueryDates;
+  /**
+   * Filters a reader's drill-down, clicks and drill-through add (decision
+   * 756), each kept to tiles whose table has its field. Worked out by the
+   * server from the report's saved tiles (`viewQuery`), never taken from a request.
+   */
+  view?: Filter[];
 };
+
+/** A date grouped by a period; financial years and quarters start after the balance date (decision 755). */
+export function grainSql(grain: Grain, expression: string, yearEndMonth: number): string {
+  const end = Number.isInteger(yearEndMonth) && yearEndMonth >= 1 && yearEndMonth <= 12 ? yearEndMonth % 12 : 3;
+  if (grain === "fyear") return `cast(date_trunc('year', ${expression} - interval ${end} month) + interval ${end} month as DATE)`;
+  if (grain === "fquarter") return `cast(date_trunc('quarter', ${expression} - interval ${end % 3} month) + interval ${end % 3} month as DATE)`;
+  return `cast(date_trunc('${grain}', ${expression}) as DATE)`;
+}
 
 export const MAX_ROWS = 5000;
 
@@ -219,7 +234,7 @@ function todayDates(): QueryDates {
 }
 export const MAX_PIVOT_CELLS = 2000;
 export const MAX_PIVOT_DRILL_ROWS = 500;
-const GRAINS: Grain[] = ["day", "week", "month", "quarter", "year"];
+const GRAINS: Grain[] = ["day", "week", "month", "quarter", "year", "fquarter", "fyear"];
 const PIVOT_GRAINS: PivotGrain[] = ["month", "quarter", "year"];
 const AGGREGATES: Aggregate[] = ["sum", "avg", "min", "max", "count", "count_distinct"];
 const OPS: readonly FilterOp[] = FILTER_OPS;
@@ -589,6 +604,9 @@ function filterSql(
     if (!types.has(field) || values.length === 0) continue;
     where.push(`cast(${q(field)} as VARCHAR) in (${values.slice(0, 200).map((value) => param(String(value))).join(", ")})`);
   }
+  for (const filter of dashboard.view ?? []) {
+    if (types.has(filter.field)) where.push(conditionSql(filter, types, param, dates));
+  }
   if (query.dateField) {
     const shifted = shiftYears ? ` + interval ${shiftYears} year` : "";
     if (dashboard.from && !skipFrom) {
@@ -627,6 +645,7 @@ export function buildDistinctValuesSql(query: TileQuery, tableColumns: ColumnInf
 /** The SQL for a tile, with the dashboard's date range and slicers applied. */
 export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashboard: DashboardFilters = {}): Built {
   const types = new Map(tableColumns.map((entry) => [entry.name, entry.type]));
+  const yearEnd = (dashboard.dates ?? todayDates()).yearEndMonth;
   const params: unknown[] = [];
   const param = (value: unknown) => {
     params.push(value);
@@ -741,18 +760,19 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   let category = "";
   if (query.groupBy) {
     const field = q(query.groupBy.field);
-    category = query.groupBy.grain ? `cast(date_trunc('${query.groupBy.grain}', ${field}) as DATE)` : field;
+    category = query.groupBy.grain ? grainSql(query.groupBy.grain, field, yearEnd) : field;
     columns.push({
       key: "category",
       label: query.groupBy.field,
       format: query.groupBy.grain ? "date" : formatOfType(types.get(query.groupBy.field)!),
       role: "category",
+      ...(query.groupBy.grain ? { grain: query.groupBy.grain } : {}),
     });
   }
   let second = "";
   if (query.groupBy && query.breakdown) {
     const field = q(query.breakdown.field);
-    second = query.breakdown.grain ? `cast(date_trunc('${query.breakdown.grain}', ${field}) as DATE)` : field;
+    second = query.breakdown.grain ? grainSql(query.breakdown.grain, field, yearEnd) : field;
     columns.push({
       key: "breakdown",
       label: query.breakdown.field,
@@ -769,7 +789,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   const select = (shiftYears: number, dates: DashboardFilters = dashboard) => {
     const shiftedCategory =
       shiftYears && query.groupBy?.grain
-        ? `cast(date_trunc('${query.groupBy.grain}', ${q(query.groupBy.field)} + interval ${shiftYears} year) as DATE)`
+        ? grainSql(query.groupBy.grain, `${q(query.groupBy.field)} + interval ${shiftYears} year`, yearEnd)
         : category;
     const parts = [
       ...(query.groupBy ? [`${shiftedCategory} as category`] : []),

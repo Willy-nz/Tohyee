@@ -7645,3 +7645,47 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      removing a page removes its tiles after asking. Dates and slicers are
      the report's, on every page (per-page filters and slicers: decisions
      757-758).
+754. **Clicking a group filters or highlights the page's other tiles**
+     (22 October 2026, #376 phase 3; Power BI's cross-filter, cross-highlight
+     and "edit interactions"; not yet reviewed by Jess). Clicking a column,
+     bar, slice or table row of a chart grouped by something (no second
+     grouping) chooses that group; each chart also has a **Choose a group**
+     list, so it works from the keyboard. The choice filters the other tiles
+     on the page whose table has the column. Each tile's Interactions tab
+     sets, for each other tile, **Filter** (the default), **Highlight** or
+     **No change**. Highlight fades the other groups on a tile grouped the
+     same way (field and period); on a tile grouped differently it filters
+     instead (Power BI shows the highlighted part of each bar there, which
+     needs a second question per tile; not built). The clicked tile shows
+     its own choice highlighted. One group at a time (no Ctrl-click). A bar
+     above the tiles says what the page is filtered by, with Clear and
+     **Reset to default**, which also clears drills and drill-through.
+755. **Drill-down, with financial years** (22 October 2026, #376 phase 3;
+     Power BI's drill mode, drill up and "expand all down one level"; Xero
+     names a financial year by the year it ends). A tile can have 2 to 4
+     levels: dates by financial year, quarter, month and day (the
+     organisation's balance date; FY2027 is the year ending in 2027), dates
+     by calendar year, or its grouping then other fields. The first level is
+     what it's grouped by. Readers turn on **Drill down on click** and
+     choose a group to see the next level inside it; **↑ Up** goes back;
+     **Next level for all** shows the next level for every group. The path
+     shows under the tile. Groupings by financial year and financial
+     quarter are new choices for any date grouping too, and year, quarter
+     and week groups are named "2026", "Q3 2026", "Week of 19 Oct 2026"
+     instead of their first day. Drilling isn't saved with the report.
+756. **Drill-through and what a reader's view may ask for** (22 October
+     2026, #376 phase 3; Power BI's drill-through with Back; the access
+     contract of decision 697 / #401). A page marked **Drill-through page**
+     (usually also hidden) can be opened from a chosen group on another
+     page: the filter bar offers **Drill through to <page>**, and the page
+     shows only that group, saying so, with **← Back**. What a reader has
+     drilled, clicked or drilled through to is sent to the server as the
+     tile and the group's value only. The server works out the field from
+     the saved tile it was chosen on (never from the request), drills a
+     tile only to its own saved levels, and adds each choice as an "and"
+     filter after the tile's own filters, so a view can only narrow what a
+     tile shows and can only filter by a column some saved tile of the same
+     report groups by. A tile that isn't on the report, or a level it
+     hasn't got, is refused. Report viewers still run only saved tiles of
+     reports shared with them; filters sent as the view's own are ignored.
+     Bookmarks and links (decision 759) go through the same checks.

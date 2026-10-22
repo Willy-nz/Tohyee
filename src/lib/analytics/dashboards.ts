@@ -11,6 +11,7 @@ import { customThemeId, parseThemeChoice, type ReportTheme } from "@/lib/charts/
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import { TILE_HEIGHTS, TILE_WIDTHS, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import { pageForSaving, parsePages, type ReportPage } from "@/lib/analytics/pages";
+import { DRILLABLE, INTERACTION_MODES, parseDrill, type InteractionMode, type TileDrill } from "@/lib/analytics/report-view";
 import {
   buildDistinctValuesSql,
   buildPivotDrillSql,
@@ -65,6 +66,10 @@ export type Tile = {
   format?: ChartFormat;
   /** The report page it's on (decision 753); left out, the first page. */
   page?: string;
+  /** Drill-down levels (decision 755): the first is what it's grouped by. */
+  drill?: TileDrill;
+  /** How a click on this tile changes others, by their id (decision 754); left out, they're filtered. */
+  interactions?: Record<string, InteractionMode>;
 };
 
 export type Slicer = { table: string; field: string; label: string };
@@ -281,10 +286,19 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
   if (input.length > MAX_TILES) throw new ValidationError(`A dashboard can have up to ${MAX_TILES} charts, tables and text cards.`);
   const seen = new Set<string>();
   // Each tile on its page (decision 753): a page that isn't the report's puts it on the first.
-  return input.map((entry, index) => {
+  const parsed = input.map((entry, index) => {
     const tile = parseTile(entry, index);
     const page = pageForSaving((entry as Record<string, unknown> | null)?.page, pages);
     return page ? { ...tile, page } : tile;
+  });
+  // Interactions name the report's other tiles; any other id is dropped (decision 754).
+  const ids = new Set(parsed.map((tile) => tile.id));
+  return parsed.map((tile, index) => {
+    const raw = (input[index] as Record<string, unknown> | null)?.interactions;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || !DRILLABLE.includes(tile.visual as string)) return tile;
+    const entries = Object.entries(raw as Record<string, unknown>).filter(([id, mode]) => id !== tile.id && ids.has(id) && mode !== "filter");
+    for (const [, mode] of entries) if (!INTERACTION_MODES.includes(mode as InteractionMode)) throw new ValidationError(`${tile.title}: choose how a click changes each other tile.`);
+    return entries.length ? { ...tile, interactions: Object.fromEntries(entries) as Record<string, InteractionMode> } : tile;
   });
 
   function parseTile(entry: unknown, index: number): Tile {
@@ -368,6 +382,13 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
     } catch (error) {
       throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
     }
+    let drill: TileDrill | undefined;
+    if (tile.drill !== undefined && tile.drill !== null) {
+      if (!DRILLABLE.includes(visual as string)) throw new ValidationError(`${title}: this chart type can't be drilled down.`);
+      if (query.breakdown) throw new ValidationError(`${title}: a chart with a second grouping can't be drilled down.`);
+      const types = new Map((tables.get(query.table) ?? []).map((column) => [column.name, column.type]));
+      drill = parseDrill(tile.drill, query.groupBy, (field) => (types.has(field) ? isDateType(types.get(field)!) : undefined), title);
+    }
     return {
       id,
       title,
@@ -376,8 +397,13 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       ...(height ? { height } : {}),
       query,
       ...(format ? { format } : {}),
+      ...(drill ? { drill } : {}),
     };
   }
+}
+
+function isDateType(type: string): boolean {
+  return type === "DATE" || type.startsWith("TIMESTAMP");
 }
 
 function parseName(input: unknown): string {

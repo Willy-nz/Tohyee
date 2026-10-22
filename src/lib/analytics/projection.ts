@@ -20,7 +20,7 @@ import type { Grain } from "@/lib/analytics/query";
  * next weeks), so their labels never imply a spacing the data doesn't have.
  */
 
-export const PROJECTION_GRAINS: Grain[] = ["day", "week", "month", "quarter", "year"];
+export const PROJECTION_GRAINS: Grain[] = ["day", "week", "month", "quarter", "year", "fquarter", "fyear"];
 
 /** What the chart knows about where its groups came from (the tile's question and its answer). */
 export type ProjectionSource = {
@@ -55,6 +55,9 @@ const GRAIN_NAMES: Record<Grain, [string, string]> = {
   month: ["month", "months"],
   quarter: ["quarter", "quarters"],
   year: ["year", "years"],
+  // Financial quarters and years (decision 755) start on the 1st of a month after the balance date.
+  fquarter: ["quarter", "quarters"],
+  fyear: ["financial year", "financial years"],
 };
 
 export function periodName(grain: Grain, count: number): string {
@@ -76,7 +79,7 @@ export function addPeriods(value: string, grain: Grain, count: number): string {
   const date = utc(value);
   if (grain === "day") date.setUTCDate(date.getUTCDate() + count);
   else if (grain === "week") date.setUTCDate(date.getUTCDate() + 7 * count);
-  else date.setUTCMonth(date.getUTCMonth() + count * (grain === "month" ? 1 : grain === "quarter" ? 3 : 12));
+  else date.setUTCMonth(date.getUTCMonth() + count * (grain === "month" ? 1 : grain === "quarter" || grain === "fquarter" ? 3 : 12));
   return date.toISOString().slice(0, 10);
 }
 
@@ -86,7 +89,7 @@ function startsPeriod(value: string, grain: Grain): boolean {
   if (grain === "day") return true;
   if (grain === "week") return date.getUTCDay() === 1;
   if (date.getUTCDate() !== 1) return false;
-  if (grain === "month") return true;
+  if (grain === "month" || grain === "fquarter" || grain === "fyear") return true;
   if (grain === "quarter") return date.getUTCMonth() % 3 === 0;
   return date.getUTCMonth() === 0;
 }
