@@ -7558,6 +7558,25 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      change them) and up to 500. Viewers and up still get the whole column,
      since they can query the table anyway. No row-level rules were added
      (phase 5).
+### Report freshness (#387; decision 698)
+
+698. **A report says how fresh each source is; a failed refresh is
+     stale, never "refreshed"** (21 October 2026, #387 P2; Power BI's
+     "data updated" and refresh history as the reference, not yet
+     confirmed by Jess). `GET /api/analytics/dashboards/<id>/freshness`
+     (anyone who can open the report) gives, for each source the tiles
+     read (the books copy's and Google Analytics' many tables count as one
+     source each): the finish time of its last good load, the time of a
+     later failed attempt, whether one is running, and the latest date in
+     the date fields its tiles go by. The report shows these under its
+     dates: failed ones as warnings ("the last refresh failed …, so this is
+     still the data loaded …. It may be out of date"), and a note when its
+     sources were last refreshed more than an hour apart. A load only
+     counts once it finished and was swapped in, which is already how
+     loads work: a failed one leaves the last good table in place. There
+     are no partly loaded sources to flag (database sources over their row
+     limit load nothing; files load whole). Errors and file names aren't
+     included, so report viewers get the same answer as everyone else.
 
 
 ### Keeping the chart editor manageable (#387; decisions 750-752)
