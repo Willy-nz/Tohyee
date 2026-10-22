@@ -5,7 +5,7 @@ import type { DashboardFilters, TileQuery } from "@/lib/analytics/query";
 import { parseTileView, viewQuery, type TileDrill } from "@/lib/analytics/report-view";
 import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { listFields } from "@/lib/analytics/calculated-fields";
+import { loadModel } from "@/lib/analytics/model";
 import { applyChoice, draftParameterValues, parameterValues, parseChoice } from "@/lib/analytics/parameters";
 import { reportPages, tilePage } from "@/lib/analytics/pages";
 import { effectiveDates } from "@/lib/analytics/report-filters";
@@ -90,7 +90,7 @@ export const POST = route(async (request) => {
           filters: { ...allowed, ...own, dates, view: [...viewed.where, ...ranges, ...(page?.filters ?? []).map((entry) => entry.filter)], parameters: parameterValues(dashboard.settings.parameters, rawParameters) },
           totals,
         },
-        fields: await listFields(tx),
+        fields: await loadModel(tx),
       };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
@@ -99,10 +99,10 @@ export const POST = route(async (request) => {
     if (view) {
       const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];
       const viewed = viewQuery(tiles, { id: String(body.tileId ?? "draft"), title: "This tile", query: body.query as TileQuery, drill: body.viewDrill as TileDrill | undefined }, view);
-      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)], parameters: draftParameterValues(rawParameters) }, totals: body.totals === true }, fields: await listFields(tx) };
+      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)], parameters: draftParameterValues(rawParameters) }, totals: body.totals === true }, fields: await loadModel(tx) };
     }
-    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where), parameters: draftParameterValues(rawParameters) }, totals: body.totals === true }, fields: await listFields(tx) };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where), parameters: draftParameterValues(rawParameters) }, totals: body.totals === true }, fields: await loadModel(tx) };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill, fields));
-  return json(await runTile(organisationId, query.tile.query, query.filters, { totals: query.totals, fields }));
+  return json(await runTile(organisationId, query.tile.query, query.filters, { totals: query.totals, model: fields }));
 });

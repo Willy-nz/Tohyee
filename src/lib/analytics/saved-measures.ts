@@ -6,7 +6,7 @@ import { listTables } from "@/lib/analytics/engine";
 import { builtInMeasures, measureFromSaved, type MeasureDefinition, type SavedMeasure } from "@/lib/analytics/measure-library";
 import { parseTileQuery, type ColumnInfo } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { tablesWithFields } from "@/lib/analytics/calculated-fields";
+import { tablesWithModel } from "@/lib/analytics/model";
 
 /** Values saved on a data source (#337, decision 597), and the books copy's built-in ones. */
 
@@ -59,7 +59,7 @@ function checkDefinition(definition: unknown, table: string, columns: ColumnInfo
 
 export async function createMeasure(tx: OrgTx, input: Record<string, unknown>): Promise<SavedMeasure> {
   await requireAnalytics(tx);
-  const tables = await tablesWithFields(tx);
+  const tables = await tablesWithModel(tx);
   const table = typeof input.table === "string" ? input.table : "";
   const columns = tables.get(table);
   if (!columns) throw new ValidationError(`There's no loaded table called ${table || "that"}.`);

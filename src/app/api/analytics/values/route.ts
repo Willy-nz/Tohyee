@@ -4,7 +4,7 @@ import { columnValues, dateContext, getDashboard, slicerPairs, slicerValuesFor, 
 import { hiddenFarmTables, requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import type { QueryDates } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { listFields } from "@/lib/analytics/calculated-fields";
+import { loadModel } from "@/lib/analytics/model";
 import { ForbiddenError } from "@/lib/errors";
 
 /**
@@ -36,7 +36,7 @@ export const GET = route(async (request) => {
       if (hidden) scoped.skip = scoped.dashboard.tiles.flatMap((tile) => (tile.query && hidden.has(tile.query.table) ? [tile.query.table] : []));
     }
     // Calculated fields (decision 772) can be slicers too.
-    return { organisationId: tx.organisationId, scoped, fields: await listFields(tx) };
+    return { organisationId: tx.organisationId, scoped, fields: await loadModel(tx) };
   });
   if (child) {
     const tiles = scoped ? scoped.dashboard.tiles.filter((tile) => !tile.query || !scoped.skip.includes(tile.query.table)) : undefined;

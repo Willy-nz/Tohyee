@@ -42,7 +42,7 @@ import {
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { quickTotal, shareOf } from "@/lib/analytics/quick-calcs";
 import { parseParameters, parseSwitches, tileParameters, type NumberParameter, type TileSwitches } from "@/lib/analytics/parameters";
-import { tablesWithFields, withFields, type CalculatedField } from "@/lib/analytics/calculated-fields";
+import { modelTables, questionTables, tablesWithModel, type AnalyticsModel } from "@/lib/analytics/model";
 import { type DatePreset, isDatePreset, presetRange } from "@/lib/analytics/date-ranges";
 import { todayIsoDate } from "@/lib/dates";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
@@ -487,7 +487,7 @@ function parseDescription(input: unknown): string | null {
 
 export async function createDashboard(tx: OrgTx, input: Record<string, unknown>): Promise<Dashboard> {
   await requireAnalytics(tx);
-  const tables = await tablesWithFields(tx);
+  const tables = await tablesWithModel(tx);
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
@@ -544,7 +544,7 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const expectedVersion = parseExpectedVersion(input.expectedVersion);
   const current = await getDashboard(tx, id);
   if (expectedVersion !== null && expectedVersion !== current.version) throw new DashboardConflictError(current);
-  const tables = await tablesWithFields(tx);
+  const tables = await tablesWithModel(tx);
   const name = input.name === undefined ? current.name : parseName(input.name);
   const description = input.description === undefined ? current.description : parseDescription(input.description);
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings, tables);
@@ -590,9 +590,11 @@ export async function runTile(
   query: unknown,
   filters: DashboardFilters = {},
   /** `totals`: work out the whole answer as one total too, for a table's totals row. `fields`: the organisation's calculated fields (decision 772). */
-  options: { totals?: boolean; fields?: readonly CalculatedField[] } = {},
+  options: { totals?: boolean; model?: AnalyticsModel } = {},
 ): Promise<QueryResult> {
-  const tables = withFields(await listTables(organisationId), options.fields);
+  // Calculated fields and the relationships this question uses (decisions 772, 774), checked on the data.
+  const prepared = await questionTables(organisationId, await listTables(organisationId), options.model, query);
+  const tables = prepared.tables;
   const parsed = parseTileQuery(query, tables);
   if (parsed.pivot) {
     const built = buildPivotSql(parsed, tables.get(parsed.table)!, filters);
@@ -659,7 +661,7 @@ export async function runTile(
       }
     }
     pivotShares(parsed, [...rows.values()], built.hasColumn);
-    const notes = mixedCurrencyNotes([...mixedLabels]);
+    const notes = [...prepared.notes, ...mixedCurrencyNotes([...mixedLabels])];
     return {
       columns: [...built.rowFields, ...built.measures],
       rows: [],
@@ -694,7 +696,7 @@ export async function runTile(
       result.totals = totals;
     }
   }
-  const notes = mixedCurrencyNotes([...mixed]);
+  const notes = [...prepared.notes, ...mixedCurrencyNotes([...mixed])];
   if (notes.length) result.notes = notes;
   return result;
 }
@@ -778,10 +780,10 @@ export async function runPivotDrilldown(
   query: unknown,
   filters: DashboardFilters,
   selection: unknown,
-  fields?: readonly CalculatedField[],
+  model?: AnalyticsModel,
 ): Promise<PivotDrillResult> {
   if (!selection || typeof selection !== "object" || Array.isArray(selection)) throw new ValidationError("That pivot cell can't be opened.");
-  const tables = withFields(await listTables(organisationId), fields);
+  const { tables } = await questionTables(organisationId, await listTables(organisationId), model, query);
   const parsed = parseTileQuery(query, tables);
   const built = buildPivotDrillSql(parsed, tables.get(parsed.table)!, filters, selection as PivotDrillSelection);
   const rows = await runBuiltQuery(organisationId, built.sql, built.params);
@@ -789,13 +791,13 @@ export async function runPivotDrilldown(
 }
 
 /** The values a slicer offers: up to 500 distinct values of a column, sorted. */
-export async function sliceValues(organisationId: string, table: string, field: string, fields?: readonly CalculatedField[]): Promise<string[]> {
-  return (await columnValues(organisationId, table, field, fields)).values;
+export async function sliceValues(organisationId: string, table: string, field: string, model?: AnalyticsModel): Promise<string[]> {
+  return (await columnValues(organisationId, table, field, model)).values;
 }
 
 /** A column's values (up to 500, for slicers and "is one of" filters) and its type, so true/false can show as Yes/No. */
-export async function columnValues(organisationId: string, table: string, field: string, fields?: readonly CalculatedField[]): Promise<{ values: string[]; type: string }> {
-  const tables = withFields(await listTables(organisationId), fields);
+export async function columnValues(organisationId: string, table: string, field: string, model?: AnalyticsModel): Promise<{ values: string[]; type: string }> {
+  const { tables } = await questionTables(organisationId, await listTables(organisationId), model, { table, groupBy: { field } });
   const column = tables.get(table)?.find((entry) => entry.name === field);
   if (!column) throw new ValidationError(`There's no column ${field} in ${table}.`);
   const rows = await runBuiltQuery(
@@ -820,14 +822,19 @@ export async function slicerValuesFor(
   dates: QueryDates,
   /** Tables this person can't read (farm tables, decision 744): their tiles are left out. */
   skip: ReadonlySet<string> = new Set(),
-  fields?: readonly CalculatedField[],
+  model?: AnalyticsModel,
 ): Promise<{ values: string[]; type: string }> {
-  const tables = withFields(await listTables(organisationId), fields);
+  const base = await listTables(organisationId);
   const found = new Set<string>();
   let type = "VARCHAR";
   for (const tile of dashboard.tiles) {
     if (!tile.query || skip.has(tile.query.table)) continue;
-    const columns = tables.get(tile.query.table);
+    let columns: ColumnInfo[] | undefined;
+    try {
+      columns = (await questionTables(organisationId, base, model, { ...tile.query, slicer: field })).tables.get(tile.query.table);
+    } catch {
+      continue;
+    }
     const column = columns?.find((entry) => entry.name === field);
     if (!columns || !column) continue;
     type = column.type;
@@ -853,8 +860,9 @@ export async function slicerValuesFor(
  * after their own filters, so the list never names rows the report leaves
  * out (decision 697).
  */
-export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[], dates?: QueryDates, fields?: readonly CalculatedField[]): Promise<Array<[string, string]>> {
-  const tables = withFields(await listTables(organisationId), fields);
+export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[], dates?: QueryDates, model?: AnalyticsModel): Promise<Array<[string, string]>> {
+  const base = await listTables(organisationId);
+  const tablesFor = async (query: TileQuery) => (await questionTables(organisationId, base, model, { ...query, slicer: [field, child] })).tables;
   const found = new Map<string, [string, string]>();
   const ask = async (query: TileQuery, columns: ColumnInfo[]) => {
     const pairs: TileQuery = { ...query, groupBy: { field }, breakdown: { field: child }, pivot: null, measures: [{ label: "Rows", aggregate: "count" }], sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined };
@@ -866,12 +874,17 @@ export async function slicerPairs(organisationId: string, table: string, field: 
     }
   };
   if (!tiles) {
-    const columns = tables.get(table);
+    const columns = (await tablesFor({ table } as TileQuery)).get(table);
     if (!columns?.some((column) => column.name === field) || !columns.some((column) => column.name === child)) throw new ValidationError(`There's no column ${field} or ${child} in ${table}.`);
     await ask({ table, groupBy: null, measures: [], filters: [], dateField: null, sort: { by: "category", direction: "asc" }, limit: null }, columns);
   } else {
     for (const tile of tiles) {
-      const columns = tile.query ? tables.get(tile.query.table) : undefined;
+      let columns: ColumnInfo[] | undefined;
+      try {
+        columns = tile.query ? (await tablesFor(tile.query)).get(tile.query.table) : undefined;
+      } catch {
+        continue;
+      }
       if (!tile.query || !columns?.some((column) => column.name === field) || !columns.some((column) => column.name === child)) continue;
       try {
         await ask(tile.query, columns);
@@ -884,8 +897,14 @@ export async function slicerPairs(organisationId: string, table: string, field: 
 }
 
 /** The loaded tables and their columns, for building tiles. */
-export async function describeTables(organisationId: string, fields?: readonly CalculatedField[]): Promise<Array<{ name: string; columns: Array<ColumnInfo & { calculated?: true }> }>> {
-  const tables = withFields(await listTables(organisationId), fields);
-  // A calculated field (decision 772) is marked, never sent with its SQL.
-  return [...tables.entries()].map(([name, columns]) => ({ name, columns: columns.map((column) => (column.expression ? { name: column.name, type: column.type, calculated: true as const } : column)) }));
+export async function describeTables(organisationId: string, model?: AnalyticsModel): Promise<Array<{ name: string; columns: Array<ColumnInfo & { calculated?: true; related?: string }> }>> {
+  const tables = modelTables(await listTables(organisationId), model);
+  // A calculated field (decision 772) is marked, never sent with its SQL; a related table's field (decision 774) names its table.
+  return [...tables.entries()].map(([name, columns]) => ({
+    name,
+    columns: columns.map((column) => {
+      const related = (column as { related?: { dimension: string } }).related;
+      return column.expression ? { name: column.name, type: column.type, calculated: true as const } : related ? { name: column.name, type: column.type, related: related.dimension } : column;
+    }),
+  }));
 }

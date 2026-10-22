@@ -163,6 +163,8 @@ export type ColumnInfo = {
   type: string;
   /** A calculated field's SQL, worked out on each row of its table (decision 772); left out, a column the table has. */
   expression?: string;
+  /** The FROM joining the table to its related tables (decision 774), on every column of a table that has related fields. */
+  join?: string;
 };
 
 /**
@@ -172,8 +174,12 @@ export type ColumnInfo = {
  */
 export function sourceSql(table: string, columns: ColumnInfo[]): string {
   const fields = columns.filter((column) => column.expression);
-  if (!fields.length) return quoteIdentifier(table);
-  return `(select *, ${fields.map((field) => `${field.expression} as ${quoteIdentifier(field.name)}`).join(", ")} from ${quoteIdentifier(table)}) as ${quoteIdentifier(table)}`;
+  // Related tables' fields (decision 774): the fact table joined to each dimension it uses, by key.
+  const joined = columns.find((column) => column.join)?.join ?? null;
+  if (!fields.length && !joined) return quoteIdentifier(table);
+  const base = joined ?? quoteIdentifier(table);
+  if (!fields.length) return `${base} as ${quoteIdentifier(table)}`;
+  return `(select *, ${fields.map((field) => `${field.expression} as ${quoteIdentifier(field.name)}`).join(", ")} from ${base}${joined ? ` as ${quoteIdentifier("_tohyee_joined")}` : ""}) as ${quoteIdentifier(table)}`;
 }
 export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
 export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure"; /** A date group's period, for naming it ("FY2027 Q1"). */ grain?: Grain };
@@ -354,6 +360,13 @@ function parseBaseMeasure(measure: Record<string, unknown>, columns: Map<string,
     if (["sum", "avg"].includes(aggregate) && !isNumberType(columns.get(result.field)!)) {
       throw new ValidationError(`${label}: ${result.field} isn't a number, so it can only be counted.`);
     }
+  }
+  // A related table's number would repeat on every row of this table that matches it (decision 774).
+  // A related number times one of this table's own (e.g. quantity × the product's price) is worked out once per row, so that's fine.
+  const fromRelated = (field: unknown) => typeof field === "string" && field.includes(".");
+  const related = fromRelated(measure.field) && (!measure.times || fromRelated(measure.times)) ? String(measure.field) : null;
+  if (related && ["sum", "avg"].includes(aggregate)) {
+    throw new ValidationError(`${label}: ${related} comes from a related table, so adding it up here would count it again for every row that matches it (one invoice's 100.00 on three lines would be 300.00). Count it, use its smallest or largest, or make the chart on that table.`);
   }
   if (measure.times) {
     if (!["sum", "avg"].includes(aggregate) || !result.field) throw new ValidationError(`${label}: only a sum or average can multiply two columns.`);
