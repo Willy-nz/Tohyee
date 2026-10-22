@@ -2197,6 +2197,13 @@ that something happened.
   moving average. They're worked out over every group the filters leave
   (before Top N), shares of the value worked out again for the whole, with
   missing periods blank rather than 0; "What it means" says what each is of.
+- **Analytics: year to date and last year** (#376 phase 4, decision 771,
+  examples TI1-TI5). Each value with a date has **Over**: financial year
+  to date, financial quarter to date, month to date or the last 12 months,
+  by the organisation's balance date. A key figure or a table by account
+  shows it to the To date, with "and last year" the same dates a year
+  before (29 February becomes 28 February); a chart by month shows each
+  month's year to date, starting again each financial year.
 - **Analytics: one access check for every output** (#387, decision 697).
   The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
   figures, tooltips, totals, drill-through rows, slicer values, CSV and

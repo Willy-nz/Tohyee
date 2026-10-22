@@ -7786,6 +7786,42 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      means" says what it's of. Money stays exact: shares, changes and
      averages use the exact decimal division (six places).
 
+### Time intelligence (#376 phase 4; decision 771; examples TI1-TI5)
+
+771. **Year, quarter and month to date, and the last 12 months, by the
+     balance date** (22 October 2026, #376 phase 4 and #387's time rules;
+     Power BI's TOTALYTD, TOTALQTD, TOTALMTD, SAMEPERIODLASTYEAR and
+     DATESINPERIOD as the references, Xero's financial year for the year;
+     not yet reviewed by Jess). Each value with a date has **Over**: the
+     dates chosen (as before), **financial year to date**, **financial
+     quarter to date**, **month to date** or **the last 12 months**. The
+     year starts the day after the organisation's balance date (any month
+     end, so 31 March, 30 June and other NZ balance dates all work), and
+     quarters run from it, exactly as decision 755's financial-year
+     drill-down and the fyear/fquarter groupings. The last 12 months are the
+     "Last 12 months" dates already used (that month so far and the 11 whole
+     months before), so 29 February 2028 covers 1 March 2027 onwards. For one
+     total, or groups that aren't dates (e.g. by account), the value is
+     worked out to the dashboard's To date (or today without one),
+     whatever the From date, and **and last year** is those dates a year
+     before (`previousYear`: 29 February becomes 28 February, a month end
+     stays a month end), so the year to 22 October 2026 is compared with
+     1 April to 22 October 2025, not the whole of last year. A year with no
+     rows last year (a first, partial year) compares with blank, not 0. On a
+     chart or table **by date** each period shows the value to the end of
+     that period: the year (quarter, month) to date starts again at each
+     new financial year (quarter, month), and rows before the From date are
+     read for it (June's year to date includes April and May even when the
+     dates start in June), while other values on the tile keep the
+     dashboard's dates. There it needs a shorter grouping than its period
+     (month to date needs days or weeks), only adds up totals and counts
+     (a formula of them is worked out from their years to date), and can't
+     also have "and last year", a second grouping or a quick calculation; a
+     table's totals row shows the value to the To date. Balances refuse it
+     (they're already as at a date), and pivots don't offer it yet. Choosing
+     one adds its words to the value's name ("Sales (year to date)"), and
+     "What it means" says which dates it covers.
+
 ### More Prepare data steps (#376 phase 4; decisions 790-798)
 
 790. **Prepare data follows Power Query's steps and words** (22 October

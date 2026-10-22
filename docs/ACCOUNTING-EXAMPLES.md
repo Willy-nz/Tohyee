@@ -16090,6 +16090,55 @@ Tested in `tests/unit/analytics-measure-definitions.test.ts` (MD1-MD3,
 MD6), `tests/unit/analytics-merge-checks.test.ts` (MD4) and
 `tests/integration/sales-platform-orders.test.ts` (MD5).
 
+## Analytics: year to date and the same period last year (examples TI1-TI5; as Xero and Power BI do, not yet reviewed)
+
+Issue #376 phase 4 asked for year, quarter and month to date (financial
+year aware), the same period last year and rolling 12 months; #387 asked
+for custom NZ balance dates, partial years, leap days and month order. The
+financial year is the organisation's, as Xero's reports use it (it ends on
+the balance date, decision 755); the calculations follow Power BI's
+TOTALYTD and SAMEPERIODLASTYEAR (decision 771). **As Xero and Power BI do,
+not yet reviewed.** Nothing is posted.
+
+Setup (31 March balance date unless said): sales of 10.00 (29 Feb 2024,
+North), 100.00 (15 Mar 2025, North), 200.00 (10 Apr 2025, North), 50.00
+(30 Jun 2025, South), 70.00 (1 Jul 2025, North), 30.00 (29 Oct 2025,
+South), 40.00 (28 Feb 2026, North), 300.00 (5 Apr 2026, South), 60.00
+(20 May 2026, North), 25.00 (15 Oct 2026, North), 8.00 (28 Feb 2027,
+North), 5.00 (29 Feb 2028, North).
+
+- **TI1** To 22 October 2026, whatever the From date: year to date (FY2027
+  from 1 April 2026) **385.00**; quarter to date (from 1 October)
+  **25.00**; month to date **25.00**; last 12 months (1 November 2025 to
+  22 October 2026) **425.00**. With a **30 June** balance date the year to
+  date is **25.00** (from 1 July 2026) and last year's **70.00** (1 July to
+  22 October 2025).
+- **TI2** Same period last year: year to 22 October 2026 **385.00** against
+  1 April to 22 October 2025 **320.00** (the 30.00 on 29 October isn't in
+  it). To 30 June 2025 (FY2026): **250.00** against **blank** (FY2025 had
+  no rows by 30 June 2024; a first year isn't compared with 0). To
+  29 February 2028: **5.00** against 1 April 2026 to 28 February 2027
+  **393.00**; the last 12 months to 29 February 2028 start on 1 March 2027
+  (**5.00**).
+- **TI3** By region, year to 22 October 2026 and last year: North
+  **85.00** and **270.00**, South **300.00** and **50.00**.
+- **TI4** By month from 15 June 2025 to 31 May 2026: year to date June
+  **250.00** (April's 200.00 counts, though before the From date) while
+  June's own sales are **50.00**; July **320.00**, October **350.00**,
+  February 2026 **390.00**, then FY2027 starts again: April **300.00**, May
+  **360.00**. Quarter to date by month (1 April to 31 October 2025): April
+  **200.00**, June **250.00**, July **70.00** (a new quarter), October
+  **30.00**. Last 12 months at February 2026 (March 2025 to February 2026)
+  **490.00** and at April 2026 (May 2025 to April 2026) **490.00**. A
+  table's totals row is the year to the To date: **385.00** to 22 October
+  2026. North's share of sales, year to date at June 2025: **80%** (200.00
+  of 250.00, worked out from the two years to date).
+- **TI5** Refused, with a reason: month to date on a chart by month; on a
+  chart by date, year to date with "and last year" or of an average; any
+  period on a balance, without a date, or with a quick calculation.
+
+Tested in `tests/unit/analytics-time-intelligence.test.ts`.
+
 ## Analytics: quick calculations (examples QC1-QC8; as Power BI does, not yet reviewed)
 
 Issue #376 phase 4 asked for running totals, shares, ranks, differences and

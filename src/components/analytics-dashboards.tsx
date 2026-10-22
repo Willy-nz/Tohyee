@@ -9,7 +9,7 @@ import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, ValueMeaning, ValueRules } from "@/components/analytics/saved-values";
-import { QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
+import { PeriodField, QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
@@ -1671,7 +1671,7 @@ function TileFigures({
     const look = tableLook(tile.format?.table);
     const ranges = measures.map((column) => columnRange(result.rows.map((row) => row[column.key])));
     // A quick calculation (decision 770) is never added up from the rows shown.
-    const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.quick ? ["quick"] : measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
+    const aggregates = (tile.query?.measures ?? []).flatMap((measure) => (measure.quick || (measure.period && tile.query?.groupBy?.grain) ? ["quick"] : measure.compare ? [measure.aggregate, measure.aggregate] : [measure.aggregate]));
     const totals = tile.format?.table?.totals ? tableTotals(result.columns, result.rows, aggregates, result.totals) : null;
     return (
       <div className={ui.tableWrap}>
@@ -2656,7 +2656,7 @@ function TileEditor({
               round
             </label>
           ) : null}
-          {query.groupBy?.grain && !(visual === "kpi" && index === 0) && !measure.quick ? (
+          {((query.groupBy?.grain && !measure.period) || (query.groupBy && !query.groupBy.grain && measure.period)) && !(visual === "kpi" && index === 0) && !measure.quick ? (
             <label className={ui.checkbox}>
               <input
                 type="checkbox"
@@ -2666,6 +2666,7 @@ function TileEditor({
               and last year
             </label>
           ) : null}
+          <PeriodField index={index} measure={measure} dated={Boolean(query.dateField || query.groupBy?.grain) && visual !== "pivot"} onChange={(patch) => setMeasure(index, patch)} />
           <QuickCalcField
             index={index}
             measure={measure}

@@ -46,12 +46,13 @@ function checkDefinition(definition: unknown, table: string, columns: ColumnInfo
   const query = parseTileQuery({ table, groupBy: null, measures: [measure], filters: [], dateField }, tables);
   const parsed = query.measures[0];
   if (parsed.aggregate === "formula") return { kind: "formula", formula: parsed.formula!, inputs: parsed.inputs ?? [] };
-  const { label: _label, compare: _compare, formula: _formula, inputs: _inputs, quick: _quick, ...rest } = parsed;
+  const { label: _label, compare: _compare, formula: _formula, inputs: _inputs, quick: _quick, period: _period, ...rest } = parsed;
   void _label;
   void _compare;
   void _formula;
   void _inputs;
   void _quick;
+  void _period;
   return { kind: "base", ...(rest as Omit<typeof rest, "aggregate"> & { aggregate: Exclude<typeof rest.aggregate, "formula"> }) };
 }
 
