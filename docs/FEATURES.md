@@ -2207,6 +2207,19 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: a simpler chart panel** (#387, decisions 750-752). The
+  selected chart's panel has **Data**, **Style** and **Interactions** tabs,
+  showing only the settings that apply to its chart type. Each Style
+  section and each value's number format says whether it's **changed on
+  this chart**, comes from **this report's default** for the chart type, or
+  from **the theme**, with a **Reset** for just that setting (or for the
+  default). Specialist chart types are under **More chart types…**, and
+  reference lines, trend lines and projections, colour rules, gridline
+  styles and log scales under **Show advanced settings** (shown anyway
+  when a chart uses them). In edit mode, tiles can be chosen (**Select**)
+  and given the **same width** or **same height**, made to **share a row**
+  (two halves, three thirds or four quarters) or have their **heights lined
+  up** across a row, all from the keyboard.
 - **Analytics: New Zealand maps** (#376 phase 2, decision 687). A
   **filled map** colours New Zealand's regions or districts and cities by a
   value, e.g. sales by region; names are matched however they're spelt

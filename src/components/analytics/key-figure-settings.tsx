@@ -1,6 +1,7 @@
 "use client";
 
 import { ColourInput } from "@/components/analytics/colour-input";
+import { SettingSection } from "@/components/analytics/setting-source";
 import { Button, Field, Notice, ui } from "@/components/ui";
 import type { ChartFormat, KpiFormat, KpiRule } from "@/lib/analytics/chart-format";
 import type { TileQuery } from "@/lib/analytics/query";
@@ -18,11 +19,14 @@ export function KeyFigureSettings({
   onQuery,
   format,
   onFormat,
+  part = "data",
 }: {
   query: TileQuery;
   onQuery: (query: TileQuery) => void;
   format: ChartFormat | undefined;
   onFormat: (format: ChartFormat | undefined) => void;
+  /** The chart panel's tab (#387, decision 750): what's compared (Data) or how it looks (Style). */
+  part?: "data" | "style";
 }) {
   const first = query.measures[0];
   const kpi = format?.kpi ?? {};
@@ -44,6 +48,25 @@ export function KeyFigureSettings({
     if (next === "target") setKpi({ target: kpi.target ?? "0" });
     else if (kpi.target !== undefined) setKpi({ target: undefined });
   };
+  if (part === "style") {
+    return (
+      <SettingSection title="Key figure" open paths={KPI_LOOK.map((key) => ["kpi", key])}>
+        {query.sparkline ? (
+          <div className={styles.pair}>
+            <Field label="Trend style">
+              <select value={kpi.sparkline ?? "line"} onChange={(event) => setKpi({ sparkline: event.target.value === "line" ? undefined : (event.target.value as "area" | "column") })}>
+                <option value="line">Line</option>
+                <option value="area">Area</option>
+                <option value="column">Columns</option>
+              </select>
+            </Field>
+            <ColourInput label="Trend colour" value={kpi.sparkColor} onChange={(sparkColor) => setKpi({ sparkColor })} />
+          </div>
+        ) : null}
+        <KeyFigureLook kpi={kpi} setKpi={setKpi} compare={compare !== "none"} several={query.measures.length > 1} />
+      </SettingSection>
+    );
+  }
   return (
     <fieldset className={styles.group}>
       <legend>Key figure</legend>
@@ -85,22 +108,13 @@ export function KeyFigureSettings({
         Trend by month underneath
       </label>
       {!query.dateField && !grouped ? <p className={ui.muted}>Choose what the date range applies to for a comparison or trend.</p> : null}
-      {query.sparkline ? (
-        <>
-          <Field label="Trend style">
-            <select value={kpi.sparkline ?? "line"} onChange={(event) => setKpi({ sparkline: event.target.value === "line" ? undefined : (event.target.value as "area" | "column") })}>
-              <option value="line">Line</option>
-              <option value="area">Area</option>
-              <option value="column">Columns</option>
-            </select>
-          </Field>
-          <ColourInput label="Trend colour" value={kpi.sparkColor} onChange={(sparkColor) => setKpi({ sparkColor })} />
-        </>
-      ) : null}
-      <KeyFigureLook kpi={kpi} setKpi={setKpi} compare={compare !== "none"} several={query.measures.length > 1} />
+      {query.sparkline ? <p className={ui.muted}>The trend&apos;s style and colour are under Style.</p> : null}
     </fieldset>
   );
 }
+
+/** A key figure's look; its target and comparison are data, under Data. */
+const KPI_LOOK = ["size", "sizePx", "color", "align", "bold", "label", "colorBy", "rules", "icon", "sparkline", "sparkColor", "multi"];
 
 const RULE_OPS: Array<{ value: KpiRule["op"]; label: string }> = [
   { value: ">=", label: "at least" },
@@ -115,7 +129,7 @@ function KeyFigureLook({ kpi, setKpi, compare, several }: { kpi: KpiFormat; setK
   const rules = kpi.rules ?? [];
   const setRule = (index: number, patch: Partial<KpiRule>) => setKpi({ rules: rules.map((rule, at) => (at === index ? { ...rule, ...patch } : rule)) });
   return (
-    <details className={styles.inner}>
+    <details className={styles.inner} open>
       <summary>Number style</summary>
       <div className={styles.pair}>
         <Field label="Number size">
