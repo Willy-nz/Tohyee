@@ -246,6 +246,8 @@ export type DashboardFilters = {
    * server from the report's saved tiles (`viewQuery`), never taken from a request.
    */
   view?: Filter[];
+  /** What-if parameters' values by name (decision 773), for @name in formulas. */
+  parameters?: Record<string, string>;
 };
 
 /** A date grouped by a period; financial years and quarters start after the balance date (decision 755). */
@@ -722,6 +724,12 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     return `$${params.length}`;
   };
   const q = quoteIdentifier;
+  /** A what-if parameter's value (decision 773): the reader's choice, checked by the server, or the report's default. */
+  const parameterValue = (name: string, label: string): string => {
+    const value = dashboard.parameters?.[name];
+    if (value === undefined || !NUMBER.test(value)) throw new ValidationError(`${label}: uses @${name}, which this report doesn't have.`);
+    return value;
+  };
 
   // A balance counts everything up to the To date, so the From date moves from the tile's rows onto each other value.
   const balances = query.measures.some((measure) => measure.asAt || measure.inputs?.some((input) => input.asAt));
@@ -848,6 +856,8 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
           return decimal(`coalesce(${baseSql(inputOf(measure, node.name), dates)}, 0)`);
         case "days":
           return days === null || days < 1 ? `cast(null as ${DECIMAL_RESULT})` : decimal(param(String(days)));
+        case "param":
+          return decimal(param(parameterValue(node.name, measure.label)));
         case "negate":
           return `(-(${compile(node.operand)}))`;
         case "binary":
@@ -1054,6 +1064,8 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
             return decimal(`coalesce(${over(q(`i${index}_${names.indexOf(node.name)}`))}, 0)`);
           case "days":
             return days === null || days < 1 ? `cast(null as ${DECIMAL_RESULT})` : decimal(param(String(days)));
+          case "param":
+            return decimal(param(parameterValue(node.name, measure.label)));
           case "negate":
             return `(-(${compile(node.operand)}))`;
           case "binary":

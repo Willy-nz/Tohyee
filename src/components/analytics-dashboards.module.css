@@ -412,3 +412,12 @@
 .bookmarkList { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bookmarkLabel { display: block; font-size: var(--text-sm); font-weight: 600; margin-right: 4px; }
 .hiddenList { display: grid; gap: 4px; }
+
+/* What-if parameters and tile switches (decision 773). */
+.parameter { display: grid; gap: 2px; min-width: 180px; }
+.parameterRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.parameterRow input[type="range"] { accent-color: var(--accent); min-width: 140px; }
+.parameterValue { font-variant-numeric: tabular-nums; min-width: 3.5em; font-weight: 600; }
+.switcher { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 12px; margin: -4px 0 6px; font-size: var(--text-xs); }
+.switcher label { display: flex; align-items: center; gap: 4px; margin: 0; }
+.switcher select { font-size: var(--text-xs); padding: 2px 6px; min-height: 28px; max-width: 240px; }

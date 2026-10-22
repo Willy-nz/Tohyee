@@ -7859,3 +7859,35 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      saved value uses it is refused, naming them. A field whose column was
      removed from its table shows why it no longer works, and tiles using it
      say the column is missing.
+
+### What-if parameters and switches (#376 phase 4; decision 773)
+
+773. **A report's sliders for formulas, and a tile's own switches; neither
+     can ask for more than the report has** (22 October 2026, #376 phase 4;
+     Power BI's what-if and field parameters, Looker Studio's parameters,
+     optional metrics and alternative dimensions as the references; not yet
+     reviewed by Jess). **What-if parameters** are saved in the report's
+     settings (up to 10): a name used in formulas as `@name`, a label, the
+     smallest and largest values, a step (up to 1,000 steps) and a starting
+     value, all exact decimals. Readers move a slider under the report's
+     dates; a calculated value such as `[Sales] * (1 + @growth)` is worked
+     out with that number, exactly. The server only takes a value that's one
+     of the slider's steps for a saved tile (anything else is refused, other
+     names are dropped, a parameter not chosen has its starting value); a
+     report can't be saved with a formula naming a parameter it hasn't got.
+     A parameter only changes a number in a formula, so it can't reach any
+     other rows. **Switches** are saved on a tile (Interactions tab, "What
+     the reader can switch"): show one of the tile's values at a time
+     (Power BI's field parameter of measures; a calculated value that names
+     the tile's other values takes them along as its own inputs), and group
+     it by one of up to 8 other columns of the same table chosen by the
+     author (its own grouping is the first choice). A reader's choice is
+     sent as positions only and checked against the saved tile, so a report
+     viewer can pick only what the author listed, and the tile's own filters
+     still apply. Not with pivots, tiles that drill down or have a second
+     grouping; a value that compares with last year shows without the
+     comparison under a grouping that isn't a date. A tile switched to
+     another grouping doesn't filter the page's other tiles when clicked
+     (the click couldn't say which field it means); the default grouping
+     still does. Choices and slider values aren't kept (like drilling) and
+     aren't part of bookmarks yet.

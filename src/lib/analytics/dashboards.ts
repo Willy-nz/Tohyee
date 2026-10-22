@@ -41,6 +41,7 @@ import {
 } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { quickTotal, shareOf } from "@/lib/analytics/quick-calcs";
+import { parseParameters, parseSwitches, tileParameters, type NumberParameter, type TileSwitches } from "@/lib/analytics/parameters";
 import { tablesWithFields, withFields, type CalculatedField } from "@/lib/analytics/calculated-fields";
 import { type DatePreset, isDatePreset, presetRange } from "@/lib/analytics/date-ranges";
 import { todayIsoDate } from "@/lib/dates";
@@ -79,6 +80,8 @@ export type Tile = {
   interactions?: Record<string, InteractionMode>;
   /** Its own dates, in place of the report's (decision 758). */
   dates?: TileDates;
+  /** What the reader can switch: one value at a time, or another grouping (decision 773). */
+  switches?: TileSwitches;
 };
 
 /** A slicer: its column, and its style, second level, pages and look (decision 757). */
@@ -98,6 +101,8 @@ export type DashboardSettings = {
   pages?: ReportPage[];
   /** Saved views of the report: a page, dates, slicer choices and hidden tiles (decision 759). */
   bookmarks?: Bookmark[];
+  /** What-if parameters: numbers the reader chooses, used as @name in formulas (decision 773). */
+  parameters?: NumberParameter[];
 };
 
 /** Today and the organisation's balance date, for dates that move (decision 577). */
@@ -157,6 +162,7 @@ function toDashboard(row: Row, dates: DateContext): Dashboard {
       ...(row.settings.visualDefaults ? { visualDefaults: row.settings.visualDefaults } : {}),
       ...(row.settings.pages?.length ? { pages: row.settings.pages } : {}),
       ...(row.settings.bookmarks?.length ? { bookmarks: row.settings.bookmarks } : {}),
+      ...(row.settings.parameters?.length ? { parameters: row.settings.parameters } : {}),
     },
     tiles: row.tiles,
     version: Number(row.version),
@@ -293,6 +299,7 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     valueFields: slicerValueFields(slicers),
     rangeFields: new Set(slicers.filter((slicer) => isRangeStyle(slicer.style)).map((slicer) => slicer.field)),
   });
+  const parameters = parseParameters(raw.parameters);
   return {
     from: date(raw.from, "From"),
     to: date(raw.to, "To"),
@@ -302,7 +309,17 @@ function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): Dashb
     ...(visualDefaults ? { visualDefaults } : {}),
     ...(pagesWithFilters ? { pages: pagesWithFilters } : {}),
     ...(bookmarks ? { bookmarks } : {}),
+    ...(parameters ? { parameters } : {}),
   };
+}
+
+/** Every @name a tile's formulas use is one of the report's parameters (decision 773). */
+function checkParameters(settings: DashboardSettings, tiles: Tile[]): void {
+  const names = new Set((settings.parameters ?? []).map((parameter) => parameter.name));
+  for (const tile of tiles) {
+    const missing = tileParameters(tile.query).find((name) => !names.has(name));
+    if (missing) throw new ValidationError(`${tile.title}: uses @${missing}; add a parameter called ${missing} to the report first.`);
+  }
 }
 
 /** A bookmark's hidden tiles are the report's own (decision 759). */
@@ -437,6 +454,7 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       drill = parseDrill(tile.drill, query.groupBy, (field) => (types.has(field) ? isDateType(types.get(field)!) : undefined), title);
     }
     const dates = query.dateField ? parseTileDates(tile.dates, title) : undefined;
+    const switches = parseSwitches(tile.switches, query, tables.get(query.table) ?? [], { title, drill: Boolean(drill), visual });
     return {
       id,
       title,
@@ -447,6 +465,7 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>, pages?: R
       ...(format ? { format } : {}),
       ...(drill ? { drill } : {}),
       ...(dates ? { dates } : {}),
+      ...(switches ? { switches } : {}),
     };
   }
 }
@@ -473,6 +492,7 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
   const tiles = parseTiles(input.tiles ?? [], tables, settings.pages, settings.bookmarks);
+  checkParameters(settings, tiles);
   // An image is uploaded to a report that's already saved.
   if (tiles.some((tile) => tile.visual === "image")) throw new ValidationError("Save the report first, then add images to it.");
   const result = await tx.query<{ id: string }>(
@@ -531,6 +551,7 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   if (input.settings !== undefined && settings.theme !== current.settings.theme) await checkTheme(tx, settings);
   // Tiles are checked against the tables as they are now only when they're changed.
   const tiles = input.tiles === undefined ? current.tiles : parseTiles(input.tiles, tables, settings.pages, settings.bookmarks);
+  if (input.tiles !== undefined || input.settings !== undefined) checkParameters(settings, tiles);
   // Images must be this report's own; ones no tile uses any more are removed (decision 684).
   if (input.tiles !== undefined) await checkDashboardImages(tx, current.id, tiles);
   const updated = await tx.query(
