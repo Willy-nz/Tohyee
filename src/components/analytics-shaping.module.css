@@ -75,6 +75,63 @@
   cursor: pointer;
 }
 
+.stepRows {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.rowCount {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.formRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.formRow > * {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.formRow > .stepTools {
+  flex: 0 0 auto;
+}
+
+.checklist {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.checklist legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.formulaEditor {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+}
+
 .stepTools {
   display: flex;
   gap: 4px;
@@ -119,7 +176,8 @@
   padding: 7px 9px;
   border-bottom: 1px solid var(--border);
   text-align: left;
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere: a column is never squeezed narrower than its words, so a wide preview scrolls instead. */
+  overflow-wrap: break-word;
   white-space: pre-wrap;
 }
 
