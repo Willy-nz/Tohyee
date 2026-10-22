@@ -16090,6 +16090,44 @@ Tested in `tests/unit/analytics-measure-definitions.test.ts` (MD1-MD3,
 MD6), `tests/unit/analytics-merge-checks.test.ts` (MD4) and
 `tests/integration/sales-platform-orders.test.ts` (MD5).
 
+## Analytics: calculated fields on a data source (examples CF1-CF6; as Looker Studio does, not yet reviewed)
+
+Issue #376 phase 4 asked for calculated fields on a source, Looker Studio
+style. Not accounting: a formula on each row of a loaded table, shared by
+reports (decision 772). **As Looker Studio does, not yet reviewed.**
+
+Setup: lines on 31 Mar 2026 (Kererū Café, north, 2 × 12.50 = 25.00), 1 Apr
+2026 (Tūī Books, south, 10 × 150.00 = 1,500.00), 15 Apr 2026 (O'Neill's,
+north, 1 × 999.99), 2 Jul 2026 (Tūī Books, no region, 4 × 250.00 =
+1,000.00) and 29 Feb 2028 (Kererū Café, south, no amounts).
+
+- **CF1** `CASE WHEN [amount] >= 1000 THEN "Large" WHEN [amount] >= 100 THEN
+  "Medium" WHEN IS_BLANK([amount]) THEN "No amount" ELSE "Small" END`:
+  Large **2,500.00**, Medium **999.99**, No amount blank, Small **25.00**.
+  A yes/no field `IF([region] = "north", TRUE, FALSE)` filters to
+  Kererū Café **25.00** and O'Neill's **999.99** (the blank region is No).
+- **CF2** `[quantity] * [unit_price]` for O'Neill's **999.99** (a number);
+  `[amount] + 0.10` **1,000.09** (money); `[amount] / 3` **333.33**; a blank
+  amount gives blank, and dividing by zero is blank.
+- **CF3** With a 31 March balance date `FINANCIAL_YEAR([sale_date])`: 31
+  March 2026 is **2026**, 1 April and 15 April 2026 and 2 July 2026 are
+  **2027**, 29 February 2028 is **2028**; FINANCIAL_QUARTER gives Q1 for
+  April, Q2 for July and Q4 for March and February. With a 30 June balance
+  date, 2 July 2026 starts **2027** and the three before it are **2026**.
+- **CF4** `CONCAT(UPPER(LEFT([customer], 3)), " - ", IFBLANK([region],
+  "none"))` gives "KER - north", "TŪĪ - none" and "O'N - north"; text
+  with quotes and semicolons in a formula is only ever text.
+- **CF5** Refused before saving, with a reason: text added to a number, IF
+  with a number and text, an unknown column or function, a date compared
+  with "soon", BLANK compared with =, and a formula that's always blank.
+- **CF6** A report grouped by a field: changing the field's formula
+  (Large from 900) changes the report (Large **2,499.99**, Small
+  **25.00**); removing it, renaming it or making it Yes/No while the report
+  uses it is refused, naming the report.
+
+Tested in `tests/unit/analytics-calculated-fields.test.ts` (CF1-CF5) and
+`tests/integration/analytics-fields.test.ts` (CF6).
+
 ## Analytics: year to date and the same period last year (examples TI1-TI5; as Xero and Power BI do, not yet reviewed)
 
 Issue #376 phase 4 asked for year, quarter and month to date (financial

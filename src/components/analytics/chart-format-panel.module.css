@@ -221,3 +221,11 @@
 .advancedToggle {
   margin-top: 4px;
 }
+
+/* Calculated fields on a data source (decision 772). */
+.fieldList { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 8px; }
+.fieldList li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.fieldFormula { flex-basis: 100%; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.fieldActions { display: flex; gap: 6px; flex-wrap: wrap; }
+.fieldForm { display: grid; gap: 8px; margin-top: 8px; }
+.fieldForm textarea { width: 100%; font-family: var(--font-mono, monospace); }

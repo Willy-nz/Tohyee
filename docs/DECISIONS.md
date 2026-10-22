@@ -7821,3 +7821,41 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      (they're already as at a date), and pivots don't offer it yet. Choosing
      one adds its words to the value's name ("Sales (year to date)"), and
      "What it means" says which dates it covers.
+
+### Calculated fields on a data source (#376 phase 4; decision 772; examples CF1-CF6)
+
+772. **Calculated fields are saved on a table and shared by every report;
+     a change that would break a report is refused** (22 October 2026, #376
+     phase 4; Looker Studio's data source calculated fields as the
+     reference; not yet reviewed by Jess). Under a chart's data source,
+     **Calculated fields on this data source** lists the table's fields and
+     adds one: a name (small letters, numbers and underscores, not one of
+     the table's columns), a formula worked out on each row, and an optional
+     description (tenant migration 0184, `analytics_fields`; bookkeepers and
+     up save, viewers and up see them, report viewers only through their
+     reports' saved tiles). A field is then one of the table's columns
+     everywhere: grouping, filters, values, pivots, slicers, drill-through.
+     Formulas use the values' formula parser (`formula.ts`, extended; never
+     run as code) with columns in square brackets, text in quotes, numbers,
+     TRUE, FALSE and BLANK, + − × ÷, comparisons, AND, OR, NOT,
+     IF(test, then, otherwise), CASE WHEN … THEN … ELSE … END, IS_BLANK,
+     IFBLANK, UPPER, LOWER, TRIM, LENGTH, LEFT, RIGHT, REPLACE, CONTAINS,
+     CONCAT, TEXT, ROUND, ABS, YEAR, QUARTER, MONTH, DAY, WEEKDAY (Monday is
+     1), MONTH_NAME, FINANCIAL_YEAR (the year it ends, by the balance date,
+     as decision 755), FINANCIAL_QUARTER and DAYS_BETWEEN. Its kind (money,
+     number, whole number, text, date, yes or no) is worked out and
+     checked before it's saved: text can't be added to a number, IF's
+     results must be one kind, a date is compared with a date written
+     YYYY-MM-DD. Money added to or taken from money stays money; multiplying
+     and dividing give a number, worked out exactly (division to six places,
+     dividing by zero is blank). A blank in what it uses makes it blank (a
+     test on a blank isn't true, so IF and CASE take their otherwise). It
+     reads only its own table's columns (not other calculated fields), so it
+     can't show a report viewer anything the table's tiles couldn't (decision
+     697); the SQL is worked out on the server and never sent. **Shared, not
+     copied** (unlike saved values, decision 597): changing a field's
+     formula changes every tile using it, and the answer says which reports
+     do; renaming it, changing its kind, or removing it while a report or
+     saved value uses it is refused, naming them. A field whose column was
+     removed from its table shows why it no longer works, and tiles using it
+     say the column is missing.

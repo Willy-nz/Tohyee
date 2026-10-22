@@ -9,6 +9,7 @@ import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, ValueMeaning, ValueRules } from "@/components/analytics/saved-values";
+import { CalculatedFieldsPanel } from "@/components/analytics/calculated-fields-panel";
 import { PeriodField, QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
@@ -868,6 +869,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           saving={busy}
           organisationId={organisationId}
           tables={tables.data?.tables ?? []}
+          onTablesChanged={tables.reload}
           tile={chartTile === "new" ? null : chartTile}
           filters={shown}
           defaults={dashboard.settings.visualDefaults}
@@ -2154,10 +2156,13 @@ function TileEditor({
   theme,
   onSetDefault,
   others = [],
+  onTablesChanged,
 }: {
   saving: boolean;
   organisationId: string;
   tables: TableInfo[];
+  /** A calculated field was added, changed or removed (decision 772): the tables' columns are read again. */
+  onTablesChanged?: () => void;
   tile: Tile | null;
   filters: Filters;
   onSave: (tile: Tile) => void;
@@ -2376,6 +2381,7 @@ function TileEditor({
             ))}
           </select>
         </Field>
+        <CalculatedFieldsPanel organisationId={organisationId} table={query.table} canEdit={can("bookkeeper")} onChanged={() => onTablesChanged?.()} />
         {visual === "pivot" ? (
           <>
             {pivotRows.map((dimension, index) => (

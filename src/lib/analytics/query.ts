@@ -158,7 +158,23 @@ export type TileQuery = {
   sparkline?: boolean;
 };
 
-export type ColumnInfo = { name: string; type: string };
+export type ColumnInfo = {
+  name: string;
+  type: string;
+  /** A calculated field's SQL, worked out on each row of its table (decision 772); left out, a column the table has. */
+  expression?: string;
+};
+
+/**
+ * What a tile reads: its table, or with calculated fields (decision 772)
+ * the table with each field worked out on every row, under the table's own
+ * name so the rest of the query reads it the same way.
+ */
+export function sourceSql(table: string, columns: ColumnInfo[]): string {
+  const fields = columns.filter((column) => column.expression);
+  if (!fields.length) return quoteIdentifier(table);
+  return `(select *, ${fields.map((field) => `${field.expression} as ${quoteIdentifier(field.name)}`).join(", ")} from ${quoteIdentifier(table)}) as ${quoteIdentifier(table)}`;
+}
 export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
 export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure"; /** A date group's period, for naming it ("FY2027 Q1"). */ grain?: Grain };
 export type PivotColumn = {
@@ -692,7 +708,7 @@ export function buildDistinctValuesSql(query: TileQuery, tableColumns: ColumnInf
   const q = quoteIdentifier;
   const where = filterSql({ ...query, dateField: null }, types, { dates: dashboard.dates }, param);
   const notBlank = `${q(field)} is not null`;
-  const sql = `select distinct cast(${q(field)} as VARCHAR) as value from ${q(query.table)}${where ? `${where} and ${notBlank}` : ` where ${notBlank}`} order by 1 limit 500`;
+  const sql = `select distinct cast(${q(field)} as VARCHAR) as value from ${sourceSql(query.table, tableColumns)}${where ? `${where} and ${notBlank}` : ` where ${notBlank}`} order by 1 limit 500`;
   return { sql, params, columns: [] };
 }
 
@@ -937,7 +953,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
           )
         : []),
     ];
-    let from = `${q(query.table)}${conditions(shiftYears, dates)}`;
+    let from = `${sourceSql(query.table, tableColumns)}${conditions(shiftYears, dates)}`;
     if (snapshots.size) {
       // The latest date each snapshot balance has in its group (and for each `per` value), over the tile's rows.
       const windows = [...snapshots].map(([measure, alias]) => {
@@ -1157,7 +1173,7 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
     ...rowExpressions.map((entry, index) => `${entry} as ${q(rowAliases[index])}`),
     ...columnExpressions.map((entry, index) => `${entry} as ${q(columnAliases[index])}`),
   ];
-  const filtered = `with filtered as (select ${filteredColumns.join(", ")} from ${q(query.table)}${filter})`;
+  const filtered = `with filtered as (select ${filteredColumns.join(", ")} from ${sourceSql(query.table, tableColumns)}${filter})`;
   const rowGroups = (depth: number) => rowAliases.slice(0, depth).map(q);
   const columnGroups = (depth: number) => columnAliases.slice(0, depth).map(q);
   const rowGroupingSets = Array.from({ length: pivot.rows.length + 1 }, (_, index) => {
@@ -1314,7 +1330,7 @@ export function buildPivotDrillSql(
     role: measureFields.has(field) ? "measure" : "category",
   }));
   const selected = fields.map((field, index) => `${q(field)} as ${q(`d${index}`)}`);
-  const sql = `select ${selected.join(", ")} from ${q(query.table)}${where} ` +
+  const sql = `select ${selected.join(", ")} from ${sourceSql(query.table, tableColumns)}${where} ` +
     `order by ${query.pivot.rows.map((dimension) => `${q(dimension.field)} asc nulls last`).join(", ")} limit ${MAX_PIVOT_DRILL_ROWS + 1}`;
   return { sql, params, columns };
 }

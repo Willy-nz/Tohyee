@@ -2204,6 +2204,13 @@ that something happened.
   shows it to the To date, with "and last year" the same dates a year
   before (29 February becomes 28 February); a chart by month shows each
   month's year to date, starting again each financial year.
+- **Analytics: calculated fields on a data source** (#376 phase 4,
+  decision 772, tenant migration 0184, examples CF1-CF6). Under a chart's
+  data source, **Calculated fields on this data source** adds a formula
+  worked out on each row (IF, CASE, comparisons, text and date functions,
+  financial year and quarter, arithmetic), saved on the table for every
+  report. Its kind is checked before it's saved; changing one changes every
+  report using it, and removing or renaming one in use is refused.
 - **Analytics: one access check for every output** (#387, decision 697).
   The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
   figures, tooltips, totals, drill-through rows, slicer values, CSV and
