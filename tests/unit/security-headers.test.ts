@@ -25,6 +25,38 @@ describe("security headers", () => {
     );
   });
 
+  // #429, decision 839: only the PowerPoint add-in's slide page may be framed by Office.
+  it("lets Office frame the PowerPoint add-in's slide page, and nothing else", async () => {
+    const slide = await headersFor("/office/powerpoint");
+    expect(slide.get("x-frame-options")).toBeNull();
+    const policy = slide.get("content-security-policy") ?? "";
+    expect(policy).toContain("frame-ancestors 'self' https://*.officeapps.live.com");
+    expect(policy).toContain("https://*.sharepoint.com");
+    expect(policy).toContain("object-src 'none'");
+    // With a query string it's the same page.
+    expect((await headersFor("/office/powerpoint?x=1")).get("x-frame-options")).toBeNull();
+  });
+
+  it.each([
+    "/office/powerpoint/signed-in",
+    "/office/powerpoint/help",
+    "/office/powerpoint/manifest.xml",
+    "/office/powerpointx",
+    "/office",
+    "/login",
+    "/oauth/authorize",
+    "/connect/abc",
+    "/analytics/dashboards/1",
+  ])("%s still can't be framed by Office", async (pathname) => {
+    const headers = await headersFor(pathname);
+    expect(headers.get("x-frame-options")).toBe("SAMEORIGIN");
+    expect(headers.get("content-security-policy")).toContain("frame-ancestors 'self';");
+  });
+
+  it("the Office API is never framed", async () => {
+    expect((await headersFor("/api/office/me")).get("x-frame-options")).toBe("SAMEORIGIN");
+  });
+
   it("leaves the CSP of /api/ responses to the route, so a stored file's sandbox isn't replaced", async () => {
     expect((await headersFor("/api/bills/inbox/3/file")).get("content-security-policy")).toBeNull();
     expect((await headersFor("/api/organisations/acme/logo")).get("content-security-policy")).toBeNull();

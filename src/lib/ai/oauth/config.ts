@@ -1,5 +1,6 @@
 import { remoteAccessAddress } from "@/lib/ai/tokens";
 import { mcpResourceFor, resourceMetadataUrlFor } from "@/lib/ai/oauth/format";
+import { OFFICE_API_PATH } from "@/lib/office/addin";
 
 /**
  * Where Tohyee's sign-in for AI apps lives (decision 810): only on the
@@ -14,6 +15,13 @@ export type OAuthAddresses = {
   /** e.g. https://glimmers.tohyee.nz/api/mcp: what tokens are bound to. */
   resource: string;
   resourceMetadataUrl: string;
+  /**
+   * e.g. https://glimmers.tohyee.nz/api/office: the read-only Analytics API
+   * the PowerPoint add-in's tokens are for (#429, decision 833). A separate
+   * audience: an MCP token doesn't work there, nor one of its tokens at MCP.
+   */
+  officeResource: string;
+  officeResourceMetadataUrl: string;
 };
 
 export function oauthAddressesFor(remoteAddress: string | null): OAuthAddresses | null {
@@ -27,20 +35,21 @@ export function oauthAddressesFor(remoteAddress: string | null): OAuthAddresses 
   if (url.protocol !== "https:") return null;
   const issuer = url.origin;
   const resource = mcpResourceFor(issuer);
-  return { issuer, resource, resourceMetadataUrl: resourceMetadataUrlFor(resource) };
+  const officeResource = `${issuer}${OFFICE_API_PATH}`;
+  return { issuer, resource, resourceMetadataUrl: resourceMetadataUrlFor(resource), officeResource, officeResourceMetadataUrl: resourceMetadataUrlFor(officeResource) };
 }
 
 export async function oauthAddresses(): Promise<OAuthAddresses | null> {
   return oauthAddressesFor(await remoteAccessAddress());
 }
 
-/** RFC 9728 protected resource metadata for the MCP endpoint. */
-export function protectedResourceMetadata(addresses: OAuthAddresses) {
+/** RFC 9728 protected resource metadata for the MCP endpoint, or (#429) the Analytics API for Office. */
+export function protectedResourceMetadata(addresses: OAuthAddresses, which: "mcp" | "office" = "mcp") {
   return {
-    resource: addresses.resource,
+    resource: which === "office" ? addresses.officeResource : addresses.resource,
     authorization_servers: [addresses.issuer],
     bearer_methods_supported: ["header"],
-    resource_name: "Tohyee",
+    resource_name: which === "office" ? "Tohyee Analytics for Office" : "Tohyee",
   };
 }
 

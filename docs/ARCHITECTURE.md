@@ -27,6 +27,7 @@ tohyee                  core database (DATABASE_URL)
 ├─ organisation_members who can open which organisation, with what role
 ├─ ai_access_tokens     personal AI keys (SHA-256 only) with an access level, per user per organisation;
 │                       also AI apps connected by signing in (kind 'connection', #427)
+│                       and PowerPoint add-in sign-ins (kind 'office', no organisation, #429)
 ├─ oauth_clients, oauth_authorization_requests, oauth_authorization_codes, oauth_tokens
 │                       OAuth 2.1 for AI apps signing in (#427): apps, consent requests,
 │                       one-time codes and access/refresh tokens (hashes only)
@@ -289,6 +290,27 @@ re-runs the whole sequence.
   a savepoint inside the one transaction. No
   same-origin check (AI services call it from elsewhere) and no CORS
   headers; cookies are ignored.
+- The PowerPoint add-in (#429, decisions 830-849; docs/POWERPOINT-ADDIN.md)
+  is a content add-in whose slide page is `/office/powerpoint`, served by
+  Tohyee on the https remote access address only. It signs in with the
+  #427 OAuth as a built-in public client (its client_id is
+  `<remote>/office/powerpoint/client.json`, known without fetching; only
+  redirect `<remote>/office/powerpoint/signed-in`), through Office's dialog.
+  Its tokens are bound to a separate audience, `<remote>/api/office`, and
+  its connection is an `ai_access_tokens` row of kind `office` (the
+  person's, no organisation, read level): `/api/mcp` only accepts kind
+  `connection`, `/api/office/*` only kind `office`, both also checking the
+  bound resource. `/api/office/*` is bearer-only (cookies ignored), runs
+  organisation transactions read-only (`withOfficeOrganisation`), and
+  answers only a report's reads through the same handlers as
+  `/api/analytics/*` (`src/lib/analytics/read-routes.ts`, which take the
+  organisation runner), with typed questions refused. On the slide, the
+  normal report viewer (`DashboardView`) runs in an embed mode
+  (`AnalyticsEmbedContext`): read-only, chosen page or tile, and every
+  `api()` call goes through `setApiTransport` to `/api/office` with the
+  token (anything else refused). Only `/office/powerpoint` may be framed by
+  Office's hosts (`src/lib/office/csp.ts`); everything else stays
+  frame-ancestors 'self'.
 - AI apps can sign in instead of using a key (#427, decisions 810-829):
   Tohyee is both the MCP resource server and its own OAuth 2.1
   authorisation server, only on the https remote access address (the

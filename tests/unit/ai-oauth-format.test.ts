@@ -98,6 +98,9 @@ describe("AI apps signing in: the pure parts (#427)", () => {
       issuer: "https://books.example.nz",
       resource: "https://books.example.nz/api/mcp",
       resourceMetadataUrl: "https://books.example.nz/.well-known/oauth-protected-resource/api/mcp",
+      // The PowerPoint add-in's separate audience (#429, decision 833).
+      officeResource: "https://books.example.nz/api/office",
+      officeResourceMetadataUrl: "https://books.example.nz/.well-known/oauth-protected-resource/api/office",
     });
     const resource = protectedResourceMetadata(addresses!);
     expect(resource.resource).toBe("https://books.example.nz/api/mcp");

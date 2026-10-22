@@ -22,14 +22,29 @@ function errorFields(payload: unknown): { code: string | null; details: Record<s
   return { code: typeof record.code === "string" ? record.code : null, details };
 }
 
-type Options = {
+export type ApiOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | boolean | null | undefined>;
 };
+type Options = ApiOptions;
+
+/**
+ * Another way to the API for a page that isn't signed in with a session:
+ * the PowerPoint add-in (#429, decision 838) sends Analytics' reads to the
+ * Analytics API for Office with its own token, and refuses everything else.
+ */
+export type ApiTransport = (path: string, options: ApiOptions) => Promise<unknown>;
+let transport: ApiTransport | null = null;
+
+/** Sends every `api()` call through `next` (null: back to the session cookie). */
+export function setApiTransport(next: ApiTransport | null): void {
+  transport = next;
+}
 
 /** Calls the Tohyee API with the session cookie. Signs you out on 401. */
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
+  if (transport) return (await transport(path, options)) as T;
   const url = new URL(path, window.location.origin);
   for (const [name, value] of Object.entries(options.query ?? {})) {
     if (value !== null && value !== undefined && value !== "") {
@@ -66,6 +81,8 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 
 /** Calls the Tohyee API for a downloadable file, with the same session handling as `api()`. */
 export async function apiDownload(path: string, body: unknown): Promise<Blob> {
+  // Not signed in with a session (the PowerPoint add-in): there are no downloads.
+  if (transport) throw new ApiError("Downloads aren't available here.", 403);
   const response = await fetch(new URL(path, window.location.origin), {
     method: "POST",
     headers: { "content-type": "application/json" },

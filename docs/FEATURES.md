@@ -2090,6 +2090,27 @@ that something happened.
   setup, headers and protocol, and the "what it can do" list fold away.
   Built from the specification and the AI services' published docs; **not
   yet tried with real Claude.ai or ChatGPT**.
+- **PowerPoint add-in for Analytics** (#429, decisions 830-849, core
+  migration 0019; docs/POWERPOINT-ADDIN.md). A content add-in, like Power
+  BI's: a live, interactive Analytics report page (or one tile) on a slide,
+  with its dates and slicers, click-to-filter, drill-down, tooltips and page
+  tabs, while editing and in the slide show. Everyone viewing the slide
+  signs in to Tohyee themselves (password and two-step, or Google, in
+  Office's sign-in window; the OAuth from #427, with its own read-only
+  audience) and sees only what they can see in Analytics (a report viewer
+  only reports shared with them). Someone who can't sign in sees the
+  picture saved the last time someone signed in looked at it, with "Sign
+  in to see live data". What the slide shows (organisation, report, page or
+  tile, filters pane on or off, keep a picture) is saved in the
+  presentation; tokens never are. Slide toolbar: Refresh, Show/Hide
+  filters, Open in Tohyee, Change, Sign out. It only reads: no editing,
+  sharing, pinning or exports, never a typed question. Settings › PowerPoint
+  add-in (admins) downloads the manifest and explains installing it for
+  yourself (Upload My Add-in) or for everyone (Microsoft 365 Integrated
+  apps); only with https remote access. Sign-ins are listed under Your
+  account › Connected apps and can be signed out. **Not yet tried in real
+  PowerPoint** (Windows, Mac or web): built from Microsoft's docs and tested
+  in Chromium with Office.js stubbed.
 - **Draft manual journals** (examples MJD1-MJD9, decisions 349-352, tenant
   migration 0081), like Xero's: "Save as draft" beside "Post journal", and a
   Draft journals list on the journal page to edit, post or delete them. A

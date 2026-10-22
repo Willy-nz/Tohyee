@@ -1,16 +1,17 @@
 import type { NextConfig } from "next";
 
-/**
+import { securityHeaderRules } from "./src/lib/office/csp";
+
+/*
  * The page Content-Security-Policy (issue #144): only Tohyee itself may frame
  * its pages, and no <base> or plugin content. Forms only submit to Tohyee, and
  * images only come from Tohyee, data:/blob: URLs and LINZ's aerial tiles (the
  * Farming map, src/lib/farming/geometry.ts), so injected markup can't send
  * data elsewhere through a form or an image address (decision 568). Scripts
  * aren't limited yet: the theme script and Next's own page data are inline,
- * and need a nonce first.
+ * and need a nonce first. The one exception is the PowerPoint add-in's slide
+ * page, which Office frames (#429, decision 839): see src/lib/office/csp.ts.
  */
-const PAGE_CONTENT_SECURITY_POLICY =
-  "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; img-src 'self' data: blob: https://basemaps.linz.govt.nz";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -39,25 +40,7 @@ const nextConfig: NextConfig = {
   // CSP including frame-ancestors (src/lib/api/upload.ts); X-Frame-Options
   // still covers every API response.
   async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "same-origin" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          // #208 item 6: browsers that reached Tohyee over HTTPS (remote access) use HTTPS for that
-          // address from then on. Browsers ignore this header on plain HTTP (RFC 6797 section 8.1),
-          // so the local network address isn't affected. No includeSubDomains: other names under
-          // your own domain aren't Tohyee's to decide.
-          { key: "Strict-Transport-Security", value: "max-age=31536000" },
-        ],
-      },
-      {
-        source: "/:path((?!api/).*)",
-        headers: [{ key: "Content-Security-Policy", value: PAGE_CONTENT_SECURITY_POLICY }],
-      },
-    ];
+    return securityHeaderRules();
   },
   // Folders a running copy writes real data into (backups, analytics' DuckDB
   // copies of the books, data) stay out of the routes' traces even if a

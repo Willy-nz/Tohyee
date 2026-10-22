@@ -17,15 +17,16 @@ export function oauthErrorResponse(error: string, description: string, status = 
  * read them (browser-based MCP tools need that); 404 while remote access is
  * off, since there's no https address to sign in at (decision 810).
  */
-async function metadataAnswer(build: "resource" | "server"): Promise<Response> {
+async function metadataAnswer(build: "resource" | "server" | "office"): Promise<Response> {
   const addresses = await oauthAddresses();
   const headers = { "cache-control": "public, max-age=300", "access-control-allow-origin": "*" };
   if (!addresses) return NextResponse.json({ error: "Remote access is off, so AI apps can't sign in to this Tohyee." }, { status: 404, headers });
-  return NextResponse.json(build === "resource" ? protectedResourceMetadata(addresses) : authorizationServerMetadata(addresses), { headers });
+  return NextResponse.json(build === "server" ? authorizationServerMetadata(addresses) : protectedResourceMetadata(addresses, build === "office" ? "office" : "mcp"), { headers });
 }
 
 export const protectedResourceMetadataRoute = () => metadataAnswer("resource");
 export const authorizationServerMetadataRoute = () => metadataAnswer("server");
+export const officeResourceMetadataRoute = () => metadataAnswer("office");
 
 /**
  * The fields of an OAuth request body: application/x-www-form-urlencoded as

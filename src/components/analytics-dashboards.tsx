@@ -16,6 +16,7 @@ import { RelationshipsPanel } from "@/components/analytics/relationships-panel";
 import { FieldSettingsPanel } from "@/components/analytics/field-settings-panel";
 import { PeriodField, QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { useAnalyticsEmbed } from "@/components/analytics/embed-context";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
@@ -306,16 +307,18 @@ export function DashboardView({ organisationId, dashboardId, startEditing }: { o
 function DashboardViewInner({ organisationId, dashboardId, startEditing }: { organisationId: string; dashboardId: string; startEditing: boolean }) {
   const router = useRouter();
   const { can } = useWorkspace();
+  // On a PowerPoint slide (#429, decision 838): read-only, the chosen page or tile.
+  const embed = useAnalyticsEmbed();
   const confirm = useConfirm();
   const loaded = useApiData<{ dashboard: Dashboard } & Partial<DateContext>>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
-  const tables = useApiData<{ tables: TableInfo[] }>(can("bookkeeper") ? "/api/analytics/tables" : null, { organisationId });
+  const tables = useApiData<{ tables: TableInfo[] }>(can("bookkeeper") && !embed ? "/api/analytics/tables" : null, { organisationId });
   // What the server has (the last save, or the report as loaded), and this
   // editing session's draft with its Undo and Redo (decisions 690-691).
   const [saved, setSaved] = useState<Dashboard | null>(null);
   const [history, setHistory] = useState<EditHistory<Dashboard> | null>(null);
   // Someone else saved first (decision 690): who and when, until Reload or Save a copy.
   const [conflict, setConflict] = useState<{ updatedByEmail: string; updatedAt: string } | null>(null);
-  const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
+  const [editing, setEditing] = useState(startEditing && can("bookkeeper") && !embed);
   const [sharing, setSharing] = useState(false);
   const [theming, setTheming] = useState(false);
   // The format painter (#376): a tile's format, copied to paste on others.
@@ -331,7 +334,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [error, setError] = useState<string | null>(null);
   // The page shown (decision 753), kept in the address (?page=) so a link opens it.
   const search = useSearchParams();
-  const [pageChoice, setPageChoice] = useState<string | null>(() => search.get("page"));
+  const [pageChoice, setPageChoice] = useState<string | null>(() => (embed ? embed.pageId : search.get("page")));
   // What the reader has drilled to, clicked and drilled through to (decisions 754-756); none of it is saved.
   const [drills, setDrills] = useState<Record<string, DrillState>>({});
   const [drillMode, setDrillMode] = useState<Record<string, boolean>>({});
@@ -353,7 +356,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     ? { ...chosenFilters, parameters: { ...Object.fromEntries(dashboard.settings.parameters.map((parameter) => [parameter.name, parameter.value])), ...chosenFilters.parameters } }
     : chosenFilters;
   const dates: DateContext = { today: loaded.data?.today ?? todayInBrowser(), financialYearEndMonth: loaded.data?.financialYearEndMonth ?? 3 };
-  const canEdit = can("bookkeeper");
+  const canEdit = can("bookkeeper") && !embed;
   /**
    * What a report's buttons do (#376 phase 2, decision 686). Only resetting
    * the filters exists so far; pages and bookmarks (phase 3) add their
@@ -536,8 +539,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!dashboard) return <p className={ui.muted}>Loading…</p>;
   const pages = dashboard.settings.pages;
-  const page = openingPage(pages, pageChoice);
-  const pageTiles = tilesOnPage(dashboard.tiles, pages, page.id);
+  // Just one tile (on a slide): its own page, so that page's slicers and filters apply to it.
+  const onlyTile = embed?.tileId ? (dashboard.tiles.find((tile) => tile.id === embed.tileId) ?? null) : null;
+  const page = openingPage(pages, onlyTile ? tilePage(onlyTile, pages) : pageChoice);
+  const pageTiles = onlyTile ? [onlyTile] : tilesOnPage(dashboard.tiles, pages, page.id);
+  if (embed?.tileId && !onlyTile) return <Notice tone="warning">That tile isn&apos;t in the report any more. Choose Change to pick another.</Notice>;
   const look = pageStyle(page);
   const choosePage = (pageId: string, remember = true) => {
     if (remember && pageId !== page.id) setPageHistory((history) => [...history.slice(-19), page.id]);
@@ -671,7 +677,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   return (
     <ReportThemeStyle theme={theme} scope={themeScope}>
       <YearEndMonth.Provider value={dates.financialYearEndMonth}>
-      <div className={styles.header}>
+      {embed ? null : <div className={styles.header}>
         <div>
           {editing ? (
             <div className={ui.grid3}>
@@ -750,7 +756,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             </Button>
           ) : null}
         </div>
-      </div>
+      </div>}
       {editing ? (
         <p className={styles.saveState} role="status" aria-live="polite">
           {busy ? "Saving…" : conflict || error ? "Not saved" : unsaved ? "Unsaved changes: Save to keep them. Viewers see the report as last saved." : "All changes saved"}
@@ -770,7 +776,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       {editing && tables.error ? <Notice tone="error">{tables.error}</Notice> : null}
       {editing && tables.data?.tables.length === 0 ? <Notice tone="info">Connect and load a <Link href="/analytics/sources">data source</Link> to start adding charts.</Notice> : null}
 
-      <FilterBar
+      {embed && !embed.showFilters ? null : <FilterBar
         organisationId={organisationId}
         dashboardId={dashboard.id}
         settings={dashboard.settings}
@@ -785,10 +791,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         onSettings={(settings) => change({ ...dashboard, settings }, "change the dates and slicers", "settings")}
         pageId={page.id}
         pages={reportPages(pages)}
-      />
+      />}
 
       <ReportFreshnessLine organisationId={organisationId} dashboardId={dashboard.id} />
-      <PageTabs
+      {onlyTile ? null : <PageTabs
         pages={pages}
         current={page.id}
         onChoose={choosePage}
@@ -821,9 +827,9 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           setPages(removePage(pages, dashboard.tiles, gone.id), `remove the ${gone.name} page`);
           setPageChoice(null);
         }}
-      />
+      />}
 
-      <BookmarkBar
+      {onlyTile ? null : <BookmarkBar
         bookmarks={dashboard.settings.bookmarks ?? []}
         shown={bookmarkShown}
         editing={editing}
@@ -843,7 +849,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           delete settings.bookmarks;
           change({ ...dashboard, settings: bookmarks.length ? { ...settings, bookmarks } : settings }, "change the bookmarks", "bookmarks");
         }}
-      />
+      />}
 
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
@@ -1038,7 +1044,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Remove
                     </Button>
                   </div>
-                ) : isItemVisual(tile.visual) ? null : (
+                ) : isItemVisual(tile.visual) || embed ? null : (
                   // Only saved tiles can be pinned, so not while the dashboard is being changed.
                   <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
                 )}
@@ -1903,7 +1909,7 @@ export function PivotTable({
   title,
   pivot,
   onDrill,
-  exportFor,
+  exportFor: exportForProp,
   format,
 }: {
   title: string;
@@ -1916,6 +1922,8 @@ export function PivotTable({
 }) {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  // No exports from a slide (#429): the add-in only shows reports.
+  const exportFor = useAnalyticsEmbed() ? undefined : exportForProp;
   const download = async (format: "csv" | "xlsx") => {
     if (!exportFor) return;
     setExportError(null);

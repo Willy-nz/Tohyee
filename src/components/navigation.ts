@@ -344,6 +344,7 @@ export const SETTINGS: MenuGroup[] = [
       { href: "/operations/modules", label: "Modules", minRole: "admin" },
       { href: "/operations/settings/email", label: "Email", minRole: "admin" },
       { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
+      { href: "/operations/settings/powerpoint", label: "PowerPoint add-in", minRole: "admin" },
     ],
   },
   {

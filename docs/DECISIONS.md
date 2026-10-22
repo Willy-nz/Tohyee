@@ -8284,3 +8284,184 @@ so; those choices are not yet reviewed by Jess.
      address, so Claude Code on the same network uses a key. The consent
      itself isn't a sign-in event in the sign-in monitor (decision 487):
      the sign-in before it is.
+
+### PowerPoint add-in for Analytics (#429; decisions 830-843)
+
+830. **A live report on the slide, as Power BI's add-in does** (23 October
+     2026, #429; Jess, through the lead: "like Power BI's PowerPoint add-in
+     — a live, interactive Tohyee report embedded in the slide, not pasted
+     pictures"). A PowerPoint content add-in shows a report page (or one
+     tile) on the slide with its dates and slicers, click-to-filter,
+     drill-down, tooltips and page tabs working, while editing and in the
+     slide show. The first design (inserting charts as pictures and tables
+     as PowerPoint tables, with a Refresh that replaced them) was dropped,
+     except that a saved picture is shown to people who can't sign in
+     (decision 840). No task pane: the slide itself does the setup, as Power
+     BI's does.
+831. **Only through Remote access** (#429, Jess: "Only works with that
+     remote link"). The slide page, the sign-in and the manifest exist only
+     on the https remote access address: PowerPoint on the web and
+     Microsoft 365 load add-ins only over https, and apps only sign in there
+     (decision 810). With Remote access off (or not https) the manifest and
+     the add-in's app details answer 404, Settings › PowerPoint add-in says
+     why, and the slide page opened on any other address says to use the
+     remote address. Changing the address stops every add-in sign-in (their
+     tokens are bound to it) and needs the manifest downloaded again.
+832. **The XML (add-in only) manifest, a content add-in** (#429; Microsoft's
+     docs read 23 October 2026). The unified JSON manifest is generally
+     available for PowerPoint since July 2026, but it's installed as an app
+     package (Teams' Upload a custom app, Microsoft 365 Integrated apps, or
+     developer tools) and needs PowerPoint for Mac 16.103 or later;
+     PowerPoint's own Upload My Add-in takes the XML file, which works on
+     Windows, Mac and the web, and Integrated apps takes it too. So Tohyee
+     serves one XML manifest per server at
+     `<remote>/office/powerpoint/manifest.xml` (Settings downloads it, and
+     Microsoft 365 can be given its address): `xsi:type="ContentApp"`, host
+     Presentation, elements in the schema's order, requested size 800×450,
+     DialogApi 1.1, `Restricted` permission (the least: the add-in only uses
+     its own settings and the current view), `AllowSnapshot` true (decision
+     840). Its Id is made from the server's address, so the same server
+     always gives the same add-in (downloading it again updates it) and two
+     servers' add-ins don't clash. Content add-ins have no ribbon button;
+     PowerPoint lists them under Add-ins. Not yet reviewed by Jess.
+833. **A separate audience for the add-in** (#429). The add-in's tokens are
+     for `<remote>/api/office`, the read-only Analytics API for Office, not
+     for MCP. Its connection is an `ai_access_tokens` row of kind `office`
+     (core migration 0019), with `resource` the Office API: the MCP endpoint
+     only accepts kind `connection` with the MCP address, and the Office API
+     only kind `office` with its own address, so an MCP token or AI key is
+     refused at the Office API and an add-in token at MCP, and a refresh
+     token can't be swapped for the other audience (`invalid_target`). The
+     Office API answers 401 with `resource_metadata` pointing at
+     `/.well-known/oauth-protected-resource/api/office`. Not yet reviewed by
+     Jess.
+834. **The add-in is Tohyee's own app** (#429). Its client_id is
+     `<remote>/office/powerpoint/client.json`, a client ID metadata document
+     Tohyee serves (public, no secret, one redirect address:
+     `<remote>/office/powerpoint/signed-in`), but Tohyee knows it without
+     fetching it. Only this built-in app gets tokens for the Office API, and
+     it only gets those: another app (even one calling itself "Tohyee for
+     PowerPoint") asking for the Office API, or the add-in asking for MCP,
+     gets `invalid_target`, and a code can only go back to Tohyee's own
+     page. PKCE S256, state, iss, single-use codes, rotated refresh tokens
+     and reuse detection are #427's (decisions 813-817).
+835. **Nothing to choose when allowing it** (#429). The consent screen
+     names the add-in as this Tohyee's own, shows where it sends you back to
+     and lists the organisations it can read Analytics in (report viewer and
+     up, which AI apps don't allow: a report viewer is exactly who the add-in
+     is for); Allow or Don't allow. Allowing is recorded
+     (`office_connection.allowed`, `office_connection.connected`) and
+     emailed as a security alert when email is set up, as for AI apps.
+836. **The sign-in is the person's, in every organisation** (#429). One
+     sign-in lets the person pick any organisation they can open Analytics
+     in (the slide picks one), so the connection has no organisation and the
+     read level; each request checks the person's membership and role in the
+     organisation asked for, with their role now. It ends when signed out on
+     the slide (RFC 7009), from **Your account › Connected apps** (each
+     sign-in listed with when it signed in and was last used), when their
+     login is turned off or their password or two-step is reset (the same
+     update that ends keys), when a refresh token is reused, after 60 days
+     unused, or when Remote access is turned off or its address changes.
+     Leaving an organisation doesn't end it, but that organisation stops
+     answering straight away. At most 20 working sign-ins per person (one
+     per computer or browser). AI apps stay on each organisation's AI page.
+     Not yet reviewed by Jess.
+837. **The Office API only reads, and only reports** (#429; the access
+     contract, decision 697). `/api/office/me` (who and which
+     organisations), `/reports` (names of reports, pages and tiles the person
+     can open), `/reports/<id>`, `/reports/<id>/freshness`,
+     `/reports/<id>/images/<id>`, `/values` (a slicer's values) and `/query`
+     (a saved tile's answer, with the reader's dates, slicers, clicks,
+     drill-down and switches). They use the same code as Tohyee's own
+     Analytics routes (`src/lib/analytics/read-routes.ts` takes the
+     organisation runner), so a report viewer gets exactly what they get in
+     Tohyee: only reports shared with them, slicers listing only what the
+     report's tiles show. Never a typed question, even for an Owner; a
+     slicer's values only for a slicer on that report. Bearer token only
+     (session cookies ignored); every organisation transaction is read-only
+     in PostgreSQL; no PUT, PATCH or DELETE exists; requests are limited per
+     sign-in and wrong tokens per address. `/query` is a POST only because
+     the reader's view doesn't fit an address. Not yet reviewed by Jess.
+838. **The slide shows Tohyee's own report viewer, read-only** (#429). The
+     slide page runs the same report view as Analytics in an embed mode:
+     no title bar, Edit, Share, pin, theme or exports; it opens on the chosen
+     page (page tabs and bookmarks still work) or shows just one tile on its
+     page (so that page's slicers and filters apply); the dates and slicers
+     show only with "Show the filters pane" on, as Power BI's does. It's
+     shown as a reader sees it whatever the person's role (what they may see
+     is still decided by the server with their real role). Every API call on
+     the page goes through the add-in's token to the Office API, set before
+     anything renders; anything else is refused, so nothing goes out with a
+     session cookie. A small toolbar while editing: Refresh, Show/Hide
+     filters (saved in the presentation, so it's the same for everyone),
+     Open in Tohyee (in the browser), Change, Sign out. The report's theme
+     applies, as in Analytics. Not yet reviewed by Jess.
+839. **Only the slide page may be framed by Office** (#429). Tohyee pages
+     keep `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`, except
+     exactly `/office/powerpoint`, which allows `'self'`, `*.officeapps.live.com`,
+     `*.office.com`, `office.com`, `*.office365.com`, `*.microsoft365.com`,
+     `*.cloud.microsoft`, `*.sharepoint.com`, `onedrive.live.com`,
+     `*.onedrive.live.com`, `teams.microsoft.com` and `*.teams.microsoft.com`
+     (frame-ancestors checks every frame up to the top, so both Office's
+     frame and the page around it are listed). Sign-in, consent, the
+     signed-in page and every other page still can't be framed; the sign-in
+     happens in Office's own window (the Dialog API), not a frame. Microsoft
+     doesn't publish a list of these hosts; this one is from where Office on
+     the web is served. PowerPoint on Windows and Mac shows the add-in in a
+     webview with no parent page. Tested with Next's header matching, not in
+     real Office.
+840. **What's kept in the presentation, and the saved picture** (#429;
+     Power BI's snapshot). The add-in's settings in the presentation hold
+     the choice (server, organisation, report, page or tile, their names,
+     the filters pane, keep a picture) and, unless turned off, a picture
+     of the report as it last drew for someone signed in, with when. Never
+     a token or password, and no figures except in that picture. Someone not
+     signed in (or who can't) sees the picture with "Sign in to see live
+     data", or the report's name if there's no picture. The picture is an
+     SVG of the report as drawn (the charts are already SVG), cut to what
+     shows in the add-in's box, at most 1.2 MB (Office keeps about 2 MB of
+     settings per add-in): an SVG because Safari, which PowerPoint for Mac
+     uses, won't turn HTML into a PNG in the browser. Images from report
+     image items are kept; fonts fall back to the system's. It's replaced
+     each time someone signed in views or refreshes the slide; it's saved
+     with the file when the presentation is saved. Because anyone with the
+     file can see it, the chooser says so and has a tick box to turn it
+     off. Office also keeps its own picture of the add-in for people without
+     the add-in (AllowSnapshot). Not yet reviewed by Jess.
+841. **Editing and the slide show** (#429; Microsoft's docs). The add-in
+     checks the view (Document.getActiveViewAsync, allowed with Restricted)
+     when it loads and every 3 seconds, rather than the ActiveViewChanged
+     event, which needs read/write permission; PowerPoint on the web starts
+     the slide show as a new session, so it reads the view on load there
+     anyway. In the slide show the toolbar goes and only a faint Refresh
+     button stays in the corner; the report stays interactive. Setting up a
+     slide isn't offered in the slide show. The toolbar leaves room on the
+     right for Office's own add-in menu.
+842. **Signing in on the slide** (#429; Microsoft's dialog guidance). The
+     slide opens Office's dialog at `/oauth/authorize` on its own address
+     (the first page must be on the add-in's domain), the person signs in
+     with Tohyee's normal sign-in (password and two-step, or Google) and
+     allows it, and `/office/powerpoint/signed-in` hands the code and state
+     back with messageParent (to the slide's origin only) and removes them
+     from the address; the slide checks the state and swaps the code with its
+     PKCE verifier. Tokens are kept in the add-in's browser storage on that
+     computer (with Office's partition key where Office gives one), never in
+     the presentation, so a sign-in lasts between PowerPoint sessions while
+     used. Refreshing is done under a Web Lock and re-reads storage first, so
+     two slides (or two open presentations) refreshing at once don't both
+     use the same refresh token and end the sign-in (decision 815); an
+     offline or busy server doesn't sign the person out.
+843. **Not done or not tried** (#429). **It hasn't been tried in real
+     PowerPoint** on Windows, Mac or the web: it was built from Microsoft's
+     docs (read 23 October 2026) and tested with the routes and in Chromium
+     with Office.js stood in for. Things that may need changing once it is:
+     Google may refuse its sign-in inside Office's dialog on Windows and Mac
+     (it blocks some embedded browsers; password and two-step don't depend on
+     it); the list of Office hosts allowed to frame the slide (decision 839);
+     whether PowerPoint keeps the saved picture when settings are saved
+     during a slide show; and how the SVG picture looks in each webview.
+     "Open in Tohyee" opens the report, but Tohyee opens on the browser's
+     current organisation. Not built: Excel and Word add-ins, AppSource
+     (each server has its own address), the unified JSON manifest, PowerPoint
+     on iPad, and choosing a different look for the slide from the report's
+     theme.

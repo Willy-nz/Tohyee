@@ -4,10 +4,12 @@ import { ClientProblem, type OAuthClient, resolveClient } from "@/lib/ai/oauth/c
 import { oauthAddresses } from "@/lib/ai/oauth/config";
 import {
   AUTHORIZATION_CODE_SECONDS,
+  canonicalResource,
   AUTHORIZATION_REQUEST_SECONDS,
   CODE_PREFIX,
   isLoopbackRedirect,
   MAX_ACTIVE_CONNECTIONS,
+  MAX_OFFICE_CONNECTIONS,
   randomToken,
   redirectHost,
   redirectUriMatches,
@@ -93,8 +95,14 @@ export async function startAuthorization(request: Request): Promise<StartResult>
   if (query.get("code_challenge_method") !== "S256") return back("invalid_request", "PKCE with code_challenge_method=S256 is required.");
   const challenge = query.get("code_challenge");
   if (!validCodeChallenge(challenge)) return back("invalid_request", "A PKCE code_challenge is required.");
+  // Tohyee's PowerPoint add-in gets tokens for the Analytics API for Office, and only it does;
+  // every other app gets tokens for MCP (#429, decisions 833-834).
+  const office = client.source === "built_in";
+  const audience = office ? addresses.officeResource : addresses.resource;
   const resource = query.get("resource");
-  if (resource !== null && !resourceIsOurs(resource, addresses.resource)) return back("invalid_target", `Tokens here are only for ${addresses.resource}.`);
+  if (resource !== null && !(office ? canonicalResource(resource) === canonicalResource(audience) : resourceIsOurs(resource, audience))) {
+    return back("invalid_target", `Tokens for this app are only for ${audience}.`);
+  }
 
   const existing = readCookie(request, OAUTH_BROWSER_COOKIE);
   const browser = existing && BROWSER_PATTERN.test(existing) ? existing : randomToken();
@@ -103,7 +111,7 @@ export async function startAuthorization(request: Request): Promise<StartResult>
   await coreQuery(
     `insert into oauth_authorization_requests (handle_hash, browser_hash, client_id, client_name, redirect_uri, state, code_challenge, resource)
      values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [sha256Hex(handle), sha256Hex(browser), client.clientId, client.name, redirectUri, state, challenge, addresses.resource],
+    [sha256Hex(handle), sha256Hex(browser), client.clientId, client.name, redirectUri, state, challenge, audience],
   );
   return { kind: "consent", location: `/connect/${handle}`, cookie: browserCookieHeader(request, browser) };
 }
@@ -138,31 +146,46 @@ export type ConsentOrganisation = { id: string; displayName: string; role: Role;
 
 /** What the consent screen shows. Only things the app chose are its name and redirect address, shown as such. */
 export type ConsentDetails = {
+  /**
+   * "connection": an AI app (MCP), for one organisation at a chosen level.
+   * "office": Tohyee's PowerPoint add-in (#429, decision 835): read-only
+   * Analytics, as the person, in every organisation they can open
+   * Analytics in; nothing to choose.
+   */
+  kind: "connection" | "office";
   appName: string;
   /** e.g. "claude.ai". */
   redirectHost: string;
   redirectUri: string;
   /** Where the app's details came from: its own address (a metadata document), or it registered itself. */
-  detailsFrom: { kind: "metadata_document"; host: string } | { kind: "registered" };
+  detailsFrom: { kind: "metadata_document"; host: string } | { kind: "registered" } | { kind: "built_in" };
   /** The app can only send people back to this computer. */
   loopbackOnly: boolean;
   organisations: ConsentOrganisation[];
   signedInAs: string;
 };
 
+/** Whether a waiting request is for the PowerPoint add-in: the audience it was kept with is the Analytics API for Office. */
+async function isOfficeRequest(row: { resource: string }): Promise<boolean> {
+  const addresses = await oauthAddresses();
+  return addresses !== null && row.resource === addresses.officeResource;
+}
+
 export async function consentDetails(auth: AuthContext, handle: string, browserCookie: string | null): Promise<ConsentDetails | null> {
   const row = await findRequest(handle, browserCookie);
   if (!row) return null;
+  const office = await isOfficeRequest(row);
   const memberships = await listMembershipsForUser(auth.user.id);
   const organisations = memberships
-    .filter((membership) => roleAtLeast(membership.role, "viewer") && membership.organisation.provisioningStatus === "ready" && membership.organisation.migrationStatus === "current")
+    .filter((membership) => roleAtLeast(membership.role, office ? "report_viewer" : "viewer") && membership.organisation.provisioningStatus === "ready" && membership.organisation.migrationStatus === "current")
     .map((membership) => ({ id: membership.organisation.id, displayName: membership.organisation.displayName, role: membership.role, ceiling: roleCeiling(membership.role) }));
   const registered = row.redirect_uris ?? [row.redirect_uri];
   return {
+    kind: office ? "office" : "connection",
     appName: row.client_name,
     redirectHost: redirectHost(row.redirect_uri),
     redirectUri: row.redirect_uri,
-    detailsFrom: row.source === "metadata_document" ? { kind: "metadata_document", host: redirectHost(row.client_id) } : { kind: "registered" },
+    detailsFrom: office ? { kind: "built_in" } : row.source === "metadata_document" ? { kind: "metadata_document", host: redirectHost(row.client_id) } : { kind: "registered" },
     loopbackOnly: registered.every(isLoopbackRedirect),
     organisations,
     signedInAs: auth.user.email,
@@ -201,23 +224,44 @@ export async function decideConsent(
   }
   if (body.decision !== "allow") throw new ValidationError("Choose Allow or Don't allow.");
 
-  const level = await checkChoice(auth, body);
+  // The PowerPoint add-in (decision 835): nothing to choose; read-only Analytics as the person.
+  const office = row.resource === addresses.officeResource;
+  const level = office ? await checkOfficeChoice(auth) : await checkChoice(auth, body);
   if (!(await claimRequest(handle))) throw new NotFoundError("This connection request was already used.");
   const code = randomToken(CODE_PREFIX);
   await withCoreTransaction(async (client) => {
     await client.query(
-      `insert into oauth_authorization_codes (code_hash, user_id, organisation_id, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + make_interval(secs => $10))`,
-      [sha256Hex(code), auth.user.id, level.organisationId, row.client_id, row.client_name, row.redirect_uri, row.code_challenge, row.resource, level.accessLevel, AUTHORIZATION_CODE_SECONDS],
+      `insert into oauth_authorization_codes (code_hash, user_id, organisation_id, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at, kind)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + make_interval(secs => $10), $11)`,
+      [sha256Hex(code), auth.user.id, level.organisationId, row.client_id, row.client_name, row.redirect_uri, row.code_challenge, row.resource, level.accessLevel, AUTHORIZATION_CODE_SECONDS, office ? "office" : "connection"],
     );
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
-      eventType: "ai_connection.allowed",
-      entityType: "organisation",
-      entityId: level.organisationId,
+      eventType: office ? "office_connection.allowed" : "ai_connection.allowed",
+      entityType: office ? "user" : "organisation",
+      entityId: level.organisationId ?? auth.user.id,
       details: { app: row.client_name, redirectHost: redirectHost(row.redirect_uri), accessLevel: level.accessLevel },
     });
   });
   return { redirectTo: backWith({ code }) };
+}
+
+/** Working PowerPoint add-in sign-ins a person has (decision 836). */
+export async function activeOfficeConnectionCount(userId: string): Promise<number> {
+  const result = await coreQuery<{ count: string }>(
+    `select count(*)::text as count from ai_access_tokens t
+      where t.user_id = $1 and t.kind = 'office' and t.revoked_at is null
+        and exists (select 1 from oauth_tokens o where o.connection_id = t.id and o.expires_at > now() and (o.kind = 'access' or o.used_at is null))`,
+    [userId],
+  );
+  return Number(result.rows[0].count);
+}
+
+/** The PowerPoint add-in's sign-in: at most MAX_OFFICE_CONNECTIONS working at once (one per computer or browser, usually). */
+async function checkOfficeChoice(auth: AuthContext): Promise<{ organisationId: null; accessLevel: AiAccessLevel }> {
+  if ((await activeOfficeConnectionCount(auth.user.id)) >= MAX_OFFICE_CONNECTIONS) {
+    throw new ConflictError(`You're already signed in to the PowerPoint add-in in ${MAX_OFFICE_CONNECTIONS} places. Sign one out under Your account › Connected apps first.`);
+  }
+  return { organisationId: null, accessLevel: "read" };
 }
 
 async function claimRequest(handle: string): Promise<boolean> {
