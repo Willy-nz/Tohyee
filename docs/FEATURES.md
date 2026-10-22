@@ -2207,6 +2207,9 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: zoom on time charts** (#376 phase 3, decision 760). Column,
+  line and area charts can have a zoom slider along the bottom axis
+  (Interactions tab), with the mouse wheel or a pinch too.
 - **Analytics: bookmarks and page buttons** (#376 phase 3, decision 759).
   A report can keep bookmarks (a page, dates, slicer choices and hidden
   tiles), opened from the Bookmarks row or a button. Buttons can go to a

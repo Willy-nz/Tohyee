@@ -973,5 +973,20 @@ export function toEChartsOption(spec: ChartSpec, allRows: ChartRow[], theme: Cha
     ...(horizontal ? {} : { xAxis: { ...categoryAxis, ...(categoryFormat.reverse ? { inverse: true } : {}) } }),
     // Each entry is a bar or line series; TypeScript can't narrow the mixed list.
     series: series as EChartsOption["series"],
+    // Zooming along a time chart (decision 760): the mouse wheel or a pinch, and a slider under it.
+    ...(format.zoom && !horizontal ? zoomOptions(common.grid, theme) : {}),
+  };
+}
+
+/** Zoom on the group axis: inside the chart and a slider along the bottom, in the theme's colours. */
+function zoomOptions(grid: unknown, theme: ChartTheme): Pick<EChartsOption, "dataZoom" | "grid"> {
+  const base = grid && typeof grid === "object" && !Array.isArray(grid) ? (grid as Record<string, unknown>) : {};
+  const bottom = typeof base.bottom === "number" ? base.bottom : 24;
+  return {
+    grid: { ...base, bottom: bottom + 32 },
+    dataZoom: [
+      { type: "inside", xAxisIndex: 0, filterMode: "filter" },
+      { type: "slider", xAxisIndex: 0, filterMode: "filter", height: 18, bottom: 6, textStyle: { color: theme.mutedText }, borderColor: theme.grid, fillerColor: "rgba(127, 127, 127, 0.18)", backgroundColor: "transparent", dataBackground: { lineStyle: { color: theme.mutedText }, areaStyle: { color: theme.grid } }, handleStyle: { color: theme.background, borderColor: theme.mutedText }, moveHandleStyle: { color: theme.mutedText }, brushSelect: false },
+    ],
   };
 }
