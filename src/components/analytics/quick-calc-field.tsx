@@ -54,7 +54,7 @@ export function QuickCalcField({
   };
   return (
     <>
-      <label className={ui.checkbox}>
+      <label className={ui.checkbox} style={{ whiteSpace: "nowrap" }}>
         Show as{" "}
         <select aria-label={`Value ${index + 1} show as`} value={quick?.kind ?? ""} disabled={Boolean(measure.compare) && !quick} onChange={(event) => choose(event.target.value)}>
           <option value="">The value</option>

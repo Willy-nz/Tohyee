@@ -192,6 +192,13 @@ export function quickTotal(quick: QuickCalc, total: string | null): string | nul
   }
 }
 
+/** What a quick calculation's figures are, given the value's own unit (decision 770). */
+export function quickUnit(quick: QuickCalc, unit: string): string {
+  if (quickIsPercent(quick)) return `a percentage (worked out from ${unit})`;
+  if (quick.kind === "rank") return "a place: 1 is the first";
+  return unit;
+}
+
 /** How a quick calculation's totals work, in words (decision 770). */
 export function quickTotalsText(kind: QuickKind): string {
   if (kind === "percent_of_total" || kind === "percent_of_row" || kind === "percent_of_column") return "a total of the shares is 100% (blank when the whole is blank or 0)";

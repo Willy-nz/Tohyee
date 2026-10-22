@@ -7,7 +7,7 @@ import { Button, Field, Notice, ui } from "@/components/ui";
 import type { NumberFormat } from "@/lib/analytics/chart-format";
 import { definitionToSave, measureFromSaved, type SavedMeasure } from "@/lib/analytics/measure-library";
 import { describeMeasure } from "@/lib/analytics/measure-definition";
-import { describeQuickCalc, quickTotalsText } from "@/lib/analytics/quick-calcs";
+import { describeQuickCalc, quickTotalsText, quickUnit } from "@/lib/analytics/quick-calcs";
 import { formatOfType, type ColumnInfo, type Filter, type Measure } from "@/lib/analytics/query";
 import { api, errorMessage } from "@/lib/client/api";
 import styles from "./chart-format-panel.module.css";
@@ -75,7 +75,7 @@ export function ValueMeaning({
         <dt>Worked out as</dt>
         <dd>{meaning.aggregation}</dd>
         <dt>Unit</dt>
-        <dd>{meaning.unit}</dd>
+        <dd>{measure.quick ? quickUnit(measure.quick, meaning.unit) : meaning.unit}</dd>
         <dt>Movement or balance</dt>
         <dd>{meaning.kind}</dd>
         <dt>Dates</dt>

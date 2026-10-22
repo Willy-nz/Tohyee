@@ -363,3 +363,12 @@ describe("QC8: how a share is shown", () => {
     expect(spec?.series[0].percent).toBe(true);
   });
 });
+
+describe("QC8: its unit", () => {
+  it("says a share is a percentage and a rank a place", async () => {
+    const { quickUnit } = await import("@/lib/analytics/quick-calcs");
+    expect(quickUnit({ kind: "percent_of_total" }, "money, in NZD")).toBe("a percentage (worked out from money, in NZD)");
+    expect(quickUnit({ kind: "rank" }, "money, in NZD")).toBe("a place: 1 is the first");
+    expect(quickUnit({ kind: "running_total" }, "money, in NZD")).toBe("money, in NZD");
+  });
+});
