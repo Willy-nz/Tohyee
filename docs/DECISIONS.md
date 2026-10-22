@@ -7929,3 +7929,93 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      the checked relationship covers the star case, and blending needs its
      own rules for rows on one side only; it can follow if a report needs
      two fact tables side by side.
+
+### More Prepare data steps (#376 phase 4; decisions 790-798)
+
+790. **Prepare data follows Power Query's steps and words** (22 October
+     2026, #376 phase 4; Power Query in Power BI as the reference; not yet
+     reviewed by Jess). Ten steps are added to the fixed list (decision
+     370; still no typed SQL): Pivot column, Unpivot other columns, Fill
+     down or up, Replace values, Remove duplicates, Conditional column,
+     Date parts, Sort rows, Index column and Custom column. They have
+     Power Query's names, so people who know Power BI find them, and
+     forms rather than the settings box; the older steps keep the settings
+     box for now. Saved shaped tables are read and built as before.
+791. **Pivot column lists its new columns** (22 October 2026, #376 phase
+     4; Power Query's Pivot column). Power Query makes one column per value
+     found in the data. Here each new column is listed (a value and a
+     column name, up to 100), because a shaped table's columns must be
+     known before it's built: other shapes and reports use them, and a new
+     value appearing in next month's file mustn't change the table without
+     anyone choosing it. **Use the values in <column>** fills the list from
+     the data shown. Rows are grouped by every other column; values are
+     combined by adding up, average (exact), count of rows, smallest or
+     largest. Power Query's "Don't aggregate" isn't offered. Values not
+     listed are left out (the row counts show it).
+792. **Blank means null or empty text** (22 October 2026, #376 phase 4).
+     Fill down/up fills blank cells, Replace values can find blank cells or
+     replace with blank, and a conditional rule's "is blank" matches both,
+     as Filter rows' "is empty" always has. Power Query fills only null;
+     text loaded from a file is often empty text instead, which would leave
+     Fill doing nothing. Unpivot drops blank (null) values, as Power Query
+     does. A blank cell never matches a comparison ("is", "more than" and
+     so on) in a conditional rule, so it goes on to the next rule.
+793. **Rows have an order only where it's certain** (22 October 2026,
+     #376 phase 4). Fill and Index column depend on the order of rows.
+     The order is the one the rows were loaded in, or the last Sort's, and
+     is kept through steps that keep or drop rows (DuckDB keeps insertion
+     order there, which the tests check). After Group, Pivot, Merge or
+     Append there is no set order, and a Fill or Index column after them is
+     refused with "Add a Sort step before step N", rather than giving an
+     answer that could change on each rebuild. Remove duplicates keeps the
+     first row of each set (Power Query's rule); with no set order, the
+     first is worked out from every column, so it's the same row each time.
+     Sort puts blanks first going up and last going down, as Power Query
+     does, and a built table keeps its sort order.
+794. **Typed values must fit the column** (22 October 2026, #376 phase 4).
+     Replace values and conditional outputs check a typed value against the
+     column's type before anything runs: a number with more decimal places
+     than the column keeps (0.105 for money) is refused rather than
+     rounded, dates are YYYY-MM-DD, Yes/No is true or false, and numbers
+     have no commas or $. Part-of-the-text replacing is only for text
+     columns, and is case-sensitive, as in Power Query. A conditional
+     column's type is chosen, or worked out: the type of the columns it
+     gives (money stays money), or text.
+795. **Date parts, with the financial year from the balance date**
+     (22 October 2026, #376 phase 4; Power Query's Date menu). Year,
+     quarter, month, month name, week of the year, day, day of the week,
+     day name, financial year and quarter of the financial year. Weeks are
+     ISO 8601 (starting Monday), and the day of the week is Monday 1 to
+     Sunday 7, rather than Power Query's Sunday 0, since New Zealand weeks
+     start on Monday. The financial year is named by the year it ends in
+     (the year to 31 March 2026 is 2026, as IRD names income years), from
+     the organisation's balance date when the preview or rebuild runs, so
+     changing the balance date changes the next rebuild. Names are in
+     English.
+796. **Custom column uses the report formula parser** (22 October 2026,
+     #376 phase 4; Power Query's Custom column). The formula is parsed by
+     the same hand-written parser as report formulas (decision 597; never
+     run as code): number columns in [brackets], numbers, + - * / and
+     brackets; `days` isn't allowed here. It's exact like report formulas
+     (DECIMAL(38,6), division in millionths; dividing by zero is blank),
+     and money added to or taken from money stays money. Unlike a report
+     value, a blank cell gives a blank answer (Power Query's null), since
+     a row's missing amount isn't the same as no rows. Power Query's M
+     functions aren't offered; the existing Add a calculated column step
+     stays for joining text.
+797. **Index column and Unpivot other columns** (22 October 2026, #376
+     phase 4). Index column starts at 1 by default, or any whole number,
+     and goes up by any whole number but 0 (Power Query's From 0, From 1
+     and Custom). Unpivot other columns keeps the ticked columns and
+     unpivots the rest, worked out when the shape is built. When the
+     columns unpivoted are text and numbers or dates together, they're
+     made text first; before, DuckDB refused that and the shape failed.
+798. **Each step shows its rows** (22 October 2026, #376 phase 4; Power
+     Query's row count in the status bar). A preview also returns the rows
+     after each step, from one query over the same steps, and the step
+     list shows each step's rows and the change from the step before
+     (e.g. "1,168 rows (−36)"); the preview says the rows before and after
+     the step shown. The columns a step's form offers are worked out
+     without running anything. Previews are still admins only, and still
+     run each merge's checks (decision 693). Nothing new is shown to report
+     viewers (decision 697): a shaped table is a table like any other.
