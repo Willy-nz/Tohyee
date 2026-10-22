@@ -7929,3 +7929,31 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      the checked relationship covers the star case, and blending needs its
      own rules for rows on one side only; it can follow if a report needs
      two fact tables side by side.
+
+### Field settings: sort by another column, default summary and format, folders (#376 phase 4; decision 775; examples FS1-FS3)
+
+775. **A field's settings are saved on its table and used by every
+     report** (22 October 2026, #376 phase 4; Power BI's column properties
+     "Sort by column", "Summarization", "Format", "Display folder" and
+     "Description" as the references; not yet reviewed by Jess). Under a
+     chart's data source, **Field settings** chooses a field and sets (table
+     `analytics_field_settings`, made by tenant migration 0185 with the
+     relationships; bookkeepers and up): **sort its groups by** another
+     column, checked on the data to have one value for each of the field's
+     values (Power BI refuses it otherwise), e.g. month names by month
+     number; dates aren't offered (they're already in date order). A tile
+     grouped by the field orders its groups by that column (either way) when
+     it's ordered by group; ordering by value still wins; running totals,
+     differences and moving averages (decision 770) go in that order too.
+     Pivots keep their own A to Z order for now. **When it's chosen as a
+     value**: total, average, smallest, largest, count, count of different
+     values, or don't add it up (for a year or a code); the chart editor
+     uses it when the field is chosen, and nothing already saved changes.
+     **Shown as** money, a number or a percentage with decimal places: a
+     value that adds the field up as it is (not a count, a product, a formula
+     or a share or rank) shows in that format unless the chart chose one, in
+     tables, charts and key figures; it's display only. **Folder** and
+     **description**: the editor's field list groups fields by folder and
+     shows descriptions, and search finds words in them. A related table's
+     fields (decision 774) bring their own settings, their sort column under
+     the same name. A sort column that's gone from the table is ignored.

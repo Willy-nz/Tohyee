@@ -1,6 +1,7 @@
 import type { ResultColumn } from "@/lib/analytics/query";
 import { formatCurrency, formatDate, formatMoney, formatQuantity } from "@/lib/format";
 import { dec, mul, roundHalfUp, toFixedString } from "@/lib/money/decimal";
+import { makeNumberFormatter } from "@/lib/analytics/chart-format";
 
 /**
  * A value from a query, shown the way its column is meant to be read, in
@@ -8,8 +9,12 @@ import { dec, mul, roundHalfUp, toFixedString } from "@/lib/money/decimal";
  * Money has the minus first, as everywhere else in Tohyee: -$27.00 (#328).
  * True and false are Yes and No (decision 577).
  */
-export function showValue(value: string | null, column: Pick<ResultColumn, "format">): string {
+export function showValue(value: string | null, column: Pick<ResultColumn, "format"> & { number?: ResultColumn["number"] }): string {
   if (value === null) return "";
+  // The field's own format (decision 775), for numbers: shown, never used to work anything out.
+  if (column.number && (column.format === "money" || column.format === "number" || column.format === "integer")) {
+    return makeNumberFormatter(column.number, column.format === "money" ? "money" : "number")(value);
+  }
   switch (column.format) {
     case "money":
       return formatCurrency(value);

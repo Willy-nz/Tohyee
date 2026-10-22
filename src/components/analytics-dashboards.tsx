@@ -13,6 +13,7 @@ import { applyChoice, choiceFormat, type TileChoice, type TileSwitches } from "@
 import { ParameterControls, SwitchSettings } from "@/components/analytics/parameter-controls";
 import { CalculatedFieldsPanel } from "@/components/analytics/calculated-fields-panel";
 import { RelationshipsPanel } from "@/components/analytics/relationships-panel";
+import { FieldSettingsPanel } from "@/components/analytics/field-settings-panel";
 import { PeriodField, QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
@@ -86,6 +87,16 @@ import type { ReportExportData, ReportExportTable } from "@/lib/reports/export-t
 import styles from "./analytics-dashboards.module.css";
 
 type TableInfo = { name: string; columns: ColumnInfo[] };
+
+/** A table's fields by folder (decision 775): those without a folder first, then each folder A to Z. */
+function fieldFolders(columns: ColumnInfo[]): Array<[string, ColumnInfo[]]> {
+  const folders = new Map<string, ColumnInfo[]>();
+  for (const column of columns) {
+    const folder = column.settings?.folder ?? "";
+    folders.set(folder, [...(folders.get(folder) ?? []), column]);
+  }
+  return [...folders.entries()].sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)));
+}
 
 const VISUALS: Array<{ value: Visual; label: string }> = [
   { value: "column", label: "Columns" },
@@ -2382,7 +2393,20 @@ function TileEditor({
       <aside className={styles.fieldsPanel}>
         <h2>Data</h2><p className={ui.muted}>Fields in the selected source</p>
         <Field label="Search fields"><input type="search" value={fieldSearch} onChange={(event) => setFieldSearch(event.target.value)} placeholder="Find a field…" /></Field>
-        <div className={styles.fieldList}>{columns.filter((column) => `${column.name} ${fieldLabel(column.name)}`.toLowerCase().includes(fieldSearch.toLowerCase().trim())).map((column) => <div className={styles.fieldItem} key={column.name} title={`${query.table}.${column.name}`}><span className={styles.fieldType}>{isNumber(column.type) ? "123" : isDate(column.type) ? "Date" : column.type === "BOOLEAN" ? "Y/N" : "ABC"}</span><span>{fieldLabel(column.name)}<small>{column.name}</small></span></div>)}</div>
+        <div className={styles.fieldList}>
+          {/* Fields by their folder (decision 775), with their descriptions; fields without a folder first. */}
+          {fieldFolders(columns.filter((column) => `${column.name} ${fieldLabel(column.name)} ${column.settings?.description ?? ""}`.toLowerCase().includes(fieldSearch.toLowerCase().trim()))).map(([folder, entries]) => (
+            <div key={folder || "-"} role="group" aria-label={folder || "Fields"}>
+              {folder ? <div className={styles.fieldFolder}>{folder}</div> : null}
+              {entries.map((column) => (
+                <div className={styles.fieldItem} key={column.name} title={column.settings?.description ?? `${query.table}.${column.name}`}>
+                  <span className={styles.fieldType}>{isNumber(column.type) ? "123" : isDate(column.type) ? "Date" : column.type === "BOOLEAN" ? "Y/N" : "ABC"}</span>
+                  <span>{fieldLabel(column.name)}<small>{column.settings?.description ?? column.name}</small></span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
         {!columns.length ? <p>No fields loaded. <Link href="/analytics/sources">Add a data source</Link>.</p> : null}
         {can("admin") ? <Link href="/analytics/shaping">Prepare or combine data →</Link> : null}
       </aside>
@@ -2453,6 +2477,7 @@ function TileEditor({
         </Field>
         <CalculatedFieldsPanel organisationId={organisationId} table={query.table} canEdit={can("bookkeeper")} onChanged={() => onTablesChanged?.()} />
         <RelationshipsPanel organisationId={organisationId} table={query.table} tables={tables} canEdit={can("bookkeeper")} onChanged={() => onTablesChanged?.()} />
+        <FieldSettingsPanel organisationId={organisationId} table={query.table} columns={columns} canEdit={can("bookkeeper")} onChanged={() => onTablesChanged?.()} />
         {visual === "pivot" ? (
           <>
             {pivotRows.map((dimension, index) => (
@@ -2716,7 +2741,15 @@ function TileEditor({
           </select>
           )}
           {measure.aggregate !== "count" && measure.aggregate !== "formula" ? (
-            <select aria-label={`Value ${index + 1} of`} value={measure.field ?? ""} onChange={(event) => setMeasure(index, { field: event.target.value })}>
+            <select
+              aria-label={`Value ${index + 1} of`}
+              value={measure.field ?? ""}
+              onChange={(event) => {
+                // A field's own way of adding up (decision 775) when it's chosen.
+                const summarise = columns.find((column) => column.name === event.target.value)?.settings?.summarise;
+                setMeasure(index, { field: event.target.value, ...(summarise && summarise !== "none" && measure.aggregate !== "formula" ? { aggregate: summarise } : {}) });
+              }}
+            >
               <option value="">Choose a column</option>
               {columnOptions(["sum", "avg"].includes(measure.aggregate) ? numbers : columns)}
             </select>

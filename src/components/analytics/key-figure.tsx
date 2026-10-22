@@ -7,7 +7,7 @@ import { adaptForDark } from "@/lib/charts/colour-check";
 import styles from "./key-figure.module.css";
 
 function formatterFor(column: ResultColumn, format: ChartFormat | undefined, index: number) {
-  return makeNumberFormatter(format?.series?.[index]?.number, column.format === "money" ? "money" : "number");
+  return makeNumberFormatter(format?.series?.[index]?.number ?? column.number, column.format === "money" ? "money" : "number");
 }
 
 const MONTH = new Intl.DateTimeFormat("en-NZ", { month: "short", year: "numeric", timeZone: "UTC" });

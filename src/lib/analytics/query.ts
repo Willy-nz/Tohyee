@@ -8,6 +8,8 @@ import { todayIsoDate } from "@/lib/dates";
 import { previousPeriod, previousYear } from "@/lib/analytics/periods";
 import { parseQuickCalc, quickIsPercent, type QuickCalc } from "@/lib/analytics/quick-calcs";
 import { parsePeriod, periodRange, periodStart, type TimePeriod } from "@/lib/analytics/time-intelligence";
+import type { FieldSettings } from "@/lib/analytics/field-settings";
+import type { NumberFormat } from "@/lib/analytics/chart-format";
 
 /**
  * A dashboard tile's question, turned into SQL for DuckDB (analytics step 3).
@@ -165,6 +167,8 @@ export type ColumnInfo = {
   expression?: string;
   /** The FROM joining the table to its related tables (decision 774), on every column of a table that has related fields. */
   join?: string;
+  /** Its field settings (decision 775): sort by another column, default summary and format, folder, description. */
+  settings?: FieldSettings;
 };
 
 /**
@@ -182,7 +186,16 @@ export function sourceSql(table: string, columns: ColumnInfo[]): string {
   return `(select *, ${fields.map((field) => `${field.expression} as ${quoteIdentifier(field.name)}`).join(", ")} from ${base}${joined ? ` as ${quoteIdentifier("_tohyee_joined")}` : ""}) as ${quoteIdentifier(table)}`;
 }
 export type ValueFormat = "money" | "number" | "integer" | "date" | "text" | "percent" | "boolean";
-export type ResultColumn = { key: string; label: string; format: ValueFormat; role: "category" | "measure"; /** A date group's period, for naming it ("FY2027 Q1"). */ grain?: Grain };
+export type ResultColumn = {
+  key: string;
+  label: string;
+  format: ValueFormat;
+  role: "category" | "measure";
+  /** A date group's period, for naming it ("FY2027 Q1"). */
+  grain?: Grain;
+  /** The value's field's own format (decision 775), when a chart hasn't chosen one. */
+  number?: NumberFormat;
+};
 export type PivotColumn = {
   key: string;
   label: string;
@@ -899,6 +912,12 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     return formats[0] === "date" ? "date" : "number";
   };
 
+  // The column a grouping's groups are ordered by (decision 775), when it isn't a date.
+  const sortColumn = (() => {
+    if (!query.groupBy || query.groupBy.grain) return null;
+    const sortBy = tableColumns.find((column) => column.name === query.groupBy!.field)?.settings?.sortBy;
+    return sortBy && types.has(sortBy) ? sortBy : null;
+  })();
   const columns: ResultColumn[] = [];
   let category = "";
   if (query.groupBy) {
@@ -931,8 +950,15 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     const base = measureFormat(measure);
     return measure.quick.kind === "moving_average" && base === "integer" ? "number" : base;
   };
+  // A field's own format (decision 775) for a value that adds it up as it is (not a count or a quick calculation's share or rank).
+  const fieldNumber = (measure: Measure) => {
+    if (measure.aggregate === "formula" || measure.aggregate === "count" || measure.aggregate === "count_distinct" || measure.times || !measure.field) return undefined;
+    if (measure.quick && (quickIsPercent(measure.quick) || measure.quick.kind === "rank")) return undefined;
+    return tableColumns.find((column) => column.name === measure.field)?.settings?.number;
+  };
   query.measures.forEach((measure, index) => {
-    columns.push({ key: `m${index}`, label: measure.label, format: shownFormat(measure), role: "measure" });
+    const number = fieldNumber(measure);
+    columns.push({ key: `m${index}`, label: measure.label, format: shownFormat(measure), role: "measure", ...(number ? { number } : {}) });
     if (measure.compare === "previous_year") columns.push({ key: `m${index}_py`, label: `${measure.label} last year`, format: measureFormat(measure), role: "measure" });
     if (measure.compare === "previous_period") columns.push({ key: `m${index}_pp`, label: `${measure.label} previous period`, format: measureFormat(measure), role: "measure" });
   });
@@ -952,6 +978,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     const bySecond = Boolean(second) && (level === "all" || level === "breakdown");
     const parts = [
       ...(byCategory ? [`${shiftedCategory} as category`] : []),
+      ...(byCategory && sortColumn ? [`min(${q(sortColumn)}) as _tohyee_sort`] : []),
       ...(bySecond ? [`${second} as breakdown`] : []),
       ...query.measures.map((measure, index) => `${measureSql(measure, rangeOf(measure, dates))} as m${index}`),
       ...query.measures.flatMap((measure, index) => (checked[index] ? [`${currencyCheckSql(measure, rangeOf(measure, dates))} as m${index}_ccy`] : [])),
@@ -993,7 +1020,8 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
 
   const order = (alias: string) => {
     if (!query.groupBy) return "";
-    const by = query.sort.by === "value" ? `${alias}m0` : `${alias}category`;
+    // A field sorted by another column (decision 775): its groups go in that column's order.
+    const by = query.sort.by === "value" ? `${alias}m0` : sortColumn ? `${alias}_tohyee_sort ${query.sort.direction} nulls last, ${alias}category` : `${alias}category`;
     // With a second grouping, its values come in order within each group.
     const then = second ? (query.sort.by === "value" ? `, ${alias}category asc nulls last, ${alias}breakdown asc nulls last` : `, ${alias}breakdown asc nulls last`) : "";
     return ` order by ${by} ${query.sort.direction} nulls last${then}`;
@@ -1054,7 +1082,8 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     const back = (steps: number) => `cast(n.category - interval ${step![0] * steps} ${step![1]} as DATE)`;
     const sameSecond = second ? " and p.breakdown is not distinct from n.breakdown" : "";
     const partition = second ? "partition by n.breakdown " : "";
-    const run = `over (${partition}order by n.category asc nulls last rows between unbounded preceding and current row)`;
+    const along = sortColumn ? "n._tohyee_sort asc nulls last, n.category asc nulls last" : "n.category asc nulls last";
+    const run = `over (${partition}order by ${along} rows between unbounded preceding and current row)`;
     const previous = (column: string) =>
       `(select max(p.${column}) from n as p where ${step ? `p.category = ${back(1)}` : "p._tohyee_rn = n._tohyee_rn - 1"}${sameSecond})`;
     /**
@@ -1130,7 +1159,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     });
     const ctes = [
       `g as (${select(0, dashboard, "all", true)})`,
-      `n as (select *, row_number() over (${second ? "partition by breakdown " : ""}order by category asc nulls last) as _tohyee_rn from g)`,
+      `n as (select *, row_number() over (${second ? "partition by breakdown " : ""}order by ${sortColumn ? "_tohyee_sort asc nulls last, " : ""}category asc nulls last) as _tohyee_rn from g)`,
       ...(needs.total ? [`t as (${select(0, dashboard, "none")})`] : []),
       ...(needs.row ? [`rt as (${select(0, dashboard, "category")})`] : []),
       ...(needs.column ? [`ct as (${select(0, dashboard, "breakdown")})`] : []),
@@ -1142,6 +1171,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     ].join("");
     const parts = [
       "n.category as category",
+      ...(sortColumn ? ["n._tohyee_sort as _tohyee_sort"] : []),
       ...(second ? ["n.breakdown as breakdown"] : []),
       ...shown.map((sql, index) => `${sql} as m${index}`),
       ...query.measures.flatMap((_measure, index) => (checked[index] ? [`n.m${index}_ccy as m${index}_ccy`] : [])),

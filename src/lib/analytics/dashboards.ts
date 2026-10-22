@@ -680,7 +680,13 @@ export async function runTile(
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);
   const answer = await runBuiltQuery(organisationId, built.sql, built.params);
   const mixed = new Set<string>();
-  const rows = blankMixedCurrencies(answer, built.columns, mixed);
+  // The sort column (decision 775) only orders the groups.
+  const rows = blankMixedCurrencies(answer, built.columns, mixed).map((row) => {
+    if (!("_tohyee_sort" in row)) return row;
+    const { _tohyee_sort: _sort, ...rest } = row;
+    void _sort;
+    return rest;
+  });
   const result: QueryResult = { columns: built.columns, rows: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS };
   if (parsed.sparkline && parsed.dateField) result.trend = await runTrend(organisationId, parsed, tables.get(parsed.table)!, filters);
   // A table's totals row (decision 694): every row worked out again as one total, so a calculated value
@@ -904,7 +910,8 @@ export async function describeTables(organisationId: string, model?: AnalyticsMo
     name,
     columns: columns.map((column) => {
       const related = (column as { related?: { dimension: string } }).related;
-      return column.expression ? { name: column.name, type: column.type, calculated: true as const } : related ? { name: column.name, type: column.type, related: related.dimension } : column;
+      const settings = column.settings ? { settings: column.settings } : {};
+      return column.expression ? { name: column.name, type: column.type, calculated: true as const, ...settings } : related ? { name: column.name, type: column.type, related: related.dimension, ...settings } : column;
     }),
   }));
 }

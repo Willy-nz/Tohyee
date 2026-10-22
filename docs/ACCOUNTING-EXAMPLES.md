@@ -16090,6 +16090,31 @@ Tested in `tests/unit/analytics-measure-definitions.test.ts` (MD1-MD3,
 MD6), `tests/unit/analytics-merge-checks.test.ts` (MD4) and
 `tests/integration/sales-platform-orders.test.ts` (MD5).
 
+## Analytics: field settings (examples FS1-FS3; as Power BI does, not yet reviewed)
+
+Issue #376 phase 4 asked to sort by another column (month name by month
+number), with a default summary and format per field, folders and
+descriptions; #387 asked for month sorting in time reports. Decision 775,
+following Power BI's column properties. **As Power BI does, not yet
+reviewed.** Nothing is posted.
+
+Setup: sales Apr (month 1 of a 1 April year) 100.00 North, May (2) 50.00,
+Jan (10) 30.00, Mar (12) 20.00, Feb (11) 1,000.00 North and 0.50 South.
+
+- **FS1** Month names sorted by fy_month: **Apr, May, Jan, Feb, Mar** (A to
+  Z would be Apr, Feb, Jan, Mar, May); newest first Mar, Feb, Jan, May,
+  Apr. A running total goes in that order: 100.00, 150.00, 180.00,
+  **1,180.50**, 1,200.50. Top 1 by value is still Feb (**1,000.50**). A
+  month name with two month numbers can't be sorted by them.
+- **FS2** Amount shown as money with no decimals: 1,000.50 shows as
+  **$1,001** (display only; a chart's own format wins). A count of amounts
+  or a share isn't shown in that format.
+- **FS3** Folders and descriptions come with the table's fields (and a
+  related table's fields keep their own).
+
+Tested in `tests/unit/analytics-field-settings.test.ts` and
+`tests/integration/analytics-field-settings.test.ts`.
+
 ## Analytics: relationships between tables (examples RL1-RL5; as Power BI does, not yet reviewed)
 
 Issue #376 phase 4 asked for relationships (a simple star model) so a tile
