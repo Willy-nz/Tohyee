@@ -322,7 +322,7 @@ describeWithDatabase("AI apps sign in instead of using a key (#427, decisions 81
     // Code injection: the stolen code can't be used even with the right verifier now.
     expect((await token(good)).body.error).toBe("invalid_grant");
 
-    for (const change of [{ client_id: "tohyee_client_other" }, { redirect_uri: "https://evil.example/cb" }, { resource: "https://other.example/api/mcp" }]) {
+    for (const change of <Record<string, string>[]>[{ client_id: "tohyee_client_other" }, { redirect_uri: "https://evil.example/cb" }, { resource: "https://other.example/api/mcp" }]) {
       const next = await connect();
       const refused = await token({ ...good, code: next.code, code_verifier: next.verifier, ...change });
       expect(refused.status).toBe(400);
