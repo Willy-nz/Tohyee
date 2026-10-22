@@ -1,7 +1,7 @@
 import { writeAuditEvent } from "@/lib/audit";
 import type { AuthContext } from "@/lib/auth/guard";
 import type { AiTokenIdentity } from "@/lib/ai/tokens";
-import { listAiTokens } from "@/lib/ai/tokens";
+import { aiKeyVia, listAiTokens } from "@/lib/ai/tokens";
 import { type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { MailOwner, notFound } from "@/lib/private-mail/access";
@@ -15,7 +15,8 @@ import { MailOwner, notFound } from "@/lib/private-mail/access";
  * layer checks it again on every call.
  */
 
-export type MailAiKey = { id: string; name: string; startsWith: string; lookOnly: boolean; canReadMail: boolean };
+/** A key (startsWith "tohyee_ai_…") or an AI app connected by signing in (startsWith null, decision 823). */
+export type MailAiKey = { id: string; name: string; startsWith: string | null; lookOnly: boolean; canReadMail: boolean };
 
 /** Whether this key has the private-mail scope, given by `userId`. */
 export async function aiKeyHasMailScope(tx: OrgTx, userId: string, tokenId: string): Promise<boolean> {
@@ -27,7 +28,7 @@ export async function aiKeyHasMailScope(tx: OrgTx, userId: string, tokenId: stri
 export async function myMailAiKeys(tx: OrgTx, owner: MailOwner, auth: AuthContext): Promise<MailAiKey[]> {
   owner.check(tx);
   if (auth.user.id !== owner.userId) throw notFound();
-  const keys = (await listAiTokens(auth, tx.organisationId)).filter((key) => !key.revokedAt);
+  const keys = (await listAiTokens(auth, tx.organisationId)).filter((key) => !key.revokedAt && !key.expired);
   const granted = new Set((await tx.query<{ token_id: string }>("select token_id from private_mail_ai_keys where owner_user_id = $1", [owner.userId])).rows.map((row) => row.token_id));
   return keys.map((key) => ({ id: key.id, name: key.name, startsWith: key.startsWith, lookOnly: key.accessLevel === "read", canReadMail: granted.has(key.id) && key.accessLevel === "read" }));
 }
@@ -58,7 +59,7 @@ export async function keyCanReadMail(identity: AiTokenIdentity): Promise<boolean
   try {
     return await withOrganisationTransaction(
       identity.membership.organisation,
-      { userId: identity.user.id, email: identity.user.email, via: `AI key "${identity.tokenName}"` },
+      { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity) },
       async (tx) => {
         await mailOwnerForKey(tx, identity);
         return true;

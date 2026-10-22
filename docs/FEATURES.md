@@ -2068,8 +2068,28 @@ that something happened.
   and runs depreciation (decision 489, AIF1-AIF6); anything an approval rule
   covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
-  turned off. Not yet tried against each AI app; no OAuth sign-in yet, so
-  AI services that only take OAuth connectors can't connect.
+  turned off. Not yet tried against each AI app.
+- **AI apps connect by signing in** (#427, decisions 810-829, core
+  migration 0018). Claude.ai, ChatGPT and other cloud AI connect by pasting
+  one address (the MCP address on the remote access address) and signing in
+  to Tohyee (password with two-step, or Google), as the MCP authorisation
+  specification expects (OAuth 2.1), instead of pasting a key. A consent
+  screen shows the app's name (with a warning that any app can claim any
+  name), the address it sends you back to, and lets the person choose the
+  organisation and level (the role ceiling applies; Full access for Owners
+  only, after ticking the warning). A connection is listed on the AI page
+  (name, where it sends you back to, level, connected, last used) and can be
+  disconnected; its actions show in history as the person "via AI app
+  <name>". It ends when disconnected, when the person is removed or their
+  login is turned off, when their password or two-step is reset, or after 60
+  days unused. Owner-private mail stays off for a connection unless the
+  Owner turns it on in My mail (Look only only). Only through https remote
+  access; with it off the page says so and keys still work. Keys stay for
+  Claude Desktop and other apps that need them. The AI page now leads with
+  "Connect your AI", then Connected apps and Keys; the Claude Desktop
+  setup, headers and protocol, and the "what it can do" list fold away.
+  Built from the specification and the AI services' published docs; **not
+  yet tried with real Claude.ai or ChatGPT**.
 - **Draft manual journals** (examples MJD1-MJD9, decisions 349-352, tenant
   migration 0081), like Xero's: "Save as draft" beside "Post journal", and a
   Draft journals list on the journal page to edit, post or delete them. A

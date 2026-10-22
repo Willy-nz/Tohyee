@@ -25,7 +25,11 @@ tohyee                  core database (DATABASE_URL)
 ├─ server_settings      email sending and remote access (secrets encrypted with
 │                       TOHYEE_SECRET_KEY; never accounting data)
 ├─ organisation_members who can open which organisation, with what role
-├─ ai_access_tokens     personal AI keys (SHA-256 only) with an access level, per user per organisation
+├─ ai_access_tokens     personal AI keys (SHA-256 only) with an access level, per user per organisation;
+│                       also AI apps connected by signing in (kind 'connection', #427)
+├─ oauth_clients, oauth_authorization_requests, oauth_authorization_codes, oauth_tokens
+│                       OAuth 2.1 for AI apps signing in (#427): apps, consent requests,
+│                       one-time codes and access/refresh tokens (hashes only)
 └─ admin_audit_events   server-level audit trail
 
 tohyee_org_glimmers     one database per organisation (organisation "glimmers")
@@ -285,6 +289,28 @@ re-runs the whole sequence.
   a savepoint inside the one transaction. No
   same-origin check (AI services call it from elsewhere) and no CORS
   headers; cookies are ignored.
+- AI apps can sign in instead of using a key (#427, decisions 810-829):
+  Tohyee is both the MCP resource server and its own OAuth 2.1
+  authorisation server, only on the https remote access address (the
+  issuer; `src/lib/ai/oauth/`). `/api/mcp` answers 401 with
+  `WWW-Authenticate: Bearer resource_metadata=…` (RFC 9728), served at
+  `/.well-known/oauth-protected-resource/api/mcp` (and the root);
+  `/.well-known/oauth-authorization-server` (RFC 8414) names
+  `/oauth/authorize`, `/api/oauth/token`, `/api/oauth/register` (RFC 7591)
+  and `/api/oauth/revoke` (RFC 7009), and says client ID metadata documents
+  are supported (read with `publicFetch`: public addresses only, no
+  redirects, 5 KB). Public clients only, the code flow with PKCE S256,
+  exact redirect matching (loopback any port), `iss` in every answer (RFC
+  9207), and `resource` (RFC 8707) checked so tokens only work at
+  `<remote address>/api/mcp`. `/oauth/authorize` keeps the request (hashed
+  handle, tied to the browser by an HttpOnly cookie) and sends the browser to
+  `/connect/<handle>`, behind the normal sign-in; the consent POST is
+  same-origin and needs that cookie. A connection is an `ai_access_tokens`
+  row (`kind = 'connection'`), so the level, role ceiling, `actor.via`,
+  private-mail scope and every ending (removal, login off, password or
+  two-step reset) work as for keys; access tokens (1 hour) and rotated
+  refresh tokens (60 days; a reused one ends the connection) are in
+  `oauth_tokens`, hashed.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
 - Command-line tool (`scripts/admin.ts`; `npm run admin`, or

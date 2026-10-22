@@ -3,8 +3,11 @@ import { MAX_JSON_BYTES, readLimitedBytes, route } from "@/lib/api/http";
 import { MCP_FAILED_KEYS_PER_MINUTE, MCP_REQUESTS_PER_MINUTE, RequestLimiter } from "@/lib/ai/limits";
 import { handleMcpMessage, JSON_RPC, type JsonRpcResponse, protocolHeaderAccepted, rpcError } from "@/lib/ai/mcp-protocol";
 import { mcpServerFor } from "@/lib/ai/mcp-server";
-import { bearerAiToken } from "@/lib/ai/token-format";
-import { authenticateAiToken } from "@/lib/ai/tokens";
+import { oauthAddresses } from "@/lib/ai/oauth/config";
+import { bearerToken, wwwAuthenticate } from "@/lib/ai/oauth/format";
+import { authenticateAccessToken } from "@/lib/ai/oauth/tokens";
+import { looksLikeAiToken } from "@/lib/ai/token-format";
+import { authenticateAiToken, type AiTokenIdentity } from "@/lib/ai/tokens";
 import { keyCanReadMail } from "@/lib/private-mail/ai";
 import { sessionMetaFrom } from "@/lib/auth/sessions";
 import { PayloadTooLargeError } from "@/lib/errors";
@@ -12,8 +15,12 @@ import { PayloadTooLargeError } from "@/lib/errors";
 /**
  * The MCP endpoint people connect their own AI to (decisions 339-345).
  *
- * Authenticated only by `Authorization: Bearer tohyee_ai_…` (a personal AI
- * key); session cookies are ignored, so a signed-in browser can't use it.
+ * Authenticated only by `Authorization: Bearer …`: a personal AI key
+ * (`tohyee_ai_…`), or an access token an AI app got by signing in
+ * (`tohyee_at_…`, #427, decisions 810-829). Session cookies are ignored, so
+ * a signed-in browser can't use it. Without a working token the answer is
+ * 401 with `WWW-Authenticate: Bearer resource_metadata="…"` (RFC 9728), so
+ * an AI app knows where to sign in, when remote access is on.
  * There's no same-origin check because AI services call it from elsewhere;
  * a cross-site browser page can't send the header without a CORS preflight,
  * which this route doesn't answer. Read tools run in a read-only
@@ -35,22 +42,35 @@ function reply(body: unknown, status = 200, headers: Record<string, string> = {}
   return NextResponse.json(body, { status, headers: { "cache-control": "no-store", ...headers } });
 }
 
-function unauthorized(): Response {
+async function unauthorized(tokenSent: boolean): Promise<Response> {
+  const addresses = await oauthAddresses();
   return reply(
-    rpcError(null, JSON_RPC.UNAUTHORIZED, "This needs a Tohyee AI key: Authorization: Bearer tohyee_ai_… Make one on the AI page in Tohyee."),
+    rpcError(
+      null,
+      JSON_RPC.UNAUTHORIZED,
+      addresses
+        ? "Sign in to Tohyee to connect (your AI app should offer this), or use a Tohyee AI key: Authorization: Bearer tohyee_ai_…"
+        : "This needs a Tohyee AI key: Authorization: Bearer tohyee_ai_… Make one on the AI page in Tohyee.",
+    ),
     401,
-    { "www-authenticate": 'Bearer realm="tohyee", error="invalid_token"' },
+    { "www-authenticate": wwwAuthenticate(addresses?.resourceMetadataUrl ?? null, tokenSent) },
   );
+}
+
+async function identify(token: string | null): Promise<AiTokenIdentity | null> {
+  if (!token) return null;
+  if (looksLikeAiToken(token)) return authenticateAiToken(token);
+  return authenticateAccessToken(token);
 }
 
 export const POST = route(async (request) => {
   const address = sessionMetaFrom(request).ipAddress;
   if (address && failedKeys.spent(address)) return tooManyFailures();
-  const token = bearerAiToken(request.headers.get("authorization"));
-  const identity = token ? await authenticateAiToken(token) : null;
+  const token = bearerToken(request.headers.get("authorization"));
+  const identity = await identify(token);
   if (!identity) {
-    if (address && !failedKeys.take(address)) return tooManyFailures();
-    return unauthorized();
+    if (token && address && !failedKeys.take(address)) return tooManyFailures();
+    return unauthorized(token !== null);
   }
 
   if (!limiter.take(identity.tokenId)) {

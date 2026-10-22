@@ -38,3 +38,48 @@
   padding-left: 20px;
   line-height: 1.6;
 }
+
+/* Keys and connected apps as short rows, so they fit a phone (#427). */
+.items {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.item:first-child {
+  border-top: 0;
+}
+
+.itemMain {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.itemName {
+  font-weight: 600;
+}
+
+.ended {
+  margin-top: 8px;
+}
+
+.ended > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.more {
+  display: grid;
+  gap: 12px;
+}

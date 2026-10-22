@@ -659,13 +659,13 @@ function AiKeys({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Your AI"
-      description="Let one of your own AI keys search and read this mail for you, citing the email it used. Only Look only keys can, so the AI can't copy anything from your mail into Tohyee. Nobody else's key can ever be given it."
+      description="Let one of your own AI keys or connected AI apps search and read this mail for you, citing the email it used. Only Look only keys can, so the AI can't copy anything from your mail into Tohyee. Nobody else's key can ever be given it."
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {keys.error ? <Notice tone="error">{keys.error}</Notice> : null}
       {keys.data && !keys.data.keys.length ? (
         <p className={ui.muted}>
-          You have no AI keys here. Make a Look only key on the <Link href="/operations/ai">AI page</Link>.
+          You have no AI keys or connected AI apps here. Connect one at Look only, or make a Look only key, on the <Link href="/operations/ai">AI page</Link>.
         </p>
       ) : null}
       {keys.data?.keys.length ? (
@@ -675,7 +675,7 @@ function AiKeys({ organisationId }: { organisationId: string }) {
               <label className={ui.checkbox}>
                 <input type="checkbox" checked={key.canReadMail} disabled={busy || !key.lookOnly} onChange={(event) => void change(key, event.target.checked)} />
                 <span>
-                  {key.name} <small className={styles.meta}>({key.startsWith}…)</small>
+                  {key.name} <small className={styles.meta}>{key.startsWith ? `(${key.startsWith}…)` : "(connected AI app)"}</small>
                 </span>
               </label>
               {!key.lookOnly ? <small className={styles.meta}> Not Look only, so it can&apos;t read your mail.</small> : null}

@@ -145,3 +145,30 @@
   flex: 1;
   border-top: 1px solid var(--border);
 }
+
+/* The consent screen for an AI app signing in (#427) has a little more to show. */
+.panelWide {
+  width: min(480px, 100%);
+}
+
+.facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.facts dt {
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.85rem);
+}
+
+.facts dd {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.host {
+  font-size: 1.05rem;
+  font-weight: 700;
+}

@@ -248,6 +248,8 @@ export async function removeMember(
         where organisation_id = $1 and user_id = $2 and revoked_at is null`,
       [organisationId, userId],
     );
+    // Connected AI apps are rows above too; a code not yet swapped for tokens stops as well (#427, decision 820).
+    await client.query("update oauth_authorization_codes set used_at = now() where organisation_id = $1 and user_id = $2 and used_at is null", [organisationId, userId]);
     // Their farm app keys too (FA2, decision 561).
     const appKeys = await client.query("update farm_app_keys set revoked_at = now() where organisation_id = $1 and user_id = $2 and revoked_at is null", [organisationId, userId]);
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
