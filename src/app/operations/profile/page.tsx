@@ -1,15 +1,100 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { GoogleButton, useAddressParam } from "@/components/auth/google-button";
 import { BackupCodes } from "@/components/auth/two-step";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { api, errorMessage } from "@/lib/client/api";
+import { googleSignInMessage } from "@/lib/auth/google-messages";
+import type { GoogleSignInStatus } from "@/lib/auth/google-sign-in";
 import type { SignedInSession } from "@/lib/auth/session-list";
 import type { TwoStepStatus } from "@/lib/auth/two-step";
 import { formatDateTime } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
+
+/**
+ * Sign in with Google (#424): link a Google account (with your password
+ * again), see which one is linked, and unlink it while you still have
+ * another way in.
+ */
+function GoogleCard({ google, reload }: { google: GoogleSignInStatus; reload: () => void }) {
+  const confirm = useConfirm();
+  const [password, setPassword] = useState("");
+  const [message, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Back from Google: only a fixed message for a known code.
+  const code = useAddressParam("google");
+  const returned = googleSignInMessage(code);
+  const status = message ?? (returned ? { tone: code === "linked" ? ("success" as const) : ("error" as const), text: returned } : null);
+
+  async function unlink() {
+    if (!google.linked) return;
+    if (!(await confirm(`Unlink ${google.linked.email}? You'll sign in with your password and authenticator app only, and other sessions signed in with Google end.`))) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      await api("/api/auth/google/unlink", { method: "POST" });
+      setStatus({ tone: "success", text: "Google sign-in unlinked." });
+      reload();
+    } catch (caught) {
+      setStatus({ tone: "error", text: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Sign in with Google" description="Use your Google account to sign in, instead of your password and authenticator app.">
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+      {google.linked ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          <p>
+            <Badge tone="green">Linked</Badge> {google.linked.email} · since {formatDateTime(google.linked.linkedAt)}
+            {google.linked.lastUsedAt ? ` · last used ${formatDateTime(google.linked.lastUsedAt)}` : ""}
+          </p>
+          {google.canUnlink ? (
+            <div>
+              <Button variant="secondary" onClick={() => void unlink()} disabled={busy}>
+                Unlink Google account
+              </Button>
+            </div>
+          ) : (
+            <p className={ui.muted}>
+              {google.googleOnly
+                ? "You sign in with Google only, so it can't be unlinked. To have a password as well, ask your server admin for a setup link."
+                : "It can't be unlinked until your password sign-in (with two-step) is set up."}
+            </p>
+          )}
+        </div>
+      ) : google.available ? (
+        <form
+          onSubmit={(event) => event.preventDefault()}
+          style={{ display: "grid", gap: 12, maxWidth: 420 }}
+          autoComplete="off"
+        >
+          <Field label="Your password" hint="To check it's you before adding another way to sign in.">
+            <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          </Field>
+          <div>
+            <GoogleButton
+              purpose="link"
+              extra={{ password }}
+              label="Link a Google account"
+              disabled={!password}
+              onError={(message) => setStatus(message ? { tone: "error", text: message } : null)}
+            />
+          </div>
+          <p className={ui.muted}>Google must say the account&apos;s email address is verified. You can still sign in with your password.</p>
+        </form>
+      ) : (
+        <p className={ui.muted}>Sign in with Google isn&apos;t turned on on this server.</p>
+      )}
+    </Card>
+  );
+}
 
 /** Two-step sign-in status, and new backup codes (which need a current authenticator code). */
 function TwoStepCard() {
@@ -137,6 +222,8 @@ function SessionsCard() {
 
 export default function ProfilePage() {
   const { user, organisations } = useWorkspace();
+  const google = useApiData<{ google: GoogleSignInStatus }>("/api/auth/google");
+  const googleOnly = google.data?.google.googleOnly ?? false;
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -184,8 +271,14 @@ export default function ProfilePage() {
           </table>
         </div>
       </Card>
-      <TwoStepCard />
+      {google.data && (google.data.google.available || google.data.google.linked) ? <GoogleCard google={google.data.google} reload={google.reload} /> : null}
+      {googleOnly ? null : <TwoStepCard />}
       <SessionsCard />
+      {googleOnly ? (
+        <Card title="Password">
+          <p className={ui.muted}>You sign in with Google, so there&apos;s no password to change. To have a password as well, ask your server admin for a setup link.</p>
+        </Card>
+      ) : (
       <Card title="Change password">
         {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
         <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12, maxWidth: 420 }}>
@@ -203,6 +296,7 @@ export default function ProfilePage() {
           </div>
         </form>
       </Card>
+      )}
     </Page>
   );
 }

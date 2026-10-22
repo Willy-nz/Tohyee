@@ -18,7 +18,7 @@ import { readServerSetting, writeServerSetting } from "@/lib/server-settings";
  * app (Sign-ins, Home) and are emailed to the person and the server admins
  * when the server can send email. No country lookup (Jess). Kept for a year.
  */
-export type SignInStep = "password" | "code" | "backup_code" | "setup_link" | "reset_link" | "first_admin";
+export type SignInStep = "password" | "code" | "backup_code" | "setup_link" | "reset_link" | "first_admin" | "google";
 export type SignInOutcome = "signed_in" | "password_ok" | "failed" | "locked" | "refused";
 
 export type SignInEvent = {

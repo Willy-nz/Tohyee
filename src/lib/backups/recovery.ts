@@ -297,6 +297,14 @@ export async function recoverPeople(
     members: (await client.query<{ organisation_id: string; user_id: string; role: string }>("select organisation_id, user_id::text, role from organisation_members")).rows,
     organisations: (await client.query<{ id: string; display_name: string }>("select id, display_name from organisations order by display_name, organisations.id")).rows,
     settings: (await client.query<{ key: string }>("select key from server_settings order by key")).rows.map((row) => row.key),
+    // Sign in with Google links (#424), in backups made since it was added.
+    google: (await client.query<{ present: boolean }>("select to_regclass('public.user_google_identities') is not null as present")).rows[0]?.present
+      ? (
+          await client.query<{ user_id: string; google_sub: string; email: string; linked_at: Date; google_only: boolean }>(
+            "select g.user_id::text, g.google_sub, g.email, g.linked_at, u.google_only from user_google_identities g join users u on u.id = g.user_id",
+          )
+        ).rows
+      : [],
   }));
 
   const here = (await coreQuery<{ id: string; email: string; memberships: string }>(
@@ -374,6 +382,14 @@ export async function recoverPeople(
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [user.id, user.email, user.display_name, user.password_hash, user.is_server_admin, user.is_active, user.password_changed_at, user.created_at, user.totp, user.totp ? user.totp_enabled_at : null],
       );
+      const google = fromBackup.google.find((g) => g.user_id === user.id);
+      if (google) {
+        await client.query(
+          "insert into user_google_identities (user_id, google_sub, email, linked_at) values ($1, $2, $3, $4) on conflict do nothing",
+          [user.id, google.google_sub, google.email, google.linked_at],
+        );
+        if (google.google_only) await client.query("update users set google_only = true where id = $1", [user.id]);
+      }
       for (const code of fromBackup.codes.filter((c) => c.user_id === user.id)) {
         await client.query("insert into user_backup_codes (user_id, code_hash, created_at) values ($1, $2, $3)", [user.id, code.code_hash, code.created_at]);
       }

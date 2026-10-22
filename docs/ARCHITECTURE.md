@@ -20,7 +20,8 @@ row-level tenancy.
 tohyee                  core database (DATABASE_URL)
 ├─ organisations        registry: id, name, database_name, status
 ├─ users, sessions      logins, two-step sign-in (authenticator key encrypted),
-│                       user_backup_codes, two_step_reset_tokens
+│                       user_backup_codes, two_step_reset_tokens,
+│                       user_google_identities and google_sign_in_states (#424)
 ├─ server_settings      email sending and remote access (secrets encrypted with
 │                       TOHYEE_SECRET_KEY; never accounting data)
 ├─ organisation_members who can open which organisation, with what role
@@ -238,6 +239,14 @@ re-runs the whole sequence.
   person out everywhere. Without `TOHYEE_SECRET_KEY`, sign-in is password
   only and server admins see a warning on every page; remote access can't be
   turned on.
+- **Sign in with Google** (#424, decisions 800-809), for invited people only:
+  OpenID Connect's code flow with state, nonce and PKCE, bound to the
+  browser by a short-lived cookie, through one Google app per server
+  (Server settings). A login is linked to a Google account by Google's
+  account ID (`user_google_identities`), only from a setup link (the
+  invited address) or from Your account (password again). A Google session
+  (`sessions.sign_in_method = 'google'`) is full without Tohyee's two-step,
+  as Xero's is; server admins always keep a password.
 - Security alerts are emailed (when Email is set up in the server settings) for two-step
   turned on or reset, a backup code used, new backup codes and a lockout.
   A failed alert never blocks the action.

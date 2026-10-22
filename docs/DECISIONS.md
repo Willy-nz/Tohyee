@@ -8047,3 +8047,104 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      without running anything. Previews are still admins only, and still
      run each merge's checks (decision 693). Nothing new is shown to report
      viewers (decision 697): a shaped table is a table like any other.
+
+### Sign in with Google for invited people (#424; decisions 800-809)
+
+Jess, 22 Oct 2026: "Would it be possible to have account set up that log in
+with google?" … "Yes just google for now." She agreed the design in #424.
+Where the issue doesn't answer a question, the choice below says so; those
+are not yet reviewed by Jess.
+
+800. **Google as a second way to sign in, for invited people only**
+     (#424, Jess). A setup link (decision 484) offers **Continue with
+     Google** beside choosing a password; people with a password can link a
+     Google account on Your account; the sign-in page shows **Sign in with
+     Google** once a server admin has turned it on. A Google account that
+     wasn't invited or linked can never make a login: Google sign-in only
+     ever finds a login that's already linked to that Google account.
+     Google only: Microsoft is out of scope for now.
+801. **Linked by Google's account ID, and an invitation is for its own
+     address** (#424). The link is Google's `sub`, kept in the core
+     database (core migration 0017, `user_google_identities`; one Google
+     account per login, one login per Google account). The email address is
+     only shown, and updated when Google's changes, so a changed Gmail
+     address doesn't break the link and an address someone else reuses
+     doesn't reach the login. Google must say the email is verified
+     (`email_verified`), or nothing is linked. Not in the issue, and not yet
+     reviewed by Jess: **a setup link only accepts the Google account with
+     the invited email address**, so a forwarded link can't be taken over
+     with someone else's Google account (the link stays usable for the right
+     person after a refusal). Linking from Your account allows a Google
+     account with a different address, since the person has just proved
+     both (their password again and Google).
+802. **A Google sign-in relies on Google's checks; passwords keep two-step**
+     (#424, Jess, as Xero does). Sessions record how they were signed in
+     (`sessions.sign_in_method`); a Google session is full without
+     Tohyee's authenticator code. Someone who sets up their login with
+     Google has no password anyone knows (`users.google_only`): their old
+     password, authenticator app and backup codes stop working, other
+     sessions end and AI keys stop, as a setup link with a password does.
+     To have a password as well, they ask a server admin for a setup link.
+803. **The ID token is checked as OpenID Connect Core 3.1.3.7 says, without
+     the signature** (#424). The token comes straight from Google's token
+     endpoint (oauth2.googleapis.com) over TLS, in exchange for a one-time
+     code, the client secret and the PKCE verifier; the browser never hands
+     Tohyee a token. OpenID Connect allows TLS to stand in for the
+     signature in that case, and it saves fetching and caching Google's
+     keys. Everything else is checked: issuer (`https://accounts.google.com`
+     or `accounts.google.com`), audience and `azp` (this server's client
+     ID), expiry and issue time (2 minutes' clock difference allowed, at
+     most 15 minutes old), the nonce, a verified email and `sub`.
+804. **Each trip to Google is tied to the browser that started it**
+     (#424). Starting needs a same-site POST; it stores hashes of a random
+     state and of a random cookie set in that browser (HttpOnly,
+     SameSite=Lax, 10 minutes, path `/api/auth/google`), a nonce and a PKCE
+     (S256) verifier (`google_sign_in_states`). The callback only goes on
+     when the state and the cookie match, unused and under 10 minutes old,
+     and marks it used first, so a callback link sent to someone else, or
+     used twice, does nothing. The scopes are only `openid email profile`,
+     without offline access: no Google tokens are kept. The browser is sent
+     back only to Tohyee's own pages (the sign-in page's rule for `next`),
+     on the address the trip started from, with a short code (such as
+     `google=not_linked`) that the page turns into a fixed message, never
+     text from the address.
+805. **Linking and unlinking from Your account** (#424). Linking needs the
+     person's password again (counted with the sign-in tries, so it locks
+     like a sign-in), and the callback must arrive in the same session that
+     started it: a browser now signed in as someone else links nothing. Not
+     yet reviewed by Jess: the password step, and that a link is emailed to
+     the person as a security alert (as are unlinking and a server admin
+     removing it). Unlinking is only allowed while the person still has
+     another way in (a password, and two-step where the server needs it);
+     it ends their other Google sessions.
+806. **Server admins always keep a password** (#424, Jess). A server admin's
+     setup link doesn't offer Google; someone set up with Google only can't
+     be made a server admin until they've chosen a password through a setup
+     link. A server admin can link Google and sign in with it as well, as
+     anyone can; server settings still only open on the server computer.
+807. **The Google app is set per server, in Server settings** (#424, Jess).
+     Server settings › Sign in with Google (a server admin, on the server
+     computer) takes a client ID and secret (encrypted with
+     TOHYEE_SECRET_KEY, never shown again), or copies the Google app an
+     organisation already has in Settings › Email (for Gmail and Google
+     Analytics; the server admin must be an admin there), and an on/off
+     switch. It lists the sign-in address to add to the app
+     (`/api/auth/google/callback` on the remote access address and on the
+     address in use), and says when Google won't accept one: Google only
+     takes https on a public name, or localhost, so a server reached only by
+     a home-network address or name can't use it from other computers.
+     Settings › Email's help mentions the extra address.
+808. **What ends Google sign-in** (#424). Disabling a login ends its
+     sessions and refuses Google sign-in. A server admin can remove someone's
+     Google sign-in under Users (their Google sessions end). Removing
+     someone from an organisation works as it does for passwords: Google
+     sign-in only reaches what the login can. Sign-ins are recorded and
+     flagged as before (decision 487) with the step "Google"; Google
+     refusals are recorded as refused. The per-address limit (decision 456)
+     covers starting and coming back. People recovered from a server backup
+     (decision 738) keep their Google link.
+809. **Not done or not tried** (#424). It hasn't been tried with a real
+     Google account or Google app: the tests use a made-up Google token
+     endpoint. The Windows server app has no page for it yet (the browser
+     page at `/server/google-sign-in` on the server computer does it), and
+     `tohyee-admin` has no command for it. Microsoft sign-in isn't built.

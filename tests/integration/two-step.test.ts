@@ -314,6 +314,7 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
       valid: true,
       email: "kim@example.com",
       displayName: "Kim",
+      googleAvailable: false,
     });
     expect((await setupAccountRoute.POST(apiRequest("/api/auth/setup-account", { method: "POST", body: { token: kimToken, password: "short" } }), noContext)).status).toBe(400);
     const usedLink = await setupAccountRoute.POST(

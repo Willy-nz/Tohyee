@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { GoogleButton, useKeptValue } from "@/components/auth/google-button";
 import { BrandMark } from "@/components/brand-mark";
 import { useApiData } from "@/components/hooks";
 import { Button, Field, Notice } from "@/components/ui";
@@ -9,11 +10,21 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { SetupLinkState } from "@/lib/auth/setup-links";
 import styles from "./auth.module.css";
 
-/** A setup link (#208): choose a password, then set up two-step sign-in straight away. */
-export function SetupAccountForm({ token }: { token: string }) {
+/** Where the link's code waits while the person is at Google, so a refusal can come back to the same link (#424). */
+const KEPT_TOKEN = "tohyee.setupLink";
+
+/**
+ * A setup link (#208): choose a password, then set up two-step sign-in
+ * straight away; or, where the server has Sign in with Google (#424),
+ * continue with the invited Google account instead.
+ */
+export function SetupAccountForm({ token: linkToken, googleMessage = null }: { token: string; googleMessage?: string | null }) {
   const router = useRouter();
+  // Back from Google without the link in the address: the one kept in this tab.
+  const kept = useKeptValue(KEPT_TOKEN);
+  const token = linkToken || (googleMessage ? kept : "");
   const link = useApiData<SetupLinkState>(token ? "/api/auth/setup-account" : null, { token });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(googleMessage);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -37,6 +48,13 @@ export function SetupAccountForm({ token }: { token: string }) {
   }
 
   const invalid = !token || (link.data && !link.data.valid);
+  const keepToken = () => {
+    try {
+      window.sessionStorage.setItem(KEPT_TOKEN, token);
+    } catch {
+      // storage blocked: nothing to keep
+    }
+  };
   return (
     <div className={styles.screen}>
       <div className={styles.panel}>
@@ -68,6 +86,18 @@ export function SetupAccountForm({ token }: { token: string }) {
             {busy ? "Setting up…" : "Continue"}
           </Button>
         </form>
+        {link.data?.valid && link.data.googleAvailable ? (
+          <>
+            <div className={styles.divider}>or</div>
+            <div className={styles.form}>
+              <GoogleButton purpose="setup" extra={{ token }} disabled={busy} beforeLeaving={keepToken} onError={setError} />
+              <p className={styles.text}>
+                Sign in with the Google account for {link.data.email} instead of making a password. Google&apos;s own sign-in checks then
+                protect your login, and there&apos;s no authenticator app to set up here.
+              </p>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );

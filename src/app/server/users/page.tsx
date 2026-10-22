@@ -142,13 +142,16 @@ export default function UsersPage() {
                   <td>
                     {user.isActive ? null : <Badge tone="red">Disabled</Badge>}{" "}
                     {user.isServerAdmin ? <Badge tone="blue">Server admin</Badge> : null}{" "}
-                    {user.twoStepEnabled ? (
+                    {user.googleOnly ? (
+                      <Badge tone="green">Signs in with Google</Badge>
+                    ) : user.twoStepEnabled ? (
                       <Badge tone="green">Two-step on</Badge>
                     ) : user.setupLinkExpiresAt ? (
                       <Badge tone="amber">Setup link sent</Badge>
                     ) : (
                       <Badge tone="amber">Two-step not set up</Badge>
                     )}{" "}
+                    {user.googleEmail && !user.googleOnly ? <Badge tone="blue">Google linked</Badge> : null}{" "}
                     <span className={ui.muted}>
                       {user.organisationCount} organisation{user.organisationCount === 1 ? "" : "s"}
                     </span>
@@ -204,6 +207,23 @@ export default function UsersPage() {
                           }
                         >
                           {user.setupLinkExpiresAt ? "New setup link" : "Send setup link"}
+                        </Button>
+                      ) : null}
+                      {user.googleEmail ? (
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={async () => {
+                            if (
+                              await confirm(
+                                `Remove Google sign-in (${user.googleEmail}) from ${user.email}? Their Google sessions end.${user.googleOnly ? " They have no password, so they then need a setup link to choose one." : " They can still sign in with their password."}`,
+                              )
+                            ) {
+                              void act(() => api(`/api/admin/users/${user.id}/google`, { method: "DELETE" }), `Google sign-in removed from ${user.email}.`);
+                            }
+                          }}
+                        >
+                          Remove Google
                         </Button>
                       ) : null}
                       {user.id !== me.id ? (

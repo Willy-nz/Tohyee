@@ -40,7 +40,7 @@ export const GOOGLE_SEND_SCOPES = ["openid", "https://www.googleapis.com/auth/us
 
 export type ProviderApp = { clientId: string; clientSecret: string; tenant?: string };
 /** `scope`: the scopes actually granted, when the provider says (Google does; people can untick some). */
-export type Tokens = { accessToken: string; refreshToken: string | null; expiresInSeconds: number; scope?: string | null };
+export type Tokens = { accessToken: string; refreshToken: string | null; expiresInSeconds: number; scope?: string | null; idToken?: string | null };
 
 export type Participant = { email: string; name: string | null };
 export type ProviderMessage = {
@@ -158,13 +158,19 @@ function tokenUrl(provider: MailProvider, app: ProviderApp): string {
 async function tokenRequest(provider: MailProvider, app: ProviderApp, fields: Record<string, string>, microsoftScopes: readonly string[]): Promise<Tokens> {
   const body = new URLSearchParams({ client_id: app.clientId, client_secret: app.clientSecret, ...fields });
   if (provider === "microsoft") body.set("scope", microsoftScopes.join(" "));
-  const result = await request<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string }>(tokenUrl(provider, app), {
+  const result = await request<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; id_token?: string }>(tokenUrl(provider, app), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: body.toString(),
   });
   if (!result?.access_token) throw new ValidationError("The sign-in didn't return an access token.");
-  return { accessToken: result.access_token, refreshToken: result.refresh_token ?? null, expiresInSeconds: result.expires_in ?? 3600, scope: result.scope ?? null };
+  return {
+    accessToken: result.access_token,
+    refreshToken: result.refresh_token ?? null,
+    expiresInSeconds: result.expires_in ?? 3600,
+    scope: result.scope ?? null,
+    idToken: typeof result.id_token === "string" ? result.id_token : null,
+  };
 }
 
 export function exchangeCode(
@@ -173,8 +179,10 @@ export function exchangeCode(
   code: string,
   redirectUri: string,
   microsoftScopes: readonly string[] = MICROSOFT_SCOPES,
+  extra: Record<string, string> = {},
 ): Promise<Tokens> {
-  return tokenRequest(provider, app, { grant_type: "authorization_code", code, redirect_uri: redirectUri }, microsoftScopes);
+  // `extra` carries PKCE's code_verifier for Sign in with Google (#424).
+  return tokenRequest(provider, app, { ...extra, grant_type: "authorization_code", code, redirect_uri: redirectUri }, microsoftScopes);
 }
 
 export function refreshAccess(provider: MailProvider, app: ProviderApp, refreshToken: string, microsoftScopes: readonly string[] = MICROSOFT_SCOPES): Promise<Tokens> {

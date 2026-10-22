@@ -23,6 +23,10 @@ export type UserSummary = {
   twoStepEnabled: boolean;
   /** When an unused setup link for this login runs out (null: none waiting). */
   setupLinkExpiresAt: string | null;
+  /** The Google account linked for signing in (#424), if any. */
+  googleEmail: string | null;
+  /** Set up with Google only: no password. */
+  googleOnly: boolean;
 };
 
 type UserRow = {
@@ -36,6 +40,8 @@ type UserRow = {
   organisation_count: string;
   two_step_enabled: boolean;
   setup_link_expires_at: string | null;
+  google_email: string | null;
+  google_only: boolean;
 };
 
 function toSummary(row: UserRow): UserSummary {
@@ -50,12 +56,15 @@ function toSummary(row: UserRow): UserSummary {
     organisationCount: Number(row.organisation_count),
     twoStepEnabled: row.two_step_enabled,
     setupLinkExpiresAt: row.setup_link_expires_at ? new Date(row.setup_link_expires_at).toISOString() : null,
+    googleEmail: row.google_email,
+    googleOnly: row.google_only,
   };
 }
 
 const USER_SELECT = `
   select u.id, u.email, u.display_name, u.is_server_admin, u.is_active,
-         u.last_login_at, u.created_at, u.totp_enabled_at is not null as two_step_enabled,
+         u.last_login_at, u.created_at, u.totp_enabled_at is not null as two_step_enabled, u.google_only,
+         (select g.email from user_google_identities g where g.user_id = u.id) as google_email,
          (select count(*) from organisation_members m where m.user_id = u.id)::text as organisation_count,
          (select max(l.expires_at) from user_setup_links l where l.user_id = u.id and l.used_at is null and l.expires_at > now()) as setup_link_expires_at
     from users u`;
@@ -152,12 +161,18 @@ export async function updateUser(
   }
 
   return withCoreTransaction(async (client) => {
-    const existing = await client.query<{ id: string; is_server_admin: boolean }>(
-      "select id, is_server_admin from users where id = $1 for update",
+    const existing = await client.query<{ id: string; is_server_admin: boolean; google_only: boolean; email: string }>(
+      "select id, is_server_admin, google_only, email from users where id = $1 for update",
       [userId],
     );
     if (!existing.rows[0]) {
       throw new NotFoundError("User not found.");
+    }
+    // Server admins always keep a password (#424), so Google being down can't lock anyone out of the server.
+    if (isServerAdmin === true && existing.rows[0].google_only && !newPasswordHash) {
+      throw new ValidationError(
+        `${existing.rows[0].email} signs in with Google only. Server admins always keep a password: send them a setup link to choose one first.`,
+      );
     }
 
     await client.query(
@@ -166,6 +181,7 @@ export async function updateUser(
               is_active = coalesce($3, is_active),
               is_server_admin = coalesce($4, is_server_admin),
               password_hash = coalesce($5, password_hash),
+              google_only = case when $5::text is null then google_only else false end,
               password_changed_at = case when $5::text is null then password_changed_at else now() end,
               failed_login_count = case when $5::text is null then failed_login_count else 0 end,
               locked_until = case when $5::text is null then locked_until else null end,
