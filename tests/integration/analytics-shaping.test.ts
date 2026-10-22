@@ -368,4 +368,62 @@ describeWithDatabase("analytics shaped tables", () => {
     expect(shapeGone.status).toBe(409);
     expect(shapeGone.data.error).toMatch(/Halves uses this table/);
   });
+  it("runs the newer steps through the routes, with row counts and the organisation's balance date (#376 phase 4)", async () => {
+    // A 30 June balance date: 1 April 2026 is in the 2026 financial year (it would be 2027 with 31 March).
+    await inOrganisation(ORG, actor(), (tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 6 }));
+    const steps = [
+      { type: "type", column: "amount", kind: "money" },
+      { type: "conditional", name: "sold", kind: "date", rules: [{ column: "amount", test: "more than", value: "5", then: { type: "value", value: "2026-04-01" } }], otherwise: { type: "value", value: "2026-07-01" } },
+      { type: "dateParts", column: "sold", parts: [{ part: "financial_year", name: "fy" }] },
+      { type: "append", table: "contacts_export" },
+      { type: "filter", column: "email", test: "contains", value: "person" },
+      { type: "sort", by: [{ column: "fy", descending: false }] },
+      { type: "fill", columns: ["fy"], direction: "down" },
+      { type: "index", name: "line", start: 1, increment: 1 },
+      { type: "formula", name: "with_gst", formula: "[amount] * 1.15" },
+      { type: "distinct", columns: ["email", "fy"] },
+    ];
+    const preview = (cookie: string, extra: Record<string, unknown>) =>
+      previewRoute.POST(
+        apiRequest("/api/analytics/shaping/preview", { method: "POST", cookie, body: { organisationId: ORG, baseTable: "contacts_export", steps, ...extra } }),
+        noContext,
+      );
+    expect((await preview(viewerCookie, { throughStep: 2 })).status).toBe(403);
+    expect((await preview(viewerCookie, { throughStep: 2, columnsOnly: true })).status).toBe(403);
+
+    // The columns a step can choose from, worked out without running anything.
+    const before = await body(await preview(ownerCookie, { throughStep: 1, columnsOnly: true }));
+    expect(before.status).toBe(200);
+    expect(before.data.columns).toEqual([
+      { name: "email", type: "VARCHAR" },
+      { name: "amount", type: "DECIMAL(18,2)" },
+      { name: "sold", type: "DATE" },
+    ]);
+    const base = await body(await preview(ownerCookie, { throughStep: -1, columnsOnly: true }));
+    expect(base.data.columns.map((column: { name: string }) => column.name)).toEqual(["email", "amount"]);
+
+    // Showing step 3, the counts cover every step: 2 rows, 4 after the append, 2 after the filter.
+    const third = await body(await preview(ownerCookie, { throughStep: 2 }));
+    expect(third.status).toBe(200);
+    expect(third.data.counts).toEqual(["2", "2", "2", "2", "4", "2", "2", "2", "2", "2", "2"]);
+    expect(third.data.rows).toEqual([
+      { email: "person@example.test", amount: "20.25", sold: "2026-04-01", fy: "2026" },
+      { email: "missing@example.test", amount: "4.00", sold: "2026-07-01", fy: "2027" },
+    ]);
+
+    const created = await body(
+      await shapingRoute.POST(
+        apiRequest("/api/analytics/shaping", { method: "POST", cookie: ownerCookie, body: { organisationId: ORG, name: "New steps", tableName: "new_steps", baseTable: "contacts_export", steps } }),
+        noContext,
+      ),
+    );
+    expect(created.status).toBe(201);
+    expect(created.data.run.status).toBe("ok");
+    // The appended row has no date: it sorts first (blank going up) and has nothing above to fill from, so it isn't a duplicate.
+    expect(await queryAnalytics(ORG, "select email, fy::varchar as fy, line::varchar as line, with_gst::varchar as with_gst from new_steps")).toEqual([
+      { email: "person@example.test", fy: null, line: "1", with_gst: "23.287500" },
+      { email: "person@example.test", fy: "2026", line: "2", with_gst: "23.287500" },
+    ]);
+    await inOrganisation(ORG, actor(), (tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 3 }));
+  });
 });
