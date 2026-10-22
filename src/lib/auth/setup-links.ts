@@ -107,19 +107,22 @@ export async function sendSetupLink(actor: AdminActor, userId: string): Promise<
   return { url: link.url, expiresAt: link.expiresAt, emailed, localOnly: link.localOnly };
 }
 
-export type SetupLinkState = { valid: boolean; email: string | null; displayName: string | null };
+/** `googleAvailable`: the person may choose Continue with Google instead of a password (#424; never for server admins). */
+export type SetupLinkState = { valid: boolean; email: string | null; displayName: string | null; googleAvailable: boolean };
 
 /** What the setup page shows before anything is typed: whether the link still works, and whose it is. */
 export async function readSetupLink(tokenInput: unknown): Promise<SetupLinkState> {
   const token = typeof tokenInput === "string" ? tokenInput : "";
-  if (!token) return { valid: false, email: null, displayName: null };
-  const found = await coreQuery<{ email: string; display_name: string }>(
-    `select u.email, u.display_name from user_setup_links l join users u on u.id = l.user_id
+  if (!token) return { valid: false, email: null, displayName: null, googleAvailable: false };
+  const found = await coreQuery<{ email: string; display_name: string; is_server_admin: boolean }>(
+    `select u.email, u.display_name, u.is_server_admin from user_setup_links l join users u on u.id = l.user_id
       where l.token_hash = $1 and l.used_at is null and l.expires_at > now() and u.is_active`,
     [hashToken(token)],
   );
   const row = found.rows[0];
-  return row ? { valid: true, email: row.email, displayName: row.display_name } : { valid: false, email: null, displayName: null };
+  if (!row) return { valid: false, email: null, displayName: null, googleAvailable: false };
+  const { googleSignInAvailable } = await import("@/lib/auth/google-sign-in");
+  return { valid: true, email: row.email, displayName: row.display_name, googleAvailable: !row.is_server_admin && (await googleSignInAvailable()) };
 }
 
 /**
@@ -143,7 +146,7 @@ export async function completeAccountSetup(input: { token: unknown; password: un
     const userId = claimed.rows[0]?.user_id;
     if (!userId) throw new UnauthorizedError("This setup link has expired or was already used. Ask your server admin for a new one.");
     const updated = await client.query<{ email: string; display_name: string; is_server_admin: boolean }>(
-      `update users set password_hash = $2, password_changed_at = now(), failed_login_count = 0, locked_until = null,
+      `update users set password_hash = $2, google_only = false, password_changed_at = now(), failed_login_count = 0, locked_until = null,
               totp_secret_ciphertext = null, totp_enabled_at = null, totp_last_step = null, updated_at = now()
         where id = $1 returning email, display_name, is_server_admin`,
       [userId, passwordHash],

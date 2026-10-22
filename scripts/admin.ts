@@ -330,7 +330,7 @@ async function setPasswordCommand(args: string[]) {
   const passwordHash = await hashPassword(validateNewPassword(await readPassword()));
   const updated = await coreQuery<{ id: string }>(
     `update users
-        set password_hash = $2, password_changed_at = now(), failed_login_count = 0,
+        set password_hash = $2, google_only = false, password_changed_at = now(), failed_login_count = 0,
             locked_until = null, is_active = true, updated_at = now()
       where email = $1
       returning id`,

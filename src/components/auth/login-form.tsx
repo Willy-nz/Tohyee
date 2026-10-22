@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { GoogleButton } from "@/components/auth/google-button";
 import { TwoStepEnrol, TwoStepVerify } from "@/components/auth/two-step";
 import { api, errorMessage } from "@/lib/client/api";
 import { Button, Field, Notice } from "@/components/ui";
@@ -17,14 +18,25 @@ type Props = {
   initialStage?: LoginStage;
   initialEmail?: string;
   emailResetAvailable?: boolean;
+  /** Sign in with Google is on for this server (#424). */
+  googleAvailable?: boolean;
+  /** What the Google sign-in said, on the way back from it. */
+  googleMessage?: string | null;
 };
 
-export function LoginForm({ next = "/operations", initialStage = "password", initialEmail = "", emailResetAvailable = false }: Props) {
+export function LoginForm({
+  next = "/operations",
+  initialStage = "password",
+  initialEmail = "",
+  emailResetAvailable = false,
+  googleAvailable = false,
+  googleMessage = null,
+}: Props) {
   const router = useRouter();
   const [stage, setStage] = useState<LoginStage>(initialStage);
   const [email, setEmail] = useState(initialEmail);
   const [canEmailReset, setCanEmailReset] = useState(emailResetAvailable);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(googleMessage);
   const [busy, setBusy] = useState(false);
 
   function finish() {
@@ -86,6 +98,12 @@ export function LoginForm({ next = "/operations", initialStage = "password", ini
                 {busy ? "Signing in…" : "Sign in"}
               </Button>
             </form>
+            {googleAvailable ? (
+              <>
+                <div className={styles.divider}>or</div>
+                <GoogleButton purpose="sign_in" extra={{ next }} label="Sign in with Google" onError={setError} />
+              </>
+            ) : null}
             <p className={styles.text}>
               Forgotten your password? A server admin can reset it from Users, or on the server with{" "}
               <code>npm run admin -- set-password</code>.

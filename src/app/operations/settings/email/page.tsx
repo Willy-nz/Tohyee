@@ -281,7 +281,7 @@ function GoogleAppForm({ organisationId, settings, onSaved }: { organisationId: 
         Library turn on the <strong>Gmail API</strong>; set up the OAuth consent screen with the permission{" "}
         <code>https://www.googleapis.com/auth/gmail.send</code>; then create an OAuth client of type <strong>Web application</strong> with the authorised
         redirect URI <code>{origin}/api/email/google/callback</code>, and paste its client ID and secret below. The CRM&apos;s email sync uses the same app
-        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it). For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{origin}/api/farming/mail/callback</code> and the permission <code>https://www.googleapis.com/auth/gmail.readonly</code>.
+        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it). For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{origin}/api/farming/mail/callback</code> and the permission <code>https://www.googleapis.com/auth/gmail.readonly</code>. The same app can let invited people sign in to Tohyee with Google: add <code>{origin}/api/auth/google/callback</code> too, and a server admin turns it on in Server settings › Sign in with Google.
       </Notice>
       <Notice tone="warning">
         <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> sending email (gmail.send) is one of Google&apos;s &ldquo;sensitive&rdquo;

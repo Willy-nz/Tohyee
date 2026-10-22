@@ -1326,6 +1326,21 @@ that something happened.
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
   reset by emailed link, by a server admin, or from the command line; new
   backup codes from your profile.
+- **Sign in with Google for invited people** (#424, decisions 800-809):
+  a setup link offers **Continue with Google** (for the Google account with
+  the invited address) instead of a password; people with a password link a
+  Google account on Your account (password again) and can unlink it while
+  they still have their password; the sign-in page shows **Sign in with
+  Google**. Linked by Google's account ID, with a verified email; an
+  uninvited Google account can never make a login. A Google sign-in relies
+  on Google's own checks; password sign-ins keep two-step. Server admins
+  always keep a password. Set up per server in Server settings › Sign in
+  with Google (client ID and secret, or an organisation's existing Google
+  app), with the sign-in address to add to the app and a warning when the
+  server has no web address Google accepts. OpenID Connect with state,
+  nonce, PKCE and a browser-bound cookie; only `openid email profile`.
+  Tested against a made-up Google only; not yet tried with a real Google
+  account.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
 - **Emailing documents** (decided by Jess, 30 Sep 2026): invoices, credit

@@ -114,3 +114,34 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+.googleButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.googleMark {
+  flex: none;
+  /* Google's mark keeps its own colours; a white disc keeps them readable in dark mode. */
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 1px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.85rem);
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}

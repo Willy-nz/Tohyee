@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/server/organisations", label: "Organisations" },
   { href: "/server/users", label: "Users" },
   { href: "/server/sign-ins", label: "Sign-ins" },
+  { href: "/server/google-sign-in", label: "Sign in with Google" },
   { href: "/server/remote-access", label: "Remote access" },
   { href: "/server/email", label: "Email" },
   { href: "/server/analytics", label: "Analytics folders" },

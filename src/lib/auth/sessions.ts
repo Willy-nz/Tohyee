@@ -34,6 +34,9 @@ export function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/** How a session was signed in (#424): Google sign-ins rely on Google's own checks, not Tohyee's two-step. */
+export type SignInMethod = "password" | "google";
+
 /**
  * Creates a session. A `pending` session is one where the password was right
  * but the second step (authenticator code) isn't done yet: it lasts 10
@@ -43,14 +46,14 @@ export async function createSession(
   client: DbClient,
   userId: string,
   meta: SessionMeta,
-  options: { pending?: boolean } = {},
+  options: { pending?: boolean; method?: SignInMethod } = {},
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("base64url");
   const lifetimeMs = options.pending ? PENDING_SESSION_MINUTES * 60 * 1000 : SESSION_LIFETIME_DAYS * 24 * 60 * 60 * 1000;
   const expiresAt = new Date(Date.now() + lifetimeMs);
   await client.query(
-    `insert into sessions (id, user_id, expires_at, user_agent, ip_address, two_step_pending)
-     values ($1, $2, $3, $4, $5, $6)`,
+    `insert into sessions (id, user_id, expires_at, user_agent, ip_address, two_step_pending, sign_in_method)
+     values ($1, $2, $3, $4, $5, $6, $7)`,
     [
       hashSessionToken(token),
       userId,
@@ -58,6 +61,7 @@ export async function createSession(
       meta.userAgent?.slice(0, 300) ?? null,
       meta.ipAddress?.slice(0, 64) ?? null,
       options.pending === true,
+      options.method ?? "password",
     ],
   );
   // Opportunistic clean-up of expired sessions.
@@ -83,6 +87,7 @@ type SessionRow = {
   display_name: string;
   is_server_admin: boolean;
   two_step_enabled: boolean;
+  sign_in_method: SignInMethod;
 };
 
 /**
@@ -99,6 +104,7 @@ export type SessionState = {
   user: SessionUser;
   stage: SessionStage;
   pending: boolean;
+  method: SignInMethod;
 };
 
 /**
@@ -113,7 +119,7 @@ export async function getSessionState(token: string | null): Promise<SessionStat
   const sessionId = hashSessionToken(token);
   const result = await coreQuery<SessionRow>(
     `select s.id as session_id, s.last_seen_at, s.two_step_pending, u.id as user_id, u.email,
-            u.display_name, u.is_server_admin, u.totp_enabled_at is not null as two_step_enabled
+            u.display_name, u.is_server_admin, u.totp_enabled_at is not null as two_step_enabled, s.sign_in_method
        from sessions s
        join users u on u.id = s.user_id
       where s.id = $1 and s.expires_at > now() and u.is_active`,
@@ -124,8 +130,16 @@ export async function getSessionState(token: string | null): Promise<SessionStat
     return null;
   }
   const required = twoStepRequired();
-  const stage: SessionStage =
-    row.two_step_pending && row.two_step_enabled ? "verify" : required && !row.two_step_enabled ? "enrol" : "full";
+  // A Google sign-in (#424, decision 802) relies on Google's own checks, as
+  // Xero's does, so it never asks for Tohyee's authenticator code.
+  const viaGoogle = row.sign_in_method === "google" && !row.two_step_pending;
+  const stage: SessionStage = viaGoogle
+    ? "full"
+    : row.two_step_pending && row.two_step_enabled
+      ? "verify"
+      : required && !row.two_step_enabled
+        ? "enrol"
+        : "full";
   if (stage === "full") noteActiveUser(row.user_id);
   if (stage === "full" && !row.two_step_pending && Date.now() - new Date(row.last_seen_at).getTime() > REFRESH_AFTER_MS) {
     await coreQuery(
@@ -140,6 +154,7 @@ export async function getSessionState(token: string | null): Promise<SessionStat
     sessionId,
     stage,
     pending: row.two_step_pending,
+    method: row.sign_in_method,
     user: {
       id: row.user_id,
       email: row.email,
