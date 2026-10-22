@@ -57,7 +57,11 @@ export function withRelationships(tables: Map<string, ColumnInfo[]>, relationshi
     if (!fact || !dimension || !fact.some((column) => column.name === relationship.field) || !dimension.some((column) => column.name === relationship.dimensionField)) continue;
     const added: RelatedColumn[] = dimension
       .filter((column) => column.name !== relationship.dimensionField)
-      .map((column) => ({ name: `${relationship.name}.${column.name}`, type: column.type, related: { relationship: relationship.name, dimension: relationship.dimension, field: column.name } }));
+      .map((column) => {
+        // A dimension field's own settings come with it (decision 775), its sort column under the same name.
+        const settings = column.settings ? { ...column.settings, ...(column.settings.sortBy ? { sortBy: `${relationship.name}.${column.settings.sortBy}` } : {}) } : undefined;
+        return { name: `${relationship.name}.${column.name}`, type: column.type, ...(settings ? { settings } : {}), related: { relationship: relationship.name, dimension: relationship.dimension, field: column.name } };
+      });
     result.set(relationship.table, [...fact, ...added.filter((column) => !fact.some((existing) => existing.name === column.name))]);
   }
   return result;

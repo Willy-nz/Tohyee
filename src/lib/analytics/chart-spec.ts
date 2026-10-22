@@ -31,6 +31,8 @@ export type ChartSeries = {
   kind?: ValueKind;
   /** A share as a fraction (a quick calculation, decision 770): shown as a percentage unless its format says otherwise. */
   percent?: boolean;
+  /** The value's field's own format (decision 775), when the chart hasn't chosen one. */
+  number?: NumberFormat;
 };
 
 export type ChartSpec = {
@@ -109,7 +111,7 @@ function seriesKind(spec: ChartSpec, index: number): ValueKind {
 }
 
 function seriesNumber(spec: ChartSpec, index: number): NumberFormat | undefined {
-  return spec.format?.series?.[index]?.number ?? (spec.series[index]?.percent ? { style: "percent", decimals: 1 } : spec.valueFormat === "percent" ? { style: "percent" } : undefined);
+  return spec.format?.series?.[index]?.number ?? spec.series[index]?.number ?? (spec.series[index]?.percent ? { style: "percent", decimals: 1 } : spec.valueFormat === "percent" ? { style: "percent" } : undefined);
 }
 
 function seriesFormatter(spec: ChartSpec, index: number, axis = false) {

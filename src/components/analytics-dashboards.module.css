@@ -421,3 +421,6 @@
 .switcher { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 12px; margin: -4px 0 6px; font-size: var(--text-xs); }
 .switcher label { display: flex; align-items: center; gap: 4px; margin: 0; }
 .switcher select { font-size: var(--text-xs); padding: 2px 6px; min-height: 28px; max-width: 240px; }
+
+/* Field folders in the field list (decision 775). */
+.fieldFolder { font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 8px 0 2px; }

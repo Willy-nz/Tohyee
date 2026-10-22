@@ -2225,6 +2225,11 @@ that something happened.
   a table with two rows for one match is refused (amounts would count
   twice), a related table's numbers aren't added up, and rows with no match
   are counted in a note. Blending isn't built.
+- **Analytics: field settings** (#376 phase 4, decision 775, examples
+  FS1-FS3). Under a chart's data source, **Field settings** sorts a field
+  by another column (month names by month number), says how it's added up
+  when chosen, gives it a default number format, and puts it in a folder
+  with a description in the field list.
 - **Analytics: one access check for every output** (#387, decision 697).
   The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
   figures, tooltips, totals, drill-through rows, slicer values, CSV and

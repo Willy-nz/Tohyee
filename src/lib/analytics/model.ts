@@ -4,6 +4,7 @@ import { listFields, withFields, type CalculatedField } from "@/lib/analytics/ca
 import { hiddenFarmTables } from "@/lib/analytics/farm-access";
 import { checkRelationship, listRelationships, relatedSourceSql, relationshipsUsed, unmatchedNote, withRelationships, type Relationship } from "@/lib/analytics/relationships";
 import type { ColumnInfo } from "@/lib/analytics/query";
+import { listFieldSettings, withFieldSettings, type SavedFieldSettings } from "@/lib/analytics/field-settings";
 
 /**
  * The organisation's data model for Analytics questions: its calculated
@@ -13,19 +14,21 @@ import type { ColumnInfo } from "@/lib/analytics/query";
  * model. Relationships touching a table the member can't use (farm tables,
  * decision 744) are left out, so they can't reach it through another table.
  */
-export type AnalyticsModel = { fields: CalculatedField[]; relationships: Relationship[] };
+export type AnalyticsModel = { fields: CalculatedField[]; relationships: Relationship[]; /** Field settings (decision 775). */ fieldSettings?: SavedFieldSettings[] };
 
 export async function loadModel(tx: OrgTx, tables?: Map<string, ColumnInfo[]>): Promise<AnalyticsModel> {
   const loaded = tables ?? (await listTables(tx.organisationId));
   const hidden = await hiddenFarmTables(tx);
   const fields = (await listFields(tx, loaded)).filter((field) => !hidden?.has(field.table));
   const relationships = (await listRelationships(tx, loaded)).filter((relationship) => !hidden?.has(relationship.table) && !hidden?.has(relationship.dimension));
-  return { fields, relationships };
+  const fieldSettings = (await listFieldSettings(tx)).filter((entry) => !hidden?.has(entry.table));
+  return { fields, relationships, ...(fieldSettings.length ? { fieldSettings } : {}) };
 }
 
 /** Every table's columns with the model's fields and related columns, for listing fields and checking saved tiles (nothing is joined). */
 export function modelTables(tables: Map<string, ColumnInfo[]>, model: AnalyticsModel | undefined): Map<string, ColumnInfo[]> {
-  return withRelationships(withFields(tables, model?.fields), model?.relationships);
+  // Settings first, so a related table's fields keep their own settings (decision 775).
+  return withRelationships(withFieldSettings(withFields(tables, model?.fields), model?.fieldSettings), model?.relationships);
 }
 
 /** The loaded tables with the model, inside a transaction (saving reports and values). */
@@ -46,7 +49,7 @@ export async function questionTables(
   model: AnalyticsModel | undefined,
   question: unknown,
 ): Promise<{ tables: Map<string, ColumnInfo[]>; notes: string[] }> {
-  const withCalculated = withFields(tables, model?.fields);
+  const withCalculated = withFieldSettings(withFields(tables, model?.fields), model?.fieldSettings);
   const table = (question as { table?: unknown } | null)?.table;
   if (typeof table !== "string" || !model?.relationships.length) return { tables: withCalculated, notes: [] };
   const used = relationshipsUsed(question, table, model.relationships);

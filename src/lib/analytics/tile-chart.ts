@@ -29,6 +29,7 @@ export function tileChartSpec(
       label: column.label,
       kind: column.format === "money" ? ("money" as const) : ("number" as const),
       ...(column.format === "percent" ? { percent: true } : {}),
+      ...(column.number ? { number: column.number } : {}),
       // Columns and line: the first value as columns and the rest as lines, unless chosen otherwise.
       ...(tile.visual === "combo" ? { as: index === 0 ? ("bar" as const) : ("line" as const) } : {}),
     })),
