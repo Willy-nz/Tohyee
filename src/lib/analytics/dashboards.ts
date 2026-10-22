@@ -39,6 +39,7 @@ import {
   type Visual,
 } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
+import { quickTotal, shareOf } from "@/lib/analytics/quick-calcs";
 import { type DatePreset, isDatePreset, presetRange } from "@/lib/analytics/date-ranges";
 import { todayIsoDate } from "@/lib/dates";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
@@ -634,6 +635,7 @@ export async function runTile(
         row.cells[cellKey] = mixed ? null : result[`m${index}`];
       }
     }
+    pivotShares(parsed, [...rows.values()], built.hasColumn);
     const notes = mixedCurrencyNotes([...mixedLabels]);
     return {
       columns: [...built.rowFields, ...built.measures],
@@ -661,11 +663,43 @@ export async function runTile(
   if (options.totals && parsed.groupBy && !parsed.limit && !result.truncated) {
     const whole = buildTileSql({ ...parsed, groupBy: null, sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined }, tables.get(parsed.table)!, filters);
     const [totals] = blankMixedCurrencies(await runBuiltQuery(organisationId, whole.sql, whole.params), whole.columns, mixed);
-    if (totals) result.totals = totals;
+    // A quick calculation's total (decision 770): a share is 100%, a running total the value's total, the rest none.
+    if (totals) {
+      parsed.measures.forEach((measure, index) => {
+        if (measure.quick) totals[`m${index}`] = quickTotal(measure.quick, totals[`m${index}`] ?? null);
+      });
+      result.totals = totals;
+    }
   }
   const notes = mixedCurrencyNotes([...mixed]);
   if (notes.length) result.notes = notes;
   return result;
+}
+
+/**
+ * A pivot's shares (decision 770), worked out exactly from its cells: of the
+ * grand total, of the row's total across the columns, or of the column's
+ * grand total. Every subtotal and total is a share of the same whole, so the
+ * grand total is 100%.
+ */
+function pivotShares(query: TileQuery, rows: PivotRow[], hasColumn: boolean): void {
+  const grand = rows.find((row) => row.kind === "grand_total");
+  query.measures.forEach((measure, index) => {
+    const kind = measure.quick?.kind;
+    if (kind !== "percent_of_total" && kind !== "percent_of_row" && kind !== "percent_of_column") return;
+    const totalKey = hasColumn ? `total_m${index}` : `m${index}`;
+    const own = (key: string) => key === `m${index}` || key === `total_m${index}` || key.endsWith(`_m${index}`);
+    const original = new Map(rows.map((row) => [row, { ...row.cells }]));
+    const grandCells = grand ? original.get(grand)! : {};
+    for (const row of rows) {
+      const cells = original.get(row)!;
+      for (const key of Object.keys(cells)) {
+        if (!own(key)) continue;
+        const whole = kind === "percent_of_total" ? grandCells[totalKey] : kind === "percent_of_row" ? cells[totalKey] : grandCells[key];
+        row.cells[key] = shareOf(cells[key], whole);
+      }
+    }
+  });
 }
 
 /**

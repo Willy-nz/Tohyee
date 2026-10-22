@@ -7738,3 +7738,50 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      free-position canvas (#376 says optional, after the rest) isn't built:
      the flowing grid with aligning and sizing (decision 752) stays the only
      layout, on every screen.
+
+### Quick calculations (#376 phase 4; decision 770; examples QC1-QC8)
+
+770. **"Show as": quick calculations on a value, with what they're of
+     said** (22 October 2026, #376 phase 4 and #387's rules for measures;
+     Power BI's "Show value as" and quick measures and Looker Studio's
+     running and comparison calculations as the references; not yet
+     reviewed by Jess). A value on a grouped chart or table can be shown as
+     a **running total**, **% of total**, **% of row** or **% of column**
+     (with a second grouping, or in a pivot table), **rank**, **difference
+     from previous**, **% change from previous** or a **moving average** (2
+     to 12 periods). The value is still worked out from the rows as before
+     (it's `quick` on the tile's value, never on a saved value); the server
+     then works the calculation out over **every group the tile's filters,
+     the report's dates and slicers and any clicks leave, before Top N**, and
+     only then sorts and cuts to Top N. So with Top N, shares don't add to
+     100% and ranks are among all groups (Power BI's "% of grand total" uses
+     what the visual shows; Tohyee keeps the whole so a share means the same
+     whatever's shown, and says so). Shares are of the value **worked out
+     again** for the whole (or for the first or second group), never of the
+     groups added up: a margin of 10% beside a total margin of 25% is 40% of
+     total (#387's MD1). Runs go **oldest period first** (or A to Z for other
+     groupings) whatever the sort, separately for each value of a second
+     grouping, from the start of the dates. For a date grouping, "previous"
+     and a moving average's window are **calendar periods** (the grain's
+     own, financial quarters and years included): a missing period is blank,
+     never 0, so a difference after a month with no rows is blank and a
+     moving average counts only periods with a value. Blanks: a blank adds
+     nothing to a run (it shows the total so far), isn't ranked, and gives a
+     blank share, difference or change; a change from 0 is blank. Ranks give
+     equal values the same place and skip the next (1, 2, 2, 4), largest
+     first unless "smallest is 1". A running total of a formula works the
+     formula out again from the running totals of what it names (cumulative
+     margin, not margins added up). Refused, with a reason: any quick
+     calculation with one total, together with "and last year", or on
+     values in more than one currency (decision 694); a running total of a
+     balance, an average, smallest, largest or count of different values; a
+     moving average of anything but a total, a count or a formula that only
+     adds and takes them away (so percentages are never averaged); % of row
+     or column without a second grouping or pivot column. A pivot offers only
+     the shares, worked out exactly from its cells. A table's totals row
+     shows 100% for a share, the value's own total for a running total, and
+     nothing for the rest; the rows shown are never added up. Shares show as
+     percentages to one place; ranks as whole numbers. Choosing one adds its
+     words to the value's name ("Sales (running total)"), and "What <value>
+     means" says what it's of. Money stays exact: shares, changes and
+     averages use the exact decimal division (six places).

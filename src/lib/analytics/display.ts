@@ -1,5 +1,6 @@
 import type { ResultColumn } from "@/lib/analytics/query";
 import { formatCurrency, formatDate, formatMoney, formatQuantity } from "@/lib/format";
+import { dec, mul, roundHalfUp, toFixedString } from "@/lib/money/decimal";
 
 /**
  * A value from a query, shown the way its column is meant to be read, in
@@ -21,6 +22,9 @@ export function showValue(value: string | null, column: Pick<ResultColumn, "form
       return formatDate(value);
     case "boolean":
       return booleanText(value);
+    case "percent":
+      // A share as a fraction (0.250000 is 25.0%, decision 770), to one place, worked out exactly.
+      return `${formatQuantity(toFixedString(roundHalfUp(mul(dec(value), dec("100")), 1), 1))}%`;
     default:
       return value;
   }

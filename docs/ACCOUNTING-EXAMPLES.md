@@ -16090,6 +16090,68 @@ Tested in `tests/unit/analytics-measure-definitions.test.ts` (MD1-MD3,
 MD6), `tests/unit/analytics-merge-checks.test.ts` (MD4) and
 `tests/integration/sales-platform-orders.test.ts` (MD5).
 
+## Analytics: quick calculations (examples QC1-QC8; as Power BI does, not yet reviewed)
+
+Issue #376 phase 4 asked for running totals, shares, ranks, differences and
+moving averages on a value, and #387 asked that their denominators, totals,
+blanks and Top N be defined. Jess hasn't answered how; these follow Power
+BI's "Show value as" and quick measures (decision 537's rule for analytics,
+decision 770). **As Power BI does, not yet reviewed.** Nothing is posted:
+they change what a chart or table shows, not the books.
+
+Setup: sales rows of 100.00 (5 Jan, North), 300.00 (20 Jan, South), 50.00
+(11 Feb, North), 200.00 (2 Apr, North), 50.00 (30 Apr, South), 0.00
+(15 May, North), 30.00 (1 Jun, North) and a West row with no amount
+(2 Jun). By month: January **400.00**, February **50.00**, no March,
+April **250.00**, May **0.00**, June **30.00**; all **730.00**. North
+**380.00**, South **350.00**, West blank.
+
+- **QC1 Running total** by month: **400.00, 450.00, 700.00, 700.00,
+  730.00**, oldest first even when the chart shows newest first. By region
+  (A to Z): North **380.00**, South **730.00**, West **730.00** (a blank
+  adds nothing). A margin (sales less cost, over sales; costs 10% of each
+  sale except 30% for South in January) as a running total is worked out
+  from the running sales and costs: January **75%**, to February
+  **76.6667%** ((450.00 − 105.00) / 450.00), not the margins added up.
+  Refused: a running total of a balance or an average, and of amounts in
+  several currencies.
+- **QC2 % of total** by month: **54.7945%, 6.8493%, 34.2466%, 0%,
+  4.1096%** (each of 730.00). With Top 1 by value, North shows
+  **52.0548%** (of 730.00, not 100%). With the slicer on North, January is
+  **26.3158%** (of 380.00). West is blank, not 0%. MD1's margins by region
+  (10% and 30%, total 25%) as % of total are **40%** and **120%**: shares of
+  the margin worked out again for all the rows, not of 10% + 30%.
+- **QC3 % of row and % of column**: by month with a second grouping by
+  region, January North **25%** and South **75%** of January; January
+  North **26.3158%** of North's 380.00. A pivot of regions by quarter (North
+  150.00 and 230.00, South 300.00 and 50.00): North's first quarter is
+  **39.4737%** of its row (380.00), **33.3333%** of its column (450.00),
+  and South's first quarter **41.0959%** of the grand total; each row
+  total, column total and the grand total is **100%** of its own whole.
+- **QC4 Rank**, largest first: January **1**, April **2**, February **3**,
+  June **4**, May **5**. Smallest first by region: South **1**, North
+  **2**, West blank. Counting rows from April to June (2, 1, 2): **1, 3,
+  1** (equal values share a place; the next is skipped).
+- **QC5 Difference and % change from the previous period**: January blank
+  (no December), February **−350.00** and **−87.5%**, April blank (no
+  March: a missing month is blank, not 0), May **−250.00** and **−100%**,
+  June **30.00** and blank (May was 0). By financial quarter with a 31 March
+  balance date: 1 January **450.00**, 1 April **280.00**, a difference of
+  **−170.00**. By region, the group before in A to Z order: South
+  **−30.00**, North and West blank.
+- **QC6 Moving average over 3 months**: January **400.00**, February
+  **225.00**, April **150.00** (February and April; March has no rows and
+  isn't counted as 0), May **125.00**, June **93.333333**. Refused for a
+  ratio and for fewer than 2 or more than 12 periods.
+- **QC7 Totals**: a table's totals row shows **100%** for a share,
+  **730.00** for a running total and nothing for a rank; with Top N the
+  rows shown aren't added up (all blank).
+- **QC8** Shares show to one place: 0.547945 is **54.8%**; "What Sales
+  means" says each share is of "the rows the tile's filters, the report's
+  dates, slicers and any clicks leave, before Top N".
+
+Tested in `tests/unit/analytics-quick-calcs.test.ts`.
+
 ## Issues #180-#183, 8 Oct 2026 (approved by Jess)
 
 Drafted before anything was built, as AGENTS.md asks, then approved by Jess
