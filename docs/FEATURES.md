@@ -2207,6 +2207,11 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: report pages** (#376 phase 3, decision 753). A report can
+  have up to 12 pages, shown as tabs under its dates. In edit mode, **+ Add
+  page** and **Page settings** (name, width, background, hide from the
+  tabs, move earlier or later, remove). Links can open a page (`?page=`).
+  Reports without pages look as they always have.
 - **Analytics: a simpler chart panel** (#387, decisions 750-752). The
   selected chart's panel has **Data**, **Style** and **Interactions** tabs,
   showing only the settings that apply to its chart type. Each Style
