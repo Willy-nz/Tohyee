@@ -8,39 +8,30 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useWorkspace } from "@/components/workspace";
 import type { ShapeColumn, ShapeStep } from "@/lib/analytics/shaping";
+import { rowCountText, STEP_LABELS, STEP_ORDER, stepSummary } from "@/lib/analytics/shaping-labels";
+import { FORM_STEPS, StepForm } from "@/components/analytics-shaping-step-form";
 import type { ShapedLoadRun, ShapedTable } from "@/lib/analytics/shaped-tables";
 import { api, errorMessage } from "@/lib/client/api";
 import styles from "./analytics-shaping.module.css";
 
 type TableInfo = { name: string; columns: ShapeColumn[] };
 type ShapeOverview = { shapes: ShapedTable[]; tables: TableInfo[] };
-/** `notes`: what a Merge step did with rows that had no match (decision 693). */
-type Preview = { columns: ShapeColumn[]; rows: Array<Record<string, string | null>>; notes?: string[] };
-type StepKind = "filter" | "columns" | "rename" | "type" | "split" | "unpivot" | "group" | "calculated" | "merge" | "append";
+/** `notes`: what a Merge step did with rows that had no match (decision 693). `counts`: rows after each step, [0] the base table (decision 798). */
+type Preview = { columns: ShapeColumn[]; rows: Array<Record<string, string | null>>; notes?: string[]; counts?: string[] };
+type StepKind = ShapeStep["type"];
 
-const STEP_KINDS: Array<{ value: StepKind; label: string }> = [
-  { value: "filter", label: "Filter rows" },
-  { value: "columns", label: "Keep or remove columns" },
-  { value: "rename", label: "Rename a column" },
-  { value: "type", label: "Change a column type" },
-  { value: "split", label: "Split a column" },
-  { value: "unpivot", label: "Unpivot columns" },
-  { value: "group", label: "Group and summarise" },
-  { value: "calculated", label: "Add a calculated column" },
-  { value: "merge", label: "Merge another table" },
-  { value: "append", label: "Append another table" },
-];
-
-const TYPE_NAMES: Record<StepKind, string> = Object.fromEntries(STEP_KINDS.map(({ value, label }) => [value, label])) as Record<StepKind, string>;
+const STEP_KINDS: Array<{ value: StepKind; label: string }> = STEP_ORDER.map((value) => ({ value, label: STEP_LABELS[value] }));
 
 function titleFor(step: ShapeStep, index: number): string {
-  const column = "column" in step ? ` · ${step.column}` : "";
-  return `${index + 1}. ${TYPE_NAMES[step.type]}${column}`;
+  const summary = stepSummary(step);
+  return `${index + 1}. ${STEP_LABELS[step.type]}${summary ? ` · ${summary}` : ""}`;
 }
 
 function template(kind: StepKind, table: TableInfo | undefined, otherTable: string): Record<string, unknown> {
-  const first = table?.columns[0]?.name ?? "column";
-  const second = table?.columns[1]?.name ?? "other_column";
+  const columns = table?.columns ?? [];
+  const first = columns[0]?.name ?? "column";
+  const second = columns[1]?.name ?? "other_column";
+  const firstDate = columns.find((column) => column.type === "DATE" || column.type.startsWith("TIMESTAMP"))?.name ?? first;
   switch (kind) {
     case "filter":
       return { type: kind, column: first, test: "is", value: "" };
@@ -62,6 +53,24 @@ function template(kind: StepKind, table: TableInfo | undefined, otherTable: stri
       return { type: kind, table: otherTable, join: "left", matches: [{ column: first, withColumn: second }], columns: [] };
     case "append":
       return { type: kind, table: otherTable };
+    case "pivot":
+      return { type: kind, column: first, valueColumn: second, operation: "sum", columns: [{ value: "", name: "value_1" }] };
+    case "fill":
+      return { type: kind, columns: [first], direction: "down" };
+    case "replace":
+      return { type: kind, columns: [first], find: "", replaceWith: "", match: "whole" };
+    case "distinct":
+      return { type: kind, columns: columns.length ? columns.map((column) => column.name) : [first] };
+    case "conditional":
+      return { type: kind, name: "conditional_column", rules: [{ column: first, test: "is", value: "", then: { type: "value", value: "" } }], otherwise: { type: "blank" } };
+    case "dateParts":
+      return { type: kind, column: firstDate, parts: [{ part: "year", name: `${firstDate}_year`.slice(0, 60) }, { part: "month", name: `${firstDate}_month`.slice(0, 60) }] };
+    case "sort":
+      return { type: kind, by: [{ column: first, descending: false }] };
+    case "index":
+      return { type: kind, name: "index", start: 1, increment: 1 };
+    case "formula":
+      return { type: kind, name: "custom_column", formula: "" };
   }
 }
 
@@ -87,6 +96,8 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showJson, setShowJson] = useState(false);
+  const [stepColumns, setStepColumns] = useState<{ key: string; columns: ShapeColumn[] } | null>(null);
   const canManage = can("admin");
   const data = overview.data;
   const activeShape = data?.shapes.find((shape) => shape.id === activeId);
@@ -123,6 +134,27 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
       clearTimeout(timeout);
     };
   }, [canManage, effectiveBaseTable, noBaseTable, organisationId, selectedStep, steps]);
+
+  // The columns the selected step can use: the ones after the step above it (nothing is run for this).
+  const columnsKey = selectedStep >= 0 ? JSON.stringify([effectiveBaseTable, steps.slice(0, selectedStep)]) : "";
+  useEffect(() => {
+    if (!columnsKey || noBaseTable || !canManage) return;
+    let cancelled = false;
+    const [table, before] = JSON.parse(columnsKey) as [string, ShapeStep[]];
+    api<{ columns: ShapeColumn[] }>("/api/analytics/shaping/preview", {
+      method: "POST",
+      body: { organisationId, baseTable: table, steps: before, throughStep: before.length - 1, columnsOnly: true },
+    })
+      .then((result) => {
+        if (!cancelled) setStepColumns({ key: columnsKey, columns: result.columns });
+      })
+      .catch(() => {
+        if (!cancelled) setStepColumns({ key: columnsKey, columns: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage, columnsKey, noBaseTable, organisationId]);
 
   if (!modules) return <p className={ui.muted}>Loading…</p>;
   if (!modules.analytics) {
@@ -186,6 +218,24 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
     } catch {
       setMessage({ tone: "error", text: "The step isn't valid JSON yet. Finish editing it before saving or previewing." });
     }
+  }
+
+  function updateStep(step: ShapeStep) {
+    const next = steps.slice();
+    next[selectedStep] = step;
+    setSteps(next);
+    setStepText(JSON.stringify(step, null, 2));
+    setMessage(null);
+  }
+
+  /** A column's values after the steps above the selected one, for Pivot column: a Group step added to a preview. */
+  async function valuesOf(column: string): Promise<string[]> {
+    const grouped = [...steps.slice(0, selectedStep), { type: "group", by: [column], aggregates: [{ operation: "count", name: "rows" }] }];
+    const result = await api<Preview>("/api/analytics/shaping/preview", {
+      method: "POST",
+      body: { organisationId, baseTable: effectiveBaseTable, steps: grouped, throughStep: grouped.length - 1 },
+    });
+    return result.rows.map((row) => row[column]).filter((value): value is string => value !== null && value !== "").sort((a, b) => a.localeCompare(b, "en-NZ", { numeric: true }));
   }
 
   function moveStep(index: number, offset: number) {
@@ -335,6 +385,7 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
                       }}
                     >
                       {titleFor(step, index)}
+                      {rowCountText(preview?.counts, index) ? <span className={styles.stepRows}>{rowCountText(preview?.counts, index)}</span> : null}
                     </button>
                     {canManage ? (
                       <div className={styles.stepTools}>
@@ -358,23 +409,50 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
             </Card>
 
             <div className={styles.rightPane}>
-              {selectedStep >= 0 ? (
-                <Card title={`Edit step ${selectedStep + 1}`} description="Edit the step settings below. Names and values are validated; SQL and formulas are not accepted.">
-                  <Field label="Step settings (JSON)">
-                    <textarea
-                      className={styles.stepEditor}
-                      value={stepText}
-                      onChange={(event) => editStep(event.target.value)}
-                      spellCheck={false}
-                      readOnly={!canManage}
+              {selectedStep >= 0 && steps[selectedStep] ? (
+                <Card
+                  title={`Step ${selectedStep + 1}: ${STEP_LABELS[steps[selectedStep].type] ?? "Step"}`}
+                  description={FORM_STEPS.has(steps[selectedStep].type) && !showJson ? "Choose the settings below. They're checked before anything runs." : "Edit the step settings below. Names and values are validated; SQL and formulas are not accepted."}
+                >
+                  {FORM_STEPS.has(steps[selectedStep].type) && !showJson ? (
+                    <StepForm
+                      key={`${selectedStep}-${steps[selectedStep].type}`}
+                      step={steps[selectedStep]}
+                      columns={stepColumns?.key === columnsKey ? stepColumns.columns : []}
+                      disabled={!canManage}
+                      onChange={updateStep}
+                      valuesOf={valuesOf}
                     />
-                  </Field>
+                  ) : (
+                    <Field label="Step settings (JSON)">
+                      <textarea
+                        className={styles.stepEditor}
+                        value={stepText}
+                        onChange={(event) => editStep(event.target.value)}
+                        spellCheck={false}
+                        readOnly={!canManage}
+                      />
+                    </Field>
+                  )}
+                  {FORM_STEPS.has(steps[selectedStep].type) ? (
+                    <label className={ui.checkbox}>
+                      <input type="checkbox" checked={showJson} onChange={(event) => setShowJson(event.target.checked)} />
+                      Show the settings as JSON
+                    </label>
+                  ) : null}
                 </Card>
               ) : null}
               <Card
                 title="Preview"
                 description={selectedStep >= 0 ? `First 100 rows after step ${selectedStep + 1}.` : "First 100 rows from the selected base table."}
               >
+                {preview?.counts && selectedStep >= 0 && preview.counts[selectedStep + 1] !== undefined ? (
+                  <p className={styles.rowCount} aria-live="polite">
+                    Rows before this step: {Number(preview.counts[selectedStep]).toLocaleString("en-NZ")}. After it: {rowCountText(preview.counts, selectedStep)}.
+                  </p>
+                ) : preview?.counts?.[0] !== undefined && selectedStep < 0 ? (
+                  <p className={styles.rowCount}>{Number(preview.counts[0]).toLocaleString("en-NZ")} rows in {effectiveBaseTable}.</p>
+                ) : null}
                 {visiblePreviewError ? <Notice tone="error">{visiblePreviewError}</Notice> : null}
                 {preview?.notes?.map((note) => <Notice key={note} tone="warning">{note}</Notice>)}
                 {preview ? (

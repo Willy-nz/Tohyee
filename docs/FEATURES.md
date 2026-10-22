@@ -2234,6 +2234,18 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: more Prepare data steps** (#376 phase 4, decisions
+  790-798). Analytics › Prepare data has ten more steps, named as in Power
+  Query: Pivot column, Unpivot other columns, Fill down or up, Replace
+  values, Remove duplicates (choosing the columns that make a duplicate),
+  Conditional column (if, else if, otherwise), Date parts (year, quarter,
+  month, month name, ISO week, day, day of the week, day name, and the
+  financial year and its quarter from the organisation's balance date),
+  Sort rows, Index column and Custom column (a formula over number
+  columns, worked out exactly). The new steps have forms (the older ones
+  still edit as settings), each step shows the rows after it and the
+  change from the step before, and steps can still be moved, edited and
+  removed. Existing shaped tables build as before.
 - **Analytics: zoom on time charts** (#376 phase 3, decision 760). Column,
   line and area charts can have a zoom slider along the bottom axis
   (Interactions tab), with the mouse wheel or a pinch too.
