@@ -2196,6 +2196,11 @@ that something happened.
   Excel, pinned tiles and addresses all use the same server-side check. A
   report viewer's slicer now lists only values in the rows the report's
   tiles read, not the whole column.
+- **Analytics: how fresh a report is** (#387, decision 698). Under a
+  report's dates, each source says when it was last refreshed and the
+  latest date in its data; a failed refresh shows as a warning that the
+  report still has the last good data, and sources refreshed at different
+  times are pointed out.
 - **Analytics: dashboard layout** (#335, decision 596). Tiles can be a
   quarter, a third, a half, two-thirds or the full width of a row, and
   charts Small, Medium or Large. In edit mode, tiles can be dragged into
