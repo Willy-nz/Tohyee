@@ -4,6 +4,7 @@ import { columnValues, dateContext, getDashboard, slicerPairs, slicerValuesFor, 
 import { hiddenFarmTables, requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import type { QueryDates } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
+import { listFields } from "@/lib/analytics/calculated-fields";
 import { ForbiddenError } from "@/lib/errors";
 
 /**
@@ -17,7 +18,7 @@ export const GET = route(async (request) => {
   const table = params.get("table") ?? "";
   const field = params.get("field") ?? "";
   const child = params.get("child");
-  const { organisationId, scoped } = await withOrganisation(request, params.get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
+  const { organisationId, scoped, fields } = await withOrganisation(request, params.get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
     await requireAnalytics(tx);
     let scoped: { dashboard: Dashboard; dates: QueryDates; skip: string[] } | null = null;
     if (!roleAtLeast(membership.role, "viewer")) {
@@ -34,12 +35,13 @@ export const GET = route(async (request) => {
       const hidden = await hiddenFarmTables(tx);
       if (hidden) scoped.skip = scoped.dashboard.tiles.flatMap((tile) => (tile.query && hidden.has(tile.query.table) ? [tile.query.table] : []));
     }
-    return { organisationId: tx.organisationId, scoped };
+    // Calculated fields (decision 772) can be slicers too.
+    return { organisationId: tx.organisationId, scoped, fields: await listFields(tx) };
   });
   if (child) {
     const tiles = scoped ? scoped.dashboard.tiles.filter((tile) => !tile.query || !scoped.skip.includes(tile.query.table)) : undefined;
-    return json({ pairs: await slicerPairs(organisationId, table, field, child, tiles, scoped?.dates) });
+    return json({ pairs: await slicerPairs(organisationId, table, field, child, tiles, scoped?.dates, fields) });
   }
-  if (scoped) return json(await slicerValuesFor(organisationId, scoped.dashboard, field, scoped.dates, new Set(scoped.skip)));
-  return json(await columnValues(organisationId, table, field));
+  if (scoped) return json(await slicerValuesFor(organisationId, scoped.dashboard, field, scoped.dates, new Set(scoped.skip), fields));
+  return json(await columnValues(organisationId, table, field, fields));
 });

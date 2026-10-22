@@ -34,12 +34,14 @@ import {
   type QueryDates,
   type QueryResult,
   quoteIdentifier,
+  sourceSql,
   type TileQuery,
   type TrendPoint,
   type Visual,
 } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { quickTotal, shareOf } from "@/lib/analytics/quick-calcs";
+import { tablesWithFields, withFields, type CalculatedField } from "@/lib/analytics/calculated-fields";
 import { type DatePreset, isDatePreset, presetRange } from "@/lib/analytics/date-ranges";
 import { todayIsoDate } from "@/lib/dates";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
@@ -466,7 +468,7 @@ function parseDescription(input: unknown): string | null {
 
 export async function createDashboard(tx: OrgTx, input: Record<string, unknown>): Promise<Dashboard> {
   await requireAnalytics(tx);
-  const tables = await listTables(tx.organisationId);
+  const tables = await tablesWithFields(tx);
   const name = parseName(input.name);
   const settings = parseSettings(input.settings, tables);
   await checkTheme(tx, settings);
@@ -522,7 +524,7 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
   const expectedVersion = parseExpectedVersion(input.expectedVersion);
   const current = await getDashboard(tx, id);
   if (expectedVersion !== null && expectedVersion !== current.version) throw new DashboardConflictError(current);
-  const tables = await listTables(tx.organisationId);
+  const tables = await tablesWithFields(tx);
   const name = input.name === undefined ? current.name : parseName(input.name);
   const description = input.description === undefined ? current.description : parseDescription(input.description);
   const settings = input.settings === undefined ? current.settings : parseSettings(input.settings, tables);
@@ -566,10 +568,10 @@ export async function runTile(
   organisationId: string,
   query: unknown,
   filters: DashboardFilters = {},
-  /** `totals`: work out the whole answer as one total too, for a table's totals row. */
-  options: { totals?: boolean } = {},
+  /** `totals`: work out the whole answer as one total too, for a table's totals row. `fields`: the organisation's calculated fields (decision 772). */
+  options: { totals?: boolean; fields?: readonly CalculatedField[] } = {},
 ): Promise<QueryResult> {
-  const tables = await listTables(organisationId);
+  const tables = withFields(await listTables(organisationId), options.fields);
   const parsed = parseTileQuery(query, tables);
   if (parsed.pivot) {
     const built = buildPivotSql(parsed, tables.get(parsed.table)!, filters);
@@ -755,9 +757,10 @@ export async function runPivotDrilldown(
   query: unknown,
   filters: DashboardFilters,
   selection: unknown,
+  fields?: readonly CalculatedField[],
 ): Promise<PivotDrillResult> {
   if (!selection || typeof selection !== "object" || Array.isArray(selection)) throw new ValidationError("That pivot cell can't be opened.");
-  const tables = await listTables(organisationId);
+  const tables = withFields(await listTables(organisationId), fields);
   const parsed = parseTileQuery(query, tables);
   const built = buildPivotDrillSql(parsed, tables.get(parsed.table)!, filters, selection as PivotDrillSelection);
   const rows = await runBuiltQuery(organisationId, built.sql, built.params);
@@ -765,18 +768,18 @@ export async function runPivotDrilldown(
 }
 
 /** The values a slicer offers: up to 500 distinct values of a column, sorted. */
-export async function sliceValues(organisationId: string, table: string, field: string): Promise<string[]> {
-  return (await columnValues(organisationId, table, field)).values;
+export async function sliceValues(organisationId: string, table: string, field: string, fields?: readonly CalculatedField[]): Promise<string[]> {
+  return (await columnValues(organisationId, table, field, fields)).values;
 }
 
 /** A column's values (up to 500, for slicers and "is one of" filters) and its type, so true/false can show as Yes/No. */
-export async function columnValues(organisationId: string, table: string, field: string): Promise<{ values: string[]; type: string }> {
-  const tables = await listTables(organisationId);
+export async function columnValues(organisationId: string, table: string, field: string, fields?: readonly CalculatedField[]): Promise<{ values: string[]; type: string }> {
+  const tables = withFields(await listTables(organisationId), fields);
   const column = tables.get(table)?.find((entry) => entry.name === field);
   if (!column) throw new ValidationError(`There's no column ${field} in ${table}.`);
   const rows = await runBuiltQuery(
     organisationId,
-    `select distinct cast(${quoteIdentifier(field)} as VARCHAR) as value from ${quoteIdentifier(table)} where ${quoteIdentifier(field)} is not null order by 1 limit 500`,
+    `select distinct cast(${quoteIdentifier(field)} as VARCHAR) as value from ${sourceSql(table, tables.get(table)!)} where ${quoteIdentifier(field)} is not null order by 1 limit 500`,
     [],
   );
   return { values: rows.map((row) => row.value ?? ""), type: column.type };
@@ -796,8 +799,9 @@ export async function slicerValuesFor(
   dates: QueryDates,
   /** Tables this person can't read (farm tables, decision 744): their tiles are left out. */
   skip: ReadonlySet<string> = new Set(),
+  fields?: readonly CalculatedField[],
 ): Promise<{ values: string[]; type: string }> {
-  const tables = await listTables(organisationId);
+  const tables = withFields(await listTables(organisationId), fields);
   const found = new Set<string>();
   let type = "VARCHAR";
   for (const tile of dashboard.tiles) {
@@ -828,8 +832,8 @@ export async function slicerValuesFor(
  * after their own filters, so the list never names rows the report leaves
  * out (decision 697).
  */
-export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[], dates?: QueryDates): Promise<Array<[string, string]>> {
-  const tables = await listTables(organisationId);
+export async function slicerPairs(organisationId: string, table: string, field: string, child: string, tiles?: Tile[], dates?: QueryDates, fields?: readonly CalculatedField[]): Promise<Array<[string, string]>> {
+  const tables = withFields(await listTables(organisationId), fields);
   const found = new Map<string, [string, string]>();
   const ask = async (query: TileQuery, columns: ColumnInfo[]) => {
     const pairs: TileQuery = { ...query, groupBy: { field }, breakdown: { field: child }, pivot: null, measures: [{ label: "Rows", aggregate: "count" }], sort: { by: "category", direction: "asc" }, limit: null, sparkline: undefined };
@@ -859,7 +863,8 @@ export async function slicerPairs(organisationId: string, table: string, field: 
 }
 
 /** The loaded tables and their columns, for building tiles. */
-export async function describeTables(organisationId: string): Promise<Array<{ name: string; columns: ColumnInfo[] }>> {
-  const tables = await listTables(organisationId);
-  return [...tables.entries()].map(([name, columns]) => ({ name, columns }));
+export async function describeTables(organisationId: string, fields?: readonly CalculatedField[]): Promise<Array<{ name: string; columns: Array<ColumnInfo & { calculated?: true }> }>> {
+  const tables = withFields(await listTables(organisationId), fields);
+  // A calculated field (decision 772) is marked, never sent with its SQL.
+  return [...tables.entries()].map(([name, columns]) => ({ name, columns: columns.map((column) => (column.expression ? { name: column.name, type: column.type, calculated: true as const } : column)) }));
 }
