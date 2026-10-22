@@ -7,6 +7,7 @@ import { Button, Field, Notice, ui } from "@/components/ui";
 import type { NumberFormat } from "@/lib/analytics/chart-format";
 import { definitionToSave, measureFromSaved, type SavedMeasure } from "@/lib/analytics/measure-library";
 import { describeMeasure } from "@/lib/analytics/measure-definition";
+import { describePeriod } from "@/lib/analytics/time-intelligence";
 import { describeQuickCalc, quickTotalsText, quickUnit } from "@/lib/analytics/quick-calcs";
 import { formatOfType, type ColumnInfo, type Filter, type Measure } from "@/lib/analytics/query";
 import { api, errorMessage } from "@/lib/client/api";
@@ -79,7 +80,7 @@ export function ValueMeaning({
         <dt>Movement or balance</dt>
         <dd>{meaning.kind}</dd>
         <dt>Dates</dt>
-        <dd>{meaning.date}</dd>
+        <dd>{measure.period ? describePeriod(measure.period, { grouped: true, dated: place?.dated ?? false }) : meaning.date}</dd>
         <dt>Blanks and zero</dt>
         <dd>{meaning.blanks}</dd>
         <dt>Totals</dt>

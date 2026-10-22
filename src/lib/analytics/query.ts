@@ -7,6 +7,7 @@ import { cmp, dec } from "@/lib/money/decimal";
 import { todayIsoDate } from "@/lib/dates";
 import { previousPeriod, previousYear } from "@/lib/analytics/periods";
 import { parseQuickCalc, quickIsPercent, type QuickCalc } from "@/lib/analytics/quick-calcs";
+import { parsePeriod, periodRange, periodStart, type TimePeriod } from "@/lib/analytics/time-intelligence";
 
 /**
  * A dashboard tile's question, turned into SQL for DuckDB (analytics step 3).
@@ -123,6 +124,12 @@ export type Measure = {
    * previous group, or a moving average. Left out, the value itself.
    */
   quick?: QuickCalc;
+  /**
+   * Time intelligence (decision 771): the value over the financial year,
+   * quarter or month to date, or the last 12 months, as at the To date (or
+   * the end of each period on a chart by date).
+   */
+  period?: TimePeriod;
 };
 
 export type Filter = { field: string; op: FilterOp; value: string | string[]; join?: "or" };
@@ -473,7 +480,8 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
       if (pivot) throw new ValidationError(`${label}: a pivot table can't compare with another period.`);
       if (breakdown) throw new ValidationError(`${label}: a chart with a second grouping can't compare with another period.`);
       if (groupBy && measure.compare === "previous_period") throw new ValidationError(`${label}: comparing with the previous period is for one total.`);
-      if (groupBy && !groupBy.grain) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
+      // A value to date (decision 771) can compare with the same dates last year in groups that aren't dates.
+      if (groupBy && !groupBy.grain && !(measure.period && measure.compare === "previous_year")) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
       result.compare = measure.compare;
     }
     return result;
@@ -499,12 +507,29 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
   // Quick calculations (decision 770), once every value and what its formula names is known.
   const place = pivot ? { kind: "pivot" as const, column: Boolean(pivot.column) } : groupBy ? { kind: "grouped" as const, breakdown: Boolean(breakdown) } : { kind: "total" as const };
   measures.forEach((measure, index) => {
-    const raw = ((rawMeasures[index] ?? {}) as Record<string, unknown>).quick;
-    if (raw === undefined || raw === null) return;
+    const entry = (rawMeasures[index] ?? {}) as Record<string, unknown>;
+    if (entry.period !== undefined && entry.period !== null) {
+      const named = measure.aggregate === "formula"
+        ? formulaRefs(parseFormula(measure.formula!)).map((name) => measure.inputs?.find((input) => input.name === name) ?? (measures.find((other) => other.aggregate !== "formula" && other.label === name) as BaseMeasure))
+        : [measure as BaseMeasure];
+      const period = parsePeriod(entry.period, {
+        label: measure.label,
+        aggregate: measure.aggregate,
+        inputAggregates: named.map((input) => input.aggregate),
+        balance: named.some((input) => input.asAt || input.snapshot),
+        currency: named.some((input) => currencyFieldOf(input, columns) !== null),
+        compare: measure.compare,
+        quick: entry.quick !== undefined && entry.quick !== null && entry.quick !== "" && entry.quick !== "none",
+        dated: Boolean(raw.dateField || groupBy?.grain),
+      }, { grain: groupBy?.grain ?? null, pivot: Boolean(pivot), breakdown: Boolean(breakdown) });
+      if (period) measure.period = period;
+    }
+    const rawQuick = entry.quick;
+    if (rawQuick === undefined || rawQuick === null) return;
     const named = measure.aggregate === "formula"
       ? formulaRefs(parseFormula(measure.formula!)).map((name) => measure.inputs?.find((input) => input.name === name) ?? (measures.find((other) => other.aggregate !== "formula" && other.label === name) as BaseMeasure))
       : [measure as BaseMeasure];
-    const quick = parseQuickCalc(raw, {
+    const quick = parseQuickCalc(rawQuick, {
       label: measure.label,
       aggregate: measure.aggregate,
       formula: measure.formula,
@@ -684,12 +709,62 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
 
   // A balance counts everything up to the To date, so the From date moves from the tile's rows onto each other value.
   const balances = query.measures.some((measure) => measure.asAt || measure.inputs?.some((input) => input.asAt));
-  const conditions = (shiftYears: number, dates: DashboardFilters = dashboard) => filterSql(query, types, dates, param, shiftYears, balances);
+  /**
+   * Values to date (decision 771) each have their own dates, so every value
+   * says which rows it counts and the tile reads the rows any of them needs.
+   * On a chart by date a value to date reads back to the start of its first
+   * period's year (quarter, month or 12 months).
+   */
+  const ranged = query.measures.some((measure) => measure.period);
+  const dateGrouped = Boolean(query.groupBy?.grain);
+  const asAtDate = dashboard.to && DATE.test(dashboard.to) ? dashboard.to : (dashboard.dates ?? todayDates()).today;
+  const rangeOf = (measure: Measure, dates: DashboardFilters): DashboardFilters => {
+    if (!ranged || !measure.period) return dates;
+    if (dateGrouped) return { ...dates, from: dates.from && DATE.test(dates.from) ? periodStart(measure.period, dates.from, yearEnd) : dates.from };
+    return { ...dates, ...periodRange(measure.period, asAtDate, yearEnd) };
+  };
+  /** A value's "and last year" or previous period, from its own dates. */
+  const compareOf = (measure: Measure, dates: DashboardFilters): DashboardFilters | null => {
+    const own = rangeOf(measure, dates);
+    const range = measure.compare === "previous_year" ? previousYear(own.from, own.to) : measure.compare === "previous_period" ? previousPeriod(own.from, own.to) : null;
+    return range ? { ...dates, ...range } : null;
+  };
+  // The rows any value needs: from the earliest From (none if a value has none) to the latest To.
+  const unionDates = (): DashboardFilters => {
+    const ranges = query.measures.flatMap((measure) => {
+      const own = rangeOf(measure, dashboard);
+      const asAt = measure.asAt || measure.inputs?.some((input) => input.asAt);
+      const entries = [{ from: asAt ? null : own.from ?? null, to: own.to ?? null }];
+      if (measure.compare && !dateGrouped) {
+        const before = compareOf(measure, dashboard);
+        entries.push(before ? { from: before.from ?? null, to: before.to ?? null } : { from: null, to: null });
+      }
+      return entries;
+    });
+    const froms = ranges.map((range) => range.from);
+    const tos = ranges.map((range) => range.to);
+    return {
+      ...dashboard,
+      from: froms.every((from) => from && DATE.test(from)) ? froms.sort()[0] : null,
+      to: tos.every((to) => to && DATE.test(to)) ? tos.sort()[tos.length - 1] : null,
+    };
+  };
+  const conditions = (shiftYears: number, dates: DashboardFilters = dashboard) =>
+    ranged ? filterSql(query, types, unionDates(), param, shiftYears, false) : filterSql(query, types, dates, param, shiftYears, balances);
 
-  /** Which rows count towards a value: its own conditions, and with a balance on the tile, the From date. */
+  /** Which rows count towards a value: its own conditions, and with a balance on the tile (or values to date), its dates. */
   const ruleSql = (measure: BaseMeasure, dates: DashboardFilters) => {
     const rules = (measure.where ?? []).map((filter) => conditionSql(filter, types, param, dashboard.dates ?? todayDates()));
-    if (balances && !measure.asAt && query.dateField && dates.from) {
+    if (ranged && query.dateField) {
+      if (!measure.asAt && dates.from) {
+        if (!DATE.test(dates.from)) throw new ValidationError("The From date is YYYY-MM-DD.");
+        rules.push(`cast(${q(query.dateField)} as DATE) >= cast(${param(dates.from)} as DATE)`);
+      }
+      if (dates.to) {
+        if (!DATE.test(dates.to)) throw new ValidationError("The To date is YYYY-MM-DD.");
+        rules.push(`cast(${q(query.dateField)} as DATE) <= cast(${param(dates.to)} as DATE)`);
+      }
+    } else if (balances && !measure.asAt && query.dateField && dates.from) {
       if (!DATE.test(dates.from)) throw new ValidationError("The From date is YYYY-MM-DD.");
       rules.push(`cast(${q(query.dateField)} as DATE) >= cast(${param(dates.from)} as DATE)`);
     }
@@ -839,12 +914,25 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     const parts = [
       ...(byCategory ? [`${shiftedCategory} as category`] : []),
       ...(bySecond ? [`${second} as breakdown`] : []),
-      ...query.measures.map((measure, index) => `${measureSql(measure, dates)} as m${index}`),
-      ...query.measures.flatMap((measure, index) => (checked[index] ? [`${currencyCheckSql(measure, dates)} as m${index}_ccy`] : [])),
+      ...query.measures.map((measure, index) => `${measureSql(measure, rangeOf(measure, dates))} as m${index}`),
+      ...query.measures.flatMap((measure, index) => (checked[index] ? [`${currencyCheckSql(measure, rangeOf(measure, dates))} as m${index}_ccy`] : [])),
+      // With values to date (not on a chart by date), each comparison is its own value's dates a year (or a period) before.
+      ...(ranged && !dateGrouped
+        ? query.measures.flatMap((measure, index) => {
+            if (!measure.compare) return [];
+            const suffix = measure.compare === "previous_year" ? "py" : "pp";
+            const before = compareOf(measure, dates);
+            if (!before) return [`cast(null as VARCHAR) as m${index}_${suffix}`];
+            return [
+              `${measureSql(measure, before)} as m${index}_${suffix}`,
+              ...(checked[index] ? [`${currencyCheckSql(measure, before)} as m${index}_${suffix}_ccy`] : []),
+            ];
+          })
+        : []),
       ...(inputs
         ? query.measures.flatMap((measure, index) =>
-            measure.quick?.kind === "running_total" && measure.aggregate === "formula"
-              ? formulaRefs(parseFormula(measure.formula!)).map((name, at) => `${baseSql(inputOf(measure, name), dates)} as ${q(`i${index}_${at}`)}`)
+            (measure.quick?.kind === "running_total" || (measure.period && dateGrouped)) && measure.aggregate === "formula"
+              ? formulaRefs(parseFormula(measure.formula!)).map((name, at) => `${baseSql(inputOf(measure, name), rangeOf(measure, dates))} as ${q(`i${index}_${at}`)}`)
               : [],
           )
         : []),
@@ -875,7 +963,11 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
 
   const compares = query.measures.some((measure) => measure.compare);
   let sql: string;
-  if (compares && query.groupBy) {
+  if (ranged && !dateGrouped) {
+    sql = `${select(0)}${order("")}${limit}`;
+  } else if (ranged || (query.groupBy && query.measures.some((measure) => measure.quick))) {
+    sql = `${quickSql()}${order("")}${limit}`;
+  } else if (compares && query.groupBy) {
     const previous = query.measures
       .map((measure, index) => (measure.compare ? `, previous.m${index} as m${index}_py${checked[index] ? `, previous.m${index}_ccy as m${index}_py_ccy` : ""}` : ""))
       .join("");
@@ -902,8 +994,6 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     });
     const joined = ctes.map((cte) => cte.slice(0, cte.indexOf(" as ("))).join(" cross join ");
     sql = `with ${ctes.join(", ")} select ${parts.join(", ")} from ${joined}`;
-  } else if (query.groupBy && query.measures.some((measure) => measure.quick)) {
-    sql = `${quickSql()}${order("")}${limit}`;
   } else {
     sql = `${select(0)}${order("")}${limit}`;
   }
@@ -928,36 +1018,51 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     const run = `over (${partition}order by n.category asc nulls last rows between unbounded preceding and current row)`;
     const previous = (column: string) =>
       `(select max(p.${column}) from n as p where ${step ? `p.category = ${back(1)}` : "p._tohyee_rn = n._tohyee_rn - 1"}${sameSecond})`;
+    /**
+     * A value added up over a window of groups: `over` is the column's sum
+     * over it. A formula is worked out from the sums of what it names over
+     * the same window (cumulative margin, not margins added up).
+     */
+    const windowed = (measure: Measure, index: number, over: (column: string) => string) => {
+      if (measure.aggregate !== "formula") return over(`m${index}`);
+      const names = formulaRefs(parseFormula(measure.formula!));
+      const decimal = (sql: string) => `cast(${sql} as ${DECIMAL_RESULT})`;
+      const days = dashboard.from && dashboard.to && DATE.test(dashboard.from) && DATE.test(dashboard.to)
+        ? Math.round((Date.parse(`${dashboard.to}T00:00:00Z`) - Date.parse(`${dashboard.from}T00:00:00Z`)) / 86_400_000) + 1
+        : null;
+      const compile = (node: FormulaNode): string => {
+        switch (node.kind) {
+          case "number":
+            return decimal(param(node.value));
+          case "ref":
+            return decimal(`coalesce(${over(q(`i${index}_${names.indexOf(node.name)}`))}, 0)`);
+          case "days":
+            return days === null || days < 1 ? `cast(null as ${DECIMAL_RESULT})` : decimal(param(String(days)));
+          case "negate":
+            return `(-(${compile(node.operand)}))`;
+          case "binary":
+            return node.op === "/" ? exactDivideSql(compile(node.left), compile(node.right)) : decimal(`(${compile(node.left)} ${node.op} ${compile(node.right)})`);
+        }
+      };
+      return compile(parseFormula(measure.formula!));
+    };
+    /** Values to date on a chart by date (decision 771): each period's year (quarter, month) to date, or its last 12 months. */
+    const toDate = (period: TimePeriod) => {
+      if (period === "rolling_12") {
+        return (column: string) => `(select sum(p.${column}) from n as p where p.category > cast(n.category - interval 12 month as DATE) and p.category <= n.category)`;
+      }
+      const span = period === "ytd" ? grainSql("fyear", "n.category", yearEnd) : period === "qtd" ? grainSql("fquarter", "n.category", yearEnd) : grainSql("month", "n.category", yearEnd);
+      return (column: string) => `sum(n.${column}) over (partition by ${span} order by n.category asc nulls last rows between unbounded preceding and current row)`;
+    };
     const needs = { total: false, row: false, column: false };
     const shown = query.measures.map((measure, index) => {
       const value = `n.m${index}`;
+      if (measure.period && dateGrouped) return windowed(measure, index, toDate(measure.period));
       const quick = measure.quick;
       if (!quick) return value;
       switch (quick.kind) {
-        case "running_total": {
-          if (measure.aggregate !== "formula") return `sum(${value}) ${run}`;
-          // A formula of running totals: each value it names is run, then the formula worked out from those.
-          const names = formulaRefs(parseFormula(measure.formula!));
-          const decimal = (sql: string) => `cast(${sql} as ${DECIMAL_RESULT})`;
-          const days = dashboard.from && dashboard.to && DATE.test(dashboard.from) && DATE.test(dashboard.to)
-            ? Math.round((Date.parse(`${dashboard.to}T00:00:00Z`) - Date.parse(`${dashboard.from}T00:00:00Z`)) / 86_400_000) + 1
-            : null;
-          const compile = (node: FormulaNode): string => {
-            switch (node.kind) {
-              case "number":
-                return decimal(param(node.value));
-              case "ref":
-                return decimal(`coalesce(sum(n.${q(`i${index}_${names.indexOf(node.name)}`)}) ${run}, 0)`);
-              case "days":
-                return days === null || days < 1 ? `cast(null as ${DECIMAL_RESULT})` : decimal(param(String(days)));
-              case "negate":
-                return `(-(${compile(node.operand)}))`;
-              case "binary":
-                return node.op === "/" ? exactDivideSql(compile(node.left), compile(node.right)) : decimal(`(${compile(node.left)} ${node.op} ${compile(node.right)})`);
-            }
-          };
-          return compile(parseFormula(measure.formula!));
-        }
+        case "running_total":
+          return windowed(measure, index, (column) => `sum(n.${column}) ${run}`);
         case "percent_of_total":
           needs.total = true;
           return exactDivideSql(value, `t.m${index}`);
@@ -1000,7 +1105,11 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       ...shown.map((sql, index) => `${sql} as m${index}`),
       ...query.measures.flatMap((_measure, index) => (checked[index] ? [`n.m${index}_ccy as m${index}_ccy`] : [])),
     ];
-    return `with ${ctes.join(", ")} select * from (select ${parts.join(", ")} from n${joins}) as ${q("_tohyee_quick")}`;
+    // On a chart by date with values to date, groups before the From date were read only for those values.
+    const keep = ranged && dateGrouped && step && dashboard.from && DATE.test(dashboard.from)
+      ? ` where cast(category + interval ${step[0]} ${step[1]} as DATE) > cast(${param(dashboard.from)} as DATE)`
+      : "";
+    return `with ${ctes.join(", ")} select * from (select ${parts.join(", ")} from n${joins}) as ${q("_tohyee_quick")}${keep}`;
   }
 }
 
