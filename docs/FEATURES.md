@@ -2207,6 +2207,10 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: bookmarks and page buttons** (#376 phase 3, decision 759).
+  A report can keep bookmarks (a page, dates, slicer choices and hidden
+  tiles), opened from the Bookmarks row or a button. Buttons can go to a
+  page, open a bookmark, go back, or reset to the report's default.
 - **Analytics: slicer styles, page filters and a tile's own dates** (#376
   phase 3, decisions 757-758). Slicers can be tick boxes, search and tick,
   a drop-down, buttons, a number range, a date range, relative dates or two

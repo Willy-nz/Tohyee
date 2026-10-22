@@ -7714,3 +7714,18 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      page whose table has the column. Both are saved with the report and
      applied by the server, so readers can't change them. The chart editor's
      preview uses a tile's own dates but not page filters or range slicers.
+759. **Bookmarks and buttons that open pages and bookmarks** (22 October
+     2026, #376 phase 3; Power BI's bookmarks and button actions; not yet
+     reviewed by Jess). A bookmark keeps a page, the dates (a moving preset
+     stays moving), slicer choices and tiles hidden while it's open (up to
+     20 per report). In edit mode, **Bookmark settings** adds one from the
+     view shown, renames, updates or removes it, and chooses the tiles it
+     hides; readers open one from the Bookmarks row or a button. A bookmark
+     keeps only choices for the report's own slicers (others are dropped
+     when it's saved), and opening one sends them through the same server
+     checks as any choice, so it can't show a report viewer more (decision
+     756); hidden tiles are visibility, not access. Buttons can now go to a
+     page, open a bookmark, go back to the page shown before, or reset to
+     the report's default (its dates and slicers, nothing clicked, drilled,
+     drilled through or hidden); a button's page or bookmark must be the
+     report's own.

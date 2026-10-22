@@ -268,4 +268,38 @@ describeWithDatabase("analytics report pages and interactions", () => {
     const refused = await valuesRoute.GET(apiRequest(`/api/analytics/values?organisationId=${ORG}&dashboardId=${id}&table=sales&field=region&child=note`, { cookie: clientCookie }), noContext);
     expect(refused.status).toBe(403);
   });
+
+  it("bookmarks keep only the report's own slicer choices, and buttons open only its pages and bookmarks (decision 759)", async () => {
+    const made = await create({
+      settings: {
+        slicers: [{ table: "sales", field: "region", label: "Region" }],
+        pages: [{ id: "main", name: "Main" }, { id: "detail", name: "Detail" }],
+        bookmarks: [{ id: "otago", name: "Otago", state: { page: "detail", values: { region: ["Otago"], note: ["private canterbury"] }, ranges: { amount: { min: "1" } }, hidden: ["t1", "nope"] } }],
+      },
+      tiles: [
+        { id: "t1", title: "Total", visual: "kpi", width: "quarter", query: query(null) },
+        { id: "go", title: "Go", visual: "button", width: "quarter", query: null, button: { label: "Details", action: "go_to_page", target: "detail" } },
+        { id: "bm", title: "Bm", visual: "button", width: "quarter", query: null, button: { label: "Otago", action: "bookmark", target: "otago" } },
+        { id: "back", title: "Back", visual: "button", width: "quarter", query: null, button: { label: "Back", action: "back" } },
+      ],
+    });
+    expect(made.status).toBe(201);
+    const saved = (await read(made.data.dashboard.id)).data.dashboard;
+    // The note isn't a slicer and amount isn't a range slicer, so neither is kept; hidden tiles must be the report's.
+    expect(saved.settings.bookmarks).toEqual([
+      { id: "otago", name: "Otago", state: { page: "detail", from: null, to: null, preset: null, values: { region: ["Otago"] }, ranges: {}, hidden: ["t1"] } },
+    ]);
+    expect(saved.tiles.slice(1).map((tile: { button: unknown }) => tile.button)).toEqual([
+      { label: "Details", action: "go_to_page", target: "detail" },
+      { label: "Otago", action: "bookmark", target: "otago" },
+      { label: "Back", action: "back" },
+    ]);
+    const bad = await create({ tiles: [{ id: "go", title: "Go", visual: "button", width: "quarter", query: null, button: { label: "Go", action: "go_to_page", target: "elsewhere" } }] });
+    expect(bad.status).toBe(400);
+    expect(bad.data.error).toMatch(/choose the page/);
+    // Opening the bookmark sends its choices like any other: a report viewer still only gets the report's slicers.
+    await share(made.data.dashboard.id);
+    const opened = await run(clientCookie, { dashboardId: made.data.dashboard.id, tileId: "t1", filters: { values: { region: ["Otago"], note: ["private canterbury"] } } });
+    expect(opened.data.rows).toEqual([{ m0: "31.25" }]);
+  });
 });
