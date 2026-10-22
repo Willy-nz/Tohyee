@@ -799,6 +799,9 @@ export function buildShapeQuery(input: {
               return decimal(quote(node.name));
             case "days":
               throw new ValidationError(`${step.name}: days only works in a report's values.`);
+            case "param":
+              // A report's what-if parameter (decision 773) belongs to a report, not to a prepared table.
+              throw new ValidationError(`${step.name}: @${node.name} is a report's parameter, so it only works in a report's values.`);
             case "negate":
               return `(-(${compile(node.operand)}))`;
             case "binary":

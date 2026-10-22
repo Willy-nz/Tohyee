@@ -13,6 +13,8 @@ export type FormulaNode =
   | { kind: "number"; value: string }
   | { kind: "ref"; name: string }
   | { kind: "days" }
+  /** A report's what-if parameter (decision 773), e.g. @growth: the number the reader chose. */
+  | { kind: "param"; name: string }
   | { kind: "negate"; operand: FormulaNode }
   | { kind: "binary"; op: "+" | "-" | "*" | "/"; left: FormulaNode; right: FormulaNode };
 
@@ -20,6 +22,7 @@ type Token =
   | { kind: "number"; value: string }
   | { kind: "ref"; name: string }
   | { kind: "days" }
+  | { kind: "param"; name: string }
   | { kind: "op"; value: "+" | "-" | "*" | "/" | "(" | ")" };
 
 export const MAX_FORMULA_LENGTH = 500;
@@ -50,6 +53,12 @@ function tokenize(text: string): Token[] {
       at += end + 1;
       continue;
     }
+    const parameter = /^@([a-z][a-z0-9_]{0,30})/i.exec(rest);
+    if (parameter) {
+      tokens.push({ kind: "param", name: parameter[1].toLowerCase() });
+      at += parameter[0].length;
+      continue;
+    }
     const word = /^[a-z]+/i.exec(rest);
     if (word) {
       if (word[0].toLowerCase() !== "days") throw new ValidationError(`"${word[0]}" isn't something a formula knows. Put value names in square brackets, e.g. [Sales].`);
@@ -62,7 +71,7 @@ function tokenize(text: string): Token[] {
       at += 1;
       continue;
     }
-    throw new ValidationError(`A formula can't have "${rest[0]}". Use numbers, [Value names], days, + - * / and brackets.`);
+    throw new ValidationError(`A formula can't have "${rest[0]}". Use numbers, [Value names], days, @parameters, + - * / and brackets.`);
   }
   return tokens;
 }
@@ -83,6 +92,7 @@ export function parseFormula(text: string): FormulaNode {
     if (token.kind === "number") return { kind: "number", value: token.value };
     if (token.kind === "ref") return { kind: "ref", name: token.name };
     if (token.kind === "days") return { kind: "days" };
+    if (token.kind === "param") return { kind: "param", name: token.name };
     if (token.value === "-") return { kind: "negate", operand: primary(depth + 1) };
     if (token.value === "(") {
       const inside = sum(depth + 1);
@@ -111,7 +121,7 @@ export function parseFormula(text: string): FormulaNode {
   const tree = sum(0);
   if (position < tokens.length) {
     const extra = tokens[position];
-    throw new ValidationError(`The formula has something extra at "${extra.kind === "op" ? extra.value : extra.kind === "ref" ? `[${extra.name}]` : extra.kind === "days" ? "days" : extra.value}".`);
+    throw new ValidationError(`The formula has something extra at "${extra.kind === "op" ? extra.value : extra.kind === "ref" ? `[${extra.name}]` : extra.kind === "days" ? "days" : extra.kind === "param" ? `@${extra.name}` : extra.value}".`);
   }
   if (formulaRefs(tree).length > MAX_REFS) throw new ValidationError(`A formula can use up to ${MAX_REFS} values.`);
   return tree;
@@ -122,6 +132,21 @@ export function formulaRefs(node: FormulaNode): string[] {
   const names: string[] = [];
   const walk = (entry: FormulaNode) => {
     if (entry.kind === "ref" && !names.includes(entry.name)) names.push(entry.name);
+    if (entry.kind === "negate") walk(entry.operand);
+    if (entry.kind === "binary") {
+      walk(entry.left);
+      walk(entry.right);
+    }
+  };
+  walk(node);
+  return names;
+}
+
+/** The report parameters a formula uses (decision 773), each once. */
+export function formulaParameters(node: FormulaNode): string[] {
+  const names: string[] = [];
+  const walk = (entry: FormulaNode) => {
+    if (entry.kind === "param" && !names.includes(entry.name)) names.push(entry.name);
     if (entry.kind === "negate") walk(entry.operand);
     if (entry.kind === "binary") {
       walk(entry.left);
@@ -149,6 +174,8 @@ export function formulaText(node: FormulaNode): string {
       return `[${node.name}]`;
     case "days":
       return "days";
+    case "param":
+      return `@${node.name}`;
     case "negate":
       return `-(${formulaText(node.operand)})`;
     case "binary":

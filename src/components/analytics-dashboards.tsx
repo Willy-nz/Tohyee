@@ -9,6 +9,8 @@ import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, ValueMeaning, ValueRules } from "@/components/analytics/saved-values";
+import { applyChoice, choiceFormat, type TileChoice, type TileSwitches } from "@/lib/analytics/parameters";
+import { ParameterControls, SwitchSettings } from "@/components/analytics/parameter-controls";
 import { CalculatedFieldsPanel } from "@/components/analytics/calculated-fields-panel";
 import { PeriodField, QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
@@ -276,7 +278,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
 }
 
 /** What the dashboard is showing: its dates (and the preset they came from, if one was chosen) and slicer choices. */
-type Filters = { from: string; to: string; preset?: DatePreset | null; values: Record<string, string[]>; ranges?: Record<string, SlicerRange> };
+type Filters = { from: string; to: string; preset?: DatePreset | null; values: Record<string, string[]>; ranges?: Record<string, SlicerRange>; parameters?: Record<string, string> };
 type DateContext = { today: string; financialYearEndMonth: number };
 type PivotExportFor = { organisationId: string; organisationName: string; filters: Filters };
 
@@ -333,7 +335,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const unsaved = Boolean(base && dashboard && hasUnsavedChanges(base, dashboard));
   // Each saved tile's question, to tell which tiles in the draft are as saved.
   const savedQueries = useMemo(() => new Map((base?.tiles ?? []).map((tile) => [tile.id, JSON.stringify(tile.query)])), [base]);
-  const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
+  const chosenFilters: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", preset: dashboard?.settings.preset ?? null, values: {} };
+  // What-if parameters (decision 773): the reader's values over the report's starting ones.
+  const shown: Filters = dashboard?.settings.parameters?.length
+    ? { ...chosenFilters, parameters: { ...Object.fromEntries(dashboard.settings.parameters.map((parameter) => [parameter.name, parameter.value])), ...chosenFilters.parameters } }
+    : chosenFilters;
   const dates: DateContext = { today: loaded.data?.today ?? todayInBrowser(), financialYearEndMonth: loaded.data?.financialYearEndMonth ?? 3 };
   const canEdit = can("bookkeeper");
   /**
@@ -1465,6 +1471,18 @@ function FilterBar({
           </Button>
         </>
       ) : null}
+      <ParameterControls
+        parameters={settings.parameters ?? []}
+        values={filters.parameters ?? {}}
+        onChange={(parameters) => onChange({ ...filters, parameters })}
+        editing={editing}
+        onSettings={(parameters) => {
+          const next = { ...settings };
+          if (parameters) next.parameters = parameters;
+          else delete next.parameters;
+          onSettings(next);
+        }}
+      />
     </div>
   );
 }
@@ -1507,21 +1525,35 @@ function TileBody(props: TileBodyProps) {
   return <QueryTileBody {...props} />;
 }
 
-function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilters, asSaved, view, viewTiles, onPick, highlight, draftWhere }: TileBodyProps) {
+function QueryTileBody({ organisationId, dashboardId, tile: savedTile, filters: reportFilters, asSaved, view, viewTiles, onPick: pick, highlight, draftWhere }: TileBodyProps) {
   const yearEnd = useContext(YearEndMonth);
+  // The reader's switches (decision 773): a saved tile sends its choice; a draft tile makes it here.
+  const [choice, setChoice] = useState<TileChoice>({});
+  const chosenQuery = (() => {
+    if (!savedTile.query || !savedTile.switches) return savedTile.query;
+    try {
+      return applyChoice(savedTile.query, savedTile.switches, choice);
+    } catch {
+      return savedTile.query;
+    }
+  })();
+  const tile: Tile = savedTile.switches ? { ...savedTile, query: chosenQuery, format: choiceFormat(savedTile.format, savedTile.query?.measures ?? [], choice, savedTile.switches) } : savedTile;
+  // Grouped another way than saved, a click can't say which field it means to the other tiles, so it doesn't filter them.
+  const onPick = choice.grouping ? undefined : pick;
   // A tile with its own dates keeps them (the server does this for saved tiles).
   const filters = !asSaved && tile.dates ? { ...reportFilters, ...effectiveDates(tile.dates, reportFilters, todayInBrowser(), yearEnd) } as Filters : reportFilters;
-  const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, !asSaved && tile.visual === "table" && tile.format?.table?.totals === true, view || draftWhere?.length ? { view, tiles: viewTiles, drill: tile.drill, where: draftWhere } : undefined);
+  const state = useTileResult(organisationId, asSaved ? savedTile.query : tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, !asSaved && tile.visual === "table" && tile.format?.table?.totals === true, view || draftWhere?.length ? { view, tiles: viewTiles, drill: tile.drill, where: draftWhere } : undefined, asSaved ? choice : undefined);
   // Drilled, the chart shows another level: say so to the chart (its projection works on what's shown).
   const shownTile = drilledTile(tile, view?.drill);
+  const switcher = savedTile.switches && savedTile.query ? <TileSwitcher query={savedTile.query} switches={savedTile.switches} choice={choice} onChoose={setChoice} title={savedTile.title} /> : null;
   const { current } = useWorkspace();
   const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
   const [drillError, setDrillError] = useState<string | null>(null);
   // Rows opened under other dates or slicers no longer match the tile, so they're put away.
   const filtersKey = JSON.stringify([filters, view]);
   const drill = opened?.filtersKey === filtersKey ? opened : null;
-  if (!state) return <p className={ui.muted}>Working it out…</p>;
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (!state) return <>{switcher}<p className={ui.muted}>Working it out…</p></>;
+  if (state.error) return <>{switcher}<Notice tone="error">{state.error}</Notice></>;
   const openDrill = async (selection: PivotDrillSelection, title: string) => {
     setDrill(null);
     setDrillError(null);
@@ -1543,6 +1575,7 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilte
   };
   return (
     <>
+      {switcher}
       {drillError ? <Notice tone="error">{drillError}</Notice> : null}
       <TileResult
         tile={shownTile}
@@ -1587,6 +1620,41 @@ function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilte
 
 /** The organisation's balance month, for naming financial years and quarters (decision 755). */
 const YearEndMonth = createContext(3);
+
+/** What the reader can switch on a tile (decision 773): the value shown, and the grouping. */
+function TileSwitcher({ query, switches, choice, onChoose, title }: { query: TileQuery; switches: TileSwitches; choice: TileChoice; onChoose: (choice: TileChoice) => void; title: string }) {
+  const groupings = query.groupBy ? [query.groupBy, ...(switches.groupings ?? [])] : [];
+  const grainName = (grain?: string) => ({ day: "by day", week: "by week", month: "by month", quarter: "by quarter", year: "by year", fquarter: "by financial quarter", fyear: "by financial year" })[grain ?? ""];
+  return (
+    <div className={styles.switcher}>
+      {switches.values ? (
+        <label>
+          Show{" "}
+          <select aria-label={`${title}: value shown`} value={choice.value ?? 0} onChange={(event) => onChoose({ ...choice, value: Number(event.target.value) })}>
+            {query.measures.map((measure, index) => (
+              <option key={index} value={index}>
+                {measure.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {switches.groupings?.length ? (
+        <label>
+          By{" "}
+          <select aria-label={`${title}: grouped by`} value={choice.grouping ?? 0} onChange={(event) => onChoose({ ...choice, grouping: Number(event.target.value) })}>
+            {groupings.map((grouping, index) => (
+              <option key={index} value={index}>
+                {fieldLabel(grouping.field)}
+                {grouping.grain ? ` (${grainName(grouping.grain) ?? grouping.grain})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+    </div>
+  );
+}
 
 /** Periods named for people: "FY2027", "Q3 2026" (months and days keep the chart's own names). */
 const NAMED_GRAINS = new Set(["year", "quarter", "fyear", "fquarter", "week"]);
@@ -2190,6 +2258,7 @@ function TileEditor({
   const [interactions, setInteractions] = useState<Record<string, InteractionMode>>(tile?.interactions ?? {});
   // Its own dates (decision 758).
   const [tileDates, setTileDates] = useState<TileDates | undefined>(tile?.dates);
+  const [switches, setSwitches] = useState<TileSwitches | undefined>(tile?.switches);
   const yearEndMonth = useContext(YearEndMonth);
   const [savedVersion, setSavedVersion] = useState(0);
   // The panel's tab, specialist chart types and advanced settings (#387, decisions 750-751).
@@ -2834,6 +2903,18 @@ function TileEditor({
           </div>
         </fieldset>
       ) : null}
+      {visual !== "pivot" ? (
+        <SwitchSettings
+          switches={switches}
+          onChange={setSwitches}
+          values={query.measures.length}
+          grouped={Boolean(query.groupBy) && !query.breakdown}
+          canSwitchValues={!["kpi", "scatter", "pointmap"].includes(visual)}
+          columns={columns}
+          groupBy={query.groupBy}
+          drills={Boolean(drillUsable && drill)}
+        />
+      ) : null}
       {visual === "pivot" ? <p className={ui.muted}>Clicking a number in the pivot table shows the rows behind it.</p> : null}
       {visual === "kpi" || visual === "table" ? <p className={ui.muted}>{visual === "kpi" ? "Key figures" : "Tables"} have no tooltips or clicks to set.</p> : null}
             </>
@@ -2856,6 +2937,7 @@ function TileEditor({
               ...(drillUsable && drill ? { drill } : {}),
               ...(DRILLABLE.includes(visual) && Object.keys(interactions).length ? { interactions } : {}),
               ...(tileDates && query.dateField ? { dates: tileDates } : {}),
+              ...(switches && visual !== "pivot" ? { switches } : {}),
             })
           }
         >

@@ -5,9 +5,17 @@ import type { Filter, QueryResult, TileQuery } from "@/lib/analytics/query";
 import type { TileDrill, TileView } from "@/lib/analytics/report-view";
 import type { SlicerRange } from "@/lib/analytics/slicers";
 import { api, errorMessage } from "@/lib/client/api";
+import type { TileChoice } from "@/lib/analytics/parameters";
 
 /** The report's dates and slicer choices a tile is answered with. */
-export type TileFilters = { from: string; to: string; values: Record<string, string[]>; ranges?: Record<string, SlicerRange> };
+export type TileFilters = {
+  from: string;
+  to: string;
+  values: Record<string, string[]>;
+  ranges?: Record<string, SlicerRange>;
+  /** What-if parameters' values by name (decision 773). */
+  parameters?: Record<string, string>;
+};
 
 /**
  * A tile's answer: its saved question (with `saved`), which is all a report
@@ -23,9 +31,11 @@ export function useTileResult(
   totals = false,
   /** What the reader has drilled to or clicked (decision 756); for a question being built, the tiles it refers to too. */
   view?: { view?: TileView; tiles?: Array<{ id: string; title: string; query: TileQuery | null; drill?: TileDrill }>; drill?: TileDrill; where?: Filter[] },
+  /** A saved tile's switches the reader chose (decision 773): positions only; a draft tile's question already has them. */
+  choice?: TileChoice,
 ) {
   const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
-  const key = JSON.stringify({ query, filters, saved, totals, view });
+  const key = JSON.stringify({ query, filters, saved, totals, view, choice });
   useEffect(() => {
     if (!query) return;
     let cancelled = false;
@@ -35,7 +45,14 @@ export function useTileResult(
       body: {
         organisationId,
         ...question,
-        filters: { from: filters.from || null, to: filters.to || null, values: filters.values, ...(filters.ranges && Object.keys(filters.ranges).length ? { ranges: filters.ranges } : {}) },
+        filters: {
+          from: filters.from || null,
+          to: filters.to || null,
+          values: filters.values,
+          ...(filters.ranges && Object.keys(filters.ranges).length ? { ranges: filters.ranges } : {}),
+          ...(filters.parameters && Object.keys(filters.parameters).length ? { parameters: filters.parameters } : {}),
+        },
+        ...(saved && choice && (choice.value !== undefined || choice.grouping !== undefined) ? { choice } : {}),
         ...(view?.view ? { view: view.view, ...(saved ? {} : { viewTiles: view.tiles, viewDrill: view.drill }) } : {}),
         // A draft tile's page filters and range slicers, worked out here (the server works them out for saved tiles).
         ...(!saved && view?.where?.length ? { where: view.where } : {}),

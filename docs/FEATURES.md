@@ -2211,6 +2211,12 @@ that something happened.
   financial year and quarter, arithmetic), saved on the table for every
   report. Its kind is checked before it's saved; changing one changes every
   report using it, and removing or renaming one in use is refused.
+- **Analytics: what-if parameters and switches** (#376 phase 4, decision
+  773). A report can have sliders (Parameter settings in edit mode) whose
+  number formulas use as @name, e.g. `[Sales] * (1 + @growth)`. A tile can
+  let the reader show one of its values at a time, or group it by other
+  fields its author chose (Interactions tab). Only the report's own steps
+  and choices are accepted from readers.
 - **Analytics: one access check for every output** (#387, decision 697).
   The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
   figures, tooltips, totals, drill-through rows, slicer values, CSV and

@@ -6,6 +6,7 @@ import { parseTileView, viewQuery, type TileDrill } from "@/lib/analytics/report
 import { requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { listFields } from "@/lib/analytics/calculated-fields";
+import { applyChoice, draftParameterValues, parameterValues, parseChoice } from "@/lib/analytics/parameters";
 import { reportPages, tilePage } from "@/lib/analytics/pages";
 import { effectiveDates } from "@/lib/analytics/report-filters";
 import { parseRanges, rangeFilters, slicerOnPage } from "@/lib/analytics/slicers";
@@ -56,6 +57,8 @@ function extraFilters(input: unknown): Filter[] {
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const filters = parseFilters((body.filters ?? {}) as Record<string, unknown>);
+  // What-if parameters' values (decision 773): checked against the report's own sliders for a saved tile.
+  const rawParameters = ((body.filters ?? {}) as Record<string, unknown>).parameters;
   // The organisation's calculated fields (decision 772) are read with the question, so tiles can use them.
   const { organisationId, query, fields } = await withOrganisation(request, body.organisationId, "report_viewer", async (tx, { auth, membership }) => {
     await requireAnalytics(tx);
@@ -66,9 +69,11 @@ export const POST = route(async (request) => {
     const view = parseTileView(body.view);
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
-      const tile = tileOf(dashboard, body.tileId);
+      // The reader's switches (decision 773): only the saved tile's own choices, by position.
+      const saved = tileOf(dashboard, body.tileId);
+      const tile = saved.query ? { ...saved, query: applyChoice(saved.query, saved.switches, parseChoice(body.choice)) } : saved;
       await requireAnalyticsTable(tx, (tile.query as { table?: unknown } | null | undefined)?.table);
-      const viewed = viewQuery(dashboard.tiles, tile, view);
+      const viewed = viewQuery(dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)), tile, view);
       // The tile's page: its slicers' ranges and its own filters (decisions 757-758), from the report as saved.
       const pageId = tilePage(tile, dashboard.settings.pages);
       const page = reportPages(dashboard.settings.pages).find((entry) => entry.id === pageId);
@@ -80,7 +85,11 @@ export const POST = route(async (request) => {
       const totals = tile.visual === "table" && tile.format?.table?.totals === true;
       return {
         organisationId: tx.organisationId,
-        query: { tile: { query: viewed.query }, filters: { ...allowed, ...own, dates, view: [...viewed.where, ...ranges, ...(page?.filters ?? []).map((entry) => entry.filter)] }, totals },
+        query: {
+          tile: { query: viewed.query },
+          filters: { ...allowed, ...own, dates, view: [...viewed.where, ...ranges, ...(page?.filters ?? []).map((entry) => entry.filter)], parameters: parameterValues(dashboard.settings.parameters, rawParameters) },
+          totals,
+        },
         fields: await listFields(tx),
       };
     }
@@ -90,9 +99,9 @@ export const POST = route(async (request) => {
     if (view) {
       const tiles = (Array.isArray(body.viewTiles) ? body.viewTiles : []).slice(0, 40) as Parameters<typeof viewQuery>[0];
       const viewed = viewQuery(tiles, { id: String(body.tileId ?? "draft"), title: "This tile", query: body.query as TileQuery, drill: body.viewDrill as TileDrill | undefined }, view);
-      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)] }, totals: body.totals === true }, fields: await listFields(tx) };
+      return { organisationId: tx.organisationId, query: { tile: { query: viewed.query }, filters: { ...filters, dates, view: [...viewed.where, ...extraFilters(body.where)], parameters: draftParameterValues(rawParameters) }, totals: body.totals === true }, fields: await listFields(tx) };
     }
-    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where) }, totals: body.totals === true }, fields: await listFields(tx) };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters: { ...filters, dates, view: extraFilters(body.where), parameters: draftParameterValues(rawParameters) }, totals: body.totals === true }, fields: await listFields(tx) };
   });
   if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill, fields));
   return json(await runTile(organisationId, query.tile.query, query.filters, { totals: query.totals, fields }));
