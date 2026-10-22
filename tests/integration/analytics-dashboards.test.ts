@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
+import * as freshnessRoute from "@/app/api/analytics/dashboards/[dashboardId]/freshness/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
 import * as queryRoute from "@/app/api/analytics/query/route";
 import * as measureRoute from "@/app/api/analytics/measures/[measureId]/route";
@@ -554,6 +555,33 @@ describeWithDatabase("analytics dashboards", () => {
     // A refused save that names a version that never existed changes nothing either.
     expect((await save({ expectedVersion: startedAt + 99, name: "Nope" })).status).toBe(409);
     await save({ name: "Monthly sales", tiles: [tile] });
+  });
+
+  it("says how fresh the report's data is, and shows a failed refresh as stale (#387, decision 698)", async () => {
+    const freshness = async () =>
+      body(await freshnessRoute.GET(apiRequest(`/api/analytics/dashboards/${dashboardId}/freshness?organisationId=${ORG}`, { cookie: viewerCookie }), params({ dashboardId })));
+    const first = await freshness();
+    expect(first.status).toBe(200);
+    expect(first.data.mixed).toBe(false);
+    expect(first.data.sources).toHaveLength(1);
+    const [source] = first.data.sources;
+    expect(source).toMatchObject({ name: "Sales", tables: ["sales"], failedAt: null, running: false, dataThrough: "2026-04-01" });
+    expect(Date.parse(source.refreshedAt)).not.toBeNaN();
+
+    // A refresh that fails keeps the last good data, and says so: it isn't "refreshed".
+    const file = path.join(root, "reports", "sales.csv");
+    const good = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, "Date,Region,Qty,Price\nnot a date,Otago,1,10.00\n");
+    const sources = await body(await sourcesRoute.GET(apiRequest(`/api/analytics/sources?organisationId=${ORG}`, { cookie: ownerCookie }), noContext));
+    const id = sources.data.sources[0].id;
+    await loadRoute.POST(apiRequest(`/api/analytics/sources/${id}/load`, { method: "POST", cookie: ownerCookie, body: { organisationId: ORG } }), params({ sourceId: id }));
+    const stale = (await freshness()).data.sources[0];
+    expect(stale.refreshedAt).toBe(source.refreshedAt);
+    expect(Date.parse(stale.failedAt)).toBeGreaterThanOrEqual(Date.parse(source.refreshedAt));
+    expect(stale.dataThrough).toBe("2026-04-01");
+    fs.writeFileSync(file, good);
+    await loadRoute.POST(apiRequest(`/api/analytics/sources/${id}/load`, { method: "POST", cookie: ownerCookie, body: { organisationId: ORG } }), params({ sourceId: id }));
+    expect((await freshness()).data.sources[0].failedAt).toBeNull();
   });
 
   it("deletes a dashboard without touching the data", async () => {

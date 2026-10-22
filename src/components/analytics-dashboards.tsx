@@ -10,6 +10,7 @@ import { KeyFigureView } from "@/components/analytics/key-figure";
 import { KeyFigureSettings } from "@/components/analytics/key-figure-settings";
 import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, ValueMeaning, ValueRules } from "@/components/analytics/saved-values";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
+import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
 import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
@@ -730,6 +731,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         pages={reportPages(pages)}
       />
 
+      <ReportFreshnessLine organisationId={organisationId} dashboardId={dashboard.id} />
       <PageTabs
         pages={pages}
         current={page.id}
