@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { QueryResult, TileQuery } from "@/lib/analytics/query";
+import type { Filter, QueryResult, TileQuery } from "@/lib/analytics/query";
 import type { TileDrill, TileView } from "@/lib/analytics/report-view";
+import type { SlicerRange } from "@/lib/analytics/slicers";
 import { api, errorMessage } from "@/lib/client/api";
 
 /** The report's dates and slicer choices a tile is answered with. */
-export type TileFilters = { from: string; to: string; values: Record<string, string[]> };
+export type TileFilters = { from: string; to: string; values: Record<string, string[]>; ranges?: Record<string, SlicerRange> };
 
 /**
  * A tile's answer: its saved question (with `saved`), which is all a report
@@ -21,7 +22,7 @@ export function useTileResult(
   /** A table with a totals row being built asks for the whole answer as one total too (decision 694); a saved one's tile says so. */
   totals = false,
   /** What the reader has drilled to or clicked (decision 756); for a question being built, the tiles it refers to too. */
-  view?: { view: TileView; tiles?: Array<{ id: string; title: string; query: TileQuery | null; drill?: TileDrill }>; drill?: TileDrill },
+  view?: { view?: TileView; tiles?: Array<{ id: string; title: string; query: TileQuery | null; drill?: TileDrill }>; drill?: TileDrill; where?: Filter[] },
 ) {
   const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
   const key = JSON.stringify({ query, filters, saved, totals, view });
@@ -34,8 +35,10 @@ export function useTileResult(
       body: {
         organisationId,
         ...question,
-        filters: { from: filters.from || null, to: filters.to || null, values: filters.values },
-        ...(view ? { view: view.view, ...(saved ? {} : { viewTiles: view.tiles, viewDrill: view.drill }) } : {}),
+        filters: { from: filters.from || null, to: filters.to || null, values: filters.values, ...(filters.ranges && Object.keys(filters.ranges).length ? { ranges: filters.ranges } : {}) },
+        ...(view?.view ? { view: view.view, ...(saved ? {} : { viewTiles: view.tiles, viewDrill: view.drill }) } : {}),
+        // A draft tile's page filters and range slicers, worked out here (the server works them out for saved tiles).
+        ...(!saved && view?.where?.length ? { where: view.where } : {}),
       },
     }).then(
       (result) => {

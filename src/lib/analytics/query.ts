@@ -270,7 +270,8 @@ function column(columns: Map<string, string>, name: unknown, what: string): stri
   return name;
 }
 
-function parseFilter(entry: unknown, columns: Map<string, string>, what: string, joins: boolean): Filter {
+/** One filter, checked against a table's columns (a tile's, or a page's, decision 758). */
+export function parseFilter(entry: unknown, columns: Map<string, string>, what: string, joins: boolean): Filter {
   const filter = (entry ?? {}) as Record<string, unknown>;
   const field = column(columns, filter.field, what);
   const op = filter.op as FilterOp;

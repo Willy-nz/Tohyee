@@ -7689,3 +7689,28 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      hasn't got, is refused. Report viewers still run only saved tiles of
      reports shared with them; filters sent as the view's own are ignored.
      Bookmarks and links (decision 759) go through the same checks.
+757. **Slicer styles, and slicers on chosen pages** (22 October 2026, #376
+     phase 3; Power BI's slicer styles and sync slicers, Looker Studio's
+     controls; not yet reviewed by Jess). Each slicer has a style: tick
+     boxes in a menu (as before, and still the default), search and tick, a
+     drop-down list (one value), buttons (one at a time), a number range,
+     a date range, relative dates (the last so many days or months), or
+     two levels (a column then another text column of the same table, e.g.
+     region then town; ticking a first-level value chooses all of it, a
+     second-level value just that one). A number or date column can now be
+     a slicer (as a range); text and Yes/No offer the lists. Slicers can be
+     small, large or wide, and show and filter on every page (in step, the
+     default, which is Power BI's synced slicer) or only on chosen pages.
+     Ranges become ordinary filters on the server, and only for the
+     report's own range slicers on the tile's page; a report viewer's
+     two-level list only names pairs in rows the report's tiles read
+     (decision 697).
+758. **A tile's own dates and a page's own filters** (22 October 2026,
+     #376 phase 3; Looker Studio's per-chart date range, Power BI's
+     page-level filters). A chart with a date can keep its own dates (a
+     moving preset such as last financial year, or fixed dates), shown
+     under its title, whatever the report's dates are. A page can have up to
+     six filters on one data source's columns, applied to every tile on the
+     page whose table has the column. Both are saved with the report and
+     applied by the server, so readers can't change them. The chart editor's
+     preview uses a tile's own dates but not page filters or range slicers.

@@ -2207,6 +2207,13 @@ that something happened.
   place (the arrows still work from the keyboard), duplicated, or clicked
   to open, and **+ Add text or item** adds a heading with notes to split a
   dashboard into sections (or an image, shape or button). Up to 40 tiles.
+- **Analytics: slicer styles, page filters and a tile's own dates** (#376
+  phase 3, decisions 757-758). Slicers can be tick boxes, search and tick,
+  a drop-down, buttons, a number range, a date range, relative dates or two
+  levels (e.g. region then town), in three sizes, on every page or chosen
+  pages; number and date columns can be slicers. A page can have its own
+  filters (Page settings › Filters on this page), and a chart can keep its
+  own dates (Dates for this chart), noted under its title.
 - **Analytics: clicks, drill-down and drill-through** (#376 phase 3,
   decisions 754-756). Clicking a group on a chart or table (or choosing it
   from the chart's **Choose a group** list) filters the page's other tiles,

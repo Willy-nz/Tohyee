@@ -3,7 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { ChartFormatPanel } from "@/components/analytics/chart-format-panel";
 import { KeyFigureView } from "@/components/analytics/key-figure";
@@ -37,7 +37,10 @@ import { isItemVisual, type ButtonAction } from "@/lib/analytics/items";
 import { PanelTabs } from "@/components/analytics/panel-tabs";
 import { ArrangeBar } from "@/components/analytics/arrange-bar";
 import { PageTabs, pageStyle } from "@/components/analytics/report-pages";
-import { addPage, movePage, openingPage, removePage, tilePage, tilesOnPage, withPage, type ReportPage } from "@/lib/analytics/pages";
+import { SlicerControl } from "@/components/analytics/slicer-control";
+import { rangeFilters, SLICER_STYLE_LABELS, slicerOnPage, stylesFor, type SlicerRange, type SlicerStyle } from "@/lib/analytics/slicers";
+import { effectiveDates, tileDatesText, type PageFilter, type TileDates } from "@/lib/analytics/report-filters";
+import { addPage, movePage, openingPage, removePage, reportPages, tilePage, tilesOnPage, withPage, type ReportPage } from "@/lib/analytics/pages";
 import { isSpecialistVisual, PANEL_TAB_LABELS, PANEL_TABS, type PanelTab } from "@/lib/analytics/editor-panels";
 import { dateHierarchy, DRILLABLE, INTERACTION_LABELS, INTERACTION_MODES, MAX_DRILL_LEVELS, drillDown, drillUp, drillView, expandAll, interactionMode, periodLabel, selectionLevel, TOP, type DrillState, type InteractionMode, type Selection, type TileDrill, type TileView } from "@/lib/analytics/report-view";
 
@@ -50,6 +53,7 @@ import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics
 import { CHART_HEIGHTS, HEIGHT_LABELS, TILE_HEIGHTS, TILE_WIDTHS, WIDTH_LABELS, duplicateTile, moveTileTo, type TileHeight, type TileWidth } from "@/lib/analytics/layout";
 import type {
   Aggregate,
+  Filter,
   ColumnInfo,
   Grain,
   Measure,
@@ -269,7 +273,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
 }
 
 /** What the dashboard is showing: its dates (and the preset they came from, if one was chosen) and slicer choices. */
-type Filters = { from: string; to: string; preset?: DatePreset | null; values: Record<string, string[]> };
+type Filters = { from: string; to: string; preset?: DatePreset | null; values: Record<string, string[]>; ranges?: Record<string, SlicerRange> };
 type DateContext = { today: string; financialYearEndMonth: number };
 type PivotExportFor = { organisationId: string; organisationName: string; filters: Filters };
 
@@ -580,7 +584,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
     const throughList = through && through.to === page.id && through.selection.tileId !== tile.id ? [through.selection] : [];
     const view: TileView | undefined = drill || selections.length || throughList.length ? { ...(drill ? { drill } : {}), ...(selections.length ? { selections } : {}), ...(throughList.length ? { through: throughList } : {}) } : undefined;
     const canPick = !editing && DRILLABLE.includes(tile.visual) && Boolean(tile.query?.groupBy) && !tile.query?.breakdown;
-    return { view, viewTiles: dashboard.tiles, highlight, onPick: canPick ? (value) => pick(tile, value) : undefined };
+    let ranges: Filter[] = [];
+    try {
+      ranges = rangeFilters(dashboard.settings.slicers.filter((slicer) => slicerOnPage(slicer, page.id)), shown.ranges ?? {});
+    } catch {
+      // A range still being typed: left out until it's a number or date.
+    }
+    const draftWhere = [...ranges, ...(page.filters ?? []).map((entry) => entry.filter)];
+    return { view, viewTiles: dashboard.tiles, highlight, draftWhere, onPick: canPick ? (value) => pick(tile, value) : undefined };
   };
   const drillPages = (pages ?? []).filter((entry) => entry.drillThrough && entry.id !== page.id);
   const drillThrough = (target: ReportPage) => {
@@ -716,6 +727,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         tables={tables.data?.tables ?? []}
         dates={dates}
         onSettings={(settings) => change({ ...dashboard, settings }, "change the dates and slicers", "settings")}
+        pageId={page.id}
+        pages={reportPages(pages)}
       />
 
       <ReportFreshnessLine organisationId={organisationId} dashboardId={dashboard.id} />
@@ -732,6 +745,19 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         }}
         onUpdate={(changed) => setPages({ pages: (pages?.length ? pages : [page]).map((entry) => (entry.id === changed.id ? changed : entry)), tiles: dashboard.tiles }, `change the ${changed.name || "page"} page`, `page-${changed.id}`)}
         onMove={(pageId, by) => setPages(movePage(pages, dashboard.tiles, pageId, by), "move a page")}
+        filterEditor={(shownPage) => (
+          <PageFilters
+            organisationId={organisationId}
+            tables={tables.data?.tables ?? []}
+            filters={shownPage.filters ?? []}
+            onChange={(next) => {
+              const copy = { ...shownPage };
+              delete copy.filters;
+              const changed = next.length ? { ...copy, filters: next } : copy;
+              setPages({ pages: (pages?.length ? pages : [page]).map((entry) => (entry.id === changed.id ? changed : entry)), tiles: dashboard.tiles }, `change the ${changed.name} page's filters`, `page-filters-${changed.id}`);
+            }}
+          />
+        )}
         onRemove={async (gone) => {
           const count = tilesOnPage(dashboard.tiles, pages, gone.id).length;
           const ok = await confirm(count ? `Remove the ${gone.name} page and its ${count} ${count === 1 ? "tile" : "tiles"}? Nothing is saved until you choose Save.` : `Remove the ${gone.name} page?`, { title: "Remove page?", confirmLabel: "Remove", danger: true });
@@ -868,6 +894,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                 <div>
                   <h2 className={shownTile.format?.card?.showTitle === false ? styles.visuallyHidden : styles.tileTitle} style={shownTile.format?.card?.showTitle === false ? undefined : look.title}>{tile.title}</h2>
                   {shownTile.format?.card?.subtitle ? <p className={styles.tileSubtitle} style={look.subtitle}>{shownTile.format.card.subtitle}</p> : null}
+                  {tile.dates ? <p className={styles.tileDates}>{tileDatesText(tile.dates, formatDate)}</p> : null}
                 </div>
                 {editing ? (
                   <div className={styles.tileTools}>
@@ -1089,6 +1116,108 @@ function ShareCard({ organisationId, dashboardId }: { organisationId: string; da
   );
 }
 
+/** A page's own filters (decision 758): one data source's tests, on every tile of the page whose table has the column. */
+function PageFilters({ organisationId, tables, filters, onChange }: { organisationId: string; tables: TableInfo[]; filters: PageFilter[]; onChange: (filters: PageFilter[]) => void }) {
+  const [table, setTable] = useState(filters[0]?.table ?? "");
+  const columns = tables.find((entry) => entry.name === table)?.columns ?? [];
+  // Rows being typed stay here; only complete ones go on the page.
+  const [draft, setDraft] = useState<Filter[]>(filters.map((entry) => entry.filter));
+  return (
+    <fieldset className={styles.slicerPages}>
+      <legend>Filters on this page</legend>
+      <p className={ui.muted}>Every tile on this page whose data has the column shows only these rows.</p>
+      <Field label="Data source">
+        <select value={table} onChange={(event) => { setTable(event.target.value); setDraft([]); onChange([]); }}>
+          <option value="">Choose a data source</option>
+          {tables.map((entry) => <option key={entry.name} value={entry.name}>{tableLabel(entry.name)}</option>)}
+        </select>
+      </Field>
+      {table ? (
+        <TileFilters
+          organisationId={organisationId}
+          table={table}
+          columns={columns}
+          filters={draft}
+          onChange={(next) => {
+            setDraft(next.slice(0, 6));
+            onChange(next.filter(filterComplete).slice(0, 6).map((filter) => {
+              const copy = { ...filter };
+              delete copy.join;
+              return { table, filter: copy };
+            }));
+          }}
+        />
+      ) : null}
+    </fieldset>
+  );
+}
+
+/** A slicer's settings in edit mode (decision 757): style, name, second level, pages and size. */
+function SlicerSettings({ slicer, type, columns, pages, onChange, onRemove }: { slicer: Slicer; type: string; columns: ColumnInfo[]; pages: ReportPage[]; onChange: (slicer: Slicer) => void; onRemove: () => void }) {
+  const set = (patch: Partial<Slicer>) => {
+    const next: Slicer = { ...slicer, ...patch };
+    for (const key of Object.keys(patch) as Array<keyof Slicer>) if (patch[key] === undefined) delete next[key];
+    onChange(next);
+  };
+  return (
+    <details className={styles.slicerSettings}>
+      <summary>Slicer settings</summary>
+      <div className={styles.slicerSettingsBody}>
+        <Field label="Name">
+          <input value={slicer.label} maxLength={60} onChange={(event) => set({ label: event.target.value })} />
+        </Field>
+        <Field label="Style">
+          <select value={slicer.style ?? "list"} onChange={(event) => {
+            const style = event.target.value as SlicerStyle;
+            const child = style === "hierarchy" ? columns.find((column) => column.name !== slicer.field && !isNumber(column.type) && !isDate(column.type) && column.type !== "BOOLEAN")?.name : undefined;
+            set({ style: style === "list" ? undefined : style, child });
+          }}>
+            {stylesFor(type).map((style) => <option key={style} value={style}>{SLICER_STYLE_LABELS[style]}</option>)}
+          </select>
+        </Field>
+        {slicer.style === "hierarchy" ? (
+          <Field label="Second level">
+            <select value={slicer.child ?? ""} onChange={(event) => set({ child: event.target.value })}>
+              {columnOptions(columns.filter((column) => column.name !== slicer.field && !isNumber(column.type) && !isDate(column.type) && column.type !== "BOOLEAN"))}
+            </select>
+          </Field>
+        ) : null}
+        <Field label="Size">
+          <select value={`${slicer.look?.size ?? ""}|${slicer.look?.width ?? ""}`} onChange={(event) => {
+            const [size, width] = event.target.value.split("|");
+            set({ look: size || width ? { ...(size ? { size: size as "small" | "large" } : {}), ...(width ? { width: "wide" as const } : {}) } : undefined });
+          }}>
+            <option value="|">Normal</option>
+            <option value="small|">Small</option>
+            <option value="large|">Large</option>
+            <option value="|wide">Wide</option>
+            <option value="large|wide">Large and wide</option>
+          </select>
+        </Field>
+        {pages.length > 1 ? (
+          <fieldset className={styles.slicerPages}>
+            <legend>Shows and filters on</legend>
+            <label className={ui.checkbox}>
+              <input type="checkbox" checked={!slicer.pages} onChange={(event) => set({ pages: event.target.checked ? undefined : pages.map((page) => page.id) })} /> Every page (in step)
+            </label>
+            {slicer.pages ? pages.map((page) => (
+              <label key={page.id} className={ui.checkbox}>
+                <input type="checkbox" checked={slicer.pages!.includes(page.id)} onChange={(event) => {
+                  const chosen = event.target.checked ? [...slicer.pages!, page.id] : slicer.pages!.filter((id) => id !== page.id);
+                  set({ pages: chosen.length === pages.length ? undefined : chosen.length ? chosen : slicer.pages });
+                }} /> {page.name}
+              </label>
+            )) : null}
+          </fieldset>
+        ) : null}
+        <div>
+          <Button size="small" variant="danger" onClick={onRemove}>Remove slicer</Button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function FilterBar({
   organisationId,
   settings,
@@ -1099,9 +1228,14 @@ function FilterBar({
   dates,
   onSettings,
   dashboardId,
+  pageId,
+  pages,
 }: {
   organisationId: string;
   dashboardId: string;
+  /** The page shown: only its slicers show (decision 757). */
+  pageId: string;
+  pages: ReportPage[];
   settings: DashboardSettings;
   filters: Filters;
   onChange: (filters: Filters) => void;
@@ -1111,10 +1245,8 @@ function FilterBar({
   onSettings: (settings: DashboardSettings) => void;
 }) {
   const [newSlicer, setNewSlicer] = useState("");
-  // Slicers pick from columns with a few values: text and Yes/No, grouped by where they come from (decision 577).
-  const slicerTables = tables
-    .map((table) => ({ table, columns: table.columns.filter((column) => !isNumber(column.type) && !isDate(column.type)) }))
-    .filter((entry) => entry.columns.length > 0);
+  // Any column: text and Yes/No as lists, numbers and dates as ranges (decisions 577, 757), grouped by where they come from.
+  const slicerTables = tables.filter((table) => table.columns.length > 0).map((table) => ({ table, columns: table.columns }));
   // The preset chosen, or the one these dates happen to be today, so the list shows where they came from.
   const preset = filters.preset ?? matchingPreset(filters, dates.today, dates.financialYearEndMonth);
   const presetName = DATE_PRESETS.find((entry) => entry.value === filters.preset)?.label;
@@ -1144,17 +1276,35 @@ function FilterBar({
       <Field label="To">
         <DateInput value={filters.to} onChange={(event) => onChange({ ...filters, to: event.target.value, preset: null })} />
       </Field>
-      {settings.slicers.map((slicer) => (
+      {settings.slicers.map((slicer, index) => (editing || slicerOnPage(slicer, pageId) ? (
         <SlicerControl
           key={`${slicer.table}.${slicer.field}`}
           organisationId={organisationId}
           dashboardId={dashboardId}
           slicer={slicer}
           chosen={filters.values[slicer.field] ?? []}
+          childChosen={slicer.child ? filters.values[slicer.child] ?? [] : undefined}
+          range={filters.ranges?.[slicer.field]}
           onChange={(values) => onChange({ ...filters, values: { ...filters.values, [slicer.field]: values } })}
-          onRemove={editing ? () => onSettings({ ...settings, slicers: settings.slicers.filter((entry) => entry !== slicer) }) : undefined}
+          onChildChange={slicer.child ? (values) => onChange({ ...filters, values: { ...filters.values, [slicer.child!]: values } }) : undefined}
+          onRange={(range) => {
+            const ranges = { ...filters.ranges };
+            if (range) ranges[slicer.field] = range;
+            else delete ranges[slicer.field];
+            onChange({ ...filters, ranges });
+          }}
+          settings={editing ? (
+            <SlicerSettings
+              slicer={slicer}
+              type={tables.find((table) => table.name === slicer.table)?.columns.find((column) => column.name === slicer.field)?.type ?? "VARCHAR"}
+              columns={tables.find((table) => table.name === slicer.table)?.columns ?? []}
+              pages={pages}
+              onChange={(next) => onSettings({ ...settings, slicers: settings.slicers.map((entry, at) => (at === index ? next : entry)) })}
+              onRemove={() => onSettings({ ...settings, slicers: settings.slicers.filter((entry) => entry !== slicer) })}
+            />
+          ) : undefined}
         />
-      ))}
+      ) : null))}
       {editing ? (
         <>
           <Field label="Add a slicer">
@@ -1177,7 +1327,9 @@ function FilterBar({
             disabled={!newSlicer}
             onClick={() => {
               const [table, field] = newSlicer.split(".");
-              onSettings({ ...settings, slicers: [...settings.slicers, { table, field, label: fieldLabel(field) }] });
+              const type = tables.find((entry) => entry.name === table)?.columns.find((column) => column.name === field)?.type ?? "VARCHAR";
+              const style = stylesFor(type)[0];
+              onSettings({ ...settings, slicers: [...settings.slicers, { table, field, label: fieldLabel(field), ...(style !== "list" ? { style } : {}) }] });
               setNewSlicer("");
             }}
           >
@@ -1192,78 +1344,6 @@ function FilterBar({
             Keep these dates
           </Button>
         </>
-      ) : null}
-    </div>
-  );
-}
-
-function SlicerControl({
-  organisationId,
-  dashboardId,
-  slicer,
-  chosen,
-  onChange,
-  onRemove,
-}: {
-  organisationId: string;
-  dashboardId: string;
-  slicer: Slicer;
-  chosen: string[];
-  onChange: (values: string[]) => void;
-  onRemove?: () => void;
-}) {
-  const values = useApiData<{ values: string[]; type?: string }>("/api/analytics/values", { organisationId, dashboardId, table: slicer.table, field: slicer.field });
-  // Yes/No columns show Yes and No; what's sent stays true and false (decision 577).
-  const show = (value: string) => (values.data?.type === "BOOLEAN" ? booleanText(value) : value);
-  const summary = chosen.length === 0 ? "All" : chosen.length === 1 ? show(chosen[0]) : `${chosen.length} chosen`;
-  const menu = useRef<HTMLDetailsElement>(null);
-  const [open, setOpen] = useState(false);
-  // A click elsewhere or Escape closes the list. The listeners go when it closes, however it closes, and with
-  // the page: before, closing it with its own button left one behind on the document for every opening (#330).
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (menu.current && !menu.current.contains(event.target as Node)) menu.current.open = false;
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !menu.current) return;
-      menu.current.open = false;
-      menu.current.querySelector("summary")?.focus();
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  return (
-    <div className={styles.slicer}>
-      <span className={styles.slicerLabel}>{slicer.label}</span>
-      <details ref={menu} className={styles.slicerMenu} onToggle={(event) => setOpen(event.currentTarget.open)}>
-        <summary>{summary}</summary>
-        <div className={styles.slicerList} role="group" aria-label={slicer.label}>
-          {(values.data?.values ?? []).map((value) => (
-            <label key={value} className={ui.checkbox}>
-              <input
-                type="checkbox"
-                checked={chosen.includes(value)}
-                onChange={(event) => onChange(event.target.checked ? [...chosen, value] : chosen.filter((entry) => entry !== value))}
-              />{" "}
-              {show(value)}
-            </label>
-          ))}
-          {chosen.length ? (
-            <Button size="small" variant="secondary" onClick={() => onChange([])}>
-              Show all
-            </Button>
-          ) : null}
-        </div>
-      </details>
-      {onRemove ? (
-        <Button size="small" variant="danger" onClick={onRemove}>
-          Remove
-        </Button>
       ) : null}
     </div>
   );
@@ -1292,6 +1372,8 @@ type TileInteraction = {
   viewTiles?: Tile[];
   onPick?: (value: string | null) => void;
   highlight?: { value: string | null } | null;
+  /** For a draft tile: its page's filters and range slicers, and dates that are its own (decisions 757-758). */
+  draftWhere?: Filter[];
 };
 type TileBodyProps = { organisationId: string; dashboardId: string; tile: Tile; filters: Filters; asSaved: boolean; onAction?: (action: ButtonAction, target?: string) => void } & TileInteraction;
 
@@ -1305,8 +1387,11 @@ function TileBody(props: TileBodyProps) {
   return <QueryTileBody {...props} />;
 }
 
-function QueryTileBody({ organisationId, dashboardId, tile, filters, asSaved, view, viewTiles, onPick, highlight }: TileBodyProps) {
-  const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, !asSaved && tile.visual === "table" && tile.format?.table?.totals === true, view ? { view, tiles: viewTiles, drill: tile.drill } : undefined);
+function QueryTileBody({ organisationId, dashboardId, tile, filters: reportFilters, asSaved, view, viewTiles, onPick, highlight, draftWhere }: TileBodyProps) {
+  const yearEnd = useContext(YearEndMonth);
+  // A tile with its own dates keeps them (the server does this for saved tiles).
+  const filters = !asSaved && tile.dates ? { ...reportFilters, ...effectiveDates(tile.dates, reportFilters, todayInBrowser(), yearEnd) } as Filters : reportFilters;
+  const state = useTileResult(organisationId, tile.query, filters, asSaved ? { dashboardId, tileId: tile.id } : undefined, !asSaved && tile.visual === "table" && tile.format?.table?.totals === true, view || draftWhere?.length ? { view, tiles: viewTiles, drill: tile.drill, where: draftWhere } : undefined);
   // Drilled, the chart shows another level: say so to the chart (its projection works on what's shown).
   const shownTile = drilledTile(tile, view?.drill);
   const { current } = useWorkspace();
@@ -1979,6 +2064,9 @@ function TileEditor({
   // Drill-down levels and how clicks change other tiles (decisions 754-755).
   const [drill, setDrill] = useState<TileDrill | undefined>(tile?.drill);
   const [interactions, setInteractions] = useState<Record<string, InteractionMode>>(tile?.interactions ?? {});
+  // Its own dates (decision 758).
+  const [tileDates, setTileDates] = useState<TileDates | undefined>(tile?.dates);
+  const yearEndMonth = useContext(YearEndMonth);
   const [savedVersion, setSavedVersion] = useState(0);
   // The panel's tab, specialist chart types and advanced settings (#387, decisions 750-751).
   const [tab, setTab] = useState<PanelTab>("data");
@@ -2001,7 +2089,7 @@ function TileEditor({
   const pivotRows = query.pivot?.rows ?? [];
   const subColumns = query.pivot?.subColumns ?? [];
   const usedPivotFields = new Set([...pivotRows.map((dimension) => dimension.field), ...(query.pivot?.column ? [query.pivot.column.field] : []), ...subColumns.map((dimension) => dimension.field)]);
-  const preview = useTileResult(organisationId, query.table ? query : null, filters, undefined, visual === "table" && format?.table?.totals === true);
+  const preview = useTileResult(organisationId, query.table ? query : null, tileDates && query.dateField ? { ...filters, ...effectiveDates(tileDates, filters, todayInBrowser(), yearEndMonth) } as Filters : filters, undefined, visual === "table" && format?.table?.totals === true);
   // The preview's groups, for colouring a group and limiting a date axis (#376).
   const groupValues = preview?.result && query.groupBy ? preview.result.rows.map((row) => row.category) : null;
 
@@ -2363,6 +2451,31 @@ function TileEditor({
             {columnOptions(columns.filter((column) => isDate(column.type)))}
           </select>
         </Field>
+        {query.dateField ? (
+          <Field label="Dates for this chart" hint={tileDates ? "This chart keeps these dates whatever the report's dates are." : undefined}>
+            <select
+              value={!tileDates ? "" : "preset" in tileDates ? tileDates.preset : "fixed"}
+              onChange={(event) => {
+                const value = event.target.value;
+                setTileDates(!value ? undefined : value === "fixed" ? { from: filters.from || null, to: filters.to || null } : isDatePreset(value) ? { preset: value } : undefined);
+              }}
+            >
+              <option value="">The report&apos;s dates</option>
+              {DATE_PRESETS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
+              <option value="fixed">Fixed dates</option>
+            </select>
+          </Field>
+        ) : null}
+        {query.dateField && tileDates && !("preset" in tileDates) ? (
+          <>
+            <Field label="From">
+              <DateInput value={tileDates.from ?? ""} onChange={(event) => setTileDates({ ...tileDates, from: event.target.value || null })} />
+            </Field>
+            <Field label="To">
+              <DateInput value={tileDates.to ?? ""} onChange={(event) => setTileDates({ ...tileDates, to: event.target.value || null })} />
+            </Field>
+          </>
+        ) : null}
         {visual !== "pivot" ? <Field label="Order by">
           <select
             value={`${query.sort.by}-${query.sort.direction}`}
@@ -2608,6 +2721,7 @@ function TileEditor({
               ...(format ? { format } : {}),
               ...(drillUsable && drill ? { drill } : {}),
               ...(DRILLABLE.includes(visual) && Object.keys(interactions).length ? { interactions } : {}),
+              ...(tileDates && query.dateField ? { dates: tileDates } : {}),
             })
           }
         >

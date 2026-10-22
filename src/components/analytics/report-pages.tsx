@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ColourInput } from "@/components/analytics/colour-input";
 import { Button, Field, ui } from "@/components/ui";
 import { adaptForDark } from "@/lib/charts/colour-check";
@@ -22,6 +22,7 @@ export function PageTabs({
   onMove,
   onRemove,
   panelId,
+  filterEditor,
 }: {
   pages: ReportPage[] | undefined;
   current: string;
@@ -33,6 +34,8 @@ export function PageTabs({
   onRemove?: (page: ReportPage) => void;
   /** The element the tabs control (the page's tiles). */
   panelId: string;
+  /** Edit mode: the page's own filters (decision 758). */
+  filterEditor?: (page: ReportPage) => ReactNode;
 }) {
   const list = reportPages(pages);
   const shown = list.filter((page) => editing || !page.hidden || page.id === current);
@@ -117,6 +120,7 @@ export function PageTabs({
             <input type="checkbox" checked={page.drillThrough === true} onChange={(event) => onUpdate({ ...withoutKey(page, "drillThrough"), ...(event.target.checked ? { drillThrough: true } : {}) })} />{" "}
             Drill-through page: a group chosen on another page can open this page, showing only that group
           </label>
+          {filterEditor ? filterEditor(page) : null}
           <div className={ui.rowButtons}>
             <Button size="small" variant="secondary" disabled={index === 0} onClick={() => onMove?.(page.id, -1)} aria-label={`Move ${page.name} earlier`}>Move earlier</Button>
             <Button size="small" variant="secondary" disabled={index === list.length - 1} onClick={() => onMove?.(page.id, 1)} aria-label={`Move ${page.name} later`}>Move later</Button>

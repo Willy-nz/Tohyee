@@ -1,5 +1,6 @@
 import { ValidationError } from "@/lib/errors";
 import { hexColour } from "@/lib/analytics/chart-format";
+import type { PageFilter } from "@/lib/analytics/report-filters";
 
 /**
  * Report pages (#376 phase 3, decision 753; Power BI's report pages,
@@ -29,6 +30,8 @@ export type ReportPage = {
   hidden?: boolean;
   /** Other pages' groups can be drilled through to it, showing it filtered to the group (decision 756). */
   drillThrough?: boolean;
+  /** Filters on every tile of the page whose table has the column (decision 758). */
+  filters?: PageFilter[];
 };
 
 export const MAX_PAGES = 12;
@@ -61,7 +64,8 @@ export function parsePages(input: unknown): ReportPage[] | undefined {
   });
   if (pages.length && pages.every((page) => page.hidden)) throw new ValidationError("At least one page has to show in the page tabs.");
   // One page with nothing set is the same as no pages.
-  if (pages.length === 1 && !pages[0].width && !pages[0].background && !pages[0].drillThrough && pages[0].name === "Page 1") return undefined;
+  const firstFilters = (input[0] as Record<string, unknown> | undefined)?.filters;
+  if (pages.length === 1 && !pages[0].width && !pages[0].background && !pages[0].drillThrough && pages[0].name === "Page 1" && !(Array.isArray(firstFilters) && firstFilters.length)) return undefined;
   return pages.length ? pages : undefined;
 }
 
