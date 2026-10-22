@@ -176,7 +176,8 @@
   padding: 7px 9px;
   border-bottom: 1px solid var(--border);
   text-align: left;
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere: a column is never squeezed narrower than its words, so a wide preview scrolls instead. */
+  overflow-wrap: break-word;
   white-space: pre-wrap;
 }
 

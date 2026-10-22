@@ -52,6 +52,20 @@ export const STEP_ORDER: Array<ShapeStep["type"]> = [
   "append",
 ];
 
+/** Date parts, in the order they are offered. (Here, not in shaping.ts, so the page doesn't load DuckDB.) */
+export const DATE_PARTS: readonly DatePart[] = [
+  "year",
+  "quarter",
+  "month",
+  "month_name",
+  "week",
+  "day",
+  "day_of_week",
+  "day_name",
+  "financial_year",
+  "financial_quarter",
+];
+
 export const DATE_PART_LABELS: Record<DatePart, string> = {
   year: "Year",
   quarter: "Quarter (1-4)",

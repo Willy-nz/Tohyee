@@ -1,7 +1,7 @@
 import { ValidationError } from "@/lib/errors";
 import { DECIMAL_RESULT, decimalResultSql, exactAverageSql, exactDivideSql } from "@/lib/analytics/decimal-sql";
 import { COLUMN_TYPES, type ColumnKind } from "@/lib/analytics/engine";
-import { STEP_LABELS } from "@/lib/analytics/shaping-labels";
+import { DATE_PARTS, STEP_LABELS } from "@/lib/analytics/shaping-labels";
 import { formulaKeepsMoney, formulaRefs, parseFormula, type FormulaNode } from "@/lib/analytics/formula";
 
 export type ShapeColumn = { name: string; type: string };
@@ -64,18 +64,6 @@ export type ShapeStep =
   | { type: "index"; name: string; start: number; increment: number }
   | { type: "formula"; name: string; formula: string };
 
-export const DATE_PARTS: readonly DatePart[] = [
-  "year",
-  "quarter",
-  "month",
-  "month_name",
-  "week",
-  "day",
-  "day_of_week",
-  "day_name",
-  "financial_year",
-  "financial_quarter",
-];
 
 const FILTER_TESTS = [
   "is",

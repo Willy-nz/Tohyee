@@ -6,11 +6,12 @@ import {
   AGGREGATE_LABELS,
   COLUMN_KIND_LABELS,
   columnNameForValue,
+  DATE_PARTS,
   DATE_PART_LABELS,
   datePartName,
   TEST_LABELS,
 } from "@/lib/analytics/shaping-labels";
-import { DATE_PARTS, type ShapeColumn, type ShapeOutput, type ShapeStep, type ShapeTest } from "@/lib/analytics/shaping";
+import type { ShapeColumn, ShapeOutput, ShapeStep, ShapeTest } from "@/lib/analytics/shaping";
 import styles from "./analytics-shaping.module.css";
 
 /** The steps with a form; the others are edited as their settings (JSON), as before. */
