@@ -2217,6 +2217,14 @@ that something happened.
   let the reader show one of its values at a time, or group it by other
   fields its author chose (Interactions tab). Only the report's own steps
   and choices are accepted from readers.
+- **Analytics: related tables** (#376 phase 4, decision 774, tenant
+  migration 0185, examples RL1-RL5). Under a chart's data source, **Related
+  tables** relates each row of the chart's table to one row of another
+  (invoice lines to their contact or item), so its fields can be used as
+  `customer.region` and the like. It's checked on the data each time:
+  a table with two rows for one match is refused (amounts would count
+  twice), a related table's numbers aren't added up, and rows with no match
+  are counted in a note. Blending isn't built.
 - **Analytics: one access check for every output** (#387, decision 697).
   The access contract in [ANALYTICS-STUDIO.md](ANALYTICS-STUDIO.md) lists how
   figures, tooltips, totals, drill-through rows, slicer values, CSV and

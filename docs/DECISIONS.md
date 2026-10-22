@@ -7891,3 +7891,41 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      (the click couldn't say which field it means); the default grouping
      still does. Choices and slider values aren't kept (like drilling) and
      aren't part of bookmarks yet.
+
+### Relationships between tables (#376 phase 4; decision 774; examples RL1-RL5)
+
+774. **Many-to-one relationships, checked on the data every time; no
+     blending yet** (22 October 2026, #376 phase 4 and #387's join rules;
+     Power BI's star model (single direction, many-to-one) as the reference;
+     not yet reviewed by Jess). Under a chart's data source, **Related
+     tables** says that each row of the chart's table (the fact table, e.g.
+     invoice lines) matches one row of another table (a dimension, e.g.
+     contacts or items) on a column of each, under a name (tenant migration
+     0185, `analytics_relationships`; bookkeepers and up). The fact table
+     then has the dimension's fields as `<name>.<field>` ("Customer ›
+     billing country") for grouping, filters, slicers, pivots,
+     drill-through and counting. **Checks** (reusing #399's Merge check,
+     decision 693): when it's saved and again before every answer that
+     uses it, the dimension must have at most one row for each key (blank
+     keys never match); otherwise it's refused, saying which key repeats and
+     that one invoice of 100.00 with three lines would become 300.00. So
+     one-to-many and many-to-many are refused (relating invoices to their
+     lines is refused; lines to their invoice is allowed). A fact row with no
+     match keeps its amounts and has blank dimension fields, and the answer
+     says how many ("2 of 6 lines rows have no matching invoices row").
+     **A dimension's numbers are never added up through it** (its total or
+     average would repeat on each matching fact row): counting, counting
+     different values, smallest and largest are allowed, and so is a fact
+     number times a dimension number (quantity × the item's price, worked
+     out once per row). A tile that doesn't use a relationship isn't joined,
+     so a dimension that goes wrong after a reload only stops the tiles that
+     use it. One hop only (no snowflakes) and one direction (the fact's
+     slicers and filters don't filter the dimension's own tiles); a slicer
+     on a dimension's field is added on the fact table's `<name>.<field>`.
+     Relationships touching a farm table a member can't use (decision 744)
+     are left out for that member. A relationship used by a report or saved
+     value can't be removed. Looker Studio's **blending** (two tables each
+     added up on their own, then put side by side by a key) isn't built:
+     the checked relationship covers the star case, and blending needs its
+     own rules for rows on one side only; it can follow if a report needs
+     two fact tables side by side.

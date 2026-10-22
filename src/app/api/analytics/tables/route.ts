@@ -3,7 +3,7 @@ import { describeTables } from "@/lib/analytics/dashboards";
 import { hiddenFarmTables } from "@/lib/analytics/farm-access";
 import { analyticsMember } from "@/lib/analytics/http";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { listFields } from "@/lib/analytics/calculated-fields";
+import { loadModel } from "@/lib/analytics/model";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 
 /** The organisation's loaded tables and their columns. */
@@ -14,7 +14,7 @@ export const GET = route(async (request) => {
     actor,
     async (tx) => {
       await requireAnalytics(tx);
-      return { hidden: await hiddenFarmTables(tx), fields: await listFields(tx) };
+      return { hidden: await hiddenFarmTables(tx), fields: await loadModel(tx) };
     },
     { readOnly: true },
   );

@@ -16090,6 +16090,38 @@ Tested in `tests/unit/analytics-measure-definitions.test.ts` (MD1-MD3,
 MD6), `tests/unit/analytics-merge-checks.test.ts` (MD4) and
 `tests/integration/sales-platform-orders.test.ts` (MD5).
 
+## Analytics: relationships between tables (examples RL1-RL5; as Power BI does, not yet reviewed)
+
+Issue #376 phase 4 asked for relationships (a simple star model) so a tile
+can use fields from two tables, and #387 asked that joins never repeat
+amounts (MD4). Decision 774, following Power BI's many-to-one
+relationships. **As Power BI does, not yet reviewed.** Nothing is posted.
+
+Setup: invoices INV-1 (id 1, Kererū Café, total **100.00**) and INV-2 (id
+2, Tūī Books, **50.00**); lines 30.00, 30.00 (P1) and 40.00 (2 × P2) on
+INV-1, 50.00 (P2) on INV-2, 5.00 on a missing invoice 9 and 1.00 with no
+invoice; products P1 Mug **30.00** and P2 Bowl **20.00**.
+
+- **RL1** Lines related to their invoice (lines.invoice_id → invoices.id,
+  named invoice): sales by invoice.customer Kererū Café **100.00** (3
+  lines, 1 invoice), Tūī Books **50.00**, blank **6.00** (the 2 lines
+  with no invoice), with the note "2 of 6 lines rows have no matching
+  invoices row". Filtered to Kererū Café by product.name: Bowl **40.00**,
+  Mug **60.00**.
+- **RL2** The invoice's total on its lines is refused as a sum or average
+  (it would be **300.00** for INV-1); its largest is **100.00**; quantity
+  × product.price at list price for Kererū Café is **100.00**.
+- **RL3** Invoices related to their lines is refused (invoice 1 has 3
+  lines). If a reload gives invoices two rows for id 1, tiles using the
+  relationship are refused until it's fixed; tiles that don't use it
+  (sales by product: **66.00** and **90.00**) carry on.
+- **RL4** The lines table lists invoice.number, invoice.customer,
+  invoice.total, product.name and product.price (not the keys again).
+- **RL5** Related fields are shown as "Customer › billing country".
+
+Tested in `tests/unit/analytics-relationships.test.ts` and
+`tests/integration/analytics-relationships.test.ts`.
+
 ## Analytics: calculated fields on a data source (examples CF1-CF6; as Looker Studio does, not yet reviewed)
 
 Issue #376 phase 4 asked for calculated fields on a source, Looker Studio

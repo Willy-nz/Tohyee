@@ -12,6 +12,7 @@ import { FormulaField, SavedValuesPicker, SaveValueButton, ValueKindFields, Valu
 import { applyChoice, choiceFormat, type TileChoice, type TileSwitches } from "@/lib/analytics/parameters";
 import { ParameterControls, SwitchSettings } from "@/components/analytics/parameter-controls";
 import { CalculatedFieldsPanel } from "@/components/analytics/calculated-fields-panel";
+import { RelationshipsPanel } from "@/components/analytics/relationships-panel";
 import { PeriodField, QuickCalcField, quickChoices, quickLabel } from "@/components/analytics/quick-calc-field";
 import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
@@ -2451,6 +2452,7 @@ function TileEditor({
           </select>
         </Field>
         <CalculatedFieldsPanel organisationId={organisationId} table={query.table} canEdit={can("bookkeeper")} onChanged={() => onTablesChanged?.()} />
+        <RelationshipsPanel organisationId={organisationId} table={query.table} tables={tables} canEdit={can("bookkeeper")} onChanged={() => onTablesChanged?.()} />
         {visual === "pivot" ? (
           <>
             {pivotRows.map((dimension, index) => (

@@ -59,6 +59,9 @@ function fieldWords(name: string, capital: boolean): string {
 
 /** "tracking_department" -> "Tracking department", "gst" -> "GST", "contact_id" -> "Contact ID". */
 export function fieldLabel(name: string): string {
+  // A related table's field (decision 774): "customer.billing_country" -> "Customer › billing country".
+  const dot = name.indexOf(".");
+  if (dot > 0) return `${fieldWords(name.slice(0, dot), true)} › ${fieldWords(name.slice(dot + 1), false)}`;
   return fieldWords(name, true);
 }
 
