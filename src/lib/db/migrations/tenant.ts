@@ -17397,7 +17397,7 @@ create table analytics_fields (
   },
   {
     version: "0185",
-    name: "analytics_relationships",
+    name: "analytics_relationships_and_field_settings",
     sql: `
 -- Relationships between loaded tables (#376 phase 4, decision 774): each
 -- row of fact_table matches at most one row of dimension_table on the key
@@ -17415,6 +17415,18 @@ create table analytics_relationships (
   created_at timestamptz not null default now(),
   unique (fact_table, name),
   check (fact_table <> dimension_table)
+);
+-- Field settings on a loaded table (#376 phase 4, decision 775, used from
+-- the next change): how a column is sorted (by another column), added up
+-- by default, formatted, and which folder and description it has in the
+-- field list. One row per table and column; nothing here changes data.
+create table analytics_field_settings (
+  table_name text not null check (length(table_name) between 1 and 120),
+  field_name text not null check (length(field_name) between 1 and 120),
+  settings jsonb not null check (jsonb_typeof(settings) = 'object'),
+  updated_by_email text not null,
+  updated_at timestamptz not null default now(),
+  primary key (table_name, field_name)
 );
 `,
   },
