@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 20 October 2026:** the latest packaged
-release is [v0.11.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.11.0),
+**Release availability, checked 22 October 2026:** the latest packaged
+release is [v0.12.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.12.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -65,6 +65,17 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.12.0: Analytics like Power BI, several farms and backups you can prove
+
+| Area | What's new |
+| --- | --- |
+| **Analytics** | Themes and formatting, many more chart types and maps, report pages, click-to-filter, drill-down by financial year, bookmarks, quick calculations, year to date and last year, calculated fields, what-if sliders, relationships between tables, and more Prepare data steps. Totals, currencies and balances are worked out correctly. |
+| **Several farms** | A shared farm selector, all farms compared, benchmarks by farm, and staff kept to the farms chosen for them. |
+| **Backups** | Checked backups with an honest status, a recovery kit and a restore wizard for a replacement computer. |
+| **Tax** (not yet reviewed by an accountant) | Income tax on its own pages, and IRD account files imported and reviewed before they count. |
+| **My mail** | File an email attachment into a bill, invoice, contact or other record, with a preview first. |
+| **Menus** | Accounting, Tax and Settings menus, and no mountain photo. |
 
 ## New in 0.11.0: farm Home, private mail and better Analytics
 
