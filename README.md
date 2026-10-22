@@ -75,6 +75,7 @@ what you can use; developer and server setup instructions follow it.
 | **Backups** | Checked backups with an honest status, a recovery kit and a restore wizard for a replacement computer. |
 | **Tax** (not yet reviewed by an accountant) | Income tax on its own pages, and IRD account files imported and reviewed before they count. |
 | **My mail** | File an email attachment into a bill, invoice, contact or other record, with a preview first. |
+| **Sign in** | Sign in with Google for invited people, alongside passwords. |
 | **Menus** | Accounting, Tax and Settings menus, and no mountain photo. |
 
 ## New in 0.11.0: farm Home, private mail and better Analytics
