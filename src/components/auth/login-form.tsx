@@ -84,7 +84,9 @@ export function LoginForm({
           <>
             <div>
               <h1 className={styles.title}>Sign in</h1>
-              <p className={styles.text}>Use the email and password your server admin set up for you.</p>
+              <p className={styles.text}>
+                {next.startsWith("/connect/") ? "Sign in to connect your AI app. " : ""}Use the email and password your server admin set up for you.
+              </p>
             </div>
             {error ? <Notice tone="error">{error}</Notice> : null}
             <form className={styles.form} onSubmit={(event) => void onSubmit(event)}>

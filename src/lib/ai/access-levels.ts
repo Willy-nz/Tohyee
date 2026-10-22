@@ -37,6 +37,10 @@ export const AI_ACCESS_LEVEL_HELP: Record<AiAccessLevel, string> = {
 export const FULL_ACCESS_WARNING =
   "A Full access key can post spend money, receive money, payments, transfers, credit notes, refunds and depreciation into your books without anyone checking each one first. Anyone who gets the key can do the same, as you. Make one only for an AI you trust, keep the key secret, and revoke it when you stop using it.";
 
+/** The same warning on the consent screen, for an AI app that signs in (#427, decision 819). */
+export const FULL_ACCESS_CONNECTION_WARNING =
+  "With Full access, the app can post spend money, receive money, payments, transfers, credit notes, refunds and depreciation into your books without anyone checking each one first, as you. Give it only to an AI you trust, and disconnect it when you stop using it.";
+
 const RANK: Record<AiAccessLevel, number> = { read: 0, draft: 1, post: 2, full: 3 };
 
 /**

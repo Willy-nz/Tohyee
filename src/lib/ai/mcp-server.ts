@@ -5,7 +5,7 @@ import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
 import { privateMailTools } from "@/lib/ai/private-mail-tools";
 import type { CallToolResult, McpServer, ToolContent } from "@/lib/ai/mcp-protocol";
 import { ToolFileAnswer } from "@/lib/ai/tools";
-import type { AiTokenIdentity } from "@/lib/ai/tokens";
+import { aiKeyVia, type AiTokenIdentity } from "@/lib/ai/tokens";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { HttpError } from "@/lib/errors";
@@ -23,10 +23,7 @@ function fileContent(file: ToolFileAnswer["file"]): ToolContent {
     : { type: "resource", resource: { uri: file.uri, mimeType: file.contentType, blob: data } };
 }
 
-/** How an AI key shows in the history and on drafts: AI key "Claude on my laptop". */
-export function aiKeyVia(identity: Pick<AiTokenIdentity, "tokenName">): string {
-  return `AI key "${identity.tokenName}"`;
-}
+export { aiKeyVia } from "@/lib/ai/tokens";
 
 const LEVEL_WORDS = {
   read: "You can look things up but not change anything.",

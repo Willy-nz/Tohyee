@@ -3,10 +3,13 @@
  * and the browser (no Node modules here).
  */
 
-/** Where to go after signing in: only Tohyee's own pages, never another site (the login page's rule). */
+/**
+ * Where to go after signing in: only Tohyee's own pages, never another site
+ * (the login page's rule), including an AI app's consent screen (#427).
+ */
 export function safeNextPath(value: unknown): string {
   const next = typeof value === "string" ? value : "";
-  return /^\/(operations|server)(\/[A-Za-z0-9_\-/]*)?$/.test(next) ? next : "/operations";
+  return /^\/(operations|server)(\/[A-Za-z0-9_\-/]*)?$/.test(next) || /^\/connect\/[A-Za-z0-9_-]{43}$/.test(next) ? next : "/operations";
 }
 
 /**

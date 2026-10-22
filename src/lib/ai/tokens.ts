@@ -9,18 +9,30 @@ import { requireId, requireString } from "@/lib/validation";
 import { type AiAccessLevel, effectiveAccessLevel, isAiAccessLevel } from "@/lib/ai/access-levels";
 import { aiTokenDisplayPrefix, AI_TOKEN_PREFIX, hashAiToken, newAiToken } from "@/lib/ai/token-format";
 import { ValidationError } from "@/lib/errors";
+import { redirectHost } from "@/lib/ai/oauth/format";
 
 /** At most this many keys that aren't revoked, per person per organisation (decision 341). */
 export const MAX_ACTIVE_AI_TOKENS = 10;
 /** last_used_at is written at most this often per key. */
 const LAST_USED_EVERY_MS = 60_000;
 
-/** A key as the AI page lists it. Never includes the key or its hash. */
+/**
+ * A key, or an AI app connected by signing in (a "connection", #427,
+ * decision 811), as the AI page lists it. Never includes a key, token or
+ * hash.
+ */
 export type AiAccessToken = {
   id: string;
+  /** "key" for a key made on the AI page; "connection" for an app that signed in. */
+  kind: "key" | "connection";
+  /** The key's name, or the app's name as it gave it (cleaned). */
   name: string;
-  /** e.g. "tohyee_ai_abcd1234" (the start of the key). */
-  startsWith: string;
+  /** e.g. "tohyee_ai_abcd1234" (the start of the key); null for a connection. */
+  startsWith: string | null;
+  /** For a connection: where it sends people back to after signing in (e.g. "claude.ai"). */
+  appHost: string | null;
+  /** For a connection: it hasn't been used for 60 days, so it can't get new tokens (it has to sign in again). */
+  expired: boolean;
   /** What it may do (decision 346), before the owner's role caps it. */
   accessLevel: AiAccessLevel;
   createdAt: string;
@@ -30,21 +42,31 @@ export type AiAccessToken = {
 
 type TokenRow = {
   id: string;
+  kind: "key" | "connection";
   name: string;
-  token_prefix: string;
+  token_prefix: string | null;
+  redirect_uri: string | null;
+  expired: boolean;
   access_level: AiAccessLevel;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
 };
 
-const TOKEN_COLUMNS = "id::text, name, token_prefix, access_level, created_at, last_used_at, revoked_at";
+/** A connection has expired when it has no access token left and no unused refresh token that hasn't run out. */
+const TOKEN_COLUMNS = `ai_access_tokens.id::text, kind, name, token_prefix, redirect_uri, access_level, created_at, last_used_at, revoked_at,
+  (kind = 'connection' and not exists (
+     select 1 from oauth_tokens o where o.connection_id = ai_access_tokens.id and o.expires_at > now() and (o.kind = 'access' or o.used_at is null)
+   )) as expired`;
 
 function toToken(row: TokenRow): AiAccessToken {
   return {
     id: row.id,
+    kind: row.kind,
     name: row.name,
-    startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}`,
+    startsWith: row.token_prefix ? `${AI_TOKEN_PREFIX}${row.token_prefix}` : null,
+    appHost: row.redirect_uri ? redirectHost(row.redirect_uri) : null,
+    expired: row.kind === "connection" && row.expired,
     accessLevel: row.access_level,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
@@ -52,12 +74,12 @@ function toToken(row: TokenRow): AiAccessToken {
   };
 }
 
-/** The signed-in person's own keys for one organisation, newest first. */
+/** The signed-in person's own keys and connections for one organisation, newest first. */
 export async function listAiTokens(auth: AuthContext, organisationId: string): Promise<AiAccessToken[]> {
   const result = await coreQuery<TokenRow>(
     `select ${TOKEN_COLUMNS} from ai_access_tokens
       where organisation_id = $1 and user_id = $2
-      order by revoked_at is not null, id desc`,
+      order by revoked_at is not null, ai_access_tokens.id desc`,
     [organisationId, auth.user.id],
   );
   return result.rows.map(toToken);
@@ -90,7 +112,7 @@ export async function createAiToken(
     await client.query("select pg_advisory_xact_lock(hashtext($1))", [`ai-tokens:${organisationId}:${auth.user.id}`]);
     const active = await client.query<{ count: string }>(
       `select count(*)::text as count from ai_access_tokens
-        where organisation_id = $1 and user_id = $2 and revoked_at is null`,
+        where organisation_id = $1 and user_id = $2 and revoked_at is null and kind = 'key'`,
       [organisationId, auth.user.id],
     );
     if (Number(active.rows[0].count) >= MAX_ACTIVE_AI_TOKENS) {
@@ -116,14 +138,14 @@ export async function createAiToken(
   return { token, key };
 }
 
-/** Revokes one of the signed-in person's own keys. Revoking twice is fine. */
+/** Revokes one of the signed-in person's own keys, or disconnects one of their connections (decision 821). Revoking twice is fine. */
 export async function revokeAiToken(auth: AuthContext, organisationId: string, tokenIdInput: unknown): Promise<AiAccessToken> {
   const tokenId = requireId(tokenIdInput, "tokenId");
   return withCoreTransaction(async (client) => {
     const found = await client.query<TokenRow>(
       `select ${TOKEN_COLUMNS} from ai_access_tokens
-        where id = $1 and organisation_id = $2 and user_id = $3
-        for update`,
+        where ai_access_tokens.id = $1 and organisation_id = $2 and user_id = $3
+        for update of ai_access_tokens`,
       [tokenId, organisationId, auth.user.id],
     );
     const row = found.rows[0];
@@ -134,7 +156,7 @@ export async function revokeAiToken(auth: AuthContext, organisationId: string, t
       [tokenId],
     );
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
-      eventType: "ai_access_token.revoked",
+      eventType: row.kind === "connection" ? "ai_connection.disconnected" : "ai_access_token.revoked",
       entityType: "organisation",
       entityId: organisationId,
       details: { tokenId, name: row.name },
@@ -143,9 +165,11 @@ export async function revokeAiToken(auth: AuthContext, organisationId: string, t
   });
 }
 
-/** Who an AI key acts as, when it's still good. */
+/** Who an AI key (or connection) acts as, when it's still good. */
 export type AiTokenIdentity = {
   tokenId: string;
+  /** A key, or an app connected by signing in (decision 811); the history names them differently. */
+  kind: "key" | "connection";
   tokenName: string;
   /** The level the key was made with. */
   accessLevel: AiAccessLevel;
@@ -156,6 +180,15 @@ export type AiTokenIdentity = {
 };
 
 /**
+ * How a key or connection shows in the history and on drafts: AI key
+ * "Claude on my laptop", or AI app "Claude" for an app that signed in
+ * (decision 822). An app's name is its own claim, so "AI app" says what it is.
+ */
+export function aiKeyVia(identity: Pick<AiTokenIdentity, "tokenName"> & { kind?: AiTokenIdentity["kind"] }): string {
+  return identity.kind === "connection" ? `AI app "${identity.tokenName}"` : `AI key "${identity.tokenName}"`;
+}
+
+/**
  * Looks a key up (by its hash). It works only while it isn't revoked, its
  * owner's login is active, and they're still a member of the organisation
  * (viewer or higher, with their current role). Anything else is null, and
@@ -163,24 +196,40 @@ export type AiTokenIdentity = {
  * checked when its transaction opens.
  */
 export async function authenticateAiToken(token: string): Promise<AiTokenIdentity | null> {
-  const found = await coreQuery<{
-    id: string;
-    name: string;
-    organisation_id: string;
-    user_id: string;
-    email: string;
-    display_name: string;
-    last_used_at: string | null;
-    access_level: AiAccessLevel;
-  }>(
-    `select t.id::text, t.name, t.organisation_id, t.user_id, u.email, u.display_name, t.last_used_at, t.access_level
+  return grantIdentity("t.token_hash = $1 and t.kind = 'key'", [hashAiToken(token)]);
+}
+
+/** The row a key or a connection's token leads to, and the person it acts as. */
+export type GrantRow = {
+  id: string;
+  kind: "key" | "connection";
+  name: string;
+  organisation_id: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  last_used_at: string | null;
+  access_level: AiAccessLevel;
+  resource: string | null;
+};
+
+/**
+ * The identity for the key or connection `where` finds (on `ai_access_tokens
+ * t`), with every check a key has (decision 341): not revoked, the person's
+ * login active, still a member (viewer or higher) of a ready organisation,
+ * with their role now. A connection's tokens use this too, so a connection
+ * ends exactly when a key would (decision 820).
+ */
+export async function grantIdentity(where: string, values: unknown[], extra: (row: GrantRow) => boolean = () => true): Promise<AiTokenIdentity | null> {
+  const found = await coreQuery<GrantRow>(
+    `select t.id::text, t.kind, t.name, t.organisation_id, t.user_id, u.email, u.display_name, t.last_used_at, t.access_level, t.resource
        from ai_access_tokens t
        join users u on u.id = t.user_id
-      where t.token_hash = $1 and t.revoked_at is null and u.is_active`,
-    [hashAiToken(token)],
+      where ${where} and t.revoked_at is null and u.is_active`,
+    values,
   );
   const row = found.rows[0];
-  if (!row) return null;
+  if (!row || !extra(row)) return null;
   const membership = await getMembership(row.organisation_id, row.user_id);
   if (!membership || !membership.organisation.isActive || !roleAtLeast(membership.role as Role, "viewer")) return null;
   if (!row.last_used_at || Date.now() - new Date(row.last_used_at).getTime() > LAST_USED_EVERY_MS) {
@@ -188,6 +237,7 @@ export async function authenticateAiToken(token: string): Promise<AiTokenIdentit
   }
   return {
     tokenId: row.id,
+    kind: row.kind,
     tokenName: row.name,
     accessLevel: row.access_level,
     effectiveLevel: effectiveAccessLevel(row.access_level, membership.role),
@@ -216,5 +266,7 @@ export async function revokeUserAiKeys(client: DbClient, userId: string): Promis
   const revoked = await client.query("update ai_access_tokens set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
   // Farm app keys (FA2, decision 561) stop for the same reason; they're counted with the AI keys.
   const apps = await client.query("update farm_app_keys set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
+  // Connections are rows above, so they end too; a code handed out but not yet swapped for tokens stops as well (decision 820).
+  await client.query("update oauth_authorization_codes set used_at = now() where user_id = $1 and used_at is null", [userId]);
   return (revoked.rowCount ?? 0) + (apps.rowCount ?? 0);
 }

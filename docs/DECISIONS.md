@@ -8148,3 +8148,139 @@ are not yet reviewed by Jess.
      endpoint. The Windows server app has no page for it yet (the browser
      page at `/server/google-sign-in` on the server computer does it), and
      `tohyee-admin` has no command for it. Microsoft sign-in isn't built.
+
+### AI apps connect by signing in (#427; decisions 810-823)
+
+Jess, 23 Oct 2026: "that whole ai page is too long and convoluded can you
+make the AI integration easier". Asked how far to go, she chose **sign in
+instead of keys** (#427). This widens decision 345 ("authentication is the
+key alone"). Where the issue doesn't answer a question, the choice below
+follows the MCP authorisation specification (2026-07-28) or Xero, and says
+so; those choices are not yet reviewed by Jess.
+
+810. **Tohyee is its own authorisation server, only on the https remote
+     access address** (#427). Cloud AI can only reach Tohyee through remote
+     access, and the specification wants https, so the issuer is the
+     remote access address and tokens are only for `<it>/api/mcp`. With
+     remote access off (or not https) the metadata answers 404, sign-in
+     shows "remote access is off", no access token works, and the AI page
+     says so; keys still work on the local network. `/api/mcp` answers 401
+     with `WWW-Authenticate: Bearer resource_metadata="…"` (RFC 9728), and
+     serves protected resource metadata at
+     `/.well-known/oauth-protected-resource/api/mcp` and at the root, and
+     authorisation server metadata (RFC 8414) at
+     `/.well-known/oauth-authorization-server`. Not OpenID Connect
+     discovery: Tohyee isn't an OpenID provider. No scopes: what an app may
+     do is chosen by the person on the consent screen, not asked for by the
+     app (the specification makes scopes optional).
+811. **A connection is a key you got by signing in** (#427). It's a row in
+     `ai_access_tokens` with `kind = 'connection'` and no key of its own
+     (core migration 0018), so its level, the role ceiling (decision 346),
+     Full access for Owners (decision 488), the history name, the
+     private-mail scope (decision 618), the rate limit (decision 343) and
+     every way it ends are the same code as for keys, not a second
+     permission system. At most 10 working connections per person per
+     organisation, as for keys (decision 341), counted apart from keys.
+812. **How apps register** (#427). Both ways the specification has:
+     client ID metadata documents (it says SHOULD; ChatGPT prefers them,
+     and Claude uses them when the metadata says
+     `client_id_metadata_document_supported` and `none` in
+     `token_endpoint_auth_methods_supported`) and dynamic client
+     registration (RFC 7591; deprecated by the 2026-07-28 specification but
+     still what Claude falls back to). A metadata document is read only
+     from a public https address (`publicFetch`: no local or private
+     addresses, no redirects, at most 5 KB, 5 seconds), must name itself
+     exactly, must have a name and redirect addresses and no secret, and is
+     kept for its cache time (5 minutes to a day). Registration is open to
+     anyone and grants nothing; registrations never used are cleared after
+     a day, and one address can register 10 a minute. Every app is a public
+     client (no secret; PKCE stands in for one).
+813. **The browser flow** (#427). `/oauth/authorize` checks the app and its
+     redirect address first; a wrong one gets Tohyee's own page with a
+     fixed message, never a redirect (no open redirect). Other mistakes go
+     back to the app as OAuth errors with `state` and `iss`. The request is
+     kept for 10 minutes (only a hash of its handle) and tied to the
+     browser by a random HttpOnly, SameSite=Lax cookie; the browser goes to
+     `/connect/<handle>`, through Tohyee's normal sign-in when needed
+     (password with two-step, or Google; the sign-in page's `next` rule
+     allows only that page shape). A parameter given twice is refused.
+814. **Codes and PKCE** (#427, as OAuth 2.1 says). Only the code flow with
+     PKCE S256 (plain or no challenge is refused). A code is 32 random
+     bytes, kept hashed, works once within 5 minutes and only with the same
+     app, the same redirect address and the verifier. A second try with a
+     used code ends the connection it made (OAuth 2.1 section 4.1.3).
+815. **Token lifetimes, as Xero does for its own** (#427). Access tokens
+     last an hour (Xero: 30 minutes); refresh tokens 60 days (Xero: 60
+     days), replaced every time they're used. A refresh token used twice
+     ends the connection, since someone has a copy (OAuth 2.1 for public
+     clients). Not yet reviewed by Jess. A connection with no live token
+     left shows as expired on the AI page and has to connect again.
+816. **Redirect addresses** (#427, MCP specification). https, or http only
+     to localhost, 127.0.0.1 or [::1]; no fragment, no user name or
+     password, at most 500 characters, at most 10 per app; other schemes
+     (app links) aren't accepted. Matched exactly as text, except that an
+     address on this computer may use any port (RFC 8252 section 7.3;
+     Claude Code uses a new port each time) with the same host, path and
+     query.
+817. **Tokens are bound to Tohyee's MCP address** (#427, RFC 8707). The
+     `resource` an app sends to the authorisation and token endpoints must
+     name `<remote address>/api/mcp` (or the remote address itself, which
+     some apps send; compared without case in the scheme and host, default
+     port or trailing slash). The connection keeps the MCP address it was
+     made for; if the remote access address changes, its tokens stop and
+     it has to connect again. Tohyee never passes a token on to anything
+     else.
+818. **What the consent screen shows** (#427). The app's name as it gave
+     it (control and direction characters removed, at most 60 characters),
+     the host it sends you back to in bold, where its details came from
+     (its own address, or "registered itself"), who's signed in, and
+     always a warning that Tohyee can't check an app's name ("any app can
+     call itself Claude"), with the addresses to expect (claude.ai,
+     chatgpt.com). When an app can only send you back to this computer,
+     an extra warning says any program on the computer could be it (the
+     specification asks for this). No list of "verified" apps: Tohyee
+     can't verify one, and saying so would be worse than showing the
+     address.
+819. **Choosing and allowing** (#427, Jess: the same levels and Full access
+     confirmation as keys). The person picks one of their organisations
+     (viewer and up, ready) and a level up to their role's ceiling; Full
+     access is for Owners only, after ticking a warning. Allowing or
+     refusing is a same-origin POST that also needs the browser cookie from
+     step 813, so another site or another browser can't answer it; the
+     page can't be framed (frame-ancestors 'self'). Refusing sends the app
+     `access_denied`. Allowing is recorded (`ai_connection.allowed`), and
+     making the connection (`ai_connection.connected`) is recorded and
+     emailed to the person as a security alert when the server can send
+     email (not in the issue; not yet reviewed by Jess).
+820. **When a connection ends** (#427, decisions 341 and 458). When the
+     person disconnects it (straight away), is removed from the
+     organisation, has their login turned off, or has their password or
+     two-step reset: the same updates that revoke keys revoke connections,
+     and a code handed out but not yet swapped stops too. Also when the
+     app revokes its refresh token (RFC 7009), when a code or refresh token
+     is reused, or when it isn't used for 60 days.
+821. **The AI page** (#427, Jess). It leads with "Connect your AI": the MCP
+     address to copy and one line saying you'll be asked to sign in, or a
+     note when remote access is off. Then Connected apps and Keys, as short
+     rows that fit a phone, with ended ones folded away. The Claude Desktop
+     setup, the header and protocol details, the "what it can do" list and
+     "about connections and keys" fold away under their own headings.
+822. **History says "via AI app"** (#427). What a connection does shows as
+     the person via `AI app "<name>"` (a key stays `AI key "<name>"`), so
+     the history says the name is the app's own.
+823. **Not done or not tried** (#427). It hasn't been tried with real
+     Claude.ai, ChatGPT or Claude Code: the tests use made-up apps and a
+     made-up metadata document. What they need was read from their
+     published docs on 23 October 2026 (Claude: a 401 with
+     `resource_metadata`, the first authorisation server only, CIMD or DCR,
+     `https://claude.ai/api/mcp/auth_callback`, S256, form-encoded token
+     requests, refresh with `invalid_grant`; ChatGPT: CIMD preferred
+     (`https://chatgpt.com/oauth/client.json` or a per-callback one), DCR,
+     `https://chatgpt.com/connector_platform_oauth_redirect` or
+     `https://chatgpt.com/connector/oauth/{callback_id}`, S256 required,
+     `resource` on both requests). Private-key JWT client authentication
+     (which ChatGPT's metadata document may offer) isn't supported; Tohyee
+     only advertises `none`. Sign-in isn't offered on the local network
+     address, so Claude Code on the same network uses a key. The consent
+     itself isn't a sign-in event in the sign-in monitor (decision 487):
+     the sign-in before it is.
