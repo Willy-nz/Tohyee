@@ -253,10 +253,16 @@ export type PeoplePlan = {
   /**
    * Same email here under another account (often the server admin made when
    * this server was set up): reported and left alone unless `replace` names
-   * it; then the backup's account takes its place and its memberships here.
+   * it; then the backup's account takes its place and its memberships here
+   * (with the backup's role where both are in an organisation, decision 854).
    */
   conflicts: { email: string; organisationsHere: number; replacing: boolean }[];
   memberships: { organisationId: string; email: string; role: string }[];
+  /**
+   * Where the replaced account here and the backup's account are both in an
+   * organisation with different roles: the backup's role is used (decision 854).
+   */
+  roleChanges: { organisationId: string; email: string; roleHere: string; role: string }[];
   /** Organisations in the server backup that aren't on this server: restore each from its own backup, keeping its ID. */
   organisationsNotHere: { id: string; displayName: string }[];
   /** Server settings in the backup that aren't copied (they'd compete with the original, or point at folders that differ here). */
@@ -333,6 +339,7 @@ export async function recoverPeople(
     alreadyHere: [],
     conflicts: [],
     memberships: [],
+    roleChanges: [],
     organisationsNotHere: fromBackup.organisations.filter((o) => !orgsHere.has(o.id)).map((o) => ({ id: o.id, displayName: o.display_name })),
     settingsNotCopied: fromBackup.settings.filter((key) => !["backup_recovery_keys", "backup_recovery_kit_checks", "backup_key", "backups"].includes(key)),
     googleNotRestored: [],
@@ -382,11 +389,20 @@ export async function recoverPeople(
     plan.add.push({ email: user.email, displayName: user.display_name, serverAdmin: user.is_server_admin, twoStep });
   }
   const usersAfter = new Set([...here.map((u) => u.id).filter((id) => !toAdd.some((u) => u.replacesId === id)), ...toAdd.map((u) => u.id)]);
+  const replacedIds = toAdd.map((u) => u.replacesId).filter((id): id is string => id !== null);
+  const replacedRoles = new Map(
+    (
+      await coreQuery<{ k: string; role: string }>("select organisation_id || ':' || user_id::text as k, role from organisation_members where user_id = any($1::uuid[])", [replacedIds])
+    ).rows.map((row) => [row.k, row.role]),
+  );
   const existingMembers = new Set((await coreQuery<{ k: string }>("select organisation_id || ':' || user_id::text as k from organisation_members")).rows.map((row) => row.k));
   for (const member of fromBackup.members) {
     if (!orgsHere.has(member.organisation_id) || !usersAfter.has(member.user_id) || existingMembers.has(`${member.organisation_id}:${member.user_id}`)) continue;
     const email = fromBackup.users.find((u) => u.id === member.user_id)?.email ?? member.user_id;
     plan.memberships.push({ organisationId: member.organisation_id, email, role: member.role });
+    const replacedId = toAdd.find((u) => u.id === member.user_id)?.replacesId;
+    const roleHere = replacedId ? replacedRoles.get(`${member.organisation_id}:${replacedId}`) : undefined;
+    if (roleHere && roleHere !== member.role) plan.roleChanges.push({ organisationId: member.organisation_id, email, roleHere, role: member.role });
   }
   // Never leave the server without an active server admin.
   const adminsAfter = [
@@ -451,7 +467,21 @@ export async function recoverPeople(
     }
     for (const member of fromBackup.members) {
       if (!plan.memberships.some((m) => m.organisationId === member.organisation_id && m.email === (fromBackup.users.find((u) => u.id === member.user_id)?.email ?? member.user_id))) continue;
-      await client.query("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3) on conflict do nothing", [member.organisation_id, member.user_id, member.role]);
+      // A membership handed over from the replaced account takes the backup's role (decision 854).
+      await client.query(
+        `insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3)
+         on conflict (organisation_id, user_id) do update set role = excluded.role, updated_at = now()`,
+        [member.organisation_id, member.user_id, member.role],
+      );
+    }
+    // Every organisation still has an Owner.
+    const touched = [...new Set(plan.memberships.map((m) => m.organisationId))];
+    const ownerless = await client.query<{ id: string }>(
+      "select o.id from organisations o where o.id = any($1::text[]) and not exists (select 1 from organisation_members m where m.organisation_id = o.id and m.role = 'owner') order by o.id",
+      [touched],
+    );
+    if (ownerless.rows.length) {
+      throw new ValidationError(`That would leave ${ownerless.rows.map((r) => r.id).join(", ")} with no Owner. Recover the backup's Owner too, or don't replace that account.`);
     }
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: "server.people_recovered",
@@ -462,6 +492,7 @@ export async function recoverPeople(
         added: plan.add.length,
         replaced: toAdd.filter((u) => u.replacesId).length,
         memberships: plan.memberships.length,
+        roleChanges: plan.roleChanges.length,
         conflicts: plan.conflicts.length,
         googleNotRestored: plan.googleNotRestored.map((g) => g.email),
         googleMoved: plan.googleMoved,

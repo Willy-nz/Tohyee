@@ -28,6 +28,8 @@ import * as authorizeRoute from "@/app/oauth/authorize/route";
 import * as clientDocumentRoute from "@/app/office/powerpoint/client.json/route";
 import * as manifestRoute from "@/app/office/powerpoint/manifest.xml/route";
 import { consentDetails, OAUTH_BROWSER_COOKIE } from "@/lib/ai/oauth/authorize";
+import { setCodeExchangePauseForTests } from "@/lib/ai/oauth/tokens";
+import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { closeAnalytics } from "@/lib/analytics/engine";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
@@ -43,6 +45,7 @@ import {
   startTestServer,
   type TestServer,
 } from "../helpers/test-server";
+import { gate, stillWaiting } from "../helpers/gate";
 
 /*
  * The PowerPoint add-in (#429, decisions 830-849), end to end against the
@@ -403,6 +406,24 @@ describeWithDatabase("PowerPoint add-in for Analytics (#429, decisions 830-849)"
     const theirs = (await coreQuery<{ id: string }>("select id::text from ai_access_tokens where user_id = $1 and kind = 'office' and revoked_at is null", [client.id])).rows[0].id;
     expect((await connectedAppsRoute.DELETE(apiRequest("/api/auth/connected-apps", { method: "DELETE", cookie: ownerCookie, body: { id: theirs } }), noContext)).status).toBe(404);
     expect((await officeMeRoute.GET(officeGet("/api/office/me", { bearer: third.access }), noContext)).status).toBe(200);
+  });
+
+  it("an add-in code swapped while the person's apps are being revoked never leaves a working sign-in (decision 853)", async () => {
+    const held = gate();
+    setCodeExchangePauseForTests(held.pause);
+    try {
+      const signing = signIn(clientCookie);
+      await held.reached;
+      const revoking = withCoreTransaction((tx) => revokeUserAiKeys(tx, client.id));
+      expect(await stillWaiting(revoking)).toBe(true);
+      held.open();
+      const signedIn = await signing;
+      await revoking;
+      expect((await officeMeRoute.GET(officeGet("/api/office/me", { bearer: signedIn.access }), noContext)).status).toBe(401);
+      expect((await token({ grant_type: "refresh_token", refresh_token: signedIn.refresh, client_id: CLIENT_ID, resource: OFFICE_RESOURCE })).body.error).toBe("invalid_grant");
+    } finally {
+      setCodeExchangePauseForTests(null);
+    }
   });
 
   it("stops every add-in token when remote access is turned off or its address changes", async () => {

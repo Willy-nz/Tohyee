@@ -47,7 +47,8 @@ import {
  * 850-854): a server admin removing someone's Google sign-in ends every app
  * and key that acts as them, but not their password; recovering people from
  * a server backup brings their Google link back without losing it to the
- * account it replaces. Google, the AI app and the people are all made up.
+ * account it replaces, with the backup's role in each organisation (decision
+ * 854). Google, the AI app and the people are all made up.
  */
 
 const PUBLIC = "https://books.example.nz";
@@ -292,7 +293,10 @@ describeWithDatabase("recovering people keeps their Google sign-in (#432, decisi
     await coreQuery("update users set google_only = true, password_hash = $2 where id = $1", [kimHere.id, unusable]);
     await coreQuery("insert into user_google_identities (user_id, google_sub, email) values ($1, 'sub-kim', 'kim.google@example.com')", [kimHere.id]);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ('new-co', $1, 'bookkeeper')", [kimHere.id]);
-    await createTestUser("pat@example.com", { twoStep: false });
+    // Pat's login here was made an Owner of the restored organisation; the backup has Pat as a viewer.
+    const patHere = await createTestUser("pat@example.com", { twoStep: false });
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ('rec-farm', $1, 'owner')", [patHere.id]);
+    original.patHere = patHere.id;
     const samHere = await createTestUser("sam@example.com", { twoStep: false });
     await coreQuery("insert into user_google_identities (user_id, google_sub, email) values ($1, 'sub-sam', 'sam.google@example.com')", [samHere.id]);
     const other = await createTestUser("other@example.com", { twoStep: false });
@@ -309,11 +313,19 @@ describeWithDatabase("recovering people keeps their Google sign-in (#432, decisi
   });
 
   it("puts each Google link back on the original ID, reports one linked to another login, and doesn't change on a second run", async () => {
+    // The backup's role wins over the replaced login's (decision 854), but never so an organisation is left with no Owner:
+    // with the server admin only an Admin here and Kim (the backup's Owner) not recovered, nothing is changed.
+    await coreQuery("update organisation_members set role = 'admin' where organisation_id = 'rec-farm' and user_id = $1", [admin.id]);
+    await expect(recoverPeople({ user: admin }, { file: serverFile, replace: ["pat@example.com"], apply: true })).rejects.toThrow(/rec-farm with no Owner/);
+    expect((await coreQuery("select id::text from users where email = 'pat@example.com'")).rows).toEqual([{ id: original.patHere }]);
+    await coreQuery("update organisation_members set role = 'owner' where organisation_id = 'rec-farm' and user_id = $1", [admin.id]);
+
     const replace = ["kim@example.com", "pat@example.com", "sam@example.com"];
     const preview = await recoverPeople({ user: admin }, { file: serverFile, replace });
     expect(preview.applied).toBe(false);
     expect(preview.googleNotRestored).toEqual([{ email: "ria@example.com", googleEmail: "ria.google@example.com", linkedTo: "other@example.com", needsSetupLink: true }]);
     expect(preview.googleMoved).toEqual(["sam@example.com"]);
+    expect(preview.roleChanges).toEqual([{ organisationId: "rec-farm", email: "pat@example.com", roleHere: "owner", role: "viewer" }]);
 
     const plan = await recoverPeople({ user: admin }, { file: serverFile, replace, apply: true });
     expect(plan.applied).toBe(true);
@@ -348,7 +360,8 @@ describeWithDatabase("recovering people keeps their Google sign-in (#432, decisi
     const pat = (await coreQuery<{ password_hash: string }>("select password_hash from users where id = $1", [original.pat])).rows[0];
     expect(await verifyPassword(TEST_PASSWORD, pat.password_hash)).toBe(true);
 
-    // Memberships and private mail are the original IDs': the backup's, and the one Kim's replaced login had here.
+    // Memberships and private mail are the original IDs': the backup's (with the backup's role, so Pat is a
+    // viewer again), and the one Kim's replaced login had here.
     const members = await coreQuery<{ organisation_id: string; user_id: string; role: string }>(
       "select organisation_id, user_id::text, role from organisation_members where user_id = any($1::uuid[]) order by organisation_id, user_id",
       [[original.kim, original.pat, original.sam, original.ria]],
@@ -367,6 +380,7 @@ describeWithDatabase("recovering people keeps their Google sign-in (#432, decisi
     expect(again.add).toEqual([]);
     expect(again.googleNotRestored).toEqual([]);
     expect(again.googleMoved).toEqual([]);
+    expect(again.roleChanges).toEqual([]);
     expect(await googleOf(original.kim)).toEqual({ google_sub: "sub-kim", email: "kim.google@example.com" });
     expect(await googleOf(original.other)).toEqual({ google_sub: "sub-ria", email: "ria.google@example.com" });
   }, 600_000);

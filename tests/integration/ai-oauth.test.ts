@@ -14,6 +14,8 @@ import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[
 import * as authorizeRoute from "@/app/oauth/authorize/route";
 import { consentDetails, OAUTH_BROWSER_COOKIE } from "@/lib/ai/oauth/authorize";
 import { setClientMetadataFetcherForTests } from "@/lib/ai/oauth/clients";
+import { setCodeExchangePauseForTests } from "@/lib/ai/oauth/tokens";
+import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { changeOwnPassword } from "@/lib/auth/service";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { resetTwoStep } from "@/lib/auth/two-step";
@@ -31,6 +33,7 @@ import {
   TEST_PASSWORD,
   type TestServer,
 } from "../helpers/test-server";
+import { gate, stillWaiting } from "../helpers/gate";
 
 /*
  * AI apps signing in to Tohyee with OAuth 2.1 (#427, decisions 810-829),
@@ -434,6 +437,69 @@ describeWithDatabase("AI apps sign in instead of using a key (#427, decisions 81
     expect(removed.status).toBe(200);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper')", [ORG, person.id]);
     expect((await mcp(fourth.access)).status).toBe(401);
+  });
+
+  it("a code swapped at the same moment as a password or two-step reset, or removal, never leaves a working connection (decision 853)", async () => {
+    const person = await createTestUser("oauth-race@example.com");
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper')", [ORG, person.id]);
+    const swap = (flow: Awaited<ReturnType<typeof connect>>) =>
+      token({ grant_type: "authorization_code", code: flow.code, client_id: clientId, redirect_uri: CLAUDE_CALLBACK, code_verifier: flow.verifier, resource: RESOURCE });
+
+    // The exchange has claimed its code when the reset starts: the reset waits, then ends the new connection.
+    for (const reset of [
+      () => changeOwnPassword(person.id, "0".repeat(64), { currentPassword: TEST_PASSWORD, newPassword: "another-new-password-456" }),
+      () => withCoreTransaction((client) => resetTwoStep(client, person.id, { userId: owner.id, email: owner.email }, "admin")),
+    ]) {
+      const flow = await connect({ cookie: await sessionCookieFor(person) });
+      const held = gate();
+      setCodeExchangePauseForTests(held.pause);
+      try {
+        const exchanging = swap(flow);
+        await held.reached;
+        const resetting = reset();
+        expect(await stillWaiting(resetting)).toBe(true);
+        held.open();
+        const answer = await exchanging;
+        await resetting;
+        expect(answer.status).toBe(200);
+        expect((await mcp(answer.body.access_token as string)).status).toBe(401);
+        expect((await token({ grant_type: "refresh_token", refresh_token: answer.body.refresh_token as string, client_id: clientId })).body.error).toBe("invalid_grant");
+      } finally {
+        setCodeExchangePauseForTests(null);
+      }
+    }
+
+    // The revoke has started when the app swaps its code: the exchange waits, then the code is refused.
+    const flow = await connect({ cookie: await sessionCookieFor(person) });
+    const revoking = gate();
+    const revoke = withCoreTransaction(async (client) => {
+      await revokeUserAiKeys(client, person.id);
+      await revoking.pause();
+    });
+    await revoking.reached;
+    const exchanging = swap(flow);
+    expect(await stillWaiting(exchanging)).toBe(true);
+    revoking.open();
+    await revoke;
+    expect((await exchanging).body.error).toBe("invalid_grant");
+
+    // Removed from the organisation while a code is being swapped: the removal waits, then ends it.
+    const last = await connect({ cookie: await sessionCookieFor(person) });
+    const held = gate();
+    setCodeExchangePauseForTests(held.pause);
+    try {
+      const exchanging2 = swap(last);
+      await held.reached;
+      const removing = memberRoute.DELETE(apiRequest(`/api/organisations/${ORG}/members/${person.id}`, { method: "DELETE", cookie: ownerCookie }), params({ organisationId: ORG, userId: person.id }));
+      expect(await stillWaiting(removing)).toBe(true);
+      held.open();
+      const answer = await exchanging2;
+      expect((await removing).status).toBe(200);
+      expect(answer.status).toBe(200);
+      expect((await mcp(answer.body.access_token as string)).status).toBe(401);
+    } finally {
+      setCodeExchangePauseForTests(null);
+    }
   });
 
   it("an app can disconnect itself (RFC 7009)", async () => {
