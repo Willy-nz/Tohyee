@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-10-23",
+      "title": "Tohyee 0.13.0",
+      "body": "New: Claude.ai, ChatGPT and other AI apps connect by signing in to Tohyee instead of copying a key, with a much shorter AI page; and a PowerPoint add-in that puts live, clickable Analytics reports on slides. Both need Remote access.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.0"
+    },
+    {
       "date": "2026-10-22",
       "title": "Tohyee 0.12.0",
       "body": "New: Analytics much closer to Power BI, with themes, many more charts and maps, report pages, click-to-filter, drill-down, bookmarks, calculations, year to date and relationships between tables; staff kept to their own farms; checked backups with a recovery kit and restore wizard; IRD account file imports (not yet reviewed by an accountant); filing email attachments; and Sign in with Google for invited people. Before updating, read the release notes: farm staff need farms assigned.",

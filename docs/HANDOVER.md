@@ -164,6 +164,9 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.13.0 ready to publish from main** (23 Oct 2026): `package.json` says
+  0.13.0 and the notes cover #428 and #430. Jess publishes the release "Tohyee
+  0.13.0" on main with tag `v0.13.0` and pastes in `docs/releases/0.13.0.md`.
 - **0.12.0 ready to publish from main** (22 Oct 2026): `package.json` says
   0.12.0 and the notes cover #374-#425. Jess publishes the release "Tohyee
   0.12.0" on main with tag `v0.12.0` and pastes in `docs/releases/0.12.0.md`.
