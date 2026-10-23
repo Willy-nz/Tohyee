@@ -8136,13 +8136,14 @@ are not yet reviewed by Jess.
      Settings › Email's help mentions the extra address.
 808. **What ends Google sign-in** (#424). Disabling a login ends its
      sessions and refuses Google sign-in. A server admin can remove someone's
-     Google sign-in under Users (their Google sessions end). Removing
+     Google sign-in under Users (their Google sessions end, and since #432
+     their apps and keys too, decision 850). Removing
      someone from an organisation works as it does for passwords: Google
      sign-in only reaches what the login can. Sign-ins are recorded and
      flagged as before (decision 487) with the step "Google"; Google
      refusals are recorded as refused. The per-address limit (decision 456)
      covers starting and coming back. People recovered from a server backup
-     (decision 738) keep their Google link.
+     (decision 738) keep their Google link (decision 851).
 809. **Not done or not tried** (#424). It hasn't been tried with a real
      Google account or Google app: the tests use a made-up Google token
      endpoint. The Windows server app has no page for it yet (the browser
@@ -8255,7 +8256,8 @@ so; those choices are not yet reviewed by Jess.
 820. **When a connection ends** (#427, decisions 341 and 458). When the
      person disconnects it (straight away), is removed from the
      organisation, has their login turned off, or has their password or
-     two-step reset: the same updates that revoke keys revoke connections,
+     two-step reset, or a server admin removes their Google sign-in
+     (decision 850): the same updates that revoke keys revoke connections,
      and a code handed out but not yet swapped stops too. Also when the
      app revokes its refresh token (RFC 7009), when a code or refresh token
      is reused, or when it isn't used for 60 days.
@@ -8465,3 +8467,36 @@ so; those choices are not yet reviewed by Jess.
      (each server has its own address), the unified JSON manifest, PowerPoint
      on iPad, and choosing a different look for the slide from the report's
      theme.
+850. **A server admin removing Google sign-in ends what acts as the
+     person** (#432; as Google's and Xero's account security do when an
+     account may have been taken over). Removing someone's Google sign-in
+     (Server settings › Users) is for a lost or taken-over Google account,
+     so in the same transaction it does what a password reset does to apps
+     (decisions 341, 561 and 820): AI keys, AI app connections and
+     PowerPoint add-in connections (with their access and refresh tokens),
+     farm app keys, and codes not yet swapped for tokens all stop. Their
+     Google sessions end; their password and its sessions are left alone, so
+     they can sign in with their password and connect apps again. The
+     security email says the apps were disconnected. Not yet reviewed by
+     Jess.
+851. **Recovering people keeps their Google link, or says why not** (#432,
+     decision 738). When the backup's account replaces one here, the
+     replaced account's Google link comes off first, in the same
+     transaction, so the backup's link (often the same Google account) goes
+     on with the original ID. If the backup has no Google link for that
+     person, the one made here moves to the original ID (same person, same
+     email, and the server admin chose to replace). A backup's Google account
+     that is linked to a different login here stays with that login and is
+     listed under "Sign in with Google can't be restored" (on the page and
+     from `tohyee-admin`), with whether the person needs a setup link. A
+     recovered person is marked Google only only when their Google link is
+     really back. Running it again changes nothing. Not yet reviewed by
+     Jess.
+852. **Unlinking your own Google account leaves your apps connected**
+     (#432; as Google, Microsoft and Xero do when you remove a sign-in method
+     yourself). You're signed in and choosing, so AI apps, keys, farm app
+     keys and add-in sign-ins keep working; other Google sessions still end
+     (decision 805). The security email lists what stays connected and says
+     that changing your password disconnects them all, or where to
+     disconnect each. A server admin removing it (decision 850) is the path
+     for a Google account someone else may have. Not yet reviewed by Jess.

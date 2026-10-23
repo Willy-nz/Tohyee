@@ -372,6 +372,19 @@ export default function RestoreWizardPage() {
               <div>
                 <strong>Memberships {plan.applied ? "added" : "to add"}:</strong> {plan.memberships.length}
               </div>
+              {plan.googleNotRestored.length ? (
+                <div>
+                  <strong>Sign in with Google {plan.applied ? "not restored" : "can't be restored"}</strong> (that Google account is linked to another login here):{" "}
+                  {plan.googleNotRestored
+                    .map((g) => `${g.email} (${g.googleEmail}, linked to ${g.linkedTo})${g.needsSetupLink ? ": they had only Google, so send them a setup link to choose a password" : ""}`)
+                    .join("; ")}
+                </div>
+              ) : null}
+              {plan.googleMoved.length ? (
+                <div className={ui.muted}>
+                  Keep the Google sign-in linked here, as the backup has none for them: {plan.googleMoved.join(", ")}
+                </div>
+              ) : null}
               {plan.organisationsNotHere.length ? (
                 <div>
                   <strong>Not restored here yet</strong> (restore each from its own backup, keeping its ID, then recover people again):{" "}

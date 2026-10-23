@@ -32,7 +32,7 @@ function GoogleCard({ google, reload }: { google: GoogleSignInStatus; reload: ()
 
   async function unlink() {
     if (!google.linked) return;
-    if (!(await confirm(`Unlink ${google.linked.email}? You'll sign in with your password and authenticator app only, and other sessions signed in with Google end.`))) return;
+    if (!(await confirm(`Unlink ${google.linked.email}? You'll sign in with your password and authenticator app only, and other sessions signed in with Google end. Apps and keys you've connected keep working.`))) return;
     setBusy(true);
     setStatus(null);
     try {

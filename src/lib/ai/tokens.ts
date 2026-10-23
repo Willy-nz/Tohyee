@@ -259,8 +259,12 @@ export async function remoteAccessAddress(): Promise<string | null> {
 
 /**
  * Stops every AI key and farm app key a person made, in every organisation (#132): when their
- * password is changed or reset, or their two-step sign-in is reset, a key
- * made by whoever had their account shouldn't keep working. Returns how many.
+ * password is changed or reset, their two-step sign-in is reset, or a server
+ * admin removes their Google sign-in (decision 850), a key made by whoever
+ * had their account shouldn't keep working. AI app and PowerPoint add-in
+ * connections are rows of ai_access_tokens too, so they (and their access and
+ * refresh tokens) stop with the keys. Returns how many keys, connections and
+ * farm app keys.
  */
 export async function revokeUserAiKeys(client: DbClient, userId: string): Promise<number> {
   const revoked = await client.query("update ai_access_tokens set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
