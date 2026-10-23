@@ -43,7 +43,7 @@ accepted.
 > [licence](LICENSE)).
 
 **Release availability, checked 23 October 2026:** the latest packaged
-release is [v0.13.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.0),
+release is [v0.13.1](https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.1),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
