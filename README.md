@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 22 October 2026:** the latest packaged
-release is [v0.12.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.12.0),
+**Release availability, checked 23 October 2026:** the latest packaged
+release is [v0.13.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -65,6 +65,13 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.13.0: connect AI by signing in, and PowerPoint
+
+| Area | What's new |
+| --- | --- |
+| **AI** | Claude.ai, ChatGPT and other AI apps connect by signing in to Tohyee, no key to copy, and a much shorter AI page. |
+| **PowerPoint** | An add-in that puts live, clickable Analytics reports on slides, like Power BI's. |
 
 ## New in 0.12.0: Analytics like Power BI, several farms and backups you can prove
 
