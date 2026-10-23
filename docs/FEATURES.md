@@ -61,7 +61,9 @@ that something happened.
   copy with its automatic jobs paused until a server admin turns them on.
   **Recover people** brings users, passwords, two-step sign-in and
   memberships back from a server backup with their own IDs, so private
-  mail stays its owner's. **Test a restore** proves the newest backups
+  mail stays its owner's, with their Sign in with Google links (a Google
+  account already linked to another login here is reported and left
+  there, decision 851). **Test a restore** proves the newest backups
   restore, in a scratch database. An interrupted restore is cleaned up.
   Design: `docs/BACKUP-RECOVERY.md`.
 - **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
@@ -1339,6 +1341,10 @@ that something happened.
   app), with the sign-in address to add to the app and a warning when the
   server has no web address Google accepts. OpenID Connect with state,
   nonce, PKCE and a browser-bound cookie; only `openid email profile`.
+  A server admin removing someone's Google sign-in also disconnects their
+  AI apps, AI keys, farm app keys and PowerPoint add-in sign-ins; their
+  password keeps working (#432, decision 850). Unlinking your own leaves
+  them connected and the email says how to disconnect them (decision 852).
   Tested against a made-up Google only; not yet tried with a real Google
   account.
 - **Server email** (Gmail or other SMTP, password encrypted) for security

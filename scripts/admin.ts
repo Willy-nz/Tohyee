@@ -697,6 +697,10 @@ async function backups(command: string | undefined, args: string[]) {
     if (plan.alreadyHere.length) console.log(`Already here: ${plan.alreadyHere.join(", ")}`);
     for (const conflict of plan.conflicts) console.log(`Here under another account: ${conflict.email}${conflict.replacing ? " (replaced)" : " (left alone; --replace it to use the backup's)"}`);
     console.log(`Memberships ${plan.applied ? "added" : "to add"}: ${plan.memberships.length}`);
+    for (const g of plan.googleNotRestored) {
+      console.log(`Sign in with Google not restored for ${g.email}: ${g.googleEmail} is linked to ${g.linkedTo} here${g.needsSetupLink ? " (they had only Google: send them a setup link)" : ""}`);
+    }
+    if (plan.googleMoved.length) console.log(`Google sign-in linked here kept (the backup has none): ${plan.googleMoved.join(", ")}`);
     if (plan.organisationsNotHere.length) console.log(`Not restored here yet: ${plan.organisationsNotHere.map((o) => o.id).join(", ")} (restore each keeping its ID, then run this again)`);
     if (plan.settingsNotCopied.length) console.log(`Server settings not copied (set them up again): ${plan.settingsNotCopied.join(", ")}`);
     if (!plan.applied) console.log("Nothing was changed. Run again with --apply to do it.");

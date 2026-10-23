@@ -261,6 +261,15 @@ export type PeoplePlan = {
   organisationsNotHere: { id: string; displayName: string }[];
   /** Server settings in the backup that aren't copied (they'd compete with the original, or point at folders that differ here). */
   settingsNotCopied: string[];
+  /**
+   * Sign in with Google links that can't come back (decision 851): the
+   * backup's Google account is linked to a different login here. Left with
+   * that login; the person recovered has no Google sign-in (and, if they
+   * had only Google, needs a setup link).
+   */
+  googleNotRestored: { email: string; googleEmail: string; linkedTo: string; needsSetupLink: boolean }[];
+  /** Replaced accounts whose Google link here moves to the recovered account, as the backup has none for them (decision 851). */
+  googleMoved: string[];
   applied: boolean;
 };
 
@@ -272,7 +281,9 @@ export type PeoplePlan = {
  * their memberships of organisations restored here with the same ID. A
  * person already here under the same email with another ID is reported and
  * left alone, unless `replace` names them: then the backup's account takes
- * the place of the one here, with its memberships here. Sessions, AI and app keys and server settings aren't
+ * the place of the one here, with its memberships here. A Google sign-in link
+ * comes back too, unless that Google account is linked to a different login
+ * here (reported, decision 851). Sessions, AI and app keys and server settings aren't
  * copied. With `apply` false it only says what it would do. It can be run
  * again after more organisations are restored.
  */
@@ -312,6 +323,8 @@ export async function recoverPeople(
   )).rows;
   const hereById = new Map(here.map((u) => [u.id, u]));
   const hereByEmail = new Map(here.map((u) => [u.email, u]));
+  const hereGoogle = (await coreQuery<{ user_id: string; google_sub: string; email: string }>("select user_id::text, google_sub, email from user_google_identities")).rows;
+  const emailHere = (id: string) => here.find((u) => u.id === id)?.email ?? id;
   const orgsHere = new Set((await coreQuery<{ id: string }>("select id from organisations")).rows.map((row) => row.id));
 
   const plan: PeoplePlan = {
@@ -322,6 +335,8 @@ export async function recoverPeople(
     memberships: [],
     organisationsNotHere: fromBackup.organisations.filter((o) => !orgsHere.has(o.id)).map((o) => ({ id: o.id, displayName: o.display_name })),
     settingsNotCopied: fromBackup.settings.filter((key) => !["backup_recovery_keys", "backup_recovery_kit_checks", "backup_key", "backups"].includes(key)),
+    googleNotRestored: [],
+    googleMoved: [],
     applied: false,
   };
   const toAdd: (BackupUser & { totp: string | null; replacesId: string | null })[] = [];
@@ -356,6 +371,14 @@ export async function recoverPeople(
       }
     }
     toAdd.push({ ...user, totp, replacesId });
+    // Its Google link (decision 851): a link here on the account it replaces steps aside; one on another login stays there and is reported.
+    const google = fromBackup.google.find((g) => g.user_id === user.id);
+    const holder = google ? hereGoogle.find((g) => g.google_sub === google.google_sub) : undefined;
+    if (google && holder && holder.user_id !== replacesId) {
+      plan.googleNotRestored.push({ email: user.email, googleEmail: google.email, linkedTo: emailHere(holder.user_id), needsSetupLink: google.google_only });
+    } else if (!google && replacesId && hereGoogle.some((g) => g.user_id === replacesId)) {
+      plan.googleMoved.push(user.email);
+    }
     plan.add.push({ email: user.email, displayName: user.display_name, serverAdmin: user.is_server_admin, twoStep });
   }
   const usersAfter = new Set([...here.map((u) => u.id).filter((id) => !toAdd.some((u) => u.replacesId === id)), ...toAdd.map((u) => u.id)]);
@@ -373,6 +396,9 @@ export async function recoverPeople(
   if (adminsAfter.length === 0) throw new ValidationError("That would leave this server with no active server admin. Don't replace your own account, or make a server admin in the backup first.");
   if (!input.apply) return plan;
 
+  // What happens to Google links is worked out again inside the transaction, from what's here then.
+  plan.googleNotRestored = [];
+  plan.googleMoved = [];
   await withCoreTransaction(async (client) => {
     for (const user of toAdd) {
       // The account here steps aside for the backup's (same person, same email), handing over its memberships.
@@ -382,13 +408,35 @@ export async function recoverPeople(
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [user.id, user.email, user.display_name, user.password_hash, user.is_server_admin, user.is_active, user.password_changed_at, user.created_at, user.totp, user.totp ? user.totp_enabled_at : null],
       );
+      // The replaced account's Google link comes off first, so the backup's (often the same Google account) can go on (decision 851).
+      const replacedGoogle = user.replacesId
+        ? (
+            await client.query<{ google_sub: string; email: string; linked_at: Date; last_used_at: Date | null }>(
+              "delete from user_google_identities where user_id = $1 returning google_sub, email, linked_at, last_used_at",
+              [user.replacesId],
+            )
+          ).rows[0]
+        : undefined;
       const google = fromBackup.google.find((g) => g.user_id === user.id);
       if (google) {
-        await client.query(
-          "insert into user_google_identities (user_id, google_sub, email, linked_at) values ($1, $2, $3, $4) on conflict do nothing",
+        const restored = await client.query(
+          "insert into user_google_identities (user_id, google_sub, email, linked_at) values ($1, $2, $3, $4) on conflict do nothing returning user_id",
           [user.id, google.google_sub, google.email, google.linked_at],
         );
-        if (google.google_only) await client.query("update users set google_only = true where id = $1", [user.id]);
+        if (restored.rowCount) {
+          // Google only just when its Google link is really back: otherwise they'd have no way in that anyone could see.
+          if (google.google_only) await client.query("update users set google_only = true where id = $1", [user.id]);
+        } else {
+          const holder = await client.query<{ email: string }>("select u.email from user_google_identities g join users u on u.id = g.user_id where g.google_sub = $1", [google.google_sub]);
+          plan.googleNotRestored.push({ email: user.email, googleEmail: google.email, linkedTo: holder.rows[0]?.email ?? "another login", needsSetupLink: google.google_only });
+        }
+      } else if (replacedGoogle) {
+        // The backup has no Google link for them: the one they made here comes with them, as the same person.
+        await client.query(
+          "insert into user_google_identities (user_id, google_sub, email, linked_at, last_used_at) values ($1, $2, $3, $4, $5)",
+          [user.id, replacedGoogle.google_sub, replacedGoogle.email, replacedGoogle.linked_at, replacedGoogle.last_used_at],
+        );
+        plan.googleMoved.push(user.email);
       }
       for (const code of fromBackup.codes.filter((c) => c.user_id === user.id)) {
         await client.query("insert into user_backup_codes (user_id, code_hash, created_at) values ($1, $2, $3)", [user.id, code.code_hash, code.created_at]);
@@ -409,7 +457,15 @@ export async function recoverPeople(
       eventType: "server.people_recovered",
       entityType: "server_setting",
       entityId: "users",
-      details: { backupMadeAt: header.createdAt, added: plan.add.length, replaced: toAdd.filter((u) => u.replacesId).length, memberships: plan.memberships.length, conflicts: plan.conflicts.length },
+      details: {
+        backupMadeAt: header.createdAt,
+        added: plan.add.length,
+        replaced: toAdd.filter((u) => u.replacesId).length,
+        memberships: plan.memberships.length,
+        conflicts: plan.conflicts.length,
+        googleNotRestored: plan.googleNotRestored.map((g) => g.email),
+        googleMoved: plan.googleMoved,
+      },
     });
   });
   plan.applied = true;

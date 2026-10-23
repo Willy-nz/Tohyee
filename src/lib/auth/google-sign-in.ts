@@ -502,7 +502,13 @@ export async function getGoogleSignInStatus(userId: string, sessionId: string): 
   };
 }
 
-/** Unlinks your own Google account, if you'd still have a way to sign in. Google sessions (other than this one) end. */
+/**
+ * Unlinks your own Google account, if you'd still have a way to sign in.
+ * Google sessions (other than this one) end. Apps and keys you connected keep
+ * working: you're signed in and choosing, as when you remove a sign-in method
+ * from a Google or Xero account (decision 852). The email says how to
+ * disconnect them if someone else may have used your Google account.
+ */
 export async function unlinkOwnGoogle(user: { id: string; email: string }, currentSessionId: string): Promise<void> {
   const status = await getGoogleSignInStatus(user.id, currentSessionId);
   if (!status.linked) throw new ConflictError("No Google account is linked to your login.");
@@ -523,13 +529,21 @@ export async function unlinkOwnGoogle(user: { id: string; email: string }, curre
       details: { googleEmail: status.linked!.email },
     });
   });
-  await sendSecurityAlert(user.email, "Google sign-in was unlinked", [`The Google account ${status.linked.email} can no longer be used to sign in to your Tohyee login.`]);
+  await sendSecurityAlert(user.email, "Google sign-in was unlinked", [
+    `The Google account ${status.linked.email} can no longer be used to sign in to your Tohyee login.`,
+    "AI apps, AI keys, farm app keys and PowerPoint add-in sign-ins you connected keep working.",
+    "If someone else may have used your Google account, change your password: that disconnects them all. Or disconnect them one by one on the AI page, on Farm apps and under Your account › Connected apps.",
+  ]);
 }
 
 /**
  * A server admin removes someone's Google sign-in (a lost or taken-over
- * Google account). Their Google sessions end. Someone set up with Google
- * only then needs a setup link to choose a password.
+ * Google account). Their Google sessions end, and so does everything that
+ * could carry on acting as them (decision 850): AI keys, AI app and
+ * PowerPoint add-in connections with their tokens, farm app keys, and codes
+ * not yet swapped for tokens, as when a password is reset. Their password
+ * and its sessions are left alone. Someone set up with Google only then
+ * needs a setup link to choose a password.
  */
 export async function removeGoogleSignIn(actor: AdminActor, userId: string): Promise<{ googleOnly: boolean }> {
   if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new NotFoundError("User not found.");
@@ -543,16 +557,19 @@ export async function removeGoogleSignIn(actor: AdminActor, userId: string): Pro
     if (!row.google_email) throw new ConflictError(`${row.email} doesn't sign in with Google.`);
     await client.query("delete from user_google_identities where user_id = $1", [userId]);
     await client.query("delete from sessions where user_id = $1 and sign_in_method = 'google'", [userId]);
+    // An app connected while the Google account was someone else's mustn't keep acting as them.
+    const aiKeysRevoked = await revokeUserAiKeys(client, userId);
     await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
       eventType: "user.google_removed",
       entityType: "user",
       entityId: userId,
-      details: { googleEmail: row.google_email },
+      details: { googleEmail: row.google_email, aiKeysRevoked },
     });
     return row;
   });
   await sendSecurityAlert(result.email, "Google sign-in was removed", [
     `A server admin (${actor.email}) removed Google sign-in (${result.google_email}) from your Tohyee login and signed out its Google sessions.`,
+    "Your AI apps, AI keys, farm app keys and PowerPoint add-in sign-ins were disconnected too. Connect again the ones you still use.",
     result.google_only ? "Your server admin will send you a setup link to choose a password." : "You can still sign in with your password.",
   ]);
   return { googleOnly: result.google_only };

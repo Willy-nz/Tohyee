@@ -216,7 +216,7 @@ export default function UsersPage() {
                           onClick={async () => {
                             if (
                               await confirm(
-                                `Remove Google sign-in (${user.googleEmail}) from ${user.email}? Their Google sessions end.${user.googleOnly ? " They have no password, so they then need a setup link to choose one." : " They can still sign in with their password."}`,
+                                `Remove Google sign-in (${user.googleEmail}) from ${user.email}? Their Google sessions end, and their AI apps, AI keys, farm app keys and PowerPoint add-in sign-ins are disconnected.${user.googleOnly ? " They have no password, so they then need a setup link to choose one." : " They can still sign in with their password."}`,
                               )
                             ) {
                               void act(() => api(`/api/admin/users/${user.id}/google`, { method: "DELETE" }), `Google sign-in removed from ${user.email}.`);

@@ -253,8 +253,10 @@ password and two-step sign-in (its secret re-encrypted), and adds their
 memberships for organisations here with the same ID. A person already on
 this server under the same email with a different ID is reported, not
 merged, unless their account here has no organisations and the server admin
-chooses to replace it. It can be run again after more organisations are
-restored. Server settings (email sending, remote access, folders) aren't
+chooses to replace it. Sign in with Google links come back with the person
+(decision 851): a replaced account's link steps aside first, and a Google
+account already linked to a different login here is listed, not moved. It
+can be run again after more organisations are restored. Server settings (email sending, remote access, folders) aren't
 copied: the old tunnel token would compete with the original, and folder
 paths differ; they're listed to set up again.
 
