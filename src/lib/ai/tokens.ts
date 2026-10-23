@@ -264,9 +264,12 @@ export async function remoteAccessAddress(): Promise<string | null> {
  * had their account shouldn't keep working. AI app and PowerPoint add-in
  * connections are rows of ai_access_tokens too, so they (and their access and
  * refresh tokens) stop with the keys. Returns how many keys, connections and
- * farm app keys.
+ * farm app keys. Locks the person's row first (decision 853).
  */
 export async function revokeUserAiKeys(client: DbClient, userId: string): Promise<number> {
+  // The person's row, locked first: a code being swapped for a connection holds it shared until it
+  // commits, so that connection either ends here or its code is refused (decision 853).
+  await client.query("select 1 from users where id = $1 for update", [userId]);
   const revoked = await client.query("update ai_access_tokens set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
   // Farm app keys (FA2, decision 561) stop for the same reason; they're counted with the AI keys.
   const apps = await client.query("update farm_app_keys set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);

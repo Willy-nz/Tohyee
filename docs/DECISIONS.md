@@ -8500,3 +8500,29 @@ so; those choices are not yet reviewed by Jess.
      that changing your password disconnects them all, or where to
      disconnect each. A server admin removing it (decision 850) is the path
      for a Google account someone else may have. Not yet reviewed by Jess.
+853. **A code being swapped can't outlive a revoke** (#432 follow-up).
+     Swapping an authorisation code (an AI app's or the PowerPoint
+     add-in's) is one transaction: it takes a share lock on the person's row
+     and, for an AI app, their membership row, then claims the code, checks
+     them, makes the connection and its tokens, and commits. Everything that
+     revokes a person's apps locks their row for update first
+     (`revokeUserAiKeys`: password change or reset, two-step reset, a server
+     admin removing Google sign-in, setting up from a setup link), and
+     removing someone from an organisation locks their membership row. So
+     either the swap finishes first and the revoke then ends the new
+     connection, or the revoke finishes first and the code is refused. Locks
+     are always taken person, then membership, then code, so the two can't
+     deadlock. A refused code still counts as used, as before. Chosen over a
+     per-person "revoked at" time because it needs no new column and covers
+     membership removal too.
+854. **When recovering replaces an account, the backup's role wins**
+     (#432 follow-up, 23 October 2026). A server
+     admin can replace an account here that already belongs to
+     organisations: its memberships are handed to the backup's account. Where
+     the backup has the same person in the same organisation with a different
+     role, the backup's role is used, because the server admin chose to
+     restore that account; the preview lists each change ("Role from the
+     backup"). Recovery is refused, and nothing changes, if it would leave an
+     organisation it touches with no Owner. Private mail the replaced account
+     connected on this server isn't moved (it's in each organisation's
+     database, and stays with the replaced ID). Not yet reviewed by Jess.

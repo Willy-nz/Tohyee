@@ -372,6 +372,12 @@ export default function RestoreWizardPage() {
               <div>
                 <strong>Memberships {plan.applied ? "added" : "to add"}:</strong> {plan.memberships.length}
               </div>
+              {plan.roleChanges.length ? (
+                <div>
+                  <strong>Role from the backup</strong> (the account here had a different one):{" "}
+                  {plan.roleChanges.map((c) => `${c.email} in ${c.organisationId}: ${c.roleHere} → ${c.role}`).join("; ")}
+                </div>
+              ) : null}
               {plan.googleNotRestored.length ? (
                 <div>
                   <strong>Sign in with Google {plan.applied ? "not restored" : "can't be restored"}</strong> (that Google account is linked to another login here):{" "}

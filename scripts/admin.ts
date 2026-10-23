@@ -697,6 +697,7 @@ async function backups(command: string | undefined, args: string[]) {
     if (plan.alreadyHere.length) console.log(`Already here: ${plan.alreadyHere.join(", ")}`);
     for (const conflict of plan.conflicts) console.log(`Here under another account: ${conflict.email}${conflict.replacing ? " (replaced)" : " (left alone; --replace it to use the backup's)"}`);
     console.log(`Memberships ${plan.applied ? "added" : "to add"}: ${plan.memberships.length}`);
+    for (const c of plan.roleChanges) console.log(`Role from the backup for ${c.email} in ${c.organisationId}: ${c.roleHere} -> ${c.role}`);
     for (const g of plan.googleNotRestored) {
       console.log(`Sign in with Google not restored for ${g.email}: ${g.googleEmail} is linked to ${g.linkedTo} here${g.needsSetupLink ? " (they had only Google: send them a setup link)" : ""}`);
     }

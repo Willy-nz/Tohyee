@@ -251,9 +251,16 @@ with **Recover people from a server backup**: it opens the `_server` backup
 the same way, adds each user who isn't on this server with the same ID,
 password and two-step sign-in (its secret re-encrypted), and adds their
 memberships for organisations here with the same ID. A person already on
-this server under the same email with a different ID is reported, not
-merged, unless their account here has no organisations and the server admin
-chooses to replace it. Sign in with Google links come back with the person
+this server under the same email with a different ID is reported and left
+alone, unless the server admin ticks it to replace it (even if that account
+already belongs to organisations here). Then the backup's account, with its
+original ID, takes the place of the one here: it keeps the backup's
+memberships, and the memberships the account here had are handed over to it.
+Where both are in the same organisation, the backup's role is used, and the
+change is listed before anything is done (decision 854); it never leaves an
+organisation without an Owner. The account here is then deleted, with its
+sessions and keys. Private mail it connected here isn't moved to the
+original ID. Sign in with Google links come back with the person
 (decision 851): a replaced account's link steps aside first, and a Google
 account already linked to a different login here is listed, not moved. It
 can be run again after more organisations are restored. Server settings (email sending, remote access, folders) aren't

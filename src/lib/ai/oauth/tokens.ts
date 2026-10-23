@@ -124,93 +124,134 @@ type CodeRow = {
   fresh: boolean;
 };
 
-/** grant_type=authorization_code: makes the connection and its first tokens. */
+let exchangePauseForTests: (() => Promise<void>) | null = null;
+/** Lets a test hold a code exchange part-way through its transaction, to check what happens beside it. */
+export function setCodeExchangePauseForTests(pause: (() => Promise<void>) | null): void {
+  exchangePauseForTests = pause;
+}
+
+type Exchanged =
+  | { kind: "refused"; error: OAuthError; reusedConnectionId?: string | null }
+  | { kind: "connection"; answer: TokenAnswer; row: CodeRow; email: string; organisationName: string }
+  | { kind: "office"; answer: TokenAnswer; row: CodeRow; email: string };
+
+/**
+ * grant_type=authorization_code: makes the connection and its first tokens.
+ *
+ * Claiming the code, checking the person and their membership, and making
+ * the connection are one transaction that first takes a share lock on the
+ * person's row (decision 853). Everything that revokes their apps (a
+ * password or two-step reset, a server admin removing Google sign-in) locks
+ * that row for update first, and removing a membership locks the
+ * membership row, so either the exchange finishes first and the revoke ends
+ * the new connection, or the revoke finishes first and the code is refused.
+ * A refused code still counts as used.
+ */
 export async function exchangeCode(form: Form): Promise<TokenAnswer> {
   const addresses = await needAddresses();
   const code = required(form, "code");
   const clientId = required(form, "client_id");
   const redirectUri = required(form, "redirect_uri");
   const verifier = required(form, "code_verifier");
-  const claimed = await coreQuery<CodeRow>(
-    `update oauth_authorization_codes set used_at = now() where code_hash = $1 and used_at is null
-     returning user_id::text, organisation_id, kind, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at > now() as fresh`,
-    [sha256Hex(code)],
-  );
-  const row = claimed.rows[0];
-  if (!row) {
-    // A used code again: whatever it made is ended (OAuth 2.1 section 4.1.3).
-    const used = await coreQuery<{ connection_id: string | null }>("select connection_id::text from oauth_authorization_codes where code_hash = $1", [sha256Hex(code)]);
-    if (used.rows[0]?.connection_id) await endForReuse(used.rows[0].connection_id, "code");
-    throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
-  }
-  if (!row.fresh) throw new OAuthError("invalid_grant", "That code has expired. Start connecting again.");
-  if (row.client_id !== clientId) throw new OAuthError("invalid_grant", "That code was given to a different app.");
-  if (row.redirect_uri !== redirectUri) throw new OAuthError("invalid_grant", "redirect_uri isn't the one the code was given for.");
-  if (!pkceMatches(verifier, row.code_challenge)) throw new OAuthError("invalid_grant", "The PKCE code_verifier doesn't match.");
-  checkResource(form, row.resource, addresses, row.kind);
-
-  const user = await coreQuery<{ email: string; is_active: boolean }>("select email, is_active from users where id = $1", [row.user_id]);
-  if (row.kind === "office") return connectOffice(row, user.rows[0], code);
-  // The person must still be able to use the organisation, as for a key (decision 341).
-  const membership = row.organisation_id ? await getMembership(row.organisation_id, row.user_id) : null;
-  if (!user.rows[0]?.is_active || !membership || !membership.organisation.isActive || !roleAtLeast(membership.role as Role, "viewer")) {
-    throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
-  }
-  const email = user.rows[0].email;
-  const organisationId = membership.organisation.id;
-
-  const answer = await withCoreTransaction(async (client) => {
-    const inserted = await client.query<{ id: string }>(
-      `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource)
-       values ($1, $2, $3, $4, $5, 'connection', $6, $7, $8) returning id::text`,
-      [row.user_id, row.organisation_id, row.client_name, email, row.access_level, row.client_id, row.redirect_uri, row.resource],
+  const codeHash = sha256Hex(code);
+  const outcome = await withCoreTransaction<Exchanged>(async (client) => {
+    // Locks in this order, before the code: the person, then their membership (an AI app's code), then the code.
+    const owner = await client.query<{ user_id: string; organisation_id: string | null }>("select user_id::text, organisation_id from oauth_authorization_codes where code_hash = $1", [codeHash]);
+    const found = owner.rows[0];
+    const person = found
+      ? (await client.query<{ email: string; is_active: boolean }>("select email, is_active from users where id = $1 for share", [found.user_id])).rows[0]
+      : undefined;
+    // The membership is held until this commits, so removing them waits and then ends the connection.
+    const member = found?.organisation_id
+      ? Boolean((await client.query("select 1 from organisation_members where organisation_id = $1 and user_id = $2 for share", [found.organisation_id, found.user_id])).rowCount)
+      : false;
+    const claimed = await client.query<CodeRow>(
+      `update oauth_authorization_codes set used_at = now() where code_hash = $1 and used_at is null
+       returning user_id::text, organisation_id, kind, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at > now() as fresh`,
+      [codeHash],
     );
-    const connectionId = inserted.rows[0].id;
-    await client.query("update oauth_authorization_codes set connection_id = $1 where code_hash = $2", [connectionId, sha256Hex(code)]);
-    await writeAdminAuditEvent(client, { userId: row.user_id, email }, {
-      eventType: "ai_connection.connected",
-      entityType: "organisation",
-      entityId: organisationId,
-      details: { connectionId, app: row.client_name, redirectHost: redirectHost(row.redirect_uri), accessLevel: row.access_level },
-    });
-    return issueTokens(client, connectionId);
+    const row = claimed.rows[0];
+    if (!row) {
+      // A used code again: whatever it made is ended (OAuth 2.1 section 4.1.3), after this transaction.
+      const used = await client.query<{ connection_id: string | null }>("select connection_id::text from oauth_authorization_codes where code_hash = $1", [codeHash]);
+      return { kind: "refused", error: new OAuthError("invalid_grant", "That code isn't valid. Start connecting again."), reusedConnectionId: used.rows[0]?.connection_id ?? null };
+    }
+    if (exchangePauseForTests) await exchangePauseForTests();
+    try {
+      if (!row.fresh) throw new OAuthError("invalid_grant", "That code has expired. Start connecting again.");
+      if (row.client_id !== clientId) throw new OAuthError("invalid_grant", "That code was given to a different app.");
+      if (row.redirect_uri !== redirectUri) throw new OAuthError("invalid_grant", "redirect_uri isn't the one the code was given for.");
+      if (!pkceMatches(verifier, row.code_challenge)) throw new OAuthError("invalid_grant", "The PKCE code_verifier doesn't match.");
+      checkResource(form, row.resource, addresses, row.kind);
+      if (!person?.is_active) throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
+      if (row.kind === "office") return { kind: "office", answer: await connectOffice(client, row, person.email, codeHash), row, email: person.email };
+      // The person must still be able to use the organisation, as for a key (decision 341).
+      const membership = member && row.organisation_id ? await getMembership(row.organisation_id, row.user_id) : null;
+      if (!membership || !membership.organisation.isActive || !roleAtLeast(membership.role as Role, "viewer")) {
+        throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
+      }
+      const organisationId = membership.organisation.id;
+      const inserted = await client.query<{ id: string }>(
+        `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource)
+         values ($1, $2, $3, $4, $5, 'connection', $6, $7, $8) returning id::text`,
+        [row.user_id, row.organisation_id, row.client_name, person.email, row.access_level, row.client_id, row.redirect_uri, row.resource],
+      );
+      const connectionId = inserted.rows[0].id;
+      await client.query("update oauth_authorization_codes set connection_id = $1 where code_hash = $2", [connectionId, codeHash]);
+      await writeAdminAuditEvent(client, { userId: row.user_id, email: person.email }, {
+        eventType: "ai_connection.connected",
+        entityType: "organisation",
+        entityId: organisationId,
+        details: { connectionId, app: row.client_name, redirectHost: redirectHost(row.redirect_uri), accessLevel: row.access_level },
+      });
+      return { kind: "connection", answer: await issueTokens(client, connectionId), row, email: person.email, organisationName: membership.organisation.displayName };
+    } catch (caught) {
+      // Refused, but the code stays used: the claim above commits.
+      if (caught instanceof OAuthError) return { kind: "refused", error: caught };
+      throw caught;
+    }
   });
+  if (outcome.kind === "refused") {
+    if (outcome.reusedConnectionId) await endForReuse(outcome.reusedConnectionId, "code");
+    throw outcome.error;
+  }
+  const { row, email } = outcome;
+  if (outcome.kind === "office") {
+    await sendSecurityAlert(email, "you signed in to the PowerPoint add-in", [
+      `"${row.client_name}" was signed in to Tohyee as you. It can read the Analytics reports you can see, in every organisation you belong to, and can't change anything.`,
+      "You can see and sign it out under Your account › Connected apps in Tohyee.",
+    ]);
+    return outcome.answer;
+  }
   await markClientUsed(row.client_id);
   await sendSecurityAlert(email, "an AI app was connected", [
-    `"${row.client_name}" (sending you back to ${redirectHost(row.redirect_uri)}) was connected to ${membership.organisation.displayName} in Tohyee, as you, at the level "${AI_ACCESS_LEVEL_LABELS[row.access_level]}".`,
+    `"${row.client_name}" (sending you back to ${redirectHost(row.redirect_uri)}) was connected to ${outcome.organisationName} in Tohyee, as you, at the level "${AI_ACCESS_LEVEL_LABELS[row.access_level]}".`,
     "You can see and disconnect it on the AI page in Tohyee.",
   ]);
-  return answer;
+  return outcome.answer;
 }
 
 /**
  * The PowerPoint add-in's code swapped for its connection and first tokens
  * (#429, decisions 835-836): the person's, not one organisation's, always
  * the read level; which organisations it reaches is checked on every request.
+ * Inside the exchange's transaction (decision 853).
  */
-async function connectOffice(row: CodeRow, user: { email: string; is_active: boolean } | undefined, code: string): Promise<TokenAnswer> {
-  if (!user?.is_active) throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
-  const answer = await withCoreTransaction(async (client) => {
-    const inserted = await client.query<{ id: string }>(
-      `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource)
-       values ($1, null, $2, $3, 'read', 'office', $4, $5, $6) returning id::text`,
-      [row.user_id, row.client_name, user.email, row.client_id, row.redirect_uri, row.resource],
-    );
-    const connectionId = inserted.rows[0].id;
-    await client.query("update oauth_authorization_codes set connection_id = $1 where code_hash = $2", [connectionId, sha256Hex(code)]);
-    await writeAdminAuditEvent(client, { userId: row.user_id, email: user.email }, {
-      eventType: "office_connection.connected",
-      entityType: "user",
-      entityId: row.user_id,
-      details: { connectionId, app: row.client_name },
-    });
-    return issueTokens(client, connectionId);
+async function connectOffice(client: DbClient, row: CodeRow, email: string, codeHash: string): Promise<TokenAnswer> {
+  const inserted = await client.query<{ id: string }>(
+    `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource)
+     values ($1, null, $2, $3, 'read', 'office', $4, $5, $6) returning id::text`,
+    [row.user_id, row.client_name, email, row.client_id, row.redirect_uri, row.resource],
+  );
+  const connectionId = inserted.rows[0].id;
+  await client.query("update oauth_authorization_codes set connection_id = $1 where code_hash = $2", [connectionId, codeHash]);
+  await writeAdminAuditEvent(client, { userId: row.user_id, email }, {
+    eventType: "office_connection.connected",
+    entityType: "user",
+    entityId: row.user_id,
+    details: { connectionId, app: row.client_name },
   });
-  await sendSecurityAlert(user.email, "you signed in to the PowerPoint add-in", [
-    `"${row.client_name}" was signed in to Tohyee as you. It can read the Analytics reports you can see, in every organisation you belong to, and can't change anything.`,
-    "You can see and sign it out under Your account › Connected apps in Tohyee.",
-  ]);
-  return answer;
+  return issueTokens(client, connectionId);
 }
 
 /** grant_type=refresh_token: a new access token and a new refresh token; the old refresh token stops. */
