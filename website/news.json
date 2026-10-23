@@ -3,6 +3,12 @@
   "items": [
     {
       "date": "2026-10-23",
+      "title": "Tohyee 0.13.1: security fixes",
+      "body": "Removing someone's Google sign-in now disconnects their AI apps, keys and PowerPoint add-in sign-ins too; ending access can't be raced; and restoring people from a backup keeps their Google sign-in. Update soon if you use Google sign-in, AI app connections or the PowerPoint add-in.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.1"
+    },
+    {
+      "date": "2026-10-23",
       "title": "Tohyee 0.13.0",
       "body": "New: Claude.ai, ChatGPT and other AI apps connect by signing in to Tohyee instead of copying a key, with a much shorter AI page; and a PowerPoint add-in that puts live, clickable Analytics reports on slides. Both need Remote access.",
       "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.0"
