@@ -6,6 +6,7 @@ import { type OAuthAddresses, oauthAddresses } from "@/lib/ai/oauth/config";
 import {
   ACCESS_TOKEN_PREFIX,
   ACCESS_TOKEN_SECONDS,
+  canonicalResource,
   looksLikeAccessToken,
   pkceMatches,
   randomToken,
@@ -64,10 +65,17 @@ async function needAddresses(): Promise<OAuthAddresses> {
   return addresses;
 }
 
-function checkResource(form: Form, bound: string, addresses: OAuthAddresses): void {
+/**
+ * The audience check on the token endpoint (RFC 8707): an AI app's tokens
+ * are for MCP, the PowerPoint add-in's for the Analytics API for Office
+ * (#429, decision 833), and a `resource` asked for must be that one.
+ */
+function checkResource(form: Form, bound: string, addresses: OAuthAddresses, kind: "connection" | "office" = "connection"): void {
+  const expected = kind === "office" ? addresses.officeResource : addresses.resource;
   const asked = form.get("resource");
-  if (asked !== null && !resourceIsOurs(asked, addresses.resource)) throw new OAuthError("invalid_target", `Tokens here are only for ${addresses.resource}.`);
-  if (bound !== addresses.resource) throw new OAuthError("invalid_grant", "Tohyee's address has changed since this app signed in. Connect it again.");
+  const fits = asked === null || (kind === "office" ? canonicalResource(asked) === canonicalResource(expected) : resourceIsOurs(asked, expected));
+  if (!fits) throw new OAuthError("invalid_target", `Tokens for this app are only for ${expected}.`);
+  if (bound !== expected) throw new OAuthError("invalid_grant", "Tohyee's address has changed since this app signed in. Connect it again.");
 }
 
 async function issueTokens(client: DbClient, connectionId: string): Promise<TokenAnswer> {
@@ -86,18 +94,18 @@ async function issueTokens(client: DbClient, connectionId: string): Promise<Toke
 /** Ends a connection because a code or refresh token was used twice. */
 async function endForReuse(connectionId: string, what: "code" | "refresh_token"): Promise<void> {
   await withCoreTransaction(async (client) => {
-    const ended = await client.query<{ user_id: string; email: string; organisation_id: string; name: string }>(
+    const ended = await client.query<{ user_id: string; email: string; organisation_id: string | null; name: string; kind: string }>(
       `update ai_access_tokens t set revoked_at = now() from users u
         where t.id = $1 and t.revoked_at is null and u.id = t.user_id
-        returning t.user_id, u.email, t.organisation_id, t.name`,
+        returning t.user_id, u.email, t.organisation_id, t.name, t.kind`,
       [connectionId],
     );
     const row = ended.rows[0];
     if (!row) return;
     await writeAdminAuditEvent(client, { userId: row.user_id, email: row.email }, {
-      eventType: "ai_connection.ended_reused",
-      entityType: "organisation",
-      entityId: row.organisation_id,
+      eventType: row.kind === "office" ? "office_connection.ended_reused" : "ai_connection.ended_reused",
+      entityType: row.organisation_id ? "organisation" : "user",
+      entityId: row.organisation_id ?? row.user_id,
       details: { connectionId, app: row.name, reused: what },
     });
   });
@@ -105,7 +113,8 @@ async function endForReuse(connectionId: string, what: "code" | "refresh_token")
 
 type CodeRow = {
   user_id: string;
-  organisation_id: string;
+  organisation_id: string | null;
+  kind: "connection" | "office";
   client_id: string;
   client_name: string;
   redirect_uri: string;
@@ -124,7 +133,7 @@ export async function exchangeCode(form: Form): Promise<TokenAnswer> {
   const verifier = required(form, "code_verifier");
   const claimed = await coreQuery<CodeRow>(
     `update oauth_authorization_codes set used_at = now() where code_hash = $1 and used_at is null
-     returning user_id::text, organisation_id, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at > now() as fresh`,
+     returning user_id::text, organisation_id, kind, client_id, client_name, redirect_uri, code_challenge, resource, access_level, expires_at > now() as fresh`,
     [sha256Hex(code)],
   );
   const row = claimed.rows[0];
@@ -138,15 +147,17 @@ export async function exchangeCode(form: Form): Promise<TokenAnswer> {
   if (row.client_id !== clientId) throw new OAuthError("invalid_grant", "That code was given to a different app.");
   if (row.redirect_uri !== redirectUri) throw new OAuthError("invalid_grant", "redirect_uri isn't the one the code was given for.");
   if (!pkceMatches(verifier, row.code_challenge)) throw new OAuthError("invalid_grant", "The PKCE code_verifier doesn't match.");
-  checkResource(form, row.resource, addresses);
+  checkResource(form, row.resource, addresses, row.kind);
 
-  // The person must still be able to use the organisation, as for a key (decision 341).
   const user = await coreQuery<{ email: string; is_active: boolean }>("select email, is_active from users where id = $1", [row.user_id]);
-  const membership = await getMembership(row.organisation_id, row.user_id);
+  if (row.kind === "office") return connectOffice(row, user.rows[0], code);
+  // The person must still be able to use the organisation, as for a key (decision 341).
+  const membership = row.organisation_id ? await getMembership(row.organisation_id, row.user_id) : null;
   if (!user.rows[0]?.is_active || !membership || !membership.organisation.isActive || !roleAtLeast(membership.role as Role, "viewer")) {
     throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
   }
   const email = user.rows[0].email;
+  const organisationId = membership.organisation.id;
 
   const answer = await withCoreTransaction(async (client) => {
     const inserted = await client.query<{ id: string }>(
@@ -159,7 +170,7 @@ export async function exchangeCode(form: Form): Promise<TokenAnswer> {
     await writeAdminAuditEvent(client, { userId: row.user_id, email }, {
       eventType: "ai_connection.connected",
       entityType: "organisation",
-      entityId: row.organisation_id,
+      entityId: organisationId,
       details: { connectionId, app: row.client_name, redirectHost: redirectHost(row.redirect_uri), accessLevel: row.access_level },
     });
     return issueTokens(client, connectionId);
@@ -168,6 +179,36 @@ export async function exchangeCode(form: Form): Promise<TokenAnswer> {
   await sendSecurityAlert(email, "an AI app was connected", [
     `"${row.client_name}" (sending you back to ${redirectHost(row.redirect_uri)}) was connected to ${membership.organisation.displayName} in Tohyee, as you, at the level "${AI_ACCESS_LEVEL_LABELS[row.access_level]}".`,
     "You can see and disconnect it on the AI page in Tohyee.",
+  ]);
+  return answer;
+}
+
+/**
+ * The PowerPoint add-in's code swapped for its connection and first tokens
+ * (#429, decisions 835-836): the person's, not one organisation's, always
+ * the read level; which organisations it reaches is checked on every request.
+ */
+async function connectOffice(row: CodeRow, user: { email: string; is_active: boolean } | undefined, code: string): Promise<TokenAnswer> {
+  if (!user?.is_active) throw new OAuthError("invalid_grant", "That code isn't valid. Start connecting again.");
+  const answer = await withCoreTransaction(async (client) => {
+    const inserted = await client.query<{ id: string }>(
+      `insert into ai_access_tokens (user_id, organisation_id, name, created_by_email, access_level, kind, oauth_client_id, redirect_uri, resource)
+       values ($1, null, $2, $3, 'read', 'office', $4, $5, $6) returning id::text`,
+      [row.user_id, row.client_name, user.email, row.client_id, row.redirect_uri, row.resource],
+    );
+    const connectionId = inserted.rows[0].id;
+    await client.query("update oauth_authorization_codes set connection_id = $1 where code_hash = $2", [connectionId, sha256Hex(code)]);
+    await writeAdminAuditEvent(client, { userId: row.user_id, email: user.email }, {
+      eventType: "office_connection.connected",
+      entityType: "user",
+      entityId: row.user_id,
+      details: { connectionId, app: row.client_name },
+    });
+    return issueTokens(client, connectionId);
+  });
+  await sendSecurityAlert(user.email, "you signed in to the PowerPoint add-in", [
+    `"${row.client_name}" was signed in to Tohyee as you. It can read the Analytics reports you can see, in every organisation you belong to, and can't change anything.`,
+    "You can see and sign it out under Your account › Connected apps in Tohyee.",
   ]);
   return answer;
 }
@@ -187,13 +228,14 @@ export async function refreshTokens(form: Form): Promise<TokenAnswer> {
     if (used.rows[0]) await endForReuse(used.rows[0].connection_id, "refresh_token");
     throw new OAuthError("invalid_grant", "That refresh token isn't valid. Connect the app again.");
   }
-  const connection = await coreQuery<{ oauth_client_id: string; resource: string }>("select oauth_client_id, resource from ai_access_tokens where id = $1", [connectionId]);
+  const connection = await coreQuery<{ oauth_client_id: string; resource: string; kind: "connection" | "office" }>("select oauth_client_id, resource, kind from ai_access_tokens where id = $1", [connectionId]);
   if (connection.rows[0]?.oauth_client_id !== clientId) {
     // Someone else's refresh token: it's used up now, so the real app's next refresh ends the connection.
     throw new OAuthError("invalid_grant", "That refresh token was given to a different app.");
   }
-  checkResource(form, connection.rows[0].resource, addresses);
-  const identity = await grantIdentity("t.id = $1 and t.kind = 'connection'", [connectionId]);
+  const kind = connection.rows[0].kind === "office" ? "office" : "connection";
+  checkResource(form, connection.rows[0].resource, addresses, kind);
+  const identity = kind === "office" ? await officeGrant("t.id = $1", [connectionId]) : await grantIdentity("t.id = $1 and t.kind = 'connection'", [connectionId]);
   if (!identity) throw new OAuthError("invalid_grant", "This connection has ended. Connect the app again.");
   return withCoreTransaction((client) => issueTokens(client, connectionId));
 }
@@ -202,8 +244,8 @@ export async function refreshTokens(form: Form): Promise<TokenAnswer> {
 export async function revokeToken(form: Form): Promise<void> {
   const token = form.get("token");
   if (!token || token.length > 2000) return;
-  const found = await coreQuery<{ connection_id: string; kind: "access" | "refresh"; oauth_client_id: string }>(
-    `select o.connection_id::text, o.kind, t.oauth_client_id from oauth_tokens o join ai_access_tokens t on t.id = o.connection_id where o.token_hash = $1`,
+  const found = await coreQuery<{ connection_id: string; kind: "access" | "refresh"; oauth_client_id: string; connection_kind: string }>(
+    `select o.connection_id::text, o.kind, t.oauth_client_id, t.kind as connection_kind from oauth_tokens o join ai_access_tokens t on t.id = o.connection_id where o.token_hash = $1`,
     [sha256Hex(token)],
   );
   const row = found.rows[0];
@@ -215,16 +257,16 @@ export async function revokeToken(form: Form): Promise<void> {
     return;
   }
   await withCoreTransaction(async (client) => {
-    const ended = await client.query<{ user_id: string; email: string; organisation_id: string; name: string }>(
+    const ended = await client.query<{ user_id: string; email: string; organisation_id: string | null; name: string }>(
       `update ai_access_tokens t set revoked_at = now() from users u where t.id = $1 and t.revoked_at is null and u.id = t.user_id returning t.user_id, u.email, t.organisation_id, t.name`,
       [row.connection_id],
     );
     const done = ended.rows[0];
     if (done) {
       await writeAdminAuditEvent(client, { userId: done.user_id, email: done.email }, {
-        eventType: "ai_connection.disconnected",
-        entityType: "organisation",
-        entityId: done.organisation_id,
+        eventType: row.connection_kind === "office" ? "office_connection.disconnected" : "ai_connection.disconnected",
+        entityType: done.organisation_id ? "organisation" : "user",
+        entityId: done.organisation_id ?? done.user_id,
         details: { tokenId: row.connection_id, name: done.name, by: "app" },
       });
     }
@@ -235,7 +277,8 @@ export async function revokeToken(form: Form): Promise<void> {
  * Who an access token acts as, or null: it must be unexpired, its
  * connection working (the same checks as a key, decision 820), and issued
  * for Tohyee's MCP address as it is now (RFC 8707 audience). With remote
- * access off no access token works.
+ * access off no access token works. A PowerPoint add-in token (kind
+ * 'office', decision 833) is never one of these.
  */
 export async function authenticateAccessToken(token: string): Promise<AiTokenIdentity | null> {
   if (!looksLikeAccessToken(token)) return null;
@@ -245,5 +288,46 @@ export async function authenticateAccessToken(token: string): Promise<AiTokenIde
     "t.kind = 'connection' and t.id = (select connection_id from oauth_tokens where token_hash = $1 and kind = 'access' and expires_at > now())",
     [sha256Hex(token)],
     (row) => row.resource === addresses.resource,
+  );
+}
+
+/** Who a PowerPoint add-in connection acts as (#429): the person, while their login is on. Organisations are checked per request. */
+export type OfficeIdentity = {
+  connectionId: string;
+  user: { id: string; email: string; displayName: string };
+};
+
+const OFFICE_LAST_USED_EVERY_MS = 60_000;
+
+/** The working PowerPoint add-in connection `where` finds (on `ai_access_tokens t`): not ended, of kind 'office', its person's login on. */
+async function officeGrant(where: string, values: unknown[], resource?: string): Promise<OfficeIdentity | null> {
+  const found = await coreQuery<{ id: string; user_id: string; email: string; display_name: string; last_used_at: string | null; resource: string }>(
+    `select t.id::text, t.user_id::text, u.email, u.display_name, t.last_used_at, t.resource
+       from ai_access_tokens t join users u on u.id = t.user_id
+      where ${where} and t.kind = 'office' and t.revoked_at is null and u.is_active`,
+    values,
+  );
+  const row = found.rows[0];
+  if (!row || (resource !== undefined && row.resource !== resource)) return null;
+  if (!row.last_used_at || Date.now() - new Date(row.last_used_at).getTime() > OFFICE_LAST_USED_EVERY_MS) {
+    await coreQuery("update ai_access_tokens set last_used_at = now() where id = $1", [row.id]);
+  }
+  return { connectionId: row.id, user: { id: row.user_id, email: row.email, displayName: row.display_name } };
+}
+
+/**
+ * Who a PowerPoint add-in access token acts as, or null (#429, decision
+ * 833): an unexpired access token of an office connection, issued for the
+ * Analytics API for Office at the remote access address as it is now. An AI
+ * app's token (for MCP) and an AI key never work here.
+ */
+export async function authenticateOfficeToken(token: string): Promise<OfficeIdentity | null> {
+  if (!looksLikeAccessToken(token)) return null;
+  const addresses = await oauthAddresses();
+  if (!addresses) return null;
+  return officeGrant(
+    "t.id = (select connection_id from oauth_tokens where token_hash = $1 and kind = 'access' and expires_at > now())",
+    [sha256Hex(token)],
+    addresses.officeResource,
   );
 }

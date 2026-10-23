@@ -23,6 +23,73 @@ export function consentLevels(ceiling: AiAccessLevel): AiAccessLevel[] {
  * shown as such; nothing is connected until the person presses Allow.
  */
 export function ConnectConsent({ handle, details }: { handle: string; details: ConsentDetails }) {
+  if (details.kind === "office") return <OfficeConsent handle={handle} details={details} />;
+  return <AiAppConsent handle={handle} details={details} />;
+}
+
+/**
+ * Tohyee's own PowerPoint add-in signing in (#429, decision 835). Nothing to
+ * choose: it reads Analytics as you, in every organisation you can open
+ * Analytics in, and can't change anything. It's Tohyee's own app on this
+ * server (its details aren't the app's claims), so no name warning; the
+ * address it sends you back to is still shown.
+ */
+function OfficeConsent({ handle, details }: { handle: string; details: ConsentDetails }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function decide(decision: "allow" | "deny") {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ redirectTo: string }>(`/api/oauth/requests/${handle}`, { method: "POST", body: { decision } });
+      window.location.assign(result.redirectTo);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+  return (
+    <div className={styles.screen}>
+      <main className={`${styles.panel} ${styles.panelWide}`}>
+        <div className={styles.brand}>
+          <BrandMark size={30} className={styles.brandMark} />
+          Tohyee
+        </div>
+        <div>
+          <h1 className={styles.title}>Sign in to the PowerPoint add-in</h1>
+          <p className={styles.text}>Tohyee&apos;s PowerPoint add-in wants to show your Analytics reports on slides, as you.</p>
+        </div>
+        <dl className={styles.facts}>
+          <dt>App</dt>
+          <dd>{details.appName} (this Tohyee&apos;s own add-in)</dd>
+          <dt>After you choose, you&apos;ll go back to</dt>
+          <dd>
+            <span className={styles.host}>{details.redirectHost}</span>
+          </dd>
+          <dt>Signed in as</dt>
+          <dd>{details.signedInAs}</dd>
+          <dt>It can read Analytics in</dt>
+          <dd>{details.organisations.length ? details.organisations.map((entry) => entry.displayName).join(", ") : "none of your organisations yet"}</dd>
+        </dl>
+        <p className={styles.text}>
+          It only reads the Analytics reports you can see (a report viewer only the ones shared with them). It can&apos;t change anything in Tohyee, and can&apos;t see your books
+          outside Analytics. You can sign it out at any time on the slide, or under Your account › Connected apps.
+        </p>
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        <div className={styles.row}>
+          <Button type="button" disabled={busy} onClick={() => void decide("allow")}>
+            Allow
+          </Button>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void decide("deny")}>
+            Don&apos;t allow
+          </Button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function AiAppConsent({ handle, details }: { handle: string; details: ConsentDetails }) {
   const [organisationId, setOrganisationId] = useState(details.organisations[0]?.id ?? "");
   const [accessLevel, setAccessLevel] = useState<AiAccessLevel>("read");
   const [fullConfirmed, setFullConfirmed] = useState(false);

@@ -1,6 +1,8 @@
 import { coreQuery } from "@/lib/db/transactions";
 import { cleanClientName, isMetadataDocumentClientId, metadataCacheSeconds, randomToken, redirectHost, redirectUriProblem } from "@/lib/ai/oauth/format";
 import { publicFetch } from "@/lib/net/public-fetch";
+import { remoteAccessAddress } from "@/lib/ai/tokens";
+import { OFFICE_APP_NAME, officeAddressesFor } from "@/lib/office/addin";
 
 /*
  * The AI apps that sign in (decision 812). Two ways, as the MCP
@@ -17,7 +19,13 @@ import { publicFetch } from "@/lib/net/public-fetch";
 
 export type OAuthClient = {
   clientId: string;
-  source: "registered" | "metadata_document";
+  /**
+   * "built_in": Tohyee's own PowerPoint add-in (#429, decision 834). Its
+   * client_id is the address of its metadata document on this server, but
+   * Tohyee knows it without reading it, and only it gets tokens for the
+   * Analytics API for Office.
+   */
+  source: "registered" | "metadata_document" | "built_in";
   name: string;
   redirectUris: string[];
 };
@@ -132,6 +140,8 @@ async function fetchMetadataDocument(clientId: string): Promise<{ name: string; 
 export async function resolveClient(clientIdInput: unknown): Promise<OAuthClient> {
   if (typeof clientIdInput !== "string" || clientIdInput.length === 0 || clientIdInput.length > 500) throw new ClientProblem("The app didn't say who it is (client_id).");
   const clientId = clientIdInput;
+  const office = await builtInOfficeClient();
+  if (office && clientId === office.clientId) return office;
   const found = await coreQuery<ClientRow>(
     `select client_id, source, client_name, redirect_uris, (expires_at is null or expires_at > now()) as fresh from oauth_clients where client_id = $1`,
     [clientId],
@@ -151,6 +161,13 @@ export async function resolveClient(clientIdInput: unknown): Promise<OAuthClient
   );
   if (!saved.rows[0]) throw new ClientProblem("Tohyee doesn't know this app.");
   return toClient(saved.rows[0]);
+}
+
+/** Tohyee's PowerPoint add-in as an app, while remote access is on with an https address (decision 834). */
+export async function builtInOfficeClient(): Promise<OAuthClient | null> {
+  const addresses = officeAddressesFor(await remoteAccessAddress());
+  if (!addresses) return null;
+  return { clientId: addresses.clientId, source: "built_in", name: OFFICE_APP_NAME, redirectUris: [addresses.redirectUri] };
 }
 
 export async function markClientUsed(clientId: string): Promise<void> {

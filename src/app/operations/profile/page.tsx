@@ -220,6 +220,68 @@ function SessionsCard() {
   );
 }
 
+type ConnectedApp = { id: string; name: string; createdAt: string; lastUsedAt: string | null; expired: boolean; revokedAt: string | null };
+
+/**
+ * Apps signed in to Tohyee as you that aren't tied to one organisation: the
+ * PowerPoint add-in (#429, decision 836), one row per computer or browser.
+ * AI apps are on each organisation's AI page. Shown once there is one.
+ */
+function ConnectedAppsCard() {
+  const loaded = useApiData<{ connections: ConnectedApp[] }>("/api/auth/connected-apps");
+  const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const list = loaded.data?.connections ?? [];
+  if (list.length === 0 && !loaded.error) return null;
+  const working = list.filter((entry) => !entry.revokedAt && !entry.expired);
+  const ended = list.length - working.length;
+  async function end(id: string) {
+    try {
+      await api("/api/auth/connected-apps", { method: "DELETE", body: { id } });
+      setStatus({ tone: "success", text: "Signed out. The add-in on that computer asks you to sign in again." });
+      loaded.reload();
+    } catch (caught) {
+      setStatus({ tone: "error", text: errorMessage(caught) });
+    }
+  }
+  return (
+    <Card title="Connected apps" description="The PowerPoint add-in signs in as you on each computer or browser you use it in. It only reads Analytics. AI apps are on each organisation's AI page.">
+      {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+      {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
+      {working.length ? (
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
+            <thead>
+              <tr>
+                <th>App</th>
+                <th>Signed in</th>
+                <th>Last used</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {working.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.name}</td>
+                  <td>{formatDateTime(entry.createdAt)}</td>
+                  <td>{entry.lastUsedAt ? formatDateTime(entry.lastUsedAt) : "Not yet"}</td>
+                  <td className={ui.num}>
+                    <Button variant="secondary" size="small" aria-label={`Sign out ${entry.name}, signed in ${formatDateTime(entry.createdAt)}`} onClick={() => void end(entry.id)}>
+                      Sign out
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className={ui.muted}>Nothing is signed in now.</p>
+      )}
+      {ended ? <p className={ui.muted}>{ended === 1 ? "1 earlier sign-in has ended." : `${ended} earlier sign-ins have ended.`}</p> : null}
+    </Card>
+  );
+}
+
 export default function ProfilePage() {
   const { user, organisations } = useWorkspace();
   const google = useApiData<{ google: GoogleSignInStatus }>("/api/auth/google");
@@ -274,6 +336,7 @@ export default function ProfilePage() {
       {google.data && (google.data.google.available || google.data.google.linked) ? <GoogleCard google={google.data.google} reload={google.reload} /> : null}
       {googleOnly ? null : <TwoStepCard />}
       <SessionsCard />
+      <ConnectedAppsCard />
       {googleOnly ? (
         <Card title="Password">
           <p className={ui.muted}>You sign in with Google, so there&apos;s no password to change. To have a password as well, ask your server admin for a setup link.</p>

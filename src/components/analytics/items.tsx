@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useAnalyticsEmbed } from "@/components/analytics/embed-context";
 import { ColourInput } from "@/components/analytics/colour-input";
 import { useTileResult, type TileFilters } from "@/components/analytics/use-tile-result";
 import { Button, Card, Field, Notice, ui } from "@/components/ui";
@@ -101,10 +102,28 @@ export function imageUrl(organisationId: string, dashboardId: string, imageId: s
 }
 
 export function ImageItemView({ organisationId, dashboardId, image, height }: { organisationId: string; dashboardId: string; image: ImageItem; height: number }) {
+  const embed = useAnalyticsEmbed();
+  const address = imageUrl(organisationId, dashboardId, image.id);
+  // On a slide (#429) the image is read with the add-in's token, so it's fetched and shown from memory.
+  const [embedded, setEmbedded] = useState<{ address: string; src: string } | null>(null);
+  useEffect(() => {
+    if (!embed) return;
+    let cancelled = false;
+    embed.imageSource(address).then(
+      (src) => {
+        if (!cancelled) setEmbedded({ address, src });
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [embed, address]);
+  const src = embed ? (embedded?.address === address ? embedded.src : null) : address;
   return (
     <div className={styles.imageBox} style={{ height }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- served from Tohyee's own API with the report's access check, not a static asset */}
-      <img src={imageUrl(organisationId, dashboardId, image.id)} alt={image.alt ?? ""} className={image.fit === "cover" ? styles.cover : styles.contain} />
+      {src ? <img src={src} alt={image.alt ?? ""} className={image.fit === "cover" ? styles.cover : styles.contain} /> : null}
     </div>
   );
 }

@@ -17,6 +17,8 @@ export const AUTHORIZATION_CODE_SECONDS = 5 * 60;
 export const AUTHORIZATION_REQUEST_SECONDS = 10 * 60;
 /** At most this many working connections per person per organisation, as for keys (decision 341). */
 export const MAX_ACTIVE_CONNECTIONS = 10;
+/** At most this many working PowerPoint add-in sign-ins per person (#429, decision 836): one per computer or browser they use. */
+export const MAX_OFFICE_CONNECTIONS = 20;
 
 export const ACCESS_TOKEN_PREFIX = "tohyee_at_";
 export const REFRESH_TOKEN_PREFIX = "tohyee_rt_";
