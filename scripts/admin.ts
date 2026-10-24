@@ -130,6 +130,13 @@ Backups (encrypted with the server's recovery key: save the recovery kit somewhe
   bank folders [--json]                     each organisation's bank files folder (decision 386)
   bank folder --id ORGANISATION --folder PATH        choose it (--folder "" clears it)
 
+Demo farm (Kōwhai Dairies Ltd: made-up data to try Tohyee on; one each)
+  demo list [--json]
+  demo add --owner EMAIL                    makes it for them (about a minute; it shows progress)
+  demo reset --owner EMAIL --yes            deletes theirs and makes it again from the start
+  demo delete --owner EMAIL --yes           removes theirs for good
+  (TOHYEE_DEMO_FARM=off in the server's environment turns "Try the demo farm" off.)
+
 Updates
   updates check [--json]
 
@@ -841,6 +848,47 @@ async function bank(command: string | undefined, args: string[]) {
   throw new UsageError(`Unknown bank command${command ? ` "${command}"` : ""}.`);
 }
 
+async function demo(command: string | undefined, args: string[]) {
+  const { addDemoFarm, deleteDemoFarm, getDemoFarm, listDemoFarms } = await import("@/lib/demo/service");
+  if (command === "list") {
+    const rows = await listDemoFarms();
+    if (flag(args, "json")) return console.log(JSON.stringify(rows, null, 2));
+    if (rows.length === 0) return console.log("No demo farms.");
+    for (const row of rows) console.log(`${row.email}: ${row.organisationId} ${row.status}${row.error ? ` (${row.error})` : ""}`);
+    return;
+  }
+  if (command !== "add" && command !== "reset" && command !== "delete") throw new UsageError(`Unknown demo command${command ? ` "${command}"` : ""}.`);
+  const email = normaliseEmail(required(args, "owner"));
+  const found = await coreQuery<{ id: string }>("select id from users where email = $1 and is_active", [email]);
+  if (!found.rows[0]) throw new UsageError(`There's no active user with the email ${email}.`);
+  const person = { id: found.rows[0].id, email };
+  if (command !== "add" && !flag(args, "yes")) {
+    throw new UsageError(`${command === "reset" ? "Reset deletes everything in their demo farm and makes it again" : "Delete removes their demo farm for good"}. Add --yes to go ahead.`);
+  }
+  if (command === "delete") {
+    await deleteDemoFarm(person);
+    console.log(`Deleted ${email}'s demo farm.`);
+    return;
+  }
+  const started = performance.now();
+  let last = "";
+  const timer = setInterval(() => {
+    void getDemoFarm(person.id).then((demo) => {
+      const line = demo ? `${demo.percent}% ${demo.step ?? ""}` : "";
+      if (line && line !== last) console.log(line);
+      last = line;
+    });
+  }, 1000);
+  try {
+    await addDemoFarm(person, { reset: command === "reset", wait: true });
+  } finally {
+    clearInterval(timer);
+  }
+  const made = await getDemoFarm(person.id);
+  if (made?.status !== "ready") throw new Error(made?.error ?? "Making the demo farm failed.");
+  console.log(`${made.displayName} (${made.organisationId}) is ready for ${email}, made in ${Math.round((performance.now() - started) / 1000)} s.`);
+}
+
 async function main(argv: string[]): Promise<void> {
   const [area, command, ...rest] = argv;
   // The older one-word commands.
@@ -856,6 +904,7 @@ async function main(argv: string[]): Promise<void> {
   if (area === "backups") return backups(command, rest);
   if (area === "analytics") return analytics(command, rest);
   if (area === "bank") return bank(command, rest);
+  if (area === "demo") return demo(command, rest);
   if (area === undefined || area === "help" || area === "--help" || area === "-h") {
     console.log(HELP);
     if (area === undefined) process.exitCode = 1;

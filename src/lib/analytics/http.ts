@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/api/http";
 import { requireOrganisationRole } from "@/lib/auth/guard";
+import { assertDemoAllows } from "@/lib/demo/guard";
 import type { Role } from "@/lib/auth/roles";
 import type { Actor } from "@/lib/db/org-transaction";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
@@ -18,5 +19,6 @@ export async function analyticsMember(
   const auth = await requireAuth(request);
   const organisationId = parseOrganisationId(organisationIdInput);
   const membership = await requireOrganisationRole(auth, organisationId, minimumRole);
+  assertDemoAllows(request, membership.organisation);
   return { organisation: membership.organisation, actor: { userId: auth.user.id, email: auth.user.email, role: membership.role }, role: membership.role };
 }

@@ -1,3 +1,5 @@
+import { assertNotDemoForEmail } from "@/lib/demo/guard";
+import { getOrganisation } from "@/lib/organisations/registry";
 import { writeAuditEvent } from "@/lib/audit";
 import { getContact } from "@/lib/contacts/service";
 import { parseIsoDate, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
@@ -342,6 +344,8 @@ export async function checkDailyLimit(tx: OrgTx, adding: number): Promise<void> 
 
 /** Refuses (503) when the organisation's email account isn't set up (payslips use it too). */
 export async function requireAccount(tx: OrgTx): Promise<void> {
+  // The demo farm never sends email (#437, decision 858), whatever asks.
+  assertNotDemoForEmail(await getOrganisation(tx.organisationId));
   const account = await getOrganisationEmailSettings(tx);
   if (!account.configured) {
     throw new UnavailableError(account.hasPassword ? "The saved email password can't be read on this server any more. An admin needs to enter it again in Settings > Email." : NOT_SET_UP);

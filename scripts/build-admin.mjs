@@ -18,8 +18,11 @@ await build({
   target: "node22",
   format: "cjs",
   tsconfig: path.join(root, "tsconfig.json"),
-  // pg's optional native binding; the pure JavaScript driver is used.
-  external: ["pg-native"],
+  // pg's optional native binding; the pure JavaScript driver is used. DuckDB
+  // and the database drivers stay outside the bundle, as they do for the
+  // server (next.config.ts): the demo farm's Analytics step (#437) loads them
+  // from the server's node_modules beside this file, and only when it runs.
+  external: ["pg-native", "@duckdb/node-api", "@duckdb/node-bindings", "mysql2", "mssql", "tedious"],
   legalComments: "none",
   logLevel: "warning",
 });

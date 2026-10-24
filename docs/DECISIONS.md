@@ -8526,3 +8526,80 @@ so; those choices are not yet reviewed by Jess.
      organisation it touches with no Owner. Private mail the replaced account
      connected on this server isn't moved (it's in each organisation's
      database, and stays with the replaced ID). Not yet reviewed by Jess.
+855. **The demo farm is an ordinary organisation, flagged in the registry**
+     (#437, Jess, 24 October 2026: "Dairy farm with analytics and accounting
+     data … have it included in an update. We will take it out later").
+     Like Xero's demo company, each person adds their own copy; it has its
+     own database (the tenancy model is unchanged) and is marked by
+     `organisations.demo_for_user_id` (core migration 0020). A unique index
+     makes it one each, and it's deleted with its person. While it's being
+     made it isn't in their organisation list. Not yet reviewed by Jess.
+856. **Made through Tohyee's own services, never written into tables.** The
+     build enters everything as the person (as if they'd typed it), month by
+     month, so the books balance, GST returns, bank reconciliation, payroll,
+     the herd count and Analytics behave as with real data, and a change to
+     a rule shows up in the demo too. Opening balances are one journal on
+     the day before the books start, with the fixed asset register made to
+     agree. Not yet reviewed by Jess.
+857. **Its automatic jobs are off for good.** It's created with
+     `jobs_paused_at` set (the mechanism restored copies use, decision 738),
+     so every job that sends, imports or checks mail skips it; a server admin
+     can't turn them on for it, and it's left out of the restored copies'
+     list on the Backups page. Not yet reviewed by Jess.
+858. **It refuses anything that reaches outside Tohyee.** Changes to email
+     sending and accounts, document and statement emails, payslip emails,
+     CRM emails and sequences, mailboxes (bills inbox, CRM, farm mail, my
+     mail, report emails), bank and payment feeds, Payday filing, online
+     sales connections, Google Analytics and database connections, and
+     adding or handing over members are refused (403) with a message saying
+     it's the demo farm; reading those pages works. Queueing a document email
+     is refused in the service as well, whatever calls it. Not yet reviewed by
+     Jess.
+859. **The dates move with today, and a day always gives the same farm.** The
+     books start on 1 June (its balance date is 31 May, as most dairy farms)
+     at least twelve months back, so there's always one whole season and the
+     season so far: 12 to 23 months, about 18 on average. Figures come from a
+     seeded random number source (the seed is the date), so tests are stable
+     and a reset on the same day gives the same farm. Not yet reviewed by
+     Jess.
+860. **Made up throughout.** Kōwhai Dairies Ltd, its people, its co-op
+     ("Southern Pastures Co-operative", rather than a real dairy company),
+     vets, suppliers, bank and council are fictional; IRD numbers and bank
+     accounts are test values; the paddock map is a tidy grid. Figures are
+     only meant to look like a ~300-cow Otago farm (about 110,000 kg MS a
+     season at about $9.70/kg MS). Not yet reviewed by Jess.
+861. **GST is paid by journal in the demo.** Tohyee doesn't record a GST
+     payment against a filed return yet (FEATURES, "Not built yet"), and a
+     bank transaction can't use the GST account, so the demo pays (or is
+     refunded) each return on its due date with a journal between the bank
+     and GST, as an accountant would post it; the bank statement line
+     matches that journal. Not yet reviewed by Jess.
+862. **Payroll only where Tohyee has the rates and the key.** Pay runs are
+     made only for pay dates Tohyee has IRD rates for (it never carries a
+     year's rates forward), and only on servers with `TOHYEE_SECRET_KEY`,
+     which payroll needs to store IRD numbers; without it the demo farm is
+     made without payroll. Not yet reviewed by Jess.
+863. **Built in the background, with progress kept in the registry.** Adding
+     returns at once; the build runs on the server, saving its step and
+     percentage on the organisation's row for the page to show. A build that
+     hasn't moved for 15 minutes (the server stopped) shows as failed, with
+     Reset to try again. At most two are made at once on one server. On a
+     test server it takes about 20-40 seconds. Not yet reviewed by Jess.
+864. **Analytics as a person would set it up.** The books are copied in, a
+     shaped table appends the co-op invoice lines' kg MS to the ledger lines
+     (so working expenses per kg MS, expense accounts less interest, is one
+     tile), and four ordinary reports are made: Farm performance and
+     Accounts: profit, cash and GST (built here), and the Farm and Business
+     overview templates. Benchmarks in Farming use the same seasons' milk
+     solids. Not yet reviewed by Jess.
+865. **Reset and Delete.** Reset deletes the demo farm and makes it again;
+     Delete drops its database and Analytics file and removes it from the
+     registry, with nothing kept (it's made up). Both ask first, on the page
+     and with `--yes` on the command line (`tohyee-admin demo
+     add|reset|delete|list`). Real organisations still can't be deleted
+     this way. Not yet reviewed by Jess.
+866. **One folder and one switch, so it can come out.** The build, guard and
+     service are under `src/lib/demo/`; a few hooks elsewhere are listed in
+     `docs/DEMO-FARM.md` with the steps to remove it. `TOHYEE_DEMO_FARM=off`
+     turns it off (on by default for now); demo farms already made stay until
+     deleted. Not yet reviewed by Jess.

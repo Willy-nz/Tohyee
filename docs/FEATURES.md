@@ -8,6 +8,29 @@ that something happened.
 
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
+- **The demo farm** (#437, decisions 855-869; for now, to be taken out
+  later: [docs/DEMO-FARM.md](DEMO-FARM.md)): anyone signed in chooses **Try
+  the demo farm…** in the organisation menu (or a server admin runs
+  `tohyee-admin demo add --owner EMAIL`) and gets their own **Kōwhai Dairies
+  Ltd**, a made-up ~300-cow Otago dairy farm, made in the background with a
+  progress bar (about 20-40 seconds). It's entered through Tohyee's own
+  services from 1 June at least a year back to today: co-op milk invoices
+  (kg MS), bills, bank statements imported and reconciled (the last few days
+  left to do), two-monthly GST returns filed and paid, opening balances and
+  fixed assets with monthly depreciation, fortnightly payroll for two staff
+  with PAYE paid (on servers with `TOHYEE_SECRET_KEY`), the herd's calving,
+  culls, bulls and year-end counts, two farms with paddock maps, farm walks,
+  grazings, supplements, fertiliser plans with applications and linked bills,
+  soil tests, co-op shares and dividends, benchmark figures, a season budget,
+  the farm calendar and notebook, and Analytics (the books copied in, a
+  shaped table of milk solids beside the ledger, and four reports: Farm
+  performance with working expenses per kg MS, Accounts: profit, cash and
+  GST, Farm and Business overview). A **DEMO** badge shows on every page.
+  It never reaches outside Tohyee: its automatic jobs stay paused, and
+  sending email, mailbox, bank, IRD and sales connections and adding people
+  are refused with a message saying why. **Reset** makes it again from the
+  start, **Delete** removes it (both ask first); one each. `TOHYEE_DEMO_FARM=off`
+  turns it off. Not yet reviewed by Jess.
 - **The look (2026 redesign, 4 Oct 2026):** a simpler top bar where each menu opens a short grouped panel, one **apps launcher** button (Accounting, CRM, Analytics), one **+ New** button for every "New …" action, a **search / command palette (Ctrl+K)** for any screen, an **AI** item, a **notices bell** for non-blocking warnings, light and dark themes that follow the computer (switch in the user menu), the Inter font with tabular figures, and a short fade between pages. Reports and printed documents stay on white paper.
 - **Server settings apart from the books** (organisations, users, remote
   access, email, updates), open only on the server computer itself. On
