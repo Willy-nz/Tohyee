@@ -14,6 +14,8 @@ export type OrganisationRecord = {
   migrationError: string | null;
   schemaVersion: string | null;
   createdAt: string;
+  /** The demo farm (#437): made-up data for one person; null for every real organisation. */
+  demo: { userId: string; status: "building" | "ready" | "failed" } | null;
 };
 
 type OrganisationRow = {
@@ -28,6 +30,8 @@ type OrganisationRow = {
   migration_error: string | null;
   schema_version: string | null;
   created_at: string;
+  demo_for_user_id: string | null;
+  demo_status: "building" | "ready" | "failed" | null;
 };
 
 const ORGANISATION_COLUMN_NAMES = [
@@ -42,6 +46,8 @@ const ORGANISATION_COLUMN_NAMES = [
   "migration_error",
   "schema_version",
   "created_at",
+  "demo_for_user_id",
+  "demo_status",
 ] as const;
 
 /** Column list for selecting organisations, optionally prefixed with a table alias. */
@@ -62,6 +68,7 @@ export function toOrganisationRecord(row: OrganisationRow): OrganisationRecord {
     migrationError: row.migration_error,
     schemaVersion: row.schema_version,
     createdAt: row.created_at,
+    demo: row.demo_for_user_id && row.demo_status ? { userId: row.demo_for_user_id, status: row.demo_status } : null,
   };
 }
 
@@ -116,6 +123,8 @@ export async function listMembershipsForUser(userId: string): Promise<Membership
        from organisations o
        join organisation_members m on m.organisation_id = o.id
       where m.user_id = $1 and o.is_active
+        -- A demo farm shows once it's made (#437).
+        and (o.demo_status is null or o.demo_status = 'ready')
       order by o.display_name, o.id`,
     [userId],
   );

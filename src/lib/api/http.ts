@@ -10,6 +10,7 @@ import { parseOrganisationId } from "@/lib/organisations/registry";
 import { PAYROLL_MINIMUM_ROLE, requirePayrollAccess } from "@/lib/payroll/access";
 import { addPersonNames, loadMemberNames } from "@/lib/people/names";
 import { countRequest } from "@/lib/server-stats/counters";
+import { assertDemoAllows } from "@/lib/demo/guard";
 
 export function json(data: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
   return NextResponse.json(data, {
@@ -113,6 +114,7 @@ export async function withOrganisation<T>(
   const auth = await requireAuth(request);
   const organisationId = parseOrganisationId(organisationIdInput);
   const membership = await requireOrganisationRole(auth, organisationId, minimumRole);
+  assertDemoAllows(request, membership.organisation);
   const people = await loadMemberNames(membership.organisation.id);
   const result = await withOrganisationTransaction(
     membership.organisation,
@@ -138,6 +140,7 @@ export async function withCrm<T>(
   const auth = await requireAuth(request);
   const organisationId = parseOrganisationId(organisationIdInput);
   const membership = await requireOrganisationRole(auth, organisationId, "sales_rep");
+  assertDemoAllows(request, membership.organisation);
   if (!crmAllows(membership.role, need)) {
     throw new ForbiddenError(
       need === "admin"
@@ -206,6 +209,7 @@ export async function withOrganisationRunner<T>(
   const auth = await requireAuth(request);
   const organisationId = parseOrganisationId(organisationIdInput);
   const membership = await requireOrganisationRole(auth, organisationId, minimumRole);
+  assertDemoAllows(request, membership.organisation);
   const people = await loadMemberNames(membership.organisation.id);
   const actor = { userId: auth.user.id, email: auth.user.email };
   const run: OrgRunner = (each) => withOrganisationTransaction(membership.organisation, actor, each, { people });

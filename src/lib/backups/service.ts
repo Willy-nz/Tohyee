@@ -832,7 +832,7 @@ export async function cleanUpInterruptedRestores(processStartedAt: Date): Promis
 /** Organisations whose automatic jobs are paused (restored copies, until a server admin turns them on). */
 export async function pausedOrganisations(): Promise<{ id: string; displayName: string; pausedAt: string; reason: string | null }[]> {
   const result = await coreQuery<{ id: string; display_name: string; jobs_paused_at: Date; jobs_paused_reason: string | null }>(
-    "select id, display_name, jobs_paused_at, jobs_paused_reason from organisations where jobs_paused_at is not null order by display_name, organisations.id",
+    "select id, display_name, jobs_paused_at, jobs_paused_reason from organisations where jobs_paused_at is not null and demo_for_user_id is null order by display_name, organisations.id",
   );
   return result.rows.map((row) => ({ id: row.id, displayName: row.display_name, pausedAt: new Date(row.jobs_paused_at).toISOString(), reason: row.jobs_paused_reason }));
 }
@@ -846,8 +846,9 @@ export async function resumeOrganisationJobs(auth: ServerAdminAuth, organisation
   if (!auth.user.isServerAdmin) throw new ForbiddenError("Only a server admin can turn on a restored copy's automatic jobs.");
   const organisationId = parseOrganisationId(organisationIdInput);
   await withCoreTransaction(async (client) => {
-    const updated = await client.query("update organisations set jobs_paused_at = null, jobs_paused_reason = null where id = $1 and jobs_paused_at is not null", [organisationId]);
-    if (!updated.rowCount) throw new NotFoundError(`${organisationId} has no paused jobs.`);
+    // The demo farm's jobs stay off (#437, decision 857): it's made up, so it never sends or imports anything.
+    const updated = await client.query("update organisations set jobs_paused_at = null, jobs_paused_reason = null where id = $1 and jobs_paused_at is not null and demo_for_user_id is null", [organisationId]);
+    if (!updated.rowCount) throw new NotFoundError(`${organisationId} has no paused jobs that can be turned on.`);
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, { eventType: "organisation.jobs_resumed", entityType: "organisation", entityId: organisationId });
   });
 }

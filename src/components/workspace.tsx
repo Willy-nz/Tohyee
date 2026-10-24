@@ -16,6 +16,8 @@ export type WorkspaceOrganisation = {
   baseCurrency: string;
   role: Role;
   status: string;
+  /** The demo farm (#437): made-up data, marked DEMO on every page. */
+  isDemo?: boolean;
 };
 
 type Workspace = {
@@ -29,6 +31,8 @@ type Workspace = {
   canCrm(need: "read" | "write" | "admin"): boolean;
   /** Where server settings open on the server computer (for server admins); null if they're off. */
   serverSettingsUrl: string | null;
+  /** Whether this server offers "Try the demo farm" (#437). */
+  demoFarmEnabled: boolean;
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
@@ -66,11 +70,13 @@ export function WorkspaceProvider({
   user,
   organisations,
   serverSettingsUrl = null,
+  demoFarmEnabled = false,
   children,
 }: {
   user: WorkspaceUser;
   organisations: WorkspaceOrganisation[];
   serverSettingsUrl?: string | null;
+  demoFarmEnabled?: boolean;
   children: ReactNode;
 }) {
   const storedId = useSyncExternalStore(subscribe, readStoredOrganisation, () => null);
@@ -96,8 +102,9 @@ export function WorkspaceProvider({
       can: (role: Role) => (current ? roleAtLeast(current.role, role) : false),
       canCrm: (need: "read" | "write" | "admin") => (current ? crmAllows(current.role, need) : false),
       serverSettingsUrl,
+      demoFarmEnabled,
     }),
-    [user, organisations, current, selectOrganisation, serverSettingsUrl],
+    [user, organisations, current, selectOrganisation, serverSettingsUrl, demoFarmEnabled],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

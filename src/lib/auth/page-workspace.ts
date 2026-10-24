@@ -4,6 +4,7 @@ import { twoStepRequired } from "@/lib/auth/sessions";
 import { RECOVERY_KIT_REMINDER, recoveryKitNeedsSaving } from "@/lib/backups/recovery-kit";
 import { listMembershipsForUser } from "@/lib/organisations/registry";
 import { localAdminUrl } from "@/lib/server-admin/local";
+import { demoFarmEnabled } from "@/lib/demo/switch";
 
 /**
  * What the app shells (Accounting and the CRM) need for a signed-in page:
@@ -27,6 +28,7 @@ export async function loadPageWorkspace() {
         : organisation.migrationStatus === "current"
           ? "ready"
           : organisation.migrationStatus,
+    isDemo: Boolean(organisation.demo),
   }));
   const warnings: string[] = [];
   if (session.user.isServerAdmin && !twoStepRequired()) {
@@ -42,5 +44,6 @@ export async function loadPageWorkspace() {
     organisations,
     serverSettingsUrl: session.user.isServerAdmin ? localAdminUrl() : null,
     warnings,
+    demoFarmEnabled: demoFarmEnabled(),
   };
 }

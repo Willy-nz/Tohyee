@@ -48,6 +48,13 @@ with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
 
+**Want a look first?** Once you're signed in, choose **Try the demo farm…** in
+the organisation menu: Tohyee makes you your own copy of Kōwhai Dairies Ltd, a
+made-up Otago dairy farm with about 18 months of books, payroll, GST, farm
+records and Analytics reports, marked DEMO on every page. Nothing is emailed or
+connected from it; reset or delete it whenever you like (see
+[the demo farm](docs/DEMO-FARM.md)).
+
 **Just want to use it?** Download `TohyeeSetup` from the
 [latest release](https://github.com/Willy-nz/Tohyee/releases/latest) and see
 [Running on a server](#running-on-a-server). The feature overview below covers
@@ -481,6 +488,7 @@ docker compose exec tohyee node tohyee-admin.cjs help
 docker compose exec tohyee node tohyee-admin.cjs organisations list
 docker compose exec tohyee node tohyee-admin.cjs organisations create --id green-island --name "Green Island" --owner you@example.com
 docker compose exec tohyee node tohyee-admin.cjs users set-password --email you@example.com
+docker compose exec tohyee node tohyee-admin.cjs demo add --owner you@example.com
 ```
 
 From a checkout of this repository (with `npm install` done and

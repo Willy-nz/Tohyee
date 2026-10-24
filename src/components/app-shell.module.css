@@ -113,6 +113,41 @@
   background-color: var(--surface-hover);
 }
 
+/* The demo farm's badge (#437): on every page while the demo farm is open. */
+.demoBadge {
+  position: absolute;
+  z-index: 1;
+  left: 4px;
+  border: 1px solid var(--warning-border);
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  padding: 1px 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.demoBadge:hover {
+  text-decoration: underline;
+}
+
+.demoBadge:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.orgPickerDemo {
+  min-width: 124px;
+}
+
+.orgPickerDemo select {
+  padding-left: 48px;
+}
+
 .orgMeta {
   color: var(--text-muted);
   font-size: var(--text-sm);
@@ -849,7 +884,7 @@
   z-index: 50;
   display: grid;
   gap: 2px;
-  min-width: 150px;
+  min-width: 124px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
