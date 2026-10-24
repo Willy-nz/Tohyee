@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 23 October 2026:** the latest packaged
-release is [v0.13.1](https://github.com/Willy-nz/Tohyee/releases/tag/v0.13.1),
+**Release availability, checked 24 October 2026:** the latest packaged
+release is [v0.14.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.14.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -72,6 +72,13 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.14.0: try the demo farm
+
+| Area | What's new |
+| --- | --- |
+| **Demo farm** | Add Kōwhai Dairies Ltd, a made-up dairy farm with farm records, books, payroll, GST and Analytics reports, from the organisation menu. |
+| **Security** | Removing Google sign-in disconnects that person's apps, and restoring people keeps their Google sign-in. |
 
 ## New in 0.13.0: connect AI by signing in, and PowerPoint
 
