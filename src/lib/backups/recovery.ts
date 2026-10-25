@@ -97,8 +97,8 @@ export function backupFileIn(folderInput: unknown, name: unknown): string {
 }
 
 /**
- * The recovery material from the wizard: a recovery code or older backup
- * key typed in (`key`), or a recovery file's text and its passphrase.
+ * The recovery material from the wizard: a recovery code typed in (`key`),
+ * or a recovery file's text and its passphrase.
  * Nothing means this server's own keys.
  */
 export async function recoveryMaterial(input: { key?: unknown; kitFile?: unknown; passphrase?: unknown }): Promise<RecoveryMaterial | undefined> {
@@ -341,7 +341,7 @@ export async function recoverPeople(
     memberships: [],
     roleChanges: [],
     organisationsNotHere: fromBackup.organisations.filter((o) => !orgsHere.has(o.id)).map((o) => ({ id: o.id, displayName: o.display_name })),
-    settingsNotCopied: fromBackup.settings.filter((key) => !["backup_recovery_keys", "backup_recovery_kit_checks", "backup_key", "backups"].includes(key)),
+    settingsNotCopied: fromBackup.settings.filter((key) => !["backup_recovery_keys", "backup_recovery_kit_checks", "backups"].includes(key)),
     googleNotRestored: [],
     googleMoved: [],
     applied: false,

@@ -37,7 +37,7 @@ the private reporting process instead.
 
 Do not send real accounting or payroll records, database backups, passwords,
 authenticator or recovery codes, session cookies, API or tunnel tokens,
-environment files, or the server's encryption/backup key. Replace sensitive
+environment files, the server's secret key, or a backup recovery kit. Replace sensitive
 values with placeholders. If a credential has already been exposed, revoke
 or rotate it through the affected service; deleting a posted value alone
 does not make it safe again.

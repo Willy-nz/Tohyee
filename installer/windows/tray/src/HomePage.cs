@@ -158,15 +158,12 @@ namespace Tohyee.Tray
         }
 
         /// <summary>
-        /// Whether nobody has checked a saved recovery kit for the current recovery key (#389). A server from
-        /// before recovery kits only says whether a saved copy of its backup key was checked.
+        /// Whether nobody has checked a saved recovery kit for the current recovery key (#389).
         /// </summary>
         internal static bool RecoveryKitNeedsSaving(Dictionary<string, object> backups)
         {
             var kit = J.Obj(backups, "recoveryKit");
-            if (kit != null) return J.Bool(kit, "keySet") && J.Bool(kit, "needsSaving");
-            var keyStatus = J.Obj(backups, "keyStatus");
-            return keyStatus != null && J.Bool(keyStatus, "keySet") && J.Str(keyStatus, "savedCopyCheckedAt") == null;
+            return J.Bool(kit, "keySet") && J.Bool(kit, "needsSaving");
         }
 
         private async Task ShowBackup()
@@ -192,7 +189,7 @@ namespace Tohyee.Tray
                     }
                 }
                 var keySet = J.Bool(settings, "keySet");
-                var schedule = !keySet ? "No backup key on this server"
+                var schedule = !keySet ? "No TOHYEE_SECRET_KEY on this server"
                     : J.Bool(settings, "enabled") ? "Every night at " + (J.Str(settings, "time") ?? "02:00")
                     : "Nightly backups are off";
                 if (failed) _backup.Show("Failed", schedule, Theme.Danger);
@@ -201,7 +198,7 @@ namespace Tohyee.Tray
 
                 if (!keySet)
                 {
-                    problems.Add(new Attention("There's no backup key on this server.", "Backups can't be made until one is set.", "Open Backups", "backups", Theme.Warning));
+                    problems.Add(new Attention("There's no TOHYEE_SECRET_KEY on this server.", "Backups can't be made until one is set.", "Open Backups", "backups", Theme.Warning));
                 }
                 else if (RecoveryKitNeedsSaving(result))
                 {

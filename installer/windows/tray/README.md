@@ -68,9 +68,9 @@ Tohyee (the books) are at the bottom.
   files were last checked again, off-site "not verified", space used and
   free, what needs attention, and a warning when OneDrive isn't running for
   you), Check backups now, nightly backups, the recovery kit (Save and Check
-  open the Backups page in the browser), the older backups' key, each
-  organisation's last backup, and the backup files (restore as a copy). Until a saved copy of the
-  key has been checked, the window opens on Backups with a reminder.
+  open the Backups page in the browser), each organisation's last backup,
+  and the backup files (restore as a copy). Until a saved recovery kit has
+  been checked, the window opens on Backups with a reminder.
 - **Analytics**: each organisation's CSV folder on this computer, whether
   Tohyee can read it, and Browse and Save for each organisation. Blank clears
   the folder. Tohyee only reads files there; it never changes or deletes them.

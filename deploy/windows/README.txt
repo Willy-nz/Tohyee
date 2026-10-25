@@ -77,9 +77,7 @@ then check your saved copy (paste it when asked):
 
   docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups kit check
 
-Until someone has done that, Tohyee shows server admins a reminder. Backups
-made before recovery kits open with the older backup key instead (backups
-key show / backups key check) until they age out, up to 12 months.
+Until someone has done that, Tohyee shows server admins a reminder.
 
 RESTORING: restoring makes a copy of an organisation (with the same people)
 next to the current one, so nothing is overwritten. In a Command Prompt in
@@ -92,8 +90,9 @@ Inside Docker the backup folder is called /backups, so a file at
 C:\Tohyee\backups\green-island\x.tohyee-backup is
 /backups/green-island/x.tohyee-backup. To restore a backup kept elsewhere,
 copy it into the backup folder first. "backups check --file ..." proves a
-backup opens with this computer's key. On a new computer (a new key), add
---other-key to the restore and paste the old computer's key when asked.
+backup opens with this computer's recovery key. On a new computer, add
+--other-key to the restore and paste the old computer's recovery code when
+asked.
 Restoring the server's own database (the _server sub-folder) is a job for a
 database administrator.
 

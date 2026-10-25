@@ -27,9 +27,7 @@ namespace Tohyee.Tray
         private readonly ListView _status = Ui.List("Organisation", "Last good backup", "Size", "Latest attempt");
         private readonly ListView _files = Ui.List("Made", "Organisation", "Size", "File");
         private readonly Label _message = Ui.Status();
-        private readonly Label _keyState = Ui.State();
         private readonly Label _kitState = Ui.State();
-        private Card _legacyKey;
         private string _defaultFolder;
 
         public BackupsPage(TohyeeApi api)
@@ -38,7 +36,7 @@ namespace Tohyee.Tray
             _status.Height = Theme.S(150);
             _files.Height = Theme.S(200);
             BackColor = Theme.Bg;
-            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, checks each file after it's made, and reads the newest ones back to check them again every week. Choose a OneDrive or Google Drive folder to get copies off this computer.");
+            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's recovery key, keeps 14 daily and 12 monthly backups, checks each file after it's made, and reads the newest ones back to check them again every week. Choose a OneDrive or Google Drive folder to get copies off this computer.");
 
             // What's known, and on what evidence (decision 733). No "safe" badge: what isn't proven is said.
             var status = Ui.Card(page, "Status", "What Tohyee has done and checked, and what it can't see.");
@@ -83,14 +81,6 @@ namespace Tohyee.Tray
             kitButtons.Controls.Add(Ui.Btn("Save recovery kit…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups#recovery-kit")));
             kitButtons.Controls.Add(Ui.Btn("Check recovery kit…", (s, e) => TrayApp.Open(_api.BaseUrl + "/server/backups#recovery-kit")));
             kit.Body.Controls.Add(kitButtons);
-
-            var key = Ui.Card(page, "Older backups' key", "Backups made before recovery kits can only be opened on another computer with this server's older backup key (its TOHYEE_SECRET_KEY). Save a copy somewhere safe that isn't the backup folder, then paste it back here so Tohyee can check it. Once those older backups have aged out (up to 12 months), it isn't needed for them any more.");
-            _legacyKey = key;
-            key.Body.Controls.Add(_keyState);
-            var keyButtons = Ui.Row();
-            keyButtons.Controls.Add(Ui.Btn("Show the key…", async (s, e) => await ShowKey()));
-            keyButtons.Controls.Add(Ui.Btn("Check my saved copy…", async (s, e) => await CheckKey()));
-            key.Body.Controls.Add(keyButtons);
 
             var latest = Ui.Card(page, "Each organisation", null);
             latest.Body.Controls.Add(_status);
@@ -165,9 +155,9 @@ namespace Tohyee.Tray
             ShowOverview(J.Obj(result, "overview"));
 
             var recoveryKit = J.Obj(result, "recoveryKit");
-            if (recoveryKit == null || !J.Bool(recoveryKit, "keySet"))
+            if (!J.Bool(recoveryKit, "keySet"))
             {
-                _kitState.Text = recoveryKit == null ? "This server doesn't make recovery kits yet: update Tohyee." : "There's no TOHYEE_SECRET_KEY on this server, so there's no recovery key.";
+                _kitState.Text = "There's no TOHYEE_SECRET_KEY on this server, so there's no recovery key.";
                 _kitState.ForeColor = Ui.Danger;
             }
             else if (J.Str(recoveryKit, "version") == null)
@@ -185,26 +175,6 @@ namespace Tohyee.Tray
                 _kitState.Text = "Version " + J.Str(recoveryKit, "version") + ": " + J.Str(recoveryKit, "checkedByEmail") + " checked a saved kit on " + J.When(J.Str(recoveryKit, "checkedAt")) + ". That proves it was right then, not that it's still there.";
                 _kitState.ForeColor = Ui.Success;
             }
-            // Only while backups from before recovery kits are kept (or the server is older).
-            _legacyKey.Visible = recoveryKit == null || J.Obj(J.Obj(J.Obj(result, "overview"), "recoveryKit"), "legacyFiles") != null;
-
-            var keyStatus = J.Obj(result, "keyStatus");
-            if (!J.Bool(keyStatus, "keySet"))
-            {
-                _keyState.Text = "There's no backup key yet (TOHYEE_SECRET_KEY isn't set).";
-                _keyState.ForeColor = Ui.Danger;
-            }
-            else if (J.Str(keyStatus, "savedCopyCheckedAt") == null)
-            {
-                _keyState.Text = "Not saved yet: nobody has checked a saved copy of this key. Show the key, save it, then check your copy.";
-                _keyState.ForeColor = Ui.Danger;
-            }
-            else
-            {
-                _keyState.Text = "Saved: " + J.Str(keyStatus, "savedCopyCheckedByEmail") + " checked a saved copy on " + J.When(J.Str(keyStatus, "savedCopyCheckedAt")) + ".";
-                _keyState.ForeColor = Ui.Success;
-            }
-
             if (!J.Bool(settings, "keySet"))
             {
                 _state.Text = "This server has no TOHYEE_SECRET_KEY, so it can't make backups. Updating Tohyee with the installer sets one.";
@@ -413,9 +383,9 @@ namespace Tohyee.Tray
                 }
                 catch (ApiException error)
                 {
-                    // Made on another server (or before the key changed): ask for that server's key.
-                    if (!error.Message.Contains("made with a different key") && !error.Message.Contains("recovery kit")) throw;
-                    var oldKey = AskKey("Restore from another server", "This backup was made by another server (or before this one was set up again). Paste that server's recovery code (or, for a backup from before recovery kits, its backup key). For a recovery file, use Restore on this computer:", true);
+                    // Made on another server (or before this one was set up again): ask for that server's recovery code.
+                    if (!error.Message.Contains("recovery kit")) throw;
+                    var oldKey = AskKey("Restore from another server", "This backup was made by another server (or before this one was set up again). Paste that server's recovery code. For a recovery file, use Restore on this computer:", true);
                     if (string.IsNullOrEmpty(oldKey)) throw;
                     body["key"] = oldKey;
                     Ui.Show(_message, "Restoring… this can take a few minutes.", false);
@@ -430,7 +400,7 @@ namespace Tohyee.Tray
                 Ui.Show(_message, keep, false);
             }
         }
-        /// <summary>Asks for a key or password; null if cancelled.</summary>
+        /// <summary>Asks for a recovery code; null if cancelled.</summary>
         private string AskKey(string title, string prompt, bool hidden)
         {
             using (var dialog = new Form
@@ -453,75 +423,6 @@ namespace Tohyee.Tray
                 dialog.CancelButton = cancel;
                 Theme.Apply(dialog);
                 return dialog.ShowDialog(FindForm()) == DialogResult.OK ? box.Text.Trim() : null;
-            }
-        }
-
-        private async Task ShowKey()
-        {
-            var password = AskKey("Show the backup key", "To see the backup key, type your Tohyee password again (" + (_api.SignedInEmail ?? "") + "):", true);
-            if (string.IsNullOrEmpty(password)) return;
-            string key = null;
-            await Ui.Busy(this, _message, async () =>
-            {
-                var result = await _api.Post("/api/admin/backups/key", new Dictionary<string, object> { { "password", password } });
-                key = J.Str(result, "key");
-            });
-            if (key == null) return;
-            using (var dialog = new Form
-            {
-                Text = "Your backup key",
-                Font = Ui.Body,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition = FormStartPosition.CenterParent,
-                MinimizeBox = false,
-                MaximizeBox = false,
-                ClientSize = new Size(Theme.S(560), Theme.S(230)),
-            })
-            {
-                var label = new Label
-                {
-                    Text = "Save this key somewhere safe that isn't the backup folder, such as a password manager (as a note called \"Tohyee backup key\"). Anyone with the key and the backup files can read the books, so keep it private. Then use \"Check my saved copy\".",
-                    Left = Theme.S(16), Top = Theme.S(12), Width = Theme.S(528), Height = Theme.S(72), AutoSize = false,
-                };
-                var box = new TextBox { Text = key, ReadOnly = true, Left = Theme.S(16), Top = Theme.S(92), Width = Theme.S(528), Font = Theme.F("Consolas", 11f) };
-                var copied = new Label { Left = Theme.S(16), Top = Theme.S(130), Width = Theme.S(400), Height = Theme.S(22), ForeColor = Ui.Success };
-                var copy = new Button { Text = "Copy", Left = Theme.S(16), Top = Theme.S(180), Width = Theme.S(90), Height = Theme.S(30) };
-                copy.Click += (s, e) =>
-                {
-                    Clipboard.SetText(key);
-                    copied.Text = "Copied. Paste it into your password manager now.";
-                };
-                var done = new Button { Text = "Done", DialogResult = DialogResult.OK, Left = Theme.S(454), Top = Theme.S(180), Width = Theme.S(90), Height = Theme.S(30) };
-                dialog.Controls.AddRange(new Control[] { label, box, copied, copy, done });
-                dialog.AcceptButton = done;
-                Theme.Apply(dialog);
-                copied.ForeColor = Ui.Success;
-                dialog.ShowDialog(FindForm());
-            }
-            try
-            {
-                // Don't leave the key on the clipboard.
-                if (Clipboard.ContainsText() && Clipboard.GetText() == key) Clipboard.Clear();
-            }
-            catch (Exception)
-            {
-                // The clipboard was busy; nothing more to do.
-            }
-        }
-
-        private async Task CheckKey()
-        {
-            var pasted = AskKey("Check my saved copy", "Paste the backup key from where you saved it (your password manager). Tohyee checks it's exactly right:", false);
-            if (string.IsNullOrEmpty(pasted)) return;
-            if (await Ui.Busy(this, _message, async () =>
-            {
-                await _api.Post("/api/admin/backups/key/check", new Dictionary<string, object> { { "key", pasted } });
-                Ui.Show(_message, "That's the right key. Your saved copy is good.", false);
-            }))
-            {
-                var keep = _message.Text;
-                await Reload();
-                Ui.Show(_message, keep, false);
             }
         }
     }
