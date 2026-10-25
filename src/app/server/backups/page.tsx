@@ -6,7 +6,6 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { ageText } from "@/lib/backups/age";
-import type { BackupKeyStatus } from "@/lib/backups/key";
 import type { BackupOverview, TargetSummary } from "@/lib/backups/overview";
 import type { RecoveryKitStatus } from "@/lib/backups/recovery-kit";
 import type { BackupSettings } from "@/lib/backups/service";
@@ -18,7 +17,6 @@ type FileRow = { name: string; sizeBytes: number; problem: string | null; header
 type Details = {
   settings: BackupSettings;
   overview: BackupOverview;
-  keyStatus: BackupKeyStatus;
   recoveryKit: RecoveryKitStatus;
   files: FileRow[];
 };
@@ -187,13 +185,12 @@ export default function ServerBackupsPage() {
       {details ? <Files files={details.files} /> : null}
       {details ? <RecoveryKit details={details} onChanged={load} /> : null}
       <IndependentCopy />
-      {details?.overview.recoveryKit.legacyFiles ? <BackupKey keyStatus={details.keyStatus} legacy={details.overview.recoveryKit.legacyFiles} onChecked={load} /> : null}
     </Page>
   );
 }
 
 function Status({ details }: { details: Details }) {
-  const { overview, keyStatus } = details;
+  const { overview } = details;
   const now = new Date();
   const total = overview.targets.length;
   const done = overview.targets.filter((t) => t.lastGoodAt).length;
@@ -246,7 +243,7 @@ function Status({ details }: { details: Details }) {
         <div className={ui.recordField}>
           <dt>Recovery kit</dt>
           <dd>
-            {!keyStatus.keySet ? (
+            {!details.recoveryKit.keySet ? (
               <Badge tone="red">No TOHYEE_SECRET_KEY on this server</Badge>
             ) : !details.recoveryKit.version ? (
               "There's no recovery key yet: the first backup makes one."
@@ -448,88 +445,6 @@ function IndependentCopy() {
           Now and then (once a month, say), copy the whole backup folder to a USB drive and keep it unplugged, somewhere other than this computer. The files are
           encrypted, so the drive alone doesn&apos;t give anyone your books; they still need the recovery kit.
         </p>
-      </div>
-    </Card>
-  );
-}
-
-function BackupKey({
-  keyStatus,
-  legacy,
-  onChecked,
-}: {
-  keyStatus: BackupKeyStatus;
-  legacy: NonNullable<BackupOverview["recoveryKit"]["legacyFiles"]>;
-  onChecked: () => Promise<void>;
-}) {
-  const [password, setPassword] = useState("");
-  const [shown, setShown] = useState<string | null>(null);
-  const [pasted, setPasted] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<Message>(null);
-
-  async function show(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage(null);
-    try {
-      const result = await api<{ key: string }>("/api/admin/backups/key", { method: "POST", body: { password } });
-      setShown(result.key);
-      setPassword("");
-    } catch (caught) {
-      setMessage({ tone: "error", text: errorMessage(caught) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function checkCopy(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api("/api/admin/backups/key/check", { method: "POST", body: { key: pasted } });
-      setPasted("");
-      setShown(null);
-      await onChecked();
-      setMessage({ tone: "success", text: "That's the right key. Your saved copy was right just now." });
-    } catch (caught) {
-      setMessage({ tone: "error", text: errorMessage(caught) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!keyStatus.keySet) return null;
-  return (
-    <Card
-      title="Older backups' key"
-      description={`${legacy.files} ${legacy.files === 1 ? "backup" : "backups"} in the folder were made before recovery kits. On another computer they open only with this server's older backup key (its TOHYEE_SECRET_KEY), not the recovery kit. The newest was made ${formatDateTime(legacy.newestMadeAt)}, so they're kept until about ${legacy.keepKeyUntilAbout}. ${keyStatus.savedCopyCheckedAt ? `A saved copy was checked ${formatDateTime(keyStatus.savedCopyCheckedAt)}.` : "Nobody has checked a saved copy of it."}`}
-    >
-      <div style={{ display: "grid", gap: 12 }}>
-        {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
-        {shown ? (
-          <Field label="The backup key" hint="Anyone with this key and the backup files can read the books. Copy it into your password manager now; it isn't shown again until someone types their password.">
-            <input readOnly value={shown} onFocus={(event) => event.target.select()} style={{ fontFamily: "var(--mono)" }} />
-          </Field>
-        ) : (
-          <form onSubmit={(event) => void show(event)} className={ui.inlineForm}>
-            <Field label="Your password, to see the key">
-              <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
-            </Field>
-            <Button type="submit" variant="secondary" disabled={busy || !password}>
-              Show the key
-            </Button>
-          </form>
-        )}
-        <form onSubmit={(event) => void checkCopy(event)} className={ui.inlineForm}>
-          <Field label="Check your saved copy">
-            <input type="password" autoComplete="off" value={pasted} onChange={(event) => setPasted(event.target.value)} placeholder="Paste the key from where you saved it" />
-          </Field>
-          <Button type="submit" variant="secondary" disabled={busy || !pasted}>
-            Check it
-          </Button>
-        </form>
       </div>
     </Card>
   );

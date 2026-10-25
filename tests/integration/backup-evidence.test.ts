@@ -123,7 +123,7 @@ describeWithDatabase("backups: evidence, checks and keeping good copies (#389 pa
       await fs.copyFile(good, path.join(orgFolder(), `${ORG}_2026-09-${String(day).padStart(2, "0")}_020000.tohyee-backup`));
     }
     const damaged = path.join(orgFolder(), `${ORG}_2026-12-31_020000.tohyee-backup`);
-    await fs.writeFile(damaged, "TOHYEE-BACKUP 1\nnot json");
+    await fs.writeFile(damaged, "TOHYEE-BACKUP 2\nnot json");
     const notOurs = path.join(orgFolder(), "notes.txt");
     await fs.writeFile(notOurs, "kept");
 

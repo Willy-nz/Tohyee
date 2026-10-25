@@ -7238,7 +7238,8 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      made over them and backups fail with a message instead. Restoring
      takes a recovery code as the "key" (or, for a format 1 file, the
      older backup key), and says which kit version and fingerprint a
-     backup needs. Format 1 files open as before.
+     backup needs. Format 1 files open as before. (Format 1 and the older
+     backup key were removed by decision 867.)
 735. **The recovery kit: a code or a passphrase file, and nothing else**
      (21 October 2026, #389 part 2; not yet reviewed by Jess). The code is
      the key in Crockford base32 plus a 4-character check (`RK<version>-`
@@ -7269,7 +7270,7 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      newest, as monthly backups are kept 12 months), and the page says a
      new key can't take back copies already taken with their kit. The
      older backup key (show and check) stays, labelled for backups made
-     before recovery kits, while any are kept.
+     before recovery kits, while any are kept. (Removed by decision 867.)
 737. **A restore re-encrypts stored secrets for the computer it's on**
      (21 October 2026, #389 part 3; not yet reviewed by Jess). After
      `pg_restore` into the new database, and before it's made ready, every
@@ -8604,6 +8605,37 @@ so; those choices are not yet reviewed by Jess.
      turns it off (on by default for now); demo farms already made stay until
      deleted. Not yet reviewed by Jess.
 
+### Only the recovery key: the old backup key removed (#440; decisions 867-869)
+
+867. **Format 1 backups and the older backup key are removed** (Jess, 25
+     October 2026: "No one uses tohyee yet so dont need that part about old
+     backup keys"). Since decisions 734-736 backups are format 2, opened
+     with the recovery kit; the code kept for backups made before that
+     (opening `TOHYEE-BACKUP 1` files, the "Older backups' key" card in the
+     server app and on the Backups page, its show and check API and
+     `backups key show|check` commands, restoring with the older key, the
+     status counting format 1 files, and the server app's fallback for a
+     server from before recovery kits) is gone. A recovery kit is the only
+     thing that opens a backup on another computer. A format 1 file is
+     refused as "in a format this version of Tohyee can't open" (listed as
+     a file that can't be read, so it's never counted or pruned), and a
+     typed key that isn't a recovery code is refused as such.
+868. **The saved-copy check goes with it** (core migration 0021). The
+     `backup_key` server setting held only when someone last checked a
+     saved copy of the older key, so the migration deletes it. Its audit
+     events stay, as history. Wrong passwords for the recovery kit still
+     block after 5 in 15 minutes; only the recovery kit's own refusals now
+     count. `--other-key` on the command line now takes a recovery code
+     only (`TOHYEE_RECOVERY_CODE`; `TOHYEE_BACKUP_KEY` is no longer read).
+869. **What stays, because it's how a server works now, not old
+     compatibility.** `TOHYEE_SECRET_KEY` (the live key) still protects
+     stored secrets and the recovery keys, and is carried in each backup
+     for re-encrypting secrets on restore (decision 737). The first backup
+     (or the first kit saved) still makes recovery key version 1, and
+     recovery key versions and "Make a new recovery key" (n+1, older
+     versions kept for their backups) are unchanged. The 0.12.0 release
+     notes are left as they were: they record what that release did. Not
+     yet reviewed by Jess.
 ### Invite people from People and roles (#441; decisions 870-879)
 
 Will, 25 Oct 2026: "If I want to add my wife to Glimmers why add here

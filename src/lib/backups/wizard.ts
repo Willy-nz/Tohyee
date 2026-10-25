@@ -13,14 +13,6 @@ export function describeBackup(backup: Found): { what: string; key: string; need
   if (!header) return { what: backup.name, key: "", needs: "", note: backup.problem };
   const what = header.kind === "server" ? "People and settings (the server's own database)" : (header.displayName ?? header.organisationId ?? "An organisation");
   const note = !backup.compatible ? `Made by a newer Tohyee (${header.tohyeeVersion}): update this server first.` : null;
-  if (header.format === 1) {
-    return {
-      what,
-      key: "Older backup key",
-      needs: "This backup was made before recovery kits. If this server didn't make it, it needs the old server's backup key (its TOHYEE_SECRET_KEY).",
-      note,
-    };
-  }
   return {
     what,
     key: `Recovery kit v${header.recoveryKey.version}`,

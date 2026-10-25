@@ -3,8 +3,7 @@
 Issue #389; decisions 730-739. This is the design for getting a Tohyee
 server back after the computer, its disk or its Windows profile is lost. It
 builds on what was already there (nightly encrypted backups, 14 daily and 12
-monthly kept, a check after each backup, the backup key and restore as a
-copy: see "Backups and restore" in `ARCHITECTURE.md`) rather than adding a
+monthly kept, a check after each backup and restore as a copy: see "Backups and restore" in `ARCHITECTURE.md`) rather than adding a
 second backup system. It's built in three pull requests:
 
 | Part | What | State |
@@ -22,12 +21,12 @@ AES-256-GCM, HKDF-SHA256, SHA-256 and scrypt. Nothing is invented.
 | --- | --- | --- | --- |
 | Live secret key | `TOHYEE_SECRET_KEY` (48 random characters from the installer) | `tohyee.env` (Windows: `%ProgramData%\Tohyee`, admin and service only), or the server's environment | Stored secrets: every `*_ciphertext` column (bank feed tokens, mailbox tokens, IRD numbers, two-step sign-in keys, email passwords, private mail copy keys), and the recovery keys below |
 | Backup recovery key, version n (part 2) | 32 random bytes made by the server; numbered 1, 2, 3 | The core database (`server_settings`, key `backup_recovery_keys`), encrypted with the live key | Every backup made while it's the current version |
-| Older backup key (format 1) | HKDF-SHA256 of `TOHYEE_SECRET_KEY` ("tohyee backups v1") | Nowhere: worked out from the live key | Backups made before part 2 |
 | File key | HKDF-SHA256(recovery key, a random 32-byte salt in the file) | Worked out when needed | One backup file |
 
-Why a separate recovery key: today the only way to open a backup on another
-computer is the whole `TOHYEE_SECRET_KEY`, the same key that protects every
-stored secret on the running server. Keeping them apart means:
+Why a separate recovery key: before part 2, the only way to open a backup on
+another computer was the whole `TOHYEE_SECRET_KEY`, the same key that
+protects every stored secret on the running server. Keeping them apart
+means:
 
 - the recovery kit holds one thing, made for one job, and never the
   environment file, the PostgreSQL passwords or the setup token;
@@ -46,7 +45,7 @@ its own secrets, and DPAPI-protected values don't move to a new computer, so
 it would add a second recovery problem without stopping that threat. The
 environment file keeps its current permissions (decision 486).
 
-## Backup file format 2 (part 2)
+## The backup file format (part 2)
 
 ```
 TOHYEE-BACKUP 2\n
@@ -66,10 +65,11 @@ schema version, Tohyee version, when) plus:
   HKDF(recovery key, salt, "tohyee backup v2 live key").
 
 The whole header is the GCM additional data, so nothing in it can be changed
-without the file failing its check. Format 1 files (`format.ts` before this
-work) stay readable for good: the reader keeps both formats, and a
-format 1 file is opened with the server's own `TOHYEE_SECRET_KEY` or the one
-it was made with.
+without the file failing its check. Format 2 is the only format Tohyee
+reads. The first format (before part 2, encrypted with a key worked out
+from `TOHYEE_SECRET_KEY`) was removed before anyone used Tohyee, with the
+"older backup key" that opened it (decision 867): a `TOHYEE-BACKUP 1` file
+is refused as a format this version can't open.
 
 ## Encrypted fields inside a restored database (part 3)
 
@@ -79,9 +79,8 @@ encrypted with the old server's live key. A new computer has its own
 read there. The restore therefore re-encrypts them before anyone can use
 the copy:
 
-1. The old live key comes from the backup itself (format 2: `liveKey` in
-   the header, opened with the recovery key) or is the key given for a
-   format 1 file (which is that server's `TOHYEE_SECRET_KEY`).
+1. The old live key comes from the backup itself (`liveKey` in the header,
+   opened with the recovery key).
 2. In the new database, every text column whose name ends in `_ciphertext`
    (the naming rule every stored secret follows) is read. Each value that
    opens with this server's key is left alone; each that opens with the old
@@ -145,11 +144,8 @@ its own check.
 - **Rotation can't recall copies**: if an old backup and its kit were taken
   together, a new key doesn't undo that. A new key only protects backups made
   from then on.
-- **Moving to format 2**: nothing is converted. The first backup after the
-  update makes recovery key version 1. Older format 1 files still need the
-  older backup key (this server's `TOHYEE_SECRET_KEY`) on another computer,
-  so its "Show / check the key" stays, labelled for older backups, while any
-  format 1 file is kept.
+- **A new server's first key**: the first backup (or the first kit
+  someone saves) makes recovery key version 1.
 - **The live key** isn't changed by any of this. Changing it is still not
   supported in the app (stored secrets would have to be re-encrypted, which
   the part 3 re-encryption makes possible later).
@@ -218,11 +214,10 @@ open Server settings, Backups, Restore on this computer.
 1. **Find the backups**: a folder on this computer (the OneDrive folder once
    OneDrive has downloaded it, a USB drive). Only `.tohyee-backup` files are
    read, and only their headers until a key is given.
-2. **Choose one**: organisation, date, Tohyee version, file format and key
+2. **Choose one**: organisation, date, Tohyee version and recovery key
    version are shown.
 3. **Give its recovery material**: nothing (this server made it), the
-   recovery code, the recovery file and its passphrase, or (format 1) the old
-   backup key.
+   recovery code, or the recovery file and its passphrase.
 4. **Check**: the whole file is decrypted (tag checked) into
    `pg_restore --list`, and its schema version compared with this server's.
    A newer backup is refused before anything is made.
@@ -293,8 +288,8 @@ afterwards, recorded in `backup_checks`; the status shows the last one.
   disk, the weekly check, the API.
 - `tests/integration/backup-recovery-kit.test.ts`: format 2, kit export
   (password, local address, audit without the key), checking, recovery
-  files, rotation, a replacement server with and without the kit, format 1
-  still restoring, the command line, nothing secret logged.
+  files, rotation, a replacement server with and without the kit, a format 1
+  file refused, the command line, nothing secret logged.
 - `tests/integration/backup-restore-wizard.test.ts`: finding backups,
   restoring with paused jobs and private mail boundaries, damaged, cut-short
   and newer backups refused with nothing made, an interrupted restore

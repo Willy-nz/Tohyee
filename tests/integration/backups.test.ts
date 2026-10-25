@@ -9,9 +9,7 @@ import * as backupsRoute from "@/app/api/admin/backups/route";
 import * as restoreRoute from "@/app/api/admin/backups/restore/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { runDueBackups } from "@/lib/backups/scheduler";
-import * as keyRoute from "@/app/api/admin/backups/key/route";
-import * as keyCheckRoute from "@/app/api/admin/backups/key/check/route";
-import { backupKeyNeedsSaving, backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
+import * as kitRoute from "@/app/api/admin/backups/recovery-kit/route";
 import { exportRecoveryKit } from "@/lib/backups/recovery-kit";
 import { backUpNow, checkBackup, listBackupFiles, restoreBackupAsCopy, updateBackupSettings } from "@/lib/backups/service";
 import type { Actor } from "@/lib/db/org-transaction";
@@ -244,61 +242,17 @@ describeWithDatabase("backups and restores", () => {
     await expect(updateBackupSettings({ user: owner }, { time: "2am" })).rejects.toThrow(/24-hour HH:MM/);
   });
 
-  it("the backup key: shown only with the password again, and a saved copy is checked by pasting it back", async () => {
-    expect(await backupKeyStatus()).toMatchObject({ keySet: true, savedCopyCheckedAt: null });
-    expect(await backupKeyNeedsSaving()).toBe(true);
-
-    await expect(revealBackupKey({ user: owner }, "not my password")).rejects.toThrow(/password isn't right/);
-    const shown = await revealBackupKey({ user: owner }, TEST_PASSWORD);
-    expect(shown.key).toBe(KEY);
-
-    await expect(checkSavedBackupKey({ user: owner }, KEY.slice(0, -1))).rejects.toThrow(/isn't the same key/);
-    expect((await backupKeyStatus()).savedCopyCheckedAt).toBeNull();
-    const checked = await checkSavedBackupKey({ user: owner }, `  ${KEY}\n`);
-    expect(checked).toMatchObject({ keySet: true, savedCopyCheckedByEmail: owner.email });
-    expect(checked.savedCopyCheckedAt).not.toBeNull();
-    expect(await backupKeyNeedsSaving()).toBe(false);
-
-    // A different key (e.g. the server was set up again) needs its own saved copy.
-    process.env.TOHYEE_SECRET_KEY = "a-new-key-for-this-server-0123456789abcdef";
-    expect((await backupKeyStatus()).savedCopyCheckedAt).toBeNull();
-    process.env.TOHYEE_SECRET_KEY = KEY;
-    expect((await backupKeyStatus()).savedCopyCheckedAt).not.toBeNull();
-
-    // The key is never written to the audit trail.
-    const audit = await coreQuery<{ event_type: string; details: unknown }>(
-      "select event_type, details from admin_audit_events where entity_id = 'backup_key' order by id",
-    );
-    expect(audit.rows.map((r) => r.event_type)).toEqual([
-      "server.backup_key_show_refused",
-      "server.backup_key_shown",
-      "server.backup_key_check_failed",
-      "server.backup_key_checked",
-    ]);
-    expect(JSON.stringify(audit.rows)).not.toContain(KEY);
-  });
-
-  it("the backup key through the server settings address: server admins only, with their password, and not too many guesses", async () => {
-    const show = (cookieValue: string, password: string, local = true) =>
-      keyRoute.POST(apiRequest("/api/admin/backups/key", { method: "POST", cookie: cookieValue, body: { password }, local }), noContext);
-    const ok = await show(cookie, TEST_PASSWORD);
-    expect(ok.status).toBe(200);
-    expect(((await ok.json()) as { key: string }).key).toBe(KEY);
-    expect((await show(cookie, TEST_PASSWORD, false)).status).toBe(403);
-    expect((await show(await sessionCookieFor(bookkeeper), TEST_PASSWORD)).status).toBe(403);
-
-    const checked = await keyCheckRoute.POST(
-      apiRequest("/api/admin/backups/key/check", { method: "POST", cookie, body: { key: KEY } }),
-      noContext,
-    );
-    expect(((await checked.json()) as { keyStatus: { savedCopyCheckedAt: string | null } }).keyStatus.savedCopyCheckedAt).not.toBeNull();
-    const listed = (await (await backupsRoute.GET(apiRequest("/api/admin/backups", { cookie }), noContext)).json()) as { keyStatus: { keySet: boolean } };
-    expect(listed.keyStatus.keySet).toBe(true);
+  it("a wrong password for the recovery kit: 5 in 15 minutes blocks it, even with the right one", async () => {
+    const exportKit = (cookieValue: string, password: string) =>
+      kitRoute.POST(apiRequest("/api/admin/backups/recovery-kit", { method: "POST", cookie: cookieValue, body: { password, form: "code" } }), noContext);
+    const listed = (await (await backupsRoute.GET(apiRequest("/api/admin/backups", { cookie }), noContext)).json()) as { recoveryKit: { keySet: boolean }; keyStatus?: unknown };
+    expect(listed.recoveryKit.keySet).toBe(true);
+    expect(listed.keyStatus).toBeUndefined();
 
     const guesser = await createTestUser("guesser@example.com", { serverAdmin: true });
     const guesserCookie = await sessionCookieFor(guesser);
-    for (let i = 0; i < 5; i += 1) expect((await show(guesserCookie, `wrong ${i}`)).status).toBe(403);
-    const blocked = await show(guesserCookie, TEST_PASSWORD);
+    for (let i = 0; i < 5; i += 1) expect((await exportKit(guesserCookie, `wrong ${i}`)).status).toBe(403);
+    const blocked = await exportKit(guesserCookie, TEST_PASSWORD);
     expect(blocked.status).toBe(403);
     expect(((await blocked.json()) as { error: string }).error).toMatch(/Too many wrong passwords/);
   });
@@ -314,7 +268,7 @@ describeWithDatabase("backups and restores", () => {
       );
       await expect(
         restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "from-old-server", key: "not-the-key-0123456789abcdefghijklmn" }),
-      ).rejects.toThrow(/needs a recovery kit/);
+      ).rejects.toThrow(/isn't a recovery code/);
       const copy = await restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "from-old-server", key: kit.code });
       expect(copy).toMatchObject({ id: "from-old-server", provisioningStatus: "ready" });
     } finally {
@@ -332,13 +286,9 @@ describeWithDatabase("backups and restores", () => {
     const [file] = await listBackupFiles(ORG);
     const checked = await run(process.execPath, [tsx, "scripts/admin.ts", "backups", "check", "--file", file.path], { env, timeout: 30_000 });
     expect(checked.stdout).toContain("OK: backup-co");
-    const key = await run(process.execPath, [tsx, "scripts/admin.ts", "backups", "key", "show"], { env, timeout: 30_000 });
-    expect(key.stdout).toContain(`\n${KEY}\n`);
-    const keyChecked = await run(process.execPath, [tsx, "scripts/admin.ts", "backups", "key", "check"], {
-      env: { ...env, TOHYEE_BACKUP_KEY: KEY },
-      timeout: 30_000,
-    });
-    expect(keyChecked.stdout).toContain("That's the right key");
+    // The older backup key's commands are gone (decision 867): only the recovery kit.
+    await expect(run(process.execPath, [tsx, "scripts/admin.ts", "backups", "key", "show"], { env, timeout: 30_000 })).rejects.toThrow(/Unknown backups command "key"/);
+    expect(status.stdout).not.toContain(KEY);
   });
 });
 

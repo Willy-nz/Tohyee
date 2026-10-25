@@ -50,7 +50,6 @@ function input(overrides: Partial<OverviewInput> = {}): OverviewInput {
       { organisationId: "kowhai", displayName: "Kōwhai Dairies", latest: good, lastGood: good },
     ],
     checks: [check(null, "ok", "2026-10-19T03:00:00Z"), check("kowhai", "ok", "2026-10-19T03:00:00Z")],
-    keyStatus: { keySet: true, savedCopyCheckedAt: "2026-10-01T00:00:00Z" },
     kit: { keySet: true, version: 1, id: "k1", checkedAt: "2026-10-02T00:00:00Z", checkedByEmail: "jess@example.com" },
     ...overrides,
   };
@@ -117,21 +116,17 @@ describe("the Backups panel's overview (decision 733)", () => {
     expect(overview.offSite.note).toMatch(/^No off-site copy/);
   });
 
-  it("backups made with an earlier recovery key, or before recovery kits, say which kit or key to keep, and until about when", () => {
-    const legacy = { ...v2("kowhai", "2026-09-30T02:00:00Z", 1, "k1"), format: 1, keyId: "old" } as unknown as BackupHeader;
+  it("backups made with an earlier recovery key say which kit to keep, and until about when", () => {
     const files = [
       ...input().files,
       { name: "kowhai/kowhai_2026-10-01_020000.tohyee-backup", sizeBytes: MB, problem: null, header: v2("kowhai", "2026-10-01T02:00:00Z", 1, "k1") },
-      { name: "kowhai/kowhai_2026-09-30_020000.tohyee-backup", sizeBytes: MB, problem: null, header: legacy },
     ];
     const kit = { keySet: true, version: 2, id: "k2", checkedAt: "2026-10-20T00:00:00Z", checkedByEmail: "jess@example.com" };
-    const overview = summariseBackups(input({ files, kit, keyStatus: { keySet: true, savedCopyCheckedAt: null } }));
+    const overview = summariseBackups(input({ files, kit }));
     expect(overview.recoveryKit.olderVersions).toEqual([{ version: 1, id: "k1", files: 3, newestMadeAt: "2026-10-21T02:01:00Z", keepKitUntilAbout: "2027-10-21" }]);
-    expect(overview.recoveryKit.legacyFiles).toEqual({ files: 1, newestMadeAt: "2026-09-30T02:00:00Z", keepKeyUntilAbout: "2027-09-30", keyCheckedAt: null });
-    expect(overview.attention.map((a) => a.text)).toContainEqual(expect.stringMatching(/^1 older backup was made before recovery kits/));
-    // Once a saved copy of the older key has been checked, that's no longer a problem.
-    const checked = summariseBackups(input({ files, kit, keyStatus: { keySet: true, savedCopyCheckedAt: "2026-10-01T00:00:00Z" } }));
-    expect(checked.attention).toEqual([]);
+    // There's no "older backup key" any more (decision 867): only recovery kits.
+    expect(overview.recoveryKit).not.toHaveProperty("legacyFiles");
+    expect(overview.attention).toEqual([]);
   });
 
   it("test restores and paused restored copies are shown", () => {
