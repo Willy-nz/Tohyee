@@ -1,5 +1,4 @@
 import { promises as fs } from "node:fs";
-import { type BackupKeyStatus, backupKeyStatus } from "@/lib/backups/key";
 import { type RecoveryKitStatus, recoveryKitStatus } from "@/lib/backups/recovery-kit";
 import { type BackupCheck, latestChecks } from "@/lib/backups/checks";
 import { classifyDestination, type Destination, type DiskSpace, diskSpace, describeDestination, formatBytes, offSiteNote } from "@/lib/backups/destination";
@@ -53,8 +52,6 @@ export type BackupOverview = {
     checkedByEmail: string | null;
     /** Backups in the folder made with an earlier recovery key version: keep that version's kit until they age out. */
     olderVersions: { version: number; id: string; files: number; newestMadeAt: string; keepKitUntilAbout: string }[];
-    /** Backups in the older format (before recovery kits), which need the older backup key (TOHYEE_SECRET_KEY). */
-    legacyFiles: { files: number; newestMadeAt: string; keepKeyUntilAbout: string; keyCheckedAt: string | null } | null;
   };
   /** The last test restore (decision 739): the oldest of each database's latest, so it's when everything was last test-restored. */
   testRestore: { lastAt: string | null; allAt: string | null; failed: number; failures: { organisationId: string | null; error: string | null }[] };
@@ -75,11 +72,10 @@ export type OverviewInput = {
   checks: BackupCheck[];
   testRestores?: BackupCheck[];
   pausedCopies?: BackupOverview["pausedCopies"];
-  keyStatus: Pick<BackupKeyStatus, "keySet" | "savedCopyCheckedAt">;
   kit: Pick<RecoveryKitStatus, "keySet" | "version" | "id" | "checkedAt" | "checkedByEmail">;
 };
 
-/** Backups are kept up to 12 months (the first of each month), so a kit or key is needed until about a year after the newest backup made with it. */
+/** Backups are kept up to 12 months (the first of each month), so a kit is needed until about a year after the newest backup made with it. */
 function aYearAfter(iso: string): string {
   const date = new Date(iso);
   date.setUTCFullYear(date.getUTCFullYear() + 1);
@@ -175,27 +171,16 @@ export function summariseBackups(input: OverviewInput): BackupOverview {
     notProven.push(`A saved recovery kit${kit.version ? ` for recovery key version ${kit.version}` : ""}.`);
   }
   const older = new Map<string, { version: number; id: string; files: number; newestMadeAt: string }>();
-  const legacyCount = { files: 0, newestMadeAt: "" };
   for (const file of input.files) {
     const header = file.header;
     if (!header) continue;
-    if (header.format === 1) {
-      legacyCount.files += 1;
-      if (header.createdAt > legacyCount.newestMadeAt) legacyCount.newestMadeAt = header.createdAt;
-    } else if (header.recoveryKey.id !== kit.id) {
+    if (header.recoveryKey.id !== kit.id) {
       const name = `${header.recoveryKey.version}:${header.recoveryKey.id}`;
       const entry = older.get(name) ?? { version: header.recoveryKey.version, id: header.recoveryKey.id, files: 0, newestMadeAt: header.createdAt };
       entry.files += 1;
       if (header.createdAt > entry.newestMadeAt) entry.newestMadeAt = header.createdAt;
       older.set(name, entry);
     }
-  }
-  const legacy = legacyCount.files > 0 ? legacyCount : null;
-  if (legacy && !input.keyStatus.savedCopyCheckedAt) {
-    attention.push({
-      level: "warning",
-      text: `${legacy.files} older ${legacy.files === 1 ? "backup was" : "backups were"} made before recovery kits and can only be opened on another computer with the older backup key (this server's TOHYEE_SECRET_KEY). Nobody has checked a saved copy of it: save one, or rely on the newer backups.`,
-    });
   }
 
   const goodTimes = targets.map((t) => t.lastGoodAt);
@@ -246,7 +231,6 @@ export function summariseBackups(input: OverviewInput): BackupOverview {
       checkedAt: kit.checkedAt,
       checkedByEmail: kit.checkedByEmail,
       olderVersions: [...older.values()].sort((a, b) => b.version - a.version).map((entry) => ({ ...entry, keepKitUntilAbout: aYearAfter(entry.newestMadeAt) })),
-      legacyFiles: legacy ? { ...legacy, keepKeyUntilAbout: aYearAfter(legacy.newestMadeAt), keyCheckedAt: input.keyStatus.savedCopyCheckedAt } : null,
     },
     testRestore: {
       lastAt: tests.map((t) => t.finishedAt ?? t.startedAt).sort().at(-1) ?? null,
@@ -280,7 +264,6 @@ export async function backupOverview(now = new Date()): Promise<{ overview: Back
     checks: await latestChecks("integrity"),
     testRestores: await latestChecks("test_restore"),
     pausedCopies: await pausedOrganisations(),
-    keyStatus: await backupKeyStatus(),
     kit: await recoveryKitStatus(),
   });
   return { overview, files };

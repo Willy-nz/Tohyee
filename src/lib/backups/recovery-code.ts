@@ -60,11 +60,6 @@ export function formatRecoveryCode(version: number, key: Buffer): string {
   return `RK${version}-${body.match(/.{1,4}/g)!.join("-")}`;
 }
 
-/** Whether some text looks like it was meant to be a recovery code (so a bad one is reported as such). */
-export function looksLikeRecoveryCode(text: string): boolean {
-  return /^\s*rk\s*\d+\s*[-\s]/i.test(text);
-}
-
 /**
  * Reads a recovery code. Spaces, dashes and case don't matter; O is read as
  * 0 and I or L as 1, as Crockford base32 says. A mistyped character is

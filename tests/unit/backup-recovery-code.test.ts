@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { backupKeys, materialFromText, readBackupHeader, readDecrypted, writeEncrypted, writeLegacyEncryptedForTests } from "@/lib/backups/format";
+import { backupKeys, materialFromText, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
 import {
   describeRecoveryFile,
   formatRecoveryCode,
@@ -44,9 +44,9 @@ describe("the recovery code (decision 735)", () => {
     expect(() => parseRecoveryCode(code.replace("RK1", "RK2"))).toThrow(/mistake/); // the version is part of the check
   });
 
-  it("text that looks like a code is read as one; anything else is the older backup key", () => {
+  it("typed text is read as a recovery code, and nothing else is accepted (decision 867)", () => {
     expect(materialFromText(formatRecoveryCode(1, KEY))?.recoveryKey?.key.equals(KEY)).toBe(true);
-    expect(materialFromText("  some-older-secret-key-0123456789abcdef  ")).toEqual({ legacyKey: "some-older-secret-key-0123456789abcdef" });
+    expect(() => materialFromText("  some-older-secret-key-0123456789abcdef  ")).toThrow(/isn't a recovery code/);
     expect(materialFromText("")).toBeUndefined();
   });
 });
@@ -102,10 +102,8 @@ describe("backup file format 2 (decision 734)", () => {
   };
   const payload = randomBytes(200_000);
 
-  async function write(file: string, legacy = false) {
-    const out = createWriteStream(file);
-    if (legacy) await writeLegacyEncryptedForTests(Readable.from([payload]), out, fields);
-    else await writeEncrypted(Readable.from([payload]), out, fields, recovery);
+  async function write(file: string) {
+    await writeEncrypted(Readable.from([payload]), createWriteStream(file), fields, recovery);
   }
 
   async function read(file: string, material?: Parameters<typeof readDecrypted>[2]) {
@@ -140,19 +138,18 @@ describe("backup file format 2 (decision 734)", () => {
 
     const { header } = await readBackupHeader(file);
     expect(header).toMatchObject({ format: 2, recoveryKey: { version: 1, id: recovery.id }, kdf: "hkdf-sha256", organisationId: "unit-co" });
-    expect(header.format === 2 && header.liveKey.id).toBe(liveKeyId(LIVE));
+    expect(header.liveKey.id).toBe(liveKeyId(LIVE));
 
     expect((await read(file, { recoveryKey: { version: 1, key: KEY } })).equals(payload)).toBe(true);
     const keys = await backupKeys(await readBackupHeader(file), { recoveryKey: { version: 1, key: KEY } });
     expect(keys.sourceLiveKey).toBe(LIVE);
   });
 
-  it("refuses the wrong kit, an older backup key, a changed header and a damaged or cut-short file", async () => {
+  it("refuses the wrong kit, a changed header and a damaged or cut-short file", async () => {
     const file = path.join(folder, "b.tohyee-backup");
     await write(file);
     await expect(read(file, { recoveryKey: { version: 1, key: randomBytes(32) } })).rejects.toThrow(/isn't the one this backup was made with/);
     await expect(read(file, { recoveryKey: { version: 2, key: KEY } })).rejects.toThrow(/it needs version 1/);
-    await expect(read(file, { legacyKey: LIVE })).rejects.toThrow(/needs a recovery kit \(recovery key version 1\), not a backup key/);
 
     const bytes = await fs.readFile(file);
     const flipped = Buffer.from(bytes);
@@ -172,20 +169,17 @@ describe("backup file format 2 (decision 734)", () => {
     await expect(readBackupHeader(path.join(folder, "future.tohyee-backup"))).rejects.toThrow(/made by a newer version of Tohyee/);
   });
 
-  it("older format 1 files still open with the key they were made with, and not with a kit", async () => {
-    const file = path.join(folder, "legacy.tohyee-backup");
-    await write(file, true);
-    expect((await fs.readFile(file)).subarray(0, 16).toString()).toBe("TOHYEE-BACKUP 1\n");
-    expect((await read(file)).equals(payload)).toBe(true); // this server's own key
-    expect((await read(file, { legacyKey: LIVE })).equals(payload)).toBe(true);
-    await expect(read(file, { recoveryKey: { version: 1, key: KEY } })).rejects.toThrow(/made before recovery kits/);
-    process.env.TOHYEE_SECRET_KEY = "another-servers-live-key-0123456789abcdefgh";
-    try {
-      await expect(read(file)).rejects.toThrow(/made with a different key/);
-      const keys = await backupKeys(await readBackupHeader(file), { legacyKey: LIVE });
-      expect(keys.sourceLiveKey).toBe(LIVE);
-    } finally {
-      process.env.TOHYEE_SECRET_KEY = LIVE;
-    }
+  it("a file in the first format (before recovery kits) isn't opened (decision 867)", async () => {
+    const file = path.join(folder, "first-format.tohyee-backup");
+    const header = { format: 1, ...fields, cipher: "aes-256-gcm", keyId: "0123456789abcdef" };
+    await fs.writeFile(file, Buffer.concat([Buffer.from(`TOHYEE-BACKUP 1\n${JSON.stringify(header)}\n`), randomBytes(64)]));
+    await expect(readBackupHeader(file)).rejects.toThrow(/in a format this version of Tohyee can't open/);
+    await expect(read(file)).rejects.toThrow(/in a format this version of Tohyee can't open/);
+    // A format 2 header claiming another format is damaged, not opened.
+    const good = path.join(folder, "c.tohyee-backup");
+    await write(good);
+    const relabelled = Buffer.from((await fs.readFile(good)).toString("latin1").replace('"format":2', '"format":1'), "latin1");
+    await fs.writeFile(path.join(folder, "relabelled.tohyee-backup"), relabelled);
+    await expect(readBackupHeader(path.join(folder, "relabelled.tohyee-backup"))).rejects.toThrow(/damaged or was made by a newer version/);
   });
 });

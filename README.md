@@ -478,8 +478,7 @@ file locked with a passphrase you keep elsewhere, and holds nothing but the
 recovery key. Backups shows it (after your password) and checks your saved
 copy when you give it back; until someone has, server admins see a reminder
 on every page. To restore on a new server, give the recovery code when
-restoring (the new server keeps its own keys); backups made before recovery
-kits need the old server's backup key instead. See
+restoring (the new server keeps its own keys). See
 [docs/BACKUP-RECOVERY.md](docs/BACKUP-RECOVERY.md). pg_dump and pg_restore come with the Windows installer and the Docker
 image; elsewhere they need to be on the PATH (or set `TOHYEE_PG_BIN`).
 

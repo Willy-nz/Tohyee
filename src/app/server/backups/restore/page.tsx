@@ -12,7 +12,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
 import { cutoverChecklist, describeBackup } from "@/lib/backups/wizard";
 
-type Material = "none" | "code" | "file" | "older";
+type Material = "none" | "code" | "file";
 type Message = { tone: "success" | "error" | "info" | "warning"; text: string } | null;
 
 function size(bytes: number): string {
@@ -58,7 +58,7 @@ export default function RestoreWizardPage() {
   }
 
   const materialBody = () =>
-    material === "code" || material === "older" ? { key: code } : material === "file" ? { kitFile: kitFile ?? "", passphrase } : {};
+    material === "code" ? { key: code } : material === "file" ? { kitFile: kitFile ?? "", passphrase } : {};
   const fileBody = () => ({ folder: found?.folder, file: chosen?.name, ...materialBody() });
 
   async function run(name: string, text: string, work: () => Promise<void>) {
@@ -90,7 +90,7 @@ export default function RestoreWizardPage() {
     setResult(null);
     setPlan(null);
     setMessage(null);
-    setMaterial(backup.header?.format === 1 ? "none" : "code");
+    setMaterial("code");
   };
 
   const check = () =>
@@ -216,24 +216,16 @@ export default function RestoreWizardPage() {
             <label className={ui.checkbox}>
               <input type="radio" name="material" checked={material === "none"} onChange={() => setMaterial("none")} /> Nothing: this server made it
             </label>
-            {header.format === 2 ? (
-              <>
-                <label className={ui.checkbox}>
-                  <input type="radio" name="material" checked={material === "code"} onChange={() => setMaterial("code")} /> The recovery code
-                </label>
-                <label className={ui.checkbox}>
-                  <input type="radio" name="material" checked={material === "file"} onChange={() => setMaterial("file")} /> The recovery file and its passphrase
-                </label>
-              </>
-            ) : (
-              <label className={ui.checkbox}>
-                <input type="radio" name="material" checked={material === "older"} onChange={() => setMaterial("older")} /> The old server&apos;s backup key (its TOHYEE_SECRET_KEY)
-              </label>
-            )}
+            <label className={ui.checkbox}>
+              <input type="radio" name="material" checked={material === "code"} onChange={() => setMaterial("code")} /> The recovery code
+            </label>
+            <label className={ui.checkbox}>
+              <input type="radio" name="material" checked={material === "file"} onChange={() => setMaterial("file")} /> The recovery file and its passphrase
+            </label>
           </fieldset>
           <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-            {material === "code" || material === "older" ? (
-              <Field label={material === "code" ? "Recovery code" : "The old server's backup key"}>
+            {material === "code" ? (
+              <Field label="Recovery code">
                 <input type="password" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} style={{ fontFamily: "var(--mono)" }} />
               </Field>
             ) : null}

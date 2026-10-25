@@ -255,7 +255,7 @@ function toTarget(o: OrganisationRecord): Target {
 /**
  * Decrypts a backup into `pg_restore --list`: proves the key opens it,
  * nothing was changed, and PostgreSQL can read it. `material` is the
- * recovery kit (or older backup key) when this server didn't make it.
+ * recovery kit when this server didn't make it.
  */
 export async function checkBackup(file: string, material?: RecoveryMaterial): Promise<BackupHeader> {
   const restore = startPgTool("pg_restore", ["--list"], "postgres");
@@ -605,7 +605,7 @@ export async function backupFileInFolder(name: unknown): Promise<string> {
 /** What a restore checked and did (#389, decision 737), shown in the wizard and kept in `backup_checks`. */
 export type RestoreReport = {
   organisationId: string;
-  from: { organisationId: string; displayName: string | null; madeAt: string; tohyeeVersion: string; format: 1 | 2; recoveryKeyVersion: number | null };
+  from: { organisationId: string; displayName: string | null; madeAt: string; tohyeeVersion: string; format: 2; recoveryKeyVersion: number };
   /** Stored secrets: re-encrypted for this server, already readable, or needing connecting again. */
   secrets: SecretsReport;
   /** Kinds of connection with values that couldn't be read. */
@@ -623,7 +623,7 @@ export type RestoreInput = {
   id?: unknown;
   displayName?: unknown;
   ownerEmail?: unknown;
-  /** A recovery code, or (format 1) the older backup key, as typed. */
+  /** A recovery code, as typed. */
   key?: unknown;
   /** Or the recovery kit already opened (a recovery file and its passphrase). */
   material?: RecoveryMaterial;
@@ -654,7 +654,7 @@ async function countIn(client: { query: (sql: string) => Promise<{ rows: { n: st
  * restart) is cleaned up when the server starts again (decision 739).
  */
 export async function restoreBackup(actor: AdminActor, input: RestoreInput): Promise<{ organisation: OrganisationRecord; report: RestoreReport }> {
-  // The recovery code (or, for an older backup, the backup key) of the server that made it, when that isn't this one.
+  // The recovery code of the server that made it, when that isn't this one.
   const material = input.material ?? materialFromText(input.key);
   if (!secretsAvailable()) throw new UnavailableError("Restoring needs this server's TOHYEE_SECRET_KEY (stored secrets are re-encrypted with it). Set it and restart Tohyee.");
   const { header } = await readBackupHeader(input.file);
@@ -768,7 +768,7 @@ export async function restoreBackup(actor: AdminActor, input: RestoreInput): Pro
         madeAt: header.createdAt,
         tohyeeVersion: header.tohyeeVersion,
         format: header.format,
-        recoveryKeyVersion: header.format === 2 ? header.recoveryKey.version : null,
+        recoveryKeyVersion: header.recoveryKey.version,
       },
       secrets,
       reconnect: [...new Set(secrets.columns.filter((c) => c.unreadable > 0).map((c) => describeSecretColumn(c.table)))],
@@ -854,8 +854,8 @@ export async function resumeOrganisationJobs(auth: ServerAdminAuth, organisation
 }
 
 /** Decrypts a backup to a plain pg_dump file, for a database administrator (e.g. restoring the server's own database). */
-export async function decryptBackupTo(file: string, outFile: string, otherKey?: string): Promise<BackupHeader> {
-  const material = materialFromText(otherKey);
+export async function decryptBackupTo(file: string, outFile: string, recoveryCode?: string): Promise<BackupHeader> {
+  const material = materialFromText(recoveryCode);
   await checkBackup(file, material);
   const out = createWriteStream(outFile, { mode: 0o600, flags: "wx" });
   return readDecrypted(file, out, material);

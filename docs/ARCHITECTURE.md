@@ -1750,13 +1750,9 @@ as the admin login, straight into an encrypted file:
   `TOHYEE_SECRET_KEY`; the **recovery kit** (`recovery-code.ts`,
   `recovery-kit.ts`, decisions 735-736) is that key as a code or a
   passphrase-protected file (scrypt), exported with the password again and
-  checked by giving it back. Format 1 files (`TOHYEE-BACKUP 1`, key HKDF of
-  `TOHYEE_SECRET_KEY`, "tohyee backups v1") made before still open with the
-  key they were made with. For those, (`key.ts`) a server admin
-  can see that key after typing their password again (5 wrong tries in 15
-  minutes blocks it, counted with the kit's), and proves a saved copy by
-  pasting it back: the server compares it and records when, for that key's
-  fingerprint, in `server_settings` (`backup_key`). Until a saved kit for the
+  checked by giving it back (5 wrong passwords in 15 minutes blocks the
+  export). Format 2 is the only format; the first one and its "older backup
+  key" were removed before anyone used Tohyee (decision 867). Until a saved kit for the
   current recovery key version has been checked, server admins see a
   reminder on every page and the server app opens on Backups. No key ever
   goes in the audit trail or the logs.
@@ -1807,8 +1803,8 @@ as the admin login, straight into an encrypted file:
   (migrations up to this server's version, runtime-login grants). Any failure
   drops the new database and registry row. A backup from a newer Tohyee is
   refused. A backup made on another server (or before the key changed) is
-  restored by giving that server's recovery code (or, for format 1, its
-  key) with the request; this server's own keys are never replaced. Stored
+  restored by giving that server's recovery code (or recovery file and
+  passphrase) with the request; this server's own keys are never replaced. Stored
   secrets (`*_ciphertext`) are re-encrypted with this server's key before
   the copy is ready (`rewrap.ts`), and the copy starts with
   `jobs_paused_at` set, so every scheduled job skips it

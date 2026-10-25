@@ -33,7 +33,6 @@ import {
 import { getRemoteAccess, getTohyeeAddress, releaseTohyeeAddress, updateRemoteAccess } from "@/lib/remote/settings";
 import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
 import { checkStoredBackups } from "@/lib/backups/checks";
-import { backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
 import { backupOverview } from "@/lib/backups/overview";
 import { checkRecoveryKit, exportRecoveryKit, recoveryKitStatus, rotateRecoveryKey } from "@/lib/backups/recovery-kit";
 import {
@@ -114,8 +113,8 @@ Backups (encrypted with the server's recovery key: save the recovery kit somewhe
                                             server backup (without --apply it only says what it would do)
   backups decrypt --file FILE --out DUMP [--other-key]
                                             a plain pg_dump file, for a database administrator
-                                            --other-key: the backup was made on another server; its key
-                                            from TOHYEE_BACKUP_KEY or asked
+                                            --other-key: the backup was made on another server; its
+                                            recovery code from TOHYEE_RECOVERY_CODE or asked
   backups kit show                          the recovery kit as a recovery code, to save somewhere safe
   backups kit file --out PATH [--random-name]
                                             the recovery kit as a file encrypted with a passphrase
@@ -123,8 +122,6 @@ Backups (encrypted with the server's recovery key: save the recovery kit somewhe
   backups kit check [--file PATH]           checks your saved kit: the code (TOHYEE_RECOVERY_CODE or
                                             asked), or the file and its passphrase
   backups kit new                           a new recovery key for backups from now on
-  backups key show                          the older backups' key (made before recovery kits)
-  backups key check                         checks your saved copy (TOHYEE_BACKUP_KEY or asked)
   analytics folders [--json]                each organisation's analytics folder (decision 358)
   analytics folder --id ORGANISATION --folder PATH   choose it (--folder "" clears it)
   bank folders [--json]                     each organisation's bank files folder (decision 386)
@@ -536,18 +533,13 @@ async function email(command: string | undefined, args: string[]) {
   throw new UsageError(`Unknown email command${command ? ` "${command}"` : ""}.`);
 }
 
-/**
- * With --other-key: the recovery code of the server that made the backup
- * (TOHYEE_RECOVERY_CODE), or for a backup made before recovery kits, its
- * backup key (TOHYEE_BACKUP_KEY); asked when neither is set.
- */
+/** With --other-key: the recovery code of the server that made the backup (TOHYEE_RECOVERY_CODE, or asked). */
 async function otherKey(args: string[]): Promise<string | undefined> {
   if (!flag(args, "other-key")) return undefined;
-  if (process.env.TOHYEE_RECOVERY_CODE !== undefined) return process.env.TOHYEE_RECOVERY_CODE;
-  return secret("TOHYEE_BACKUP_KEY", "The recovery code (or, for an older backup, the backup key) of the server that made this backup: ");
+  return secret("TOHYEE_RECOVERY_CODE", "The recovery code of the server that made this backup: ");
 }
 
-/** --other-key (a recovery code or older backup key) or --kit-file PATH with its passphrase (TOHYEE_KIT_PASSPHRASE or asked). */
+/** --other-key (a recovery code) or --kit-file PATH with its passphrase (TOHYEE_KIT_PASSPHRASE or asked). */
 async function cliMaterial(args: string[]) {
   const kitFile = option(args, "kit-file");
   if (kitFile) {
@@ -568,9 +560,9 @@ async function backups(command: string | undefined, args: string[]) {
   if (command === "status") {
     const settings = await getBackupSettings();
     const status = await backupStatus();
-    const keyStatus = await backupKeyStatus();
     const { overview } = await backupOverview();
-    show(args, { settings, keyStatus, status, overview }, () => {
+    const kit = await recoveryKitStatus();
+    show(args, { settings, recoveryKit: kit, status, overview }, () => {
       console.log(`Nightly backups: ${settings.enabled ? `on, at ${settings.time} (${settings.timeZone})` : "off"}`);
       console.log(`Folder: ${settings.folder}${settings.folder === settings.defaultFolder ? " (the default)" : ""}, ${overview.destination.description}`);
       console.log(`Off-site: ${overview.offSite.note}`);
@@ -579,7 +571,7 @@ async function backups(command: string | undefined, args: string[]) {
       );
       console.log(`Space: ${overview.storage.fileCount} files, ${megabytes(overview.storage.usedBytes)}${overview.storage.freeBytes !== null ? `; ${megabytes(overview.storage.freeBytes)} free` : ""}`);
       if (!settings.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so backups can't be made (they're encrypted with it).");
-      else if (!keyStatus.savedCopyCheckedAt) console.log("Nobody has checked a saved copy of the backup key yet. Without a copy, backups can't be opened if this server is lost: run backups key show.");
+      else if (kit.version && kit.needsSaving) console.log("Nobody has checked a saved recovery kit yet. Without one, backups can't be opened if this server is lost: run backups kit show.");
       console.log("");
       table(
         status.map((s) => ({
@@ -761,28 +753,6 @@ async function backups(command: string | undefined, args: string[]) {
     if (!status.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so there's no recovery key yet.");
     else if (!status.version) console.log("There's no recovery key yet: the first backup (or backups kit show) makes one.");
     else console.log(status.checkedAt ? `Recovery key version ${status.version}: a saved kit was checked ${when(status.checkedAt)} by ${status.checkedByEmail}.` : `Recovery key version ${status.version}: nobody has checked a saved kit yet. Run backups kit show, save it, then backups kit check.`);
-    return;
-  }
-  if (command === "key") {
-    const [what] = args;
-    if (what === "show") {
-      const { key, keyId } = await revealBackupKey(COMMAND_LINE_ADMIN, undefined);
-      console.log("The older backups' key (this server's TOHYEE_SECRET_KEY). Backups made before recovery kits can only be opened with it; newer ones need the recovery kit (backups kit show).");
-      console.log("Save it somewhere safe that isn't the backup folder (a password manager), then run: backups key check");
-      console.log("");
-      console.log(key);
-      console.log("");
-      console.log(`Fingerprint: ${keyId}`);
-      return;
-    }
-    if (what === "check") {
-      const status = await checkSavedBackupKey(COMMAND_LINE_ADMIN, await secret("TOHYEE_BACKUP_KEY", "Paste your saved copy of the key: "));
-      console.log(`That's the right key (fingerprint ${status.keyId}). The reminder is off until the key changes.`);
-      return;
-    }
-    const status = await backupKeyStatus();
-    if (!status.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so there's no backup key yet.");
-    else console.log(status.savedCopyCheckedAt ? `A saved copy was checked ${when(status.savedCopyCheckedAt)} by ${status.savedCopyCheckedByEmail}.` : "Nobody has checked a saved copy of this key yet: run backups key show, save it, then backups key check.");
     return;
   }
   throw new UsageError(`Unknown backups command${command ? ` "${command}"` : ""}.`);

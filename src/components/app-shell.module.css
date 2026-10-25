@@ -540,7 +540,7 @@
   min-width: 0;
 }
 
-/* Server warnings (backup key, two-step): a compact strip, still hard to miss. */
+/* Server warnings (recovery kit, two-step): a compact strip, still hard to miss. */
 .warnings {
   display: grid;
   gap: 6px;

@@ -123,7 +123,7 @@ namespace Tohyee.Tray
             Controls.Add(_sidebar);
             ResumeLayout();
             Navigate("home");
-            RemindAboutBackupKey();
+            RemindAboutRecoveryKit();
             if (_updatesWhenSignedIn)
             {
                 _updatesWhenSignedIn = false;
@@ -237,8 +237,8 @@ namespace Tohyee.Tray
             BeginInvoke((Action)(async () => await page.BackUpNow()));
         }
 
-        /// <summary>Until a saved copy of the backup key has been checked, open on Backups and say why.</summary>
-        private async void RemindAboutBackupKey()
+        /// <summary>Until a saved recovery kit has been checked, open on Backups and say why.</summary>
+        private async void RemindAboutRecoveryKit()
         {
             if (_app.Api.IsDemo) return;
             // #198: the answer can take a while. If the person has opened another page (or signed

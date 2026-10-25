@@ -47,14 +47,12 @@ that something happened.
   offline) and a (light-hearted) conference card. On Docker and Linux they're a **command-line tool**
   (`tohyee-admin.cjs` in the image, `npm run admin` from a checkout).
 - **Nightly backups** of each organisation (and the server's own database),
-  encrypted with the server's secret key, into a folder the server admin
+  encrypted with the server's backup recovery key, into a folder the server admin
   chooses (a OneDrive folder gets copies off the computer); each checked after
   it's made; 14 daily and 12 monthly kept; failures retried hourly and
   emailed to server admins. **Restoring** makes a copy of the organisation, so
   nothing is overwritten, and works on a new server given the old server's
-  key. **Keeping the key**: server admins can see the backup key (with their
-  password) and check a saved copy by pasting it back; they're reminded on
-  every page until someone has.
+  recovery kit (below).
 - **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports, Accounting,
   Tax and Settings across the top (Contacts under Sales/Purchases; #375,
   decision 700), each opening to its overview, lists and settings; a ☰ menu with
@@ -75,8 +73,9 @@ that something happened.
   (optional random name, said to be a convenience only), got with the
   password again and checked by giving it back, per key version. A new
   recovery key can be made; older backups keep opening and the status says
-  which earlier kit to keep until when. Backups from before keep opening
-  with the older backup key. **Restore on this computer** (#389 part 3): a
+  which earlier kit to keep until when. The recovery kit is the only way in:
+  the older backup key and the first backup format were removed before anyone
+  used Tohyee (decision 867). **Restore on this computer** (#389 part 3): a
   wizard finds backups in any folder (OneDrive, a USB drive), takes the
   recovery code or file, checks the whole backup and its version first,
   restores as a new organisation (keeping its ID on a replacement

@@ -199,7 +199,7 @@ describeWithDatabase("restoring: checks, re-encrypted secrets, paused jobs and p
       await expect(inspectBackup(orgFile)).rejects.toThrow(/Give that server's recovery kit/);
       const wrong = codeA.slice(0, 6) + (codeA[6] === "A" ? "B" : "A") + codeA.slice(7);
       await expect(recoveryMaterial({ key: wrong })).rejects.toThrow(/mistake/);
-      await expect(restoreBackup({ id: admin.id, email: admin.email }, { file: orgFile, id: "wiz-moved", key: "not a code but long enough to be a key 0123456789" })).rejects.toThrow(/needs a recovery kit/);
+      await expect(restoreBackup({ id: admin.id, email: admin.email }, { file: orgFile, id: "wiz-moved", key: "not a code but long enough to be a key 0123456789" })).rejects.toThrow(/isn't a recovery code/);
       expect((await coreQuery("select count(*)::int as n from organisations")).rows[0]).toEqual(before);
 
       // Through the route, with the code.
