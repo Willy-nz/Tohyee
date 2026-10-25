@@ -1,3 +1,4 @@
+import * as membersRoute from "@/app/api/organisations/[organisationId]/members/route";
 import { rm } from "node:fs/promises";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as demoRoute from "@/app/api/demo-farm/route";
@@ -238,6 +239,13 @@ describeWithDatabase("the demo farm (#437)", () => {
     );
     expect(put.status).toBe(403);
     expect(((await put.json()) as { error: string }).error).toMatch(/demo farm/);
+    // Inviting people is refused too (#441): no login is made for them.
+    const invited = await membersRoute.POST(
+      apiRequest(`/api/organisations/${org}/members`, { method: "POST", cookie: await sessionCookieFor(jess), body: { email: "demo-invitee@example.com", displayName: "Demo Invitee", role: "viewer" } }),
+      { params: Promise.resolve({ organisationId: org }) },
+    );
+    expect(invited.status).toBe(403);
+    expect((await coreQuery("select 1 from users where email = 'demo-invitee@example.com'")).rowCount).toBe(0);
     // Reading still works.
     const get = await emailSettingsRoute.GET(apiRequest(`/api/email/settings?organisationId=${org}`, { cookie: await sessionCookieFor(jess) }), undefined as never);
     expect(get.status).toBe(200);

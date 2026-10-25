@@ -31,7 +31,10 @@ export type SetupLink = {
 };
 
 export const SETUP_NEEDED =
-  "Your login hasn't been set up yet. Open the setup link your server admin sent you (it lasts 7 days), or ask them for a new one.";
+  "Your login hasn't been set up yet. Open the setup link you were sent (it lasts 7 days), or ask whoever invited you, or your server admin, for a new one.";
+
+/** When a setup link no longer works. Invited people (#441) ask whoever invited them. */
+export const SETUP_LINK_USED = "This setup link has expired or was already used. Ask whoever invited you, or your server admin, for a new one.";
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -78,6 +81,37 @@ export async function emailSetupLink(to: { email: string; displayName: string },
         `Hi ${to.displayName},`,
         "",
         `${adminEmail} has given you a login for Tohyee. To set it up, open this link within ${SETUP_LINK_DAYS} days, choose your password and set up two-step sign-in with an authenticator app on your phone:`,
+        link.url,
+        ...(link.localOnly ? ["", "The link only works on the same network as the Tohyee server."] : []),
+        "",
+        "The link works once. If you weren't expecting this, ignore this email.",
+      ].join("\n"),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The invitation email (#441): someone in an organisation's People and roles
+ * invited a person who had no login yet. Says whether it was sent.
+ */
+export async function emailInvitation(
+  to: { email: string; displayName: string },
+  link: { url: string; localOnly: boolean },
+  invitedBy: { email: string; displayName: string },
+  organisationName: string,
+): Promise<boolean> {
+  try {
+    await sendEmail({
+      to: to.email,
+      subject: `Tohyee: you're invited to ${organisationName}`,
+      text: [
+        `Hi ${to.displayName},`,
+        "",
+        `${invitedBy.displayName} (${invitedBy.email}) has invited you to ${organisationName} in Tohyee.`,
+        `To accept, open this link within ${SETUP_LINK_DAYS} days and set up your login:`,
         link.url,
         ...(link.localOnly ? ["", "The link only works on the same network as the Tohyee server."] : []),
         "",
@@ -144,12 +178,14 @@ export async function completeAccountSetup(input: { token: unknown; password: un
       [hashToken(token)],
     );
     const userId = claimed.rows[0]?.user_id;
-    if (!userId) throw new UnauthorizedError("This setup link has expired or was already used. Ask your server admin for a new one.");
+    if (!userId) throw new UnauthorizedError(SETUP_LINK_USED);
     const updated = await client.query<{ email: string; display_name: string; is_server_admin: boolean }>(
       `update users set password_hash = $2, google_only = false, password_changed_at = now(), failed_login_count = 0, locked_until = null,
-              totp_secret_ciphertext = null, totp_enabled_at = null, totp_last_step = null, updated_at = now()
+              totp_secret_ciphertext = null, totp_enabled_at = null, totp_last_step = null, updated_at = now(),
+              -- Without two-step sign-in this is a full sign-in (it ends someone's "Invited", #441).
+              last_login_at = case when $3 then last_login_at else now() end
         where id = $1 returning email, display_name, is_server_admin`,
-      [userId, passwordHash],
+      [userId, passwordHash, twoStepRequired()],
     );
     await client.query("delete from user_backup_codes where user_id = $1", [userId]);
     await client.query("delete from sessions where user_id = $1", [userId]);

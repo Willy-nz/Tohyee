@@ -7238,7 +7238,8 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      made over them and backups fail with a message instead. Restoring
      takes a recovery code as the "key" (or, for a format 1 file, the
      older backup key), and says which kit version and fingerprint a
-     backup needs. Format 1 files open as before.
+     backup needs. Format 1 files open as before. (Format 1 and the older
+     backup key were removed by decision 867.)
 735. **The recovery kit: a code or a passphrase file, and nothing else**
      (21 October 2026, #389 part 2; not yet reviewed by Jess). The code is
      the key in Crockford base32 plus a 4-character check (`RK<version>-`
@@ -7269,7 +7270,7 @@ Jess. The design is in `docs/BACKUP-RECOVERY.md`.
      newest, as monthly backups are kept 12 months), and the page says a
      new key can't take back copies already taken with their kit. The
      older backup key (show and check) stays, labelled for backups made
-     before recovery kits, while any are kept.
+     before recovery kits, while any are kept. (Removed by decision 867.)
 737. **A restore re-encrypts stored secrets for the computer it's on**
      (21 October 2026, #389 part 3; not yet reviewed by Jess). After
      `pg_restore` into the new database, and before it's made ready, every
@@ -8603,3 +8604,99 @@ so; those choices are not yet reviewed by Jess.
      `docs/DEMO-FARM.md` with the steps to remove it. `TOHYEE_DEMO_FARM=off`
      turns it off (on by default for now); demo farms already made stay until
      deleted. Not yet reviewed by Jess.
+
+### Only the recovery key: the old backup key removed (#440; decisions 867-869)
+
+867. **Format 1 backups and the older backup key are removed** (Jess, 25
+     October 2026: "No one uses tohyee yet so dont need that part about old
+     backup keys"). Since decisions 734-736 backups are format 2, opened
+     with the recovery kit; the code kept for backups made before that
+     (opening `TOHYEE-BACKUP 1` files, the "Older backups' key" card in the
+     server app and on the Backups page, its show and check API and
+     `backups key show|check` commands, restoring with the older key, the
+     status counting format 1 files, and the server app's fallback for a
+     server from before recovery kits) is gone. A recovery kit is the only
+     thing that opens a backup on another computer. A format 1 file is
+     refused as "in a format this version of Tohyee can't open" (listed as
+     a file that can't be read, so it's never counted or pruned), and a
+     typed key that isn't a recovery code is refused as such.
+868. **The saved-copy check goes with it** (core migration 0021). The
+     `backup_key` server setting held only when someone last checked a
+     saved copy of the older key, so the migration deletes it. Its audit
+     events stay, as history. Wrong passwords for the recovery kit still
+     block after 5 in 15 minutes; only the recovery kit's own refusals now
+     count. `--other-key` on the command line now takes a recovery code
+     only (`TOHYEE_RECOVERY_CODE`; `TOHYEE_BACKUP_KEY` is no longer read).
+869. **What stays, because it's how a server works now, not old
+     compatibility.** `TOHYEE_SECRET_KEY` (the live key) still protects
+     stored secrets and the recovery keys, and is carried in each backup
+     for re-encrypting secrets on restore (decision 737). The first backup
+     (or the first kit saved) still makes recovery key version 1, and
+     recovery key versions and "Make a new recovery key" (n+1, older
+     versions kept for their backups) are unchanged. The 0.12.0 release
+     notes are left as they were: they record what that release did. Not
+     yet reviewed by Jess.
+### Invite people from People and roles (#441; decisions 870-879)
+
+Will, 25 Oct 2026: "If I want to add my wife to Glimmers why add here
+[Server › Users]? Why not in the actual organisation?" Agreed in #441 to
+build it as Xero does. Where the issue doesn't answer a question, the choice
+below says so; those are not yet reviewed by Jess.
+
+870. **Invite from the organisation, as Xero does** (#441). In People and
+     roles an owner or admin enters a name, email and role and presses
+     **Invite**. Only owners invite owners, as before. Server › Users stays
+     for server admins to manage every login.
+871. **Someone with a login is added as before** (#441). Nothing is sent to
+     them and nothing about their login changes: the name typed is only used
+     for a new login, so an invitation can't rename anyone. This shows no
+     more about an address than adding someone always has (their name in the
+     list). Not in the issue: Xero asks the person to accept even when they
+     already use Xero; Tohyee adds them straight away, as the issue says.
+872. **Someone new gets a login for this organisation only** (#441). It's
+     never a server admin and is in no other organisation. They get the
+     setup link of decision 484 by email ("you're invited to …"), and choose a
+     password or Continue with Google (#424). The login is recorded as made by
+     this invitation (core migration 0022, `organisation_invitations`, which
+     goes with the membership).
+873. **The link is shown only when it can't be emailed** (#441). When the
+     email goes, the inviter isn't shown the link (as Xero), so they don't
+     hold a way into someone else's login. When it can't be sent, the
+     inviter sees it to pass on, as Server › Users does. Not in the issue:
+     once another organisation has the same login, Resend only emails it;
+     if that fails, it says to ask a server admin.
+874. **Invited until they first sign in; Resend and Cancel** (#441, as Xero).
+     They show as **Invited** until the login is first fully signed in to
+     (choosing a password without finishing two-step sign-in isn't enough).
+     **Resend** makes a new link and stops the old one. **Cancel** removes
+     the membership as Remove does (payroll access, AI keys, farm choices
+     and farm mail go too), and deletes the login when this invitation made
+     it, it's in no other organisation, nobody has signed in to it and it
+     isn't a server admin; otherwise the login stays. Both are refused (not
+     found) for anyone not Invited, so an organisation admin can never send
+     a setup link to, reset, or delete a login someone already uses.
+875. **At most 30 adds and invitations an hour per organisation** (#441;
+     not in the issue). Adding someone with a login, inviting someone new and
+     Resend all count, from the audit trail, so it lasts through a restart
+     and also slows checking which addresses have logins. Over the limit:
+     "Wait a while, then try again" (429).
+876. **Audited** (#441). `organisation.member_invited`,
+     `organisation.invitation_resent` and `organisation.invitation_cancelled`
+     (with whether the login was removed), plus `user.created` (with
+     `invitedTo`), `user.setup_link_created` and `user.deleted`, all with the
+     inviter as actor. Setting up through the link is in the sign-in monitor
+     as before (decision 487).
+877. **Removed from every organisation, the login stays** (#441, as Xero).
+     In Xero, removing a user from an organisation doesn't close their Xero
+     login. Tohyee does the same: they can't open any books, and a server
+     admin can turn the login off under Users. Only Cancel on an unused
+     invitation (874) deletes a login.
+878. **Farms and the demo farm** (#441). A new member of an organisation
+     with two or more farms starts with no farms (decision 744); People and
+     roles names them as waiting. The demo farm refuses inviting, Resend and
+     Cancel (decision 858).
+879. **Not done** (#441). Invitations aren't in server backup recovery
+     (decision 738): a recovered person shows as an ordinary member. The
+     Windows server app and `tohyee-admin` have no invite command. Wording on
+     setup pages now says "ask whoever invited you, or your server admin".
+     Not tried with a real mail server: the tests capture email.

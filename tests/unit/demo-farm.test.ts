@@ -76,6 +76,8 @@ describe("what the demo farm refuses", () => {
       "/api/farming/mail",
       "/api/sales-platforms/connections",
       "/api/organisations/demo-farm-1/members",
+      // Inviting, resending and cancelling (#441) stay refused too.
+      "/api/organisations/demo-farm-1/members/00000000-0000-4000-8000-000000000001/invitation",
       "/api/organisations/demo-farm-1/analytics/report-emails",
       "/api/analytics/google/load",
     ]) {

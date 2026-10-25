@@ -71,7 +71,7 @@ export function SetupAccountForm({ token: linkToken, googleMessage = null }: { t
         </div>
         {!token ? <Notice tone="error">This link is missing its code. Open the link you were sent again.</Notice> : null}
         {token && link.data && !link.data.valid ? (
-          <Notice tone="error">This setup link has expired or was already used. Ask your server admin for a new one.</Notice>
+          <Notice tone="error">This setup link has expired or was already used. Ask whoever invited you, or your server admin, for a new one.</Notice>
         ) : null}
         {link.error ? <Notice tone="error">{link.error}</Notice> : null}
         {error ? <Notice tone="error">{error}</Notice> : null}

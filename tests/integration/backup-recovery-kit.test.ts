@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createWriteStream, promises as fs } from "node:fs";
+import { promises as fs } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -9,9 +9,8 @@ import * as kitRoute from "@/app/api/admin/backups/recovery-kit/route";
 import * as kitCheckRoute from "@/app/api/admin/backups/recovery-kit/check/route";
 import * as kitRotateRoute from "@/app/api/admin/backups/recovery-kit/rotate/route";
 import type { SessionUser } from "@/lib/auth/sessions";
-import { readBackupHeader, writeLegacyEncryptedForTests } from "@/lib/backups/format";
+import { readBackupHeader } from "@/lib/backups/format";
 import { backupOverview } from "@/lib/backups/overview";
-import { startPgTool } from "@/lib/backups/pg-tools";
 import { checkRecoveryKit, exportRecoveryKit, recoveryKitNeedsSaving, recoveryKitStatus } from "@/lib/backups/recovery-kit";
 import { backUpNow, checkBackup, restoreBackupAsCopy, updateBackupSettings } from "@/lib/backups/service";
 import { coreQuery } from "@/lib/db/transactions";
@@ -155,7 +154,7 @@ describeWithDatabase("the recovery kit (#389 part 2)", () => {
     try {
       await expect(checkBackup(firstFile)).rejects.toThrow(/recovery key version 1 \(fingerprint [0-9a-f]{16}\) of another Tohyee server/);
       await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: firstFile, id: "kit-co-nokit" })).rejects.toThrow(/Give that server's recovery kit/);
-      await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: firstFile, id: "kit-co-old", key: LIVE })).rejects.toThrow(/needs a recovery kit/);
+      await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: firstFile, id: "kit-co-old", key: LIVE })).rejects.toThrow(/isn't a recovery code/);
       expect(await getOrganisation("kit-co-nokit")).toBeNull();
       const copy = await restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: firstFile, id: "kit-co-restored", key: code });
       expect(copy).toMatchObject({ id: "kit-co-restored", provisioningStatus: "ready" });
@@ -165,29 +164,22 @@ describeWithDatabase("the recovery kit (#389 part 2)", () => {
     }
   }, 600_000);
 
-  it("a backup from before recovery kits (format 1) still checks, restores and is listed with the key it needs", async () => {
-    const legacyFile = path.join(folder, ORG, `${ORG}_2026-01-01_020000.tohyee-backup`);
-    const organisation = (await getOrganisation(ORG))!;
-    const dump = startPgTool("pg_dump", ["--format=custom", "--no-owner", "--no-privileges"], organisation.databaseName);
-    dump.child.stdin?.end();
-    await Promise.all([
-      writeLegacyEncryptedForTests(dump.child.stdout!, createWriteStream(legacyFile), {
-        kind: "organisation",
-        organisationId: ORG,
-        displayName: organisation.displayName,
-        databaseName: organisation.databaseName,
-        schemaVersion: organisation.schemaVersion,
-        createdAt: "2026-01-01T02:00:00.000Z",
-        tohyeeVersion: "0.9.0",
-      }),
-      dump.done,
-    ]);
-    expect((await checkBackup(legacyFile)).createdAt).toBe("2026-01-01T02:00:00.000Z");
-    const copy = await restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: legacyFile, id: "kit-co-legacy" });
-    expect(copy.provisioningStatus).toBe("ready");
-    const { overview } = await backupOverview();
-    expect(overview.recoveryKit.legacyFiles).toMatchObject({ files: 1, keepKeyUntilAbout: "2027-01-01" });
-  }, 600_000);
+  it("a file in the first format (before recovery kits) isn't opened, restored or counted (decision 867)", async () => {
+    const oldFile = path.join(folder, ORG, `${ORG}_2026-01-01_020000.tohyee-backup`);
+    const header = { format: 1, kind: "organisation", organisationId: ORG, displayName: "Kit Co", databaseName: "x", schemaVersion: null, createdAt: "2026-01-01T02:00:00.000Z", tohyeeVersion: "0.9.0", cipher: "aes-256-gcm", keyId: "0123456789abcdef" };
+    await fs.writeFile(oldFile, Buffer.concat([Buffer.from(`TOHYEE-BACKUP 1\n${JSON.stringify(header)}\n`), Buffer.alloc(64, 7)]));
+    try {
+      await expect(readBackupHeader(oldFile)).rejects.toThrow(/in a format this version of Tohyee can't open/);
+      await expect(checkBackup(oldFile)).rejects.toThrow(/in a format this version of Tohyee can't open/);
+      await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: oldFile, id: "kit-co-old" })).rejects.toThrow(/can't open/);
+      expect(await getOrganisation("kit-co-old")).toBeNull();
+      const { overview } = await backupOverview();
+      expect(overview.storage.damagedFiles).toContain(`${ORG}/${ORG}_2026-01-01_020000.tohyee-backup`);
+      expect(overview.recoveryKit).not.toHaveProperty("legacyFiles");
+    } finally {
+      await fs.rm(oldFile, { force: true });
+    }
+  });
 
   it("the command-line tool shows and checks the kit", async () => {
     const env = { ...process.env, TOHYEE_SECRET_KEY: LIVE };

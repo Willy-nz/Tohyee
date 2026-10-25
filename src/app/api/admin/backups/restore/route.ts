@@ -8,8 +8,7 @@ import { backupFileInFolder, restoreBackup } from "@/lib/backups/service";
  * `file` (relative to the backup folder, or to `folder` when the backups
  * are somewhere else on this computer), optional `id` and `displayName`,
  * and the recovery material when this server didn't make it: `key` (a
- * recovery code, or for an older backup its backup key) or `kitFile` (a
- * recovery file's text) and `passphrase`. Nothing existing is overwritten;
+ * recovery code) or `kitFile` (a recovery file's text) and `passphrase`. Nothing existing is overwritten;
  * stored secrets are re-encrypted for this server and automatic jobs start
  * paused. Returns the organisation and what was checked and done.
  */
