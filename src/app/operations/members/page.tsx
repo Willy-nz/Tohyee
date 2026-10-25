@@ -7,6 +7,8 @@ import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/comp
 import { useWorkspace } from "@/components/workspace";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
 import { api, errorMessage } from "@/lib/client/api";
+import { formatDateTime } from "@/lib/format";
+import { invitationMessage, type InvitationOutcome } from "@/lib/organisations/invite-messages";
 import type { Handover } from "@/lib/organisations/handover";
 import type { Member } from "@/lib/organisations/members";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -27,7 +29,9 @@ function Members({ organisationId }: { organisationId: string }) {
   const { user, current, can } = useWorkspace();
   const members = useApiData<{ members: Member[] }>(`/api/organisations/${organisationId}/members`);
   const handover = useApiData<{ handover: Handover | null }>(can("admin") ? `/api/organisations/${organisationId}/handover` : null);
-  const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [status, setStatus] = useState<{ tone: "success" | "error" | "warning"; text: string } | null>(null);
+  const [shownLink, setShownLink] = useState<{ email: string; url: string; expiresAt: string; localOnly: boolean } | null>(null);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("bookkeeper");
   const isOwner = current?.role === "owner";
@@ -42,13 +46,37 @@ function Members({ organisationId }: { organisationId: string }) {
     }
   }
 
-  async function add(event: FormEvent<HTMLFormElement>) {
+  function showInvitation(action: "invite" | "resend", to: string, toRole: Role | null, invitation: InvitationOutcome | null) {
+    setStatus(invitationMessage(action, to, toRole, invitation));
+    setShownLink(invitation?.url ? { email: to, url: invitation.url, expiresAt: invitation.expiresAt, localOnly: invitation.localOnly } : null);
+    members.reload();
+  }
+
+  async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await run(
-      () => api(`/api/organisations/${organisationId}/members`, { method: "POST", body: { email, role } }),
-      `Added ${email} as ${ROLE_LABELS[role].toLowerCase()}.`,
-    );
-    setEmail("");
+    const to = email.trim();
+    try {
+      const result = await api<{ invitation: InvitationOutcome | null }>(`/api/organisations/${organisationId}/members`, {
+        method: "POST",
+        body: { email: to, displayName: name, role },
+      });
+      showInvitation("invite", to, role, result.invitation);
+      setEmail("");
+      setName("");
+    } catch (caught) {
+      setShownLink(null);
+      setStatus({ tone: "error", text: errorMessage(caught) });
+    }
+  }
+
+  async function resend(member: Member) {
+    try {
+      const result = await api<{ invitation: InvitationOutcome }>(`/api/organisations/${organisationId}/members/${member.userId}/invitation`, { method: "POST" });
+      showInvitation("resend", member.email, null, result.invitation);
+    } catch (caught) {
+      setShownLink(null);
+      setStatus({ tone: "error", text: errorMessage(caught) });
+    }
   }
 
   if (!can("admin")) {
@@ -79,8 +107,29 @@ function Members({ organisationId }: { organisationId: string }) {
           </Button>
         </Card>
       ) : null}
-      <Card title="Add someone" description="They need a login first. A server admin creates logins under Users.">
-        <form className={ui.inlineForm} onSubmit={(event) => void add(event)}>
+      {shownLink ? (
+        <Card title={`Invitation link for ${shownLink.email}`} description={`It works once, until ${formatDateTime(shownLink.expiresAt)}. Resending makes a new one and stops this one.`}>
+          <p style={{ overflowWrap: "anywhere" }}>
+            <code>{shownLink.url}</code>
+          </p>
+          {shownLink.localOnly ? (
+            <Notice tone="warning">Remote access is off, so this link only works on the same network as this server.</Notice>
+          ) : null}
+          <div>
+            <Button variant="secondary" size="small" onClick={() => void navigator.clipboard.writeText(shownLink.url)}>
+              Copy link
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+      <Card
+        title="Invite someone"
+        description="If they don't have a login yet, Tohyee makes one that only opens this organisation, and emails them a link to set it up."
+      >
+        <form className={ui.inlineForm} onSubmit={(event) => void invite(event)}>
+          <Field label="Name">
+            <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" required />
+          </Field>
           <Field label="Email">
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
           </Field>
@@ -93,13 +142,13 @@ function Members({ organisationId }: { organisationId: string }) {
               ))}
             </select>
           </Field>
-          <Button type="submit">Add</Button>
+          <Button type="submit">Invite</Button>
         </form>
       </Card>
       <Card title="People with access">
         {members.error ? <Notice tone="error">{members.error}</Notice> : null}
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
             <thead>
               <tr>
                 <th>Name</th>
@@ -113,12 +162,16 @@ function Members({ organisationId }: { organisationId: string }) {
                 const locked = member.role === "owner" && !isOwner;
                 return (
                   <tr key={member.userId}>
-                    <td>
+                    <td data-label="Name">
                       {member.displayName} {member.userId === user.id ? <Badge tone="blue">You</Badge> : null}{" "}
+                      {member.invited ? <Badge tone="amber">Invited</Badge> : null}{" "}
                       {!member.isActive ? <Badge tone="red">Login disabled</Badge> : null}
+                      {member.invited && member.invitationSentAt ? (
+                        <div className={ui.muted}>Sent {formatDateTime(member.invitationSentAt)}</div>
+                      ) : null}
                     </td>
-                    <td>{member.email}</td>
-                    <td>
+                    <td data-label="Email" style={{ overflowWrap: "anywhere" }}>{member.email}</td>
+                    <td data-label="Role">
                       <select
                         aria-label={`Role for ${member.email}`}
                         value={member.role}
@@ -142,6 +195,29 @@ function Members({ organisationId }: { organisationId: string }) {
                       </select>
                     </td>
                     <td className={ui.num}>
+                      {member.invited ? (
+                        <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <Button variant="secondary" size="small" disabled={locked} onClick={() => void resend(member)} aria-label={`Resend invitation to ${member.email}`}>
+                            Resend
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="small"
+                            disabled={locked}
+                            aria-label={`Cancel invitation to ${member.email}`}
+                            onClick={async () => {
+                              if (await confirm(`Cancel the invitation to ${member.email}? Their link stops working.`)) {
+                                void run(
+                                  () => api(`/api/organisations/${organisationId}/members/${member.userId}/invitation`, { method: "DELETE" }),
+                                  `Cancelled the invitation to ${member.email}.`,
+                                );
+                              }
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </span>
+                      ) : (
                       <Button
                         variant="danger"
                         size="small"
@@ -157,6 +233,7 @@ function Members({ organisationId }: { organisationId: string }) {
                       >
                         Remove
                       </Button>
+                      )}
                     </td>
                   </tr>
                 );

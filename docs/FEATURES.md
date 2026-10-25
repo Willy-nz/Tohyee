@@ -124,6 +124,18 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
+- **Invite people from People and roles** (#441, decisions 870-879, as
+  Xero does): an owner or admin enters a name, email and role and presses
+  **Invite**. Someone who already has a login is added straight away, as
+  before (nothing is sent to them). Someone new gets a login that only
+  opens this organisation (never a server admin) and an emailed link to set
+  it up: choose a password, or Continue with Google. Until they first sign
+  in they show as **Invited**, with **Resend** (a new link; the old one
+  stops) and **Cancel** (takes them out, and takes away the login the
+  invitation made if nothing else uses it). When the server can't send
+  email, the inviter is shown the link to pass on. Only owners invite
+  owners. An organisation can add or invite 30 people an hour. Audited.
+  The demo farm refuses it. Server › Users still manages every login.
 - **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
   settings (including a temporary rate reduction approved by IRD, with its
