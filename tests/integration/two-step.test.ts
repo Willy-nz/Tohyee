@@ -308,7 +308,7 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
     await coreQuery("update users set password_hash = (select password_hash from users where email = 'jess@example.com') where id = $1", [kimId]);
     const first = await login("kim@example.com");
     expect(first.status).toBe(403);
-    expect((await body(first)).error).toContain("Open the setup link your server admin sent you");
+    expect((await body(first)).error).toContain("Open the setup link you were sent");
 
     expect(await body(await setupAccountRoute.GET(apiRequest(`/api/auth/setup-account?token=${encodeURIComponent(kimToken)}`), noContext))).toEqual({
       valid: true,

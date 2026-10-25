@@ -1,7 +1,7 @@
 import { json, readJson, requireAuth, route } from "@/lib/api/http";
 import { requireOrganisationRole } from "@/lib/auth/guard";
 import { assertDemoAllows } from "@/lib/demo/guard";
-import { addMember, listMembers } from "@/lib/organisations/members";
+import { inviteMember, listMembers } from "@/lib/organisations/members";
 import { parseOrganisationId } from "@/lib/organisations/registry";
 
 type Context = { params: Promise<{ organisationId: string }> };
@@ -20,9 +20,11 @@ export const POST = route<Context>(async (request, context) => {
   const membership = await requireOrganisationRole(auth, organisationId, "admin");
   assertDemoAllows(request, membership.organisation);
   const body = await readJson(request);
-  const member = await addMember(auth, membership.role, organisationId, {
+  // Invite (#441): someone with a login is added; someone new gets a login and a setup link.
+  const result = await inviteMember(auth, membership.role, organisationId, {
     email: body.email,
+    displayName: body.displayName,
     role: body.role,
   });
-  return json({ member }, { status: 201 });
+  return json(result, { status: 201 });
 });
