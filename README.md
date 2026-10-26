@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 24 October 2026:** the latest packaged
-release is [v0.14.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.14.0),
+**Release availability, checked 27 October 2026:** the latest packaged
+release is [v0.15.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.15.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -73,6 +73,14 @@ what you can use; developer and server setup instructions follow it.
 | <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+
+## New in 0.15.0: invite people, and a security update
+
+| Area | What's new |
+| --- | --- |
+| **People** | Invite someone from People and roles; new people get a setup link by email. |
+| **Security** | Next.js 16.4.1, fixing critical security problems. |
+| **Demo farm** | Added from the server's Organisations page. |
 
 ## New in 0.14.0: try the demo farm
 
