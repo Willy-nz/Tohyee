@@ -224,7 +224,8 @@ export default function OrganisationsPage() {
                   <td>{formatDateTime(organisation.createdAt)}</td>
                   <td className={ui.num}>
                     <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
-                      {organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current" ? (
+                      {/* A demo farm being made, or one that failed, is reset in the Demo farm card instead (#445). */}
+                      {!organisation.demo && (organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") ? (
                         <Button
                           size="small"
                           onClick={() =>
