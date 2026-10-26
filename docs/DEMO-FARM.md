@@ -1,17 +1,26 @@
 # The demo farm
 
-**Try the demo farm** (#437, decisions 855-869) gives anyone signed in their
-own copy of **Kōwhai Dairies Ltd**, a made-up Otago dairy farm, like Xero's
-demo company. Jess asked for it to be included for now and taken out later,
-so it is kept in one place and behind one switch.
+The demo farm (#437, decisions 855-866; moved to the server settings in #445,
+decisions 880-884) gives a login its own copy of **Kōwhai Dairies Ltd**, a
+made-up Otago dairy farm, like Xero's demo company. Jess asked for it to be
+included for now and taken out later, so it is kept in one place and behind
+one switch.
 
 ## What it is
 
 - An ordinary organisation with its own database, flagged as the demo farm in
   the core registry (`organisations.demo_for_user_id` and the `demo_*`
   columns, core migration 0020). One each; it goes when its person does.
-- Made in the background from the organisation menu (**Try the demo
-  farm…**) or `tohyee-admin demo add --owner EMAIL`. The build enters about
+- Added by a server admin where organisations are added (#445): **Add demo
+  farm…** on the Windows server app's **Organisations** page, or the **Demo
+  farm** card on the server settings' Organisations page in the browser (the
+  local server settings address, for Docker and Linux installs), or
+  `tohyee-admin demo add --owner EMAIL`. It's for the signed-in server admin
+  unless they choose another login, and shows in that person's organisation
+  list once it's made. The books' organisation menu doesn't offer it; one
+  already made opens from there like any other organisation. Made in the
+  background, with its progress shown on the Organisations page. The build
+  enters about
   18 months of data month by month through Tohyee's own services (as the
   person, as if they'd typed it): settings, accounts and contacts, opening
   balances and fixed assets, milk invoices to a made-up co-op, bills, bank
@@ -32,12 +41,13 @@ so it is kept in one place and behind one switch.
   refused for it (`src/lib/demo/guard.ts`). A **DEMO** badge shows in the top
   bar on every page.
 - **Reset** deletes it and makes it again; **Delete** drops its database and
-  Analytics file. Both ask first.
+  Analytics file. Both ask first, and both are for server admins, on the
+  same Organisations pages (or `tohyee-admin demo reset|delete`).
 
 ## The switch
 
-Set `TOHYEE_DEMO_FARM=off` in the server's environment and restart: "Try the
-demo farm" goes from the menu and adding one is refused. Demo farms already
+Set `TOHYEE_DEMO_FARM=off` in the server's environment and restart: the
+Organisations pages say it's turned off and adding one is refused. Demo farms already
 made stay until deleted (`tohyee-admin demo list`, then
 `tohyee-admin demo delete --owner EMAIL --yes`).
 
@@ -50,7 +60,7 @@ were that date.
    `demo delete --owner EMAIL --yes` for each), or let the migration in step 4
    remove their registry rows (their databases would then be left behind).
 2. Delete the folder `src/lib/demo/`, and these files that only use it:
-   `src/app/api/demo-farm/route.ts`, `src/app/operations/demo-farm/page.tsx`,
+   `src/app/api/admin/demo-farms/` (both routes),
    `src/components/demo-farm.tsx`, `src/components/demo-farm.module.css`,
    `tests/integration/demo-farm.test.ts`, `tests/unit/demo-farm.test.ts`
    and this file.
@@ -65,8 +75,15 @@ were that date.
    - `src/lib/backups/service.ts`: `and demo_for_user_id is null` in
      `pausedOrganisations` and `resumeOrganisationJobs`.
    - `src/lib/auth/page-workspace.ts`, `src/components/workspace.tsx` and
-     `src/components/app-shell.tsx` (+ `.module.css`): `isDemo`,
-     `demoFarmEnabled`, the menu entry and `DemoBadge`.
+     `src/components/app-shell.tsx` (+ `.module.css`): `isDemo` and
+     `DemoBadge`; `tests/unit/organisation-picker.test.ts`: the demo farm
+     test.
+   - `src/app/server/organisations/page.tsx`: `DemoFarmsCard` and the demo
+     badges in the list.
+   - The Windows server app, `installer/windows/tray/src/OrganisationsPage.cs`:
+     the demo farm buttons, `DemoText`, `FollowDemoBuilds`, `AddDemo`,
+     `ResetDemo`, `DeleteDemo` and `DemoFarmDialog`; and the demo farm in
+     `DemoData.cs`.
    - `scripts/admin.ts`: the `demo` commands and their help;
      `scripts/build-admin.mjs` can keep its externals.
 4. Add a core migration that drops the index `organisations_one_demo_each`,

@@ -8700,3 +8700,41 @@ below says so; those are not yet reviewed by Jess.
      Windows server app and `tohyee-admin` have no invite command. Wording on
      setup pages now says "ask whoever invited you, or your server admin".
      Not tried with a real mail server: the tests capture email.
+
+### The demo farm is added in the server settings (#445; decisions 880-884)
+
+880. **Added where organisations are added, not from the books** (Will, 26
+     October 2026: "The add the demo farm should only be on the tohyee app
+     not in the books part. Like where you add an org."). The Windows server
+     app's Organisations page has **Add demo farm…**, **Reset demo farm**
+     and **Delete demo farm**; the server settings' Organisations page in the
+     browser (the local server settings address, for Docker and Linux) has a
+     **Demo farm** card with the same, and progress while it's made.
+     `tohyee-admin demo` and `TOHYEE_DEMO_FARM=off` stay. This replaces
+     "anyone signed in" in decisions 855 and 865. Not yet reviewed by Jess.
+881. **Server admins only, on the server computer only.** The new routes
+     (`/api/admin/demo-farms`, and `/api/admin/demo-farms/{login ID}` to
+     reset or delete) use the same check as the other server settings: a
+     server admin, through the local-only address. The old
+     `/api/demo-farm` route and the books' demo farm page are removed, so
+     someone who isn't a server admin can't add, reset or delete one; they
+     ask a server admin. Not yet reviewed by Jess.
+882. **Still one login's, one each, and for you unless you choose.** The
+     demo farm stays tied to one login (`demo_for_user_id`, decision 855; no
+     migration). It's for the signed-in server admin unless they choose
+     another active login, and it's added to that person's organisation list
+     once made (as Xero's demo company is per user). The choice lists only
+     logins that don't have one yet; a second for the same login is refused.
+     The audit log records the server admin who did it and whose demo farm
+     it is. The farm is still entered as its person (decision 856). Not yet
+     reviewed by Jess.
+883. **The books' organisation menu no longer offers it.** No "Try the demo
+     farm…" or "Reset or delete the demo farm…" entry, and no link when
+     someone has no organisations. A demo farm already made opens from the
+     menu as before, with its DEMO badge, which is now a label rather than a
+     link (there's no books page to go to). Not yet reviewed by Jess.
+884. **Shown in the organisations list too.** On both Organisations pages a
+     demo farm is marked (a Demo badge in the browser; "Demo farm for EMAIL"
+     with its progress in the Windows app), and the Windows app follows a
+     build every two seconds without locking the page. Real organisations
+     still can't be deleted from these pages. Not yet reviewed by Jess.

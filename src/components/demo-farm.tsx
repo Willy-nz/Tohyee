@@ -1,142 +1,166 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
-import { Button, Card, Notice } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Badge, Button, Card, Field, Notice } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import { buildTime } from "@/lib/demo/build-time";
-import type { DemoFarm } from "@/lib/demo/service";
+import type { DemoFarmListing } from "@/lib/demo/service";
+import type { UserSummary } from "@/lib/users/admin";
 import styles from "./demo-farm.module.css";
 
-type State = { enabled: boolean; demo: DemoFarm | null };
+type State = { enabled: boolean; demoFarms: DemoFarmListing[] };
 
-/** The demo farm page's card (#437): what it is, and Add, Open, Reset and Delete, with progress while it's made. */
-export function DemoFarmCard() {
-  const router = useRouter();
+/**
+ * The demo farm on the server's Organisations page (#445, decisions
+ * 880-884): add it for yourself or another login, follow it being made, and
+ * reset or delete it. Server admins only; each login can have one, and it
+ * shows in that person's organisation list once it's made.
+ */
+export function DemoFarmsCard({ me, onChanged }: { me: { id: string; email: string }; onChanged: () => void }) {
   const confirm = useConfirm();
-  const { selectOrganisation } = useWorkspace();
-  const state = useApiData<State>("/api/demo-farm");
+  const state = useApiData<State>("/api/admin/demo-farms");
+  const users = useApiData<{ users: UserSummary[] }>("/api/admin/users");
+  const [owner, setOwner] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const demo = state.data?.demo ?? null;
-  const building = demo?.status === "building";
+  const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const demoFarms = state.data?.demoFarms ?? [];
+  const building = demoFarms.filter((demo) => demo.status === "building").length;
   const { reload } = state;
 
-  // Follows the build every two seconds while it runs.
+  // Follows the builds every two seconds while any runs, and refreshes the organisations list when one finishes.
+  const wasBuilding = useRef(0);
   useEffect(() => {
+    if (wasBuilding.current > building) onChanged();
+    wasBuilding.current = building;
     if (!building) return;
     const timer = window.setInterval(reload, 2000);
     return () => window.clearInterval(timer);
-  }, [building, reload]);
+  }, [building, reload, onChanged]);
 
-  async function run(work: () => Promise<unknown>) {
+  const taken = new Set(demoFarms.map((demo) => demo.userId));
+  const others = (users.data?.users ?? []).filter((user) => user.isActive && user.id !== me.id && !taken.has(user.id));
+  const mineTaken = taken.has(me.id);
+  const chosen = owner || (mineTaken ? "" : me.email);
+
+  async function run(work: () => Promise<unknown>, success: string) {
     setBusy(true);
-    setError(null);
+    setStatus(null);
     try {
       await work();
+      setStatus({ tone: "success", text: success });
       reload();
-      router.refresh();
+      onChanged();
     } catch (caught) {
-      setError(errorMessage(caught));
+      setStatus({ tone: "error", text: errorMessage(caught) });
     } finally {
       setBusy(false);
     }
   }
 
-  const add = () => run(() => api("/api/demo-farm", { method: "POST", body: { action: "add" } }));
-  const reset = async () => {
-    const ok = await confirm("Reset the demo farm? Everything you've changed in it goes, and it's made again from the start. This takes a minute or so.", {
-      title: "Reset the demo farm",
-      confirmLabel: "Reset",
-      danger: true,
-    });
-    if (ok) await run(() => api("/api/demo-farm", { method: "POST", body: { action: "reset" } }));
-  };
-  const remove = async () => {
-    const ok = await confirm("Delete the demo farm? It's removed for good. You can add it again later.", { title: "Delete the demo farm", confirmLabel: "Delete", danger: true });
-    if (ok) await run(() => api("/api/demo-farm", { method: "DELETE" }));
-  };
-  const open = () => {
-    if (!demo) return;
-    selectOrganisation(demo.organisationId);
-    router.push("/operations");
-    router.refresh();
-  };
+  async function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!chosen) return;
+    const self = chosen === me.email;
+    await run(
+      () => api("/api/admin/demo-farms", { method: "POST", body: { ownerEmail: self ? undefined : chosen } }),
+      self ? "Making your demo farm. It shows in your organisation list when it's ready." : `Making the demo farm for ${chosen}. It shows in their organisation list when it's ready.`,
+    );
+    setOwner("");
+  }
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
-  if (!state.data) return <p className={styles.muted}>Loading…</p>;
-  if (!state.data.enabled && !demo) return <Notice>The demo farm is turned off on this server.</Notice>;
+  async function reset(demo: DemoFarmListing) {
+    const whose = demo.userId === me.id ? "your demo farm" : `${demo.email}'s demo farm`;
+    const ok =
+      demo.status === "failed" ||
+      (await confirm(`Reset ${whose}? Everything changed in it goes, and it's made again from the start. This takes a minute or so.`, {
+        title: "Reset the demo farm",
+        confirmLabel: "Reset",
+        danger: true,
+      }));
+    if (ok) await run(() => api(`/api/admin/demo-farms/${demo.userId}`, { method: "POST" }), `Making ${whose} again.`);
+  }
 
+  async function remove(demo: DemoFarmListing) {
+    const whose = demo.userId === me.id ? "your demo farm" : `${demo.email}'s demo farm`;
+    const ok = await confirm(`Delete ${whose}? Its database is removed for good. It can be added again later.`, { title: "Delete the demo farm", confirmLabel: "Delete", danger: true });
+    if (ok) await run(() => api(`/api/admin/demo-farms/${demo.userId}`, { method: "DELETE" }), `Deleted ${whose}.`);
+  }
+
+  const enabled = state.data?.enabled ?? true;
   return (
-    <div className={styles.stack}>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      <Card
-        title={demo ? "Your demo farm" : "Try the demo farm"}
-        description="It's your own copy: only you can see it, and you can change anything in it. Each person can have one."
-      >
-        {!demo ? (
-          <div className={styles.actions}>
-            <Button onClick={() => void add()} disabled={busy}>
-              Add the demo farm
-            </Button>
-            <span className={styles.muted}>It takes a minute or so to make. You can leave this page while it&apos;s made.</span>
-          </div>
-        ) : building ? (
-          <div className={styles.progress}>
-            <label htmlFor="demo-farm-progress">{demo.step ?? "Starting"}…</label>
-            <progress id="demo-farm-progress" max={100} value={demo.percent} aria-valuetext={`${demo.percent}% done`} />
-            <span className={styles.muted} aria-live="polite">
-              {demo.percent}% done
-            </span>
-          </div>
-        ) : demo.status === "failed" ? (
-          <div className={styles.stack}>
-            <Notice tone="error">{demo.error ?? "Making the demo farm failed."}</Notice>
-            <div className={styles.actions}>
-              <Button onClick={() => void run(() => api("/api/demo-farm", { method: "POST", body: { action: "reset" } }))} disabled={busy}>
-                Try again
-              </Button>
-              <Button variant="secondary" onClick={() => void remove()} disabled={busy}>
-                Delete it
-              </Button>
-            </div>
-          </div>
+    <Card
+      title="Demo farm"
+      description="Kōwhai Dairies Ltd: a made-up Otago dairy farm with about 18 months of books, payroll, GST, farm records and Analytics, to try Tohyee on. Each login can have one. It shows in that person's organisation list with a DEMO badge, and Tohyee never emails, imports or connects anything for it."
+    >
+      <div className={styles.stack}>
+        {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+        {state.error ? <Notice tone="error">{state.error}</Notice> : null}
+        {!enabled ? (
+          <Notice>The demo farm is turned off on this server (TOHYEE_DEMO_FARM=off). Demo farms already made stay until they&apos;re deleted.</Notice>
         ) : (
-          <div className={styles.stack}>
-            <p className={styles.ready}>
-              {demo.displayName} is ready{buildTime(demo.buildSeconds) ? ` (made in ${buildTime(demo.buildSeconds)})` : ""}. It shows a DEMO badge at the top of every page.
-            </p>
-            <div className={styles.actions}>
-              <Button onClick={open} disabled={busy}>
-                Open the demo farm
-              </Button>
-              <Button variant="secondary" onClick={() => void reset()} disabled={busy}>
-                Reset
-              </Button>
-              <Button variant="danger" onClick={() => void remove()} disabled={busy}>
-                Delete
-              </Button>
-            </div>
-          </div>
+          <form className={styles.add} onSubmit={(event) => void add(event)}>
+            <Field label="Add it for">
+              <select value={chosen} onChange={(event) => setOwner(event.target.value)} disabled={!state.data}>
+                {mineTaken ? <option value="">Choose a login</option> : <option value={me.email}>Me ({me.email})</option>}
+                {others.map((user) => (
+                  <option key={user.id} value={user.email}>
+                    {user.displayName && user.displayName !== user.email ? `${user.displayName} (${user.email})` : user.email}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Button type="submit" disabled={busy || !chosen || !state.data}>
+              Add demo farm
+            </Button>
+            <p className={styles.note}>It&apos;s added to that login&apos;s organisation list once it&apos;s made (a minute or so). Only they can open it.</p>
+          </form>
         )}
-      </Card>
-      <Card title="What's in it">
-        <ul className={styles.list}>
-          <li>Books from 1 June at least a year ago up to today: milk income from the co-op, bills, bank statements imported and reconciled, two-monthly GST returns, fixed assets and depreciation, and a budget for this season.</li>
-          <li>Payroll for two staff, paid fortnightly, with PAYE paid to Inland Revenue.</li>
-          <li>Two farms with mapped paddocks, weekly farm walks, grazings, supplements, fertiliser plans and applications, soil tests and co-op shares.</li>
-          <li>About 300 dairy cows with replacements: calving, culls, bulls and the year-end count.</li>
-          <li>The farm calendar and notebook, and ready-made Analytics reports: Farm performance, Accounts, Farm and Business overview.</li>
-        </ul>
-      </Card>
-      <Card title="It never touches anything real">
-        <p className={styles.muted}>
-          Every name and figure is made up. Tohyee doesn&apos;t send email from the demo farm, connect it to banks, Inland Revenue or mailboxes, or run scheduled jobs that send or import for it.
-        </p>
-      </Card>
-    </div>
+        {demoFarms.length ? (
+          <ul className={styles.list} aria-label="Demo farms on this server">
+            {demoFarms.map((demo) => (
+              <li key={demo.organisationId} className={styles.item}>
+                <div className={styles.who}>
+                  <strong>
+                    {demo.displayName} <Badge tone="amber">Demo</Badge>
+                  </strong>
+                  <span className={styles.muted}>
+                    For {demo.userId === me.id ? `you (${demo.email})` : demo.email} · {demo.organisationId}
+                  </span>
+                </div>
+                {demo.status === "building" ? (
+                  <div className={styles.progress}>
+                    <label htmlFor={`demo-progress-${demo.organisationId}`}>{demo.step ?? "Starting"}…</label>
+                    <progress id={`demo-progress-${demo.organisationId}`} max={100} value={demo.percent} aria-valuetext={`${demo.percent}% done`} />
+                    <span className={styles.muted} aria-live="polite">
+                      {demo.percent}% done. You can leave this page while it&apos;s made.
+                    </span>
+                  </div>
+                ) : demo.status === "failed" ? (
+                  <Notice tone="error">{demo.error ?? "Making the demo farm failed."}</Notice>
+                ) : (
+                  <span className={styles.muted}>Ready{buildTime(demo.buildSeconds) ? `, made in ${buildTime(demo.buildSeconds)}` : ""}.</span>
+                )}
+                {demo.status !== "building" ? (
+                  <div className={styles.actions}>
+                    <Button size="small" variant="secondary" onClick={() => void reset(demo)} disabled={busy || !enabled}>
+                      {demo.status === "failed" ? "Try again" : "Reset"}
+                    </Button>
+                    <Button size="small" variant="danger" onClick={() => void remove(demo)} disabled={busy}>
+                      Delete
+                    </Button>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : state.data ? (
+          <p className={styles.muted}>No demo farms on this server.</p>
+        ) : (
+          <p className={styles.muted}>Loading…</p>
+        )}
+      </div>
+    </Card>
   );
 }
