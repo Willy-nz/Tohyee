@@ -48,6 +48,10 @@ Tohyee (the books) are at the bottom.
 - **Organisations**: as before, plus **Hand over…** for when an
   organisation's owners can't add a new owner (decision 485): a new owner
   after 7 days, which its owners and admins are told about and can cancel.
+  **Add demo farm…** (#445) makes the demo farm (`docs/DEMO-FARM.md`) for you
+  or a login you choose; the list shows whose each demo farm is and follows it
+  being made. **Reset demo farm** and **Delete demo farm** act on the one
+  chosen in the list (both ask first).
 - **Email**: as before.
 - **Sign-ins** (decision 487): every sign-in attempt for the last year,
   with suspicious ones flagged (a new device, failed tries, someone

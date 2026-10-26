@@ -6,7 +6,8 @@ import { todayIsoDate } from "@/lib/dates";
 import { closeOrganisationPool, getAdminPool } from "@/lib/db/pools";
 import { quoteSqlIdentifier } from "@/lib/db/sql";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
-import { ConflictError, NotFoundError, UnavailableError } from "@/lib/errors";
+import { normaliseEmail } from "@/lib/auth/service";
+import { ConflictError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { databaseNameFor } from "@/lib/organisations/admin";
 import { provisionOrganisation } from "@/lib/organisations/provisioning";
 import { getOrganisation } from "@/lib/organisations/registry";
@@ -23,6 +24,19 @@ import { DEMO_FARM_NAME, demoFarmEnabled, DEMO_JOBS_PAUSED_REASON, DEMO_OFF_MESS
  */
 
 export type DemoPerson = { id: string; email: string };
+
+/**
+ * Who asked, when it isn't the person themselves (#445): a server admin adding,
+ * resetting or deleting someone's demo farm from the server settings. It's
+ * kept in the audit log; the farm is still made as its person.
+ */
+type DemoOptions = { actor?: DemoPerson };
+
+/** "You" for the person themselves, otherwise their email, so a server admin's messages say whose demo farm it is. */
+function who(person: DemoPerson, actor: DemoPerson | undefined): { self: boolean; subject: string; has: string } {
+  if (!actor || actor.id === person.id) return { self: true, subject: "You", has: "have" };
+  return { self: false, subject: person.email, has: "has" };
+}
 
 export type DemoFarm = {
   organisationId: string;
@@ -93,13 +107,14 @@ function requireOn(): void {
  * runs in the background (`wait` runs it in the foreground, for the command
  * line and tests). With `reset`, an existing one is deleted first.
  */
-export async function addDemoFarm(person: DemoPerson, options: { reset?: boolean; today?: string; wait?: boolean } = {}): Promise<DemoFarm> {
+export async function addDemoFarm(person: DemoPerson, options: DemoOptions & { reset?: boolean; today?: string; wait?: boolean } = {}): Promise<DemoFarm> {
   requireOn();
+  const them = who(person, options.actor);
   const existing = await getDemoFarm(person.id);
   if (existing) {
-    if (!options.reset) throw new ConflictError("You already have the demo farm. Reset it to start it again, or delete it.");
+    if (!options.reset) throw new ConflictError(`${them.subject} already ${them.has} the demo farm. Reset it to start it again, or delete it.`);
     if (existing.status === "building") throw new ConflictError("The demo farm is still being made. Wait for it to finish, then reset it.");
-    await deleteDemoFarm(person);
+    await deleteDemoFarm(person, { actor: options.actor });
   }
   if (building.size >= MAX_BUILDS_AT_ONCE) throw new UnavailableError("This server is making other demo farms just now. Try again in a few minutes.");
   const id = demoOrganisationId(person.id);
@@ -116,15 +131,16 @@ export async function addDemoFarm(person: DemoPerson, options: { reset?: boolean
         [id, DEMO_FARM_NAME, databaseName, person.id, DEMO_JOBS_PAUSED_REASON],
       );
       await client.query("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'owner')", [id, person.id]);
-      await writeAdminAuditEvent(client, { userId: person.id, email: person.email }, {
+      const actor = options.actor ?? person;
+      await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
         eventType: options.reset ? "demo_farm.reset" : "demo_farm.added",
         entityType: "organisation",
         entityId: id,
-        details: { displayName: DEMO_FARM_NAME },
+        details: { displayName: DEMO_FARM_NAME, forEmail: person.email },
       });
     });
   } catch (error) {
-    if ((error as { code?: string }).code === "23505") throw new ConflictError("You already have the demo farm.");
+    if ((error as { code?: string }).code === "23505") throw new ConflictError(`${them.subject} already ${them.has} the demo farm.`);
     throw error;
   }
   // TOHYEE_DEMO_FARM_TODAY is for tests: the farm as made on a fixed day, so its figures don't change.
@@ -168,12 +184,14 @@ async function dropDatabase(databaseName: string): Promise<void> {
 }
 
 /** Deletes the person's demo farm: its database, its Analytics file and the registry row. Nothing in it is real, so nothing is kept. */
-export async function deleteDemoFarm(person: DemoPerson): Promise<void> {
+export async function deleteDemoFarm(person: DemoPerson, options: DemoOptions = {}): Promise<void> {
+  const them = who(person, options.actor);
+  const missing = them.self ? "You don't have the demo farm." : `${person.email} doesn't have the demo farm.`;
   const demo = await getDemoFarm(person.id);
-  if (!demo) throw new NotFoundError("You don't have the demo farm.");
+  if (!demo) throw new NotFoundError(missing);
   if (demo.status === "building" && building.has(demo.organisationId)) throw new ConflictError("The demo farm is still being made. Wait for it to finish, then delete it.");
   const organisation = await getOrganisation(demo.organisationId);
-  if (!organisation?.demo) throw new NotFoundError("You don't have the demo farm.");
+  if (!organisation?.demo) throw new NotFoundError(missing);
   await closeAnalytics(organisation.id);
   await rm(analyticsFilePath(organisation.id), { force: true });
   await rm(`${analyticsFilePath(organisation.id)}.wal`, { force: true });
@@ -181,17 +199,48 @@ export async function deleteDemoFarm(person: DemoPerson): Promise<void> {
   await dropDatabase(organisation.databaseName);
   await withCoreTransaction(async (client) => {
     await client.query("delete from organisations where id = $1 and demo_for_user_id = $2", [organisation.id, person.id]);
-    await writeAdminAuditEvent(client, { userId: person.id, email: person.email }, { eventType: "demo_farm.deleted", entityType: "organisation", entityId: organisation.id });
+    const actor = options.actor ?? person;
+    await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
+      eventType: "demo_farm.deleted",
+      entityType: "organisation",
+      entityId: organisation.id,
+      details: { forEmail: person.email },
+    });
   });
 }
 
-/** Every demo farm on the server, for the command line. */
-export async function listDemoFarms(): Promise<Array<DemoFarm & { email: string }>> {
-  const result = await coreQuery<Row & { email: string }>(
-    `select o.id, o.display_name, o.demo_status, o.demo_step, o.demo_percent, o.demo_error, o.demo_started_at, o.demo_build_ms, u.email,
+/** A demo farm with whose it is, for the server settings and the command line. */
+export type DemoFarmListing = DemoFarm & { userId: string; email: string; userDisplayName: string };
+
+/** Every demo farm on the server, for the server settings (#445) and the command line. */
+export async function listDemoFarms(): Promise<DemoFarmListing[]> {
+  const result = await coreQuery<Row & { user_id: string; email: string; user_display_name: string }>(
+    `select o.id, o.display_name, o.demo_status, o.demo_step, o.demo_percent, o.demo_error, o.demo_started_at, o.demo_build_ms,
+            u.id as user_id, u.email, u.display_name as user_display_name,
             coalesce(o.demo_updated_at, o.demo_started_at) < now() - make_interval(mins => $1) as stalled
        from organisations o join users u on u.id = o.demo_for_user_id order by u.email`,
     [STALLED_MINUTES],
   );
-  return result.rows.map((row) => ({ ...toDemo(row), email: row.email }));
+  return result.rows.map((row) => ({ ...toDemo(row), userId: row.user_id, email: row.email, userDisplayName: row.user_display_name }));
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whose demo farm a server admin means (#445): the login with this email, or
+ * with this ID (from the list). Blank means the admin themselves. Only an
+ * active login can be given one.
+ */
+export async function findDemoPerson(actor: DemoPerson, input: { email?: unknown; userId?: string }): Promise<DemoPerson> {
+  if (input.userId !== undefined) {
+    if (!UUID.test(input.userId)) throw new NotFoundError("There's no login with that ID.");
+    const found = await coreQuery<{ id: string; email: string }>("select id, email from users where id = $1", [input.userId]);
+    if (!found.rows[0]) throw new NotFoundError("There's no login with that ID.");
+    return found.rows[0];
+  }
+  if (input.email == null || input.email === "") return actor;
+  const email = normaliseEmail(input.email);
+  const found = await coreQuery<{ id: string; email: string }>("select id, email from users where email = $1 and is_active", [email]);
+  if (!found.rows[0]) throw new ValidationError(`There's no active login with the email ${email}. Add it under Users first.`);
+  return found.rows[0];
 }

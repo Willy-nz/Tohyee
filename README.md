@@ -48,12 +48,13 @@ with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
 
-**Want a look first?** Once you're signed in, choose **Try the demo farm…** in
-the organisation menu: Tohyee makes you your own copy of Kōwhai Dairies Ltd, a
-made-up Otago dairy farm with about 18 months of books, payroll, GST, farm
-records and Analytics reports, marked DEMO on every page. Nothing is emailed or
-connected from it; reset or delete it whenever you like (see
-[the demo farm](docs/DEMO-FARM.md)).
+**Want a look first?** On the server, choose **Add demo farm…** on the
+Organisations page of the Tohyee server app (or the server settings in the
+browser): Tohyee makes you, or a login you choose, your own copy of Kōwhai
+Dairies Ltd, a made-up Otago dairy farm with about 18 months of books, payroll,
+GST, farm records and Analytics reports. It appears in the organisation list,
+marked DEMO on every page. Nothing is emailed or connected from it; reset or
+delete it there whenever you like (see [the demo farm](docs/DEMO-FARM.md)).
 
 **Just want to use it?** Download `TohyeeSetup` from the
 [latest release](https://github.com/Willy-nz/Tohyee/releases/latest) and see
@@ -77,7 +78,7 @@ what you can use; developer and server setup instructions follow it.
 
 | Area | What's new |
 | --- | --- |
-| **Demo farm** | Add Kōwhai Dairies Ltd, a made-up dairy farm with farm records, books, payroll, GST and Analytics reports, from the organisation menu. |
+| **Demo farm** | Add Kōwhai Dairies Ltd, a made-up dairy farm with farm records, books, payroll, GST and Analytics reports, from the Organisations page of the server settings. |
 | **Security** | Removing Google sign-in disconnects that person's apps, and restoring people keeps their Google sign-in. |
 
 ## New in 0.13.0: connect AI by signing in, and PowerPoint

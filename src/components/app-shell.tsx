@@ -595,21 +595,15 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
   );
 }
 
-/** The value of the organisation menu's "Try the demo farm" entry (#437): it opens the demo farm page instead of switching. */
-const DEMO_FARM_OPTION = "__demo-farm__";
-
-function OrganisationPicker() {
-  const { organisations, current, selectOrganisation, demoFarmEnabled } = useWorkspace();
-  const router = useRouter();
-  const hasDemo = organisations.some((organisation) => organisation.isDemo);
+/**
+ * The organisation menu. The demo farm is added on the server, where
+ * organisations are added (#445): this menu doesn't offer it, but one
+ * already made opens from here like any other, marked DEMO.
+ */
+export function OrganisationPicker() {
+  const { organisations, current, selectOrganisation } = useWorkspace();
   if (organisations.length === 0) {
-    return demoFarmEnabled ? (
-      <Link href="/operations/demo-farm" className={styles.orgMeta}>
-        Try the demo farm
-      </Link>
-    ) : (
-      <span className={styles.orgMeta}>No organisations yet</span>
-    );
+    return <span className={styles.orgMeta}>No organisations yet</span>;
   }
   return (
     <div className={`${styles.orgPicker} ${current?.isDemo ? styles.orgPickerDemo : ""}`}>
@@ -625,33 +619,32 @@ function OrganisationPicker() {
         aria-label="Organisation"
         title={current ? `${current.displayName} · ${ROLE_LABELS[current.role]} · ${current.baseCurrency}${current.isDemo ? " · demo farm (made-up data)" : ""}` : undefined}
         value={current?.id ?? ""}
-        onChange={(event) => {
-          if (event.target.value === DEMO_FARM_OPTION) router.push("/operations/demo-farm");
-          else selectOrganisation(event.target.value);
-        }}
+        onChange={(event) => selectOrganisation(event.target.value)}
       >
         {organisations.map((organisation) => (
           <option key={organisation.id} value={organisation.id}>
             {organisation.isDemo ? `${organisation.displayName} (demo)` : organisation.displayName}
           </option>
         ))}
-        {demoFarmEnabled || hasDemo ? <option value={DEMO_FARM_OPTION}>{hasDemo ? "Reset or delete the demo farm…" : "Try the demo farm…"}</option> : null}
       </select>
     </div>
   );
 }
 
-/** Marks the demo farm on every page (#437), where the organisation's initial would be: made-up data, and nothing is sent or imported. Opens the demo farm page. */
+/**
+ * Marks the demo farm on every page (#437), where the organisation's initial would be: made-up data, and nothing is sent or imported.
+ * A server admin resets or deletes it in the server settings (#445).
+ */
 function DemoBadge() {
   return (
-    <Link
-      href="/operations/demo-farm"
+    <span
       className={styles.demoBadge}
-      title="The demo farm: made-up data. Nothing is emailed, imported or connected. Reset or delete it here."
-      aria-label="Demo farm: made-up data; nothing is sent or imported. Reset or delete it."
+      title="The demo farm: made-up data. Nothing is emailed, imported or connected. A server admin can reset or delete it in the server settings."
+      role="img"
+      aria-label="Demo farm: made-up data; nothing is sent or imported."
     >
       DEMO
-    </Link>
+    </span>
   );
 }
 
@@ -862,7 +855,6 @@ export function AppShell({
   organisations,
   serverSettingsUrl = null,
   warnings = [],
-  demoFarmEnabled = false,
   children,
 }: {
   /** Which app's top bar and menus to show. */
@@ -873,12 +865,10 @@ export function AppShell({
   serverSettingsUrl?: string | null;
   /** Server problems shown on every page (only passed for server admins). */
   warnings?: string[];
-  /** Whether "Try the demo farm" is offered (#437). */
-  demoFarmEnabled?: boolean;
   children: ReactNode;
 }) {
   return (
-    <WorkspaceProvider user={user} organisations={organisations} serverSettingsUrl={serverSettingsUrl} demoFarmEnabled={demoFarmEnabled}>
+    <WorkspaceProvider user={user} organisations={organisations} serverSettingsUrl={serverSettingsUrl}>
       <Shell app={app} warnings={warnings}>
         {children}
       </Shell>

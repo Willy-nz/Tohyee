@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
+import { DemoFarmsCard } from "@/components/demo-farm";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -23,6 +24,9 @@ function slugify(name: string): string {
 
 function StatusBadge({ organisation }: { organisation: OrganisationAdminView }) {
   if (!organisation.isActive) return <Badge>Inactive</Badge>;
+  // The demo farm (#445): made in the background; see the Demo farm card.
+  if (organisation.demo?.status === "building") return <Badge tone="amber">Being made</Badge>;
+  if (organisation.demo?.status === "failed") return <Badge tone="red">Making it failed</Badge>;
   if (organisation.provisioningStatus === "failed") return <Badge tone="red">Set-up failed</Badge>;
   if (organisation.provisioningStatus === "pending") return <Badge tone="amber">Setting up</Badge>;
   if (organisation.migrationStatus === "failed") return <Badge tone="red">Upgrade failed</Badge>;
@@ -44,6 +48,11 @@ export default function OrganisationsPage() {
   const [modules, setModules] = useState({ accounting: true, gstRegistered: true, crm: false, analytics: false });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const { reload } = list;
+  const demoChanged = useCallback(() => {
+    reload();
+    router.refresh();
+  }, [reload, router]);
 
   if (!user.isServerAdmin) {
     return (
@@ -169,6 +178,7 @@ export default function OrganisationsPage() {
           </div>
         </form>
       </Card>
+      <DemoFarmsCard me={{ id: user.id, email: user.email }} onChanged={demoChanged} />
       <Card title="All organisations on this server">
         {list.error ? <Notice tone="error">{list.error}</Notice> : null}
         <div className={ui.tableWrap}>
@@ -188,6 +198,12 @@ export default function OrganisationsPage() {
                 <tr key={organisation.id}>
                   <td>
                     {organisation.displayName}
+                    {organisation.demo ? (
+                      <>
+                        {" "}
+                        <Badge tone="amber">Demo</Badge>
+                      </>
+                    ) : null}
                     <div className={ui.muted}>
                       {organisation.id} · {organisation.baseCurrency}
                     </div>

@@ -132,7 +132,7 @@ Demo farm (Kōwhai Dairies Ltd: made-up data to try Tohyee on; one each)
   demo add --owner EMAIL                    makes it for them (about a minute; it shows progress)
   demo reset --owner EMAIL --yes            deletes theirs and makes it again from the start
   demo delete --owner EMAIL --yes           removes theirs for good
-  (TOHYEE_DEMO_FARM=off in the server's environment turns "Try the demo farm" off.)
+  (TOHYEE_DEMO_FARM=off in the server's environment turns adding the demo farm off.)
 
 Updates
   updates check [--json]
