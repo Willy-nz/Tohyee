@@ -8872,6 +8872,183 @@ not yet reviewed by Jess.
      (the browser's Users page has it), and `tohyee-admin` has no passkey
      command.
 
+### Farmer-friendly farm screens (#447; decisions 900-929)
+
+Jess asked on 26 October 2026 for farm screens that suit farmers, and on 27
+October 2026 to "implement them now including chat gpts ideas" (William's
+follow-up comment on #447, whose delivery order and acceptance checks are
+followed where they differ from the issue). The issue's questions for Jess
+aren't answered yet, so these follow the comment and the patterns of LIC
+MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
+537).
+
+900. **The farm you last used opens** (27 October 2026, #447 quick win 1;
+     not yet reviewed by Jess). Each person's last farm is remembered in the
+     organisation's database (migration 0186, `farm_last_used`), not just in
+     a browser tab, so a farm page opens on it on any device rather than
+     asking first. It's only a convenience: it's offered only while the farm
+     is active and the person can still see it (decision 744, checked on
+     every read), and the row is deleted when an owner or admin takes that
+     farm off them or they leave. Decision 740's rules stay: a choice in
+     this tab or a `?farm=` link wins, and a stale choice is reported, never
+     swapped for another farm. With two or more farms and none used yet,
+     the page shows the farms as buttons ("Which farm?") rather than an
+     empty page with a list to open: it still asks, as decision 740 says,
+     but the question is the page. "Your choice carries across … in this
+     tab" is gone from the selector.
+901. **Histories a page at a time, on the server** (27 October 2026, #447
+     quick win 2 and the comment's first change; not yet reviewed by Jess).
+     Readings, grazings and supplements are read newest first, 25 to a page
+     on screens (up to 1,000 for the Farming API and 5,000 for the AI), with
+     From, To and paddock filters, and a cursor (the last row's date and id)
+     for the next page, so rows added meanwhile don't repeat or shift what's
+     been seen. The farm's cover, feed wedge and growth use each paddock's
+     latest two readings on or before the date and only the grazings that
+     can matter; supplements by month cover the 12 months to the date. None
+     of them use a page, so paging can't change a total (tested against the
+     totals worked out from every record). A paddock's own card shows its
+     latest 50 readings and grazings. Mobs in now are listed on their own
+     so a day out can be recorded whatever page is showing.
+902. **A record can't land on the wrong farm** (27 October 2026, the
+     comment's acceptance check; not yet reviewed by Jess). Adding a
+     reading, grazing or supplement through a farm's address with a paddock
+     from another farm is refused ("isn't on the farm this was recorded
+     for. Nothing was saved"), rather than saved to the paddock's farm.
+     Forms belong to the farm they were opened on and are cleared when the
+     farm changes.
+903. **One line per record on a phone; Remove apart** (27 October 2026,
+     #447 quick wins 3-5; not yet reviewed by Jess). Below 700px, paddocks,
+     the feed wedge, readings, grazings, supplements and latest soil tests
+     are one line each ("16 · 3,057 · 24 Oct · Milkers in") that opens to
+     the rest and its actions; wide screens keep the tables. Remove sits
+     under the main actions, separated, and asks before removing. Buttons
+     and fields on farm pages are at least 44px tall on a phone. Plain
+     words: "Paddock area" for effective hectares, "Farm costs per …" with
+     "Farm working expenses (FWE)" as a hint, "Changes" instead of plan
+     version numbers, and no internal example codes (PF3) on farm pages.
+     Shorter notes replace "Tohyee doesn't judge…" sentences; decisions 516
+     and 559 still hold (nothing is judged high or low).
+904. **A farm staff role** (27 October 2026, the comment's third change and
+     #447 question 5, unanswered; not yet reviewed by Jess). People who
+     record field work don't need to be bookkeepers. A new organisation role,
+     **Farm staff** (`farm_worker`, core migration 0023), like LIC MINDA's
+     and AgriWebb's staff logins: it reads farms, paddocks, pasture, grazings,
+     feed, soil and the farm calendar, and records cover readings, grazings
+     (and their day out), supplements fed and soil samples, on the farms an
+     owner or admin chooses for them (decision 744; none until chosen when
+     there are two or more farms). It ranks below every other role, so
+     everything else (the books, reports, exports, search, settings, farm
+     Home and benchmarks with their money, fertiliser plans with their
+     costs, the notebook, AI keys) refuses it on the server, not just in
+     the menus. The field-work routes use `withFarmWork`, the same check for
+     screens, farm apps and anything else. A role rather than a flag on the
+     bookkeeper role, because a flag would leave the books open: moving money
+     cards down a page doesn't restrict financial access (William's comment).
+905. **What farm staff see** (27 October 2026; not yet reviewed by Jess). Their
+     top bar has only the Farm menu's field pages (Pasture and feed, Farms
+     and paddocks, Soil tests, Farm calendar, Farm apps), no "+ New", no
+     search across the books and no AI. Anywhere else sends them to Pasture
+     and feed. The calendar is read-only for them (no mailboxes, adding or
+     calendar link). Farm app keys may have every farm scope, and are kept to
+     their farms like the screens.
+906. **Removing a record stays with bookkeepers** (27 October 2026; not yet
+     reviewed by Jess). Farm staff record; a reading, grazing, feed line or
+     sample recorded by mistake is removed by a bookkeeper or higher (it's
+     kept as removed, decision 559). AgriWebb lets staff edit their own
+     records; that can come later, once there's a rule for how long a record
+     stays theirs to change.
+907. **The map shows facts: days since grazed and the cover reading's age**
+     (27 October 2026, #447 recommendation 9 and question 4, unanswered; not
+     yet reviewed by Jess). The farm map colours each paddock by how many
+     days since its last mob came out (or "Mob in now"), or by how old its
+     latest cover reading is, in bands (0-7, 8-14, 15-21, 22-30, more than
+     30 days; 0-7, 8-14, 15-30, more than 30) with a key. These are facts,
+     not judgements, so decisions 516 and 559 ("records, doesn't judge")
+     hold: the words say what was recorded ("Grazed 8-14 days ago"), never
+     "ready", "due", "high" or "low", and the map says the colours aren't
+     good or bad. Colours are the chart theme's sequential blues (decisions
+     599-601), so they follow light and dark, with amber for a mob in now.
+     Colouring by cover itself (shades relative to the farm's average) and
+     farmer-set pre- and post-graze targets wait for Jess's answer to
+     question 4. Each paddock's facts come from one query a paddock
+     (`/api/farming/farms/{id}/paddock-status`), whatever the history's
+     size. A list of every paddock sits beside the map, for screen readers
+     and paddocks without a shape.
+908. **App tiles hold an address, never a key** (27 October 2026, the
+     comment's "useful launch tiles", with keys and scopes under Manage
+     integrations; not yet reviewed by Jess). An admin adds a tile (name,
+     address, what it's for, one farm or all) on Farm apps; everyone who
+     works on that farm sees it on Today and More, and it opens the app in
+     a new tab. The address must be https (http only for localhost) with no
+     user name, password or Tohyee key in it, because everyone on the farm
+     sees it; each app asks for its own key, which stays with the person who
+     made it. Up to 24 tiles. Tenant migration 0187.
+909. **The paddock card** (27 October 2026, the comment's "concise card";
+     not yet reviewed by Jess). Tapping a paddock, on the map or in the
+     list, opens its card: area, cover with how long ago and how it was
+     measured, the mob in now, when it was last grazed, its latest four
+     records, a link to Safety for hazards (until #446), and big buttons to
+     add a cover or move a mob in or out, for people who may record (farm
+     staff, bookkeepers and up). The tables are one tap away (Details).
+910. **Today · Map · Log · Safety · More** (27 October 2026, the comment's
+     phone navigation; not yet reviewed by Jess). Pages under
+     `/operations/farm`, tabs at the bottom of a phone (56px tall, like the
+     farm apps people know) and along the top on a computer. The selected
+     farm is always at the top, with a switch for two or more; switching
+     clears anything half-filled (decision 902). Today leads with jobs and
+     mobs, not money; owners and accountants get a link to Home and
+     benchmarks instead of money cards. Safety is a stub in its own file
+     (`src/components/farm-safety-tab.tsx`) for #446 to replace. The old
+     farm pages stay, reached from More › Details and the Farm menu.
+911. **Quick logs, one question a screen; only what Tohyee keeps** (27
+     October 2026, #447 recommendations 10 and 11 and the comment's second
+     step; not yet reviewed by Jess). As LIC MINDA records a calving: Mob
+     in (paddock, mob, head, day in, cover before), Mob out (which mob, day
+     out, cover after), Cover reading (paddock, cover, how measured, day)
+     and Feed (what, how much, in what, paddock, day), each answer on its
+     own screen with big buttons, today and the paddock or mob already
+     filled in from the paddock card, recent mobs and feeds offered, then a
+     check screen. The farm walk goes paddock by paddock in name order
+     (1, 2 … 10) with one big number box; it doesn't wait to save the lot
+     at the end. Only records Tohyee already has are offered; rainfall,
+     photos and voice notes, animal treatments, and births and deaths have
+     no record in Tohyee yet and are named on the Log page as not kept, not
+     invented here. Near misses are #446's. Farm staff and bookkeepers and
+     up record; others see a sentence saying who can.
+912. **Every record from the phone has its own operation id** (27 October
+     2026, the comment's "stable operation IDs, duplicate prevention and
+     conflict handling"; Tohyee's idempotency rule in STYLE-GUIDE.md; not
+     yet reviewed by Jess). A UUID made on the phone when the record is
+     made (from `crypto.getRandomValues`, which works on plain http too) is
+     sent with it and kept on the reading, grazing or feed line with a
+     fingerprint of the request (tenant migration 0188). Sent again, the
+     same request finds the first record and makes nothing new; the same
+     id with different details, or from another person, is refused with
+     nothing changed. A day out sent again is already done; a different day
+     out isn't written over the one recorded. A farm app may send
+     `operationId` too.
+913. **Saved on this phone, Synced, Needs attention; offline designed, not
+     built** (27 October 2026, the comment's second change; not yet
+     reviewed by Jess). Records and the farm walk in progress are kept in
+     the browser's storage per person and organisation, each tied to the
+     farm it was made on; switching farms never moves one, and the other
+     farm's waiting records are named. They're sent oldest first when the
+     Log page opens, when the signal comes back and every 30 seconds while
+     any wait, each to its own farm's address (decision 902). No signal or
+     a server error leaves a record saved to try again; a refusal marks it
+     Needs attention with Tohyee's reason, and it's never sent again by
+     itself; the person checks and lets it go. A reading is changed in
+     place only while it's never been sent; after that a change is a new
+     reading. Synced records are let go after a week. **Not built:** a
+     service worker to open the farm pages with no signal at all. The
+     design, for when it's wanted (#447 question 3 is unanswered): cache
+     the built app files and the `/operations/farm` pages, plus the last
+     paddock status and calendar answers for the farms the person works on;
+     only farm field pages (never the books) work offline; records keep
+     using these drafts; nothing is cached for a farm the person can no
+     longer see, and signing out clears it. Today, a page opened before the
+     signal went keeps working, and what's recorded waits on the phone.
+
 ### Farm safety records that stand up (#446; decisions 930-941)
 
 Jess, 26-27 October 2026: farm health and safety like SafeAg, with "records

@@ -15,7 +15,10 @@ describe("compact multi-farm selection", () => {
   });
   it("prompts for a farm without offering archived farms", () => {
     const html = renderToStaticMarkup(createElement(FarmSelector, { farms: [...farms, { ...farms[0], id: "archived", name: "Old property", isActive: false }], farm: null, onChange: () => {} }));
-    expect(html).toContain("Choose a farm to view or add its records.");
+    // Not an empty page: each farm is a button to tap.
+    expect(html).toContain("Which farm?");
+    expect(html).toContain(">Property 9<");
+    expect(html).not.toContain("in this tab");
     expect(html).not.toContain("Old property");
   });
   it("stays out of the way when there's one farm and it's showing", () => {
@@ -25,5 +28,12 @@ describe("compact multi-farm selection", () => {
     const html = renderToStaticMarkup(createElement(FarmSelector, { farms, farm: null, stale: true, onChange: () => {} }));
     expect(html).toContain("archived or isn&#x27;t in this organisation");
     expect(html).toContain('<option value="" disabled="" selected="">');
+  });
+});
+describe("while the last farm is looked up", () => {
+  it("doesn't ask for a farm before it knows", () => {
+    const html = renderToStaticMarkup(createElement(FarmSelector, { farms, farm: null, deciding: true, onChange: () => {} }));
+    expect(html).toContain("Opening your farm");
+    expect(html).not.toContain("<select");
   });
 });

@@ -1,9 +1,9 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withOrganisation, withFarmWork } from "@/lib/api/http";
 import { listFarms, saveFarm } from "@/lib/farming/paddocks";
 
 /** GET: the organisation's farms, with their paddock counts and areas. */
 export const GET = route(async (request) => {
-  const farms = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", (tx) => listFarms(tx));
+  const farms = await withFarmWork(request, searchParams(request).get("organisationId"), "read", (tx) => listFarms(tx));
   return json({ farms });
 });
 

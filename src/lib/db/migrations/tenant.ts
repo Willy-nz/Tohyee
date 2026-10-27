@@ -17431,6 +17431,60 @@ create table analytics_field_settings (
 `,
   },
   {
+    version: "0186",
+    name: "farm_last_used",
+    sql: `
+-- The farm each person last worked on (#447, decision 900), so a farm page
+-- opens on it rather than empty, on any device. Only a convenience: access
+-- is still checked on every read and record (decision 744), a farm the
+-- person can no longer see is never offered, and the row goes when the
+-- farm is taken off them or they leave.
+create table farm_last_used (
+  user_id uuid primary key,
+  farm_id bigint not null references farms(id) on delete cascade,
+  chosen_at timestamptz not null default now()
+);
+`,
+  },
+  {
+    version: "0187",
+    name: "farm_app_launchers",
+    sql: `
+-- Launch tiles for farm apps the organisation uses (#447, decision 908): a
+-- name and the address the app opens at, shown on the farm's Today and More
+-- pages. Only the address: an app's keys stay with the person who made them
+-- (core farm_app_keys), never here. A tile can be for one farm or all.
+create table farm_app_launchers (
+  id bigserial primary key,
+  name text not null check (length(name) between 1 and 60),
+  url text not null check (length(url) between 8 and 500),
+  description text check (description is null or length(description) <= 200),
+  farm_id bigint references farms(id),
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  removed_at timestamptz,
+  removed_by_email text
+);
+`,
+  },
+  {
+    version: "0188",
+    name: "farm_record_operation_ids",
+    sql: `
+-- Records made on a phone carry the phone's own id for them (#447, decision
+-- 912), so sending the same one again (a farm walk synced twice, a retry
+-- after the signal dropped) finds the first instead of making a second.
+-- The request's fingerprint tells a true repeat from a different record
+-- reusing the id, which is refused rather than overwriting anything.
+alter table pasture_readings add column operation_id uuid, add column request_hash text;
+alter table grazings add column operation_id uuid, add column request_hash text;
+alter table supplements_fed add column operation_id uuid, add column request_hash text;
+create unique index pasture_readings_operation_id_key on pasture_readings (operation_id) where operation_id is not null;
+create unique index grazings_operation_id_key on grazings (operation_id) where operation_id is not null;
+create unique index supplements_fed_operation_id_key on supplements_fed (operation_id) where operation_id is not null;
+`,
+  },
+  {
     version: "0189",
     name: "farm_safety_records",
     sql: `

@@ -62,7 +62,7 @@ export async function listMembers(organisationId: string): Promise<Member[]> {
   const result = await coreQuery<MemberRow>(
     `${MEMBER_SELECT}
       where m.organisation_id = $1
-      order by case m.role when 'owner' then 0 when 'admin' then 1 when 'bookkeeper' then 2 when 'viewer' then 3 when 'sales_manager' then 4 when 'sales_rep' then 5 else 6 end,
+      order by case m.role when 'owner' then 0 when 'admin' then 1 when 'bookkeeper' then 2 when 'viewer' then 3 when 'sales_manager' then 4 when 'sales_rep' then 5 when 'farm_worker' then 6 else 7 end,
                u.display_name`,
     [organisationId],
   );
@@ -71,7 +71,7 @@ export async function listMembers(organisationId: string): Promise<Member[]> {
 
 function parseRole(input: unknown): Role {
   if (!isRole(input)) {
-    throw new ValidationError("role must be owner, admin, bookkeeper, viewer, report_viewer, sales_manager or sales_rep.");
+    throw new ValidationError("role must be owner, admin, bookkeeper, viewer, report_viewer, sales_manager, sales_rep or farm_worker.");
   }
   return input;
 }

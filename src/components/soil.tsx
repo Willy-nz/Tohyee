@@ -3,6 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
+import { FarmRowList, farmRowStyles } from "@/components/farm-rows";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
@@ -66,7 +67,7 @@ export function SoilHome({ organisationId, farmId = null }: { organisationId: st
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", {
     organisationId,
   });
-  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
+  const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
@@ -80,7 +81,7 @@ export function SoilHome({ organisationId, farmId = null }: { organisationId: st
   }
   return (
     <>
-      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} deciding={deciding} onChange={selectFarm} />
       {farm ? <FarmSoil key={farm.id} organisationId={organisationId} farm={farm} /> : null}
     </>
   );
@@ -115,15 +116,32 @@ function FarmSoil({
     <>
       <Card
         title={`Latest soil tests on ${farm.name}`}
-        description="Each current paddock's most recent test, as the lab reported it. Tohyee doesn't judge whether a result is high or low."
+        description="Each paddock's most recent test, as the lab reported it."
       >
         {summary.error ? <Notice tone="error">{summary.error}</Notice> : null}
         {summary.data && summary.data.summary.paddocks.length === 0 ? (
           <Empty>No paddocks yet.</Empty>
         ) : null}
         {summary.data && summary.data.summary.paddocks.length > 0 ? (
-          <div className={ui.tableWrap}>
-            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <div className={farmRowStyles.phoneOnly}>
+            <FarmRowList
+              label="Latest soil tests"
+              rows={summary.data.summary.paddocks.map((row) => ({
+                key: row.paddockId,
+                title: row.paddockName,
+                parts: row.lastSampledOn ? [age(row.lastSampledOn), ...shown.filter((measure) => row.latest[measure]).slice(0, 2).map((measure) => `${measure} ${result(row.latest[measure])}`)] : ["Not tested"],
+                details: row.lastSampledOn ? (
+                  <p>
+                    Tested {formatDate(row.lastSampledOn)}. {shown.filter((measure) => row.latest[measure]).map((measure) => `${measure} ${result(row.latest[measure])}`).join(" · ")}
+                  </p>
+                ) : undefined,
+              }))}
+            />
+          </div>
+        ) : null}
+        {summary.data && summary.data.summary.paddocks.length > 0 ? (
+          <div className={`${ui.tableWrap} ${farmRowStyles.wideOnly}`}>
+            <table className={ui.table}>
               <thead>
                 <tr>
                   <th>Paddock</th>

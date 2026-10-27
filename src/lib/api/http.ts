@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertSameOrigin, authenticate, type AuthContext, requireOrganisationRole } from "@/lib/auth/guard";
-import type { Role } from "@/lib/auth/roles";
+import { farmWorkAllows, type Role } from "@/lib/auth/roles";
 import { type OrgRunner, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { type CrmNeed, type CrmScope, crmAllows, crmScope } from "@/lib/crm/access";
 import { ForbiddenError, HttpError, ValidationError } from "@/lib/errors";
@@ -155,6 +155,44 @@ export async function withCrm<T>(
     membership.organisation,
     { userId: auth.user.id, email: auth.user.email },
     async (tx) => work(tx, { auth, membership, scope: await crmScope(tx, membership.role, auth.user.id) }),
+    { people },
+  );
+  return addPersonNames(result, people);
+}
+
+/**
+ * `withOrganisation` for farm field work (#447, decision 904): admits farm
+ * staff as well as viewers (to read) and bookkeepers (to record). Which farms
+ * is checked in the farming services (decision 744), as always. Only the
+ * field-work routes use this: reading farms, paddocks, pasture, grazings,
+ * feed, soil and the farm calendar, and recording readings, grazings, feed
+ * and soil samples. Everything else still refuses farm staff.
+ */
+/** The member, if they may do farm work at this level (decision 904); for routes on the core database (farm app keys). */
+export async function requireFarmWorkMember(auth: AuthContext, organisationId: string, need: "read" | "record"): Promise<Membership> {
+  const membership = await requireOrganisationRole(auth, organisationId, "farm_worker");
+  if (!farmWorkAllows(membership.role, need)) throw new ForbiddenError("Farm apps need the farm staff or viewer role or higher in this organisation.");
+  return membership;
+}
+
+export async function withFarmWork<T>(
+  request: Request,
+  organisationIdInput: unknown,
+  need: "read" | "record",
+  work: (tx: OrgTx, context: { auth: AuthContext; membership: Membership }) => Promise<T>,
+): Promise<T> {
+  const auth = await requireAuth(request);
+  const organisationId = parseOrganisationId(organisationIdInput);
+  const membership = await requireOrganisationRole(auth, organisationId, "farm_worker");
+  assertDemoAllows(request, membership.organisation);
+  if (!farmWorkAllows(membership.role, need)) {
+    throw new ForbiddenError(need === "record" ? "Recording farm work needs the farm staff or bookkeeper role or higher in this organisation." : "Farm records need the farm staff or viewer role or higher in this organisation.");
+  }
+  const people = await loadMemberNames(membership.organisation.id);
+  const result = await withOrganisationTransaction(
+    membership.organisation,
+    { userId: auth.user.id, email: auth.user.email, role: membership.role },
+    (tx) => work(tx, { auth, membership }),
     { people },
   );
   return addPersonNames(result, people);
