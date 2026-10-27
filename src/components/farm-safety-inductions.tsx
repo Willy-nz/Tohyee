@@ -4,10 +4,12 @@ import { useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { newOperationId } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
+import { useWorkspace } from "@/components/workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Farm } from "@/lib/farming/paddocks";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { recordAnchor } from "@/lib/safety/screens";
 import type { InductionToRead, InductionView, SignoffView, SiteLink } from "@/lib/safety/inductions";
 import { type Audience, AUDIENCE_LABELS, AUDIENCES, type CurrentRecord, HAZARD_LEVEL_LABELS, INVITE_CONTRACTORS, NOT_COMPETENCE, SELF_DECLARED, SIGN_STATEMENT, SIGNED_HOW_LABELS, type VisitData } from "@/lib/safety/shared";
 
@@ -37,15 +39,27 @@ function useRun() {
 
 const whoText = (person: { name: string; company: string | null }) => (person.company ? `${person.name} (${person.company})` : person.name);
 
-export function InductionsAndSignIn({ organisationId, farm }: { organisationId: string; farm: Farm }) {
+/**
+ * People and inductions (decision 983): signing in and your own inductions
+ * first, then, for those who keep the registers, who has signed, the
+ * induction templates and the farm's sign-in link.
+ */
+export function InductionsAndSignIn({ organisationId, farm, openInduction = null, after = null }: { organisationId: string; farm: Farm; openInduction?: string | null; after?: React.ReactNode }) {
   const data = useApiData<Data>("/api/farming/safety/inductions", { organisationId, farmId: farm.id });
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
   if (!data.data) return <p className={ui.muted}>Loading inductions…</p>;
   return (
     <>
       <OnSiteCard organisationId={organisationId} farm={farm} data={data.data} onChanged={data.reload} />
-      <InductionsCard organisationId={organisationId} farm={farm} data={data.data} onChanged={data.reload} />
-      {data.data.canRecord ? <SiteLinkCard organisationId={organisationId} farm={farm} links={data.data.links} onChanged={data.reload} /> : null}
+      <InductionsCard organisationId={organisationId} farm={farm} data={data.data} onChanged={data.reload} part="mine" openInduction={openInduction} />
+      {after}
+      {data.data.canRecord ? (
+        <>
+          <h2 style={{ fontSize: "var(--text-lg)", margin: "8px 0 0" }}>For managers</h2>
+          <InductionsCard organisationId={organisationId} farm={farm} data={data.data} onChanged={data.reload} part="manage" openInduction={null} />
+          <SiteLinkCard organisationId={organisationId} farm={farm} links={data.data.links} onChanged={data.reload} />
+        </>
+      ) : null}
     </>
   );
 }
@@ -122,7 +136,7 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
       {!data.onSite.here.length ? <Empty>Nobody is signed in on {farm.name}.</Empty> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {data.onSite.here.map((visit) => (
-          <li key={visit.recordId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
+          <li key={visit.recordId} id={recordAnchor("visit", visit.recordId)} style={{ borderTop: "1px solid var(--border)", padding: "8px 0", scrollMarginTop: 72 }}>
             <strong>{whoText(visit.data.person)}</strong> <Badge>{AUDIENCE_LABELS[visit.data.audience].replace(/s$/, "")}</Badge>
             {visit.data.signedHow === "link" ? <> <Badge>{SELF_DECLARED}</Badge></> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
@@ -177,17 +191,20 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
 
 // Inductions ---------------------------------------------------------------------------------------------
 
-function InductionsCard({ organisationId, farm, data, onChanged }: { organisationId: string; farm: Farm; data: Data; onChanged: () => void }) {
-  const [reading, setReading] = useState<{ id: string; forSomeone: boolean } | null>(null);
+function InductionsCard({ organisationId, farm, data, onChanged, part, openInduction }: { organisationId: string; farm: Farm; data: Data; onChanged: () => void; part: "mine" | "manage"; openInduction: string | null }) {
+  const [reading, setReading] = useState<{ id: string; forSomeone: boolean } | null>(openInduction ? { id: openInduction, forSomeone: false } : null);
   const [editing, setEditing] = useState<InductionView | "new" | null>(null);
   const live = data.inductions.filter((induction) => induction.change !== "withdrawn");
   const needAgain = data.signoffs.filter((signoff) => !signoff.current);
+  const manage = part === "manage";
+  const { user } = useWorkspace();
+  const mine = (inductionId: string) => data.signoffs.find((signoff) => signoff.data.inductionId === inductionId && signoff.data.person.userId === user.id) ?? null;
   return (
     <Card
-      title="Inductions"
-      description="What people read before they start: the induction, with this farm's hazards and emergency details. Each sign-off keeps the version and hazards they saw."
+      title={manage ? "Inductions and who has signed" : "Your inductions"}
+      description={manage ? "Add or change inductions, record a sign-off for someone, and see who has signed. Each sign-off keeps the version and hazards they saw." : "Read this farm's induction, with its hazards and emergency details, and sign it on your own login."}
       actions={
-        data.canRecord && !editing ? (
+        manage && !editing ? (
           <Button size="small" variant="secondary" onClick={() => setEditing("new")}>
             Add an induction
           </Button>
@@ -195,20 +212,25 @@ function InductionsCard({ organisationId, farm, data, onChanged }: { organisatio
       }
     >
       {editing ? <InductionForm organisationId={organisationId} farm={farm} current={editing === "new" ? null : editing} onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} /> : null}
-      {!live.length && !editing ? <Empty>No inductions yet. Add one for workers, contractors and visitors; this farm&apos;s hazards and emergency details go with it.</Empty> : null}
+      {!live.length && !editing ? <Empty>{manage ? "No inductions yet. Add one for workers, contractors and visitors; this farm's hazards and emergency details go with it." : `No induction for ${farm.name} yet.`}</Empty> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {live.map((induction) => (
-          <li key={induction.recordId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
+          <li key={induction.recordId} id={manage ? undefined : recordAnchor("induction", induction.recordId)} style={{ borderTop: "1px solid var(--border)", padding: "8px 0", scrollMarginTop: 72 }}>
             <strong>{induction.data.title}</strong> <Badge>{induction.farmId ? farm.name : "All farms"}</Badge> <span className={ui.muted}>version {induction.version}</span>
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
               For {induction.data.audiences.map((audience) => AUDIENCE_LABELS[audience].toLowerCase()).join(", ")}
               {induction.signVersion > 1 ? ` · people who signed before version ${induction.signVersion} sign again` : ""}
             </div>
+            {manage ? null : (() => {
+              const signed = mine(induction.recordId);
+              return (
+                <div style={{ fontSize: "var(--text-sm)" }}>
+                  {!signed ? <Badge tone="amber">Not signed yet</Badge> : signed.current ? <><Badge tone="green">Signed</Badge> version {signed.data.inductionVersion}, {formatDateTime(signed.enteredAt)}</> : <><Badge tone="amber">Sign again</Badge> {signed.reasons[0] ?? ""}</>}
+                </div>
+              );
+            })()}
             <div className={ui.actions} style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-              <Button size="small" onClick={() => setReading({ id: induction.recordId, forSomeone: false })}>
-                Read and sign
-              </Button>
-              {data.canRecord ? (
+              {manage ? (
                 <>
                   <Button size="small" variant="secondary" onClick={() => setReading({ id: induction.recordId, forSomeone: true })}>
                     Record for someone
@@ -217,39 +239,45 @@ function InductionsCard({ organisationId, farm, data, onChanged }: { organisatio
                     Change
                   </Button>
                 </>
-              ) : null}
+              ) : (
+                <Button onClick={() => setReading({ id: induction.recordId, forSomeone: false })}>Read and sign</Button>
+              )}
             </div>
             {reading?.id === induction.recordId ? <ReadAndSign organisationId={organisationId} farm={farm} inductionId={induction.recordId} forSomeone={reading.forSomeone} onDone={() => { setReading(null); onChanged(); }} onCancel={() => setReading(null)} /> : null}
           </li>
         ))}
       </ul>
-      {data.canRecord && data.signoffs.some((signoff) => signoff.data.signedHow === "link" && signoff.data.audience === "contractor") ? (
-        <p className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
-          Contractors who signed through the sign-in link are {SELF_DECLARED.toLowerCase()}: their name is as they typed it. {INVITE_CONTRACTORS}
-        </p>
-      ) : null}
-      <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "14px 0 4px" }}>Who has signed {needAgain.length ? <Badge tone="amber">{`${needAgain.length} to sign again`}</Badge> : null}</h3>
-      {!data.signoffs.length ? <p className={ui.muted}>Nobody yet.</p> : null}
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {data.signoffs.map((signoff) => {
-          const induction = data.inductions.find((each) => each.recordId === signoff.data.inductionId);
-          return (
-            <li key={signoff.recordId} style={{ padding: "4px 0" }}>
-              <strong>{whoText(signoff.data.person)}</strong> {signoff.current ? <Badge tone="green">Up to date</Badge> : <Badge tone="amber">Sign again</Badge>}
-              {signoff.data.signedHow === "link" ? <> <Badge>{SELF_DECLARED}</Badge></> : null}
-              <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
-                {induction?.data.title ?? "Induction"} version {signoff.data.inductionVersion}, {formatDateTime(signoff.enteredAt)}, {SIGNED_HOW_LABELS[signoff.data.signedHow]}
-                {signoff.data.signedHow === "recorded" ? ` by ${signoff.enteredByName || signoff.enteredByEmail}` : ""}
-              </div>
-              {signoff.reasons.map((reason) => (
-                <div key={reason} style={{ fontSize: "var(--text-sm)" }}>
-                  {reason}
+      {manage ? (
+        <>
+        {data.canRecord && data.signoffs.some((signoff) => signoff.data.signedHow === "link" && signoff.data.audience === "contractor") ? (
+          <p className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
+            Contractors who signed through the sign-in link are {SELF_DECLARED.toLowerCase()}: their name is as they typed it. {INVITE_CONTRACTORS}
+          </p>
+        ) : null}
+        <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "14px 0 4px" }}>Who has signed {needAgain.length ? <Badge tone="amber">{`${needAgain.length} to sign again`}</Badge> : null}</h3>
+        {!data.signoffs.length ? <p className={ui.muted}>Nobody yet.</p> : null}
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {data.signoffs.map((signoff) => {
+            const induction = data.inductions.find((each) => each.recordId === signoff.data.inductionId);
+            return (
+              <li key={signoff.recordId} style={{ padding: "4px 0" }}>
+                <strong>{whoText(signoff.data.person)}</strong> {signoff.current ? <Badge tone="green">Up to date</Badge> : <Badge tone="amber">Sign again</Badge>}
+                {signoff.data.signedHow === "link" ? <> <Badge>{SELF_DECLARED}</Badge></> : null}
+                <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
+                  {induction?.data.title ?? "Induction"} version {signoff.data.inductionVersion}, {formatDateTime(signoff.enteredAt)}, {SIGNED_HOW_LABELS[signoff.data.signedHow]}
+                  {signoff.data.signedHow === "recorded" ? ` by ${signoff.enteredByName || signoff.enteredByEmail}` : ""}
                 </div>
-              ))}
-            </li>
-          );
-        })}
-      </ul>
+                {signoff.reasons.map((reason) => (
+                  <div key={reason} style={{ fontSize: "var(--text-sm)" }}>
+                    {reason}
+                  </div>
+                ))}
+              </li>
+            );
+          })}
+        </ul>
+        </>
+      ) : null}
       <p className={ui.muted}>{NOT_COMPETENCE}</p>
     </Card>
   );

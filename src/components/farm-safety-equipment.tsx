@@ -1,6 +1,7 @@
 "use client";
 
 import QRCode from "qrcode";
+import Link from "next/link";
 import { useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { newOperationId } from "@/components/farm-safety";
@@ -12,6 +13,8 @@ import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import type { EquipmentView } from "@/lib/safety/equipment";
 import type { SafetyFile } from "@/lib/safety/files";
 import type { ChemicalView, TrainingView } from "@/lib/safety/register";
+import styles from "./farm-safety.module.css";
+import { recordAnchor, safetyHref } from "@/lib/safety/screens";
 import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER_LABELS, EQUIPMENT_OWNERS, type EquipmentOwner, LOCKOUT_NOTE, SDS_CHECK, SDS_RULE, TRAINING_STATE_LABELS } from "@/lib/safety/shared";
 
 /*
@@ -48,21 +51,39 @@ async function upload(organisationId: string, farmId: string, file: File) {
 
 // Equipment ----------------------------------------------------------------------------------------------
 
+/**
+ * Equipment and pre-start checks. With `openEquipment` (a machine's QR code,
+ * or Check equipment › a machine) only that machine shows, its check open
+ * (decision 981); otherwise the machines, with a search when there are more
+ * than a few.
+ */
 export function EquipmentCard({ organisationId, farm, openEquipment }: { organisationId: string; farm: Farm; openEquipment: string | null }) {
   const data = useApiData<EquipmentData>("/api/farming/safety/equipment", { organisationId, farmId: farm.id });
   const [checking, setChecking] = useState<string | null>(openEquipment);
   const [adding, setAdding] = useState<"equipment" | "checklist" | null>(null);
+  const [search, setSearch] = useState("");
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
   if (!data.data) return <p className={ui.muted}>Loading equipment…</p>;
   const { equipment, checklists, canRecord, canReport } = data.data;
   const live = equipment.filter((item) => item.change !== "withdrawn" && !item.data.retired);
   const out = live.filter((item) => !item.available);
+  const only = openEquipment ? live.find((item) => item.recordId === openEquipment) ?? null : null;
+  if (openEquipment && !only) {
+    return (
+      <Card title="Machine not found">
+        <Notice tone="warning">That machine isn&apos;t on {farm.name}, or it has been retired. Check the farm at the top, or choose the machine from the list.</Notice>
+        <Link href={safetyHref({ farmId: farm.id, screen: "equipment" })}>All equipment on {farm.name}</Link>
+      </Card>
+    );
+  }
+  const words = search.trim().toLowerCase();
+  const shown = only ? [only] : words ? live.filter((item) => `${item.data.name} ${item.data.type ?? ""} ${item.data.ownerName ?? ""}`.toLowerCase().includes(words)) : live;
   return (
     <Card
-      title={`Equipment and pre-start checks${out.length ? ` (${out.length} out of use)` : ""}`}
-      description="Check a machine before using it. A failed critical check puts it out of use until someone allowed releases it."
+      title={only ? `${only.data.name}` : `Equipment and pre-start checks${out.length ? ` (${out.length} out of use)` : ""}`}
+      description={only ? `On ${farm.name}. Check it before using it.` : "Check a machine before using it. A failed critical check puts it out of use until someone allowed releases it."}
       actions={
-        canRecord && !adding ? (
+        canRecord && !adding && !only ? (
           <>
             <Button size="small" variant="secondary" onClick={() => setAdding("equipment")}>
               Add equipment
@@ -77,10 +98,16 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
       {adding === "equipment" ? <EquipmentForm organisationId={organisationId} farm={farm} data={data.data} onDone={() => { setAdding(null); data.reload(); }} onCancel={() => setAdding(null)} /> : null}
       {adding === "checklist" ? <ChecklistForm organisationId={organisationId} farm={farm} onDone={() => { setAdding(null); data.reload(); }} onCancel={() => setAdding(null)} /> : null}
       {!live.length ? <Empty>No equipment yet. Add the machines people use here, ours, hired or a contractor&apos;s, with a checklist for each.</Empty> : null}
+      {!only && live.length > 4 ? (
+        <Field label="Find a machine">
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name or type, e.g. quad" />
+        </Field>
+      ) : null}
+      {words && !shown.length ? <p className={ui.muted}>No machine matches &ldquo;{search.trim()}&rdquo; on {farm.name}.</p> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {live.map((item) => (
-          <li key={item.recordId} style={{ borderTop: "1px solid var(--border)", padding: "10px 0" }}>
-            <strong>{item.data.name}</strong> {item.available ? <Badge tone="green">In use</Badge> : <Badge tone="red">Out of use</Badge>} {item.data.owner !== "owned" ? <Badge>{EQUIPMENT_OWNER_LABELS[item.data.owner]}</Badge> : null}
+        {shown.map((item) => (
+          <li key={item.recordId} id={recordAnchor("equipment", item.recordId)} style={{ borderTop: only ? 0 : "1px solid var(--border)", padding: "10px 0", scrollMarginTop: 72 }}>
+            {only ? null : <strong>{item.data.name}</strong>} {item.available ? <Badge tone="green">In use</Badge> : <Badge tone="red">Out of use</Badge>} {item.data.owner !== "owned" ? <Badge>{EQUIPMENT_OWNER_LABELS[item.data.owner]}</Badge> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
               {[item.data.type, item.data.ownerName, item.checklist ? `checklist: ${item.checklist.data.title}` : "no checklist yet", item.lastCheck ? `last checked ${formatDateTime(item.lastCheck.enteredAt)} by ${item.lastCheck.enteredByName || item.lastCheck.enteredByEmail}${item.lastCheck.data.passed ? "" : " (faults)"}` : "not checked yet"].filter(Boolean).join(" · ")}
             </div>
@@ -90,14 +117,18 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
               </div>
             ) : null}
             <div className={ui.actions} style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-              {canReport && item.checklist ? (
-                <Button size="small" onClick={() => setChecking(checking === item.recordId ? null : item.recordId)}>
-                  Pre-start check
-                </Button>
+              {canReport && item.checklist && !only ? (
+                <Link className={styles.rowButton} href={safetyHref({ farmId: farm.id, screen: "equipment", equipment: item.recordId })}>
+                  Check {item.data.name}
+                </Link>
               ) : null}
-              <QrButton farm={farm} item={item} />
+              {canReport && item.checklist && only && checking !== item.recordId ? (
+                <Button onClick={() => setChecking(item.recordId)}>Start the pre-start check</Button>
+              ) : null}
+              {canReport && !item.checklist ? <span className={ui.muted}>No checklist yet: someone who keeps the registers adds one.</span> : null}
+              {canRecord ? <QrButton farm={farm} item={item} /> : null}
             </div>
-            {checking === item.recordId && item.checklist ? <CheckForm organisationId={organisationId} farm={farm} item={item} checklist={item.checklist} onDone={() => { setChecking(null); data.reload(); }} /> : null}
+            {checking === item.recordId && item.checklist ? <CheckForm organisationId={organisationId} farm={farm} item={item} checklist={item.checklist} onCancel={() => setChecking(null)} onDone={() => { setChecking(null); data.reload(); }} /> : null}
             {item.failedCheck && item.canRelease ? <ReleaseForm organisationId={organisationId} farm={farm} item={item} onDone={data.reload} /> : null}
             {item.failedCheck && !item.canRelease ? <p className={ui.muted}>An owner, an admin or someone named on this equipment can release it.</p> : null}
             <details>
@@ -107,7 +138,7 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
           </li>
         ))}
       </ul>
-      {checklists.length ? (
+      {checklists.length && canRecord && !only ? (
         <p className={ui.muted}>
           Checklists: {checklists.filter((checklist) => checklist.change !== "withdrawn").map((checklist) => `${checklist.data.title} (version ${checklist.version}, ${checklist.data.items.length} checks)`).join("; ")}. Changing a checklist never changes checks already done.
         </p>
@@ -125,7 +156,7 @@ function QrButton({ farm, item }: { farm: Farm; item: EquipmentView }) {
         variant="secondary"
         onClick={() => {
           if (svg) return setSvg(null);
-          const url = `${window.location.origin}/operations/farming/safety?farm=${encodeURIComponent(farm.id)}&equipment=${encodeURIComponent(item.recordId)}`;
+          const url = `${window.location.origin}${safetyHref({ farmId: farm.id, equipment: item.recordId })}`;
           void QRCode.toString(url, { type: "svg", margin: 1 }).then(setSvg);
         }}
       >
@@ -142,7 +173,12 @@ function QrButton({ farm, item }: { farm: Farm; item: EquipmentView }) {
   );
 }
 
-function CheckForm({ organisationId, farm, item, checklist, onDone }: { organisationId: string; farm: Farm; item: EquipmentView; checklist: CurrentRecord<ChecklistData>; onDone: () => void }) {
+/**
+ * A pre-start check (decision 981): the machine and farm stay in view, each
+ * check has large OK / Fault / Not applicable choices with nothing chosen
+ * to start with, and a fault asks what's wrong and offers a photo.
+ */
+function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: { organisationId: string; farm: Farm; item: EquipmentView; checklist: CurrentRecord<ChecklistData>; onDone: () => void; onCancel: () => void }) {
   const [answers, setAnswers] = useState<Record<string, { result: string; note: string }>>({});
   const [hours, setHours] = useState("");
   const [photos, setPhotos] = useState<SafetyFile[]>([]);
@@ -150,6 +186,8 @@ function CheckForm({ organisationId, farm, item, checklist, onDone }: { organisa
   const [outcome, setOutcome] = useState<string | null>(null);
   const { busy, error, run } = useRun();
   const complete = checklist.data.items.every((entry) => answers[entry.key]?.result && (answers[entry.key].result !== "fault" || answers[entry.key].note.trim()));
+  const answered = checklist.data.items.filter((entry) => answers[entry.key]?.result).length;
+  const anyFault = Object.values(answers).some((answer) => answer.result === "fault");
   return (
     <form
       onSubmit={(event) => {
@@ -162,23 +200,29 @@ function CheckForm({ organisationId, farm, item, checklist, onDone }: { organisa
           },
         );
       }}
-      style={{ margin: "8px 0", padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}
-      aria-label={`Pre-start check of ${item.data.name}`}
+      className={styles.checkForm}
+      aria-label={`Pre-start check of ${item.data.name} on ${farm.name}`}
     >
-      <strong>{checklist.data.title}</strong> <span className={ui.muted}>version {checklist.version}</span>
+      <div className={styles.checkHeader}>
+        <strong>{item.data.name}</strong> <span className={ui.muted}>on {farm.name}</span>
+        <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
+          {checklist.data.title}, version {checklist.version} · {answered} of {checklist.data.items.length} answered
+        </div>
+      </div>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {outcome ? <Notice tone={outcome.startsWith("Check") ? "success" : "warning"}>{outcome}</Notice> : null}
       {checklist.data.items.map((entry) => {
         const answer = answers[entry.key] ?? { result: "", note: "" };
         return (
-          <fieldset key={entry.key} style={{ border: 0, borderTop: "1px dashed var(--border)", padding: "6px 0", margin: 0 }}>
-            <legend style={{ fontWeight: 600 }}>
+          <fieldset key={entry.key} className={styles.checkItem}>
+            <legend>
               {entry.text} {entry.critical ? <Badge tone="red">Critical</Badge> : null}
             </legend>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <div className={styles.choices}>
               {(["ok", "fault", ...(entry.critical ? [] : ["na"])] as const).map((result) => (
-                <label key={result} className={ui.checkbox}>
-                  <input type="radio" name={`${item.recordId}-${entry.key}`} checked={answer.result === result} onChange={() => setAnswers({ ...answers, [entry.key]: { ...answer, result } })} /> {result === "ok" ? "OK" : result === "fault" ? "Fault" : "Not applicable"}
+                <label key={result} className={styles.choice} data-result={result}>
+                  <input type="radio" name={`${item.recordId}-${entry.key}`} checked={answer.result === result} onChange={() => setAnswers({ ...answers, [entry.key]: { ...answer, result } })} />
+                  <span>{result === "ok" ? "OK" : result === "fault" ? "Fault" : "Not applicable"}</span>
                 </label>
               ))}
             </div>
@@ -190,27 +234,35 @@ function CheckForm({ organisationId, farm, item, checklist, onDone }: { organisa
           </fieldset>
         );
       })}
+      {anyFault ? (
+        <label className={ui.fieldLabel}>
+          Photo of the fault (optional)
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            style={{ display: "block", minHeight: 44 }}
+            onChange={(event) => {
+              const chosen = event.target.files?.[0];
+              event.target.value = "";
+              if (chosen) void run(() => upload(organisationId, farm.id, chosen), (file) => setPhotos([...photos, file]));
+            }}
+          />
+        </label>
+      ) : null}
+      {photos.length ? <p className={ui.muted}>{photos.length} photo(s) kept.</p> : null}
       <Field label="Hours or km (optional)">
         <input inputMode="decimal" value={hours} maxLength={30} onChange={(event) => setHours(event.target.value)} />
       </Field>
-      <label className={ui.fieldLabel}>
-        Photo of a fault (optional)
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          capture="environment"
-          style={{ display: "block" }}
-          onChange={(event) => {
-            const chosen = event.target.files?.[0];
-            event.target.value = "";
-            if (chosen) void run(() => upload(organisationId, farm.id, chosen), (file) => setPhotos([...photos, file]));
-          }}
-        />
-      </label>
-      {photos.length ? <p className={ui.muted}>{photos.length} photo(s) kept.</p> : null}
-      <Button type="submit" disabled={busy || !complete}>
-        Save check
-      </Button>
+      <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+        <Button type="submit" disabled={busy || !complete || Boolean(outcome)}>
+          {busy ? "Saving…" : `Save the check of ${item.data.name}`}
+        </Button>
+        <Button variant="secondary" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {!complete && !outcome ? <p className={ui.muted}>Answer every check to save. A fault needs a few words on what&apos;s wrong.</p> : null}
     </form>
   );
 }
@@ -473,7 +525,7 @@ export function TrainingCard({ organisationId, farm }: { organisationId: string;
       {!live.length ? <Empty>No training recorded yet.</Empty> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {live.map((record) => (
-          <li key={record.recordId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
+          <li key={record.recordId} id={recordAnchor("training", record.recordId)} style={{ borderTop: "1px solid var(--border)", padding: "8px 0", scrollMarginTop: 72 }}>
             <strong>{record.data.person.name}</strong>: {record.data.what}{" "}
             <Badge tone={record.state === "expired" ? "red" : record.state === "expiring" ? "amber" : "green"}>{TRAINING_STATE_LABELS[record.state]}</Badge>
             {record.data.confirmedByPerson ? <> <Badge tone="blue">Confirmed by them</Badge></> : null}

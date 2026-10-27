@@ -305,6 +305,45 @@ hourly check tries again. Copies sent can't be changed or deleted.
   or medical details or restricted photos**, not even ones they entered
   or if an owner names them; another farm is "not found".
 
+## Safety on a farm phone (#446 layout follow-up, decisions 976-989)
+
+The Safety tab is a small overview and focused screens, each with its own
+address (`/operations/farm/safety?farm=&view=&<record>=`), so links open the
+exact record on the right farm and the browser's Back goes back.
+
+- **Overview**: the farm in the farm bar; an **emergency strip** (Call 111,
+  the address and entrance, one tap to the full details; the copy on the
+  phone, with when it was saved, when Tohyee can't be reached); three large
+  buttons, **Report something**, **Check equipment** and **Sign in /
+  induction**; **Needs doing** (count, the first five, View all), built
+  from Today's data; and **Browse safety** with counts: Hazards and map,
+  Equipment and pre-start checks, People and inductions, Reports and
+  actions, Chemicals and fuel, and (not farm staff) Records and settings.
+  On a desktop, two columns.
+- **Focused screens** with **Back to Safety** and the farm's name: emergency
+  details; report something; equipment (a search over four machines; one
+  machine, its check open, from its QR code or Check); people (On site,
+  your inductions with your own status, training; then **For managers**:
+  who has signed, adding and changing inductions, the sign-in link); hazards
+  (a list first, the map on request); reports and actions (with **Other
+  actions**: those on a hazard, from a failed check, or on their own);
+  chemicals; records and settings (history check, pack, weekly copy, who
+  sees injury details; refused for farm staff as before).
+- **Report something**: three large choices, then two short steps: photo,
+  what, where (place and paddock), what happened and when; then what was
+  done, how bad, injury details and WorkSafe's questions as Yes / No with
+  nothing chosen (an unanswered one is kept as not answered, never No) and
+  who'll put it right as an optional extra. The half-filled report is kept
+  in the browser tab (per person, organisation and farm) while moving
+  around Safety and across a reload, and the screen says truthfully
+  whether the browser kept it.
+- **Pre-start check**: the machine and farm stay at the top; large OK /
+  Fault / Not applicable choices, nothing chosen; a fault asks what's wrong
+  and offers a photo. Critical faults and release work as before.
+- Today's Safety card uses the same list; each line opens its record. Map
+  hazards and a paddock card's hazards open the hazard. The old
+  `/operations/farming/safety` address (and printed QR codes) redirects.
+
 ## Worked examples
 
 Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
@@ -493,6 +532,22 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
   sheet): needed. Petrol (a sheet dated 2018): not needed, but "ask for the
   current one when it's next supplied". Exactly five years old is fine; a
   day more, or undated, is the prompt.
+- **FS49 Needs doing opens the record** (`tests/unit/safety-screens.test.ts`,
+  `tests/integration/farm-safety-screens.test.ts`). With the quad out of
+  use, Hemi's overdue "Fence the pond", an induction to sign, his open
+  "Fix the yard rail", someone else's overdue job, one to check, expired
+  and expiring training, a hazard review and a self-declared visitor, the
+  list is in that order and each links to its record on that farm (an
+  action on a report opens the report at the action). Actions not on a
+  report (on a hazard, a failed check, or on their own) are listed under
+  Other actions until checked and closed; another farm's are not, and
+  staff get "not found" for another farm.
+- **FS50 Addresses.** `?farm=3&equipment=<id>` opens that machine's check;
+  an unknown screen or an id that isn't a record id is ignored; a record
+  linked for farm 3 isn't looked for on farm 4.
+- **FS51 Half-filled reports.** Kept per person, organisation and farm;
+  "kept" only when the browser stored it and reads it back; full, blocked
+  or missing storage says it isn't kept; a damaged copy reads as nothing.
 
 ## Not done yet
 
@@ -504,7 +559,13 @@ the farmer, sending an induction by email or text, and signing in for
 several people at once. Not in reports yet: telling
 staff by email or notification when something is reported (no message is
 sent, and nothing claims one was), people involved besides the injured
-person, and photos kept in drafts while offline.
+person, and photos kept in drafts while offline. From the layout follow-up:
+the farmer usability test (3-5 farmers or contractors finding emergency
+details, reporting a hazard and doing a pre-start without help) hasn't been
+done; that's for people, not code. Screens were checked at 390 px (light and
+dark), 1280 px and a 195 px width standing in for 200% zoom, not on real
+phones or with a screen reader; offline sending itself is unchanged and was
+not re-tried.
 
 ## Open questions for Jess
 
