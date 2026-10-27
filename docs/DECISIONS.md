@@ -9049,3 +9049,85 @@ MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
      longer see, and signing out clears it. Today, a page opened before the
      signal went keeps working, and what's recorded waits on the phone.
 
+### Farm safety records that stand up (#446; decisions 930-941)
+
+Jess, 26-27 October 2026: farm health and safety like SafeAg, with "records
+that stand up if WorkSafe looks at them" (would they think we made the data
+up?). William's follow-up review on #446 sets the workflows. Details and
+worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
+
+930. **A record-keeping tool, not a compliance claim.** Tohyee keeps safety
+     records and shows WorkSafe's own guidance (named, dated, linked). Nothing
+     on screen or in a pack says a farm complies with the law. Wording that
+     touches the law is listed in `docs/FARM-SAFETY.md` under Open questions,
+     not yet reviewed by Jess (decision 537 sends law to Jess).
+931. **One append-only list of versions, chained by hash** (tenant migration
+     0189). Every safety record is versions in `safety_entries`; the database
+     refuses updates, deletes and truncation, numbers each version, sets its
+     entry time and works out its SHA-256 hash from its details and the
+     previous hash. Tohyee works the hashes out again on its own
+     (`src/lib/safety/chain.ts`), so a change made straight in the database
+     shows when the history is checked. Photos and documents
+     (`safety_files`) are append-only too, with their hash worked out by the
+     database. Jess's suggestion ("each record carries a hash of the one
+     before"), as built.
+932. **The database's clock, never the person's.** The entry time is set by
+     a trigger whatever is sent; the date something happened is the
+     person's and shows beside it ("entered later") when earlier. Who entered
+     it is the signed-in person (and the AI key or farm app, when one was
+     used). Jess: "No back-dating; if something is recorded late, both the
+     event date and the entry date show."
+    A change is a new version; a mistake is a **Corrected**
+     version saying what was wrong, or **Withdrawn (entered by mistake)**
+     saying why, which ends the record but keeps it in the history and the
+     pack. Jess: "Nothing can be deleted; a mistake is marked as corrected."
+933. **Saves carry the phone's id; changes name their version.** A save with
+     the same operation id is kept once (a phone retrying on a poor signal);
+     with different details it's refused. A change names the version it
+     started from and is refused if someone saved since ("reload to see
+     their change"), so nothing is silently overwritten (William's review:
+     "do not silently overwrite another person's record").
+934. **The WorkSafe pack and checking it anywhere.** A zip for a farm (or all
+     the person's farms) and date range: a PDF, the versions exactly as
+     stored, every entry's number and hash, files with their hashes and
+     dates, and `verify.mjs`, which checks it with Node.js alone. **Check the
+     history** and **Compare with a copy** do the same in Tohyee. What a
+     chain can't show by itself (a complete rewrite by someone controlling
+     the server) is caught by comparing with a copy kept off the farm; the
+     pack's README says so. Being open source, anyone can read how it works.
+935. **Who reads and records.** Safety is part of the farm: viewers and above
+     read it on their farms (decision 744), everywhere through the services;
+     another farm's record is "not found". Adding and changing needs
+     bookkeeper or higher until #447's field-worker access arrives. New
+     records can't be added to an archived farm. Not yet reviewed by Jess.
+936. **Restricted details: owners, named members, and their author.**
+     Incident and medical details are their own kind (`report_details`,
+     always restricted) so the hazard information workers need is never
+     mixed with them (William's review). Owners see them; an owner names
+     anyone else (Safety's restricted access, audited), and whoever entered
+     them sees their own. Admins aren't included by default (often the
+     accountant). A member leaving loses it. Withheld from a pack for anyone
+     else, hash kept. Not yet reviewed by Jess.
+937. **WorkSafe's wording, named and dated.** Emergency details always show
+     111 and WorkSafe's 0800 030 040 (24 hours), from WorkSafe's *Notify
+     WorkSafe* page (read 27 October 2026), and link to it for what must be
+     notified. Tohyee never notifies WorkSafe itself. Not yet reviewed by
+     Jess.
+938. **Hazards and no-go zones** on the farm map: a point (where I am, or a
+     tap) or a drawn zone, and paddocks; red for no-go or high, amber
+     otherwise; low/medium/high as WorkSafe's guidance sets no scale (open
+     question). Removed and reviewed are new versions with who, when and
+     why: a review is someone looking at the hazard, recorded as theirs,
+     not a status typed for someone else. Not yet reviewed by Jess.
+939. **Review dates.** A hazard can have a review-by date; past it, it's
+     "Review overdue". "Reviewed: still stands" sets the next one.
+940. **Emergency details on the phone.** One record per farm, first on the
+     Safety page, with tap-to-call numbers, Print, and a copy kept in the
+     phone's browser each time they load; when Tohyee can't be reached the
+     copy shows with "saved on this phone" and its time, never as current
+     (William: "clearly showing their age").
+941. **Not in this change** (follow on #446, in order): incidents and near
+     misses with corrective actions and the notifiable-event prompt;
+     inductions, sign-offs and sign in on site; pre-start checks; training;
+     chemicals; photos; the weekly copy emailed off the farm; and the farm
+     workspace (#447: Safety tab, map, Log, Today and the calendar).
