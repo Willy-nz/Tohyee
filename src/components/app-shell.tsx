@@ -25,6 +25,8 @@ import {
   AI_LINK,
   type Destination,
   destinations,
+  FARM_WORK_PATHS,
+  farmWorkAllowsPath,
   inArea,
   isCurrent,
   type Menu,
@@ -679,6 +681,8 @@ function TopBarActions({
   const pathname = usePathname();
   const shortcut = useShortcutLabel();
   const aiCurrent = pathname === AI_LINK.href || pathname.startsWith(`${AI_LINK.href}/`);
+  // Farm staff don't use the AI assistant: it reads the books (decision 904).
+  const farmWorker = useWorkspace().current?.role === "farm_worker";
   return (
     <div className={styles.actions}>
       <NewMenu groups={newActions} />
@@ -687,14 +691,12 @@ function TopBarActions({
         <span className={styles.searchText}>Search</span>
         <kbd className={styles.kbd}>{shortcut}</kbd>
       </button>
-      <Link
-        href={AI_LINK.href}
-        className={`${styles.aiLink} ${aiCurrent ? styles.aiLinkActive : ""}`}
-        aria-current={aiCurrent ? "page" : undefined}
-      >
-        <SparkIcon />
-        {AI_LINK.label}
-      </Link>
+      {farmWorker ? null : (
+        <Link href={AI_LINK.href} className={`${styles.aiLink} ${aiCurrent ? styles.aiLinkActive : ""}`} aria-current={aiCurrent ? "page" : undefined}>
+          <SparkIcon />
+          {AI_LINK.label}
+        </Link>
+      )}
       <NoticesMenu notices={notices} />
       <div className={styles.desktopOnly}>
         <UserMenu onSignOut={onSignOut} />
@@ -739,8 +741,11 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   // Sales reps and managers have the CRM and their own profile only (decision 491).
   const salesRole = current?.role === "sales_rep" || current?.role === "sales_manager";
   const salesAway = salesRole && app !== "crm" && !pathname.startsWith("/operations/profile");
+  // Farm staff have the field-work pages only (decision 904); the server refuses them everything else anyway.
+  const farmWorker = current?.role === "farm_worker";
+  const farmAway = farmWorker && !(app === "accounting" && farmWorkAllowsPath(pathname));
   const noticeData = useApiData<{ notices: TopNotice[] }>(
-    current?.id && !reportViewer && !salesRole ? "/api/notices" : null,
+    current?.id && !reportViewer && !salesRole && !farmWorker ? "/api/notices" : null,
     current?.id ? { organisationId: current.id } : {},
   );
   const notices = useMemo(
@@ -754,7 +759,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
     ],
     [warnings, noticeData.data],
   );
-  const menus = useMemo(() => visibleMenus(app, { can, modules }), [app, can, modules]);
+  const menus = useMemo(() => visibleMenus(app, { can, modules, farmWorker }), [app, can, modules, farmWorker]);
   const newActions = useMemo(() => visibleNewActions({ can, modules }), [can, modules]);
   const settings = useMemo(() => (app === "accounting" ? visibleSettings({ can, modules }) : []), [app, can, modules]);
   const items = useMemo<Destination[]>(
@@ -780,6 +785,9 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   useEffect(() => {
     if (salesAway) router.replace("/crm");
   }, [salesAway, router]);
+  useEffect(() => {
+    if (farmAway) router.replace(FARM_WORK_PATHS[0]);
+  }, [farmAway, router]);
   // MOD2: with Accounting off, its home goes to the app that's on, and its other pages say it's off.
   const accountingOff = app === "accounting" && !reportViewer && modules?.accounting === false;
   const accountingPageOff = accountingOff && !ACCOUNTING_OFF_PAGES.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -841,7 +849,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       <main id="main-content" className={styles.content} tabIndex={-1}>
         <div ref={page} className={styles.page}>
           {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}
-          {(reportViewer && app !== "analytics") || salesAway ? null : accountingPageOff ? <AccountingOff /> : children}
+          {(reportViewer && app !== "analytics") || salesAway || farmAway ? null : accountingPageOff ? <AccountingOff /> : children}
         </div>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={items} />

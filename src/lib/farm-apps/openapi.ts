@@ -70,7 +70,19 @@ export function farmAppsOpenApi(serverUrl: string) {
       },
       "/pasture/cover": { get: { summary: "The farm's pasture cover, feed wedge and growth on a date", ...secured("read_pasture"), parameters: [farmIdParam, { name: "onDate", in: "query", required: false, schema: date }], responses: ok("Cover") } },
       "/pasture/readings": {
-        get: { summary: "Pasture cover readings, newest first", ...secured("read_pasture"), parameters: [farmIdParam, paddockIdParam], responses: ok("Readings") },
+        get: {
+          summary: "Pasture cover readings, newest first, a page at a time (up to 1,000). `next` is the cursor for the next page, or null.",
+          ...secured("read_pasture"),
+          parameters: [
+            farmIdParam,
+            paddockIdParam,
+            { name: "from", in: "query", required: false, schema: date },
+            { name: "to", in: "query", required: false, schema: date },
+            { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 1000 } },
+            { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+          ],
+          responses: ok("Readings"),
+        },
         post: { summary: "Record a pasture cover reading", ...secured("record_pasture"), requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PastureReadingInput" } } } }, responses: created("The reading") },
       },
     },

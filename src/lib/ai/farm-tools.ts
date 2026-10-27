@@ -1,4 +1,4 @@
-import { boundedLimit, firstRows } from "@/lib/ai/limits";
+import { boundedLimit, firstRows, historyRows } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema } from "@/lib/ai/tools";
 import { addNotebookEntry, listNotebook, NOTEBOOK_CATEGORIES, updateNotebookEntry } from "@/lib/ai-workspace/notebook";
 import { aiFileText, listAiFiles, READ_CHUNK } from "@/lib/ai-workspace/files";
@@ -367,7 +367,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
     description: "Cover readings (kg DM/ha) by paddock and date, with the method; satellite and model readings are marked as estimates.",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500) }),
-    run: async (tx, args) => firstRows(await listReadings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId }), boundedLimit(args.limit, 500, 5000)),
+    run: async (tx, args) => historyRows((await listReadings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId, limit: boundedLimit(args.limit, 500, 5000) }, { max: 5000 }))),
   },
   {
     name: "list_grazings",
@@ -375,7 +375,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
     description: "Which mob was in which paddock from the day in to the day out (none while still in), with covers before and after and what was eaten.",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500) }),
-    run: async (tx, args) => firstRows(await listGrazings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId }), boundedLimit(args.limit, 500, 5000)),
+    run: async (tx, args) => historyRows((await listGrazings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId, limit: boundedLimit(args.limit, 500, 5000) }, { max: 5000 }))),
   },
   {
     name: "list_supplements_fed",
@@ -383,7 +383,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
     description: "Supplements fed out: date, feed, quantity and unit as recorded (never converted), and kg DM where known. Buying feed is a bill, not here.",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, limit: LIMIT(500) }),
-    run: async (tx, args) => firstRows(await listSupplements(tx, { farmId: await farmFor(tx, args.farmId) }), boundedLimit(args.limit, 500, 5000)),
+    run: async (tx, args) => historyRows((await listSupplements(tx, { farmId: await farmFor(tx, args.farmId), limit: boundedLimit(args.limit, 500, 5000) }, { max: 5000 }))),
   },
 ];
 

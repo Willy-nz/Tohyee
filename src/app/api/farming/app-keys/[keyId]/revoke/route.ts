@@ -1,5 +1,4 @@
-import { json, readJson, requireAuth, route } from "@/lib/api/http";
-import { requireOrganisationRole } from "@/lib/auth/guard";
+import { json, readJson, requireAuth, route, requireFarmWorkMember } from "@/lib/api/http";
 import { revokeFarmAppKey } from "@/lib/farm-apps/keys";
 import { parseOrganisationId } from "@/lib/organisations/registry";
 
@@ -11,6 +10,6 @@ export const POST = route<Context>(async (request, context) => {
   const auth = await requireAuth(request);
   const body = await readJson(request);
   const organisationId = parseOrganisationId(body.organisationId);
-  await requireOrganisationRole(auth, organisationId, "viewer");
+  await requireFarmWorkMember(auth, organisationId, "read");
   return json({ key: await revokeFarmAppKey(auth, organisationId, keyId) });
 });

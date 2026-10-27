@@ -39,8 +39,10 @@ export function useModules(organisationId: string | null): Modules | null {
   // Sales reps and managers use the CRM only (decision 491): whether it's on comes from the CRM, not the settings.
   const salesRole = current?.id === organisationId && (current?.role === "sales_rep" || current?.role === "sales_manager");
   const settings = useApiData<{ settings: OrganisationSettings }>(
-    organisationId && !reportViewer && !salesRole ? `/api/organisations/${organisationId}/settings` : null,
+    organisationId && !reportViewer && !salesRole && current?.role !== "farm_worker" ? `/api/organisations/${organisationId}/settings` : null,
   );
+  // Farm staff do field work only (decision 904): Farming, without asking for the organisation's settings.
+  const farmWorker = current?.id === organisationId && current?.role === "farm_worker";
   const crmTeam = useApiData<{ crmEnabled: boolean }>(organisationId && salesRole ? "/api/crm/team" : null, organisationId ? { organisationId } : {});
   const { reload } = settings;
   useEffect(() => {
@@ -48,6 +50,7 @@ export function useModules(organisationId: string | null): Modules | null {
     return () => window.removeEventListener(CHANGED, reload);
   }, [reload]);
   if (reportViewer) return { crm: false, reporting: false, notForProfit: false, analytics: true, gst: false, accounting: false };
+  if (farmWorker) return { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, livestock: false, farming: true };
   if (salesRole) return crmTeam.data ? { crm: crmTeam.data.crmEnabled, reporting: false, notForProfit: false, analytics: false, gst: false, accounting: false } : null;
   if (!settings.data) return null;
   return {
