@@ -37,9 +37,9 @@ export async function listLaunchers(tx: OrgTx): Promise<FarmAppLauncher[]> {
   await requireFarming(tx);
   const visible = await visibleFarmIds(tx);
   const rows = await tx.query<{ id: string; name: string; url: string; description: string | null; farm_id: string | null; created_by_email: string }>(
-    `select id::text, name, url, description, farm_id::text, created_by_email from farm_app_launchers
-      where removed_at is null and (farm_id is null or $1::bigint[] is null or farm_id = any($1::bigint[]))
-      order by lower(name), id`,
+    `select l.id::text, l.name, l.url, l.description, l.farm_id::text, l.created_by_email from farm_app_launchers l
+      where l.removed_at is null and (l.farm_id is null or $1::bigint[] is null or l.farm_id = any($1::bigint[]))
+      order by lower(l.name), l.id`,
     [visible],
   );
   return rows.rows.map((row) => ({ id: row.id, name: row.name, url: row.url, description: row.description, farmId: row.farm_id, createdByEmail: row.created_by_email }));
