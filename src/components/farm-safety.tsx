@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
+import { InductionsAndSignIn } from "@/components/farm-safety-inductions";
 import { ReportsCard, ReportSomething, useReports, WaitingToSend } from "@/components/farm-safety-reports";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -156,6 +157,7 @@ function FarmSafety({ organisationId, farm, imageryKey }: { organisationId: stri
         />
       )}
       {reports.error ? <Notice tone="error">{reports.error}</Notice> : reports.data ? <ReportsCard organisationId={organisationId} data={reports.data} paddockNames={paddockNames} showWithdrawn={showWithdrawnReports} onShowWithdrawn={setShowWithdrawnReports} onChanged={reports.reload} /> : null}
+      <InductionsAndSignIn organisationId={organisationId} farm={farm} />
       <RecordsCard organisationId={organisationId} farm={farm} />
     </>
   );
