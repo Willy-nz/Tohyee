@@ -8739,6 +8739,139 @@ below says so; those are not yet reviewed by Jess.
      build every two seconds without locking the page. Real organisations
      still can't be deleted from these pages. Not yet reviewed by Jess.
 
+### Sign in with a passkey (#450; decisions 885-899)
+
+Jess, 27 Oct 2026: "Is it possible to get a phone login with biometrics
+after it is already logged in usual ways?" The rules in #450 come from her
+issue; where it doesn't answer a question, the choice below says so and is
+not yet reviewed by Jess.
+
+885. **Passkeys (WebAuthn), through a maintained library** (#450). Face ID,
+     a fingerprint or Windows Hello, as a passkey. The WebAuthn checks
+     (CBOR, attestation objects, signatures, flags) are done by
+     SimpleWebAuthn (`@simplewebauthn/server` 14.0.3 and
+     `@simplewebauthn/browser` 14.0.0, pinned exactly), not written by hand.
+     Tohyee keeps only the passkey's public key, credential ID, use count,
+     transports, whether it's synced and backed up, the address it works
+     at, a name, and when it was added and last used (core migration 0025,
+     `user_passkeys`). The face or finger never leaves the device. No
+     attestation ("none"): Tohyee doesn't ask which make of phone it is, as
+     Google and Microsoft don't for passkeys. Algorithms: ES256, EdDSA and
+     RS256.
+886. **Adding one needs your password again** (#450, "a recent full
+     sign-in"). The password is checked before the browser's prompt
+     starts, and counts with the sign-in tries (so it locks like a
+     sign-in), as linking Google does (decision 805). Someone set up with
+     Google only has no password, so for them it's a sign-in within the last
+     5 minutes (sign out and in with Google again). Each added passkey is
+     emailed to the person as a security alert. A login can have up to 20.
+     Not yet reviewed by Jess: the 5 minutes and the limit of 20.
+887. **A passkey sign-in counts as two-step** (#450, Jess; as Google and
+     Microsoft treat it). The passkey must check the person (face, finger or
+     PIN: `userVerification: "required"`, and the "user verified" flag is
+     checked), so it's something you have plus something you are or know.
+     The session is full straight away (`sessions.sign_in_method =
+     'passkey'`), and remembers which passkey (`sessions.passkey_id`).
+888. **Discoverable passkeys, so the sign-in page asks nothing** (#450).
+     Passkeys are made as discoverable ("resident") ones, so **Sign in with
+     a passkey** needs no email: the phone offers the passkeys it has for
+     this address. The sign-in options are the same for everyone (no email,
+     no list of passkeys), so the page can't be used to find out who has a
+     login. Where the browser can, passkeys also appear in the email box's
+     suggestions (WebAuthn "conditional mediation"), started again every 4
+     minutes so its challenge never runs out while it waits.
+889. **Only on Tohyee's web address or localhost** (#450, Jess). A passkey
+     belongs to one web address (its relying party ID, the host of the
+     address in use, from `returnOrigin`). It's only offered on an https
+     web address that's a real name (Remote access) or on `localhost` on the
+     server computer. A home-network number (192.168.1.20) or name
+     (farm-pc, tohyee.local) is refused before the phone is asked, with
+     words saying why and Tohyee's web address when there is one: phones
+     and browsers refuse passkeys there anyway. A passkey only works at the
+     address it was made on; Your account says which. On the sign-in page
+     the note only shows once someone on the server has a passkey.
+890. **Challenges are used once, for 5 minutes, where they were asked for**
+     (#450). Each is 32 random bytes; only its hash is kept
+     (`passkey_challenges`). Adding: tied to the session that entered the
+     password. Signing in: tied to the browser by an HttpOnly,
+     SameSite=Strict cookie (`tohyee_passkey`, path
+     `/api/auth/passkeys/sign-in`). It's marked used before the answer is
+     checked, so a replayed or copied answer, one from another browser, or
+     one after 5 minutes does nothing. The address in use must be the one
+     the challenge was made for, and the library checks the answer's
+     origin and relying party ID against it, so a lookalike site's answer
+     isn't accepted.
+891. **The passkey must say it's the login's** (#450). Each login has a
+     random ID its passkeys carry (`users.passkey_user_handle`, 32 random
+     bytes, never the login's own ID or email). A sign-in whose passkey
+     carries another login's ID, or none, is refused and recorded as
+     refused. A passkey Tohyee doesn't know (removed, or never added) is
+     refused, and the browser is asked to stop offering it
+     (`signalUnknownCredential`, where the browser supports it).
+892. **What ends passkeys** (#450, Jess). A server admin resetting a
+     password (Users, or `npm run admin -- set-password`), any two-step
+     reset (server admin, emailed link, command line), using a setup link,
+     setting up with Google from a setup link, and turning a login off all
+     remove every passkey the login has, in the same transaction, with the
+     sessions they signed in; they also disconnect AI apps, AI keys, farm
+     app keys and PowerPoint add-in sign-ins (decision 850's list). Turning
+     a login off didn't disconnect apps before; it does now, as the issue
+     asks, so turning it on again needs them connected again. The command
+     line's set-password didn't disconnect apps before either; it does now.
+     Not in the issue, and not yet reviewed by Jess: **changing your own
+     password ends your passkeys too** (this session stays), because a
+     passkey added by someone who knew the old password mustn't outlive it,
+     and Tohyee already disconnects apps on a password change. Google and
+     Microsoft keep passkeys on a password change; Tohyee chooses the safer
+     way, and the confirmation says to add them again. Removing a login
+     from the server (backup recovery replacing it) removes its passkeys
+     with it.
+893. **The use count: refuse a step back, flag a stand-still** (#450). Most
+     phone passkeys always report 0, which is fine. A count that goes up is
+     stored. A count lower than the last one (and not 0) can mean a copied
+     security key: the sign-in is refused, flagged in the sign-in monitor
+     and emailed to the person; the passkey isn't removed (they decide).
+     The same count again, or 0 after counting, happens with some
+     authenticators: allowed, but flagged and emailed. The library's own
+     check (which refuses an equal count) is given 0 so Tohyee's rule
+     applies; the stored count never goes down.
+894. **Removing your own passkey** (#450). Your account lists your
+     passkeys (name, where it works, added, last used, synced, and "This
+     session"), and you can rename or remove each. Removing one ends the
+     other sessions it signed in; this session stays. Apps and keys you
+     connected keep working, as when you unlink Google (decision 852); a
+     security email says so. Not yet reviewed by Jess.
+895. **A server admin removes someone's passkeys** (#450, Jess). Users has
+     **Remove passkeys** (a server admin, on the server computer), which
+     removes all of that login's passkeys (a lost or stolen phone), ends
+     the sessions they signed in and disconnects their apps, as removing
+     Google sign-in does (decision 850). The person is emailed. Users shows
+     how many passkeys each login has.
+896. **Server admins keep a password** (#450, Jess). Passkeys are only ever
+     added beside a password (or Google), never instead of one, so a
+     server admin always has a password and two-step as before.
+897. **Recorded and limited like other sign-ins** (#450, Jess; decisions
+     456 and 487). Passkey sign-ins and failures are in the sign-in
+     monitor with the step "Passkey" (the login's email is filled in, as it
+     now is for Google sign-ins too, which typed none). The per-address
+     limit covers asking for a challenge and answering it; a paused remote
+     access refuses them; failures through remote access count towards
+     pausing it. A wrong passkey answer doesn't count towards the
+     password lockout: signatures can't be guessed.
+898. **Recovering people doesn't bring passkeys back** (#450). Passkeys
+     aren't copied from a server backup when people are recovered (decision
+     738): they're tied to a web address and a device, so people add them
+     again. Not yet reviewed by Jess.
+899. **Not done or not tried** (#450). It hasn't been tried with a real
+     phone, security key or Windows Hello: the tests use a software
+     authenticator (real P-256 keys and signatures) made for them. Things
+     that may need changing once it is: how each phone names its passkey
+     prompt, whether conditional autofill behaves on every browser, and
+     iOS's handling of a passkey made on localhost. The Windows server app
+     shows passkey sign-ins in Sign-ins but has no Remove passkeys button
+     (the browser's Users page has it), and `tohyee-admin` has no passkey
+     command.
+
 ### Farm safety records that stand up (#446; decisions 930-941)
 
 Jess, 26-27 October 2026: farm health and safety like SafeAg, with "records
