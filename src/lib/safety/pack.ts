@@ -51,7 +51,14 @@ function fileIds(body: string): string[] {
 }
 
 /** Gathers the pack inside one read of the organisation's database; the files are written afterwards. */
-export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean }): Promise<PackData> {
+/**
+ * `afterSeq` (the weekly copy, #461) picks records by entry number instead
+ * of dates: every record with an entry after that number, up to the last
+ * entry when the pack was gathered. Entries get their numbers one at a time
+ * under a lock held until they're saved, so once entry N is seen every
+ * entry before it is saved too: nothing can land behind the high-water mark.
+ */
+export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean; afterSeq?: string | null }): Promise<PackData> {
   await requireFarming(tx);
   const from = parseIsoDate(input.from, "From");
   const to = parseIsoDate(input.to, "To");
@@ -67,19 +74,29 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
   // The weekly copy goes off the farm by email: never with injury or medical details (decision 958).
   const restricted = input.withholdRestricted ? false : await canSeeRestricted(tx);
   const zone = businessTimeZone();
-  const records = await tx.query<{ record_id: string }>(
-    `select distinct record_id::text from safety_entries
-      where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[]))
-        and (((entered_at at time zone $4)::date between $2 and $3) or (not $5 and happened_on between $2 and $3))`,
-    [farmIds, from, to, zone, input.enteredOnly ?? false],
-  );
+  // One upper bound for everything below, so the pack, its chain and the head it reports agree.
+  const top = await tx.query<{ seq: string }>("select coalesce(max(seq), 0)::text as seq from safety_entries");
+  const upTo = top.rows[0].seq;
+  const records =
+    input.afterSeq !== undefined
+      ? await tx.query<{ record_id: string }>(
+          `select distinct record_id::text from safety_entries
+            where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[])) and seq > $2::bigint and seq <= $3::bigint`,
+          [farmIds, input.afterSeq ?? "0", upTo],
+        )
+      : await tx.query<{ record_id: string }>(
+          `select distinct record_id::text from safety_entries
+            where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[])) and seq <= $6::bigint
+              and (((entered_at at time zone $4)::date between $2 and $3) or (not $5 and happened_on between $2 and $3))`,
+          [farmIds, from, to, zone, input.enteredOnly ?? false, upTo],
+        );
   const ids = records.rows.map((row) => row.record_id);
-  const rows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e where e.record_id = any($1::uuid[]) order by e.seq`, [ids]);
+  const rows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e where e.record_id = any($1::uuid[]) and e.seq <= $2::bigint order by e.seq`, [ids, upTo]);
   // The first version says who entered a restricted record; they may see their own.
   const authors = new Map<string, string | null>();
   for (const row of rows.rows) if (row.version === 1) authors.set(row.record_id, row.entered_by_user_id);
   const entries = rows.rows.map((row) => toChainEntry(row, row.restricted && !restricted && (input.withholdRestricted || tx.actor.role === "farm_worker" || authors.get(row.record_id) !== tx.actor.userId)));
-  const chainRows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e order by e.seq`);
+  const chainRows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e where e.seq <= $1::bigint order by e.seq`, [upTo]);
   const chainOk = verifyChain(chainRows.rows.map((row) => toChainEntry(row))).problems.length === 0;
   const chain = chainRows.rows.map((row) => ({ seq: row.seq, previousHash: row.previous_hash, hash: row.hash }));
 

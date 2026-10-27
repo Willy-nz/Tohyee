@@ -679,13 +679,16 @@ that something happened.
   contractor's, a fixed asset optional) with QR codes and versioned
   checklists; pre-start checks that keep the questions as asked; a failed
   critical check puts a machine out of use with an action until someone
-  allowed releases it; a training register with expiry and the person
+  allowed releases it (only an owner or admin, in person, chooses who
+  besides them may: decision 969); a training register with expiry and the person
   confirming their own; and each farm's chemicals inventory with safety data
   sheets (a missing one needed; over five years old a prompt to get the
   current one when next supplied). Since FS35-FS38 (decisions 958-959,
   tenant migration 0191): a weekly PDF emailed off the farm through the
   organisation's own email, with the latest entry's number and hash, never
-  injury details, recorded only when the mail server accepted it. Since
+  injury details, recorded only when the mail server accepted it; each copy
+  picks up after the last entry number a sent copy included, so nothing
+  entered between copies is missed (decision 970). Since
   FS39-FS44 (decisions 960-962): in the farmer's workspace (#447) the
   Safety tab, hazards on the map and paddock card, Report a hazard / Near
   miss / Incident in Log, a Safety card on Today and Safety due on the farm
@@ -2900,7 +2903,11 @@ that something happened.
   the app and coming back carries on where it was. Every record is kept on
   the phone first (Saved on this phone), sent when there's a signal
   (Synced), or marked Needs attention if Tohyee refuses it; it's never sent
-  to another farm or written over another person's record. Each carries
+  to another farm or written over another person's record. A record changed
+  or added while another is being sent is kept and sent as it is now
+  (decision 971). If the phone's storage is full or blocked, it says **Not
+  saved on this phone** with a warning to keep the page open, sends it
+  straight away, and has **Try saving on this phone again** (decision 972). Each carries
   its own operation id (tenant migration 0188), so sending it twice makes
   it once. The pages themselves still need a signal to open: there's no
   offline app yet (decision 913 says how it would work). Not kept in

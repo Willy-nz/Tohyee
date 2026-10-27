@@ -23,6 +23,7 @@ describeWithDatabase("farm safety weekly copy", () => {
   let server: TestServer;
   let owner: SessionUser;
   let staff: SessionUser;
+  let farmId: string;
   const as = (user: SessionUser) => <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(ORG, { userId: user.id, email: user.email }, work);
   const sent: Array<Omit<OutgoingMessage, "messageId">> = [];
   const accept = async (_organisation: unknown, message: Omit<OutgoingMessage, "messageId">) => {
@@ -37,7 +38,8 @@ describeWithDatabase("farm safety weekly copy", () => {
     await createTestOrganisation(owner, ORG);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper')", [ORG, staff.id]);
     await as(owner)((tx) => setFarmingEnabled(tx, { enabled: true }));
-    const farm = (await as(owner)((tx) => saveFarm(tx, { name: "Home farm" })))[0].id;
+    farmId = (await as(owner)((tx) => saveFarm(tx, { name: "Home farm" })))[0].id;
+    const farm = farmId;
     await as(owner)((tx) => addHazard(tx, { farmId: farm, title: "Effluent pond", level: "high", noGo: true }));
     await as(staff)((tx) => appendEntry(tx, { kind: "report_details", change: "created", farmId: farm, data: { injury: "Private injury" } }));
   });
@@ -90,21 +92,50 @@ describeWithDatabase("farm safety weekly copy", () => {
     await expect(as(owner)((tx) => tx.query("delete from safety_copies"))).rejects.toThrow(/append-only/);
   });
 
-  it("FS38 weekly: not again within the week; the next copy starts the day after the last", async () => {
+  it("FS38 weekly: not again within the week; the next copy picks up after the last one's entry number", async () => {
     const organisation = (await getOrganisation(ORG))!;
     const [last] = (await as(owner)((tx) => copySettings(tx))).copies;
     const soon = await sendSafetyCopy(organisation, { now: new Date(new Date(last.sentAt).getTime() + 2 * 86_400_000), send: accept });
     expect(soon.skipped).toBe(true);
     const nextWeek = new Date(new Date(last.sentAt).getTime() + 7 * 86_400_000 + 3 * 3_600_000);
-    const due = await sendSafetyCopy(organisation, { now: nextWeek, send: accept });
-    if (due.skipped) {
-      // Before 6am in New Zealand at that moment: a few hours later it goes.
-      const later = await sendSafetyCopy(organisation, { now: new Date(nextWeek.getTime() + 8 * 3_600_000), send: accept });
-      expect(later.sent!.periodFrom > last.periodTo).toBe(true);
-    } else {
-      expect(due.sent!.periodFrom > last.periodTo).toBe(true);
-      expect(due.sent!.entries).toBe(0);
-    }
+    const due = (await sendSafetyCopy(organisation, { now: nextWeek, send: accept })).sent ?? (await sendSafetyCopy(organisation, { now: new Date(nextWeek.getTime() + 8 * 3_600_000), send: accept })).sent!;
+    // Before 6am in New Zealand the first try waits; either way nothing new went in.
+    expect(due).toMatchObject({ entries: 0, headSeq: last.headSeq });
+    expect(due.periodFrom <= due.periodTo).toBe(true);
+  });
+
+  it("FS38a nothing entered between copies is missed: same day, next day, failed sends and entries made while sending (#461)", async () => {
+    const organisation = (await getOrganisation(ORG))!;
+    const hazard = (title: string) => as(owner)((tx) => addHazard(tx, { farmId, title, level: "medium" }));
+    const headOf = async () => (await as(owner)((tx) => checkSafetyHistory(tx))).head!.seq;
+    const before = await headOf();
+    // Entered just after a copy went (the same day, whatever the time or season).
+    const sameDay = await hazard("Loose gate by the shed");
+    const failing = await sendSafetyCopy(organisation, { force: true, now: new Date("2026-06-15T18:00:00Z"), send: async () => { throw new Error("Connection refused"); } });
+    expect(failing.sent).toBeNull();
+    const nextDay = await hazard("Wasp nest in the hedge");
+    // While this copy is being sent someone adds another: it's after the copy's mark, so the next copy has it.
+    let duringSend: Awaited<ReturnType<typeof hazard>> | null = null;
+    const first = await sendSafetyCopy(organisation, {
+      force: true,
+      now: new Date("2026-10-27T17:00:00Z"),
+      send: async (org, message) => {
+        duringSend = await hazard("Broken step on the vat stand");
+        return accept(org, message);
+      },
+    });
+    expect(first.sent).toMatchObject({ entries: 2 });
+    expect(Number(first.sent!.headSeq)).toBe(Number(before) + 2);
+    expect(sent.at(-1)!.text).toContain(`after number ${before} up to number ${first.sent!.headSeq}`);
+    expect([sameDay.seq, nextDay.seq].every((seq) => Number(seq) > Number(before) && Number(seq) <= Number(first.sent!.headSeq))).toBe(true);
+    // A daylight-time date never skips a day: the next copy starts with the entry made during the last send.
+    const second = await sendSafetyCopy(organisation, { force: true, now: new Date("2026-10-28T11:30:00Z"), send: accept });
+    expect(second.sent).toMatchObject({ entries: 1, headSeq: duringSend!.seq });
+    expect(sent.at(-1)!.text).toContain(`after number ${first.sent!.headSeq} up to number ${duringSend!.seq}`);
+    // A change to an older record brings its whole history.
+    await as(owner)((tx) => appendEntry(tx, { kind: "hazard", recordId: sameDay.recordId, expectedVersion: 1, change: "updated", farmId, data: { ...sameDay.data, title: "Loose gate by the shed (chained now)" } }));
+    const third = await sendSafetyCopy(organisation, { force: true, send: accept });
+    expect(third.sent).toMatchObject({ entries: 2 });
     await as(owner)((tx) => saveCopySettings(tx, { on: false, toAddresses: "" }));
     expect((await sendSafetyCopy(organisation, { force: true, send: accept })).skipped).toBe(true);
   });

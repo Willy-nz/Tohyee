@@ -230,7 +230,8 @@ stays in the chain, so the rest still checks.
 
 - **Equipment** on a farm: name, type, whose (ours, hired, a contractor's,
   with a name), a checklist, who's responsible, and who besides owners and
-  admins may release it. It can name a fixed asset in the books but needn't
+  admins may release it (only an owner or admin, in person, chooses that:
+  decision 969). It can name a fixed asset in the books but needn't
   (William: "should not require an accounting fixed asset"). A **QR code**
   for each machine opens its pre-start check after signing in.
 - **Checklists** (shared by every farm, or one farm's) are versioned; items
@@ -266,15 +267,21 @@ stays in the chain, so the rest still checks.
 
 Safety › Records that stand up › **Weekly copy off the farm** (owners and
 admins set it up; tenant migration 0191). Once a week, after 6am, a PDF of
-every safety record entered since the last copy (each with its history) is
-emailed through the organisation's own email account to up to 10 addresses
+every safety record with an entry since the last copy (each with its
+history) is emailed through the organisation's own email account to up to 10 addresses
 off the farm (a personal email, the accountant). The email gives the latest
 entry's number and hash for the whole history: kept where Tohyee can't
 change it, it shows later (**Compare with a copy**) whether the history was
 rewritten. Injury and medical details are never in it. **Send a copy now**
 sends one straight away. A copy is recorded only when the mail server
 accepted it; otherwise the screen shows the last problem and the next
-hourly check tries again. Copies sent can't be changed or deleted.
+hourly check tries again. Copies sent can't be changed or deleted. What's
+in a copy is decided by entry number, not by date (decision 970): every
+record with an entry after the last entry number a sent copy included, up
+to the newest entry when the copy is made. So a record entered later the
+same day as a copy, or while a copy is being sent, is in the next one, and
+a failed or retried send loses nothing. The dates in the email are only
+for reading.
 `TOHYEE_SAFETY_COPY=off` stops the job.
 
 ## In the farmer's workspace, and farm staff (decisions 960-962)
@@ -461,6 +468,11 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
 - **FS29 Answers don't change.** After the checklist is changed to version
   2 ("Brakes: front and back work", "Lights work"), the version-1 check
   still shows its four questions as asked.
+- **FS30a Choosing who can release.** Mere (a bookkeeper) can't name herself
+  or Rangi as able to release, or take Rangi off, when adding, updating or
+  correcting equipment; an owner's AI key or a farm app can't either. Mere
+  can still rename the tractor (the list stays as it was). The owner adds
+  and takes off releasers; Rangi, named, can release (decision 969).
 - **FS30 Out of use.** Mere's check with "Back brake doesn't hold" on the
   critical brakes item puts the quad out of use and gives Rangi an action
   due today naming the check. Mere (not named), an AI key and a release
@@ -492,8 +504,13 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
   server refusing an address, records the problem and no copy; copies
   can't be deleted.
 - **FS38 Weekly.** Two days after a copy, nothing is due; a week later
-  (after 6am) the next copy starts the day after the last one ended. Off,
-  nothing is sent.
+  (after 6am) the next copy has nothing new and the same latest entry.
+- **FS38a Nothing missed between copies.** A hazard entered after a copy
+  the same day, a failed send, a hazard the next day, and a hazard added
+  while a copy is being sent: the next accepted copy has the first two
+  (entries after the last copy's number, up to its own), and the one after
+  it has the one added while sending. A change to an older record brings
+  its whole history. Off, nothing is sent (decision 970).
 
 - **FS39 Staff read their farm.** Hemi (farm staff, Home farm) gets Home
   farm's Safety (canReport, not canRecord, no restricted details); the
