@@ -18,7 +18,7 @@ import { readServerSetting, writeServerSetting } from "@/lib/server-settings";
  * app (Sign-ins, Home) and are emailed to the person and the server admins
  * when the server can send email. No country lookup (Jess). Kept for a year.
  */
-export type SignInStep = "password" | "code" | "backup_code" | "setup_link" | "reset_link" | "first_admin" | "google";
+export type SignInStep = "password" | "code" | "backup_code" | "setup_link" | "reset_link" | "first_admin" | "google" | "passkey";
 export type SignInOutcome = "signed_in" | "password_ok" | "failed" | "locked" | "refused";
 
 export type SignInEvent = {
@@ -52,7 +52,8 @@ export function outcomeOf(error: unknown): { outcome: SignInOutcome; detail: str
   return null;
 }
 
-type Entry = { email: string | null | undefined; userId?: string | null; step: SignInStep; outcome: SignInOutcome; detail?: string | null };
+/** `warning`: something the step itself noticed (a passkey's use count going backwards, #450), flagged and told to the person. */
+type Entry = { email: string | null | undefined; userId?: string | null; step: SignInStep; outcome: SignInOutcome; detail?: string | null; warning?: string | null };
 
 /** Records an attempt and reports anything suspicious. Never throws: signing in doesn't wait on the log. */
 export async function logSignIn(request: Request, entry: Entry): Promise<void> {
@@ -64,21 +65,23 @@ export async function logSignIn(request: Request, entry: Entry): Promise<void> {
 }
 
 async function record(request: Request, entry: Entry): Promise<void> {
-  const email = (entry.email ?? "").trim().toLowerCase().slice(0, 254) || "(none)";
+  let email = (entry.email ?? "").trim().toLowerCase().slice(0, 254) || "(none)";
   const address = clientAddress(request.headers)?.slice(0, 100) ?? null;
   const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
   const remote = cameThroughRemoteAccess(request.headers);
   let userId = entry.userId ?? null;
   let isServerAdmin = false;
   const user = (
-    await coreQuery<{ id: string; is_server_admin: boolean }>(
-      userId ? "select id::text, is_server_admin from users where id = $1" : "select id::text, is_server_admin from users where email = $1",
+    await coreQuery<{ id: string; email: string; is_server_admin: boolean }>(
+      userId ? "select id::text, email, is_server_admin from users where id = $1" : "select id::text, email, is_server_admin from users where email = $1",
       [userId ?? email],
     )
   ).rows[0];
   if (user) {
     userId = user.id;
     isServerAdmin = user.is_server_admin;
+    // Google and passkey sign-ins don't type an email: the login's own is shown.
+    if (email === "(none)") email = user.email;
   }
 
   const flags: string[] = [];
@@ -108,6 +111,10 @@ async function record(request: Request, entry: Entry): Promise<void> {
   }
   if (entry.step === "reset_link" && entry.outcome === "password_ok") {
     flags.push("Two-step sign-in was reset with an emailed link");
+    tellPerson = true;
+  }
+  if (entry.warning) {
+    flags.push(entry.warning);
     tellPerson = true;
   }
   if (entry.outcome === "locked") {

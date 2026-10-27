@@ -1408,6 +1408,21 @@ that something happened.
   them connected and the email says how to disconnect them (decision 852).
   Tested against a made-up Google only; not yet tried with a real Google
   account.
+- **Sign in with a passkey** (#450, decisions 885-899): Face ID, a
+  fingerprint or Windows Hello. Under **Your account › Passkeys**, enter
+  your password, name the passkey ("Jess's iPhone") and **Add a passkey**;
+  the sign-in page then has **Sign in with a passkey** (and offers passkeys
+  in the email box where the browser can). The face or finger never leaves
+  the device: Tohyee keeps only the passkey's public key. A passkey sign-in
+  counts as two-step. Passkeys can be renamed and removed; a server admin
+  can remove someone's under Users (which also disconnects their apps).
+  Resetting a password or two-step, a setup link, changing your password or
+  turning a login off ends them. Only on Tohyee's web address (Remote
+  access) or on the server computer as localhost; on a home-network
+  address the page says why. Recorded in the sign-in monitor and limited
+  per address like other sign-ins; a security email for each added or
+  removed passkey. Tested with a software authenticator only; not yet tried
+  with a real phone.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
 - **Emailing documents** (decided by Jess, 30 Sep 2026): invoices, credit

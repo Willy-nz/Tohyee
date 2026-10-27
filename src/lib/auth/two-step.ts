@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import QRCode from "qrcode";
 import { writeAdminAuditEvent } from "@/lib/audit";
 import { hashPassword, verifyAgainstDummy, verifyPassword } from "@/lib/auth/password";
+import { endPasskeys } from "@/lib/auth/passkey-end";
 import { claimPasswordTry, lockIfTooManyFailures } from "@/lib/auth/service";
 import { createSession, type SessionMeta, type SessionState, type SessionUser, twoStepRequired } from "@/lib/auth/sessions";
 import {
@@ -379,11 +380,13 @@ export async function resetTwoStep(
   await client.query("delete from sessions where user_id = $1", [userId]);
   await client.query("update two_step_reset_tokens set used_at = coalesce(used_at, now()) where user_id = $1", [userId]);
   const aiKeysRevoked = await revokeUserAiKeys(client, userId);
+  // Passkeys count as two-step, so they end too (#450, decision 892).
+  const passkeysEnded = await endPasskeys(client, userId);
   await writeAdminAuditEvent(client, actor, {
     eventType: "user.two_step_reset",
     entityType: "user",
     entityId: userId,
-    details: { how, aiKeysRevoked },
+    details: { how, aiKeysRevoked, passkeysEnded },
   });
 }
 
