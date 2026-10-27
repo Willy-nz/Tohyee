@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicalJson, type ChainEntry, entryHash, findInChain, GENESIS_HASH, verifyChain } from "@/lib/safety/chain";
-import { enteredLate, hazardState, recordFields, reviewOverdue } from "@/lib/safety/shared";
+import { enteredLate, hazardState, notifiableKeepText, notifiableKeepUntil, recordFields, reviewOverdue, SIGNED_HOW_LABELS, SITE_EXCEPTIONS, sdsState, sitePrivacyNotice } from "@/lib/safety/shared";
 import { copyDue } from "@/lib/safety/weekly-copy";
 
 /** The safety history's hash chain, worked out without a database (#446, FS7, FS8). */
@@ -97,6 +97,41 @@ describe("safety record helpers", () => {
       ["Place on the map", "-37.800000, 175.100000 (latitude, longitude)"],
       ["Zone on the map", "Drawn on the map"],
     ]);
+  });
+});
+
+describe("the answers to #446's safety questions (FS45-FS48)", () => {
+  it("FS45 shows five years from when WorkSafe was told as the keeping period", () => {
+    expect(notifiableKeepUntil("2026-10-20")).toBe("2031-10-20");
+    expect(notifiableKeepUntil("2028-02-29")).toBe("2033-03-01");
+    expect(notifiableKeepText({ on: "2026-10-20", how: "phone", reference: "WS-123" })).toBe(
+      "Keep this record until at least 2031-10-20: five years from when WorkSafe was told (Health and Safety at Work Act 2015, s 57).",
+    );
+    expect(notifiableKeepText(null)).toContain("at least five years from when WorkSafe is told");
+    expect(SITE_EXCEPTIONS).toHaveLength(5);
+    expect(SITE_EXCEPTIONS.join("; ")).toMatch(/remove someone who has died/);
+  });
+
+  it("FS46 labels a gate-link sign-off self-declared, no login, in the pack too", () => {
+    expect(SIGNED_HOW_LABELS.link).toMatch(/^self-declared, no login/);
+    expect(recordFields({ signedHow: "link" })).toEqual([["Signed", SIGNED_HOW_LABELS.link]]);
+  });
+
+  it("FS47 the gate page's privacy notice names the organisation and covers each point", () => {
+    const notice = sitePrivacyNotice({ name: "Kōwhai Farms Ltd", postalAddress: "12 Test Road\nRD 1\nMadeuptown" });
+    expect(notice.map((part) => part.label)).toEqual(["What's collected", "Why", "Who sees it", "If you'd rather not", "Seeing and correcting it", "How long it's kept", "Contact"]);
+    expect(notice[0].text).toMatch(/^Kōwhai Farms Ltd collects your name, company, phone/);
+    expect(notice.at(-1)!.text).toBe("Kōwhai Farms Ltd, 12 Test Road, RD 1, Madeuptown.");
+    expect(sitePrivacyNotice({ name: "Kōwhai Farms Ltd", postalAddress: null }).at(-1)!.text).toBe("Kōwhai Farms Ltd: use the farm's contacts on this page.");
+  });
+
+  it("FS48 a safety data sheet: needed when missing, a prompt (not out of date) when over five years old", () => {
+    const sheet = { id: "1", sha256: "x" } as never;
+    expect(sdsState({ sds: null, sdsDate: "2024-01-01" }, "2026-10-28")).toBe("missing");
+    expect(sdsState({ sds: sheet, sdsDate: "2024-01-01" }, "2026-10-28")).toBe("ok");
+    expect(sdsState({ sds: sheet, sdsDate: "2021-10-28" }, "2026-10-28")).toBe("ok");
+    expect(sdsState({ sds: sheet, sdsDate: "2021-10-27" }, "2026-10-28")).toBe("check");
+    expect(sdsState({ sds: sheet, sdsDate: null }, "2026-10-28")).toBe("check");
   });
 });
 

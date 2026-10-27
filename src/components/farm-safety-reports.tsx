@@ -20,6 +20,7 @@ import {
   FIXED_NUMBERS,
   mayBeNotifiable,
   NOTIFIABLE_QUESTIONS,
+  notifiableKeepText,
   type NotifiableAnswers,
   type Position,
   REPORT_STATE_LABELS,
@@ -29,6 +30,8 @@ import {
   SEVERITIES,
   SEVERITY_LABELS,
   type Severity,
+  SITE_EXCEPTIONS,
+  WORKSAFE_NOTIFIABLE_GUIDE_URL,
   WORKSAFE_NOTIFY_URL,
 } from "@/lib/safety/shared";
 
@@ -108,7 +111,15 @@ export function NotifiablePrompt() {
           </a>
           , which asks the questions that decide it.
         </li>
-        <li>Leave the site as it is until WorkSafe says otherwise, except to help someone hurt, make it safe, or as police or an inspector say.</li>
+        <li>
+          Leave the site as it is until WorkSafe says otherwise. You may disturb it only:
+          <ul style={{ margin: "2px 0", paddingLeft: 20 }}>
+            {SITE_EXCEPTIONS.map((exception) => (
+              <li key={exception}>{exception}</li>
+            ))}
+          </ul>
+        </li>
+        <li>{notifiableKeepText(null)}</li>
       </ul>
       <span className={ui.muted}>Tohyee doesn&apos;t tell WorkSafe for you. When you have, record it on the report.</span>
     </div>
@@ -363,6 +374,13 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
           ) : null}
           <fieldset style={{ border: 0, padding: 0, margin: "8px 0" }}>
             <legend className={ui.fieldLabel}>WorkSafe&apos;s questions</legend>
+            <p className={ui.muted} style={{ margin: "0 0 6px", fontSize: "var(--text-sm)" }}>
+              From WorkSafe&apos;s quick guide.{" "}
+              <a href={WORKSAFE_NOTIFIABLE_GUIDE_URL} target="_blank" rel="noreferrer">
+                Check WorkSafe&apos;s current guide
+              </a>{" "}
+              if you&apos;re not sure.
+            </p>
             {NOTIFIABLE_QUESTIONS.map((question) => (
               <label key={question.key} className={ui.checkbox} style={{ alignItems: "flex-start", marginBottom: 6 }}>
                 <input type="checkbox" checked={answers[question.key] === true} onChange={(event) => setAnswers({ ...answers, [question.key]: event.target.checked })} /> {question.text}
@@ -567,6 +585,7 @@ function ReportDetail({ organisationId, report, access, people, paddockNames, on
         <p className={ui.muted}>Injury details are restricted: the owner chooses who sees them.</p>
       ) : null}
       {report.mayBeNotifiable && !report.data.workSafeNotified && live ? <NotifiablePrompt /> : null}
+      {report.mayBeNotifiable && report.data.workSafeNotified ? <p className={ui.muted}>{notifiableKeepText(report.data.workSafeNotified, formatDate)}</p> : null}
 
       <h4 style={{ margin: "10px 0 4px" }}>Actions</h4>
       {!report.actions.length ? <p className={ui.muted}>None yet.</p> : null}

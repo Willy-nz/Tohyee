@@ -1,14 +1,15 @@
 # Farm health and safety records
 
 Issue #446 (Jess, 26-27 October 2026), with William's follow-up review and
-Jess's "records that stand up if WorkSafe looks at them". Decisions 930-959.
+Jess's "records that stand up if WorkSafe looks at them". Decisions 930-962;
+the answers to the open questions are decisions 963-968.
 
 **Tohyee keeps safety records. It doesn't decide what the law needs, and it
-doesn't say a farm complies.** The wording below that touches the law is
-marked *not yet reviewed by Jess* and listed under
-[Open questions](#open-questions-for-jess). Before relying on these records,
-have someone who knows health and safety law (WorkSafe, or a lawyer) check
-what needs keeping and for how long.
+doesn't say a farm complies.** The wording that touches the law was listed
+under [Open questions](#open-questions-for-jess); those are now answered
+(Claude, delegated by Jess, 28 October 2026; not legal advice). Before
+relying on these records, have someone who knows health and safety law
+(WorkSafe, or a lawyer) check what needs keeping and for how long.
 
 ## What WorkSafe's guidance says (read 27 October 2026)
 
@@ -19,13 +20,13 @@ reviewed since 2017, so they're a guide, not the law.
 | Topic | What the guidance says | Source |
 |---|---|---|
 | Notifiable events | A death, a notifiable injury or illness (for example needing admission to hospital for immediate treatment, an amputation, a serious head, eye or spinal injury, a serious burn or laceration, loss of a bodily function), or a notifiable incident (an unplanned or uncontrolled incident that seriously endangers someone through immediate or imminent exposure, for example a spill or leak, fire or explosion, electric shock, a fall from height, collapse). Notify "as soon as possible after becoming aware". For a death, phone 0800 030 040 straight away; in an emergency, 111. | WorkSafe quick guide *What events need to be notified?* (March 2024); *Notify WorkSafe* page |
-| Keeping the site | Don't disturb the site until an inspector says so, except to help someone injured, remove someone who has died, make it safe, or as police or an inspector direct. | *What events need to be notified?* |
-| Records of notifiable events | Keep a record of each notifiable event for at least five years from when WorkSafe was told. | *What events need to be notified?*; *Notifiable events for adventure activities* |
+| Keeping the site | Don't disturb the site until an inspector says so, except to help someone injured, remove someone who has died, make it safe (or stop another notifiable event), by or as police direct, or with an inspector's permission. | *What events need to be notified?* (Health and Safety at Work Act 2015, s 55) |
+| Records of notifiable events | Keep a record of each notifiable event for at least five years from when WorkSafe was told. | *What events need to be notified?*; Health and Safety at Work Act 2015, s 57 |
 | Hazard register | "The most basic document every farm needs is a hazard register", which can be "just a book, spreadsheet or other document"; a farm map showing hazards, no-go zones and safe routes is good practice. | *Managing health and safety: a guide for farmers* (not updated for the 2015 Act) |
 | Accident register | Record accidents and serious harm in an accident register. | Same guide |
 | Training | An induction covering hazards and safety procedures; keep training records and which jobs each person can and can't do; new workers supervised until they can work safely. | Same guide |
 | Contractors | Farmer and contractor work together on overlapping duties; a pre-start talk; tell them about the risks (a marked-up farm map helps), farm rules and emergency procedures; agree check-in and check-out; a backup plan where there's no phone coverage. | *Contractors on farms* fact sheet (October 2016) |
-| Hazardous substances | Any quantity means an inventory: each substance's name and UN number, the most likely to be on site, where it is, storage rules, a current safety data sheet (or its key points), any hazardous waste. Readily accessible to emergency services. Safety data sheets more than five years old should be replaced; staff must find them easily and quickly. | *Inventory* page (2017); *Working safely with chemicals and fuels on farms* (2017) |
+| Hazardous substances | Any quantity means an inventory: each substance's name and UN number, the most likely to be on site, where it is, storage rules, a current safety data sheet (or its key points), any hazardous waste. Readily accessible to emergency services. A new safety data sheet is needed when the substance is supplied again after five years, or when its sheet has changed (not "replace sheets older than five years"); staff must find them easily and quickly. | *Inventory* page (2017); *Working safely with chemicals and fuels on farms* (2017); WorkSafe, read 28 October 2026 |
 | Paperwork | A good system is practical and used every day; the real test is how well everyone on the farm understands the risks. A record of notifiable incidents is required. | *Health and safety on farms: your questions* (2017) |
 
 ## How the records work (decisions 930-934)
@@ -76,7 +77,13 @@ its full history, as a zip:
   their hashes and dates;
 - `verify.mjs`: checks all of it on any computer with Node.js
   (`node verify.mjs`), with no Tohyee needed;
-- `README.txt`: what's there and what it can and can't prove.
+- `README.txt`: what's there and what it can and can't prove, and that
+  records of notifiable events must be kept for at least five years from
+  when WorkSafe was told (s 57).
+
+A report that may be a notifiable event ends with its keeping period in
+`pack.pdf`: "Keep this record until at least {date}" once WorkSafe was told,
+otherwise five years from when WorkSafe is told (decision 963).
 
 Restricted details are withheld unless the person may see them: their hash
 stays in the chain, so the rest still checks.
@@ -127,11 +134,17 @@ stays in the chain, so the rest still checks.
   serious injury or illness from WorkSafe's list; someone put in serious,
   immediate danger by something unplanned or out of control. Any yes shows
   a prompt: phone WorkSafe straight away for a death (111 first in an
-  emergency), otherwise Notify WorkSafe online; leave the site as it is
-  except to help someone, make it safe, or as police or an inspector say.
+  emergency), otherwise Notify WorkSafe online; leave the site as it is,
+  with WorkSafe's exceptions listed (help someone who's hurt, remove
+  someone who has died, make the site safe, the police or as they direct,
+  WorkSafe's permission); and keep the record at least five years from when
+  WorkSafe is told. A link to **WorkSafe's current guide** sits beside the
+  questions so the wording can be checked against it (decision 964).
   **Tohyee never notifies WorkSafe** (or anyone) itself; the report shows
   "May need notifying" until someone records **Record telling WorkSafe**
-  (date, phone or online, WorkSafe's reference).
+  (date, phone or online, WorkSafe's reference). Once recorded, the report
+  shows "Keep this record until at least {five years after}" (s 57;
+  decision 963).
 - **Saved on this phone first.** A report is kept in the phone's browser,
   then sent with its own id. With no connection it stays under **Waiting
   to send** ("Saved on this phone, not yet recorded. Nobody has been told
@@ -170,7 +183,11 @@ stays in the chain, so the rest still checks.
   - on their own login (a worker on their own phone),
   - **recorded for someone** without a login by a bookkeeper or above,
     shown as "recorded for them (not their own signature)", or
-  - through the farm's **sign-in link** (name as typed).
+  - through the farm's **sign-in link** (name as typed), shown everywhere
+    as **self-declared, no login**: in the lists, the WorkSafe pack and
+    Today (decision 965). Fine for visitors; the sign-offs list and the
+    sign-in link card suggest inviting regular contractors as Farm staff so
+    they sign on their own login.
   Every sign-off page says signing shows someone was told; it doesn't show
   they can do a job safely (William: "Do not equate a completed induction
   with demonstrated competence").
@@ -198,6 +215,16 @@ stays in the chain, so the rest still checks.
   signal (signing in then needs a connection). Anyone holding the link can
   read the farm's hazards and emergency details: that's its purpose, and
   why it can be turned off.
+- **The gate page's privacy notice** (decision 966), using the
+  organisation's name and postal address from its settings: what's
+  collected (name, company, phone, what for, sign-in and sign-out times);
+  why (health and safety, and emergencies); who sees it (the organisation
+  and whoever keeps its safety records; WorkSafe, police or emergency
+  services if they need it); company, phone and purpose are optional, and
+  someone who won't give their name doesn't sign in there but talks to the
+  farm; they can ask to see and correct it (a correction is added, the
+  earlier version stays); safety records aren't deleted; and how to contact
+  the organisation (its address, or the farm's contacts on the page).
 
 ## Equipment, training and chemicals (decisions 953-957)
 
@@ -229,9 +256,11 @@ stays in the chain, so the rest still checks.
   inventory): name, UN number, the most likely on site (a decimal, with its
   unit), where it's kept, storage, hazards, whether an approved handler is
   needed, hazardous waste, and the safety data sheet (a PDF) with its date.
-  A missing sheet, or one more than five years old, says **Safety data
-  sheet needed** or **over 5 years old** (WorkSafe's farm chemicals
-  guidance). **Print** for a paper copy; removed chemicals stay, marked.
+  A missing sheet says **Safety data sheet needed**. One over five years
+  old, or undated, says **ask for the current one when it's next
+  supplied**: WorkSafe's rule is a new sheet when the substance is supplied
+  again after five years, or when the sheet has changed, not "replace
+  sheets older than five years" (decision 967). **Print** for a paper copy; removed chemicals stay, marked.
 
 ## The weekly copy off the farm (decisions 958-959)
 
@@ -260,7 +289,10 @@ hourly check tries again. Copies sent can't be changed or deleted.
 - **Today**: a Safety card with your open actions, overdue actions and
   actions to check (for those who keep the registers), machines out of use
   or not checked today, inductions to sign (or sign again), training to
-  renew and hazard reviews due, and the farm's high and no-go hazards.
+  renew and hazard reviews due, the farm's high and no-go hazards, and (for
+  those who keep the registers) contractors on site through the sign-in
+  link, marked **Self-declared, no login**, with the suggestion to invite
+  regular ones as Farm staff.
 - **Farm calendar**: **Safety due** for the next 30 days (actions due,
   training expiring, hazard reviews).
 - **Farm staff** (#447's role) on their assigned farms only: read Safety;
@@ -442,6 +474,26 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
   quad out of use, and an action given to him; the calendar's 2099-01-05
   action shows for him, and the runoff is "not found".
 
+- **FS45 Keeping period** (`tests/unit/safety-chain.test.ts`, the pack
+  test). WorkSafe told on 20 October 2026: keep until at least 20 October
+  2031; told on 29 February 2028: 1 March 2033. Before it's told, the
+  prompt says five years from when WorkSafe is told. The prompt lists
+  WorkSafe's five exceptions for disturbing the site. The pack's README
+  gives the s 57 rule.
+- **FS46 Self-declared, no login.** Rawiri's sign-off through the link is
+  labelled "self-declared, no login" in the lists and the pack ("Signed"),
+  and while he's on site the owner's Today lists him (Spray Co) that way.
+- **FS47 Privacy notice.** For "Kōwhai Farms Ltd" at "12 Test Road, RD 1,
+  Madeuptown", the notice covers what's collected, why, who sees it, not
+  giving details, seeing and correcting them, how long they're kept, and
+  contact ("Kōwhai Farms Ltd, 12 Test Road, RD 1, Madeuptown."); with no
+  address it points to the farm's contacts on the page. The gate page's
+  details include the organisation's name and address.
+- **FS48 Safety data sheets.** Diesel (2024 sheet): fine. Glyphosate (no
+  sheet): needed. Petrol (a sheet dated 2018): not needed, but "ask for the
+  current one when it's next supplied". Exactly five years old is fine; a
+  day more, or undated, is the prompt.
+
 ## Not done yet
 
 Safety drafts still use their own phone store, not #447's (same rules). The weekly copy's sending through
@@ -456,7 +508,31 @@ person, and photos kept in drafts while offline.
 
 ## Open questions for Jess
 
-Wording or rules that touch the law, *not yet reviewed by Jess*:
+**Answered** in [the 28 October 2026 comment on #446](https://github.com/Willy-nz/Tohyee/issues/446#issuecomment-6451823108) (Claude,
+delegated by Jess; checked against WorkSafe's and the Privacy
+Commissioner's pages; not legal advice). Decisions 963-968:
+
+1. Emergency card: kept (111 first, then WorkSafe 0800 030 040, "as soon as
+   possible"), now also "for a death, phone WorkSafe straight away".
+2. Low/medium/high with no-go as its own kind: kept.
+3. Keeping period: shown (five years from when WorkSafe was told, s 57;
+   decision 963).
+4. The pack's README sentence: kept.
+5. Restricted details owners-only by default: kept.
+6. The questions and prompt: kept, with a link to WorkSafe's current guide
+   and the site exceptions listed (decision 964).
+7. Minor/moderate/serious, with "notifiable" a separate yes/no: kept.
+8. The statement and "doesn't show they can do a job safely": kept.
+   Gate-link sign-offs are labelled "self-declared, no login", with the
+   suggestion to invite regular contractors as Farm staff (decision 965).
+9. The gate page has a short privacy notice (decision 966).
+10. "Out of use is a record, not a lock": kept. The safety data sheet line
+    follows WorkSafe's rule (decision 967).
+11. Weekly copy, "Send a copy now" and the wording: kept.
+12. Farm staff don't see injury details they entered: kept; the injured
+    person can ask the owner for their own record (Privacy Act).
+
+The questions as they were:
 
 1. The notifiable-event wording on the emergency card ("may need to be told
    to WorkSafe as soon as possible", linking to WorkSafe's page) and the

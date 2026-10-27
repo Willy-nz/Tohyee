@@ -317,6 +317,8 @@ describeWithDatabase("farm safety WorkSafe pack", () => {
     expect(entries.length).toBe(3);
     expect(entries.every((entry) => entry.body !== null)).toBe(true);
     expect(files.get("pack.pdf")!.subarray(0, 5).toString()).toBe("%PDF-");
+    // The keeping period for notifiable-event records (FS45, decision 963).
+    expect(files.get("README.txt")!.toString()).toContain("at least five years from when WorkSafe was told (Health and Safety at Work Act 2015, s 57)");
     const result = runVerify(files);
     expect(result.output).toContain("Everything in this pack checks out.");
     expect(result.ok).toBe(true);

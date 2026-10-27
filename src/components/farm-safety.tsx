@@ -287,7 +287,7 @@ function EmergencyCard({ organisationId, farm, overview, loadError, onSaved }: {
         </p>
       ) : null}
       <p className={ui.muted} style={{ marginBottom: 0 }}>
-        Someone seriously hurt or killed at work, or a serious near miss, may need to be told to WorkSafe as soon as possible.{" "}
+        Someone seriously hurt or killed at work, or a serious near miss, may need to be told to WorkSafe as soon as possible. For a death, phone WorkSafe straight away (111 first in an emergency).{" "}
         <a href={WORKSAFE_NOTIFY_URL} target="_blank" rel="noreferrer">
           What WorkSafe needs to be told
         </a>

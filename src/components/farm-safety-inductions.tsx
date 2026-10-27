@@ -9,7 +9,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { Farm } from "@/lib/farming/paddocks";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { InductionToRead, InductionView, SignoffView, SiteLink } from "@/lib/safety/inductions";
-import { type Audience, AUDIENCE_LABELS, AUDIENCES, type CurrentRecord, HAZARD_LEVEL_LABELS, NOT_COMPETENCE, SIGN_STATEMENT, SIGNED_HOW_LABELS, type VisitData } from "@/lib/safety/shared";
+import { type Audience, AUDIENCE_LABELS, AUDIENCES, type CurrentRecord, HAZARD_LEVEL_LABELS, INVITE_CONTRACTORS, NOT_COMPETENCE, SELF_DECLARED, SIGN_STATEMENT, SIGNED_HOW_LABELS, type VisitData } from "@/lib/safety/shared";
 
 /*
  * Inductions, sign-offs, signing in on site and the farm's sign-in link,
@@ -124,6 +124,7 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
         {data.onSite.here.map((visit) => (
           <li key={visit.recordId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
             <strong>{whoText(visit.data.person)}</strong> <Badge>{AUDIENCE_LABELS[visit.data.audience].replace(/s$/, "")}</Badge>
+            {visit.data.signedHow === "link" ? <> <Badge>{SELF_DECLARED}</Badge></> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
               Signed in {formatDateTime(visit.firstEnteredAt)}
               {visit.data.purpose ? ` · ${visit.data.purpose}` : ""} · {SIGNED_HOW_LABELS[visit.data.signedHow]}
@@ -222,6 +223,11 @@ function InductionsCard({ organisationId, farm, data, onChanged }: { organisatio
           </li>
         ))}
       </ul>
+      {data.canRecord && data.signoffs.some((signoff) => signoff.data.signedHow === "link" && signoff.data.audience === "contractor") ? (
+        <p className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
+          Contractors who signed through the sign-in link are {SELF_DECLARED.toLowerCase()}: their name is as they typed it. {INVITE_CONTRACTORS}
+        </p>
+      ) : null}
       <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "14px 0 4px" }}>Who has signed {needAgain.length ? <Badge tone="amber">{`${needAgain.length} to sign again`}</Badge> : null}</h3>
       {!data.signoffs.length ? <p className={ui.muted}>Nobody yet.</p> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -230,6 +236,7 @@ function InductionsCard({ organisationId, farm, data, onChanged }: { organisatio
           return (
             <li key={signoff.recordId} style={{ padding: "4px 0" }}>
               <strong>{whoText(signoff.data.person)}</strong> {signoff.current ? <Badge tone="green">Up to date</Badge> : <Badge tone="amber">Sign again</Badge>}
+              {signoff.data.signedHow === "link" ? <> <Badge>{SELF_DECLARED}</Badge></> : null}
               <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
                 {induction?.data.title ?? "Induction"} version {signoff.data.inductionVersion}, {formatDateTime(signoff.enteredAt)}, {SIGNED_HOW_LABELS[signoff.data.signedHow]}
                 {signoff.data.signedHow === "recorded" ? ` by ${signoff.enteredByName || signoff.enteredByEmail}` : ""}
@@ -429,7 +436,7 @@ function SiteLinkCard({ organisationId, farm, links, onChanged }: { organisation
   return (
     <Card
       title="Sign-in link for visitors and contractors"
-      description="A QR code for the gate or the shed. Without a Tohyee login, people see this farm's emergency details, hazards and visitor induction, then sign it and sign in. They never see who else is on site, or any report. Anyone with the link can see those details, so turn it off if it gets out."
+      description={`A QR code for the gate or the shed. Without a Tohyee login, people see this farm's emergency details, hazards and visitor induction, then sign it and sign in. They never see who else is on site, or any report. Anyone with the link can see those details, so turn it off if it gets out. Sign-offs through the link are self-declared, with no login: fine for visitors. ${INVITE_CONTRACTORS}`}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {made ? (

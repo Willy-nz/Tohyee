@@ -8,6 +8,7 @@ import type { Farm, FarmingSettings } from "@/lib/farming/paddocks";
 import { addDays } from "@/lib/farming/farm-words";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import type { safetyToday } from "@/lib/safety/today";
+import { INVITE_CONTRACTORS, SELF_DECLARED } from "@/lib/safety/shared";
 
 /*
  * The Safety tab and Today's safety card in the farmer's workspace (#447,
@@ -36,6 +37,7 @@ export function FarmSafetyToday({ organisationId, farm }: { organisationId: stri
     ...today.outOfUse.map((item) => ({ key: `u${item.id}`, text: <><Badge tone="red">Out of use</Badge> {item.name}: don&apos;t use it</> })),
     ...today.toSign.map((induction) => ({ key: `s${induction.id}`, text: <><Badge tone="amber">Sign</Badge> {induction.title}: {induction.reason}</> })),
     ...today.training.map((record) => ({ key: `t${record.id}`, text: <><Badge tone={record.state === "expired" ? "red" : "amber"}>{record.state === "expired" ? "Expired" : "Renew"}</Badge> {record.who}: {record.what}{record.expiresOn ? ` (${formatDate(record.expiresOn)})` : ""}</> })),
+    ...today.selfDeclaredOnSite.map((visit) => ({ key: `v${visit.id}`, text: <><Badge>{SELF_DECLARED}</Badge> {visit.name}{visit.company ? ` (${visit.company})` : ""} is on site, signed in through the sign-in link</> })),
     ...today.reviewsDue.map((hazard) => ({ key: `r${hazard.id}`, text: <><Badge tone="amber">Review</Badge> {hazard.title}</> })),
   ];
   return (
@@ -49,6 +51,7 @@ export function FarmSafetyToday({ organisationId, farm }: { organisationId: stri
       ) : (
         <p>Nothing needs doing for safety today.</p>
       )}
+      {today.selfDeclaredOnSite.length ? <p className={ui.muted}>{INVITE_CONTRACTORS}</p> : null}
       {today.notCheckedToday.length ? <p className={ui.muted}>Not checked today: {today.notCheckedToday.map((item) => item.name).join(", ")}. Do a pre-start check before using them.</p> : null}
       <p>
         <Link href="/operations/farm/safety">Open Safety</Link> · <Link href="/operations/farm/log?record=hazard">Report something</Link>

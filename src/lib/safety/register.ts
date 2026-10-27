@@ -5,7 +5,7 @@ import { canSeeFarm } from "@/lib/farming/access";
 import { dec, isDecimalString, isNegative, isZero, toPlainString } from "@/lib/money/decimal";
 import { fileRefs } from "@/lib/safety/files";
 import { appendEntry, currentRecord, currentRecords, requireSafetyRecorder } from "@/lib/safety/records";
-import { type ChemicalData, type CurrentRecord, type SafetyChange, type SafetyPerson, sdsOutOfDate, type TrainingData, trainingState, type TrainingState } from "@/lib/safety/shared";
+import { type ChemicalData, type CurrentRecord, type SafetyChange, type SafetyPerson, type SdsState, sdsState, type TrainingData, trainingState, type TrainingState } from "@/lib/safety/shared";
 import { optionalString, requireId, requireString } from "@/lib/validation";
 
 /*
@@ -18,8 +18,9 @@ import { optionalString, requireId, requireString } from "@/lib/validation";
  *   their own record on their own login.
  * - Chemicals (WorkSafe's hazardous substances inventory) are per farm:
  *   name, UN number, the most likely on site, where, storage, hazards, the
- *   safety data sheet (a PDF) and its date; one more than five years old,
- *   or missing, says to get a new one.
+ *   safety data sheet (a PDF) and its date; a missing one is needed, and one
+ *   over five years old (or undated) is a prompt to get the current one when
+ *   it's next supplied (WorkSafe's rule, decision 967).
  */
 
 function personOf(tx: OrgTx, input: unknown, members: ReadonlyMap<string, string>): SafetyPerson {
@@ -153,7 +154,7 @@ export async function changeChemical(tx: OrgTx, recordId: unknown, input: Record
   return appendEntry<ChemicalData>(tx, { kind: "chemical", recordId: current.recordId, expectedVersion: input.expectedVersion, change, farmId: current.farmId, data: { ...data }, operationId: input.operationId });
 }
 
-export type ChemicalView = CurrentRecord<ChemicalData> & { sdsNeeded: boolean };
+export type ChemicalView = CurrentRecord<ChemicalData> & { sdsNeeded: boolean; sdsStatus: SdsState };
 
 /** A farm's hazardous substances inventory (removed ones last). */
 export async function listChemicals(tx: OrgTx, farmIdInput: unknown): Promise<ChemicalView[]> {
@@ -163,6 +164,9 @@ export async function listChemicals(tx: OrgTx, farmIdInput: unknown): Promise<Ch
   const chemicals = await currentRecords<ChemicalData>(tx, "chemical", { farmId });
   return chemicals
     .filter((chemical) => chemical.farmId === farmId)
-    .map((chemical) => ({ ...chemical, sdsNeeded: !chemical.data.removed && sdsOutOfDate(chemical.data, today) }))
+    .map((chemical) => {
+      const sdsStatus = sdsState(chemical.data, today);
+      return { ...chemical, sdsStatus, sdsNeeded: !chemical.data.removed && sdsStatus === "missing" };
+    })
     .sort((a, b) => Number(a.data.removed) - Number(b.data.removed) || a.data.name.localeCompare(b.data.name));
 }

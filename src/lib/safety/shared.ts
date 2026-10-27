@@ -171,6 +171,48 @@ export const FIXED_NUMBERS = [
 
 export const WORKSAFE_NOTIFY_URL = "https://worksafe.govt.nz/notify-worksafe/";
 
+/**
+ * WorkSafe's current quick guide "What events need to be notified?" (March
+ * 2024), linked beside the questions so their wording can be checked
+ * against it (decision 964).
+ */
+export const WORKSAFE_NOTIFIABLE_GUIDE_URL = "https://registers.worksafe.govt.nz/dmsdocument/20210-what-events-need-to-be-notified/latest";
+
+/**
+ * When the site of a notifiable event may be disturbed before WorkSafe says
+ * so: WorkSafe's quick guide (Health and Safety at Work Act 2015, s 55;
+ * decision 964).
+ */
+export const SITE_EXCEPTIONS = [
+  "to help someone who's hurt",
+  "to remove someone who has died",
+  "to make the site safe, or stop something else serious happening",
+  "by the police, or as they direct",
+  "with WorkSafe's (an inspector's) permission",
+] as const;
+
+/**
+ * How long a record of a notifiable event must be kept: at least five years
+ * from when WorkSafe was told (Health and Safety at Work Act 2015, s 57;
+ * decision 963). Tohyee keeps everything anyway: nothing is deleted.
+ */
+export const NOTIFIABLE_KEEP_YEARS = 5;
+export const NOTIFIABLE_KEEP_RULE =
+  "Records of notifiable events must be kept for at least five years from when WorkSafe was told (Health and Safety at Work Act 2015, s 57). Tohyee doesn't delete safety records.";
+
+/** The day five years after WorkSafe was told (29 February moves to 1 March, so it's never short). */
+export function notifiableKeepUntil(toldOn: string): string {
+  const [year, month, day] = toldOn.slice(0, 10).split("-").map(Number);
+  const target = new Date(Date.UTC(year + NOTIFIABLE_KEEP_YEARS, month - 1, day));
+  return target.toISOString().slice(0, 10);
+}
+
+/** The keeping period shown on a report that may be notifiable, and in the WorkSafe pack (decision 963). */
+export function notifiableKeepText(notice: WorkSafeNotice | null, formatDay: (isoDate: string) => string = (isoDate) => isoDate): string {
+  if (!notice) return "If this is a notifiable event, keep its record for at least five years from when WorkSafe is told (Health and Safety at Work Act 2015, s 57).";
+  return `Keep this record until at least ${formatDay(notifiableKeepUntil(notice.on))}: five years from when WorkSafe was told (Health and Safety at Work Act 2015, s 57).`;
+}
+
 /** Restricted access for the overview: what the person may do. */
 export type SafetyAccess = { canRecord: boolean; canReport: boolean; farmStaff: boolean; canSeeRestricted: boolean; isOwner: boolean };
 
@@ -282,6 +324,7 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
   if (key === "level" && typeof value === "string") return HAZARD_LEVEL_LABELS[value as HazardLevel] ?? value;
   if (key === "type" && typeof value === "string") return REPORT_TYPE_LABELS[value as ReportType] ?? value;
   if (key === "severity" && typeof value === "string") return SEVERITY_LABELS[value as Severity] ?? value;
+  if (key === "signedHow" && typeof value === "string") return SIGNED_HOW_LABELS[value as SignedHow] ?? value;
   if (key === "notifiable" && value && typeof value === "object") {
     const yes = NOTIFIABLE_QUESTIONS.filter((question) => (value as Record<string, unknown>)[question.key] === true).map((question) => question.key);
     return yes.length ? `Yes: ${yes.join(", ")}` : null;
@@ -449,13 +492,41 @@ export type InductionData = {
 
 /** Who signed: a member signing for themselves, a member recording for someone else, or someone through the farm's sign-in link. */
 export type SignedHow = "self" | "recorded" | "link";
-export const SIGNED_HOW_LABELS: Record<SignedHow, string> = { self: "signed on their own login", recorded: "recorded for them (not their own signature)", link: "signed through the farm's sign-in link (name as typed)" };
+export const SIGNED_HOW_LABELS: Record<SignedHow, string> = {
+  self: "signed on their own login",
+  recorded: "recorded for them (not their own signature)",
+  link: "self-declared, no login (the farm's sign-in link, name as typed)",
+};
+/** The short label for a sign-off or sign-in through the gate link (decision 965). */
+export const SELF_DECLARED = "Self-declared, no login";
+/** Shown with gate-link sign-offs: contractors who come often are better as Farm staff (decision 965). */
+export const INVITE_CONTRACTORS = "Contractors who come regularly can be invited as Farm staff, so they sign on their own login.";
 
 export type SafetyPerson = { userId: string | null; name: string; company: string | null; phone: string | null };
 
 /** The words someone agrees to when they sign (decision 950). Not yet reviewed by Jess. */
 export const SIGN_STATEMENT = "I have read this induction, the farm's hazards and its emergency details, and I'll ask if anything isn't clear.";
 export const NOT_COMPETENCE = "Signing shows someone was told about the farm and its hazards. It doesn't show they can do a job safely: that's training and supervision.";
+
+/**
+ * The gate page's privacy notice (decision 966), covering what the Privacy
+ * Commissioner's guidance says to tell people: that it's being collected,
+ * why, who sees it, whether they can decline and what happens then, that
+ * they can see and correct it, how long it's kept, and how to contact the
+ * farm. The name and address are the organisation's, from its settings.
+ */
+export function sitePrivacyNotice(organisation: { name: string; postalAddress: string | null }): Array<{ label: string; text: string }> {
+  const address = organisation.postalAddress?.replace(/\s*\n\s*/g, ", ").trim();
+  return [
+    { label: "What's collected", text: `${organisation.name} collects your name, company, phone, what you're here for, and when you sign in and out. It's kept in Tohyee, the farm's records system.` },
+    { label: "Why", text: "For health and safety on the farm: to know who's on site in an emergency, and to show you were told about the farm's hazards." },
+    { label: "Who sees it", text: `${organisation.name} and the people who keep its safety records. It may be given to WorkSafe, the police or emergency services if they need it.` },
+    { label: "If you'd rather not", text: "Company, phone and what you're here for are optional. Your name is needed to sign in here; if you don't want to give it, don't sign in here: talk to the farm instead." },
+    { label: "Seeing and correcting it", text: `You can ask ${organisation.name} to see your details and to correct them. A correction is added to the record; the earlier version stays in the history.` },
+    { label: "How long it's kept", text: "Safety records are kept and not deleted, so they can be shown later (for example to WorkSafe)." },
+    { label: "Contact", text: address ? `${organisation.name}, ${address}.` : `${organisation.name}: use the farm's contacts on this page.` },
+  ];
+}
 
 export type SignoffData = {
   inductionId: string;
@@ -575,9 +646,20 @@ export type ChemicalData = {
   why?: string | null;
 };
 
-/** WorkSafe's farm chemicals guidance: a safety data sheet more than five years old should be replaced (decision 957). */
-export function sdsOutOfDate(data: Pick<ChemicalData, "sdsDate" | "sds">, today: string): boolean {
-  if (!data.sds || !data.sdsDate) return true;
+/**
+ * A chemical's safety data sheet (decision 967, replacing 957's "replace
+ * sheets more than five years old"): WorkSafe says a new sheet is needed
+ * when the substance is supplied again after five years, or when its sheet
+ * has changed. So a missing sheet is needed; one over five years old (or
+ * undated) is a prompt to get the current one when it's next supplied, not
+ * a sheet that has stopped counting.
+ */
+export type SdsState = "missing" | "check" | "ok";
+export function sdsState(data: Pick<ChemicalData, "sdsDate" | "sds">, today: string): SdsState {
+  if (!data.sds) return "missing";
+  if (!data.sdsDate) return "check";
   const fiveYearsAgo = `${Number(today.slice(0, 4)) - 5}${today.slice(4)}`;
-  return data.sdsDate < fiveYearsAgo;
+  return data.sdsDate < fiveYearsAgo ? "check" : "ok";
 }
+export const SDS_RULE = "WorkSafe: a new safety data sheet is needed when the substance is supplied again after five years, or when its sheet has changed.";
+export const SDS_CHECK = "Sheet over 5 years old or undated: ask for the current one when it's next supplied";
