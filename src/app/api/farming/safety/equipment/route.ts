@@ -13,6 +13,8 @@ export const GET = route(async (request) => {
       ...(await listEquipment(tx, params.get("farmId"))),
       canRecord,
       canReport: canReportSafety(tx),
+      // Naming who can release is for owners and admins in person (decision 969).
+      canChooseReleasers: canRecord && !tx.actor.via && (tx.actor.role === "owner" || tx.actor.role === "admin"),
       people: canRecord ? await safetyPeople(tx.organisationId) : [],
       fixedAssets: assets.rows.map((row) => ({ id: row.id, name: `${row.asset_number} ${row.name}` })),
     };

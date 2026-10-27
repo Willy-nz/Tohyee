@@ -15,6 +15,8 @@
  *   the server refuses it (another person's change, a retired paddock), it
  *   "Needs attention" and is never sent again by itself or written over.
  * - No signal (or the server down) leaves drafts saved, to try again later.
+ * - If the phone's storage refuses a draft (full or blocked), it isn't shown
+ *   as saved on the phone: see `draftStatusLabel` (#463).
  */
 
 export type DraftKind = "reading" | "grazing_in" | "grazing_out" | "feed";
@@ -25,6 +27,11 @@ export const DRAFT_STATUS_LABELS: Record<DraftStatus, string> = {
   synced: "Synced",
   attention: "Needs attention",
 };
+
+/** The label for a draft: "Saved on this phone" only when the phone's storage really has it (#463, decision 972). */
+export function draftStatusLabel(status: DraftStatus, stored: boolean): string {
+  return status === "saved" && !stored ? "Not saved on this phone" : DRAFT_STATUS_LABELS[status];
+}
 
 export type Draft = {
   operationId: string;
@@ -180,24 +187,40 @@ export function sendOutcome(status: number | null, message: string): SendResult 
   return { outcome: "unreachable" };
 }
 
+/** Where `syncDrafts` reads and writes the phone's store: always the latest copy, never a snapshot. */
+export type DraftAccess = { read: () => DraftStore; write: (store: DraftStore) => void };
+
 /**
  * Sends the drafts still on the phone, oldest first, for one farm (or all
  * with null), one at a time. Stops at the first that can't reach the
- * server, so they're tried again in order later. `onChange` gets the store
- * after each draft, so the page can save it as it goes.
+ * server, so they're tried again in order later.
+ *
+ * It reads the latest store before each draft and changes only the draft
+ * it's sending, by operation id (#462, decision 971). So a draft added,
+ * changed or let go while a send is waiting is kept as it is now, never put
+ * back as it was when the sync started. A draft is marked as tried before
+ * it's sent and what's sent is its value at that moment; once tried, it
+ * isn't changed in place (`saveWalkReading` makes a new draft instead), so
+ * the acknowledgement always matches what was sent.
+ *
+ * Given a plain store it works on a copy and returns the result.
  */
-export async function syncDrafts(store: DraftStore, farmId: string | null, send: (draft: Draft) => Promise<SendResult>, onChange: (store: DraftStore) => void = () => undefined): Promise<DraftStore> {
-  let current = store;
-  const queue = store.drafts.filter((draft) => draft.status === "saved" && (farmId === null || draft.farmId === farmId));
-  for (const draft of queue) {
-    current = update(current, draft.operationId, (entry) => ({ ...entry, attempts: entry.attempts + 1 }));
-    onChange(current);
-    const result = await send(draft);
-    if (result.outcome === "unreachable") return current;
-    current = update(current, draft.operationId, (entry) => (result.outcome === "done" ? { ...entry, status: "synced", error: null } : { ...entry, status: "attention", error: result.message }));
-    onChange(current);
+export async function syncDrafts(access: DraftStore | DraftAccess, farmId: string | null, send: (draft: Draft) => Promise<SendResult>): Promise<DraftStore> {
+  let held = "read" in access ? null : access;
+  const io: DraftAccess = "read" in access ? access : { read: () => held!, write: (next) => (held = next) };
+  const tried = new Set<string>();
+  for (;;) {
+    const latest = io.read();
+    const next = latest.drafts.find((draft) => draft.status === "saved" && !tried.has(draft.operationId) && (farmId === null || draft.farmId === farmId));
+    if (!next) return latest;
+    tried.add(next.operationId);
+    const attempt = { ...next, attempts: next.attempts + 1 };
+    io.write(update(latest, next.operationId, () => attempt));
+    const result = await send(attempt);
+    if (result.outcome === "unreachable") return io.read();
+    // Only this draft's status changes; everything else is as the store has it now.
+    io.write(update(io.read(), next.operationId, (entry) => (result.outcome === "done" ? { ...entry, status: "synced", error: null } : { ...entry, status: "attention", error: result.message })));
   }
-  return current;
 }
 
 /** A refused draft, checked by a person, can be let go. */

@@ -20,7 +20,7 @@ import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER
  */
 
 type Person = { userId: string; name: string; role: string };
-type EquipmentData = { equipment: EquipmentView[]; checklists: Array<CurrentRecord<ChecklistData>>; canRecord: boolean; canReport: boolean; people: Person[]; fixedAssets: Array<{ id: string; name: string }> };
+type EquipmentData = { equipment: EquipmentView[]; checklists: Array<CurrentRecord<ChecklistData>>; canRecord: boolean; canReport: boolean; canChooseReleasers: boolean; people: Person[]; fixedAssets: Array<{ id: string; name: string }> };
 
 function useRun() {
   const [busy, setBusy] = useState(false);
@@ -326,7 +326,7 @@ function EquipmentForm({ organisationId, farm, data, onDone, onCancel }: { organ
           </select>
         </Field>
       </div>
-      {data.people.some((person) => person.role !== "owner" && person.role !== "admin") ? (
+      {data.canChooseReleasers && data.people.some((person) => person.role !== "owner" && person.role !== "admin") ? (
         <fieldset style={{ border: 0, padding: 0, margin: "4px 0" }}>
           <legend className={ui.fieldLabel}>Can release it after a failed check (owners and admins always can)</legend>
           {data.people.filter((person) => person.role !== "owner" && person.role !== "admin").map((person) => (

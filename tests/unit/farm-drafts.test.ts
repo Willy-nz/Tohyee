@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDraft,
   type Draft,
+  dismissDraft,
   draftRequest,
   draftsFor,
   EMPTY_STORE,
@@ -38,6 +39,17 @@ const walk: Walk = {
   finishedAt: null,
 };
 
+const reading = (farmId: string, operationId: string): Omit<Draft, "status" | "error" | "attempts"> => ({
+  operationId,
+  farmId,
+  farmName: farmId === "1" ? "Home farm" : "Runoff",
+  kind: "reading",
+  label: "x",
+  payload: { paddockId: "11", measuredOn: "2026-10-27", cover: 2400, method: "plate_meter" },
+  createdAt: NOW,
+  walkId: null,
+  paddockId: "11",
+});
 describe("operation ids", () => {
   it("are version 4 UUIDs from random bytes", () => {
     const id = newOperationId((bytes) => bytes.fill(0xff));
@@ -79,17 +91,7 @@ describe("a farm walk saved as it goes", () => {
 });
 
 describe("syncing", () => {
-  const reading = (farmId: string, operationId: string): Omit<Draft, "status" | "error" | "attempts"> => ({
-    operationId,
-    farmId,
-    farmName: farmId === "1" ? "Home farm" : "Runoff",
-    kind: "reading",
-    label: "x",
-    payload: { paddockId: "11", measuredOn: "2026-10-27", cover: 2400, method: "plate_meter" },
-    createdAt: NOW,
-    walkId: null,
-    paddockId: "11",
-  });
+
 
   it("sends each draft to its own farm with its operation id, so a replay finds the first", async () => {
     const store = addDraft(EMPTY_STORE, reading("1", "a0000000-0000-4000-8000-000000000001"));
@@ -154,5 +156,90 @@ describe("syncing", () => {
     store = addDraft(store, { ...reading("1", "a0000000-0000-4000-8000-000000000006"), createdAt: "2026-10-01T00:00:00.000Z" });
     store = { ...store, drafts: store.drafts.map((draft, index) => (index === 0 ? { ...draft, status: "synced" } : draft)) };
     expect(prune(store, NOW).drafts.map((draft) => draft.operationId)).toEqual(["a0000000-0000-4000-8000-000000000006"]);
+  });
+});
+
+describe("changes made while a send is waiting (#462, decision 971)", () => {
+  const twoWalk: Walk = { ...walk, walkId: "walk-2" };
+  const deferred = () => {
+    let resolve!: (value: { outcome: "done" }) => void;
+    const promise = new Promise<{ outcome: "done" }>((done) => (resolve = done));
+    return { promise, resolve: () => resolve({ outcome: "done" }) };
+  };
+  const holder = (initial: typeof EMPTY_STORE) => {
+    let store = initial;
+    return { read: () => store, write: (next: typeof EMPTY_STORE) => void (store = next), edit: (change: (current: typeof EMPTY_STORE) => typeof EMPTY_STORE) => void (store = change(store)) };
+  };
+  const tick = () => new Promise((done) => setTimeout(done, 0));
+
+  it("sends B as it is now (2,900), not as it was when the sync started (2,100)", async () => {
+    let store = startWalk(EMPTY_STORE, twoWalk);
+    store = saveWalkReading(store, twoWalk, twoWalk.order[0], 2000, nextId, NOW);
+    store = saveWalkReading(store, twoWalk, twoWalk.order[1], 2100, nextId, NOW);
+    const phone = holder(store);
+    const a = deferred();
+    const sent: Array<[string, unknown]> = [];
+    const running = syncDrafts(phone, null, async (draft) => {
+      sent.push([draft.paddockId!, draft.payload.cover]);
+      return draft.paddockId === "11" ? a.promise : { outcome: "done" };
+    });
+    await tick();
+    // A is waiting on the server; B hasn't been tried, so it's changed in place.
+    phone.edit((current) => saveWalkReading(current, twoWalk, twoWalk.order[1], 2900, nextId, NOW));
+    expect(walkReading(phone.read(), "walk-2", "12")).toMatchObject({ attempts: 0, payload: { cover: 2900 } });
+    a.resolve();
+    const after = await running;
+    expect(sent).toEqual([
+      ["11", 2000],
+      ["12", 2900],
+    ]);
+    expect(walkReading(after, "walk-2", "12")).toMatchObject({ status: "synced", payload: { cover: 2900 } });
+    expect(after.drafts).toHaveLength(2);
+  });
+
+  it("keeps a draft added and a draft let go while a send waits, and changes nothing it didn't send", async () => {
+    const refusedId = "b0000000-0000-4000-8000-000000000001";
+    let store = addDraft(EMPTY_STORE, { ...reading("1", refusedId) });
+    store = { ...store, drafts: store.drafts.map((draft) => ({ ...draft, status: "attention" as const, error: "Refused", attempts: 1 })) };
+    store = addDraft(store, reading("1", "b0000000-0000-4000-8000-000000000002"));
+    const phone = holder(store);
+    const a = deferred();
+    const sent: string[] = [];
+    const running = syncDrafts(phone, null, async (draft) => {
+      sent.push(draft.operationId);
+      return sent.length === 1 ? a.promise : { outcome: "done" };
+    });
+    await tick();
+    phone.edit((current) => dismissDraft(current, refusedId));
+    phone.edit((current) => addDraft(current, reading("1", "b0000000-0000-4000-8000-000000000003")));
+    a.resolve();
+    const after = await running;
+    // The let-go draft stays gone; the new one was sent in the same sync.
+    expect(after.drafts.map((draft) => [draft.operationId, draft.status])).toEqual([
+      ["b0000000-0000-4000-8000-000000000002", "synced"],
+      ["b0000000-0000-4000-8000-000000000003", "synced"],
+    ]);
+    expect(sent).toEqual(["b0000000-0000-4000-8000-000000000002", "b0000000-0000-4000-8000-000000000003"]);
+  });
+
+  it("once tried, a draft isn't changed in place: an edit while it's being sent is a new draft", async () => {
+    let store = startWalk(EMPTY_STORE, twoWalk);
+    store = saveWalkReading(store, twoWalk, twoWalk.order[0], 2000, nextId, NOW);
+    const phone = holder(store);
+    const a = deferred();
+    const sent: unknown[] = [];
+    const running = syncDrafts(phone, null, async (draft) => {
+      sent.push(draft.payload.cover);
+      return sent.length === 1 ? a.promise : { outcome: "done" };
+    });
+    await tick();
+    phone.edit((current) => saveWalkReading(current, twoWalk, twoWalk.order[0], 2200, nextId, NOW));
+    a.resolve();
+    const after = await running;
+    expect(sent).toEqual([2000, 2200]);
+    expect(after.drafts.map((draft) => [draft.payload.cover, draft.status])).toEqual([
+      [2000, "synced"],
+      [2200, "synced"],
+    ]);
   });
 });
