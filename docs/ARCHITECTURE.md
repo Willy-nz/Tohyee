@@ -1893,6 +1893,14 @@ run time.
   `/api/custom-fields` reads use `withCrm`, and contact changes from a sales
   role are limited to contact details (`src/lib/crm/sales-contacts.ts`).
   Teams are tenant tables `crm_teams` and `crm_team_members` (migration 0114).
+- **Farm staff** (decision 904, #447): `farm_worker` ranks below the sales
+  roles, so every route guarded by rank, including those that admit sales
+  roles, refuses it. The farm field-work routes use `withFarmWork`
+  (`src/lib/api/http.ts`, "read" or "record"), which admits farm staff,
+  viewers to read and bookkeepers to record; the farming services then keep
+  them to their assigned farms (decision 744). Farm app keys allow farm
+  staff every farm scope (`src/lib/farm-apps/scopes.ts`); AI keys need
+  viewer, so farm staff can't have one. Core migration 0023.
 - **Sharing** (decision 368): the `report_viewer` role ranks below viewer
   (`src/lib/auth/roles.ts`), so routes guarded at viewer refuse it. The
   dashboard routes accept it and filter through `analytics_dashboard_shares`

@@ -566,7 +566,38 @@ export function menuSections(group: MenuGroup): MenuSection[] {
   return sections;
 }
 
-type Access = { can(role: Role): boolean; modules: Modules | null };
+type Access = { can(role: Role): boolean; modules: Modules | null; farmWorker?: boolean };
+
+/**
+ * Farm staff (decision 904) have the field-work pages only: no books, no
+ * settings, nothing to make in "+ New".
+ */
+export const FARM_WORK_MENUS: Menu[] = [
+  {
+    label: "Farm",
+    module: "farming",
+    groups: [
+      {
+        heading: "Farm",
+        links: [
+          { href: "/operations/farming/pasture", label: "Pasture and feed" },
+          { href: "/operations/farming", label: "Farms and paddocks" },
+          { href: "/operations/farming/soil", label: "Soil tests" },
+          { href: "/operations/farming/calendar", label: "Farm calendar" },
+          { href: "/operations/farming/apps", label: "Farm apps" },
+        ],
+      },
+    ],
+  },
+];
+
+/** Where farm staff may go; anywhere else in Accounting sends them to the first. */
+export const FARM_WORK_PATHS = ["/operations/farming/pasture", "/operations/farming/soil", "/operations/farming/calendar", "/operations/farming/apps", "/operations/profile"];
+
+export function farmWorkAllowsPath(pathname: string): boolean {
+  if (pathname === "/operations/farming") return true;
+  return FARM_WORK_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
 
 function moduleOn(module: ModuleKey | undefined, modules: Modules | null): boolean {
   if (!module) return true;
@@ -588,6 +619,7 @@ function filterGroups(groups: MenuGroup[], access: Access): MenuGroup[] {
 export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Access): Menu[] {
   // MOD2: no Accounting menus while it's off.
   if (app === "accounting" && access.modules?.accounting === false) return [];
+  if (access.farmWorker) return app === "accounting" ? FARM_WORK_MENUS.filter((menu) => moduleOn(menu.module, access.modules)) : [];
   return (app === "crm" ? CRM_MENUS : app === "analytics" ? ANALYTICS_MENUS : MENUS)
     .filter((menu) => moduleOn(menu.module, access.modules) && (!menu.minRole || access.can(menu.minRole)))
     .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access) }))
@@ -598,13 +630,13 @@ export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Ac
 /** The All settings page's cards someone may see: their role and the organisation's modules decide (decision 580). */
 export function visibleSettings(access: Access): MenuGroup[] {
   // The page is an Accounting page, so it's not offered while Accounting is off (MOD2).
-  if (access.modules?.accounting === false) return [];
+  if (access.modules?.accounting === false || access.farmWorker) return [];
   return filterGroups(SETTINGS, access);
 }
 
 /** The "+ New" actions someone may start (bookkeepers and up, today). */
 export function visibleNewActions(access: Access): MenuGroup[] {
-  if (access.modules?.accounting === false) return [];
+  if (access.modules?.accounting === false || access.farmWorker) return [];
   return filterGroups(NEW_ACTIONS, access);
 }
 

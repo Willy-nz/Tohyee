@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { MemberFarms } from "@/components/member-farms";
 
 const ROLE_HELP: Record<Role, string> = {
+  farm_worker: "Records field work (cover readings, grazings, feed, soil samples) on the farms you choose for them, and sees their paddocks and farm calendar. Nothing of the books.",
   sales_rep: "Uses the CRM only: every company and person, and their own deals, tasks and forecast. Nothing of the books.",
   sales_manager: "Uses the CRM only, like a sales rep, and also sees the deals, tasks and forecasts of the sales teams they manage.",
   report_viewer: "Sees only the Analytics dashboards shared with them (for example a client). Nothing of the books.",

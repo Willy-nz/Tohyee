@@ -2795,6 +2795,15 @@ that something happened.
   "Changes" for fertiliser plans; internal codes are gone from farm pages.
   The Farming API's readings and the AI's farm lists use the same pages.
 
+- **Farm staff** (#447, decisions 904-906): a **Farm staff** role under
+  People and roles records field work (cover readings, grazings and days
+  out, supplements fed, soil samples) and reads paddocks, pasture, soil and
+  the farm calendar, on the farms an owner or admin chooses for them, and
+  nothing of the books: journals, contacts, reports, exports, search, money
+  on farm pages, the notebook and the AI are all refused on the server. Their
+  top bar has the Farm menu's field pages only. Farm app keys work for them,
+  on their farms. Removing a record stays with bookkeepers and up.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

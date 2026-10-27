@@ -8795,4 +8795,33 @@ MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
      version numbers, and no internal example codes (PF3) on farm pages.
      Shorter notes replace "Tohyee doesn't judge…" sentences; decisions 516
      and 559 still hold (nothing is judged high or low).
+904. **A farm staff role** (27 October 2026, the comment's third change and
+     #447 question 5, unanswered; not yet reviewed by Jess). People who
+     record field work don't need to be bookkeepers. A new organisation role,
+     **Farm staff** (`farm_worker`, core migration 0023), like LIC MINDA's
+     and AgriWebb's staff logins: it reads farms, paddocks, pasture, grazings,
+     feed, soil and the farm calendar, and records cover readings, grazings
+     (and their day out), supplements fed and soil samples, on the farms an
+     owner or admin chooses for them (decision 744; none until chosen when
+     there are two or more farms). It ranks below every other role, so
+     everything else (the books, reports, exports, search, settings, farm
+     Home and benchmarks with their money, fertiliser plans with their
+     costs, the notebook, AI keys) refuses it on the server, not just in
+     the menus. The field-work routes use `withFarmWork`, the same check for
+     screens, farm apps and anything else. A role rather than a flag on the
+     bookkeeper role, because a flag would leave the books open: moving money
+     cards down a page doesn't restrict financial access (William's comment).
+905. **What farm staff see** (27 October 2026; not yet reviewed by Jess). Their
+     top bar has only the Farm menu's field pages (Pasture and feed, Farms
+     and paddocks, Soil tests, Farm calendar, Farm apps), no "+ New", no
+     search across the books and no AI. Anywhere else sends them to Pasture
+     and feed. The calendar is read-only for them (no mailboxes, adding or
+     calendar link). Farm app keys may have every farm scope, and are kept to
+     their farms like the screens.
+906. **Removing a record stays with bookkeepers** (27 October 2026; not yet
+     reviewed by Jess). Farm staff record; a reading, grazing, feed line or
+     sample recorded by mistake is removed by a bookkeeper or higher (it's
+     kept as removed, decision 559). AgriWebb lets staff edit their own
+     records; that can come later, once there's a rule for how long a record
+     stays theirs to change.
 

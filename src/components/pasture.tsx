@@ -7,6 +7,7 @@ import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { useCanRecordFarmWork } from "@/components/farm-selector";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Farm, Paddock } from "@/lib/farming/paddocks";
 import type { GrazingRecord, PastureReading, PastureSummary, ReadingImportPreview, Supplement } from "@/lib/farming/pasture";
@@ -76,6 +77,8 @@ export function PastureHome({ organisationId, farmId = null }: { organisationId:
 
 function FarmPasture({ organisationId, farm }: { organisationId: string; farm: Farm }) {
   const { can } = useWorkspace();
+  // Farm staff record field work too (decision 904); removing a record stays with bookkeepers.
+  const canRecord = useCanRecordFarmWork();
   const today = todayInBrowser();
   const [onDate, setOnDate] = useState(today);
   // Bumped after any change, so the histories start again from the newest.
@@ -179,10 +182,10 @@ function FarmPasture({ organisationId, farm }: { organisationId: string; farm: F
           </>
         ) : null}
       </Card>
-      {can("bookkeeper") ? <AddReading organisationId={organisationId} farmId={farm.id} paddocks={active} onAdded={reload} /> : null}
+      {canRecord ? <AddReading organisationId={organisationId} farmId={farm.id} paddocks={active} onAdded={reload} /> : null}
       {can("bookkeeper") ? <ImportReadings organisationId={organisationId} farm={farm} onImported={reload} /> : null}
-      <Grazings organisationId={organisationId} farmId={farm.id} paddocks={active} canEdit={can("bookkeeper")} version={version} onChanged={reload} />
-      <Supplements organisationId={organisationId} farm={farm} paddocks={active} months={data?.supplementMonths ?? []} canEdit={can("bookkeeper")} version={version} onChanged={reload} />
+      <Grazings organisationId={organisationId} farmId={farm.id} paddocks={active} canEdit={canRecord} canRemove={can("bookkeeper")} version={version} onChanged={reload} />
+      <Supplements organisationId={organisationId} farm={farm} paddocks={active} months={data?.supplementMonths ?? []} canEdit={canRecord} canRemove={can("bookkeeper")} version={version} onChanged={reload} />
       <Readings organisationId={organisationId} farmId={farm.id} paddocks={active} canEdit={can("bookkeeper")} version={version} onChanged={reload} />
     </div>
   );
@@ -517,7 +520,7 @@ function ImportReadings({ organisationId, farm, onImported }: { organisationId: 
   );
 }
 
-function Grazings({ organisationId, farmId, paddocks, canEdit, version, onChanged }: { organisationId: string; farmId: string; paddocks: Paddock[]; canEdit: boolean; version: number; onChanged: () => void }) {
+function Grazings({ organisationId, farmId, paddocks, canEdit, canRemove, version, onChanged }: { organisationId: string; farmId: string; paddocks: Paddock[]; canEdit: boolean; canRemove: boolean; version: number; onChanged: () => void }) {
   const today = todayInBrowser();
   const [form, setForm] = useState({
     paddockId: "",
@@ -606,7 +609,7 @@ function Grazings({ organisationId, farmId, paddocks, canEdit, version, onChange
         Record day out
       </Button>
     );
-  const remove = (grazing: GrazingRecord) => (canEdit ? <RemoveAction organisationId={organisationId} path={`/api/farming/grazings/${grazing.id}`} what="grazing" onRemoved={onChanged} /> : null);
+  const remove = (grazing: GrazingRecord) => (canRemove ? <RemoveAction organisationId={organisationId} path={`/api/farming/grazings/${grazing.id}`} what="grazing" onRemoved={onChanged} /> : null);
   const eaten = (grazing: GrazingRecord) =>
     grazing.eaten ? `${kg(grazing.eaten.perHa)} kg DM/ha${grazing.eaten.totalKgDm !== null ? `, ${kg(grazing.eaten.totalKgDm)} kg DM` : ""}${grazing.eaten.perHead ? `, ${grazing.eaten.perHead} a head` : ""}` : null;
   const inNow = open.data?.grazings ?? [];
@@ -785,6 +788,7 @@ function Supplements({
   paddocks,
   months,
   canEdit,
+  canRemove,
   version,
   onChanged,
 }: {
@@ -793,6 +797,7 @@ function Supplements({
   paddocks: Paddock[];
   months: PastureSummary["supplementMonths"];
   canEdit: boolean;
+  canRemove: boolean;
   version: number;
   onChanged: () => void;
 }) {
@@ -830,7 +835,7 @@ function Supplements({
     );
   };
   const quantity = (line: Supplement) => `${Number(line.quantity).toLocaleString("en-NZ")} ${SUPPLEMENT_UNIT_LABELS[line.unit]}`;
-  const remove = (line: Supplement) => (canEdit ? <RemoveAction organisationId={organisationId} path={`/api/farming/supplements/${line.id}`} what="feed" onRemoved={onChanged} /> : null);
+  const remove = (line: Supplement) => (canRemove ? <RemoveAction organisationId={organisationId} path={`/api/farming/supplements/${line.id}`} what="feed" onRemoved={onChanged} /> : null);
   return (
     <Card title="Supplements fed" description="What was fed out, and how much. Only kg DM is added up; anything else counts once its kg DM is typed. Buying feed stays a bill.">
       {runError ? <Notice tone="error">{runError}</Notice> : null}

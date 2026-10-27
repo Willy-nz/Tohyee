@@ -1,4 +1,4 @@
-import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, route, searchParams, withFarmWork } from "@/lib/api/http";
 import { pastureSummary } from "@/lib/farming/pasture";
 
 type Context = { params: Promise<{ farmId: string }> };
@@ -7,6 +7,6 @@ type Context = { params: Promise<{ farmId: string }> };
 export const GET = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const params = searchParams(request);
-  const summary = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) => pastureSummary(tx, { farmId, onDate: params.get("onDate") }));
+  const summary = await withFarmWork(request, params.get("organisationId"), "read", (tx) => pastureSummary(tx, { farmId, onDate: params.get("onDate") }));
   return json({ summary });
 });

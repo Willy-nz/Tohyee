@@ -96,3 +96,9 @@ export function FarmSelector({ farms, farm, stale = false, deciding = false, onC
     </div>
   );
 }
+
+/** Whether the signed-in person may record farm field work: farm staff (decision 904), or bookkeepers and up. */
+export function useCanRecordFarmWork(): boolean {
+  const { current, can } = useWorkspace();
+  return current?.role === "farm_worker" || can("bookkeeper");
+}
