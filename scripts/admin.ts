@@ -13,6 +13,8 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 import { COMMAND_LINE_ADMIN } from "@/lib/audit";
+import { revokeUserAiKeys } from "@/lib/ai/tokens";
+import { endPasskeys } from "@/lib/auth/passkey-end";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { createSetupLink, emailSetupLink, sendSetupLink } from "@/lib/auth/setup-links";
@@ -332,19 +334,27 @@ async function printSetupLink(user: { email: string; displayName: string }, link
 async function setPasswordCommand(args: string[]) {
   const email = normaliseEmail(required(args, "email"));
   const passwordHash = await hashPassword(validateNewPassword(await readPassword()));
-  const updated = await coreQuery<{ id: string }>(
-    `update users
-        set password_hash = $2, google_only = false, password_changed_at = now(), failed_login_count = 0,
-            locked_until = null, is_active = true, updated_at = now()
-      where email = $1
-      returning id`,
-    [email, passwordHash],
-  );
-  const userId = updated.rows[0]?.id;
-  if (!userId) throw new Error(`No user with the email ${email}.`);
-  await coreQuery("delete from sessions where user_id = $1", [userId]);
-  await audit("user.password_set_via_cli", userId, { email });
-  console.log(`Password updated for ${email}; their other sessions were signed out.`);
+  const done = await withCoreTransaction(async (client) => {
+    const updated = await client.query<{ id: string }>(
+      `update users
+          set password_hash = $2, google_only = false, password_changed_at = now(), failed_login_count = 0,
+              locked_until = null, is_active = true, updated_at = now()
+        where email = $1
+        returning id`,
+      [email, passwordHash],
+    );
+    const id = updated.rows[0]?.id;
+    if (!id) return null;
+    await client.query("delete from sessions where user_id = $1", [id]);
+    // As a server admin's password reset does (#450, decision 892): apps disconnect and passkeys end.
+    const aiKeysRevoked = await revokeUserAiKeys(client, id);
+    const passkeysEnded = await endPasskeys(client, id);
+    return { id, aiKeysRevoked, passkeysEnded };
+  });
+  if (!done) throw new Error(`No user with the email ${email}.`);
+  await audit("user.password_set_via_cli", done.id, { email, aiKeysRevoked: done.aiKeysRevoked, passkeysEnded: done.passkeysEnded });
+  const ended = [done.aiKeysRevoked ? "their AI and farm app keys stopped" : "", done.passkeysEnded ? `their ${done.passkeysEnded === 1 ? "passkey was" : "passkeys were"} removed` : ""].filter(Boolean);
+  console.log(`Password updated for ${email}; their other sessions were signed out${ended.length ? `, ${ended.join(" and ")}` : ""}.`);
 }
 
 async function resetTwoStepCommand(args: string[]) {

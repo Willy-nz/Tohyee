@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth/google-oidc";
 import { type GoogleSignInCode, safeNextPath } from "@/lib/auth/google-messages";
 import { authenticate } from "@/lib/auth/guard";
+import { endPasskeys } from "@/lib/auth/passkey-end";
 import { configuredOrigin, returnOrigin } from "@/lib/auth/origin";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { assertSignInRate } from "@/lib/auth/rate-limit";
@@ -425,6 +426,7 @@ async function setupWithGoogle(request: Request, identity: GoogleIdentity, token
     await client.query("delete from user_backup_codes where user_id = $1", [link.user_id]);
     await client.query("delete from sessions where user_id = $1", [link.user_id]);
     await revokeUserAiKeys(client, link.user_id);
+    await endPasskeys(client, link.user_id);
     await writeAdminAuditEvent(client, { userId: link.user_id, email: link.email }, {
       eventType: "user.setup_completed",
       entityType: "user",
