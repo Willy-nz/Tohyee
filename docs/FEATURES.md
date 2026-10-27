@@ -648,6 +648,24 @@ that something happened.
   mailboxes, someone with no mailbox gets a one-line Connect a mailbox
   prompt, an empty week offers Add an item, and the redirect addresses an
   administrator needs are under Settings › Email.
+- **Farm safety records** (Farm › Safety; #446, FS1-FS12 in
+  `docs/FARM-SAFETY.md`, decisions 930-941, tenant migration 0189, not yet
+  reviewed by Jess): each farm's emergency details first (111, WorkSafe,
+  address, entrance, assembly point, tap-to-call contacts, first aiders,
+  equipment, a no-coverage plan; Print; a copy kept on the phone and shown
+  with its age when Tohyee can't be reached), and hazards and no-go zones on
+  the farm map (a point or a drawn zone, paddocks, how serious, what's done
+  about it, review dates, reviewed and removed). Every record is kept as
+  versions dated by the database, nothing can be changed or deleted, a
+  mistake is corrected or withdrawn with why, and a hash chain shows changes
+  made behind Tohyee's back (**Check the history**, **Compare with a copy**).
+  The **WorkSafe pack** is a zip of everything in a date range with its full
+  history and a checker that runs anywhere. Restricted incident and medical
+  details are for owners, members an owner names, and their author. A
+  record-keeping tool, not a compliance claim. Not yet: incidents and near
+  misses, inductions and sign-offs, pre-start checks, training, chemicals,
+  photos, the weekly copy emailed off the farm, and the farm workspace
+  links (#447).
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

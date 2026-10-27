@@ -68,6 +68,15 @@ export function LinzAttribution() {
   );
 }
 
+/**
+ * Something drawn over the paddocks, e.g. a hazard or no-go zone (#446): a
+ * point (a warning triangle) or a zone (an outline). "danger" is red (no-go
+ * or high), "warning" amber.
+ */
+export type MapOverlay = { id: string; label: string; tone: "danger" | "warning"; point?: Position | null; ring?: Position[] | null; onSelect?: () => void };
+
+const OVERLAY_COLOURS = { danger: { fill: "rgba(200, 30, 30, 0.28)", stroke: "#c81e1e" }, warning: { fill: "rgba(230, 150, 0, 0.25)", stroke: "#b86e00" } } as const;
+
 /** New Zealand, for a farm with no shapes yet. */
 const NZ_VIEW = { centre: [172.6, -41.3] as Position, zoom: 4.6 };
 const MIN_ZOOM = 3;
@@ -87,6 +96,8 @@ export function PaddockMap({
   imageryKey,
   drawing,
   onMapTap,
+  overlays = [],
+  label,
 }: {
   paddocks: Paddock[];
   selected: string | null;
@@ -94,6 +105,8 @@ export function PaddockMap({
   imageryKey?: string | null;
   drawing?: Position[] | null;
   onMapTap?: (position: Position) => void;
+  overlays?: MapOverlay[];
+  label?: string;
 }) {
   const [moved, setMoved] = useState<{ centre: Position; zoom: number } | null>(null);
   const [failed, setFailed] = useState<{ key: string; count: number }>({ key: "", count: 0 });
@@ -103,7 +116,10 @@ export function PaddockMap({
   const dragged = useRef(false);
   const svg = useRef<SVGSVGElement | null>(null);
   const shaped = paddocks.filter((paddock) => paddock.geometry);
-  const box = bounds(shaped.map((paddock) => paddock.geometry!));
+  const overlayShapes: PaddockGeometry[] = overlays.flatMap((overlay) =>
+    overlay.ring && overlay.ring.length > 3 ? [{ type: "Polygon" as const, coordinates: [overlay.ring] }] : overlay.point ? [{ type: "Polygon" as const, coordinates: [[overlay.point, overlay.point, overlay.point, overlay.point]] }] : [],
+  );
+  const box = bounds([...shaped.map((paddock) => paddock.geometry!), ...overlayShapes]);
   const imagery = Boolean(imageryKey);
   if (!box && !drawing && !imagery) return <Empty>No paddock shapes yet. Import a file of your paddock shapes (GeoJSON, KML or a shapefile), or draw them, to see them here.</Empty>;
   const fitted = box ? fitBox(box, MAP_WIDTH, MAP_HEIGHT) : NZ_VIEW;
@@ -142,7 +158,7 @@ export function PaddockMap({
           ref={svg}
           viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
           role="img"
-          aria-label={imagery ? "Map of the paddocks over aerial imagery" : "Map of the paddocks"}
+          aria-label={label ?? (imagery ? "Map of the paddocks over aerial imagery" : "Map of the paddocks")}
           style={{ width: "100%", height: "auto", background: imagery ? "#5b6b4e" : "var(--surface-muted, #eef3ea)", borderRadius: 10, touchAction: "none", cursor: drawing ? "crosshair" : "grab", display: "block" }}
           onPointerDown={(event) => {
             const [x, y] = toDrawing(event);
@@ -217,6 +233,31 @@ export function PaddockMap({
                 >
                   {paddock.name}
                 </text>
+              </g>
+            );
+          })}
+          {overlays.map((overlay) => {
+            const colours = OVERLAY_COLOURS[overlay.tone];
+            const selectable = Boolean(overlay.onSelect) && !drawing;
+            return (
+              <g key={overlay.id} onClick={selectable ? () => (dragged.current ? undefined : overlay.onSelect!()) : undefined} style={{ cursor: selectable ? "pointer" : undefined }}>
+                <title>{overlay.label}</title>
+                {overlay.ring && overlay.ring.length > 3 ? (
+                  <path d={`M${overlay.ring.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`} fill={colours.fill} stroke={colours.stroke} strokeWidth={2.5} strokeDasharray="8 4" />
+                ) : null}
+                {overlay.point
+                  ? (() => {
+                      const [x, y] = view.project(overlay.point);
+                      return (
+                        <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}>
+                          <path d="M0,-15 L13,9 L-13,9 Z" fill={colours.stroke} stroke="#ffffff" strokeWidth={2} strokeLinejoin="round" />
+                          <text y={6} textAnchor="middle" fontSize={14} fontWeight={700} fill="#ffffff" style={{ pointerEvents: "none" }}>
+                            !
+                          </text>
+                        </g>
+                      );
+                    })()
+                  : null}
               </g>
             );
           })}
