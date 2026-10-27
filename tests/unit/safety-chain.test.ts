@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canonicalJson, type ChainEntry, entryHash, findInChain, GENESIS_HASH, verifyChain } from "@/lib/safety/chain";
 import { enteredLate, hazardState, recordFields, reviewOverdue } from "@/lib/safety/shared";
+import { copyDue } from "@/lib/safety/weekly-copy";
 
 /** The safety history's hash chain, worked out without a database (#446, FS7, FS8). */
 function chainOf(bodies: string[]): ChainEntry[] {
@@ -96,5 +97,15 @@ describe("safety record helpers", () => {
       ["Place on the map", "-37.800000, 175.100000 (latitude, longitude)"],
       ["Zone on the map", "Drawn on the map"],
     ]);
+  });
+});
+
+describe("the weekly copy's timing (FS38)", () => {
+  it("is due after 6am once a week has passed, or when none has been sent", () => {
+    const now = new Date("2026-10-27T20:00:00Z");
+    expect(copyDue(now, null, 7)).toBe(true);
+    expect(copyDue(now, null, 5)).toBe(false);
+    expect(copyDue(now, "2026-10-21T20:00:00Z", 7)).toBe(false);
+    expect(copyDue(now, "2026-10-20T20:10:00Z", 7)).toBe(true);
   });
 });

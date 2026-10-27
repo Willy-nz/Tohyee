@@ -51,7 +51,7 @@ function fileIds(body: string): string[] {
 }
 
 /** Gathers the pack inside one read of the organisation's database; the files are written afterwards. */
-export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown }): Promise<PackData> {
+export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean }): Promise<PackData> {
   await requireFarming(tx);
   const from = parseIsoDate(input.from, "From");
   const to = parseIsoDate(input.to, "To");
@@ -64,20 +64,21 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
   } else {
     farmIds = await visibleFarmIds(tx);
   }
-  const restricted = await canSeeRestricted(tx);
+  // The weekly copy goes off the farm by email: never with injury or medical details (decision 958).
+  const restricted = input.withholdRestricted ? false : await canSeeRestricted(tx);
   const zone = businessTimeZone();
   const records = await tx.query<{ record_id: string }>(
     `select distinct record_id::text from safety_entries
       where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[]))
-        and (((entered_at at time zone $4)::date between $2 and $3) or (happened_on between $2 and $3))`,
-    [farmIds, from, to, zone],
+        and (((entered_at at time zone $4)::date between $2 and $3) or (not $5 and happened_on between $2 and $3))`,
+    [farmIds, from, to, zone, input.enteredOnly ?? false],
   );
   const ids = records.rows.map((row) => row.record_id);
   const rows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e where e.record_id = any($1::uuid[]) order by e.seq`, [ids]);
   // The first version says who entered a restricted record; they may see their own.
   const authors = new Map<string, string | null>();
   for (const row of rows.rows) if (row.version === 1) authors.set(row.record_id, row.entered_by_user_id);
-  const entries = rows.rows.map((row) => toChainEntry(row, row.restricted && !restricted && authors.get(row.record_id) !== tx.actor.userId));
+  const entries = rows.rows.map((row) => toChainEntry(row, row.restricted && !restricted && (input.withholdRestricted || authors.get(row.record_id) !== tx.actor.userId)));
   const chainRows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e order by e.seq`);
   const chainOk = verifyChain(chainRows.rows.map((row) => toChainEntry(row))).problems.length === 0;
   const chain = chainRows.rows.map((row) => ({ seq: row.seq, previousHash: row.previous_hash, hash: row.hash }));
@@ -163,7 +164,7 @@ WorkSafe's guidance, or ask someone who knows health and safety law.
 `;
 
 /** Writes the pack's PDF and zip (no database work). */
-export async function renderPack(data: PackData): Promise<{ fileName: string; bytes: Buffer }> {
+export async function renderPack(data: PackData): Promise<{ fileName: string; bytes: Buffer; pdf: Uint8Array }> {
   const pdf = await PdfWriter.create({ title: `Farm safety records ${data.from} to ${data.to}`, author: data.organisationName, footer: `${data.organisationName} · Farm safety records ${data.from} to ${data.to}` });
   pdf.text("Farm safety records", { bold: true, size: 18, gap: 4 });
   pdf.text(data.organisationName, { size: 11, gap: 2 });
@@ -220,5 +221,5 @@ export async function renderPack(data: PackData): Promise<{ fileName: string; by
     ...data.files.filter((file) => file.path && file.content).map((file) => ({ name: file.path!, data: file.content! })),
   ];
   const farmPart = data.farms.length === 1 ? data.farms[0].name.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase() : "all-farms";
-  return { fileName: `safety-records-${farmPart}-${data.from}-to-${data.to}.zip`, bytes: createZip(files) };
+  return { fileName: `safety-records-${farmPart}-${data.from}-to-${data.to}.zip`, bytes: createZip(files), pdf: pdfBytes };
 }
