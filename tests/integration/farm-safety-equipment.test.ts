@@ -126,14 +126,17 @@ describeWithDatabase("farm safety equipment, training and chemicals", () => {
     const diesel = await as(staff)((tx) => addChemical(tx, { farmId: w.home, name: "Diesel", unNumber: "UN 1202", maxQuantity: "1000.50", unit: "L", location: "Tank by the workshop", sds: { id: sheet.id }, sdsDate: "2024-05-01" }));
     expect(diesel.data).toMatchObject({ unNumber: "1202", maxQuantity: "1000.5", sds: { id: sheet.id, sha256: sheet.sha256 } });
     await as(staff)((tx) => addChemical(tx, { farmId: w.home, name: "Glyphosate", maxQuantity: "40", unit: "L", sdsDate: "2018-01-01" }));
+    // A sheet over five years old isn't "needed": WorkSafe wants a new one when it's next supplied, or if it's changed (FS48, decision 967).
+    await as(staff)((tx) => addChemical(tx, { farmId: w.home, name: "Petrol", unNumber: "1203", maxQuantity: "200", unit: "L", sds: { id: sheet.id }, sdsDate: "2018-01-01" }));
     const list = await as(viewer)((tx) => listChemicals(tx, w.home));
-    expect(list.map((chemical) => [chemical.data.name, chemical.sdsNeeded])).toEqual([
-      ["Diesel", false],
-      ["Glyphosate", true],
+    expect(list.map((chemical) => [chemical.data.name, chemical.sdsNeeded, chemical.sdsStatus])).toEqual([
+      ["Diesel", false, "ok"],
+      ["Glyphosate", true, "missing"],
+      ["Petrol", false, "check"],
     ]);
     await expect(as(staff)((tx) => changeChemical(tx, diesel.recordId, { expectedVersion: 1, removed: true }))).rejects.toThrow(/Say why/);
     await as(staff)((tx) => changeChemical(tx, diesel.recordId, { expectedVersion: 1, removed: true, why: "Tank taken away" }));
-    expect((await as(viewer)((tx) => listChemicals(tx, w.home))).map((chemical) => chemical.data.name)).toEqual(["Glyphosate", "Diesel"]);
+    expect((await as(viewer)((tx) => listChemicals(tx, w.home))).map((chemical) => chemical.data.name)).toEqual(["Glyphosate", "Petrol", "Diesel"]);
   });
 
   it("FS34 another farm's equipment and chemicals aren't found, and the history checks out", async () => {

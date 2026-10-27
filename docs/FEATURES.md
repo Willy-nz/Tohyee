@@ -681,7 +681,8 @@ that something happened.
   critical check puts a machine out of use with an action until someone
   allowed releases it; a training register with expiry and the person
   confirming their own; and each farm's chemicals inventory with safety data
-  sheets (over five years old flagged). Since FS35-FS38 (decisions 958-959,
+  sheets (a missing one needed; over five years old a prompt to get the
+  current one when next supplied). Since FS35-FS38 (decisions 958-959,
   tenant migration 0191): a weekly PDF emailed off the farm through the
   organisation's own email, with the latest entry's number and hash, never
   injury details, recorded only when the mail server accepted it. Since
@@ -689,7 +690,13 @@ that something happened.
   Safety tab, hazards on the map and paddock card, Report a hazard / Near
   miss / Incident in Log, a Safety card on Today and Safety due on the farm
   calendar; farm staff report, check and sign on their assigned farms and
-  never see injury or medical details.
+  never see injury or medical details. Since FS45-FS48 (decisions 963-968, the
+  answers to the open questions; Claude, delegated by Jess, 28 October
+  2026): the five-year keeping period for notifiable-event records (s 57)
+  on the report and in the pack, a link to WorkSafe's current guide and
+  its site exceptions in the prompt, gate-link sign-offs labelled
+  "self-declared, no login" (with the suggestion to invite regular
+  contractors as Farm staff), and a short privacy notice on the gate page.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

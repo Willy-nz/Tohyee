@@ -338,16 +338,19 @@ async function withSiteLink<T>(organisationInput: string, token: string, work: (
   });
 }
 
-/** What the gate page shows: the farm's name, emergency details, hazards and its visitor and contractor inductions. Never people or reports. */
+/** What the gate page shows: the farm's name, the organisation's name and address (privacy notice), emergency details, hazards and its visitor and contractor inductions. Never people or reports. */
 export async function publicSite(organisationInput: string, token: string) {
   return withSiteLink(organisationInput, token, async (tx, farmId) => {
     const farm = await tx.query<{ name: string }>("select name from farms where id = $1", [farmId]);
+    const organisation = await tx.query<{ display_name: string; postal_address: string | null }>("select display_name, postal_address from organisation_settings where id = true");
     const paddocks = await tx.query<{ id: string; name: string }>("select id::text, name from paddocks where farm_id = $1", [farmId]);
     const names = new Map(paddocks.rows.map((row) => [row.id, row.name]));
     const inductions = (await listInductions(tx, farmId)).filter((induction) => induction.data.audiences.some((audience) => audience !== "worker"));
     const emergency = await getEmergency(tx, farmId);
     return {
       farmName: farm.rows[0].name,
+      // For the privacy notice (decision 966): the organisation's name and address from its settings.
+      organisation: { name: organisation.rows[0].display_name, postalAddress: organisation.rows[0].postal_address },
       emergency: emergency ? { data: emergency.data, version: emergency.version, enteredAt: emergency.enteredAt } : null,
       hazards: (await activeHazards(tx, farmId)).map((hazard) => ({ ...hazard, paddocks: hazard.paddockIds.map((id) => names.get(id) ?? id) })),
       inductions: inductions.map((induction) => ({ id: induction.recordId, version: induction.version, title: induction.data.title, audiences: induction.data.audiences.filter((audience) => audience !== "worker"), sections: induction.data.sections })),

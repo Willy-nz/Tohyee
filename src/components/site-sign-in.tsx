@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
-import { type EmergencyData, FIXED_NUMBERS, HAZARD_LEVEL_LABELS, type HazardLevel, NOT_COMPETENCE, SIGN_STATEMENT } from "@/lib/safety/shared";
+import { type EmergencyData, FIXED_NUMBERS, HAZARD_LEVEL_LABELS, type HazardLevel, NOT_COMPETENCE, SIGN_STATEMENT, sitePrivacyNotice } from "@/lib/safety/shared";
 
 /*
  * The gate page (#446, decisions 948-952): no login. Shows the farm's
@@ -15,6 +15,8 @@ import { type EmergencyData, FIXED_NUMBERS, HAZARD_LEVEL_LABELS, type HazardLeve
 
 type Site = {
   farmName: string;
+  /** Missing from details saved on the phone before decision 966. */
+  organisation?: { name: string; postalAddress: string | null };
   emergency: { data: EmergencyData; version: number; enteredAt: string } | null;
   hazards: Array<{ id: string; title: string; level: HazardLevel; noGo: boolean; controls: string | null; paddocks: string[] }>;
   inductions: Array<{ id: string; version: number; title: string; audiences: Array<"contractor" | "visitor">; sections: Array<{ heading: string; text: string }> }>;
@@ -212,7 +214,18 @@ export function SiteSignIn({ organisationId, token }: { organisationId: string; 
                 <input type="checkbox" checked={form.acknowledged} onChange={(event) => setForm({ ...form, acknowledged: event.target.checked })} /> {SIGN_STATEMENT}
               </label>
             ) : null}
-            <p className={ui.muted}>{NOT_COMPETENCE} The farm keeps your name, company, phone and the times you sign in and out.</p>
+            <p className={ui.muted}>{NOT_COMPETENCE}</p>
+            <details className={ui.muted} style={{ margin: "0 0 12px" }} open>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Your details and privacy</summary>
+              <dl style={{ margin: "6px 0 0" }}>
+                {sitePrivacyNotice(site.organisation ?? { name: site.farmName, postalAddress: null }).map((part) => (
+                  <div key={part.label} style={{ marginBottom: 6 }}>
+                    <dt style={{ fontWeight: 600 }}>{part.label}</dt>
+                    <dd style={{ margin: 0 }}>{part.text}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
             <Button type="submit" disabled={busy || Boolean(state.error) || !form.name.trim() || (Boolean(induction) && !form.acknowledged)}>
               {busy ? "Signing in…" : "Sign in"}
             </Button>

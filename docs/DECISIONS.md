@@ -9235,7 +9235,8 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
      `src/lib/money/decimal.ts`, with a unit), where, storage, hazards,
      approved handler, hazardous waste, and the safety data sheet with its
      date; missing or more than five years old says to get a new one
-     (WorkSafe's 2017 farm chemicals page). Removed chemicals stay. Not yet:
+     (WorkSafe's 2017 farm chemicals page; the five-year part is replaced
+     by decision 967). Removed chemicals stay. Not yet:
      HSNO thresholds (signage, emergency response plans, certified
      handlers), which depend on quantities and classes Tohyee doesn't hold.
 
@@ -9279,3 +9280,67 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
      "use the existing calendar to display assigned safety actions, but keep
      ... evidence ... in dedicated safety records"). Safety reports keep their
      own phone drafts (decision 944) rather than #447's store.
+
+### Farm safety: the answers to the open questions (#446; decisions 963-968)
+
+Answers in [the 28 October 2026 comment on #446](https://github.com/Willy-nz/Tohyee/issues/446#issuecomment-6451823108):
+Claude, delegated by Jess, 28 October 2026 (Jess: "can you answer them?").
+Checked against WorkSafe's and the Privacy Commissioner's pages on 28
+October 2026; not legal advice.
+
+963. **The keeping period is shown** (answer 3). Records of notifiable
+     events must be kept for at least five years from when WorkSafe was
+     told (Health and Safety at Work Act 2015, s 57). A report that may be
+     notifiable shows "Keep this record until at least {date}" once telling
+     WorkSafe is recorded (29 February moves to 1 March, so it's never
+     short); the prompt says five years from when WorkSafe is told; the
+     WorkSafe pack's README gives the rule and pack.pdf ends each such
+     report with its period. Tohyee still deletes nothing. Claude,
+     delegated by Jess, 28 October 2026.
+964. **WorkSafe's guide and the site exceptions** (answer 6). The
+     questions stay as worded, with a link to WorkSafe's current quick
+     guide "What events need to be notified?" beside them. The prompt keeps
+     its three points and lists WorkSafe's exceptions for disturbing the
+     site: to help someone who's hurt, to remove someone who has died, to
+     make the site safe (or stop another notifiable event), by or as
+     directed by the police, or with WorkSafe's permission (s 55). Claude,
+     delegated by Jess, 28 October 2026.
+965. **Gate-link sign-offs are "self-declared, no login"** (answer 8). The
+     statement and "doesn't show they can do a job safely" stay. A sign-off
+     or sign-in through the farm's sign-in link (typed name, no login) is
+     labelled "self-declared, no login" wherever it shows: the sign-offs
+     and On site lists, the WorkSafe pack's "Signed" field and, for those
+     who keep the registers, Today (contractors on site through the link).
+     Fine for visitors; the sign-offs list, the sign-in link card and Today
+     suggest inviting regular contractors as Farm staff so they sign on
+     their own login. Claude, delegated by Jess, 28 October 2026.
+966. **A short privacy notice on the gate page** (answer 9), replacing
+     "The farm keeps your name, company, phone and the times you sign in
+     and out". Following the Privacy Commissioner's guidance it says what's
+     collected, why (health and safety and emergencies on the farm), who
+     sees it, that company, phone and purpose are optional and someone who
+     won't give a name talks to the farm instead of signing in there, that
+     they can ask to see and correct it, that safety records are kept and
+     not deleted, and how to contact the farm: the organisation's name and
+     postal address from its settings (Tohyee has no organisation phone or
+     email setting; without an address it points to the farm's contacts on
+     the page). No migration. Claude, delegated by Jess, 28 October 2026.
+967. **Safety data sheets follow WorkSafe's rule** (answer 10), replacing
+     decision 957's "more than five years old should be replaced": a new
+     sheet is needed when the substance is supplied again after five years,
+     or when its sheet has changed. A missing sheet is still **Safety data
+     sheet needed** (and counted in the card's title); one over five years
+     old, or undated, is a prompt to ask for the current one when it's next
+     supplied, not counted as needed. "Out of use is a record, not a lock"
+     stays. Claude, delegated by Jess, 28 October 2026.
+968. **Kept as built** (answers 1, 2, 4, 5, 7, 11 and 12): the emergency
+     card (111 first, then WorkSafe 0800 030 040, "as soon as possible"),
+     now also saying to phone WorkSafe straight away for a death; low,
+     medium and high with no-go as its own kind; the pack's "Tohyee keeps
+     these records; it doesn't decide what the law needs you to keep";
+     restricted details owners-only by default, admins only if an owner
+     allows; minor, moderate and serious with "notifiable" a separate yes or
+     no; the weekly copy with "Send a copy now" and its wording; and farm
+     staff never seeing injury details, even ones they entered (the injured
+     person can ask the owner for their own record under the Privacy Act).
+     Claude, delegated by Jess, 28 October 2026.

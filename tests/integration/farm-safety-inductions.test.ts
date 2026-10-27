@@ -9,6 +9,8 @@ import { addHazard, changeHazard, saveEmergency } from "@/lib/safety/hazards";
 import { addInduction, changeInduction, inductionToRead, listInductions, listSignoffs, makeSiteLink, onSite, publicSignIn, publicSignOut, publicSite, signIn, signInduction, signOut, turnOffSiteLink } from "@/lib/safety/inductions";
 import { addReport } from "@/lib/safety/reports";
 import { checkSafetyHistory, recordHistory } from "@/lib/safety/records";
+import { SIGNED_HOW_LABELS } from "@/lib/safety/shared";
+import { safetyToday } from "@/lib/safety/today";
 import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, params, startTestServer, type TestServer } from "../helpers/test-server";
 
 const ORG = "farm-safety-inductions";
@@ -125,6 +127,9 @@ describeWithDatabase("farm safety inductions and sign-in", () => {
     const text = await response.text();
     const site = JSON.parse(text) as Awaited<ReturnType<typeof publicSite>>;
     expect(site!.farmName).toBe("Home farm");
+    // The privacy notice names the organisation from its settings (FS47, decision 966).
+    expect(site!.organisation.name).toEqual(expect.any(String));
+    expect(site!.organisation).toHaveProperty("postalAddress");
     expect(site!.hazards.map((hazard) => hazard.title)).toEqual(["Effluent pond", "Sticky gate", "Bull in paddock 9"]);
     expect(site!.inductions.map((induction) => [induction.title, induction.audiences])).toEqual([["Farm induction", ["contractor", "visitor"]]]);
     for (const secret of ["Runoff quarry", "Secret incident", "Private injury", "Mere", "Hemi", "Ana", "ind-staff@example.com"]) expect(text).not.toContain(secret);
@@ -134,6 +139,9 @@ describeWithDatabase("farm safety inductions and sign-in", () => {
     const rawiri = (await as(owner)((tx) => listSignoffs(tx, w.home))).find((signoff) => signoff.data.person.name === "Rawiri")!;
     expect(rawiri).toMatchObject({ enteredByEmail: "site sign-in link", via: "farm sign-in link", data: { signedHow: "link", audience: "contractor" } });
     expect((await as(owner)((tx) => onSite(tx, w.home))).here.map((visit) => visit.data.person.name)).toEqual(["Rawiri"]);
+    // Self-declared, no login, wherever it shows: the label, and Today for those who keep the registers (FS46, decision 965).
+    expect(SIGNED_HOW_LABELS[rawiri.data.signedHow]).toMatch(/^self-declared, no login/);
+    expect((await as(owner)((tx) => safetyToday(tx, w.home))).selfDeclaredOnSite).toEqual([{ id: expect.any(String), name: "Rawiri", company: "Spray Co" }]);
     await expect(publicSignIn(ORG, token, { person: { name: "X" }, inductionId: w.induction, inductionVersion: 3 })).rejects.toThrow(/read and understood/);
     await expect(publicSignOut(ORG, token, "x".repeat(43))).rejects.toThrow(/wasn't found/);
     expect(await publicSignOut(ORG, token, signedIn!.signOutToken)).toMatchObject({ signedOutAt: expect.any(String) });

@@ -12,7 +12,7 @@ import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import type { EquipmentView } from "@/lib/safety/equipment";
 import type { SafetyFile } from "@/lib/safety/files";
 import type { ChemicalView, TrainingView } from "@/lib/safety/register";
-import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER_LABELS, EQUIPMENT_OWNERS, type EquipmentOwner, LOCKOUT_NOTE, TRAINING_STATE_LABELS } from "@/lib/safety/shared";
+import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER_LABELS, EQUIPMENT_OWNERS, type EquipmentOwner, LOCKOUT_NOTE, SDS_CHECK, SDS_RULE, TRAINING_STATE_LABELS } from "@/lib/safety/shared";
 
 /*
  * Equipment and pre-start checks, the training register and the chemicals
@@ -507,7 +507,7 @@ export function ChemicalsCard({ organisationId, farm }: { organisationId: string
   return (
     <Card
       title={`Chemicals and fuel${needed ? ` (${needed} need a safety data sheet)` : ""}`}
-      description="This farm's hazardous substances inventory: what's here, the most likely on site, where, and its safety data sheet. WorkSafe asks for it to be easy to find in an emergency, and for sheets more than five years old to be replaced."
+      description={`This farm's hazardous substances inventory: what's here, the most likely on site, where, and its safety data sheet. WorkSafe asks for it to be easy to find in an emergency. ${SDS_RULE}`}
       actions={
         <>
           <Button size="small" variant="secondary" onClick={() => window.print()}>
@@ -579,7 +579,8 @@ export function ChemicalsCard({ organisationId, farm }: { organisationId: string
             {chemical.data.unNumber ? ` (UN ${chemical.data.unNumber})` : ""}
             {chemical.data.maxQuantity ? ` · up to ${chemical.data.maxQuantity} ${chemical.data.unit ?? ""}` : ""}
             {chemical.data.removed ? " · removed" : ""}{" "}
-            {chemical.sdsNeeded ? <Badge tone="amber">{chemical.data.sds ? "Safety data sheet over 5 years old" : "Safety data sheet needed"}</Badge> : null}
+            {chemical.sdsNeeded ? <Badge tone="amber">Safety data sheet needed</Badge> : null}
+            {!chemical.data.removed && chemical.sdsStatus === "check" ? <Badge tone="blue">{SDS_CHECK}</Badge> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
               {[chemical.data.location, chemical.data.storage, chemical.data.hazards, chemical.data.approvedHandler ? "approved handler needed" : null].filter(Boolean).join(" · ")}
             </div>

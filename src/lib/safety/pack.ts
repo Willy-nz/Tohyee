@@ -8,7 +8,7 @@ import { CONTENT_WIDTH, PdfWriter } from "@/lib/pdf/writer";
 import { type ChainEntry, verifyChain } from "@/lib/safety/chain";
 import { PACK_VERIFY_SCRIPT } from "@/lib/safety/pack-verify-script";
 import { canSeeRestricted, ENTRY_COLUMNS, type EntryRow, toChainEntry } from "@/lib/safety/records";
-import { CHANGE_LABELS, KIND_LABELS, recordFields, recordTitle } from "@/lib/safety/shared";
+import { CHANGE_LABELS, KIND_LABELS, mayBeNotifiable, NOTIFIABLE_KEEP_RULE, type NotifiableAnswers, notifiableKeepText, recordFields, recordTitle, type WorkSafeNotice } from "@/lib/safety/shared";
 import { createZip, type ZipEntry } from "@/lib/zip/write";
 
 /*
@@ -161,6 +161,8 @@ the history was rewritten.
 ${data.entries.some((entry) => entry.body === null) ? "\nSome restricted details (incident and medical) were withheld from this pack: only their hash is here.\n" : ""}
 Tohyee keeps these records; it doesn't decide what the law needs you to keep. Check
 WorkSafe's guidance, or ask someone who knows health and safety law.
+
+${NOTIFIABLE_KEEP_RULE}
 `;
 
 /** Writes the pack's PDF and zip (no database work). */
@@ -208,6 +210,10 @@ export async function renderPack(data: PackData): Promise<{ fileName: string; by
         for (const file of named) pdf.text(`File: ${file.name} (received ${nzTime(file.receivedAt)}${file.photoTaken ? `; camera date ${file.photoTaken}` : ""}) sha256 ${file.sha256}`, { size: 8, muted: true });
       }
       pdf.text(`Entry ${version.seq} · hash ${version.hash}`, { size: 7, muted: true, gap: 6 });
+    }
+    // The keeping period for a record that may be a notifiable event (decision 963).
+    if (latest.kind === "report" && mayBeNotifiable(latestData.notifiable as NotifiableAnswers | undefined)) {
+      pdf.text(notifiableKeepText((latestData.workSafeNotified as WorkSafeNotice | null | undefined) ?? null), { bold: true, size: 9, gap: 6 });
     }
   }
   const pdfBytes = await pdf.finish();

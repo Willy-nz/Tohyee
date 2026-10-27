@@ -3,7 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError } from "@/lib/errors";
 import { canSeeFarm } from "@/lib/farming/access";
 import { listEquipment } from "@/lib/safety/equipment";
-import { listInductions, listSignoffs } from "@/lib/safety/inductions";
+import { listInductions, listSignoffs, onSite } from "@/lib/safety/inductions";
 import { canRecordSafety, currentRecords } from "@/lib/safety/records";
 import { listTraining } from "@/lib/safety/register";
 import { openActions } from "@/lib/safety/reports";
@@ -44,7 +44,10 @@ export async function safetyToday(tx: OrgTx, farmIdInput: unknown) {
         })
         .filter((entry): entry is { id: string; title: string; reason: string } => entry !== null)
     : [];
+  // Contractors on site who signed in through the gate link: self-declared, no login (decision 965).
+  const selfDeclared = manager ? (await onSite(tx, farmId)).here.filter((visit) => visit.data.signedHow === "link" && visit.data.audience === "contractor") : [];
   return {
+    selfDeclaredOnSite: selfDeclared.map((visit) => ({ id: visit.recordId, name: visit.data.person.name, company: visit.data.person.company })),
     myActions: mine.map((action) => ({ id: action.recordId, title: action.data.title, due: action.data.due, state: action.state })),
     overdueActions: overdue.map((action) => ({ id: action.recordId, title: action.data.title, due: action.data.due })),
     actionsToCheck: toCheck.map((action) => ({ id: action.recordId, title: action.data.title })),
