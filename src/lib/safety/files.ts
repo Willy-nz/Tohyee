@@ -110,7 +110,8 @@ export async function fileRefs(tx: OrgTx, input: unknown, farmId: string | null,
   const refs: SafetyFileRef[] = [];
   for (const id of ids) {
     const row = found.get(id);
-    if (!row || row.farm_id !== farmId || !(await readable(tx, row))) throw new ValidationError("One of those files wasn't found.");
+    // A record for every farm (e.g. training) may name a file kept on any farm the person sees.
+    if (!row || (farmId !== null && row.farm_id !== farmId) || !(await readable(tx, row))) throw new ValidationError("One of those files wasn't found.");
     if (row.restricted !== restricted) throw new ValidationError(restricted ? "Photos with restricted details must be added as restricted." : "A restricted photo can only go with restricted details.");
     refs.push({ id: row.id, name: row.file_name, sha256: row.sha256 });
   }

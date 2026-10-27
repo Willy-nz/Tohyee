@@ -675,8 +675,14 @@ that something happened.
   shown, and "sign again" after a marked change or a new high or no-go
   hazard; On site now (sign in and out, missed sign-outs corrected); and a
   farm sign-in link with a QR code for visitors and contractors without a
-  login. Not yet: pre-start checks, training, chemicals, the weekly copy
-  emailed off the farm, and the farm workspace links (#447).
+  login. Since FS28-FS34 (decisions 953-957): equipment (ours, hired or a
+  contractor's, a fixed asset optional) with QR codes and versioned
+  checklists; pre-start checks that keep the questions as asked; a failed
+  critical check puts a machine out of use with an action until someone
+  allowed releases it; a training register with expiry and the person
+  confirming their own; and each farm's chemicals inventory with safety data
+  sheets (over five years old flagged). Not yet: the weekly copy emailed off
+  the farm, and the farm workspace links (#447).
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

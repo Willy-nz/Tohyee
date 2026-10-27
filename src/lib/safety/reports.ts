@@ -257,7 +257,7 @@ async function assignee(tx: OrgTx, input: Record<string, unknown>, members: Read
  * `members` is the organisation's members (id -> name), from the core
  * database, for choosing who's responsible.
  */
-export async function addAction(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>) {
+export async function addAction(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>, options: { checkId?: string } = {}) {
   requireSafetyRecorder(tx);
   let farmId: string;
   let reportId: string | null = null;
@@ -283,6 +283,8 @@ export async function addAction(tx: OrgTx, input: Record<string, unknown>, membe
     done: null,
     verified: null,
   };
+  // A failed pre-start check's action names the check (decision 955).
+  if (options.checkId) data.checkId = options.checkId;
   return appendEntry<ActionData>(tx, { kind: "action", change: "created", farmId, data: { ...data }, operationId: input.operationId });
 }
 

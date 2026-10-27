@@ -199,6 +199,40 @@ stays in the chain, so the rest still checks.
   read the farm's hazards and emergency details: that's its purpose, and
   why it can be turned off.
 
+## Equipment, training and chemicals (decisions 953-957)
+
+- **Equipment** on a farm: name, type, whose (ours, hired, a contractor's,
+  with a name), a checklist, who's responsible, and who besides owners and
+  admins may release it. It can name a fixed asset in the books but needn't
+  (William: "should not require an accounting fixed asset"). A **QR code**
+  for each machine opens its pre-start check after signing in.
+- **Checklists** (shared by every farm, or one farm's) are versioned; items
+  can be **critical**. A **pre-start check** answers every item OK, Fault
+  (saying what's wrong) or Not applicable (never for a critical item), with
+  hours or km and a photo, against the version shown. The check copies the
+  questions as asked, so changing the checklist never changes an answer.
+- **Out of use.** A fault on a critical item puts the machine out of use and
+  makes an action for whoever's responsible (or the checker), due today.
+  Only an owner, an admin or a member named on it can **release** it, with
+  what was done (and a photo), never through an AI key or farm app; the
+  database records who and when. Out of use is worked out from the checks
+  and releases, not typed in, and the screen says it isn't a physical
+  lockout: tag the machine and take the key.
+- **Training and qualifications**, for every farm: who (a member or a
+  name), what, who gave it, done on (not after today), expires, certificate,
+  and the jobs it covers or limits (WorkSafe's farm guide: which jobs each
+  person can and can't do), with a certificate photo or PDF. **Expires
+  soon** within 60 days, **Expired** after. The person can **confirm it's
+  theirs** on their own login (Jess: worker sign-offs on their own phone,
+  including training); any later change needs confirming again.
+- **Chemicals and fuel**, per farm (WorkSafe's hazardous substances
+  inventory): name, UN number, the most likely on site (a decimal, with its
+  unit), where it's kept, storage, hazards, whether an approved handler is
+  needed, hazardous waste, and the safety data sheet (a PDF) with its date.
+  A missing sheet, or one more than five years old, says **Safety data
+  sheet needed** or **over 5 years old** (WorkSafe's farm chemicals
+  guidance). **Print** for a paper copy; removed chemicals stay, marked.
+
 ## Worked examples
 
 Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
@@ -308,11 +342,41 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
 - **FS27 Like every safety record.** Visits and sign-offs have versions and
   the history checks out.
 
+- **FS28 Equipment needn't be in the books.** A quad (ours, with a
+  checklist, Rangi responsible and able to release) and a hired digger
+  (Digger Hire Ltd, no fixed asset). An unknown fixed asset or "stolen" as
+  whose is refused; a viewer can't add equipment. Checklist items get keys
+  from their words ("brakes-work").
+- **FS29 Answers don't change.** After the checklist is changed to version
+  2 ("Brakes: front and back work", "Lights work"), the version-1 check
+  still shows its four questions as asked.
+- **FS30 Out of use.** Mere's check with "Back brake doesn't hold" on the
+  critical brakes item puts the quad out of use and gives Rangi an action
+  due today naming the check. Mere (not named), an AI key and a release
+  without what was done are refused; Rangi releases it ("New back brake
+  pads, tested on the hill") and it's in use; a second release is refused.
+- **FS31 Answer everything.** A missing answer, a critical item marked not
+  applicable, a fault with no note, or the wrong checklist version are
+  refused; a fault on a non-critical item (fuel low) is a check with faults
+  that leaves the quad in use.
+- **FS32 Training.** Hemi's expired chemical course, Mere's quad training
+  expiring in 30 days, and Rangi's first aid show Expired, Expires soon and
+  Current, soonest first; Mere's own list has only hers. Done after today,
+  or expiring before it was done, is refused. Only Mere, on her own login,
+  confirms hers; a later change needs confirming again.
+- **FS33 Chemicals.** "lots", -5, a quantity without a unit and a two-digit
+  UN number are refused. Diesel (UN 1202, 1000.50 L kept as 1000.5, a PDF
+  sheet from 2024) is fine; glyphosate with a 2018 sheet needs a new one.
+  Removing diesel needs why, and it then lists last.
+- **FS34 Farms kept apart.** Mere can't list or check the runoff's
+  equipment, or list or add its chemicals; the history checks out.
+
 ## Not done yet
 
-Pre-start checks, training, chemicals, the weekly copy emailed off the
-farm, and the farm workspace (#447) links follow as further changes on
-#446. Not in inductions yet: photos of ID, a contractor's own induction of
+The weekly copy emailed off the farm and the farm workspace (#447) links
+follow as further changes on #446. Not in equipment yet: hours-based
+service reminders and lockout/tagout steps; policies and procedures as
+documents. Not in inductions yet: photos of ID, a contractor's own induction of
 the farmer, sending an induction by email or text, and signing in for
 several people at once. Not in reports yet: telling
 staff by email or notification when something is reported (no message is
@@ -344,3 +408,5 @@ Wording or rules that touch the law, *not yet reviewed by Jess*:
 9. What the gate page tells people about their details ("The farm keeps
    your name, company, phone and the times you sign in and out"): is a
    fuller privacy notice needed (Privacy Act 2020)?
+10. "Out of use is a record, not a lock" and the five-year safety data sheet
+    line (from WorkSafe's 2017 farm chemicals page).

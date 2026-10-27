@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
+import { ChemicalsCard, EquipmentCard, TrainingCard } from "@/components/farm-safety-equipment";
 import { InductionsAndSignIn } from "@/components/farm-safety-inductions";
 import { ReportsCard, ReportSomething, useReports, WaitingToSend } from "@/components/farm-safety-reports";
 import { useApiData } from "@/components/hooks";
@@ -109,7 +110,7 @@ export function SafetyHistory({ organisationId, recordId, paddockNames }: { orga
 
 // The page ---------------------------------------------------------------------------------------
 
-export function FarmSafetyHome({ organisationId, farmId = null }: { organisationId: string; farmId?: string | null }) {
+export function FarmSafetyHome({ organisationId, farmId = null, equipmentId = null }: { organisationId: string; farmId?: string | null; equipmentId?: string | null }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
   const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
   const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
@@ -120,7 +121,7 @@ export function FarmSafetyHome({ organisationId, farmId = null }: { organisation
   return (
     <>
       <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
-      {farm ? <FarmSafety key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} /> : null}
+      {farm ? <FarmSafety key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} equipmentId={equipmentId} /> : null}
       <p className={ui.muted}>
         Tohyee keeps these records; it doesn&apos;t decide what the law needs you to keep. Check WorkSafe&apos;s guidance, or ask someone who knows health and safety law.
       </p>
@@ -128,7 +129,7 @@ export function FarmSafetyHome({ organisationId, farmId = null }: { organisation
   );
 }
 
-function FarmSafety({ organisationId, farm, imageryKey }: { organisationId: string; farm: Farm; imageryKey: string | null }) {
+function FarmSafety({ organisationId, farm, imageryKey, equipmentId }: { organisationId: string; farm: Farm; imageryKey: string | null; equipmentId: string | null }) {
   const [showWithdrawn, setShowWithdrawn] = useState(false);
   const overview = useApiData<Overview>("/api/farming/safety", { organisationId, farmId: farm.id, includeWithdrawn: showWithdrawn });
   const paddocks = useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farm.id}/paddocks`, { organisationId });
@@ -158,6 +159,9 @@ function FarmSafety({ organisationId, farm, imageryKey }: { organisationId: stri
       )}
       {reports.error ? <Notice tone="error">{reports.error}</Notice> : reports.data ? <ReportsCard organisationId={organisationId} data={reports.data} paddockNames={paddockNames} showWithdrawn={showWithdrawnReports} onShowWithdrawn={setShowWithdrawnReports} onChanged={reports.reload} /> : null}
       <InductionsAndSignIn organisationId={organisationId} farm={farm} />
+      <EquipmentCard organisationId={organisationId} farm={farm} openEquipment={equipmentId} />
+      <TrainingCard organisationId={organisationId} farm={farm} />
+      <ChemicalsCard organisationId={organisationId} farm={farm} />
       <RecordsCard organisationId={organisationId} farm={farm} />
     </>
   );
