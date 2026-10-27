@@ -16,7 +16,7 @@ export const POST = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const body = await readJson(request);
   const supplement = await withFarmWork(request, body.organisationId, "record", (tx) =>
-    addSupplement(tx, { farmId, paddockId: body.paddockId, fedOn: body.fedOn, feed: body.feed, quantity: body.quantity, unit: body.unit, kgDm: body.kgDm, mob: body.mob, note: body.note }),
+    addSupplement(tx, { farmId, paddockId: body.paddockId, fedOn: body.fedOn, feed: body.feed, quantity: body.quantity, unit: body.unit, kgDm: body.kgDm, mob: body.mob, note: body.note, operationId: body.operationId }),
   );
   return json({ supplement }, { status: 201 });
 });

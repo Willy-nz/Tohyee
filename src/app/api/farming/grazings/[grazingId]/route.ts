@@ -7,7 +7,7 @@ type Context = { params: Promise<{ grazingId: string }> };
 export const PATCH = route<Context>(async (request, context) => {
   const { grazingId } = await context.params;
   const body = await readJson(request);
-  const grazing = await withFarmWork(request, body.organisationId, "record", (tx) => closeGrazing(tx, grazingId, { outOn: body.outOn, postCover: body.postCover }));
+  const grazing = await withFarmWork(request, body.organisationId, "record", (tx) => closeGrazing(tx, grazingId, { outOn: body.outOn, postCover: body.postCover, farmId: body.farmId }));
   return json({ grazing });
 });
 
