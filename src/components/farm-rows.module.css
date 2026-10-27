@@ -1,0 +1,189 @@
+/* Farmer-friendly lists (#447, decision 903): one line per record on a phone, tap to open. */
+
+.list {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.row {
+  min-width: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.line::-webkit-details-marker {
+  display: none;
+}
+
+.line:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.button {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.plain {
+  cursor: default;
+}
+
+.title {
+  flex: none;
+  min-width: 2.5ch;
+  font-weight: 700;
+}
+
+.parts {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+details[open] > .line .chevron {
+  transform: rotate(90deg);
+}
+
+.body {
+  display: grid;
+  gap: 10px;
+  padding: 4px 4px 14px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Remove and other undo-able-only-by-asking actions sit apart from the main ones. */
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.bar {
+  display: inline-block;
+  flex: none;
+  width: 56px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-muted, var(--border));
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-1);
+}
+
+.filterBox {
+  margin-bottom: 8px;
+}
+
+.filterSummary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--link);
+  cursor: pointer;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.filters label {
+  display: grid;
+  gap: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.filters input,
+.filters select {
+  min-height: 44px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* Wide screens show the table; phones show the one-line rows. */
+.phoneOnly {
+  display: none;
+  /* A grid item (inside a card) mustn't grow to fit a line that should be cut short. */
+  min-width: 0;
+}
+
+.wideOnly {
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .phoneOnly {
+    display: block;
+  }
+
+  .wideOnly {
+    display: none;
+  }
+
+  /* Bigger tap targets on farm pages (at least 44px). */
+  .tapTargets button,
+  .tapTargets select,
+  .tapTargets input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 44px;
+  }
+}

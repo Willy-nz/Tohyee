@@ -3,6 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
+import { FarmRowList, farmRowStyles } from "@/components/farm-rows";
 import { useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { PaddockPastureSummary } from "@/components/pasture";
@@ -273,13 +274,13 @@ export function FarmingHome({ organisationId, farmId = null }: { organisationId:
   const { can } = useWorkspace();
   const farms = useFarms(organisationId);
   const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
-  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
+  const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
   return (
     <>
-      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} deciding={deciding} onChange={selectFarm} />
       {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} onChanged={() => farms.reload()} /> : null}
       {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} knownIds={farms.data.farms.map((entry) => entry.id)} onSaved={(added) => { if (added) selectFarm(added); farms.reload(); }} /> : null}
       {can("admin") && settings.data ? <ImagerySettings organisationId={organisationId} imageryKey={settings.data.settings.imageryKey} onSaved={() => settings.reload()} /> : null}
@@ -396,7 +397,7 @@ function DrawPaddock({
             <Field label="Paddock name">
               <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field label="Effective ha" hint="The area you farm">
+            <Field label="Paddock area (ha)" hint="The area you farm">
               <input inputMode="decimal" size={8} value={effectiveHa} onChange={(event) => setEffectiveHa(event.target.value)} />
             </Field>
           </>
@@ -530,7 +531,7 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
       ) : null}
       <Card
         title="Paddocks"
-        description="Plans use each paddock's effective area, the area you farm. The mapped area is worked out from its boundary."
+        description="Paddock area is the area you farm; plans use it. The mapped area comes from the boundary."
         actions={
           <label className={ui.checkbox}>
             <input type="checkbox" checked={showRetired} onChange={(event) => setShowRetired(event.target.checked)} /> Show retired
@@ -539,12 +540,25 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
       >
         {paddocks.data && list.length === 0 ? <Empty>No paddocks yet. Add one below or import a file of their shapes.</Empty> : null}
         {list.length > 0 ? (
-          <div className={ui.tableWrap}>
-            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <div className={farmRowStyles.phoneOnly}>
+            <FarmRowList
+              label="Paddocks"
+              rows={list.map((paddock) => ({
+                key: paddock.id,
+                title: paddock.name,
+                parts: [paddock.effectiveHa ? `${paddock.effectiveHa} ha` : paddock.mappedHa ? `${paddock.mappedHa} ha mapped` : "No area yet", paddock.status === "retired" ? `Retired ${formatDate(paddock.retiredOn!)}` : null],
+                onOpen: () => setSelected(paddock.id),
+              }))}
+            />
+          </div>
+        ) : null}
+        {list.length > 0 ? (
+          <div className={`${ui.tableWrap} ${farmRowStyles.wideOnly}`}>
+            <table className={ui.table}>
               <thead>
                 <tr>
                   <th>Paddock</th>
-                  <th className={ui.num}>Effective ha</th>
+                  <th className={ui.num}>Paddock area (ha)</th>
                   <th className={ui.num}>Mapped ha</th>
                   <th>Boundary from</th>
                   <th></th>
@@ -562,7 +576,7 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
                         </>
                       ) : null}
                     </td>
-                    <td data-label="Effective ha" className={ui.num}>
+                    <td data-label="Paddock area" className={ui.num}>
                       {paddock.effectiveHa ?? <span className={ui.muted}>Not entered</span>}
                     </td>
                     <td data-label="Mapped ha" className={ui.num}>
@@ -597,7 +611,7 @@ function AddPaddock({ organisationId, farmId, onAdded }: { organisationId: strin
         <Field label="New paddock">
           <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="Effective ha">
+        <Field label="Paddock area (ha)">
           <input inputMode="decimal" value={effectiveHa} onChange={(event) => setEffectiveHa(event.target.value)} />
         </Field>
         <Button
@@ -727,7 +741,7 @@ function EditPaddock({ organisationId, paddock, onSaved }: { organisationId: str
         <Field label="Name">
           <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="Effective ha">
+        <Field label="Paddock area (ha)">
           <input inputMode="decimal" value={effectiveHa} onChange={(event) => setEffectiveHa(event.target.value)} />
         </Field>
         <Button
@@ -764,7 +778,7 @@ function SplitPaddock({ organisationId, paddock, onSplit }: { organisationId: st
             <Field label={`New paddock ${index + 1}`}>
               <input value={part.name} maxLength={60} onChange={(event) => setPart(index, "name", event.target.value)} />
             </Field>
-            <Field label="Effective ha">
+            <Field label="Paddock area (ha)">
               <input inputMode="decimal" value={part.effectiveHa} onChange={(event) => setPart(index, "effectiveHa", event.target.value)} />
             </Field>
           </div>

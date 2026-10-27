@@ -8738,3 +8738,61 @@ below says so; those are not yet reviewed by Jess.
      with its progress in the Windows app), and the Windows app follows a
      build every two seconds without locking the page. Real organisations
      still can't be deleted from these pages. Not yet reviewed by Jess.
+
+### Farmer-friendly farm screens (#447; decisions 900-929)
+
+Jess asked on 26 October 2026 for farm screens that suit farmers, and on 27
+October 2026 to "implement them now including chat gpts ideas" (William's
+follow-up comment on #447, whose delivery order and acceptance checks are
+followed where they differ from the issue). The issue's questions for Jess
+aren't answered yet, so these follow the comment and the patterns of LIC
+MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
+537).
+
+900. **The farm you last used opens** (27 October 2026, #447 quick win 1;
+     not yet reviewed by Jess). Each person's last farm is remembered in the
+     organisation's database (migration 0186, `farm_last_used`), not just in
+     a browser tab, so a farm page opens on it on any device rather than
+     asking first. It's only a convenience: it's offered only while the farm
+     is active and the person can still see it (decision 744, checked on
+     every read), and the row is deleted when an owner or admin takes that
+     farm off them or they leave. Decision 740's rules stay: a choice in
+     this tab or a `?farm=` link wins, and a stale choice is reported, never
+     swapped for another farm. With two or more farms and none used yet,
+     the page shows the farms as buttons ("Which farm?") rather than an
+     empty page with a list to open: it still asks, as decision 740 says,
+     but the question is the page. "Your choice carries across … in this
+     tab" is gone from the selector.
+901. **Histories a page at a time, on the server** (27 October 2026, #447
+     quick win 2 and the comment's first change; not yet reviewed by Jess).
+     Readings, grazings and supplements are read newest first, 25 to a page
+     on screens (up to 1,000 for the Farming API and 5,000 for the AI), with
+     From, To and paddock filters, and a cursor (the last row's date and id)
+     for the next page, so rows added meanwhile don't repeat or shift what's
+     been seen. The farm's cover, feed wedge and growth use each paddock's
+     latest two readings on or before the date and only the grazings that
+     can matter; supplements by month cover the 12 months to the date. None
+     of them use a page, so paging can't change a total (tested against the
+     totals worked out from every record). A paddock's own card shows its
+     latest 50 readings and grazings. Mobs in now are listed on their own
+     so a day out can be recorded whatever page is showing.
+902. **A record can't land on the wrong farm** (27 October 2026, the
+     comment's acceptance check; not yet reviewed by Jess). Adding a
+     reading, grazing or supplement through a farm's address with a paddock
+     from another farm is refused ("isn't on the farm this was recorded
+     for. Nothing was saved"), rather than saved to the paddock's farm.
+     Forms belong to the farm they were opened on and are cleared when the
+     farm changes.
+903. **One line per record on a phone; Remove apart** (27 October 2026,
+     #447 quick wins 3-5; not yet reviewed by Jess). Below 700px, paddocks,
+     the feed wedge, readings, grazings, supplements and latest soil tests
+     are one line each ("16 · 3,057 · 24 Oct · Milkers in") that opens to
+     the rest and its actions; wide screens keep the tables. Remove sits
+     under the main actions, separated, and asks before removing. Buttons
+     and fields on farm pages are at least 44px tall on a phone. Plain
+     words: "Paddock area" for effective hectares, "Farm costs per …" with
+     "Farm working expenses (FWE)" as a hint, "Changes" instead of plan
+     version numbers, and no internal example codes (PF3) on farm pages.
+     Shorter notes replace "Tohyee doesn't judge…" sentences; decisions 516
+     and 559 still hold (nothing is judged high or low).
+

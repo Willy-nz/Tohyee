@@ -52,7 +52,7 @@ two-step sign-in is reset.
 | `GET /soil/samples` | `read_soil` | samples taken in the field |
 | `POST /soil/samples` | `record_soil_samples` | `{ paddockId, takenOn, sampleName?, depth?, latitude?, longitude?, note? }` |
 | `GET /pasture/cover` | `read_pasture` | cover, feed wedge and growth on `onDate` |
-| `GET /pasture/readings` | `read_pasture` | cover readings |
+| `GET /pasture/readings` | `read_pasture` | cover readings, newest first, up to 1,000 a page (`from`, `to`, `paddockId`, `limit`, `cursor`); `next` is the cursor for the next page, or null |
 | `POST /pasture/readings` | `record_pasture` | `{ paddockId, measuredOn, cover, method, note? }` |
 
 ## What Tohyee won't decide for your app
