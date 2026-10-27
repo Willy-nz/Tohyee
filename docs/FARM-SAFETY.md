@@ -109,6 +109,53 @@ stays in the chain, so the rest still checks.
   paper copy. Each time they load, a copy is kept on the phone, and when
   Tohyee can't be reached that copy shows with the time it was saved.
 
+## Reports, actions and photos (decisions 942-947)
+
+- **Report something** (Safety page, near the top): **Hazard spotted**,
+  **Near miss** or **Incident**. A phone-sized form in William's order: a
+  photo, what it was, when (date and time; not after today), where (words,
+  "where I am now", a paddock), what happened, what was done straight
+  away, how bad (minor, moderate, serious), and optionally who'll put it
+  right (a member or someone without a login, with a date).
+- **Injury details are restricted.** "Someone was hurt or made ill" opens
+  who, injury or illness, treatment and an injury photo. They're saved as a
+  separate restricted record (decision 936): the farm team sees the report
+  and "injury details are restricted"; owners, members an owner names, and
+  whoever entered them see the details. Photos follow the same rule.
+- **WorkSafe's questions** (incidents and near misses), in WorkSafe's words
+  from its quick guide: a death; admitted to hospital as an inpatient; a
+  serious injury or illness from WorkSafe's list; someone put in serious,
+  immediate danger by something unplanned or out of control. Any yes shows
+  a prompt: phone WorkSafe straight away for a death (111 first in an
+  emergency), otherwise Notify WorkSafe online; leave the site as it is
+  except to help someone, make it safe, or as police or an inspector say.
+  **Tohyee never notifies WorkSafe** (or anyone) itself; the report shows
+  "May need notifying" until someone records **Record telling WorkSafe**
+  (date, phone or online, WorkSafe's reference).
+- **Saved on this phone first.** A report is kept in the phone's browser,
+  then sent with its own id. With no connection it stays under **Waiting
+  to send** ("Saved on this phone, not yet recorded. Nobody has been told
+  about these yet."); **Send now** sends each once. A refusal shows **Needs
+  attention** with the reason, kept until fixed or discarded. Drafts belong
+  to the person and organisation, carry their farm (switching farms never
+  moves them), and go after 14 days. Photos need a connection: they're not
+  kept in drafts.
+- **Photos and documents**: JPEG, PNG, WebP or PDF up to 10 MB, checked to
+  be what they say. The database keeps each file's hash and when it
+  arrived; the camera's date (from the photo) and the phone's file date
+  are kept beside it as given, never as the entry time. The record names
+  the file's hash, so it's in the chain too. The WorkSafe pack includes the
+  files and `verify.mjs` checks them.
+- **Corrective actions** for a report (or a hazard): what needs doing, who
+  (a member, or a name), by when. **Mark done** (what was done, a photo),
+  then **Check and close** (bookkeeper or above), or **Reopen** (why). An
+  action past its date is Overdue. A report can be **Closed** (why) only
+  once every action is checked and closed. Marking done, checking,
+  reopening and closing are refused through an AI key or farm app: a
+  person does them (William: "AI must not independently close an action").
+  Open actions per person are ready for Today and the calendar (#447).
+- **Owners choose** who else sees injury details, on the Safety page.
+
 ## Worked examples
 
 Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
@@ -155,12 +202,48 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
 - **FS12 Viewers read.** A viewer sees the Safety page but can't add or
   change a hazard (403).
 
+- **FS13 Injury details kept apart.** Mere reports "Hand caught in the yard
+  gate latch" with a photo and injury details (cut to the left hand,
+  stitches) and a restricted photo. Aroha (bookkeeper, all farms) sees the
+  report and its photo, "injury details are restricted", and can't open the
+  restricted photo or change the details; Mere and the owner see them. A
+  restricted photo can't go on the open report.
+- **FS14 WorkSafe's questions.** A near miss answered yes to "put in
+  serious, immediate danger" shows the prompt; nothing is sent anywhere.
+  Recording telling WorkSafe needs phone or online and a date not after
+  today; it's kept as a version (20 October, phone, WS-123).
+- **FS15 Photos.** A JPEG whose camera date is 27 October 07:45 keeps
+  "2026-10-27 07:45:00" and the phone's file date beside the database's
+  arrival time and hash. Text calling itself a JPEG, an SVG, or a photo for
+  another farm is refused.
+- **FS16 Actions to a checked close.** An action needs who; a non-member is
+  refused. Due 1 October, it's Overdue on Mere's list (not Aroha's). The
+  report can't close while it's open; it can't be checked before it's
+  done; done and checked are refused through an AI key or farm app; after
+  Aroha checks it, it can't be changed without reopening; the report then
+  closes with why, and takes no more actions.
+- **FS17 Sent twice.** The same report sent again from the phone (same id)
+  is one report with one set of injury details.
+- **FS18 Farms kept apart.** Mere can't list, change or add actions to
+  Runoff reports (route 404). A photo is served with its own type and
+  `nosniff`.
+- **FS19 Waiting to send** (`tests/unit/safety-drafts.test.ts`). A draft
+  survives reopening, belongs to one person and organisation, is sent once
+  with its id and removed only when recorded; no connection or a busy
+  server keeps it; a refusal marks it needs attention with the reason; it
+  goes after 14 days; a phone that can't store it says so.
+- **FS20 Photos in the pack.** The owner's pack has both photos and
+  `verify.mjs` checks them; Aroha's has only the open one and still checks
+  out.
+
 ## Not done yet
 
-In this change: incidents and near misses, corrective actions, inductions
-and sign-offs, pre-start checks, training, chemicals, photos, the weekly
-copy emailed off the farm, and the farm workspace (#447) links. They follow
-as further changes on #446, in that order.
+Inductions and sign-offs, sign in on site, pre-start checks, training,
+chemicals, the weekly copy emailed off the farm, and the farm workspace
+(#447) links follow as further changes on #446. Not in reports yet: telling
+staff by email or notification when something is reported (no message is
+sent, and nothing claims one was), people involved besides the injured
+person, and photos kept in drafts while offline.
 
 ## Open questions for Jess
 
@@ -176,3 +259,8 @@ Wording or rules that touch the law, *not yet reviewed by Jess*:
 4. The pack's README sentence "Tohyee keeps these records; it doesn't decide
    what the law needs you to keep".
 5. Owners (not admins) seeing restricted details by default.
+6. WorkSafe's notifiable-event questions as worded in Report something
+   (from the March 2024 quick guide), and the prompt's three points
+   (phone for a death, Notify WorkSafe otherwise, leave the site as it is
+   with WorkSafe's exceptions).
+7. The minor/moderate/serious scale for reports.

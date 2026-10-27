@@ -52,6 +52,9 @@ export const CHANGE_LABELS: Record<SafetyChange, string> = {
   withdrawn: "Withdrawn (entered by mistake)",
 };
 
+/** A photo or document a record names; the hash is in the record's own version (decision 945). */
+export type SafetyFileRef = { id: string; name: string; sha256: string };
+
 /** One version of a safety record, as the screens get it. */
 export type SafetyVersion<T> = {
   seq: string;
@@ -196,6 +199,26 @@ const FIELD_LABELS: Record<string, string> = {
   noCoveragePlan: "Where there's no phone coverage",
   medicalCentre: "Nearest medical centre",
   notes: "Notes",
+  type: "Type",
+  whatHappened: "What happened",
+  where: "Where",
+  time: "Time",
+  immediateAction: "What was done straight away",
+  severity: "How bad",
+  injured: "Someone hurt or made ill",
+  notifiable: "May need notifying",
+  workSafeNotified: "WorkSafe told",
+  closed: "Closed",
+  reportId: "Report",
+  hazardId: "Hazard",
+  injuredPerson: "Who",
+  injury: "Injury or illness",
+  treatment: "Treatment",
+  assignedToUserId: "Assigned to (member)",
+  assignedToName: "Assigned to",
+  due: "Due",
+  done: "Done",
+  verified: "Checked and closed",
 };
 
 /** A short name for a record, for lists and the pack. */
@@ -213,6 +236,18 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
   if (key === "point" && Array.isArray(value)) return `${Number(value[1]).toFixed(6)}, ${Number(value[0]).toFixed(6)} (latitude, longitude)`;
   if (key === "zone") return "Drawn on the map";
   if (key === "level" && typeof value === "string") return HAZARD_LEVEL_LABELS[value as HazardLevel] ?? value;
+  if (key === "type" && typeof value === "string") return REPORT_TYPE_LABELS[value as ReportType] ?? value;
+  if (key === "severity" && typeof value === "string") return SEVERITY_LABELS[value as Severity] ?? value;
+  if (key === "notifiable" && value && typeof value === "object") {
+    const yes = NOTIFIABLE_QUESTIONS.filter((question) => (value as Record<string, unknown>)[question.key] === true).map((question) => question.key);
+    return yes.length ? `Yes: ${yes.join(", ")}` : null;
+  }
+  if (key === "workSafeNotified" && value && typeof value === "object") {
+    const notice = value as WorkSafeNotice;
+    return `${notice.on}, by ${notice.how}${notice.reference ? `, reference ${notice.reference}` : ""}`;
+  }
+  if ((key === "closed" || key === "verified") && value && typeof value === "object") return (value as { why?: string; note?: string | null }).why ?? (value as { note?: string | null }).note ?? "Yes";
+  if (key === "done" && value && typeof value === "object") return (value as { note: string }).note;
   if (Array.isArray(value)) {
     if (!value.length) return null;
     return value
@@ -234,4 +269,107 @@ export function recordFields(data: Record<string, unknown>, paddockNames: Readon
     if (text !== null) fields.push([FIELD_LABELS[key] ?? key.replace(/([A-Z])/g, " $1").replace(/^./, (first) => first.toUpperCase()), text]);
   }
   return fields;
+}
+
+// Reports: hazards spotted, near misses and incidents ----------------------------------------------
+
+export const REPORT_TYPES = ["hazard", "near_miss", "incident"] as const;
+export type ReportType = (typeof REPORT_TYPES)[number];
+export const REPORT_TYPE_LABELS: Record<ReportType, string> = { hazard: "Hazard spotted", near_miss: "Near miss", incident: "Incident" };
+
+export const SEVERITIES = ["minor", "moderate", "serious"] as const;
+export type Severity = (typeof SEVERITIES)[number];
+export const SEVERITY_LABELS: Record<Severity, string> = { minor: "Minor", moderate: "Moderate", serious: "Serious" };
+
+/**
+ * The questions that prompt "this may need to be notified", in WorkSafe's
+ * words from its quick guide "What events need to be notified?" (March
+ * 2024). A yes shows the prompt; Tohyee never notifies anyone itself
+ * (decision 943). Not yet reviewed by Jess.
+ */
+export const NOTIFIABLE_QUESTIONS = [
+  { key: "death", text: "Did someone die?" },
+  { key: "hospital", text: "Was someone admitted to hospital for immediate treatment (as an inpatient, not just seen and sent home)?" },
+  {
+    key: "seriousInjury",
+    text: "Was there a serious injury or illness: an amputation, serious head injury, serious eye injury, serious burn, skin torn away, spinal injury, loss of a bodily function, a serious cut, a serious infection, or medical treatment needed within 48 hours of being exposed to a substance?",
+  },
+  {
+    key: "dangerousIncident",
+    text: "Even if nobody was hurt, was someone put in serious, immediate danger by something unplanned or out of control: a spill or leak, fire or explosion, an electric shock, something falling from height, or a collapse?",
+  },
+] as const;
+export type NotifiableKey = (typeof NOTIFIABLE_QUESTIONS)[number]["key"];
+export type NotifiableAnswers = Partial<Record<NotifiableKey, boolean>>;
+
+export function mayBeNotifiable(answers: NotifiableAnswers | null | undefined): boolean {
+  return Boolean(answers && Object.values(answers).some(Boolean));
+}
+
+export type WorkSafeNotice = { on: string; how: "phone" | "online"; reference: string | null };
+
+export type ReportData = {
+  type: ReportType;
+  title: string;
+  whatHappened: string | null;
+  where: string | null;
+  paddockIds: string[];
+  point: Position | null;
+  /** HH:MM, as the person says. */
+  time: string | null;
+  immediateAction: string | null;
+  severity: Severity;
+  /** Someone hurt or made ill: their details go in restricted details. */
+  injured: boolean;
+  notifiable: NotifiableAnswers;
+  /** Recorded by a person after they told WorkSafe (Tohyee doesn't). */
+  workSafeNotified: WorkSafeNotice | null;
+  /** Closed by a person, with why; only once every action is verified. */
+  closed: { why: string } | null;
+  files: SafetyFileRef[];
+  why?: string | null;
+};
+
+export type ReportDetailsData = {
+  reportId: string;
+  injuredPerson: string | null;
+  injury: string | null;
+  treatment: string | null;
+  notes: string | null;
+  files: SafetyFileRef[];
+  why?: string | null;
+};
+
+export type ActionData = {
+  /** What it's for: a report or a hazard (by record id), or neither. */
+  reportId: string | null;
+  hazardId: string | null;
+  title: string;
+  assignedToUserId: string | null;
+  /** A name, for someone without a login. */
+  assignedToName: string | null;
+  due: string | null;
+  done: { note: string; files: SafetyFileRef[] } | null;
+  verified: { note: string | null } | null;
+  why?: string | null;
+};
+
+export type ActionState = "open" | "overdue" | "done" | "verified" | "withdrawn";
+
+export function actionState(record: Pick<SafetyVersion<ActionData>, "change" | "data">, today: string): ActionState {
+  if (record.change === "withdrawn") return "withdrawn";
+  if (record.data.verified) return "verified";
+  if (record.data.done) return "done";
+  return record.data.due && record.data.due < today ? "overdue" : "open";
+}
+
+export const ACTION_STATE_LABELS: Record<ActionState, string> = { open: "Open", overdue: "Overdue", done: "Done, to check", verified: "Checked and closed", withdrawn: "Withdrawn" };
+
+export type ReportState = "open" | "actions" | "closed" | "withdrawn";
+export const REPORT_STATE_LABELS: Record<ReportState, string> = { open: "Open", actions: "Actions open", closed: "Closed", withdrawn: "Withdrawn" };
+
+export function reportState(record: Pick<SafetyVersion<ReportData>, "change" | "data">, actions: ReadonlyArray<Pick<SafetyVersion<ActionData>, "change" | "data">>): ReportState {
+  if (record.change === "withdrawn") return "withdrawn";
+  if (record.data.closed) return "closed";
+  return actions.some((action) => action.change !== "withdrawn" && !action.data.verified) ? "actions" : "open";
 }

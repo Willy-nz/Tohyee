@@ -8821,3 +8821,41 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
      inductions, sign-offs and sign in on site; pre-start checks; training;
      chemicals; photos; the weekly copy emailed off the farm; and the farm
      workspace (#447: Safety tab, map, Log, Today and the calendar).
+
+### Farm safety: reports, actions and photos (#446; decisions 942-947)
+
+942. **One report for hazards spotted, near misses and incidents**, in
+     William's order (photo, where, what happened, what was done, who'll put
+     it right), dated by the person (not after today) and entered by the
+     database (decision 932). A first action can come with the report.
+     Severity minor/moderate/serious (open question). Not yet reviewed by
+     Jess.
+943. **WorkSafe's questions prompt; Tohyee never notifies.** The four
+     questions follow WorkSafe's quick guide *What events need to be
+     notified?* (March 2024). Any yes shows the prompt (phone for a death,
+     Notify WorkSafe online otherwise, leave the site as it is with WorkSafe's
+     exceptions) and the report shows "May need notifying" until a person
+     records telling WorkSafe (date, phone or online, reference). Nothing is
+     sent automatically, and nothing says it was. Not yet reviewed by Jess.
+944. **Saved on this phone, sent once.** Reports are kept in the phone's
+     browser before sending, with the operation id they're sent with
+     (decision 933); "Waiting to send" says plainly nobody has been told; a
+     refusal needs attention; drafts are the person's, carry their farm and
+     go after 14 days. Photos aren't kept in drafts (phone storage is small).
+     A safety-only store for now; it moves to #447's shared drafts if that
+     lands with the same rules.
+945. **Photos keep their own dates.** JPEG, PNG, WebP or PDF, 10 MB, checked
+     by their first bytes; the database sets the hash and arrival time; the
+     camera's EXIF date (with its offset when written) and the phone's file
+     date are kept as given, labelled, never the entry time. Records name
+     files by id and hash. Restricted photos follow restricted details.
+946. **Actions are closed by people.** Done (with what was done), then
+     checked and closed by bookkeeper or above, or reopened with why; a
+     report closes (with why) only when every action is checked. Done,
+     check, reopen and close are refused through an AI key or farm app
+     (William: AI "must not independently close an action"). The same person
+     may mark done and check (a one-person farm must be able to), and the
+     history shows who did each. Not yet reviewed by Jess.
+947. **Owners choose who sees injury details** on the Safety page (decision
+     936). Not in this change: emailing or notifying staff about a report,
+     and people involved besides the injured person.
