@@ -8895,3 +8895,36 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
      uses its own one-time token. Anyone with the link can read the farm's
      hazards and emergency details, which is its purpose. Not yet reviewed by
      Jess (privacy wording is an open question).
+
+### Farm safety: equipment and pre-start checks, training, chemicals (#446; decisions 953-957)
+
+953. **Equipment is its own safety record.** On a farm, ours, hired or a
+     contractor's; it may name a fixed asset but needn't (William's review).
+     A QR code per machine opens its pre-start check. Not yet reviewed by
+     Jess.
+954. **Checklists are versioned; a check copies the questions it asked.**
+     Answers are OK, Fault (with what's wrong) or Not applicable (not for a
+     critical item), against the version shown, so a changed checklist never
+     rewrites an answer (William's acceptance test). Item keys come from
+     their words and carry across versions.
+955. **A failed critical check puts a machine out of use.** It makes an
+     action (for whoever's responsible, or the checker, due today, naming the
+     check). Only an owner, an admin or a member named on the equipment can
+     release it, with what was done, never through an AI key or farm app.
+     Out of use is worked out from checks and releases (not a status typed
+     in), and the screen says it isn't a physical lockout (William: "software
+     status is not a physical lockout"). Not yet reviewed by Jess.
+956. **Training for every farm; the person confirms their own.** Expires soon
+     within 60 days (as Xero's and SafeAg's reminders work on a window; the
+     number is ours), expired after; jobs it covers or limits (WorkSafe's farm
+     guide). Only the person, on their own login, confirms it; a change needs
+     confirming again. Reminders on Today and the calendar come with #447.
+     Not yet reviewed by Jess.
+957. **Chemicals per farm, as WorkSafe's inventory lists them.** Name, UN
+     number, the most likely on site (a decimal through
+     `src/lib/money/decimal.ts`, with a unit), where, storage, hazards,
+     approved handler, hazardous waste, and the safety data sheet with its
+     date; missing or more than five years old says to get a new one
+     (WorkSafe's 2017 farm chemicals page). Removed chemicals stay. Not yet:
+     HSNO thresholds (signage, emergency response plans, certified
+     handlers), which depend on quantities and classes Tohyee doesn't hold.

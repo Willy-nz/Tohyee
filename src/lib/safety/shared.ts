@@ -211,6 +211,50 @@ const FIELD_LABELS: Record<string, string> = {
   closed: "Closed",
   reportId: "Report",
   hazardId: "Hazard",
+  checkId: "Pre-start check",
+  equipmentId: "Equipment",
+  checklistId: "Checklist",
+  checklistVersion: "Checklist version",
+  answers: "Answers",
+  hoursOrKm: "Hours or km",
+  passed: "Passed",
+  criticalFault: "Out of use (critical fault)",
+  whatWasDone: "What was done",
+  owner: "Whose",
+  ownerName: "Owner",
+  fixedAssetId: "Fixed asset",
+  responsibleUserId: "Responsible (member)",
+  releaserUserIds: "Can release (members)",
+  retired: "No longer used",
+  items: "Checks",
+  what: "Training",
+  provider: "Provider",
+  expiresOn: "Expires",
+  certificate: "Certificate",
+  canDo: "Covers",
+  confirmedByPerson: "Confirmed by them",
+  person: "Person",
+  unNumber: "UN number",
+  maxQuantity: "Most on site",
+  unit: "Unit",
+  location: "Where it's kept",
+  storage: "Storage",
+  hazards: "Hazards",
+  sdsDate: "Safety data sheet date",
+  approvedHandler: "Needs an approved handler",
+  hazardousWaste: "Hazardous waste",
+  audiences: "For",
+  sections: "Sections",
+  needsResign: "Everyone signs again",
+  inductionId: "Induction",
+  inductionVersion: "Induction version",
+  audience: "As",
+  signedHow: "Signed",
+  statement: "Statement",
+  emergencyVersion: "Emergency details version",
+  purpose: "What for",
+  signedOut: "Signed out",
+  leftAt: "Left at",
   injuredPerson: "Who",
   injury: "Injury or illness",
   treatment: "Treatment",
@@ -248,13 +292,23 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
   }
   if ((key === "closed" || key === "verified") && value && typeof value === "object") return (value as { why?: string; note?: string | null }).why ?? (value as { note?: string | null }).note ?? "Yes";
   if (key === "done" && value && typeof value === "object") return (value as { note: string }).note;
+  if (key === "answers" && Array.isArray(value)) {
+    return value.map((answer: { text?: string; result?: string; note?: string | null }) => `${answer.text}: ${answer.result === "ok" ? "OK" : answer.result === "na" ? "n/a" : `FAULT${answer.note ? ` (${answer.note})` : ""}`}`).join("; ") || null;
+  }
+  if (key === "items" && Array.isArray(value)) return value.map((item: { text?: string; critical?: boolean }) => `${item.text}${item.critical ? " (critical)" : ""}`).join("; ") || null;
+  if (key === "sections" && Array.isArray(value)) return value.map((section: { heading?: string }) => section.heading).join("; ") || null;
+  if (key === "hazards" && Array.isArray(value)) return `${value.length} shown`;
   if (Array.isArray(value)) {
     if (!value.length) return null;
     return value
       .map((item) => (item && typeof item === "object" ? Object.values(item as Record<string, unknown>).filter((part) => part !== null && part !== "").join(", ") : String(item)))
       .join("; ");
   }
-  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "object") {
+    const named = value as { name?: unknown; company?: unknown };
+    if (typeof named.name === "string") return typeof named.company === "string" && named.company ? `${named.name} (${named.company})` : named.name;
+    return JSON.stringify(value);
+  }
   return String(value);
 }
 
@@ -344,6 +398,8 @@ export type ActionData = {
   /** What it's for: a report or a hazard (by record id), or neither. */
   reportId: string | null;
   hazardId: string | null;
+  /** For an action made by a failed pre-start check. */
+  checkId?: string | null;
   title: string;
   assignedToUserId: string | null;
   /** A name, for someone without a login. */
@@ -425,3 +481,103 @@ export type VisitData = {
   signedHow: SignedHow;
   why?: string | null;
 };
+
+// Equipment and pre-start checks ------------------------------------------------------------------------
+
+export const EQUIPMENT_OWNERS = ["owned", "hired", "contractor"] as const;
+export type EquipmentOwner = (typeof EQUIPMENT_OWNERS)[number];
+export const EQUIPMENT_OWNER_LABELS: Record<EquipmentOwner, string> = { owned: "Ours", hired: "Hired", contractor: "A contractor's" };
+
+export type EquipmentData = {
+  name: string;
+  /** e.g. tractor, quad bike, side-by-side, chainsaw. */
+  type: string | null;
+  owner: EquipmentOwner;
+  ownerName: string | null;
+  /** The fixed asset in the books, if it is one (not needed). */
+  fixedAssetId: string | null;
+  checklistId: string | null;
+  /** Who's responsible for it: failed checks go to them. */
+  responsibleUserId: string | null;
+  /** Members who may release it after a failed check (owners and admins always may). */
+  releaserUserIds: string[];
+  notes: string | null;
+  retired: boolean;
+  why?: string | null;
+};
+
+export type ChecklistItem = { key: string; text: string; critical: boolean };
+export type ChecklistData = { title: string; items: ChecklistItem[]; why?: string | null };
+
+export type CheckAnswer = { key: string; text: string; critical: boolean; result: "ok" | "fault" | "na"; note: string | null };
+export type CheckData = {
+  equipmentId: string;
+  checklistId: string;
+  checklistVersion: number;
+  /** The questions as asked, copied in: a changed checklist never rewrites an answer (decision 954). */
+  answers: CheckAnswer[];
+  hoursOrKm: string | null;
+  passed: boolean;
+  /** A failed critical item: the equipment is out of use until released. */
+  criticalFault: boolean;
+  files: SafetyFileRef[];
+  why?: string | null;
+};
+
+export type ReleaseData = { equipmentId: string; checkId: string; whatWasDone: string; files: SafetyFileRef[]; why?: string | null };
+
+export const LOCKOUT_NOTE = "Tohyee's \"out of use\" is a record, not a lock: tag it out on the machine too, and take the key.";
+
+// Training and chemicals ------------------------------------------------------------------------------
+
+export type TrainingData = {
+  person: SafetyPerson;
+  what: string;
+  provider: string | null;
+  expiresOn: string | null;
+  certificate: string | null;
+  /** Jobs it covers, or limits (WorkSafe: keep "which jobs each person can and can't do"). */
+  canDo: string | null;
+  files: SafetyFileRef[];
+  /** The person confirmed it on their own login (decision 956). */
+  confirmedByPerson: boolean;
+  why?: string | null;
+};
+
+export type TrainingState = "current" | "expiring" | "expired" | "no_expiry" | "withdrawn";
+export const TRAINING_STATE_LABELS: Record<TrainingState, string> = { current: "Current", expiring: "Expires soon", expired: "Expired", no_expiry: "No expiry", withdrawn: "Withdrawn" };
+export const EXPIRING_DAYS = 60;
+
+export function trainingState(record: Pick<SafetyVersion<TrainingData>, "change" | "data">, today: string): TrainingState {
+  if (record.change === "withdrawn") return "withdrawn";
+  if (!record.data.expiresOn) return "no_expiry";
+  if (record.data.expiresOn < today) return "expired";
+  const soon = new Date(`${today}T00:00:00Z`);
+  soon.setUTCDate(soon.getUTCDate() + EXPIRING_DAYS);
+  return record.data.expiresOn <= soon.toISOString().slice(0, 10) ? "expiring" : "current";
+}
+
+export type ChemicalData = {
+  name: string;
+  unNumber: string | null;
+  /** The most likely to be on site at once (WorkSafe's inventory), a decimal string, and its unit. */
+  maxQuantity: string | null;
+  unit: string | null;
+  location: string | null;
+  storage: string | null;
+  hazards: string | null;
+  sds: SafetyFileRef | null;
+  /** The date on the safety data sheet. */
+  sdsDate: string | null;
+  approvedHandler: boolean;
+  hazardousWaste: string | null;
+  removed: boolean;
+  why?: string | null;
+};
+
+/** WorkSafe's farm chemicals guidance: a safety data sheet more than five years old should be replaced (decision 957). */
+export function sdsOutOfDate(data: Pick<ChemicalData, "sdsDate" | "sds">, today: string): boolean {
+  if (!data.sds || !data.sdsDate) return true;
+  const fiveYearsAgo = `${Number(today.slice(0, 4)) - 5}${today.slice(4)}`;
+  return data.sdsDate < fiveYearsAgo;
+}
