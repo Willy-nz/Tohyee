@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
+import { endPasskeys } from "@/lib/auth/passkey-end";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
 import { createSetupLink, emailSetupLink, type SetupLink } from "@/lib/auth/setup-links";
@@ -27,6 +28,8 @@ export type UserSummary = {
   googleEmail: string | null;
   /** Set up with Google only: no password. */
   googleOnly: boolean;
+  /** How many passkeys the login has (#450). */
+  passkeyCount: number;
 };
 
 type UserRow = {
@@ -42,6 +45,7 @@ type UserRow = {
   setup_link_expires_at: string | null;
   google_email: string | null;
   google_only: boolean;
+  passkey_count: string;
 };
 
 function toSummary(row: UserRow): UserSummary {
@@ -58,6 +62,7 @@ function toSummary(row: UserRow): UserSummary {
     setupLinkExpiresAt: row.setup_link_expires_at ? new Date(row.setup_link_expires_at).toISOString() : null,
     googleEmail: row.google_email,
     googleOnly: row.google_only,
+    passkeyCount: Number(row.passkey_count),
   };
 }
 
@@ -65,6 +70,7 @@ const USER_SELECT = `
   select u.id, u.email, u.display_name, u.is_server_admin, u.is_active,
          u.last_login_at, u.created_at, u.totp_enabled_at is not null as two_step_enabled, u.google_only,
          (select g.email from user_google_identities g where g.user_id = u.id) as google_email,
+         (select count(*) from user_passkeys p where p.user_id = u.id)::text as passkey_count,
          (select count(*) from organisation_members m where m.user_id = u.id)::text as organisation_count,
          (select max(l.expires_at) from user_setup_links l where l.user_id = u.id and l.used_at is null and l.expires_at > now()) as setup_link_expires_at
     from users u`;
@@ -200,8 +206,11 @@ export async function updateUser(
     if (isActive === false || newPasswordHash) {
       await client.query("delete from sessions where user_id = $1", [userId]);
     }
-    // A reset password stops their AI keys too (#132).
-    const aiKeysRevoked = newPasswordHash ? await revokeUserAiKeys(client, userId) : 0;
+    // A reset password stops their AI keys too (#132). A reset password or a login
+    // turned off ends their passkeys and disconnects their apps (#450, decision 892).
+    const endsAccess = Boolean(newPasswordHash) || isActive === false;
+    const aiKeysRevoked = endsAccess ? await revokeUserAiKeys(client, userId) : 0;
+    const passkeysEnded = endsAccess ? await endPasskeys(client, userId) : 0;
 
     await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
       eventType: "user.updated",
@@ -213,6 +222,7 @@ export async function updateUser(
         isServerAdmin,
         passwordReset: Boolean(newPasswordHash),
         aiKeysRevoked,
+        passkeysEnded,
       },
     });
 

@@ -164,6 +164,9 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.15.0 ready to publish from main** (27 Oct 2026): #435, #442, #443 and
+  #448. Jess publishes "Tohyee 0.15.0" on main with tag `v0.15.0` and pastes
+  in `docs/releases/0.15.0.md`.
 - **0.14.0 ready to publish from main** (24 Oct 2026): the demo farm (#438)
   and the security fixes (#433, #434). 0.13.1 was prepared but not published,
   so 0.14.0 carries it. Jess publishes "Tohyee 0.14.0" on main with tag

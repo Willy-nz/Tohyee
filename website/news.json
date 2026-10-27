@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-10-27",
+      "title": "Tohyee 0.15.0: invite people, and a security update",
+      "body": "New: invite people from People and roles, with a setup link emailed to new people. Next.js is updated to fix critical security problems, so update soon. The demo farm is now added from the server's Organisations page.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.15.0"
+    },
+    {
       "date": "2026-10-24",
       "title": "Tohyee 0.14.0: try the demo farm",
       "body": "New: add Kōwhai Dairies Ltd, a made-up dairy farm with farm records, books, payroll, GST and Analytics reports, from the organisation menu. Also security fixes: removing someone's Google sign-in now disconnects their AI apps, keys and PowerPoint add-in sign-ins, and restoring people from a backup keeps their Google sign-in. Update soon if you use those.",

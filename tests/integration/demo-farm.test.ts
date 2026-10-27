@@ -1,7 +1,8 @@
 import * as membersRoute from "@/app/api/organisations/[organisationId]/members/route";
 import { rm } from "node:fs/promises";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import * as demoRoute from "@/app/api/demo-farm/route";
+import * as demoFarmsRoute from "@/app/api/admin/demo-farms/route";
+import * as demoFarmRoute from "@/app/api/admin/demo-farms/[userId]/route";
 import * as emailSettingsRoute from "@/app/api/email/settings/route";
 import { listDashboards, runTile } from "@/lib/analytics/dashboards";
 import type { SessionUser } from "@/lib/auth/sessions";
@@ -47,7 +48,9 @@ describeWithDatabase("the demo farm (#437)", () => {
   let server: TestServer;
   let jess: SessionUser;
   let mere: SessionUser;
+  let ana: SessionUser;
   let org = "";
+  const params = (userId: string) => ({ params: Promise.resolve({ userId }) });
   const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: jess.id, email: jess.email }, work);
   const waitFor = async (userId: string) => {
     for (let tries = 0; tries < 600; tries += 1) {
@@ -66,12 +69,16 @@ describeWithDatabase("the demo farm (#437)", () => {
     server = await startTestServer();
     jess = await createTestUser("demo-jess@example.com");
     mere = await createTestUser("demo-mere@example.com");
-    // Anyone signed in adds it from the organisation menu: the request returns at once, and the build runs in the background.
-    const started = await demoRoute.POST(apiRequest("/api/demo-farm", { method: "POST", cookie: await sessionCookieFor(jess), body: { action: "add" } }), undefined as never);
+    ana = await createTestUser("demo-ana@example.com", { serverAdmin: true });
+    // A server admin adds it for Jess in the server settings (#445): the request returns at once, and the build runs in the background.
+    const started = await demoFarmsRoute.POST(
+      apiRequest("/api/admin/demo-farms", { method: "POST", cookie: await sessionCookieFor(ana), body: { ownerEmail: jess.email } }),
+      undefined as never,
+    );
     expect(started.status).toBe(202);
-    const body = (await started.json()) as { demo: { status: string; organisationId: string } };
-    expect(body.demo.status).toBe("building");
-    org = body.demo.organisationId;
+    const body = (await started.json()) as { demoFarm: { status: string; organisationId: string; email: string } };
+    expect(body.demoFarm).toMatchObject({ status: "building", email: jess.email });
+    org = body.demoFarm.organisationId;
     // Not in her organisation list until it's made.
     expect((await listMembershipsForUser(jess.id)).map((entry) => entry.organisation.id)).not.toContain(org);
     const demo = await waitFor(jess.id);
@@ -92,9 +99,67 @@ describeWithDatabase("the demo farm (#437)", () => {
     const organisation = await getOrganisation(org);
     expect(organisation).toMatchObject({ displayName: "Kōwhai Dairies Ltd", provisioningStatus: "ready", demo: { userId: jess.id, status: "ready" } });
     expect((await listMembershipsForUser(jess.id)).map((entry) => [entry.organisation.id, entry.role])).toEqual([[org, "owner"]]);
-    const response = await demoRoute.GET(apiRequest("/api/demo-farm", { cookie: await sessionCookieFor(jess) }), undefined as never);
-    expect(await response.json()).toMatchObject({ enabled: true, demo: { organisationId: org, status: "ready" } });
+    const response = await demoFarmsRoute.GET(apiRequest("/api/admin/demo-farms", { cookie: await sessionCookieFor(ana) }), undefined as never);
+    expect(await response.json()).toMatchObject({ enabled: true, demoFarms: [{ organisationId: org, status: "ready", userId: jess.id, email: jess.email }] });
+    // Added by the server admin, for Jess: the audit log says both.
+    const audit = await coreQuery<{ actor_email: string; details: { forEmail: string } }>(
+      "select actor_email, details from admin_audit_events where event_type = 'demo_farm.added' and entity_id = $1",
+      [org],
+    );
+    expect(audit.rows[0]).toMatchObject({ actor_email: ana.email, details: { forEmail: jess.email } });
   });
+
+  it("is added, reset and deleted only by a server admin, on the server computer (#445)", async () => {
+    const jessCookie = await sessionCookieFor(jess);
+    const anaCookie = await sessionCookieFor(ana);
+    // Not by someone who isn't a server admin, for themselves or anyone else.
+    for (const response of [
+      await demoFarmsRoute.GET(apiRequest("/api/admin/demo-farms", { cookie: jessCookie }), undefined as never),
+      await demoFarmsRoute.POST(apiRequest("/api/admin/demo-farms", { method: "POST", cookie: await sessionCookieFor(mere), body: {} }), undefined as never),
+      await demoFarmRoute.POST(apiRequest(`/api/admin/demo-farms/${jess.id}`, { method: "POST", cookie: jessCookie }), params(jess.id)),
+      await demoFarmRoute.DELETE(apiRequest(`/api/admin/demo-farms/${jess.id}`, { method: "DELETE", cookie: jessCookie }), params(jess.id)),
+    ]) {
+      expect(response.status).toBe(403);
+    }
+    // Not from the network: only through the local server settings address.
+    for (const response of [
+      await demoFarmsRoute.GET(apiRequest("/api/admin/demo-farms", { cookie: anaCookie, local: false }), undefined as never),
+      await demoFarmsRoute.POST(apiRequest("/api/admin/demo-farms", { method: "POST", cookie: anaCookie, local: false, body: {} }), undefined as never),
+      await demoFarmRoute.DELETE(apiRequest(`/api/admin/demo-farms/${jess.id}`, { method: "DELETE", cookie: anaCookie, local: false }), params(jess.id)),
+    ]) {
+      expect(response.status).toBe(403);
+    }
+    expect(await getDemoFarm(mere.id)).toBeNull();
+    expect((await getDemoFarm(jess.id))?.status).toBe("ready");
+    // A login that doesn't exist.
+    const nobody = await demoFarmsRoute.POST(apiRequest("/api/admin/demo-farms", { method: "POST", cookie: anaCookie, body: { ownerEmail: "nobody@example.com" } }), undefined as never);
+    expect(nobody.status).toBe(400);
+    const badId = await demoFarmRoute.DELETE(apiRequest("/api/admin/demo-farms/not-an-id", { method: "DELETE", cookie: anaCookie }), params("not-an-id"));
+    expect(badId.status).toBe(404);
+  });
+
+  it("is for the signed-in server admin when no login is chosen, one each (#445)", async () => {
+    const anaCookie = await sessionCookieFor(ana);
+    const started = await demoFarmsRoute.POST(apiRequest("/api/admin/demo-farms", { method: "POST", cookie: anaCookie, body: {} }), undefined as never);
+    expect(started.status).toBe(202);
+    const own = ((await started.json()) as { demoFarm: { organisationId: string; userId: string } }).demoFarm;
+    expect(own.userId).toBe(ana.id);
+    expect(own.organisationId).not.toBe(org);
+    // One each: a second for her is refused, even while the first is being made.
+    const again = await demoFarmsRoute.POST(apiRequest("/api/admin/demo-farms", { method: "POST", cookie: anaCookie, body: { ownerEmail: ana.email } }), undefined as never);
+    expect(again.status).toBe(409);
+    expect(((await again.json()) as { error: string }).error).toMatch(/You already have the demo farm/);
+    const made = await waitFor(ana.id);
+    expect(made).toMatchObject({ status: "ready", error: null });
+    // It's in her organisation list, not Jess's other one.
+    expect((await listMembershipsForUser(ana.id)).map((entry) => [entry.organisation.id, entry.role])).toEqual([[own.organisationId, "owner"]]);
+    const listed = (await (await demoFarmsRoute.GET(apiRequest("/api/admin/demo-farms", { cookie: anaCookie }), undefined as never)).json()) as { demoFarms: Array<{ userId: string }> };
+    expect(listed.demoFarms.map((demo) => demo.userId).sort()).toEqual([ana.id, jess.id].sort());
+    const deleted = await demoFarmRoute.DELETE(apiRequest(`/api/admin/demo-farms/${ana.id}`, { method: "DELETE", cookie: anaCookie }), params(ana.id));
+    expect(deleted.status).toBe(200);
+    expect(await getDemoFarm(ana.id)).toBeNull();
+    expect((await getDemoFarm(jess.id))?.status).toBe("ready");
+  }, 900_000);
 
   it("has books that balance, from 1 June at least a year back", async () => {
     const tb = await as((tx) => trialBalance(tx, { asAt: TODAY }));
@@ -264,15 +329,16 @@ describeWithDatabase("the demo farm (#437)", () => {
 
   it("is one each: a second is refused, and someone else gets their own", async () => {
     await expect(addDemoFarm(jess, { today: TODAY })).rejects.toThrow(/already have the demo farm/);
-    const again = await demoRoute.POST(apiRequest("/api/demo-farm", { method: "POST", cookie: await sessionCookieFor(jess), body: { action: "add" } }), undefined as never);
+    const again = await demoFarmsRoute.POST(apiRequest("/api/admin/demo-farms", { method: "POST", cookie: await sessionCookieFor(ana), body: { ownerEmail: jess.email } }), undefined as never);
     expect(again.status).toBe(409);
+    expect(((await again.json()) as { error: string }).error).toMatch(/demo-jess@example.com already has the demo farm/);
     await expect(coreQuery("update organisations set demo_for_user_id = $1, demo_status = 'ready' where id = 'real-farm'", [jess.id])).rejects.toThrow(/organisations_one_demo_each/);
   });
 
   it("resets: the old one goes and a fresh one is made", async () => {
     const before = await as((tx) => tx.query<{ n: number }>("select count(*)::int as n from sales_invoices"));
     await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Tried something out", isCustomer: true }));
-    const reset = await demoRoute.POST(apiRequest("/api/demo-farm", { method: "POST", cookie: await sessionCookieFor(jess), body: { action: "reset" } }), undefined as never);
+    const reset = await demoFarmRoute.POST(apiRequest(`/api/admin/demo-farms/${jess.id}`, { method: "POST", cookie: await sessionCookieFor(ana) }), params(jess.id));
     expect(reset.status).toBe(202);
     // Out of her list while it's made again.
     expect((await listMembershipsForUser(jess.id)).map((entry) => entry.organisation.id)).not.toContain(org);
@@ -285,7 +351,7 @@ describeWithDatabase("the demo farm (#437)", () => {
 
   it("deletes: the database and the registry row go", async () => {
     const organisation = (await getOrganisation(org))!;
-    const deleted = await demoRoute.DELETE(apiRequest("/api/demo-farm", { method: "DELETE", cookie: await sessionCookieFor(jess) }), undefined as never);
+    const deleted = await demoFarmRoute.DELETE(apiRequest(`/api/admin/demo-farms/${jess.id}`, { method: "DELETE", cookie: await sessionCookieFor(ana) }), params(jess.id));
     expect(deleted.status).toBe(200);
     expect(await getDemoFarm(jess.id)).toBeNull();
     expect(await getOrganisation(org)).toBeNull();

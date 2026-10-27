@@ -8,10 +8,12 @@ that something happened.
 
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
-- **The demo farm** (#437, decisions 855-869; for now, to be taken out
-  later: [docs/DEMO-FARM.md](DEMO-FARM.md)): anyone signed in chooses **Try
-  the demo farm…** in the organisation menu (or a server admin runs
-  `tohyee-admin demo add --owner EMAIL`) and gets their own **Kōwhai Dairies
+- **The demo farm** (#437, decisions 855-866 and 880-884; for now, to be taken out
+  later: [docs/DEMO-FARM.md](DEMO-FARM.md)): a server admin adds it where
+  organisations are added (#445, decisions 880-884), on the Windows server
+  app's Organisations page or the server settings' Organisations page in the
+  browser (or runs `tohyee-admin demo add --owner EMAIL`), for themselves or
+  another login, and that person gets their own **Kōwhai Dairies
   Ltd**, a made-up ~300-cow Otago dairy farm, made in the background with a
   progress bar (about 20-40 seconds). It's entered through Tohyee's own
   services from 1 June at least a year back to today: co-op milk invoices
@@ -29,7 +31,9 @@ that something happened.
   It never reaches outside Tohyee: its automatic jobs stay paused, and
   sending email, mailbox, bank, IRD and sales connections and adding people
   are refused with a message saying why. **Reset** makes it again from the
-  start, **Delete** removes it (both ask first); one each. `TOHYEE_DEMO_FARM=off`
+  start, **Delete** removes it (both ask first; server admins, on the same
+  Organisations pages); one each. The books' organisation menu doesn't offer
+  it. `TOHYEE_DEMO_FARM=off`
   turns it off. Not yet reviewed by Jess.
 - **The look (2026 redesign, 4 Oct 2026):** a simpler top bar where each menu opens a short grouped panel, one **apps launcher** button (Accounting, CRM, Analytics), one **+ New** button for every "New …" action, a **search / command palette (Ctrl+K)** for any screen, an **AI** item, a **notices bell** for non-blocking warnings, light and dark themes that follow the computer (switch in the user menu), the Inter font with tabular figures, and a short fade between pages. Reports and printed documents stay on white paper.
 - **Server settings apart from the books** (organisations, users, remote
@@ -644,6 +648,48 @@ that something happened.
   mailboxes, someone with no mailbox gets a one-line Connect a mailbox
   prompt, an empty week offers Add an item, and the redirect addresses an
   administrator needs are under Settings › Email.
+- **Farm safety records** (Farm › Safety; #446, FS1-FS12 in
+  `docs/FARM-SAFETY.md`, decisions 930-941, tenant migration 0189, not yet
+  reviewed by Jess): each farm's emergency details first (111, WorkSafe,
+  address, entrance, assembly point, tap-to-call contacts, first aiders,
+  equipment, a no-coverage plan; Print; a copy kept on the phone and shown
+  with its age when Tohyee can't be reached), and hazards and no-go zones on
+  the farm map (a point or a drawn zone, paddocks, how serious, what's done
+  about it, review dates, reviewed and removed). Every record is kept as
+  versions dated by the database, nothing can be changed or deleted, a
+  mistake is corrected or withdrawn with why, and a hash chain shows changes
+  made behind Tohyee's back (**Check the history**, **Compare with a copy**).
+  The **WorkSafe pack** is a zip of everything in a date range with its full
+  history and a checker that runs anywhere. Restricted incident and medical
+  details are for owners, members an owner names, and their author. A
+  record-keeping tool, not a compliance claim. Since FS13-FS20 (decisions
+  942-947): **Report something** (hazard spotted, near miss, incident) on a
+  phone, saved on the phone first and sent once; injury details kept apart
+  and restricted; WorkSafe's notifiable-event questions prompting a person
+  to tell WorkSafe (Tohyee never does) and recording when they did; photos
+  with the camera's date and their hash; corrective actions through done
+  and checked to a closed report, never closed by an AI or app. Since
+  FS21-FS27 (decisions 948-952, tenant migration 0190): inductions (shared
+  or per farm) read with the farm's hazards and emergency details, signed on
+  your own login or recorded for someone, kept with the version and hazards
+  shown, and "sign again" after a marked change or a new high or no-go
+  hazard; On site now (sign in and out, missed sign-outs corrected); and a
+  farm sign-in link with a QR code for visitors and contractors without a
+  login. Since FS28-FS34 (decisions 953-957): equipment (ours, hired or a
+  contractor's, a fixed asset optional) with QR codes and versioned
+  checklists; pre-start checks that keep the questions as asked; a failed
+  critical check puts a machine out of use with an action until someone
+  allowed releases it; a training register with expiry and the person
+  confirming their own; and each farm's chemicals inventory with safety data
+  sheets (over five years old flagged). Since FS35-FS38 (decisions 958-959,
+  tenant migration 0191): a weekly PDF emailed off the farm through the
+  organisation's own email, with the latest entry's number and hash, never
+  injury details, recorded only when the mail server accepted it. Since
+  FS39-FS44 (decisions 960-962): in the farmer's workspace (#447) the
+  Safety tab, hazards on the map and paddock card, Report a hazard / Near
+  miss / Incident in Log, a Safety card on Today and Safety due on the farm
+  calendar; farm staff report, check and sign on their assigned farms and
+  never see injury or medical details.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not
@@ -1381,6 +1427,21 @@ that something happened.
   them connected and the email says how to disconnect them (decision 852).
   Tested against a made-up Google only; not yet tried with a real Google
   account.
+- **Sign in with a passkey** (#450, decisions 885-899): Face ID, a
+  fingerprint or Windows Hello. Under **Your account › Passkeys**, enter
+  your password, name the passkey ("Jess's iPhone") and **Add a passkey**;
+  the sign-in page then has **Sign in with a passkey** (and offers passkeys
+  in the email box where the browser can). The face or finger never leaves
+  the device: Tohyee keeps only the passkey's public key. A passkey sign-in
+  counts as two-step. Passkeys can be renamed and removed; a server admin
+  can remove someone's under Users (which also disconnects their apps).
+  Resetting a password or two-step, a setup link, changing your password or
+  turning a login off ends them. Only on Tohyee's web address (Remote
+  access) or on the server computer as localhost; on a home-network
+  address the page says why. Recorded in the sign-in monitor and limited
+  per address like other sign-ins; a security email for each added or
+  removed passkey. Tested with a software authenticator only; not yet tried
+  with a real phone.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
 - **Emailing documents** (decided by Jess, 30 Sep 2026): invoices, credit
@@ -2775,6 +2836,60 @@ that something happened.
   `/api/farm-apps/v1` (OpenAPI 3.1). A sample soil sampling app is in
   `examples/farm-apps/soil-sampling`, and soil samples taken in the field
   show on Soil tests. Guide: [FARM-APPS.md](FARM-APPS.md).
+
+- **Farmer-friendly farm pages, step 1** (#447, decisions 900-903): farm
+  pages open on the farm you last worked on (remembered for you on the
+  server, on any device, and forgotten when that farm is taken off you or
+  archived). Pasture readings, grazings and supplements load from the
+  server a page at a time (25, then Show more) with From, To and paddock
+  filters; the farm's cover, feed wedge and supplements by month are worked
+  out on their own, so paging never changes them. A record sent for one
+  farm with a paddock from another is refused, so switching farms can't put
+  it on the wrong farm. On a phone, paddocks, the feed wedge, readings,
+  grazings, supplements and latest soil tests are one line each that opens;
+  Remove sits apart and asks first; buttons and fields are at least 44px.
+  Plainer words: "Paddock area", "Farm costs" (with FWE as a hint),
+  "Changes" for fertiliser plans; internal codes are gone from farm pages.
+  The Farming API's readings and the AI's farm lists use the same pages.
+
+- **Farm staff** (#447, decisions 904-906): a **Farm staff** role under
+  People and roles records field work (cover readings, grazings and days
+  out, supplements fed, soil samples) and reads paddocks, pasture, soil and
+  the farm calendar, on the farms an owner or admin chooses for them, and
+  nothing of the books: journals, contacts, reports, exports, search, money
+  on farm pages, the notebook and the AI are all refused on the server. Their
+  top bar has the Farm menu's field pages only. Farm app keys work for them,
+  on their farms. Removing a record stays with bookkeepers and up.
+
+- **The farmer's workspace** (#447, decisions 907-910): Farm › Today, map and
+  log (`/operations/farm`) has **Today · Map · Log · Safety · More**, as
+  tabs along the bottom of a phone. The farm being worked on stays at the
+  top. **Today** has today's and the next few days' jobs from the farm
+  calendar, the mobs in now, a compact map that opens to its full height,
+  and the farm's app tiles. **Map** colours paddocks by days since grazed
+  or by the cover reading's age, with a key, and a list of every paddock;
+  tapping one opens its card (cover and how old it is, mob, last grazed,
+  recent records, Add cover and Mob in or out). **Safety** is a placeholder
+  until farm health and safety (#446). **More** has every table under
+  Details, and year-end and setup. Farm staff land on Today. **App tiles**
+  (a name and an address) are added by admins on Farm apps, now headed
+  Manage integrations for the keys; a tile never holds a key (tenant
+  migration 0187). Paddock numbers on the map stay readable on a phone.
+
+- **Quick logs and the farm walk** (#447, decisions 911-913): the Log tab
+  records a mob in, a mob out, a cover reading or feed, one question a
+  screen with today and the paddock or mob filled in where known, then a
+  check before saving. **Farm walk** goes paddock by paddock with a big
+  number box, saving each reading on the phone as it's typed, so closing
+  the app and coming back carries on where it was. Every record is kept on
+  the phone first (Saved on this phone), sent when there's a signal
+  (Synced), or marked Needs attention if Tohyee refuses it; it's never sent
+  to another farm or written over another person's record. Each carries
+  its own operation id (tenant migration 0188), so sending it twice makes
+  it once. The pages themselves still need a signal to open: there's no
+  offline app yet (decision 913 says how it would work). Not kept in
+  Tohyee yet: rainfall, photos and voice notes, treatments, births and
+  deaths.
 
 ## Not built yet, on purpose
 

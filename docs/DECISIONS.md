@@ -8700,3 +8700,582 @@ below says so; those are not yet reviewed by Jess.
      Windows server app and `tohyee-admin` have no invite command. Wording on
      setup pages now says "ask whoever invited you, or your server admin".
      Not tried with a real mail server: the tests capture email.
+
+### The demo farm is added in the server settings (#445; decisions 880-884)
+
+880. **Added where organisations are added, not from the books** (Will, 26
+     October 2026: "The add the demo farm should only be on the tohyee app
+     not in the books part. Like where you add an org."). The Windows server
+     app's Organisations page has **Add demo farm…**, **Reset demo farm**
+     and **Delete demo farm**; the server settings' Organisations page in the
+     browser (the local server settings address, for Docker and Linux) has a
+     **Demo farm** card with the same, and progress while it's made.
+     `tohyee-admin demo` and `TOHYEE_DEMO_FARM=off` stay. This replaces
+     "anyone signed in" in decisions 855 and 865. Not yet reviewed by Jess.
+881. **Server admins only, on the server computer only.** The new routes
+     (`/api/admin/demo-farms`, and `/api/admin/demo-farms/{login ID}` to
+     reset or delete) use the same check as the other server settings: a
+     server admin, through the local-only address. The old
+     `/api/demo-farm` route and the books' demo farm page are removed, so
+     someone who isn't a server admin can't add, reset or delete one; they
+     ask a server admin. Not yet reviewed by Jess.
+882. **Still one login's, one each, and for you unless you choose.** The
+     demo farm stays tied to one login (`demo_for_user_id`, decision 855; no
+     migration). It's for the signed-in server admin unless they choose
+     another active login, and it's added to that person's organisation list
+     once made (as Xero's demo company is per user). The choice lists only
+     logins that don't have one yet; a second for the same login is refused.
+     The audit log records the server admin who did it and whose demo farm
+     it is. The farm is still entered as its person (decision 856). Not yet
+     reviewed by Jess.
+883. **The books' organisation menu no longer offers it.** No "Try the demo
+     farm…" or "Reset or delete the demo farm…" entry, and no link when
+     someone has no organisations. A demo farm already made opens from the
+     menu as before, with its DEMO badge, which is now a label rather than a
+     link (there's no books page to go to). Not yet reviewed by Jess.
+884. **Shown in the organisations list too.** On both Organisations pages a
+     demo farm is marked (a Demo badge in the browser; "Demo farm for EMAIL"
+     with its progress in the Windows app), and the Windows app follows a
+     build every two seconds without locking the page. Real organisations
+     still can't be deleted from these pages. Not yet reviewed by Jess.
+
+### Sign in with a passkey (#450; decisions 885-899)
+
+Jess, 27 Oct 2026: "Is it possible to get a phone login with biometrics
+after it is already logged in usual ways?" The rules in #450 come from her
+issue; where it doesn't answer a question, the choice below says so and is
+not yet reviewed by Jess.
+
+885. **Passkeys (WebAuthn), through a maintained library** (#450). Face ID,
+     a fingerprint or Windows Hello, as a passkey. The WebAuthn checks
+     (CBOR, attestation objects, signatures, flags) are done by
+     SimpleWebAuthn (`@simplewebauthn/server` 14.0.3 and
+     `@simplewebauthn/browser` 14.0.0, pinned exactly), not written by hand.
+     Tohyee keeps only the passkey's public key, credential ID, use count,
+     transports, whether it's synced and backed up, the address it works
+     at, a name, and when it was added and last used (core migration 0025,
+     `user_passkeys`). The face or finger never leaves the device. No
+     attestation ("none"): Tohyee doesn't ask which make of phone it is, as
+     Google and Microsoft don't for passkeys. Algorithms: ES256, EdDSA and
+     RS256.
+886. **Adding one needs your password again** (#450, "a recent full
+     sign-in"). The password is checked before the browser's prompt
+     starts, and counts with the sign-in tries (so it locks like a
+     sign-in), as linking Google does (decision 805). Someone set up with
+     Google only has no password, so for them it's a sign-in within the last
+     5 minutes (sign out and in with Google again). Each added passkey is
+     emailed to the person as a security alert. A login can have up to 20.
+     Not yet reviewed by Jess: the 5 minutes and the limit of 20.
+887. **A passkey sign-in counts as two-step** (#450, Jess; as Google and
+     Microsoft treat it). The passkey must check the person (face, finger or
+     PIN: `userVerification: "required"`, and the "user verified" flag is
+     checked), so it's something you have plus something you are or know.
+     The session is full straight away (`sessions.sign_in_method =
+     'passkey'`), and remembers which passkey (`sessions.passkey_id`).
+888. **Discoverable passkeys, so the sign-in page asks nothing** (#450).
+     Passkeys are made as discoverable ("resident") ones, so **Sign in with
+     a passkey** needs no email: the phone offers the passkeys it has for
+     this address. The sign-in options are the same for everyone (no email,
+     no list of passkeys), so the page can't be used to find out who has a
+     login. Where the browser can, passkeys also appear in the email box's
+     suggestions (WebAuthn "conditional mediation"), started again every 4
+     minutes so its challenge never runs out while it waits.
+889. **Only on Tohyee's web address or localhost** (#450, Jess). A passkey
+     belongs to one web address (its relying party ID, the host of the
+     address in use, from `returnOrigin`). It's only offered on an https
+     web address that's a real name (Remote access) or on `localhost` on the
+     server computer. A home-network number (192.168.1.20) or name
+     (farm-pc, tohyee.local) is refused before the phone is asked, with
+     words saying why and Tohyee's web address when there is one: phones
+     and browsers refuse passkeys there anyway. A passkey only works at the
+     address it was made on; Your account says which. On the sign-in page
+     the note only shows once someone on the server has a passkey.
+890. **Challenges are used once, for 5 minutes, where they were asked for**
+     (#450). Each is 32 random bytes; only its hash is kept
+     (`passkey_challenges`). Adding: tied to the session that entered the
+     password. Signing in: tied to the browser by an HttpOnly,
+     SameSite=Strict cookie (`tohyee_passkey`, path
+     `/api/auth/passkeys/sign-in`). It's marked used before the answer is
+     checked, so a replayed or copied answer, one from another browser, or
+     one after 5 minutes does nothing. The address in use must be the one
+     the challenge was made for, and the library checks the answer's
+     origin and relying party ID against it, so a lookalike site's answer
+     isn't accepted.
+891. **The passkey must say it's the login's** (#450). Each login has a
+     random ID its passkeys carry (`users.passkey_user_handle`, 32 random
+     bytes, never the login's own ID or email). A sign-in whose passkey
+     carries another login's ID, or none, is refused and recorded as
+     refused. A passkey Tohyee doesn't know (removed, or never added) is
+     refused, and the browser is asked to stop offering it
+     (`signalUnknownCredential`, where the browser supports it).
+892. **What ends passkeys** (#450, Jess). A server admin resetting a
+     password (Users, or `npm run admin -- set-password`), any two-step
+     reset (server admin, emailed link, command line), using a setup link,
+     setting up with Google from a setup link, and turning a login off all
+     remove every passkey the login has, in the same transaction, with the
+     sessions they signed in; they also disconnect AI apps, AI keys, farm
+     app keys and PowerPoint add-in sign-ins (decision 850's list). Turning
+     a login off didn't disconnect apps before; it does now, as the issue
+     asks, so turning it on again needs them connected again. The command
+     line's set-password didn't disconnect apps before either; it does now.
+     Not in the issue, and not yet reviewed by Jess: **changing your own
+     password ends your passkeys too** (this session stays), because a
+     passkey added by someone who knew the old password mustn't outlive it,
+     and Tohyee already disconnects apps on a password change. Google and
+     Microsoft keep passkeys on a password change; Tohyee chooses the safer
+     way, and the confirmation says to add them again. Removing a login
+     from the server (backup recovery replacing it) removes its passkeys
+     with it.
+893. **The use count: refuse a step back, flag a stand-still** (#450). Most
+     phone passkeys always report 0, which is fine. A count that goes up is
+     stored. A count lower than the last one (and not 0) can mean a copied
+     security key: the sign-in is refused, flagged in the sign-in monitor
+     and emailed to the person; the passkey isn't removed (they decide).
+     The same count again, or 0 after counting, happens with some
+     authenticators: allowed, but flagged and emailed. The library's own
+     check (which refuses an equal count) is given 0 so Tohyee's rule
+     applies; the stored count never goes down.
+894. **Removing your own passkey** (#450). Your account lists your
+     passkeys (name, where it works, added, last used, synced, and "This
+     session"), and you can rename or remove each. Removing one ends the
+     other sessions it signed in; this session stays. Apps and keys you
+     connected keep working, as when you unlink Google (decision 852); a
+     security email says so. Not yet reviewed by Jess.
+895. **A server admin removes someone's passkeys** (#450, Jess). Users has
+     **Remove passkeys** (a server admin, on the server computer), which
+     removes all of that login's passkeys (a lost or stolen phone), ends
+     the sessions they signed in and disconnects their apps, as removing
+     Google sign-in does (decision 850). The person is emailed. Users shows
+     how many passkeys each login has.
+896. **Server admins keep a password** (#450, Jess). Passkeys are only ever
+     added beside a password (or Google), never instead of one, so a
+     server admin always has a password and two-step as before.
+897. **Recorded and limited like other sign-ins** (#450, Jess; decisions
+     456 and 487). Passkey sign-ins and failures are in the sign-in
+     monitor with the step "Passkey" (the login's email is filled in, as it
+     now is for Google sign-ins too, which typed none). The per-address
+     limit covers asking for a challenge and answering it; a paused remote
+     access refuses them; failures through remote access count towards
+     pausing it. A wrong passkey answer doesn't count towards the
+     password lockout: signatures can't be guessed.
+898. **Recovering people doesn't bring passkeys back** (#450). Passkeys
+     aren't copied from a server backup when people are recovered (decision
+     738): they're tied to a web address and a device, so people add them
+     again. Not yet reviewed by Jess.
+899. **Not done or not tried** (#450). It hasn't been tried with a real
+     phone, security key or Windows Hello: the tests use a software
+     authenticator (real P-256 keys and signatures) made for them. Things
+     that may need changing once it is: how each phone names its passkey
+     prompt, whether conditional autofill behaves on every browser, and
+     iOS's handling of a passkey made on localhost. The Windows server app
+     shows passkey sign-ins in Sign-ins but has no Remove passkeys button
+     (the browser's Users page has it), and `tohyee-admin` has no passkey
+     command.
+
+### Farmer-friendly farm screens (#447; decisions 900-929)
+
+Jess asked on 26 October 2026 for farm screens that suit farmers, and on 27
+October 2026 to "implement them now including chat gpts ideas" (William's
+follow-up comment on #447, whose delivery order and acceptance checks are
+followed where they differ from the issue). The issue's questions for Jess
+aren't answered yet, so these follow the comment and the patterns of LIC
+MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
+537).
+
+900. **The farm you last used opens** (27 October 2026, #447 quick win 1;
+     not yet reviewed by Jess). Each person's last farm is remembered in the
+     organisation's database (migration 0186, `farm_last_used`), not just in
+     a browser tab, so a farm page opens on it on any device rather than
+     asking first. It's only a convenience: it's offered only while the farm
+     is active and the person can still see it (decision 744, checked on
+     every read), and the row is deleted when an owner or admin takes that
+     farm off them or they leave. Decision 740's rules stay: a choice in
+     this tab or a `?farm=` link wins, and a stale choice is reported, never
+     swapped for another farm. With two or more farms and none used yet,
+     the page shows the farms as buttons ("Which farm?") rather than an
+     empty page with a list to open: it still asks, as decision 740 says,
+     but the question is the page. "Your choice carries across … in this
+     tab" is gone from the selector.
+901. **Histories a page at a time, on the server** (27 October 2026, #447
+     quick win 2 and the comment's first change; not yet reviewed by Jess).
+     Readings, grazings and supplements are read newest first, 25 to a page
+     on screens (up to 1,000 for the Farming API and 5,000 for the AI), with
+     From, To and paddock filters, and a cursor (the last row's date and id)
+     for the next page, so rows added meanwhile don't repeat or shift what's
+     been seen. The farm's cover, feed wedge and growth use each paddock's
+     latest two readings on or before the date and only the grazings that
+     can matter; supplements by month cover the 12 months to the date. None
+     of them use a page, so paging can't change a total (tested against the
+     totals worked out from every record). A paddock's own card shows its
+     latest 50 readings and grazings. Mobs in now are listed on their own
+     so a day out can be recorded whatever page is showing.
+902. **A record can't land on the wrong farm** (27 October 2026, the
+     comment's acceptance check; not yet reviewed by Jess). Adding a
+     reading, grazing or supplement through a farm's address with a paddock
+     from another farm is refused ("isn't on the farm this was recorded
+     for. Nothing was saved"), rather than saved to the paddock's farm.
+     Forms belong to the farm they were opened on and are cleared when the
+     farm changes.
+903. **One line per record on a phone; Remove apart** (27 October 2026,
+     #447 quick wins 3-5; not yet reviewed by Jess). Below 700px, paddocks,
+     the feed wedge, readings, grazings, supplements and latest soil tests
+     are one line each ("16 · 3,057 · 24 Oct · Milkers in") that opens to
+     the rest and its actions; wide screens keep the tables. Remove sits
+     under the main actions, separated, and asks before removing. Buttons
+     and fields on farm pages are at least 44px tall on a phone. Plain
+     words: "Paddock area" for effective hectares, "Farm costs per …" with
+     "Farm working expenses (FWE)" as a hint, "Changes" instead of plan
+     version numbers, and no internal example codes (PF3) on farm pages.
+     Shorter notes replace "Tohyee doesn't judge…" sentences; decisions 516
+     and 559 still hold (nothing is judged high or low).
+904. **A farm staff role** (27 October 2026, the comment's third change and
+     #447 question 5, unanswered; not yet reviewed by Jess). People who
+     record field work don't need to be bookkeepers. A new organisation role,
+     **Farm staff** (`farm_worker`, core migration 0023), like LIC MINDA's
+     and AgriWebb's staff logins: it reads farms, paddocks, pasture, grazings,
+     feed, soil and the farm calendar, and records cover readings, grazings
+     (and their day out), supplements fed and soil samples, on the farms an
+     owner or admin chooses for them (decision 744; none until chosen when
+     there are two or more farms). It ranks below every other role, so
+     everything else (the books, reports, exports, search, settings, farm
+     Home and benchmarks with their money, fertiliser plans with their
+     costs, the notebook, AI keys) refuses it on the server, not just in
+     the menus. The field-work routes use `withFarmWork`, the same check for
+     screens, farm apps and anything else. A role rather than a flag on the
+     bookkeeper role, because a flag would leave the books open: moving money
+     cards down a page doesn't restrict financial access (William's comment).
+905. **What farm staff see** (27 October 2026; not yet reviewed by Jess). Their
+     top bar has only the Farm menu's field pages (Pasture and feed, Farms
+     and paddocks, Soil tests, Farm calendar, Farm apps), no "+ New", no
+     search across the books and no AI. Anywhere else sends them to Pasture
+     and feed. The calendar is read-only for them (no mailboxes, adding or
+     calendar link). Farm app keys may have every farm scope, and are kept to
+     their farms like the screens.
+906. **Removing a record stays with bookkeepers** (27 October 2026; not yet
+     reviewed by Jess). Farm staff record; a reading, grazing, feed line or
+     sample recorded by mistake is removed by a bookkeeper or higher (it's
+     kept as removed, decision 559). AgriWebb lets staff edit their own
+     records; that can come later, once there's a rule for how long a record
+     stays theirs to change.
+907. **The map shows facts: days since grazed and the cover reading's age**
+     (27 October 2026, #447 recommendation 9 and question 4, unanswered; not
+     yet reviewed by Jess). The farm map colours each paddock by how many
+     days since its last mob came out (or "Mob in now"), or by how old its
+     latest cover reading is, in bands (0-7, 8-14, 15-21, 22-30, more than
+     30 days; 0-7, 8-14, 15-30, more than 30) with a key. These are facts,
+     not judgements, so decisions 516 and 559 ("records, doesn't judge")
+     hold: the words say what was recorded ("Grazed 8-14 days ago"), never
+     "ready", "due", "high" or "low", and the map says the colours aren't
+     good or bad. Colours are the chart theme's sequential blues (decisions
+     599-601), so they follow light and dark, with amber for a mob in now.
+     Colouring by cover itself (shades relative to the farm's average) and
+     farmer-set pre- and post-graze targets wait for Jess's answer to
+     question 4. Each paddock's facts come from one query a paddock
+     (`/api/farming/farms/{id}/paddock-status`), whatever the history's
+     size. A list of every paddock sits beside the map, for screen readers
+     and paddocks without a shape.
+908. **App tiles hold an address, never a key** (27 October 2026, the
+     comment's "useful launch tiles", with keys and scopes under Manage
+     integrations; not yet reviewed by Jess). An admin adds a tile (name,
+     address, what it's for, one farm or all) on Farm apps; everyone who
+     works on that farm sees it on Today and More, and it opens the app in
+     a new tab. The address must be https (http only for localhost) with no
+     user name, password or Tohyee key in it, because everyone on the farm
+     sees it; each app asks for its own key, which stays with the person who
+     made it. Up to 24 tiles. Tenant migration 0187.
+909. **The paddock card** (27 October 2026, the comment's "concise card";
+     not yet reviewed by Jess). Tapping a paddock, on the map or in the
+     list, opens its card: area, cover with how long ago and how it was
+     measured, the mob in now, when it was last grazed, its latest four
+     records, a link to Safety for hazards (until #446), and big buttons to
+     add a cover or move a mob in or out, for people who may record (farm
+     staff, bookkeepers and up). The tables are one tap away (Details).
+910. **Today · Map · Log · Safety · More** (27 October 2026, the comment's
+     phone navigation; not yet reviewed by Jess). Pages under
+     `/operations/farm`, tabs at the bottom of a phone (56px tall, like the
+     farm apps people know) and along the top on a computer. The selected
+     farm is always at the top, with a switch for two or more; switching
+     clears anything half-filled (decision 902). Today leads with jobs and
+     mobs, not money; owners and accountants get a link to Home and
+     benchmarks instead of money cards. Safety is a stub in its own file
+     (`src/components/farm-safety-tab.tsx`) for #446 to replace. The old
+     farm pages stay, reached from More › Details and the Farm menu.
+911. **Quick logs, one question a screen; only what Tohyee keeps** (27
+     October 2026, #447 recommendations 10 and 11 and the comment's second
+     step; not yet reviewed by Jess). As LIC MINDA records a calving: Mob
+     in (paddock, mob, head, day in, cover before), Mob out (which mob, day
+     out, cover after), Cover reading (paddock, cover, how measured, day)
+     and Feed (what, how much, in what, paddock, day), each answer on its
+     own screen with big buttons, today and the paddock or mob already
+     filled in from the paddock card, recent mobs and feeds offered, then a
+     check screen. The farm walk goes paddock by paddock in name order
+     (1, 2 … 10) with one big number box; it doesn't wait to save the lot
+     at the end. Only records Tohyee already has are offered; rainfall,
+     photos and voice notes, animal treatments, and births and deaths have
+     no record in Tohyee yet and are named on the Log page as not kept, not
+     invented here. Near misses are #446's. Farm staff and bookkeepers and
+     up record; others see a sentence saying who can.
+912. **Every record from the phone has its own operation id** (27 October
+     2026, the comment's "stable operation IDs, duplicate prevention and
+     conflict handling"; Tohyee's idempotency rule in STYLE-GUIDE.md; not
+     yet reviewed by Jess). A UUID made on the phone when the record is
+     made (from `crypto.getRandomValues`, which works on plain http too) is
+     sent with it and kept on the reading, grazing or feed line with a
+     fingerprint of the request (tenant migration 0188). Sent again, the
+     same request finds the first record and makes nothing new; the same
+     id with different details, or from another person, is refused with
+     nothing changed. A day out sent again is already done; a different day
+     out isn't written over the one recorded. A farm app may send
+     `operationId` too.
+913. **Saved on this phone, Synced, Needs attention; offline designed, not
+     built** (27 October 2026, the comment's second change; not yet
+     reviewed by Jess). Records and the farm walk in progress are kept in
+     the browser's storage per person and organisation, each tied to the
+     farm it was made on; switching farms never moves one, and the other
+     farm's waiting records are named. They're sent oldest first when the
+     Log page opens, when the signal comes back and every 30 seconds while
+     any wait, each to its own farm's address (decision 902). No signal or
+     a server error leaves a record saved to try again; a refusal marks it
+     Needs attention with Tohyee's reason, and it's never sent again by
+     itself; the person checks and lets it go. A reading is changed in
+     place only while it's never been sent; after that a change is a new
+     reading. Synced records are let go after a week. **Not built:** a
+     service worker to open the farm pages with no signal at all. The
+     design, for when it's wanted (#447 question 3 is unanswered): cache
+     the built app files and the `/operations/farm` pages, plus the last
+     paddock status and calendar answers for the farms the person works on;
+     only farm field pages (never the books) work offline; records keep
+     using these drafts; nothing is cached for a farm the person can no
+     longer see, and signing out clears it. Today, a page opened before the
+     signal went keeps working, and what's recorded waits on the phone.
+
+### Farm safety records that stand up (#446; decisions 930-941)
+
+Jess, 26-27 October 2026: farm health and safety like SafeAg, with "records
+that stand up if WorkSafe looks at them" (would they think we made the data
+up?). William's follow-up review on #446 sets the workflows. Details and
+worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
+
+930. **A record-keeping tool, not a compliance claim.** Tohyee keeps safety
+     records and shows WorkSafe's own guidance (named, dated, linked). Nothing
+     on screen or in a pack says a farm complies with the law. Wording that
+     touches the law is listed in `docs/FARM-SAFETY.md` under Open questions,
+     not yet reviewed by Jess (decision 537 sends law to Jess).
+931. **One append-only list of versions, chained by hash** (tenant migration
+     0189). Every safety record is versions in `safety_entries`; the database
+     refuses updates, deletes and truncation, numbers each version, sets its
+     entry time and works out its SHA-256 hash from its details and the
+     previous hash. Tohyee works the hashes out again on its own
+     (`src/lib/safety/chain.ts`), so a change made straight in the database
+     shows when the history is checked. Photos and documents
+     (`safety_files`) are append-only too, with their hash worked out by the
+     database. Jess's suggestion ("each record carries a hash of the one
+     before"), as built.
+932. **The database's clock, never the person's.** The entry time is set by
+     a trigger whatever is sent; the date something happened is the
+     person's and shows beside it ("entered later") when earlier. Who entered
+     it is the signed-in person (and the AI key or farm app, when one was
+     used). Jess: "No back-dating; if something is recorded late, both the
+     event date and the entry date show."
+    A change is a new version; a mistake is a **Corrected**
+     version saying what was wrong, or **Withdrawn (entered by mistake)**
+     saying why, which ends the record but keeps it in the history and the
+     pack. Jess: "Nothing can be deleted; a mistake is marked as corrected."
+933. **Saves carry the phone's id; changes name their version.** A save with
+     the same operation id is kept once (a phone retrying on a poor signal);
+     with different details it's refused. A change names the version it
+     started from and is refused if someone saved since ("reload to see
+     their change"), so nothing is silently overwritten (William's review:
+     "do not silently overwrite another person's record").
+934. **The WorkSafe pack and checking it anywhere.** A zip for a farm (or all
+     the person's farms) and date range: a PDF, the versions exactly as
+     stored, every entry's number and hash, files with their hashes and
+     dates, and `verify.mjs`, which checks it with Node.js alone. **Check the
+     history** and **Compare with a copy** do the same in Tohyee. What a
+     chain can't show by itself (a complete rewrite by someone controlling
+     the server) is caught by comparing with a copy kept off the farm; the
+     pack's README says so. Being open source, anyone can read how it works.
+935. **Who reads and records.** Safety is part of the farm: viewers and above
+     read it on their farms (decision 744), everywhere through the services;
+     another farm's record is "not found". Adding and changing needs
+     bookkeeper or higher until #447's field-worker access arrives. New
+     records can't be added to an archived farm. Not yet reviewed by Jess.
+936. **Restricted details: owners, named members, and their author.**
+     Incident and medical details are their own kind (`report_details`,
+     always restricted) so the hazard information workers need is never
+     mixed with them (William's review). Owners see them; an owner names
+     anyone else (Safety's restricted access, audited), and whoever entered
+     them sees their own. Admins aren't included by default (often the
+     accountant). A member leaving loses it. Withheld from a pack for anyone
+     else, hash kept. Not yet reviewed by Jess.
+937. **WorkSafe's wording, named and dated.** Emergency details always show
+     111 and WorkSafe's 0800 030 040 (24 hours), from WorkSafe's *Notify
+     WorkSafe* page (read 27 October 2026), and link to it for what must be
+     notified. Tohyee never notifies WorkSafe itself. Not yet reviewed by
+     Jess.
+938. **Hazards and no-go zones** on the farm map: a point (where I am, or a
+     tap) or a drawn zone, and paddocks; red for no-go or high, amber
+     otherwise; low/medium/high as WorkSafe's guidance sets no scale (open
+     question). Removed and reviewed are new versions with who, when and
+     why: a review is someone looking at the hazard, recorded as theirs,
+     not a status typed for someone else. Not yet reviewed by Jess.
+939. **Review dates.** A hazard can have a review-by date; past it, it's
+     "Review overdue". "Reviewed: still stands" sets the next one.
+940. **Emergency details on the phone.** One record per farm, first on the
+     Safety page, with tap-to-call numbers, Print, and a copy kept in the
+     phone's browser each time they load; when Tohyee can't be reached the
+     copy shows with "saved on this phone" and its time, never as current
+     (William: "clearly showing their age").
+941. **Not in this change** (follow on #446, in order): incidents and near
+     misses with corrective actions and the notifiable-event prompt;
+     inductions, sign-offs and sign in on site; pre-start checks; training;
+     chemicals; photos; the weekly copy emailed off the farm; and the farm
+     workspace (#447: Safety tab, map, Log, Today and the calendar).
+
+### Farm safety: reports, actions and photos (#446; decisions 942-947)
+
+942. **One report for hazards spotted, near misses and incidents**, in
+     William's order (photo, where, what happened, what was done, who'll put
+     it right), dated by the person (not after today) and entered by the
+     database (decision 932). A first action can come with the report.
+     Severity minor/moderate/serious (open question). Not yet reviewed by
+     Jess.
+943. **WorkSafe's questions prompt; Tohyee never notifies.** The four
+     questions follow WorkSafe's quick guide *What events need to be
+     notified?* (March 2024). Any yes shows the prompt (phone for a death,
+     Notify WorkSafe online otherwise, leave the site as it is with WorkSafe's
+     exceptions) and the report shows "May need notifying" until a person
+     records telling WorkSafe (date, phone or online, reference). Nothing is
+     sent automatically, and nothing says it was. Not yet reviewed by Jess.
+944. **Saved on this phone, sent once.** Reports are kept in the phone's
+     browser before sending, with the operation id they're sent with
+     (decision 933); "Waiting to send" says plainly nobody has been told; a
+     refusal needs attention; drafts are the person's, carry their farm and
+     go after 14 days. Photos aren't kept in drafts (phone storage is small).
+     A safety-only store for now; it moves to #447's shared drafts if that
+     lands with the same rules.
+945. **Photos keep their own dates.** JPEG, PNG, WebP or PDF, 10 MB, checked
+     by their first bytes; the database sets the hash and arrival time; the
+     camera's EXIF date (with its offset when written) and the phone's file
+     date are kept as given, labelled, never the entry time. Records name
+     files by id and hash. Restricted photos follow restricted details.
+946. **Actions are closed by people.** Done (with what was done), then
+     checked and closed by bookkeeper or above, or reopened with why; a
+     report closes (with why) only when every action is checked. Done,
+     check, reopen and close are refused through an AI key or farm app
+     (William: AI "must not independently close an action"). The same person
+     may mark done and check (a one-person farm must be able to), and the
+     history shows who did each. Not yet reviewed by Jess.
+947. **Owners choose who sees injury details** on the Safety page (decision
+     936). Not in this change: emailing or notifying staff about a report,
+     and people involved besides the injured person.
+
+### Farm safety: inductions, sign-offs and signing in on site (#446; decisions 948-952)
+
+948. **Inductions are versioned safety records; shared ones show each
+     farm's own details.** An induction can be for every farm (no farm) or
+     one; reading it always shows that farm's active hazards and emergency
+     details (William: "Share reusable templates across farms, while keeping
+     local hazards, emergency details and completed records specific to the
+     relevant farm"). Not yet reviewed by Jess.
+949. **A sign-off keeps what was shown; "sign again" is explicit.** Each
+     sign-off records the induction version, each hazard's id and version,
+     the emergency details' version and how it was signed. It's no longer up
+     to date after a version saved with "everyone must sign again", or when a
+     high or no-go hazard is added or changed after it (William: "Changes to
+     material hazards/instructions should have an explicit re-acknowledgement
+     workflow"). Low and medium hazard changes don't, so people aren't asked
+     to sign for every small edit. Not yet reviewed by Jess.
+950. **Who signed, honestly.** A member signs on their own login (Jess:
+     "Worker sign-offs on their own phone"); a bookkeeper or above can record
+     a sign-off for someone without a login, shown as recorded, not their
+     signature; the sign-in link records the name as typed. Every sign-off
+     says it shows someone was told, not that they can do the job safely.
+     Wording not yet reviewed by Jess.
+951. **On site is a reported presence.** Signing in and out are safety
+     records; the screen says it's what people reported, not a location, and
+     shows when. A missed sign-out is corrected with when they say they left
+     and why (WorkSafe's contractor guidance: agree check-in and check-out).
+952. **A farm sign-in link for people without a login, done safely**
+     (tenant migration 0190). A random 43-letter token per link (only its
+     hash kept), optional end date, turned off rather than deleted, rate
+     limited, "not found" alike for every refusal; it shows only that farm's
+     emergency details, hazards and visitor/contractor inductions, never
+     people, worker-only inductions or reports; sign-out from the same phone
+     uses its own one-time token. Anyone with the link can read the farm's
+     hazards and emergency details, which is its purpose. Not yet reviewed by
+     Jess (privacy wording is an open question).
+
+### Farm safety: equipment and pre-start checks, training, chemicals (#446; decisions 953-957)
+
+953. **Equipment is its own safety record.** On a farm, ours, hired or a
+     contractor's; it may name a fixed asset but needn't (William's review).
+     A QR code per machine opens its pre-start check. Not yet reviewed by
+     Jess.
+954. **Checklists are versioned; a check copies the questions it asked.**
+     Answers are OK, Fault (with what's wrong) or Not applicable (not for a
+     critical item), against the version shown, so a changed checklist never
+     rewrites an answer (William's acceptance test). Item keys come from
+     their words and carry across versions.
+955. **A failed critical check puts a machine out of use.** It makes an
+     action (for whoever's responsible, or the checker, due today, naming the
+     check). Only an owner, an admin or a member named on the equipment can
+     release it, with what was done, never through an AI key or farm app.
+     Out of use is worked out from checks and releases (not a status typed
+     in), and the screen says it isn't a physical lockout (William: "software
+     status is not a physical lockout"). Not yet reviewed by Jess.
+956. **Training for every farm; the person confirms their own.** Expires soon
+     within 60 days (as Xero's and SafeAg's reminders work on a window; the
+     number is ours), expired after; jobs it covers or limits (WorkSafe's farm
+     guide). Only the person, on their own login, confirms it; a change needs
+     confirming again. Reminders on Today and the calendar come with #447.
+     Not yet reviewed by Jess.
+957. **Chemicals per farm, as WorkSafe's inventory lists them.** Name, UN
+     number, the most likely on site (a decimal through
+     `src/lib/money/decimal.ts`, with a unit), where, storage, hazards,
+     approved handler, hazardous waste, and the safety data sheet with its
+     date; missing or more than five years old says to get a new one
+     (WorkSafe's 2017 farm chemicals page). Removed chemicals stay. Not yet:
+     HSNO thresholds (signage, emergency response plans, certified
+     handlers), which depend on quantities and classes Tohyee doesn't hold.
+
+### Farm safety: the weekly copy off the farm (#446; decisions 958-959)
+
+958. **A weekly PDF and the latest hash, emailed off the farm** (Jess: "A
+     copy you can't edit, such as a weekly PDF emailed off the farm"; tenant
+     migration 0191). Owners and admins choose up to 10 addresses; once a
+     week after 6am (business time zone) the records entered since the last
+     copy go as a PDF through the organisation's own email account, with the
+     whole history's latest entry number and hash in the email. Injury and
+     medical details are always withheld. Not yet reviewed by Jess.
+959. **Recorded only when accepted.** A copy is written (append-only) only
+     when the mail server accepted it; a failure is kept as the last problem
+     and retried at the next hourly check, never shown as sent. Sending
+     happens outside database transactions. Not tried with a real mail
+     account: tests use a stand-in for the mail server.
+
+### Farm safety in the farmer's workspace, and farm staff (#446 with #447; decisions 960-962)
+
+960. **Farm staff report, check and sign on their farms.** The farm_worker
+     role (#447, decision 904) reads Safety through the field-work routes
+     and may report hazards, near misses and incidents (with photos and
+     injury details), do pre-start checks (a failed one still makes its
+     action), sign inductions and sign in for themselves, and mark their own
+     actions done. Keeping the registers, checking and reopening actions,
+     recording for someone else, the WorkSafe pack and the history check
+     stay with bookkeepers and above (William: staff "record authorised
+     field work on assigned farms without becoming bookkeepers"). Not yet
+     reviewed by Jess.
+961. **Farm staff never see injury or medical details.** Not their own once
+     sent, not if an owner names them, not restricted photos (Jess: "never
+     see injury/medical details or other farms"). They see only their own
+     training. A farm they aren't assigned is "not found" on every safety
+     route, including the hazard list.
+962. **Safety in the workspace.** The Safety tab is the Safety page for the
+     farm in the farm bar; the map shows hazards and no-go zones and the
+     paddock card lists its hazards; Log has Report a hazard, Near miss and
+     Incident; Today has a Safety card; the farm calendar has Safety due for
+     the next 30 days. All worked out from the records each time (William:
+     "use the existing calendar to display assigned safety actions, but keep
+     ... evidence ... in dedicated safety records"). Safety reports keep their
+     own phone drafts (decision 944) rather than #447's store.

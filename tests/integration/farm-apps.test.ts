@@ -107,7 +107,7 @@ describeWithDatabase("the Farming API for people's own apps", () => {
     const recorder = (await makeKey(owner, "Plate meter app", ["read_pasture", "record_pasture"])).body.key as string;
     const added = await app(readingsRoute.POST, recorder, "/pasture/readings", { method: "POST", body: { paddockId: twelveId, measuredOn: "2026-10-19", cover: 2400, method: "plate_meter" } });
     expect(added.status).toBe(201);
-    expect(((await as((tx) => listReadings(tx, { farmId })))[0]).source).toBe('Recorded via app "Plate meter app"');
+    expect(((await as((tx) => listReadings(tx, { farmId }))).rows[0]).source).toBe('Recorded via app "Plate meter app"');
     expect(((await app(coverRoute.GET, recorder, "/pasture/cover?onDate=2026-10-20")).body.summary as Json).cover).toMatchObject({ averageKgDmPerHa: 2400 });
 
     // The owner becomes a viewer: the key can still read, but not record.

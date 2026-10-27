@@ -257,7 +257,14 @@ namespace Tohyee.Tray
                     "{'id':'kowhai-kindy','displayName':'Kōwhai Kindergarten Inc','baseCurrency':'NZD','isActive':true,'provisioningStatus':'ready','migrationStatus':'ready','memberCount':3,'createdAt':'" + Ago(24 * 120) + "'}," +
                     "{'id':'southern-paws','displayName':'Southern Paws Ltd','baseCurrency':'NZD','isActive':true,'provisioningStatus':'ready','migrationStatus':'ready','memberCount':2,'createdAt':'" + Ago(24 * 60) + "'}," +
                     "{'id':'farm-trust','displayName':'Coastal Farm Trust','baseCurrency':'NZD','isActive':true,'provisioningStatus':'ready','migrationStatus':'ready','memberCount':2,'createdAt':'" + Ago(24 * 20) + "'}," +
+                    "{'id':'demo-farm-1a2b3c4d','displayName':'Kōwhai Dairies Ltd','baseCurrency':'NZD','isActive':true,'provisioningStatus':'ready','migrationStatus':'ready','memberCount':1,'createdAt':'" + Ago(2) + "','demo':{'userId':'3','status':'building'}}," +
                     "{'id':'old-test','displayName':'Old test organisation','baseCurrency':'AUD','isActive':false,'provisioningStatus':'ready','migrationStatus':'ready','memberCount':1,'createdAt':'" + Ago(24 * 300) + "'}]}");
+            }
+            if (path.StartsWith("/api/admin/demo-farms"))
+            {
+                // A demo farm being made for Kim (#445).
+                return Parse("{'enabled':true,'demoFarms':[" +
+                    "{'organisationId':'demo-farm-1a2b3c4d','displayName':'Kōwhai Dairies Ltd','status':'building','step':'Bank statements: March','percent':62,'error':null,'userId':'3','email':'kim@example.nz','userDisplayName':'Kim (treasurer)'}]}");
             }
             if (path.StartsWith("/api/admin/users"))
             {

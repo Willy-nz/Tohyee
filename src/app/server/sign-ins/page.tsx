@@ -24,6 +24,7 @@ const STEP: Record<SignInEvent["step"], string> = {
   reset_link: "Emailed reset link",
   first_admin: "First admin",
   google: "Google",
+  passkey: "Passkey",
 };
 
 /** The sign-in monitor (#208, decision 487): every sign-in attempt, with the suspicious ones flagged. Reported, never blocked. */

@@ -3,7 +3,8 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
-import { useRef, useState } from "react";
+import { FarmRowList, farmRowStyles } from "@/components/farm-rows";
+import { useEffect, useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { PaddockPastureSummary } from "@/components/pasture";
 import { PaddockRecords } from "@/components/soil";
@@ -68,6 +69,15 @@ export function LinzAttribution() {
   );
 }
 
+/**
+ * Something drawn over the paddocks, e.g. a hazard or no-go zone (#446): a
+ * point (a warning triangle) or a zone (an outline). "danger" is red (no-go
+ * or high), "warning" amber.
+ */
+export type MapOverlay = { id: string; label: string; tone: "danger" | "warning"; point?: Position | null; ring?: Position[] | null; onSelect?: () => void };
+
+const OVERLAY_COLOURS = { danger: { fill: "rgba(200, 30, 30, 0.28)", stroke: "#c81e1e" }, warning: { fill: "rgba(230, 150, 0, 0.25)", stroke: "#b86e00" } } as const;
+
 /** New Zealand, for a farm with no shapes yet. */
 const NZ_VIEW = { centre: [172.6, -41.3] as Position, zoom: 4.6 };
 const MIN_ZOOM = 3;
@@ -87,13 +97,21 @@ export function PaddockMap({
   imageryKey,
   drawing,
   onMapTap,
+  fills,
+  label = "Map of the paddocks",
+  overlays = [],
 }: {
-  paddocks: Paddock[];
+  /** A colour (a CSS colour or var()) for each paddock id, for the farm map's bands (decision 907). */
+  fills?: Record<string, string>;
+  /** What the map shows, for screen readers. */
+  label?: string;
+  paddocks: Pick<Paddock, "id" | "name" | "geometry" | "effectiveHa" | "mappedHa">[];
   selected: string | null;
   onSelect?: (id: string) => void;
   imageryKey?: string | null;
   drawing?: Position[] | null;
   onMapTap?: (position: Position) => void;
+  overlays?: MapOverlay[];
 }) {
   const [moved, setMoved] = useState<{ centre: Position; zoom: number } | null>(null);
   const [failed, setFailed] = useState<{ key: string; count: number }>({ key: "", count: 0 });
@@ -102,8 +120,21 @@ export function PaddockMap({
   // A click follows the end of a drag: it mustn't also choose a paddock.
   const dragged = useRef(false);
   const svg = useRef<SVGSVGElement | null>(null);
+  // Paddock numbers stay about 13px on screen however narrow the map is (#447: they were too small to read on a phone).
+  const [shownWidth, setShownWidth] = useState(MAP_WIDTH);
+  useEffect(() => {
+    const element = svg.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => setShownWidth(entries[0]?.contentRect.width || MAP_WIDTH));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const labelSize = Math.max(14, Math.min(36, (13 * MAP_WIDTH) / Math.max(shownWidth, 1)));
   const shaped = paddocks.filter((paddock) => paddock.geometry);
-  const box = bounds(shaped.map((paddock) => paddock.geometry!));
+  const overlayShapes: PaddockGeometry[] = overlays.flatMap((overlay) =>
+    overlay.ring && overlay.ring.length > 3 ? [{ type: "Polygon" as const, coordinates: [overlay.ring] }] : overlay.point ? [{ type: "Polygon" as const, coordinates: [[overlay.point, overlay.point, overlay.point, overlay.point]] }] : [],
+  );
+  const box = bounds([...shaped.map((paddock) => paddock.geometry!), ...overlayShapes]);
   const imagery = Boolean(imageryKey);
   if (!box && !drawing && !imagery) return <Empty>No paddock shapes yet. Import a file of your paddock shapes (GeoJSON, KML or a shapefile), or draw them, to see them here.</Empty>;
   const fitted = box ? fitBox(box, MAP_WIDTH, MAP_HEIGHT) : NZ_VIEW;
@@ -142,7 +173,7 @@ export function PaddockMap({
           ref={svg}
           viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
           role="img"
-          aria-label={imagery ? "Map of the paddocks over aerial imagery" : "Map of the paddocks"}
+          aria-label={imagery ? `${label}, over aerial imagery` : label}
           style={{ width: "100%", height: "auto", background: imagery ? "#5b6b4e" : "var(--surface-muted, #eef3ea)", borderRadius: 10, touchAction: "none", cursor: drawing ? "crosshair" : "grab", display: "block" }}
           onPointerDown={(event) => {
             const [x, y] = toDrawing(event);
@@ -192,8 +223,9 @@ export function PaddockMap({
             const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
             const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
             const isSelected = paddock.id === selected;
-            const fill = imagery ? (isSelected ? "rgba(255, 214, 10, 0.35)" : "rgba(255, 255, 255, 0.08)") : isSelected ? "#9ccf7a" : "#c9e3b4";
-            const stroke = imagery ? (isSelected ? "#ffd60a" : "#ffffff") : isSelected ? "#1f5fae" : "#4f7a3a";
+            const banded = fills?.[paddock.id];
+            const fill = banded ?? (imagery ? (isSelected ? "rgba(255, 214, 10, 0.35)" : "rgba(255, 255, 255, 0.08)") : isSelected ? "#9ccf7a" : "#c9e3b4");
+            const stroke = banded ? (isSelected ? "var(--text)" : "var(--surface)") : imagery ? (isSelected ? "#ffd60a" : "#ffffff") : isSelected ? "#1f5fae" : "#4f7a3a";
             return (
               <g
                 key={paddock.id}
@@ -201,22 +233,48 @@ export function PaddockMap({
                 style={{ cursor: onSelect && !drawing ? "pointer" : undefined }}
               >
                 <title>{`${paddock.name}: ${paddock.effectiveHa ?? "?"} ha effective, ${paddock.mappedHa} ha mapped`}</title>
-                <path d={path} fill={fill} stroke={stroke} strokeWidth={isSelected ? 3 : 1.5} fillRule="evenodd" />
+                {/* Theme colours are CSS variables, so they go in style (an SVG attribute can't use var()). */}
+                <path d={path} style={{ fill, fillOpacity: banded && imagery ? 0.75 : undefined, stroke }} strokeWidth={isSelected ? 4 : 1.5} fillRule="evenodd" />
                 <text
                   x={cx}
                   y={cy}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={14}
+                  fontSize={labelSize}
                   fontWeight={600}
-                  fill={imagery ? "#ffffff" : "#203a18"}
-                  stroke={imagery ? "rgba(0, 0, 0, 0.7)" : "none"}
-                  strokeWidth={imagery ? 3 : 0}
+                  fill={imagery || banded ? "#ffffff" : "#203a18"}
+                  stroke={imagery || banded ? "rgba(0, 0, 0, 0.75)" : "none"}
+                  strokeWidth={imagery || banded ? 3 : 0}
                   paintOrder="stroke"
                   style={{ pointerEvents: "none" }}
                 >
                   {paddock.name}
                 </text>
+              </g>
+            );
+          })}
+          {overlays.map((overlay) => {
+            const colours = OVERLAY_COLOURS[overlay.tone];
+            const selectable = Boolean(overlay.onSelect) && !drawing;
+            return (
+              <g key={overlay.id} onClick={selectable ? () => (dragged.current ? undefined : overlay.onSelect!()) : undefined} style={{ cursor: selectable ? "pointer" : undefined }}>
+                <title>{overlay.label}</title>
+                {overlay.ring && overlay.ring.length > 3 ? (
+                  <path d={`M${overlay.ring.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`} fill={colours.fill} stroke={colours.stroke} strokeWidth={2.5} strokeDasharray="8 4" />
+                ) : null}
+                {overlay.point
+                  ? (() => {
+                      const [x, y] = view.project(overlay.point);
+                      return (
+                        <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}>
+                          <path d="M0,-15 L13,9 L-13,9 Z" fill={colours.stroke} stroke="#ffffff" strokeWidth={2} strokeLinejoin="round" />
+                          <text y={6} textAnchor="middle" fontSize={14} fontWeight={700} fill="#ffffff" style={{ pointerEvents: "none" }}>
+                            !
+                          </text>
+                        </g>
+                      );
+                    })()
+                  : null}
               </g>
             );
           })}
@@ -273,13 +331,13 @@ export function FarmingHome({ organisationId, farmId = null }: { organisationId:
   const { can } = useWorkspace();
   const farms = useFarms(organisationId);
   const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
-  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
+  const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   const active = farms.data.farms.filter((farm) => farm.isActive);
   return (
     <>
-      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} deciding={deciding} onChange={selectFarm} />
       {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} onChanged={() => farms.reload()} /> : null}
       {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} knownIds={farms.data.farms.map((entry) => entry.id)} onSaved={(added) => { if (added) selectFarm(added); farms.reload(); }} /> : null}
       {can("admin") && settings.data ? <ImagerySettings organisationId={organisationId} imageryKey={settings.data.settings.imageryKey} onSaved={() => settings.reload()} /> : null}
@@ -396,7 +454,7 @@ function DrawPaddock({
             <Field label="Paddock name">
               <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field label="Effective ha" hint="The area you farm">
+            <Field label="Paddock area (ha)" hint="The area you farm">
               <input inputMode="decimal" size={8} value={effectiveHa} onChange={(event) => setEffectiveHa(event.target.value)} />
             </Field>
           </>
@@ -530,7 +588,7 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
       ) : null}
       <Card
         title="Paddocks"
-        description="Plans use each paddock's effective area, the area you farm. The mapped area is worked out from its boundary."
+        description="Paddock area is the area you farm; plans use it. The mapped area comes from the boundary."
         actions={
           <label className={ui.checkbox}>
             <input type="checkbox" checked={showRetired} onChange={(event) => setShowRetired(event.target.checked)} /> Show retired
@@ -539,12 +597,25 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
       >
         {paddocks.data && list.length === 0 ? <Empty>No paddocks yet. Add one below or import a file of their shapes.</Empty> : null}
         {list.length > 0 ? (
-          <div className={ui.tableWrap}>
-            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+          <div className={farmRowStyles.phoneOnly}>
+            <FarmRowList
+              label="Paddocks"
+              rows={list.map((paddock) => ({
+                key: paddock.id,
+                title: paddock.name,
+                parts: [paddock.effectiveHa ? `${paddock.effectiveHa} ha` : paddock.mappedHa ? `${paddock.mappedHa} ha mapped` : "No area yet", paddock.status === "retired" ? `Retired ${formatDate(paddock.retiredOn!)}` : null],
+                onOpen: () => setSelected(paddock.id),
+              }))}
+            />
+          </div>
+        ) : null}
+        {list.length > 0 ? (
+          <div className={`${ui.tableWrap} ${farmRowStyles.wideOnly}`}>
+            <table className={ui.table}>
               <thead>
                 <tr>
                   <th>Paddock</th>
-                  <th className={ui.num}>Effective ha</th>
+                  <th className={ui.num}>Paddock area (ha)</th>
                   <th className={ui.num}>Mapped ha</th>
                   <th>Boundary from</th>
                   <th></th>
@@ -562,7 +633,7 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
                         </>
                       ) : null}
                     </td>
-                    <td data-label="Effective ha" className={ui.num}>
+                    <td data-label="Paddock area" className={ui.num}>
                       {paddock.effectiveHa ?? <span className={ui.muted}>Not entered</span>}
                     </td>
                     <td data-label="Mapped ha" className={ui.num}>
@@ -597,7 +668,7 @@ function AddPaddock({ organisationId, farmId, onAdded }: { organisationId: strin
         <Field label="New paddock">
           <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="Effective ha">
+        <Field label="Paddock area (ha)">
           <input inputMode="decimal" value={effectiveHa} onChange={(event) => setEffectiveHa(event.target.value)} />
         </Field>
         <Button
@@ -727,7 +798,7 @@ function EditPaddock({ organisationId, paddock, onSaved }: { organisationId: str
         <Field label="Name">
           <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="Effective ha">
+        <Field label="Paddock area (ha)">
           <input inputMode="decimal" value={effectiveHa} onChange={(event) => setEffectiveHa(event.target.value)} />
         </Field>
         <Button
@@ -764,7 +835,7 @@ function SplitPaddock({ organisationId, paddock, onSplit }: { organisationId: st
             <Field label={`New paddock ${index + 1}`}>
               <input value={part.name} maxLength={60} onChange={(event) => setPart(index, "name", event.target.value)} />
             </Field>
-            <Field label="Effective ha">
+            <Field label="Paddock area (ha)">
               <input inputMode="decimal" value={part.effectiveHa} onChange={(event) => setPart(index, "effectiveHa", event.target.value)} />
             </Field>
           </div>

@@ -51,7 +51,7 @@ namespace Tohyee.Tray
             var outcome = J.Str(entry, "outcome");
             var text = outcome == "signed_in" ? "Signed in" : outcome == "password_ok" ? "Password right" : outcome == "failed" ? "Failed" : outcome == "locked" ? "Locked" : "Refused";
             var step = J.Str(entry, "step");
-            var how = step == "code" ? "code" : step == "backup_code" ? "backup code" : step == "setup_link" ? "setup link" : step == "reset_link" ? "reset link" : step == "first_admin" ? "first admin" : "password";
+            var how = step == "code" ? "code" : step == "backup_code" ? "backup code" : step == "setup_link" ? "setup link" : step == "reset_link" ? "reset link" : step == "first_admin" ? "first admin" : step == "google" ? "Google" : step == "passkey" ? "passkey" : "password";
             return text + " (" + how + ")";
         }
 

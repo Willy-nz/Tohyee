@@ -317,6 +317,8 @@ export async function disconnectMemberFarmMail(organisation: OrganisationRecord,
     await tx.query("delete from farm_calendar_links where user_id = $1", [userId]);
     // Which farms they worked on (decision 744).
     await forgetMemberFarmAccess(tx, userId);
+    // And whether they saw restricted incident details (#446, decision 936).
+    await tx.query("delete from safety_restricted_members where user_id = $1", [userId]);
     return ids.rows.length;
   });
 }

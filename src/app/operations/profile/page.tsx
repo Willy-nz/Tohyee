@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { GoogleButton, useAddressParam } from "@/components/auth/google-button";
+import { PasskeysCard } from "@/components/auth/passkeys-card";
 import { BackupCodes } from "@/components/auth/two-step";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -302,7 +303,7 @@ export default function ProfilePage() {
         body: { currentPassword: form.get("currentPassword"), newPassword: form.get("newPassword") },
       });
       formElement.reset();
-      setStatus({ tone: "success", text: "Password changed. Your other sessions have been signed out." });
+      setStatus({ tone: "success", text: "Password changed. Your other sessions have been signed out, and any passkeys removed: add them again if you use them." });
     } catch (caught) {
       setStatus({ tone: "error", text: errorMessage(caught) });
     }
@@ -334,6 +335,7 @@ export default function ProfilePage() {
         </div>
       </Card>
       {google.data && (google.data.google.available || google.data.google.linked) ? <GoogleCard google={google.data.google} reload={google.reload} /> : null}
+      <PasskeysCard />
       {googleOnly ? null : <TwoStepCard />}
       <SessionsCard />
       <ConnectedAppsCard />

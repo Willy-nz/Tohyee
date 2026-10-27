@@ -23,8 +23,10 @@ import {
   supplementTotals,
 } from "@/lib/farming/pasture-rules";
 import { requireFarming } from "@/lib/farming/paddocks";
+import { historyConditions, type HistoryInput, type HistoryPage, parseHistoryQuery, toPage } from "@/lib/farming/history";
 import { fileRows, type ImportOrigin, importSource } from "@/lib/farming/soil";
 import { optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
+import { requestHash } from "@/lib/idempotency";
 
 /*
  * Pasture and feed records (#249 stage 4; examples PF1-PF8, decision 559):
@@ -33,6 +35,8 @@ import { optionalString, requireId, requireOneOf, requireString } from "@/lib/va
  */
 
 const MAX_IMPORT_ROWS = 5000;
+/** A paddock's own history on its card: the latest this many readings and grazings. */
+const PADDOCK_HISTORY = 50;
 
 type PaddockRow = { id: string; farm_id: string; name: string; status: string; hectares: string | null };
 
@@ -80,12 +84,12 @@ export type PastureReading = Reading & { farmId: string; paddockName: string; es
 
 type ReadingRow = { id: string; farm_id: string; paddock_id: string; paddock_name: string; measured_on: string; cover: number; method: PastureMethod; note: string | null; source: string; created_by_email: string };
 
-async function loadReadings(tx: OrgTx, where: string, params: unknown[]): Promise<PastureReading[]> {
+async function loadReadings(tx: OrgTx, where: string, params: unknown[], limit?: number): Promise<PastureReading[]> {
   const rows = await tx.query<ReadingRow>(
     `select r.id::text, r.farm_id::text, r.paddock_id::text, p.name as paddock_name, r.measured_on::text, r.cover, r.method, r.note, r.source, r.created_by_email
        from pasture_readings r join paddocks p on p.id = r.paddock_id
       where r.status = 'active' and ${where}
-      order by r.measured_on desc, r.id desc`,
+      order by r.measured_on desc, r.id desc${limit ? ` limit ${Math.trunc(limit)}` : ""}`,
     params,
   );
   return rows.rows.map((row) => ({
@@ -103,22 +107,94 @@ async function loadReadings(tx: OrgTx, where: string, params: unknown[]): Promis
   }));
 }
 
-export async function listReadings(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown }): Promise<PastureReading[]> {
-  const farmId = await requireFarm(tx, input.farmId);
-  if (input.paddockId) return loadReadings(tx, "r.farm_id = $1 and r.paddock_id = $2", [farmId, requireId(input.paddockId, "paddockId")]);
-  return loadReadings(tx, "r.farm_id = $1", [farmId]);
+type HistoryFilter = HistoryInput & { farmId: unknown; paddockId?: unknown };
+
+/** The paddock filter, when given: it must be on this farm. */
+async function paddockFilter(tx: OrgTx, farmId: string, input: unknown): Promise<string | null> {
+  if (input === undefined || input === null || input === "") return null;
+  const paddockId = requireId(input, "paddockId");
+  const found = await tx.query("select 1 from paddocks where id = $1 and farm_id = $2", [paddockId, farmId]);
+  if (!found.rowCount) throw new NotFoundError("Paddock not found.");
+  return paddockId;
 }
 
-export async function addReading(tx: OrgTx, input: { paddockId: unknown; measuredOn: unknown; cover: unknown; method: unknown; note?: unknown }): Promise<PastureReading> {
+/** Builds "farm = $1 [and paddock = $2] and dates/cursor" for one farm table (decision 901). */
+async function historyWhere(tx: OrgTx, alias: string, dateColumn: string, input: HistoryFilter, options?: { defaultLimit?: number; max?: number }) {
+  const farmId = await requireFarm(tx, input.farmId);
+  const query = parseHistoryQuery(input, options);
+  const paddockId = await paddockFilter(tx, farmId, input.paddockId);
+  const params: unknown[] = [farmId];
+  let where = `${alias}.farm_id = $1`;
+  if (paddockId) {
+    params.push(paddockId);
+    where += ` and ${alias}.paddock_id = $2`;
+  }
+  const history = historyConditions(query, `${alias}.${dateColumn}`, `${alias}.id`, params.length + 1);
+  return { where: `${where} and ${history.sql}`, params: [...params, ...history.params], limit: query.limit };
+}
+
+/** A page of the farm's cover readings, newest first (`paddockId`, `from`, `to`, `limit`, `cursor`; decision 901). */
+export async function listReadings(tx: OrgTx, input: HistoryFilter, options?: { defaultLimit?: number; max?: number }): Promise<HistoryPage<PastureReading>> {
+  const { where, params, limit } = await historyWhere(tx, "r", "measured_on", input, options);
+  return toPage(await loadReadings(tx, where, params, limit + 1), limit, (row) => ({ date: row.measuredOn, id: row.id }));
+}
+
+/**
+ * A record sent for one farm must be for that farm: a paddock on another farm
+ * is refused, so switching farms can never put a record on the wrong one
+ * (#447, decision 902).
+ */
+function requireSameFarm(paddock: PaddockRow, farmIdInput: unknown) {
+  if (farmIdInput === undefined || farmIdInput === null || farmIdInput === "") return;
+  if (requireId(farmIdInput, "farmId") !== paddock.farm_id) throw new ConflictError(`${paddock.name} isn't on the farm this was recorded for. Nothing was saved: check the farm and try again.`);
+}
+
+// Operation ids (decision 912) ------------------------------------------------------------------------
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A phone's own id for a record it made (a UUID), or null when none was sent. */
+export function optionalOperationId(input: unknown): string | null {
+  if (input === undefined || input === null || input === "") return null;
+  if (typeof input !== "string" || !UUID.test(input)) throw new ValidationError("operationId must be a UUID.");
+  return input.toLowerCase();
+}
+
+type OperationTable = "pasture_readings" | "grazings" | "supplements_fed";
+
+/**
+ * The record an operation id already made, when the same request is sent
+ * again (a sync replayed after the signal dropped): its id, so the caller
+ * answers with it and nothing new is made. The same id with different
+ * details, or from someone else, is refused: nothing is overwritten.
+ */
+async function replayed(tx: OrgTx, table: OperationTable, operationId: string | null, hash: string, what: string): Promise<string | null> {
+  if (!operationId) return null;
+  const row = await tx.query<{ id: string; request_hash: string | null; created_by_email: string; status: string }>(`select id::text, request_hash, created_by_email, status from ${table} where operation_id = $1`, [operationId]);
+  const found = row.rows[0];
+  if (!found) return null;
+  if (found.created_by_email !== tx.actor.email || found.request_hash !== hash) {
+    throw new ConflictError(`This ${what} was already sent with different details. Nothing was changed: check it and record it again.`);
+  }
+  if (found.status !== "active") throw new ConflictError(`This ${what} was saved and then removed. Nothing was changed.`);
+  return found.id;
+}
+
+export async function addReading(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; measuredOn: unknown; cover: unknown; method: unknown; note?: unknown; operationId?: unknown }): Promise<PastureReading> {
   const paddock = await requireActivePaddock(tx, input.paddockId);
+  requireSameFarm(paddock, input.farmId);
   const measuredOn = parseIsoDate(input.measuredOn, "Measured on");
   const cover = requireCover(input.cover, "Cover");
   const method = requireOneOf(input.method, "Method", PASTURE_METHODS);
   const note = optionalString(input.note, "Note", { maxLength: 200 });
+  const operationId = optionalOperationId(input.operationId);
+  const hash = requestHash("pasture_reading", { paddockId: paddock.id, measuredOn, cover, method, note });
+  const again = await replayed(tx, "pasture_readings", operationId, hash, "reading");
+  if (again) return (await loadReadings(tx, "r.id = $1", [again]))[0];
   const row = await tx.query<{ id: string }>(
-    "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, note, source, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id::text",
+    "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, note, source, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text",
     // Recorded by a farm app, the record says which (FA3).
-    [paddock.farm_id, paddock.id, measuredOn, cover, method, note, (tx.actor.via ? `Recorded via ${tx.actor.via}` : "Entered in Tohyee").slice(0, 200), tx.actor.email],
+    [paddock.farm_id, paddock.id, measuredOn, cover, method, note, (tx.actor.via ? `Recorded via ${tx.actor.via}` : "Entered in Tohyee").slice(0, 200), tx.actor.email, operationId, operationId ? hash : null],
   );
   await writeAuditEvent(tx, { eventType: "farming.pasture_reading_added", entityType: "pasture_reading", entityId: row.rows[0].id, details: { paddockId: paddock.id, measuredOn, cover, method } });
   return (await loadReadings(tx, "r.id = $1", [row.rows[0].id]))[0];
@@ -260,14 +336,14 @@ export type GrazingRecord = {
 
 type GrazingRow = { id: string; paddock_id: string; paddock_name: string; hectares: string | null; mob: string; head: number | null; in_on: string; out_on: string | null; pre_cover: number | null; post_cover: number | null; note: string | null; created_by_email: string };
 
-async function loadGrazings(tx: OrgTx, where: string, params: unknown[]): Promise<GrazingRecord[]> {
+async function loadGrazings(tx: OrgTx, where: string, params: unknown[], limit?: number): Promise<GrazingRecord[]> {
   const rows = await tx.query<GrazingRow>(
     `select g.id::text, g.paddock_id::text, p.name as paddock_name,
             coalesce(p.effective_ha, round((select b.mapped_ha from paddock_boundaries b where b.paddock_id = p.id order by b.id desc limit 1), 2))::text as hectares,
             g.mob, g.head, g.in_on::text, g.out_on::text, g.pre_cover, g.post_cover, g.note, g.created_by_email
        from grazings g join paddocks p on p.id = g.paddock_id
       where g.status = 'active' and ${where}
-      order by g.in_on desc, g.id desc`,
+      order by g.in_on desc, g.id desc${limit ? ` limit ${Math.trunc(limit)}` : ""}`,
     params,
   );
   return rows.rows.map((row) => ({
@@ -286,10 +362,16 @@ async function loadGrazings(tx: OrgTx, where: string, params: unknown[]): Promis
   }));
 }
 
-export async function listGrazings(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown }): Promise<GrazingRecord[]> {
+/** A page of the farm's grazings by day in, newest first (`paddockId`, `from`, `to`, `limit`, `cursor`; decision 901). */
+export async function listGrazings(tx: OrgTx, input: HistoryFilter, options?: { defaultLimit?: number; max?: number }): Promise<HistoryPage<GrazingRecord>> {
+  const { where, params, limit } = await historyWhere(tx, "g", "in_on", input, options);
+  return toPage(await loadGrazings(tx, where, params, limit + 1), limit, (row) => ({ date: row.inOn, id: row.id }));
+}
+
+/** Mobs in a paddock now (no day out), whatever page of history is showing. */
+export async function openGrazings(tx: OrgTx, input: { farmId: unknown }): Promise<GrazingRecord[]> {
   const farmId = await requireFarm(tx, input.farmId);
-  if (input.paddockId) return loadGrazings(tx, "g.farm_id = $1 and g.paddock_id = $2", [farmId, requireId(input.paddockId, "paddockId")]);
-  return loadGrazings(tx, "g.farm_id = $1", [farmId]);
+  return loadGrazings(tx, "g.farm_id = $1 and g.out_on is null", [farmId], 500);
 }
 
 function optionalHead(input: unknown): number | null {
@@ -299,35 +381,52 @@ function optionalHead(input: unknown): number | null {
   return value;
 }
 
-export async function addGrazing(tx: OrgTx, input: { paddockId: unknown; mob: unknown; head?: unknown; inOn: unknown; outOn?: unknown; preCover?: unknown; postCover?: unknown; note?: unknown }): Promise<GrazingRecord> {
+export async function addGrazing(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; mob: unknown; head?: unknown; inOn: unknown; outOn?: unknown; preCover?: unknown; postCover?: unknown; note?: unknown; operationId?: unknown }): Promise<GrazingRecord> {
   const paddock = await requireActivePaddock(tx, input.paddockId);
+  requireSameFarm(paddock, input.farmId);
   const mob = requireString(input.mob, "Mob", { maxLength: 100 });
   const inOn = parseIsoDate(input.inOn, "Day in");
   const outOn = input.outOn === undefined || input.outOn === null || input.outOn === "" ? null : parseIsoDate(input.outOn, "Day out");
   if (outOn !== null && outOn < inOn) throw new ValidationError("The day out can't be before the day in.");
+  const head = optionalHead(input.head);
+  const preCover = optionalCover(input.preCover, "Cover before");
+  const postCover = optionalCover(input.postCover, "Cover after");
+  const note = optionalString(input.note, "Note", { maxLength: 200 });
+  const operationId = optionalOperationId(input.operationId);
+  const hash = requestHash("grazing", { paddockId: paddock.id, mob, head, inOn, outOn, preCover, postCover, note });
+  const again = await replayed(tx, "grazings", operationId, hash, "grazing");
+  if (again) return (await loadGrazings(tx, "g.id = $1", [again]))[0];
   if (outOn === null) {
     const open = await tx.query("select 1 from grazings where paddock_id = $1 and status = 'active' and out_on is null", [paddock.id]);
     if (open.rowCount) throw new ConflictError(`${paddock.name} already has a mob in it. Record the day out first.`);
   }
   const row = await tx.query<{ id: string }>(
-    "insert into grazings (farm_id, paddock_id, mob, head, in_on, out_on, pre_cover, post_cover, note, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text",
-    [paddock.farm_id, paddock.id, mob, optionalHead(input.head), inOn, outOn, optionalCover(input.preCover, "Cover before"), optionalCover(input.postCover, "Cover after"), optionalString(input.note, "Note", { maxLength: 200 }), tx.actor.email],
+    "insert into grazings (farm_id, paddock_id, mob, head, in_on, out_on, pre_cover, post_cover, note, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id::text",
+    [paddock.farm_id, paddock.id, mob, head, inOn, outOn, preCover, postCover, note, tx.actor.email, operationId, operationId ? hash : null],
   );
   await writeAuditEvent(tx, { eventType: "farming.grazing_added", entityType: "grazing", entityId: row.rows[0].id, details: { paddockId: paddock.id, mob, inOn, outOn } });
   return (await loadGrazings(tx, "g.id = $1", [row.rows[0].id]))[0];
 }
 
 /** Records the day out (and optionally the cover after) for a mob still in a paddock. */
-export async function closeGrazing(tx: OrgTx, idInput: unknown, input: { outOn: unknown; postCover?: unknown }): Promise<GrazingRecord> {
+export async function closeGrazing(tx: OrgTx, idInput: unknown, input: { outOn: unknown; postCover?: unknown; farmId?: unknown }): Promise<GrazingRecord> {
   await requireFarming(tx);
   const id = requireId(idInput, "grazingId");
   await requireRecordAccess(tx, "grazings", id, "Grazing not found.");
-  const current = await tx.query<{ in_on: string; out_on: string | null }>("select in_on::text, out_on::text from grazings where id = $1 and status = 'active' for update", [id]);
+  const current = await tx.query<{ in_on: string; out_on: string | null; post_cover: number | null; farm_id: string }>("select in_on::text, out_on::text, post_cover, farm_id::text from grazings where id = $1 and status = 'active' for update", [id]);
   if (!current.rows[0]) throw new NotFoundError("Grazing not found.");
-  if (current.rows[0].out_on !== null) throw new ConflictError("That mob's day out is already recorded.");
+  // Recorded for one farm, it must be that farm's mob (decision 902).
+  if (input.farmId !== undefined && input.farmId !== null && input.farmId !== "" && requireId(input.farmId, "farmId") !== current.rows[0].farm_id) {
+    throw new ConflictError("That mob isn't on the farm this was recorded for. Nothing was saved: check the farm and try again.");
+  }
   const outOn = parseIsoDate(input.outOn, "Day out");
-  if (outOn < current.rows[0].in_on) throw new ValidationError("The day out can't be before the day in.");
   const postCover = optionalCover(input.postCover, "Cover after");
+  if (current.rows[0].out_on !== null) {
+    // The same day out sent again (a replayed sync) is already done; a different one isn't written over (decision 912).
+    if (current.rows[0].out_on === outOn && (postCover === null || postCover === current.rows[0].post_cover)) return (await loadGrazings(tx, "g.id = $1", [id]))[0];
+    throw new ConflictError("That mob's day out is already recorded.");
+  }
+  if (outOn < current.rows[0].in_on) throw new ValidationError("The day out can't be before the day in.");
   await tx.query("update grazings set out_on = $2, post_cover = coalesce($3, post_cover) where id = $1", [id, outOn, postCover]);
   await writeAuditEvent(tx, { eventType: "farming.grazing_closed", entityType: "grazing", entityId: id, details: { outOn, postCover } });
   return (await loadGrazings(tx, "g.id = $1", [id]))[0];
@@ -348,12 +447,12 @@ export type Supplement = { id: string; paddockId: string | null; paddockName: st
 
 type SupplementRow = { id: string; paddock_id: string | null; paddock_name: string | null; fed_on: string; feed: string; quantity: string; unit: SupplementUnit; kg_dm: string | null; mob: string | null; note: string | null; created_by_email: string };
 
-async function loadSupplements(tx: OrgTx, where: string, params: unknown[]): Promise<Supplement[]> {
+async function loadSupplements(tx: OrgTx, where: string, params: unknown[], limit?: number): Promise<Supplement[]> {
   const rows = await tx.query<SupplementRow>(
     `select s.id::text, s.paddock_id::text, p.name as paddock_name, s.fed_on::text, s.feed, s.quantity::text, s.unit, s.kg_dm::text, s.mob, s.note, s.created_by_email
        from supplements_fed s left join paddocks p on p.id = s.paddock_id
       where s.status = 'active' and ${where}
-      order by s.fed_on desc, s.id desc`,
+      order by s.fed_on desc, s.id desc${limit ? ` limit ${Math.trunc(limit)}` : ""}`,
     params,
   );
   return rows.rows.map((row) => ({
@@ -372,17 +471,18 @@ async function loadSupplements(tx: OrgTx, where: string, params: unknown[]): Pro
   }));
 }
 
-export async function listSupplements(tx: OrgTx, input: { farmId: unknown }): Promise<Supplement[]> {
-  const farmId = await requireFarm(tx, input.farmId);
-  return loadSupplements(tx, "s.farm_id = $1", [farmId]);
+/** A page of supplements fed, newest first (`paddockId`, `from`, `to`, `limit`, `cursor`; decision 901). */
+export async function listSupplements(tx: OrgTx, input: HistoryFilter, options?: { defaultLimit?: number; max?: number }): Promise<HistoryPage<Supplement>> {
+  const { where, params, limit } = await historyWhere(tx, "s", "fed_on", input, options);
+  return toPage(await loadSupplements(tx, where, params, limit + 1), limit, (row) => ({ date: row.fedOn, id: row.id }));
 }
 
-export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown; fedOn: unknown; feed: unknown; quantity: unknown; unit: unknown; kgDm?: unknown; mob?: unknown; note?: unknown }): Promise<Supplement> {
+export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown; fedOn: unknown; feed: unknown; quantity: unknown; unit: unknown; kgDm?: unknown; mob?: unknown; note?: unknown; operationId?: unknown }): Promise<Supplement> {
   const farmId = await requireFarm(tx, input.farmId);
   let paddockId: string | null = null;
   if (input.paddockId !== undefined && input.paddockId !== null && input.paddockId !== "") {
     const paddock = await requireActivePaddock(tx, input.paddockId);
-    if (paddock.farm_id !== farmId) throw new ValidationError(`${paddock.name} isn't on this farm.`);
+    if (paddock.farm_id !== farmId) throw new ConflictError(`${paddock.name} isn't on the farm this was recorded for. Nothing was saved: check the farm and try again.`);
     paddockId = paddock.id;
   }
   const unit = requireOneOf(input.unit, "Unit", SUPPLEMENT_UNITS);
@@ -391,9 +491,17 @@ export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddock
   if (unit === "kg_dm") {
     if (kgDm !== null) throw new ValidationError("A quantity in kg DM is its own kg DM; leave kg DM blank.");
   }
+  const fedOn = parseIsoDate(input.fedOn, "Fed on");
+  const feed = requireString(input.feed, "Feed", { maxLength: 100 });
+  const mob = optionalString(input.mob, "Mob", { maxLength: 100 });
+  const note = optionalString(input.note, "Note", { maxLength: 200 });
+  const operationId = optionalOperationId(input.operationId);
+  const hash = requestHash("supplement", { farmId, paddockId, fedOn, feed, quantity, unit, kgDm, mob, note });
+  const again = await replayed(tx, "supplements_fed", operationId, hash, "feed line");
+  if (again) return (await loadSupplements(tx, "s.id = $1", [again]))[0];
   const row = await tx.query<{ id: string }>(
-    "insert into supplements_fed (farm_id, paddock_id, fed_on, feed, quantity, unit, kg_dm, mob, note, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text",
-    [farmId, paddockId, parseIsoDate(input.fedOn, "Fed on"), requireString(input.feed, "Feed", { maxLength: 100 }), quantity, unit, kgDm, optionalString(input.mob, "Mob", { maxLength: 100 }), optionalString(input.note, "Note", { maxLength: 200 }), tx.actor.email],
+    "insert into supplements_fed (farm_id, paddock_id, fed_on, feed, quantity, unit, kg_dm, mob, note, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id::text",
+    [farmId, paddockId, fedOn, feed, quantity, unit, kgDm, mob, note, tx.actor.email, operationId, operationId ? hash : null],
   );
   await writeAuditEvent(tx, { eventType: "farming.supplement_added", entityType: "supplement_fed", entityId: row.rows[0].id, details: { farmId, unit, quantity, kgDm } });
   return (await loadSupplements(tx, "s.id = $1", [row.rows[0].id]))[0];
@@ -415,7 +523,7 @@ export type PaddockPasture = { paddockId: string; name: string; hectares: string
 export type PastureSummary = {
   cover: FarmCover;
   paddocks: PaddockPasture[];
-  /** kg DM of supplements fed in each month, newest first (PF6). */
+  /** kg DM of supplements fed in each month, newest first, for the 12 months to the date (PF6). */
   supplementMonths: Array<{ month: string; kgDm: string; notCounted: Array<{ fedOn: string; feed: string; quantity: string; unit: SupplementUnit }> }>;
 };
 
@@ -424,8 +532,19 @@ export async function pastureSummary(tx: OrgTx, input: { farmId: unknown; onDate
   const farmId = await requireFarm(tx, input.farmId);
   const onDate = parseIsoDate(input.onDate, "On date");
   const paddocks = await paddockRows(tx, "p.farm_id = $1 and p.status = 'active'", [farmId]);
-  const readings = (await loadReadings(tx, "r.farm_id = $1 and r.measured_on <= $2", [farmId, onDate])).sort((a, b) => b.measuredOn.localeCompare(a.measuredOn) || Number(b.id) - Number(a.id));
-  const grazings = await loadGrazings(tx, "g.farm_id = $1", [farmId]);
+  // Each paddock's latest two readings on or before the date (the latest, and the one before for growth), read
+  // on their own so the summary never depends on a page of history (decision 901).
+  const readings = (
+    await loadReadings(
+      tx,
+      `r.id in (select id from (select x.id, row_number() over (partition by x.paddock_id order by x.measured_on desc, x.id desc) as n
+                                   from pasture_readings x where x.farm_id = $1 and x.status = 'active' and x.measured_on <= $2) ranked where n <= 2)`,
+      [farmId, onDate],
+    )
+  ).sort((a, b) => b.measuredOn.localeCompare(a.measuredOn) || Number(b.id) - Number(a.id));
+  // Only grazings that can matter: in by the date, and not out before the earliest reading used.
+  const earliest = readings.reduce<string>((oldest, reading) => (reading.measuredOn < oldest ? reading.measuredOn : oldest), onDate);
+  const grazings = await loadGrazings(tx, "g.farm_id = $1 and g.in_on <= $2 and (g.out_on is null or g.out_on >= $3)", [farmId, onDate, earliest]);
   const spans: GrazingSpan[] = grazings.map((grazing) => ({ paddockId: grazing.paddockId, inOn: grazing.inOn, outOn: grazing.outOn }));
   const result: PaddockPasture[] = paddocks.map((paddock) => {
     const own = readings.filter((reading) => reading.paddockId === paddock.id);
@@ -441,7 +560,7 @@ export async function pastureSummary(tx: OrgTx, input: { farmId: unknown; onDate
     };
   });
   const cover = farmCover(onDate, result.map((paddock) => ({ paddockId: paddock.paddockId, name: paddock.name, hectares: paddock.hectares, latest: paddock.latest })));
-  const supplements = await loadSupplements(tx, "s.farm_id = $1", [farmId]);
+  const supplements = await loadSupplements(tx, "s.farm_id = $1 and s.fed_on <= $2 and s.fed_on > ($2::date - interval '12 months')", [farmId, onDate]);
   const months = new Map<string, Supplement[]>();
   for (const line of supplements) months.set(line.fedOn.slice(0, 7), [...(months.get(line.fedOn.slice(0, 7)) ?? []), line]);
   const supplementMonths = [...months.entries()]
@@ -460,8 +579,11 @@ export async function paddockPasture(tx: OrgTx, paddockIdInput: unknown): Promis
   const found = await tx.query("select 1 from paddocks where id = $1", [paddockId]);
   if (!found.rowCount) throw new NotFoundError("Paddock not found.");
   await requirePaddockAccess(tx, paddockId);
-  const readings = await loadReadings(tx, "r.paddock_id = $1", [paddockId]);
-  const grazings = await loadGrazings(tx, "g.paddock_id = $1", [paddockId]);
+  // The paddock's latest 50 readings (and one more, for the last one's growth) and the grazings since (decision 901).
+  const all = await loadReadings(tx, "r.paddock_id = $1", [paddockId], PADDOCK_HISTORY + 1);
+  const since = all.length ? all[all.length - 1].measuredOn : "0001-01-01";
+  const grazings = await loadGrazings(tx, "g.paddock_id = $1 and (g.out_on is null or g.out_on >= $2)", [paddockId, since], PADDOCK_HISTORY);
   const spans = grazings.map((grazing) => ({ paddockId: grazing.paddockId, inOn: grazing.inOn, outOn: grazing.outOn }));
-  return { readings: readings.map((reading, index) => ({ ...reading, growth: readings[index + 1] ? growthBetween(readings[index + 1], reading, spans) : null })), grazings };
+  const readings = all.slice(0, PADDOCK_HISTORY);
+  return { readings: readings.map((reading, index) => ({ ...reading, growth: all[index + 1] ? growthBetween(all[index + 1], reading, spans) : null })), grazings };
 }

@@ -3,6 +3,7 @@ import {
   ALL_SETTINGS_HREF,
   CRM_MENUS,
   destinations,
+  farmWorkAllowsPath,
   inArea,
   menuSections,
   MENUS,
@@ -332,5 +333,32 @@ describe("CRM top bar", () => {
   it("drops a dropdown that has nothing left in it", () => {
     const menus = visibleMenus("crm", { can: () => false, modules: { crm: true, reporting: false, notForProfit: false, analytics: false, gst: false, accounting: false } });
     for (const menu of menus) expect(Boolean(menu.href) || menu.groups.length > 0).toBe(true);
+  });
+});
+
+describe("farm staff (decision 904)", () => {
+  const modules = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, livestock: false, farming: true };
+  const access = { can: () => false, modules, farmWorker: true };
+  it("have the field-work pages only, nothing to make and no settings", () => {
+    const menus = visibleMenus("accounting", access);
+    expect(menus.map((menu) => menu.label)).toEqual(["Farm"]);
+    expect(menus[0].groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
+      "/operations/farm",
+      "/operations/farming/pasture",
+      "/operations/farming",
+      "/operations/farming/soil",
+      "/operations/farming/calendar",
+      "/operations/farming/apps",
+    ]);
+    expect(visibleNewActions(access)).toEqual([]);
+    expect(visibleSettings(access)).toEqual([]);
+    expect(visibleMenus("crm", access)).toEqual([]);
+  });
+  it("are sent back to farm pages from anywhere else", () => {
+    expect(farmWorkAllowsPath("/operations/farming")).toBe(true);
+    expect(farmWorkAllowsPath("/operations/farming/pasture")).toBe(true);
+    expect(farmWorkAllowsPath("/operations/profile")).toBe(true);
+    expect(farmWorkAllowsPath("/operations/farm/map")).toBe(true);
+    for (const path of ["/operations", "/operations/invoices", "/operations/farming/benchmarks", "/operations/farming/fertiliser", "/operations/farming/notebook", "/operations/livestock"]) expect(farmWorkAllowsPath(path)).toBe(false);
   });
 });

@@ -128,6 +128,8 @@ export async function setMemberFarmAccess(
     if (found.rows.length !== farmIds.length) throw new ValidationError("One of those farms wasn't found.");
     for (const farmId of farmIds) await tx.query("insert into farm_member_farms (user_id, farm_id) values ($1, $2)", [userId, farmId]);
   }
+  // A remembered farm they can no longer see is forgotten (decision 900); it's also checked on every read.
+  if (input.access !== "all") await tx.query("delete from farm_last_used where user_id = $1 and not (farm_id = any($2::bigint[]))", [userId, farmIds]);
   await writeAuditEvent(tx, { eventType: "farming.member_farms_set", entityType: "user", entityId: userId, details: { access: input.access, farmIds } });
   return listMemberFarmAccess(tx);
 }
@@ -135,4 +137,5 @@ export async function setMemberFarmAccess(
 /** When someone leaves the organisation, their farm assignments go too. */
 export async function forgetMemberFarmAccess(tx: OrgTx, userId: string): Promise<void> {
   await tx.query("delete from farm_member_scopes where user_id = $1", [userId]);
+  await tx.query("delete from farm_last_used where user_id = $1", [userId]);
 }

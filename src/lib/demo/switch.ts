@@ -1,7 +1,8 @@
 /*
  * The demo farm's one switch (#437, decision 866): on unless the server's
- * environment has TOHYEE_DEMO_FARM=off. Turning it off hides "Try the demo
- * farm" and refuses adding one; demo farms already made stay until deleted.
+ * environment has TOHYEE_DEMO_FARM=off. Turning it off takes "Add demo
+ * farm" off the server settings (#445) and refuses adding one; demo farms
+ * already made stay until deleted.
  * Kept apart from the rest so pages can ask without loading the build.
  */
 
