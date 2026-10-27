@@ -233,6 +233,21 @@ stays in the chain, so the rest still checks.
   sheet needed** or **over 5 years old** (WorkSafe's farm chemicals
   guidance). **Print** for a paper copy; removed chemicals stay, marked.
 
+## The weekly copy off the farm (decisions 958-959)
+
+Safety › Records that stand up › **Weekly copy off the farm** (owners and
+admins set it up; tenant migration 0191). Once a week, after 6am, a PDF of
+every safety record entered since the last copy (each with its history) is
+emailed through the organisation's own email account to up to 10 addresses
+off the farm (a personal email, the accountant). The email gives the latest
+entry's number and hash for the whole history: kept where Tohyee can't
+change it, it shows later (**Compare with a copy**) whether the history was
+rewritten. Injury and medical details are never in it. **Send a copy now**
+sends one straight away. A copy is recorded only when the mail server
+accepted it; otherwise the screen shows the last problem and the next
+hourly check tries again. Copies sent can't be changed or deleted.
+`TOHYEE_SAFETY_COPY=off` stops the job.
+
 ## Worked examples
 
 Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
@@ -371,10 +386,24 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
 - **FS34 Farms kept apart.** Mere can't list or check the runoff's
   equipment, or list or add its chemicals; the history checks out.
 
+- **FS35 Who sets it up.** A bookkeeper can't; on with no address, or an
+  address that isn't one, is refused; the owner sends it to two addresses.
+- **FS36 What's in it.** The email names the latest entry's number and hash
+  (the same as Check the history), attaches a PDF, says injury details are
+  never in it, and doesn't contain them (they're withheld even though the
+  owner may see them).
+- **FS37 Only accepted mail counts.** A refused connection, or the mail
+  server refusing an address, records the problem and no copy; copies
+  can't be deleted.
+- **FS38 Weekly.** Two days after a copy, nothing is due; a week later
+  (after 6am) the next copy starts the day after the last one ended. Off,
+  nothing is sent.
+
 ## Not done yet
 
-The weekly copy emailed off the farm and the farm workspace (#447) links
-follow as further changes on #446. Not in equipment yet: hours-based
+The farm workspace (#447) links (Today, map, Log, calendar, the farm staff
+role) follow as a further change on #446. The weekly copy's sending through
+a real mail account wasn't tried: tests use a stand-in for the mail server. Not in equipment yet: hours-based
 service reminders and lockout/tagout steps; policies and procedures as
 documents. Not in inductions yet: photos of ID, a contractor's own induction of
 the farmer, sending an induction by email or text, and signing in for
@@ -410,3 +439,5 @@ Wording or rules that touch the law, *not yet reviewed by Jess*:
    fuller privacy notice needed (Privacy Act 2020)?
 10. "Out of use is a record, not a lock" and the five-year safety data sheet
     line (from WorkSafe's 2017 farm chemicals page).
+11. The weekly copy's wording ("Keep this email somewhere Tohyee can't
+    change it") and whether a week is the right interval.

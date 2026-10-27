@@ -147,6 +147,12 @@ export async function register() {
     startFarmMailScheduler();
   }
 
+  // The farm safety records' weekly copy off the farm (#446, decision 958).
+  if (process.env.TOHYEE_SAFETY_COPY !== "off") {
+    const { startSafetyCopyScheduler } = await import("@/lib/safety/weekly-copy");
+    startSafetyCopyScheduler();
+  }
+
   if (process.env.TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER !== "off") {
     const { startSalesPlatformScheduler } = await import("@/lib/sales-platforms/service");
     startSalesPlatformScheduler();

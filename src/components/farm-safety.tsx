@@ -8,6 +8,7 @@ import { ChemicalsCard, EquipmentCard, TrainingCard } from "@/components/farm-sa
 import { InductionsAndSignIn } from "@/components/farm-safety-inductions";
 import { ReportsCard, ReportSomething, useReports, WaitingToSend } from "@/components/farm-safety-reports";
 import { useApiData } from "@/components/hooks";
+import { useWorkspace } from "@/components/workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
@@ -808,6 +809,77 @@ function HazardDetail({ organisationId, hazard, access, paddockNames, onSaved }:
   );
 }
 
+// The weekly copy off the farm ----------------------------------------------------------------------
+
+type CopyData = { settings: { on: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null }; copies: Array<{ id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentAt: string }> };
+
+/** Decision 958: a PDF and the latest entry's number and hash, emailed off the farm each week. */
+function WeeklyCopy({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const data = useApiData<CopyData>("/api/farming/safety/weekly-copy", { organisationId });
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ on: true, toAddresses: "" });
+  const [message, setMessage] = useState<string | null>(null);
+  const { busy, error, run } = useRun();
+  if (data.error) return <Notice tone="error">{data.error}</Notice>;
+  if (!data.data) return null;
+  const { settings, copies } = data.data;
+  const admin = can("admin");
+  return (
+    <>
+      <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "16px 0 4px" }}>Weekly copy off the farm</h3>
+      <p className={ui.muted} style={{ marginTop: 0 }}>
+        Each week, a PDF of what was entered and the latest entry&apos;s number and hash are emailed to addresses you choose, through this organisation&apos;s email. Kept where Tohyee can&apos;t change it, it shows later whether the history was rewritten. Injury and medical details are never in it.
+      </p>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {message ? <Notice tone="info">{message}</Notice> : null}
+      {settings.lastProblem ? <Notice tone="warning">The last copy wasn&apos;t sent ({settings.lastAttemptAt ? formatDateTime(settings.lastAttemptAt) : ""}): {settings.lastProblem}</Notice> : null}
+      <p>
+        {settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? `to ${settings.toAddresses.join(", ")}` : "No copy is sent."}
+      </p>
+      {copies.length ? (
+        <ul style={{ paddingLeft: 18, marginTop: 0 }}>
+          {copies.slice(0, 5).map((copy) => (
+            <li key={copy.id} style={{ overflowWrap: "anywhere" }}>
+              Sent {formatDateTime(copy.sentAt)}: {copy.entries} entries ({formatDate(copy.periodFrom)} to {formatDate(copy.periodTo)}){copy.headSeq ? `; latest entry ${copy.headSeq}, hash ${copy.headHash}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {admin && !editing ? (
+        <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+          <Button variant="secondary" size="small" onClick={() => { setForm({ on: settings.on || true, toAddresses: settings.toAddresses.join(", ") }); setEditing(true); }}>
+            {settings.on ? "Change" : "Set up the weekly copy"}
+          </Button>
+          {settings.on ? (
+            <Button variant="secondary" size="small" disabled={busy} onClick={() => void run(() => api<{ sent: { headSeq: string | null } | null; problem: string | null }>("/api/farming/safety/weekly-copy/send", { method: "POST", body: { organisationId } }), (result) => { setMessage(result.sent ? `Sent: the mail server accepted it${result.sent.headSeq ? ` (latest entry ${result.sent.headSeq})` : ""}.` : `Not sent: ${result.problem ?? "nothing to send"}`); data.reload(); })}>
+              {busy ? "Sending…" : "Send a copy now"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {editing ? (
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => api("/api/farming/safety/weekly-copy", { method: "POST", body: { organisationId, on: form.on, toAddresses: form.toAddresses } }), () => { setEditing(false); data.reload(); }); }}>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={form.on} onChange={(event) => setForm({ ...form, on: event.target.checked })} /> Send a copy every week
+          </label>
+          <Field label="Send it to" hint="Addresses off the farm, separated by commas: your own personal email, your accountant. Up to 10.">
+            <input value={form.toAddresses} maxLength={2000} onChange={(event) => setForm({ ...form, toAddresses: event.target.value })} />
+          </Field>
+          <div className={ui.actions}>
+            <Button type="submit" disabled={busy}>
+              Save
+            </Button>
+            <Button variant="secondary" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </>
+  );
+}
+
 // Records and checks ------------------------------------------------------------------------------
 
 function RecordsCard({ organisationId, farm }: { organisationId: string; farm: Farm }) {
@@ -864,6 +936,7 @@ function RecordsCard({ organisationId, farm }: { organisationId: string; farm: F
           </Button>
         </div>
       </details>
+      <WeeklyCopy organisationId={organisationId} />
       <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "16px 0 4px" }}>WorkSafe pack</h3>
       <p className={ui.muted} style={{ marginTop: 0 }}>
         Everything entered or dated in a date range, each record with its full history, as a zip: a PDF to read, the records exactly as stored, and a small program that checks them on any computer.

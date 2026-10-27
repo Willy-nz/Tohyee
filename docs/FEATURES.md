@@ -681,8 +681,11 @@ that something happened.
   critical check puts a machine out of use with an action until someone
   allowed releases it; a training register with expiry and the person
   confirming their own; and each farm's chemicals inventory with safety data
-  sheets (over five years old flagged). Not yet: the weekly copy emailed off
-  the farm, and the farm workspace links (#447).
+  sheets (over five years old flagged). Since FS35-FS38 (decisions 958-959,
+  tenant migration 0191): a weekly PDF emailed off the farm through the
+  organisation's own email, with the latest entry's number and hash, never
+  injury details, recorded only when the mail server accepted it. Not yet:
+  the farm workspace links (#447).
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

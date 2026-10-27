@@ -9238,3 +9238,18 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
      (WorkSafe's 2017 farm chemicals page). Removed chemicals stay. Not yet:
      HSNO thresholds (signage, emergency response plans, certified
      handlers), which depend on quantities and classes Tohyee doesn't hold.
+
+### Farm safety: the weekly copy off the farm (#446; decisions 958-959)
+
+958. **A weekly PDF and the latest hash, emailed off the farm** (Jess: "A
+     copy you can't edit, such as a weekly PDF emailed off the farm"; tenant
+     migration 0191). Owners and admins choose up to 10 addresses; once a
+     week after 6am (business time zone) the records entered since the last
+     copy go as a PDF through the organisation's own email account, with the
+     whole history's latest entry number and hash in the email. Injury and
+     medical details are always withheld. Not yet reviewed by Jess.
+959. **Recorded only when accepted.** A copy is written (append-only) only
+     when the mail server accepted it; a failure is kept as the last problem
+     and retried at the next hourly check, never shown as sent. Sending
+     happens outside database transactions. Not tried with a real mail
+     account: tests use a stand-in for the mail server.
