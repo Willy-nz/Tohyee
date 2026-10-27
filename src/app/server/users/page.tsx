@@ -152,6 +152,7 @@ export default function UsersPage() {
                       <Badge tone="amber">Two-step not set up</Badge>
                     )}{" "}
                     {user.googleEmail && !user.googleOnly ? <Badge tone="blue">Google linked</Badge> : null}{" "}
+                    {user.passkeyCount ? <Badge tone="blue">{user.passkeyCount === 1 ? "1 passkey" : `${user.passkeyCount} passkeys`}</Badge> : null}{" "}
                     <span className={ui.muted}>
                       {user.organisationCount} organisation{user.organisationCount === 1 ? "" : "s"}
                     </span>
@@ -224,6 +225,23 @@ export default function UsersPage() {
                           }}
                         >
                           Remove Google
+                        </Button>
+                      ) : null}
+                      {user.passkeyCount ? (
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={async () => {
+                            if (
+                              await confirm(
+                                `Remove ${user.passkeyCount === 1 ? "the passkey" : `all ${user.passkeyCount} passkeys`} from ${user.email} (a lost or stolen phone)? Sessions signed in with them end, and their AI apps, AI keys, farm app keys and PowerPoint add-in sign-ins are disconnected. They can still sign in with their password${user.googleEmail ? " or Google" : ""}.`,
+                              )
+                            ) {
+                              void act(() => api(`/api/admin/users/${user.id}/passkeys`, { method: "DELETE" }), `Passkeys removed from ${user.email}.`);
+                            }
+                          }}
+                        >
+                          Remove passkeys
                         </Button>
                       ) : null}
                       {user.id !== me.id ? (

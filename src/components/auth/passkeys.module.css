@@ -1,0 +1,55 @@
+/* Passkeys on Your account (#450): a list that stacks on a phone. */
+.list {
+  display: grid;
+  gap: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.details {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.85rem);
+  overflow-wrap: anywhere;
+}
+
+.rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  width: 100%;
+}
+
+.rename > :first-child {
+  flex: 1 1 220px;
+}
+
+.add {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+}
