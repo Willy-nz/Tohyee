@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
@@ -19,6 +21,7 @@ import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { GrazingRecord, PastureReading } from "@/lib/farming/pasture";
 import { PASTURE_METHOD_LABELS } from "@/lib/farming/pasture-rules";
 import { todayInBrowser } from "@/lib/format";
+import { type CurrentRecord, HAZARD_LEVEL_LABELS, type HazardData, hazardState } from "@/lib/safety/shared";
 import styles from "./farm-workspace.module.css";
 
 /*
@@ -101,6 +104,11 @@ function useStatuses(organisationId: string, farmId: string) {
 
 function useShapes(organisationId: string, farmId: string) {
   return useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farmId}/paddocks`, { organisationId });
+}
+
+/** The farm's hazards and no-go zones (#446), for the map and the paddock card. */
+function useHazards(organisationId: string, farmId: string) {
+  return useApiData<{ hazards: Array<CurrentRecord<HazardData>> }>("/api/farming/safety", { organisationId, farmId });
 }
 
 function useImageryKey(organisationId: string) {
@@ -271,13 +279,18 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const fills = bandFills(list, colouring, today);
   const status = list.find((entry) => entry.paddockId === selected) ?? null;
   const shaped = (shapes.data?.paddocks ?? []).filter((paddock) => paddock.status === "active");
+  const router = useRouter();
+  const hazards = useHazards(organisationId, farm.id);
+  const activeHazards = (hazards.data?.hazards ?? []).filter((hazard) => hazardState(hazard) === "active");
+  // Hazards and no-go zones over the paddocks (#446): a tap opens Safety.
+  const overlays = hazardOverlays(activeHazards, () => router.push("/operations/farm/safety"));
   return (
     <div className={styles.grid}>
-      <Card title="Paddocks" description="Tap a paddock for its cover, mob and recent records. Colours show what was recorded, not whether it's good or bad.">
+      <Card title="Paddocks" description="Tap a paddock for its cover, mob and recent records. Colours show what was recorded, not whether it's good or bad. Red and amber triangles and dashed outlines are hazards and no-go zones.">
         <ColouringSwitch value={colouring} onChange={setColouring} />
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {shapes.data && statuses.data ? (
-          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} fills={fills} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}`} />
+          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} fills={fills} overlays={overlays} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${overlays.length} hazards`} />
         ) : (
           <p className={ui.muted}>Loading…</p>
         )}
@@ -285,7 +298,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
       </Card>
       <div>
         <div id="paddock-card" style={{ scrollMarginTop: 64 }}>
-          {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} onClose={() => setSelected(null)} /> : null}
+          {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} hazards={activeHazards} onClose={() => setSelected(null)} /> : null}
         </div>
         <Card title="All paddocks">
           <FarmRowList
@@ -316,7 +329,8 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
 }
 
 /** A paddock's card (decision 909): cover and how old it is, the mob, recent records and buttons to record. */
-export function PaddockCard({ organisationId, farm, status, onClose }: { organisationId: string; farm: Farm; status: PaddockStatus; onClose: () => void }) {
+export function PaddockCard({ organisationId, farm, status, hazards = [], onClose }: { organisationId: string; farm: Farm; status: PaddockStatus; hazards?: Array<CurrentRecord<HazardData>>; onClose: () => void }) {
+  const here = hazards.filter((hazard) => hazard.data.paddockIds.includes(status.paddockId));
   const today = todayInBrowser();
   const canRecord = useCanRecordFarmWork();
   const history = useApiData<{ pasture: { readings: PastureReading[]; grazings: GrazingRecord[] } }>(`/api/farming/paddocks/${status.paddockId}/pasture`, { organisationId });
@@ -338,6 +352,17 @@ export function PaddockCard({ organisationId, farm, status, onClose }: { organis
         <dd>{status.inNow ? "Being grazed now" : status.lastGrazedOn ? `${shortDate(status.lastGrazedOn, today)} (${daysAgo(status.lastGrazedOn, today)})` : "No grazing recorded"}</dd>
         <dt>Hazards</dt>
         <dd>
+          {here.length ? (
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {here.map((hazard) => (
+                <li key={hazard.recordId}>
+                  <strong>{hazard.data.noGo ? "No-go: " : ""}{hazard.data.title}</strong> ({HAZARD_LEVEL_LABELS[hazard.data.level]}){hazard.data.controls ? `: ${hazard.data.controls}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            "None recorded for this paddock. "
+          )}
           <Link href="/operations/farm/safety">See Safety</Link>
         </dd>
       </dl>
@@ -349,6 +374,9 @@ export function PaddockCard({ organisationId, farm, status, onClose }: { organis
       ) : null}
       {canRecord ? (
         <div className={styles.actions}>
+          <Link className={styles.bigButton} href={logHref("hazard")}>
+            Report a hazard
+          </Link>
           <Link className={styles.bigButton} href={logHref("cover")}>
             Add cover
           </Link>

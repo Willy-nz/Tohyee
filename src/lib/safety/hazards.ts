@@ -1,6 +1,7 @@
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { parseOptionalIsoDate } from "@/lib/dates";
 import { ValidationError } from "@/lib/errors";
+import { requireFarmAccess } from "@/lib/farming/access";
 import { GeometryError, parseGeometry } from "@/lib/farming/geometry";
 import { appendEntry, currentRecord, currentRecords, requireSafetyRecorder } from "@/lib/safety/records";
 import { EMPTY_EMERGENCY, type EmergencyData, HAZARD_LEVELS, type HazardData, type HazardLevel, type Position, type SafetyChange, type ZoneGeometry } from "@/lib/safety/shared";
@@ -84,6 +85,7 @@ async function hazardData(tx: OrgTx, farmId: string, input: HazardInput): Promis
 
 export async function listHazards(tx: OrgTx, farmId: unknown, options: { includeWithdrawn?: boolean } = {}) {
   const farm = requireId(farmId, "Farm");
+  await requireFarmAccess(tx, farm);
   return currentRecords<HazardData>(tx, "hazard", { farmId: farm, includeWithdrawn: options.includeWithdrawn });
 }
 

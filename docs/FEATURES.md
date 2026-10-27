@@ -684,8 +684,12 @@ that something happened.
   sheets (over five years old flagged). Since FS35-FS38 (decisions 958-959,
   tenant migration 0191): a weekly PDF emailed off the farm through the
   organisation's own email, with the latest entry's number and hash, never
-  injury details, recorded only when the mail server accepted it. Not yet:
-  the farm workspace links (#447).
+  injury details, recorded only when the mail server accepted it. Since
+  FS39-FS44 (decisions 960-962): in the farmer's workspace (#447) the
+  Safety tab, hazards on the map and paddock card, Report a hazard / Near
+  miss / Incident in Log, a Safety card on Today and Safety due on the farm
+  calendar; farm staff report, check and sign on their assigned farms and
+  never see injury or medical details.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

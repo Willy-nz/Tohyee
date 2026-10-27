@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withFarmWork } from "@/lib/api/http";
 import { safetyPeopleMap } from "@/lib/safety/people";
 import { changeTraining } from "@/lib/safety/register";
 
@@ -8,6 +8,6 @@ type Context = { params: Promise<{ recordId: string }> };
 export const POST = route<Context>(async (request, context) => {
   const { recordId } = await context.params;
   const body = await readJson(request);
-  const training = await withOrganisation(request, body.organisationId, "viewer", async (tx) => changeTraining(tx, recordId, body, await safetyPeopleMap(tx.organisationId)));
+  const training = await withFarmWork(request, body.organisationId, "read", async (tx) => changeTraining(tx, recordId, body, await safetyPeopleMap(tx.organisationId)));
   return json({ training });
 });

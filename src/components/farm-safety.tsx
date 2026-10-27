@@ -130,7 +130,7 @@ export function FarmSafetyHome({ organisationId, farmId = null, equipmentId = nu
   );
 }
 
-function FarmSafety({ organisationId, farm, imageryKey, equipmentId }: { organisationId: string; farm: Farm; imageryKey: string | null; equipmentId: string | null }) {
+export function FarmSafety({ organisationId, farm, imageryKey, equipmentId }: { organisationId: string; farm: Farm; imageryKey: string | null; equipmentId: string | null }) {
   const [showWithdrawn, setShowWithdrawn] = useState(false);
   const overview = useApiData<Overview>("/api/farming/safety", { organisationId, farmId: farm.id, includeWithdrawn: showWithdrawn });
   const paddocks = useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farm.id}/paddocks`, { organisationId });
@@ -163,7 +163,8 @@ function FarmSafety({ organisationId, farm, imageryKey, equipmentId }: { organis
       <EquipmentCard organisationId={organisationId} farm={farm} openEquipment={equipmentId} />
       <TrainingCard organisationId={organisationId} farm={farm} />
       <ChemicalsCard organisationId={organisationId} farm={farm} />
-      <RecordsCard organisationId={organisationId} farm={farm} />
+      {/* Checking the history and the WorkSafe pack are for viewers and above, not farm staff (decision 961). */}
+      {overview.data && !overview.data.access.farmStaff ? <RecordsCard organisationId={organisationId} farm={farm} /> : null}
     </>
   );
 }
@@ -413,7 +414,7 @@ function EmergencyForm({ organisationId, farm, current, onDone, onCancel }: { or
 
 // Hazards ----------------------------------------------------------------------------------------------
 
-function hazardOverlays(hazards: Array<CurrentRecord<HazardData>>, onSelect: (id: string) => void): MapOverlay[] {
+export function hazardOverlays(hazards: Array<CurrentRecord<HazardData>>, onSelect: (id: string) => void): MapOverlay[] {
   return hazards
     .filter((hazard) => hazardState(hazard) === "active" && (hazard.data.point || hazard.data.zone))
     .map((hazard) => ({

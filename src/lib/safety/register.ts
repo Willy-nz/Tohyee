@@ -90,6 +90,8 @@ export type TrainingView = CurrentRecord<TrainingData> & { state: TrainingState 
 /** The training register, soonest to expire first. `mine` limits it to the person's own. */
 export async function listTraining(tx: OrgTx, options: { mine?: boolean } = {}): Promise<TrainingView[]> {
   const today = todayIsoDate();
+  // Farm staff see only their own training (decision 961).
+  if (tx.actor.role === "farm_worker") options = { mine: true };
   const records = await currentRecords<TrainingData>(tx, "training");
   return records
     .filter((record) => !options.mine || record.data.person.userId === tx.actor.userId)

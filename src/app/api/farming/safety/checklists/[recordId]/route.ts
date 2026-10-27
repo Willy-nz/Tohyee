@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withFarmWork } from "@/lib/api/http";
 import { changeChecklist } from "@/lib/safety/equipment";
 
 type Context = { params: Promise<{ recordId: string }> };
@@ -7,6 +7,6 @@ type Context = { params: Promise<{ recordId: string }> };
 export const POST = route<Context>(async (request, context) => {
   const { recordId } = await context.params;
   const body = await readJson(request);
-  const checklist = await withOrganisation(request, body.organisationId, "viewer", (tx) => changeChecklist(tx, recordId, body));
+  const checklist = await withFarmWork(request, body.organisationId, "read", (tx) => changeChecklist(tx, recordId, body));
   return json({ checklist });
 });

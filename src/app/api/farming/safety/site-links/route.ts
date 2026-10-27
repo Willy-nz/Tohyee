@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withFarmWork } from "@/lib/api/http";
 import { requestOrigin } from "@/lib/crm/mail/origin";
 import { makeSiteLink } from "@/lib/safety/inductions";
 
@@ -6,6 +6,6 @@ import { makeSiteLink } from "@/lib/safety/inductions";
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const origin = await requestOrigin(request);
-  const link = await withOrganisation(request, body.organisationId, "viewer", (tx) => makeSiteLink(tx, body, origin));
+  const link = await withFarmWork(request, body.organisationId, "read", (tx) => makeSiteLink(tx, body, origin));
   return json(link, { status: 201 });
 });

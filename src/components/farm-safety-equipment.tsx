@@ -20,7 +20,7 @@ import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER
  */
 
 type Person = { userId: string; name: string; role: string };
-type EquipmentData = { equipment: EquipmentView[]; checklists: Array<CurrentRecord<ChecklistData>>; canRecord: boolean; people: Person[]; fixedAssets: Array<{ id: string; name: string }> };
+type EquipmentData = { equipment: EquipmentView[]; checklists: Array<CurrentRecord<ChecklistData>>; canRecord: boolean; canReport: boolean; people: Person[]; fixedAssets: Array<{ id: string; name: string }> };
 
 function useRun() {
   const [busy, setBusy] = useState(false);
@@ -54,7 +54,7 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
   const [adding, setAdding] = useState<"equipment" | "checklist" | null>(null);
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
   if (!data.data) return <p className={ui.muted}>Loading equipment…</p>;
-  const { equipment, checklists, canRecord } = data.data;
+  const { equipment, checklists, canRecord, canReport } = data.data;
   const live = equipment.filter((item) => item.change !== "withdrawn" && !item.data.retired);
   const out = live.filter((item) => !item.available);
   return (
@@ -90,7 +90,7 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
               </div>
             ) : null}
             <div className={ui.actions} style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-              {canRecord && item.checklist ? (
+              {canReport && item.checklist ? (
                 <Button size="small" onClick={() => setChecking(checking === item.recordId ? null : item.recordId)}>
                   Pre-start check
                 </Button>

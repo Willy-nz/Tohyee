@@ -3,7 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { canSeeFarm } from "@/lib/farming/access";
 import { fileRefs } from "@/lib/safety/files";
-import { appendEntry, currentRecord, currentRecords, requireSafetyRecorder } from "@/lib/safety/records";
+import { appendEntry, currentRecord, currentRecords, requireSafetyRecorder, requireSafetyReporter } from "@/lib/safety/records";
 import { addAction } from "@/lib/safety/reports";
 import {
   type CheckAnswer,
@@ -186,7 +186,8 @@ export async function equipmentChecks(tx: OrgTx, equipmentIdInput: unknown) {
  * the checker), due today.
  */
 export async function recordCheck(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>) {
-  requireSafetyRecorder(tx);
+  // Farm staff do pre-start checks on their farms (decision 960).
+  requireSafetyReporter(tx);
   const equipment = await currentRecord<EquipmentData>(tx, "equipment", input.equipmentId);
   if (equipment.change === "withdrawn" || equipment.data.retired) throw new ValidationError("That equipment isn't in use any more.");
   const checklistId = typeof input.checklistId === "string" ? input.checklistId : equipment.data.checklistId;

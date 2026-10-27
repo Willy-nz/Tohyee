@@ -172,7 +172,7 @@ export const FIXED_NUMBERS = [
 export const WORKSAFE_NOTIFY_URL = "https://worksafe.govt.nz/notify-worksafe/";
 
 /** Restricted access for the overview: what the person may do. */
-export type SafetyAccess = { canRecord: boolean; canSeeRestricted: boolean; isOwner: boolean };
+export type SafetyAccess = { canRecord: boolean; canReport: boolean; farmStaff: boolean; canSeeRestricted: boolean; isOwner: boolean };
 
 // Describing any record (history, the WorkSafe pack) -------------------------------------------
 

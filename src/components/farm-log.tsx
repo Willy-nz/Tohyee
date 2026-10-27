@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { operationId, useFarmDrafts } from "@/components/farm-drafts";
+import { LogSafetyReport } from "@/components/farm-safety-reports";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useApiData } from "@/components/hooks";
@@ -27,7 +28,7 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-type Flow = { kind: "cover" | "in" | "out" | "feed"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" };
+type Flow = { kind: "cover" | "in" | "out" | "feed"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" } | { kind: "safety"; type: "hazard" | "near_miss" | "incident" };
 
 const STATUS_TONE: Record<DraftStatus, "neutral" | "green" | "amber"> = { saved: "neutral", synced: "green", attention: "amber" };
 
@@ -39,11 +40,19 @@ export function FarmLog(context: FarmContext) {
   const params = useSearchParams();
   const record = params.get("record");
   const initial: Flow | null =
-    record === "cover" || record === "in" || record === "out" || record === "feed" ? { kind: record, paddockId: params.get("paddock"), grazingId: params.get("grazing") } : record === "walk" ? { kind: "walk" } : null;
+    record === "cover" || record === "in" || record === "out" || record === "feed"
+      ? { kind: record, paddockId: params.get("paddock"), grazingId: params.get("grazing") }
+      : record === "walk"
+        ? { kind: "walk" }
+        : record === "hazard" || record === "near_miss" || record === "incident"
+          ? { kind: "safety", type: record }
+          : null;
   const [flow, setFlow] = useState<Flow | null>(initial);
   const canRecord = useCanRecordFarmWork();
   if (!canRecord) return <Notice tone="info">Recording farm work needs the farm staff or bookkeeper role. An owner or admin can change your role.</Notice>;
   if (flow?.kind === "walk") return <FarmWalk {...context} onClose={() => setFlow(null)} />;
+  // Safety reports (#446, decision 962): the Safety page's report, saved on the phone first.
+  if (flow?.kind === "safety") return <LogSafetyReport organisationId={context.organisationId} farm={context.farm} type={flow.type} onClose={() => setFlow(null)} />;
   if (flow) return <QuickLog {...context} flow={flow} onClose={() => setFlow(null)} />;
   return <LogHome {...context} onStart={setFlow} />;
 }
@@ -79,7 +88,22 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
             <small>Supplements fed</small>
           </button>
         </div>
-        <p className={ui.muted}>Not kept in Tohyee yet: rainfall, photos and voice notes, animal treatments, and births and deaths. Near misses come with Safety.</p>
+        <h3>Safety</h3>
+        <div className={styles.bigButtons}>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "safety", type: "hazard" })}>
+            Report a hazard
+            <small>Something that could hurt someone</small>
+          </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "safety", type: "near_miss" })}>
+            Near miss
+            <small>Nobody hurt, but it nearly happened</small>
+          </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "safety", type: "incident" })}>
+            Incident
+            <small>Someone hurt, or damage done</small>
+          </button>
+        </div>
+        <p className={ui.muted}>Not kept in Tohyee yet: rainfall, voice notes, animal treatments, and births and deaths.</p>
       </Card>
       <Card title="On this phone" description="Each record is saved here first, then sent. Nothing is lost without a signal.">
         {!mine.length ? <p className={ui.muted}>Nothing recorded on this phone for {farm.name} lately.</p> : null}
@@ -219,7 +243,7 @@ function stepsFor(kind: "cover" | "in" | "out" | "feed", given: { paddock: boole
 
 const TITLES = { cover: "Cover reading", in: "Mob in", out: "Mob out", feed: "Feed" } as const;
 
-function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" }>; onClose: () => void }) {
+function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" }>; onClose: () => void }) {
   const today = todayInBrowser();
   const { store, change, sync } = useFarmDrafts(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });
