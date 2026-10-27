@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function FarmAppsPage() {
   return (
     <Page>
-      <PageHeader title="Farm apps" description="Keys for apps you build (often with an AI) or use, to read farm data and record field work through Tohyee's Farming API." />
+      <PageHeader title="Farm apps" description="Tiles for the apps the farm uses, and keys for apps you build (often with an AI) or use, through Tohyee's Farming API." />
       <RequireOrganisation>{(organisationId) => <FarmApps key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

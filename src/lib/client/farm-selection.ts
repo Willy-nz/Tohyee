@@ -1,8 +1,15 @@
-/** A stale choice must never silently redirect work to a different farm. */
-export function resolveSelectedFarm<T extends { id: string; isActive: boolean }>(farms: T[], selectedId: string | null): T | null {
+/**
+ * The farm a page works on. A stale choice must never silently redirect work
+ * to a different farm (decision 740). With no choice in this tab, the farm
+ * the person last worked on (remembered on the server, decision 900) opens,
+ * or the only active farm; the server only offers a farm the person can still
+ * see, and it must be active and listed here too.
+ */
+export function resolveSelectedFarm<T extends { id: string; isActive: boolean }>(farms: T[], selectedId: string | null, lastUsedId: string | null = null): T | null {
   const active = farms.filter((farm) => farm.isActive);
   if (selectedId !== null) return active.find((farm) => farm.id === selectedId) ?? null;
-  return active.length === 1 ? active[0] : null;
+  if (active.length === 1) return active[0];
+  return lastUsedId === null ? null : (active.find((farm) => farm.id === lastUsedId) ?? null);
 }
 
 type SelectionStorage = Pick<Storage, "getItem" | "setItem">;

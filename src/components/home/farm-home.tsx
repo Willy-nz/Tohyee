@@ -205,7 +205,7 @@ function PerformanceCard({ data }: { data: FarmHomePerformance }) {
         <div className={homeStyles.rows}>
           {shown.map(([label, key]) => (
             <div key={key} className={homeStyles.row}>
-              <span>FWE {label}</span>
+              <span title="Farm working expenses (FWE)">Farm costs {label}</span>
               <span><Money value={data.workingExpenses[key]} />{data.previous?.[key] ? <small className={homeStyles.activityMeta}>Year before <Money value={data.previous[key]} /></small> : null}</span>
             </div>
           ))}
