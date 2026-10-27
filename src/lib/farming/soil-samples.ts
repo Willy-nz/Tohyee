@@ -2,7 +2,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { requireFarmAccess, requireRecordAccess } from "./access";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { dec, parseDecimalInput, toFixedString } from "@/lib/money/decimal";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { optionalString, requireId } from "@/lib/validation";
@@ -73,13 +73,17 @@ function coordinate(input: unknown, label: string, limit: number): string | null
 }
 
 /** Records a sample (FA4). Latitude and longitude come together or not at all. */
-export async function addSoilSample(tx: OrgTx, input: { paddockId: unknown; takenOn: unknown; sampleName?: unknown; depth?: unknown; latitude?: unknown; longitude?: unknown; note?: unknown }): Promise<SoilSample> {
+export async function addSoilSample(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; takenOn: unknown; sampleName?: unknown; depth?: unknown; latitude?: unknown; longitude?: unknown; note?: unknown }): Promise<SoilSample> {
   await requireFarming(tx);
   const paddockId = requireId(input.paddockId, "paddockId");
   const paddock = (await tx.query<{ farm_id: string; name: string; status: string }>("select farm_id::text, name, status from paddocks where id = $1", [paddockId])).rows[0];
   if (!paddock) throw new NotFoundError("Paddock not found.");
   await requireFarmAccess(tx, paddock.farm_id, "Paddock not found.");
   if (paddock.status !== "active") throw new ValidationError(`${paddock.name} is retired.`);
+  // Sent for one farm, it must be that farm's paddock (decision 902).
+  if (input.farmId !== undefined && input.farmId !== null && input.farmId !== "" && requireId(input.farmId, "farmId") !== paddock.farm_id) {
+    throw new ConflictError(`${paddock.name} isn't on the farm this was recorded for. Nothing was saved: check the farm and try again.`);
+  }
   const latitude = coordinate(input.latitude, "Latitude", 90);
   const longitude = coordinate(input.longitude, "Longitude", 180);
   if ((latitude === null) !== (longitude === null)) throw new ValidationError("Give both latitude and longitude, or neither.");

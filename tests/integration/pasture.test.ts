@@ -115,7 +115,7 @@ describeWithDatabase("pasture and feed records", () => {
     expect(noMethod.rows[0].error).toBe("No method: choose one for the file.");
     expect(await w.as((tx) => importReadings(tx, w.farm.id, { fileName: "walk.csv", content: csv, method: "plate_meter" }))).toEqual({ imported: 2, skipped: 2 });
     await expect(w.as((tx) => importReadings(tx, w.farm.id, { fileName: "walk again.csv", content: csv, method: "plate_meter" }))).rejects.toThrow("already imported");
-    const readings = await w.as((tx) => listReadings(tx, { farmId: w.farm.id }));
+    const readings = (await w.as((tx) => listReadings(tx, { farmId: w.farm.id }))).rows;
     expect(readings.map((entry) => [entry.paddockName, entry.cover, entry.source])).toEqual([
       ["B", 2100, "Imported from walk.csv"],
       ["A", 2450, "Imported from walk.csv"],

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
+import { useWorkspace } from "@/components/workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useConfirm } from "@/components/confirm-dialog";
 import { api, errorMessage } from "@/lib/client/api";
@@ -111,7 +112,9 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
   const [chosen, setChosen] = useState<CalendarItem | null>(null);
   const [open, setOpen] = useState<"mailboxes" | "add" | "link" | null>(null);
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const mailboxes = useApiData<{ mailboxes: FarmMailbox[] }>("/api/farming/mail", { organisationId });
+  // Farm staff read the calendar only (decision 904): no mailboxes, adding or calendar link.
+  const farmWorker = useWorkspace().current?.role === "farm_worker";
+  const mailboxes = useApiData<{ mailboxes: FarmMailbox[] }>(farmWorker ? null : "/api/farming/mail", { organisationId });
   const shown = range(view === "check" ? "week" : view, anchor);
   const calendar = useApiData<{ items: CalendarItem[]; needsChecking: number; senders: Array<{ email: string; name: string | null }> }>("/api/farming/calendar", {
     organisationId,
@@ -180,6 +183,7 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
             </button>
           ))}
         </div>
+        {farmWorker ? null : (
         <div className={ui.rowButtons}>
           <Button size="small" aria-expanded={open === "add"} aria-controls="farm-calendar-add" onClick={() => setOpen(open === "add" ? null : "add")}>
             Add an item
@@ -191,8 +195,9 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
             Manage mailboxes
           </Button>
         </div>
+        )}
       </div>
-      {open === "add" ? (
+      {open === "add" && !farmWorker ? (
         <div id="farm-calendar-add">
           <AddItem
             organisationId={organisationId}
@@ -260,7 +265,7 @@ export function FarmCalendarHome({ organisationId }: { organisationId: string })
               ) : view === "month" ? (
                 <MonthGrid anchor={anchor} from={shown.from} to={shown.to} items={data.items} selectedId={selectedId} onSelect={setSelectedId} />
               ) : (
-                <Agenda from={shown.from} to={shown.to} items={data.items} selectedId={selectedId} onSelect={setSelectedId} onAdd={() => setOpen("add")} />
+                <Agenda from={shown.from} to={shown.to} items={data.items} selectedId={selectedId} onSelect={setSelectedId} onAdd={farmWorker ? undefined : () => setOpen("add")} />
               )
             }
           </LoadState>
