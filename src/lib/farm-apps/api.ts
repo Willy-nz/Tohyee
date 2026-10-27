@@ -5,6 +5,7 @@ import { addReading, listReadings, pastureSummary } from "@/lib/farming/pasture"
 import { addSoilSample, listSoilSamples } from "@/lib/farming/soil-samples";
 import { listSoilTests, soilSummary } from "@/lib/farming/soil";
 import { todayIsoDate } from "@/lib/dates";
+import type { HistoryInput } from "@/lib/farming/history";
 
 /*
  * What the Farming API v1 does (#249 stage 5; FA1-FA8, decision 561), on top
@@ -52,6 +53,7 @@ export const api = {
   soilSamples: (tx: OrgTx, farmId: string, paddockId: string | null) => listSoilSamples(tx, { farmId, paddockId }),
   addSoilSample,
   pastureCover: (tx: OrgTx, farmId: string, onDate: string | null) => pastureSummary(tx, { farmId, onDate: onDate ?? todayIsoDate() }),
-  pastureReadings: (tx: OrgTx, farmId: string, paddockId: string | null) => listReadings(tx, { farmId, paddockId }),
+  /** Up to 1,000 a page by default (decision 901). */
+  pastureReadings: (tx: OrgTx, farmId: string, paddockId: string | null, page: HistoryInput = {}) => listReadings(tx, { farmId, paddockId, ...page }, { defaultLimit: 1000, max: 1000 }),
   addReading,
 };

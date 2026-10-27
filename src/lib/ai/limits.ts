@@ -60,6 +60,11 @@ export function firstRows<T>(rows: readonly T[], max: number): { rows: T[]; trun
   return { rows: rows.slice(0, max), truncated: rows.length > max, total: rows.length };
 }
 
+/** A page of history (decision 901) in the same shape: `truncated` when there's more past the limit. */
+export function historyRows<T>(page: { rows: T[]; next: string | null }): { rows: T[]; truncated: boolean; total: number | null } {
+  return { rows: page.rows, truncated: page.next !== null, total: page.next === null ? page.rows.length : null };
+}
+
 /**
  * JSON text for a tool answer, or null when it's over the cap (the caller
  * then answers with a message asking for a narrower question).

@@ -2795,6 +2795,21 @@ that something happened.
   `examples/farm-apps/soil-sampling`, and soil samples taken in the field
   show on Soil tests. Guide: [FARM-APPS.md](FARM-APPS.md).
 
+- **Farmer-friendly farm pages, step 1** (#447, decisions 900-903): farm
+  pages open on the farm you last worked on (remembered for you on the
+  server, on any device, and forgotten when that farm is taken off you or
+  archived). Pasture readings, grazings and supplements load from the
+  server a page at a time (25, then Show more) with From, To and paddock
+  filters; the farm's cover, feed wedge and supplements by month are worked
+  out on their own, so paging never changes them. A record sent for one
+  farm with a paddock from another is refused, so switching farms can't put
+  it on the wrong farm. On a phone, paddocks, the feed wedge, readings,
+  grazings, supplements and latest soil tests are one line each that opens;
+  Remove sits apart and asks first; buttons and fields are at least 44px.
+  Plainer words: "Paddock area", "Farm costs" (with FWE as a hint),
+  "Changes" for fertiliser plans; internal codes are gone from farm pages.
+  The Farming API's readings and the AI's farm lists use the same pages.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
