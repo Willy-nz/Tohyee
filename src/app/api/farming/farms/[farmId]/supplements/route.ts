@@ -1,4 +1,4 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withFarmWork } from "@/lib/api/http";
 import { addSupplement, listSupplements } from "@/lib/farming/pasture";
 
 type Context = { params: Promise<{ farmId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ farmId: string }> };
 export const GET = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const params = searchParams(request);
-  const page = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) => listSupplements(tx, { farmId, paddockId: params.get("paddockId"), from: params.get("from"), to: params.get("to"), limit: params.get("limit"), cursor: params.get("cursor") }));
+  const page = await withFarmWork(request, params.get("organisationId"), "read", (tx) => listSupplements(tx, { farmId, paddockId: params.get("paddockId"), from: params.get("from"), to: params.get("to"), limit: params.get("limit"), cursor: params.get("cursor") }));
   return json({ supplements: page.rows, next: page.next });
 });
 
@@ -15,7 +15,7 @@ export const GET = route<Context>(async (request, context) => {
 export const POST = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const body = await readJson(request);
-  const supplement = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
+  const supplement = await withFarmWork(request, body.organisationId, "record", (tx) =>
     addSupplement(tx, { farmId, paddockId: body.paddockId, fedOn: body.fedOn, feed: body.feed, quantity: body.quantity, unit: body.unit, kgDm: body.kgDm, mob: body.mob, note: body.note }),
   );
   return json({ supplement }, { status: 201 });

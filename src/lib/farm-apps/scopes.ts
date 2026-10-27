@@ -24,6 +24,8 @@ export const isFarmAppScope = (value: unknown): value is FarmAppScope => typeof 
 
 /** The scopes a person with this role may give a key, or use through one. */
 export function scopesAllowed(role: Role): FarmAppScope[] {
+  // Farm staff read and record field work (decision 904), on their farms only (decision 744).
+  if (role === "farm_worker") return [...FARM_APP_SCOPES];
   if (!roleAtLeast(role, "viewer")) return [];
   return roleAtLeast(role, "bookkeeper") ? [...FARM_APP_SCOPES] : FARM_APP_SCOPES.filter((scope) => !RECORDING_SCOPES.includes(scope));
 }
