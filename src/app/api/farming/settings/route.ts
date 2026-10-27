@@ -1,9 +1,9 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withOrganisation, withFarmWork } from "@/lib/api/http";
 import { getFarmingSettings, setFarmingEnabled, setImageryKey } from "@/lib/farming/paddocks";
 
 /** GET: whether Farming is on (#249). */
 export const GET = route(async (request) => {
-  const settings = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", (tx) => getFarmingSettings(tx));
+  const settings = await withFarmWork(request, searchParams(request).get("organisationId"), "read", (tx) => getFarmingSettings(tx));
   return json({ settings });
 });
 

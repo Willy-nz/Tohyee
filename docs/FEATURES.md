@@ -2830,6 +2830,60 @@ that something happened.
   `examples/farm-apps/soil-sampling`, and soil samples taken in the field
   show on Soil tests. Guide: [FARM-APPS.md](FARM-APPS.md).
 
+- **Farmer-friendly farm pages, step 1** (#447, decisions 900-903): farm
+  pages open on the farm you last worked on (remembered for you on the
+  server, on any device, and forgotten when that farm is taken off you or
+  archived). Pasture readings, grazings and supplements load from the
+  server a page at a time (25, then Show more) with From, To and paddock
+  filters; the farm's cover, feed wedge and supplements by month are worked
+  out on their own, so paging never changes them. A record sent for one
+  farm with a paddock from another is refused, so switching farms can't put
+  it on the wrong farm. On a phone, paddocks, the feed wedge, readings,
+  grazings, supplements and latest soil tests are one line each that opens;
+  Remove sits apart and asks first; buttons and fields are at least 44px.
+  Plainer words: "Paddock area", "Farm costs" (with FWE as a hint),
+  "Changes" for fertiliser plans; internal codes are gone from farm pages.
+  The Farming API's readings and the AI's farm lists use the same pages.
+
+- **Farm staff** (#447, decisions 904-906): a **Farm staff** role under
+  People and roles records field work (cover readings, grazings and days
+  out, supplements fed, soil samples) and reads paddocks, pasture, soil and
+  the farm calendar, on the farms an owner or admin chooses for them, and
+  nothing of the books: journals, contacts, reports, exports, search, money
+  on farm pages, the notebook and the AI are all refused on the server. Their
+  top bar has the Farm menu's field pages only. Farm app keys work for them,
+  on their farms. Removing a record stays with bookkeepers and up.
+
+- **The farmer's workspace** (#447, decisions 907-910): Farm › Today, map and
+  log (`/operations/farm`) has **Today · Map · Log · Safety · More**, as
+  tabs along the bottom of a phone. The farm being worked on stays at the
+  top. **Today** has today's and the next few days' jobs from the farm
+  calendar, the mobs in now, a compact map that opens to its full height,
+  and the farm's app tiles. **Map** colours paddocks by days since grazed
+  or by the cover reading's age, with a key, and a list of every paddock;
+  tapping one opens its card (cover and how old it is, mob, last grazed,
+  recent records, Add cover and Mob in or out). **Safety** is a placeholder
+  until farm health and safety (#446). **More** has every table under
+  Details, and year-end and setup. Farm staff land on Today. **App tiles**
+  (a name and an address) are added by admins on Farm apps, now headed
+  Manage integrations for the keys; a tile never holds a key (tenant
+  migration 0187). Paddock numbers on the map stay readable on a phone.
+
+- **Quick logs and the farm walk** (#447, decisions 911-913): the Log tab
+  records a mob in, a mob out, a cover reading or feed, one question a
+  screen with today and the paddock or mob filled in where known, then a
+  check before saving. **Farm walk** goes paddock by paddock with a big
+  number box, saving each reading on the phone as it's typed, so closing
+  the app and coming back carries on where it was. Every record is kept on
+  the phone first (Saved on this phone), sent when there's a signal
+  (Synced), or marked Needs attention if Tohyee refuses it; it's never sent
+  to another farm or written over another person's record. Each carries
+  its own operation id (tenant migration 0188), so sending it twice makes
+  it once. The pages themselves still need a signal to open: there's no
+  offline app yet (decision 913 says how it would work). Not kept in
+  Tohyee yet: rainfall, photos and voice notes, treatments, births and
+  deaths.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

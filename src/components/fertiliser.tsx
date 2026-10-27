@@ -39,7 +39,7 @@ function useRun() {
 
 export function FertiliserHome({ organisationId, planId, farmId = null }: { organisationId: string; planId: string | null; farmId?: string | null }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
+  const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
   if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
   if (!farms.data) return <p className={ui.muted}>Loading…</p>;
   if (planId) return <PlanView key={planId} organisationId={organisationId} planId={planId} farms={farms.data.farms} />;
@@ -53,7 +53,7 @@ export function FertiliserHome({ organisationId, planId, farmId = null }: { orga
   }
   return (
     <>
-      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
+      <FarmSelector farms={active} farm={farm} stale={stale} deciding={deciding} onChange={selectFarm} />
       {farm ? <PlanList key={farm.id} organisationId={organisationId} farm={farm} /> : null}
       <Products organisationId={organisationId} />
     </>
@@ -77,7 +77,7 @@ function PlanList({ organisationId, farm }: { organisationId: string; farm: Farm
             <thead>
               <tr>
                 <th>Plan</th>
-                <th>Latest version</th>
+                <th>Changes</th>
                 <th>Added</th>
               </tr>
             </thead>
@@ -89,7 +89,7 @@ function PlanList({ organisationId, farm }: { organisationId: string; farm: Farm
                       <strong>{plan.name}</strong>
                     </Link>
                   </td>
-                  <td data-label="Latest version">{plan.latestVersion ? `Version ${plan.latestVersion}` : <span className={ui.muted}>No lines yet</span>}</td>
+                  <td data-label="Changes">{plan.latestVersion ? (plan.latestVersion === 1 ? "As first saved" : `Changed ${plan.latestVersion - 1} time${plan.latestVersion === 2 ? "" : "s"}`) : <span className={ui.muted}>No lines yet</span>}</td>
                   <td data-label="Added">{formatDate(plan.createdAt.slice(0, 10))}</td>
                 </tr>
               ))}
@@ -492,7 +492,7 @@ function EditVersion({
   const change = (index: number, key: keyof DraftLine, value: string) => setLines(lines.map((line, i) => (i === index ? { ...line, [key]: value } : line)));
   return (
     <>
-      <h3>{latest ? `Version ${latest.version + 1}` : "Version 1"}</h3>
+      <h3>{latest ? "Change the plan" : "The plan"}</h3>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {lines.map((line, index) => (
         <div className={ui.inlineForm} key={index}>

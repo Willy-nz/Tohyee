@@ -1,4 +1,4 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withOrganisation, withFarmWork } from "@/lib/api/http";
 import { addPaddock, listPaddocks } from "@/lib/farming/paddocks";
 
 type Context = { params: Promise<{ farmId: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ farmId: string }> };
 export const GET = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const params = searchParams(request);
-  const paddocks = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) => listPaddocks(tx, { farmId, includeRetired: params.get("includeRetired") }));
+  const paddocks = await withFarmWork(request, params.get("organisationId"), "read", (tx) => listPaddocks(tx, { farmId, includeRetired: params.get("includeRetired") }));
   return json({ paddocks });
 });
 

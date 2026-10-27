@@ -61,7 +61,7 @@ export function FarmComparisonView({ organisationId }: { organisationId: string 
   return (
     <Card
       title="All farms"
-      description={`Pasture cover uses each paddock's latest reading on or before the date, weighted by area (PF3). The all-farms figure is worked from every paddock, not by averaging the farms. A farm walk more than ${FRESH_PASTURE_DAYS} days old is flagged. Fertiliser is each farm's latest plan.`}
+      description={`Pasture cover uses each paddock's latest reading on or before the date, weighted by area. The all-farms figure is worked from every paddock, not by averaging the farms. A farm walk more than ${FRESH_PASTURE_DAYS} days old is flagged. Fertiliser is each farm's latest plan.`}
     >
       <div className={ui.inlineForm}>
         <Field label="On">
