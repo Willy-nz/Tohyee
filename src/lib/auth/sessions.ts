@@ -34,8 +34,12 @@ export function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-/** How a session was signed in (#424): Google sign-ins rely on Google's own checks, not Tohyee's two-step. */
-export type SignInMethod = "password" | "google";
+/**
+ * How a session was signed in (#424): Google sign-ins rely on Google's own
+ * checks, not Tohyee's two-step. A passkey sign-in (#450) counts as two-step
+ * in itself: the device plus a face, finger or PIN.
+ */
+export type SignInMethod = "password" | "google" | "passkey";
 
 /**
  * Creates a session. A `pending` session is one where the password was right
@@ -46,14 +50,14 @@ export async function createSession(
   client: DbClient,
   userId: string,
   meta: SessionMeta,
-  options: { pending?: boolean; method?: SignInMethod } = {},
+  options: { pending?: boolean; method?: SignInMethod; passkeyId?: string } = {},
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("base64url");
   const lifetimeMs = options.pending ? PENDING_SESSION_MINUTES * 60 * 1000 : SESSION_LIFETIME_DAYS * 24 * 60 * 60 * 1000;
   const expiresAt = new Date(Date.now() + lifetimeMs);
   await client.query(
-    `insert into sessions (id, user_id, expires_at, user_agent, ip_address, two_step_pending, sign_in_method)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
+    `insert into sessions (id, user_id, expires_at, user_agent, ip_address, two_step_pending, sign_in_method, passkey_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       hashSessionToken(token),
       userId,
@@ -62,6 +66,7 @@ export async function createSession(
       meta.ipAddress?.slice(0, 64) ?? null,
       options.pending === true,
       options.method ?? "password",
+      options.passkeyId ?? null,
     ],
   );
   // Opportunistic clean-up of expired sessions.
@@ -131,9 +136,10 @@ export async function getSessionState(token: string | null): Promise<SessionStat
   }
   const required = twoStepRequired();
   // A Google sign-in (#424, decision 802) relies on Google's own checks, as
-  // Xero's does, so it never asks for Tohyee's authenticator code.
-  const viaGoogle = row.sign_in_method === "google" && !row.two_step_pending;
-  const stage: SessionStage = viaGoogle
+  // Xero's does, so it never asks for Tohyee's authenticator code. A passkey
+  // sign-in (#450, decision 887) is two-step in itself.
+  const noCodeNeeded = (row.sign_in_method === "google" || row.sign_in_method === "passkey") && !row.two_step_pending;
+  const stage: SessionStage = noCodeNeeded
     ? "full"
     : row.two_step_pending && row.two_step_enabled
       ? "verify"

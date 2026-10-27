@@ -1,5 +1,6 @@
 import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { timingSafeEqual } from "node:crypto";
+import { endPasskeys } from "@/lib/auth/passkey-end";
 import { writeAdminAuditEvent } from "@/lib/audit";
 import {
   hashPassword,
@@ -267,11 +268,15 @@ export async function changeOwnPassword(
       currentSessionId,
     ]);
     const aiKeysRevoked = await revokeUserAiKeys(client, userId);
+    // Passkeys end too (#450, decision 892): a passkey added by someone who knew the
+    // old password mustn't outlive it. This session stays, even if a passkey signed it in.
+    await client.query("update sessions set passkey_id = null where id = $1", [currentSessionId]);
+    const passkeysEnded = await endPasskeys(client, userId);
     await writeAdminAuditEvent(client, { userId, email: row.email }, {
       eventType: "user.password_changed",
       entityType: "user",
       entityId: userId,
-      details: { aiKeysRevoked },
+      details: { aiKeysRevoked, passkeysEnded },
     });
   });
 }

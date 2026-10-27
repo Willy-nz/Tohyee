@@ -172,3 +172,13 @@
   font-size: 1.05rem;
   font-weight: 700;
 }
+
+/* Passkeys (#450): the key on the button, and the note about addresses. */
+.passkeyMark {
+  flex: none;
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.85rem);
+}
