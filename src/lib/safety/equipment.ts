@@ -114,11 +114,26 @@ async function equipmentData(tx: OrgTx, farmId: string, input: Record<string, un
   return data;
 }
 
+/**
+ * Who can release equipment is itself release authority, so naming or
+ * removing releasers is for an owner or an admin, as a person in Tohyee,
+ * never an AI or app (#464, decision 969). Anyone who can record safety
+ * can still change the other details, as long as the list stays the same.
+ */
+function guardReleasers(tx: OrgTx, before: readonly string[], after: readonly string[]) {
+  const same = before.length === after.length && [...before].sort().every((id, index) => id === [...after].sort()[index]);
+  if (same) return;
+  if (tx.actor.via) throw new ForbiddenError("Choosing who can release equipment is for a person in Tohyee, not an AI or app.");
+  if (tx.actor.role !== "owner" && tx.actor.role !== "admin") throw new ForbiddenError("Only an owner or an admin can choose who can release equipment.");
+}
+
 export async function addEquipment(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>) {
   requireSafetyRecorder(tx);
   const farmId = requireId(input.farmId, "Farm");
   if (!(await canSeeFarm(tx, farmId))) throw new NotFoundError("Farm not found.");
-  return appendEntry<EquipmentData>(tx, { kind: "equipment", change: "created", farmId, data: { ...(await equipmentData(tx, farmId, input, members)) }, operationId: input.operationId });
+  const data = await equipmentData(tx, farmId, input, members);
+  guardReleasers(tx, [], data.releaserUserIds);
+  return appendEntry<EquipmentData>(tx, { kind: "equipment", change: "created", farmId, data: { ...data }, operationId: input.operationId });
 }
 
 export async function changeEquipment(tx: OrgTx, recordId: unknown, input: Record<string, unknown>, members: ReadonlyMap<string, string>) {
@@ -126,6 +141,7 @@ export async function changeEquipment(tx: OrgTx, recordId: unknown, input: Recor
   const current = await currentRecord<EquipmentData>(tx, "equipment", recordId);
   const change: SafetyChange = input.change === "corrected" ? "corrected" : input.change === "withdrawn" ? "withdrawn" : "updated";
   const data = await equipmentData(tx, current.farmId!, { ...current.data, why: undefined, ...input }, members);
+  guardReleasers(tx, current.data.releaserUserIds ?? [], data.releaserUserIds);
   if (change !== "updated" && !data.why) throw new ValidationError("Say why.");
   return appendEntry<EquipmentData>(tx, { kind: "equipment", recordId: current.recordId, expectedVersion: input.expectedVersion, change, farmId: current.farmId, data: { ...data }, operationId: input.operationId });
 }

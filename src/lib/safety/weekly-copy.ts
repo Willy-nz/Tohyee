@@ -15,10 +15,12 @@ import { loadPackData, renderPack } from "@/lib/safety/pack";
  * The weekly copy off the farm (#446, decisions 958-959; Jess: "A copy you
  * can't edit, such as a weekly PDF emailed off the farm").
  *
- * Once a week, after 6am, a PDF of every safety record entered since the
- * last copy (each with its history) is emailed through the organisation's
- * own email account to the addresses an owner or admin chose, with the
- * number and hash of the latest entry in the whole history in the email.
+ * Once a week, after 6am, a PDF of every safety record with an entry after
+ * the last entry number a sent copy included (each with its history) is
+ * emailed through the organisation's own email account to the addresses an
+ * owner or admin chose, with the number and hash of the latest entry in the
+ * whole history in the email. Entry numbers, not dates, decide what's in
+ * it, so nothing entered between copies is missed (#461, decision 970).
  * Kept in a mailbox Tohyee can't reach, that number and hash show later
  * whether the history was rewritten (Compare with a copy). Injury and
  * medical details are never in it.
@@ -85,21 +87,28 @@ async function prepareCopy(organisation: OrganisationRecord, now: Date): Promise
   const gathered = await withOrganisationTransaction(organisation, COPY_ACTOR, async (tx) => {
     const settings = await tx.query<{ is_on: boolean; to_addresses: string[] }>("select is_on, to_addresses from safety_copy_settings");
     if (!settings.rows[0]?.is_on || !settings.rows[0].to_addresses.length) return null;
-    const last = await tx.query<{ period_to: string }>("select period_to from safety_copies order by safety_copies.sent_at desc limit 1");
+    // The high-water mark is the last entry number a sent copy included (#461, decision 970).
+    // It only moves when the mail server accepts a copy, so a failed or retried send loses nothing.
+    const last = await tx.query<{ head_seq: string | null; sent_at: string | null }>("select max(head_seq)::text as head_seq, max(sent_at) as sent_at from safety_copies");
+    const afterSeq = last.rows[0]?.head_seq ?? "0";
     const periodTo = isoDateAt(now);
-    let periodFrom = last.rows[0] ? isoDateAt(new Date(new Date(`${last.rows[0].period_to}T12:00:00Z`).getTime() + 86_400_000)) : isoDateAt(new Date(now.getTime() - (COPY_DAYS - 1) * 86_400_000));
+    const data = await loadPackData(tx, { from: periodTo, to: periodTo, withholdRestricted: true, afterSeq });
+    // The dates are for people reading the email; the entry numbers decide what's in it.
+    const firstEntered = data.entries.reduce<string | null>((first, entry) => (!first || entry.enteredAt < first ? entry.enteredAt : first), null);
+    let periodFrom = last.rows[0]?.sent_at ? isoDateAt(new Date(last.rows[0].sent_at)) : firstEntered ? isoDateAt(new Date(firstEntered)) : periodTo;
     if (periodFrom > periodTo) periodFrom = periodTo;
-    const data = await loadPackData(tx, { from: periodFrom, to: periodTo, withholdRestricted: true, enteredOnly: true });
-    return { data, toAddresses: settings.rows[0].to_addresses, periodFrom, periodTo };
+    return { data, toAddresses: settings.rows[0].to_addresses, periodFrom, periodTo, afterSeq };
   });
   if (!gathered) return null;
-  const { data, toAddresses, periodFrom, periodTo } = gathered;
+  const { data, toAddresses, periodFrom, periodTo, afterSeq } = gathered;
   const rendered = await renderPack(data);
   const head = data.chain.at(-1) ?? null;
   const text = [
     `Farm safety records for ${data.organisationName}, entered ${periodFrom} to ${periodTo}.`,
     "",
-    data.entries.length ? `${data.entries.length} new or changed entries are in the attached PDF, each record with its history.` : "Nothing was entered this week.",
+    data.entries.length
+      ? `Every record with an entry after number ${afterSeq}${head ? ` up to number ${head.seq}` : ""} is in the attached PDF, each with its history (${data.entries.length} entries).`
+      : "Nothing was entered since the last copy.",
     "",
     head ? `The safety history now has ${data.chain.length} entries. The latest is number ${head.seq}, with this hash:` : "The safety history has no entries yet.",
     head ? head.hash : "",

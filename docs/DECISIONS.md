@@ -9344,3 +9344,43 @@ October 2026; not legal advice.
      staff never seeing injury details, even ones they entered (the injured
      person can ask the owner for their own record under the Privacy Act).
      Claude, delegated by Jess, 28 October 2026.
+
+### Fixes from the review of the farm Log and safety work (#461-#464; decisions 969-972)
+
+969. **Only an owner or admin, in person, chooses who can release
+     equipment** (#464). Being named on equipment lets someone release it
+     after a failed check (decision 955), so naming or taking someone off
+     is release authority too. Adding, updating or correcting equipment
+     with a different list of releasers needs an owner or admin, and not
+     through an AI key or farm app (as releasing itself, decision 955).
+     Anyone who can record safety still keeps up the other details; the
+     list carries over unchanged. Checked on the server; the add form shows
+     the choice only to owners and admins. No migration. Claude, from the
+     review in #464, 28 October 2026.
+970. **The weekly copy goes by entry number, not date** (#461), replacing
+     decision 958's "entered since the last copy" by date. Each copy has
+     every record with an entry after the highest entry number an accepted
+     copy included (its `head_seq`), up to the newest entry when the copy
+     is gathered, each with its full history; that newest number becomes
+     the mark only when the mail server accepts the copy. Entry numbers are
+     given one at a time under a lock held until the entry is saved, so
+     once an entry is seen all earlier ones are saved: nothing can land
+     behind the mark. The dates in the email are for reading only. The
+     first copy has everything entered so far (it was the last seven days).
+     No migration (the mark is the existing `head_seq`). Claude, from the
+     review in #461, 28 October 2026.
+971. **Draft sending reads the phone's latest copy before each record**
+     (#462). The sync no longer works from a snapshot: it marks one draft
+     as tried, sends what that draft is now, and then changes only that
+     draft's status, by operation id. A reading changed, a draft added or
+     one let go while another is being sent is kept as it is now. A draft
+     already tried still isn't changed in place (a change is a new draft),
+     so what's acknowledged is what was sent. Claude, from the review in
+     #462, 28 October 2026.
+972. **"Saved on this phone" only when the phone's storage has it** (#463).
+     If storage refuses a write (full, blocked, private browsing), the
+     record is kept in memory, labelled **Not saved on this phone**, sent
+     straight away, and a warning says to keep the page open until it's
+     Synced, with **Try saving on this phone again** (also tried every 30
+     seconds). Another tab's change never drops the only copy. Claude, from
+     the review in #463, 28 October 2026.

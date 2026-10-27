@@ -3,47 +3,26 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useWorkspace } from "@/components/workspace";
 import { api, ApiError } from "@/lib/client/api";
+import { createDraftStorage } from "@/lib/farming/draft-storage";
 import { type Draft, type DraftStore, draftRequest, newOperationId, parseStore, prune, type SendResult, sendOutcome, storeKey, syncDrafts } from "@/lib/farming/drafts";
 
 /*
  * The phone's copy of farm records not yet in Tohyee (#447, decisions
- * 911-913). Kept in the browser's storage (in memory if storage is
- * blocked), per person and organisation, and sent whenever the page is open
- * and there's a signal: on opening, when the signal comes back, and after
- * each new record.
+ * 911-913). Kept in the browser's storage, per person and organisation, and
+ * sent whenever the page is open and there's a signal: on opening, when the
+ * signal comes back, and after each new record. If storage is blocked or
+ * full the records are kept in memory while the page is open, and the page
+ * says so instead of "Saved on this phone" (#463, decision 972).
  */
 
-const memory = new Map<string, string>();
-const listeners = new Set<() => void>();
-
-function readRaw(key: string): string | null {
-  if (memory.has(key)) return memory.get(key)!;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeRaw(key: string, value: string) {
-  memory.set(key, value);
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Storage blocked or full: the copy in memory lasts while the page is open.
-  }
-  listeners.forEach((listener) => listener());
-}
+const storage = createDraftStorage(() => (typeof window === "undefined" ? null : window.localStorage));
 
 function subscribe(listener: () => void) {
-  listeners.add(listener);
-  const onStorage = () => {
-    memory.clear();
-    listener();
-  };
+  const stop = storage.subscribe(listener);
+  const onStorage = () => storage.storageChanged();
   window.addEventListener("storage", onStorage);
   return () => {
-    listeners.delete(listener);
+    stop();
     window.removeEventListener("storage", onStorage);
   };
 }
@@ -67,38 +46,40 @@ async function send(organisationId: string, draft: Draft): Promise<SendResult> {
 export function useFarmDrafts(organisationId: string) {
   const { user } = useWorkspace();
   const key = storeKey(user.id, organisationId);
-  const text = useSyncExternalStore(subscribe, () => readRaw(key), () => null);
+  const text = useSyncExternalStore(subscribe, () => storage.read(key), () => null);
+  const stored = useSyncExternalStore(subscribe, () => storage.stored(key), () => true);
   const store = useMemo(() => parseStore(text), [text]);
   const syncing = useRef(false);
-  const commit = useCallback((next: DraftStore) => writeRaw(key, JSON.stringify(next)), [key]);
-  const change = useCallback((edit: (current: DraftStore) => DraftStore) => commit(edit(parseStore(readRaw(key)))), [commit, key]);
+  const read = useCallback(() => parseStore(storage.read(key)), [key]);
+  const commit = useCallback((next: DraftStore) => storage.write(key, JSON.stringify(next)), [key]);
+  const change = useCallback((edit: (current: DraftStore) => DraftStore) => commit(edit(read())), [commit, read]);
   const sync = useCallback(async () => {
     if (syncing.current) return;
     syncing.current = true;
     try {
+      commit(prune(read(), new Date().toISOString()));
       // Each draft goes to its own farm's address (decision 902), whichever farm is showing.
-      await syncDrafts(prune(parseStore(readRaw(key)), new Date().toISOString()), null, (draft) => send(organisationId, draft), (next) => {
-        // Keep anything added while sending: merge by operation id.
-        const latest = parseStore(readRaw(key));
-        const sent = new Map(next.drafts.map((draft) => [draft.operationId, draft]));
-        commit({ ...latest, drafts: latest.drafts.map((draft) => sent.get(draft.operationId) ?? draft) });
-      });
+      // Reads the latest store before each draft, so changes made while sending are kept (#462).
+      await syncDrafts({ read, write: commit }, null, (draft) => send(organisationId, draft));
     } finally {
       syncing.current = false;
     }
-  }, [commit, key, organisationId]);
+  }, [commit, read, organisationId]);
+  /** Tries again to save on the phone what's only in memory. */
+  const retryStorage = useCallback(() => storage.retry(key), [key]);
   useEffect(() => {
     void sync();
     const online = () => void sync();
     window.addEventListener("online", online);
-    // While records wait, try again every 30 seconds.
+    // While records wait, try again every 30 seconds (and storage, if it refused them).
     const timer = window.setInterval(() => {
-      if (parseStore(readRaw(key)).drafts.some((draft) => draft.status === "saved")) void sync();
+      if (!storage.stored(key)) storage.retry(key);
+      if (read().drafts.some((draft) => draft.status === "saved")) void sync();
     }, 30_000);
     return () => {
       window.removeEventListener("online", online);
       window.clearInterval(timer);
     };
-  }, [sync, key]);
-  return { store, change, sync };
+  }, [sync, read, key]);
+  return { store, change, sync, stored, retryStorage };
 }

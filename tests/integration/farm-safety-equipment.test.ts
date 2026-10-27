@@ -4,7 +4,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { setMemberFarmAccess } from "@/lib/farming/access";
 import { saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
-import { addChecklist, addEquipment, changeChecklist, equipmentChecks, listEquipment, recordCheck, releaseEquipment } from "@/lib/safety/equipment";
+import { addChecklist, addEquipment, changeChecklist, changeEquipment, equipmentChecks, listEquipment, recordCheck, releaseEquipment } from "@/lib/safety/equipment";
 import { uploadSafetyFile } from "@/lib/safety/files";
 import { checkSafetyHistory } from "@/lib/safety/records";
 import { addChemical, addTraining, changeChemical, changeTraining, listChemicals, listTraining } from "@/lib/safety/register";
@@ -93,6 +93,34 @@ describeWithDatabase("farm safety equipment, training and chemicals", () => {
     expect(released).toMatchObject({ enteredByEmail: "eq-mechanic@example.com", data: { checkId: failed.check.recordId } });
     expect((await as(staff)((tx) => listEquipment(tx, w.home))).equipment[0].available).toBe(true);
     await expect(as(owner)((tx) => releaseEquipment(tx, { equipmentId: w.quad, whatWasDone: "again" }))).rejects.toThrow(/isn't out of use/);
+  });
+
+  it("FS30a only an owner or admin, in person, chooses who can release equipment (#464)", async () => {
+    const tractor = await as(owner)((tx) => addEquipment(tx, { farmId: w.home, name: "Tractor", checklistId: w.checklist, releaserUserIds: [mechanic.id] }, members));
+    const deny = /Only an owner or an admin can choose who can release/;
+    // A bookkeeper can't name themselves or anyone else, on adding, updating or correcting.
+    await expect(as(staff)((tx) => addEquipment(tx, { farmId: w.home, name: "Ute", releaserUserIds: [staff.id] }, members))).rejects.toThrow(deny);
+    await expect(as(staff)((tx) => addEquipment(tx, { farmId: w.home, name: "Ute", releaserUserIds: [mechanic.id] }, members))).rejects.toThrow(deny);
+    await expect(as(staff)((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 1, releaserUserIds: [mechanic.id, staff.id] }, members))).rejects.toThrow(deny);
+    await expect(as(staff)((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 1, change: "corrected", why: "typo", releaserUserIds: [staff.id] }, members))).rejects.toThrow(deny);
+    // ...or take someone off.
+    await expect(as(staff)((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 1, releaserUserIds: [] }, members))).rejects.toThrow(deny);
+    // An owner's AI key or a farm app can't either.
+    await expect(as(owner, 'AI key "Phone"')((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 1, releaserUserIds: [staff.id] }, members))).rejects.toThrow(/not an AI or app/);
+    await expect(as(owner, "farm app")((tx) => addEquipment(tx, { farmId: w.home, name: "Ute", releaserUserIds: [staff.id] }, members))).rejects.toThrow(/not an AI or app/);
+    // Other details are still the bookkeeper's to keep up; the list stays as it was.
+    const renamed = await as(staff)((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 1, name: "John Deere tractor" }, members));
+    expect(renamed.data).toMatchObject({ name: "John Deere tractor", releaserUserIds: [mechanic.id] });
+    const hired = await as(staff)((tx) => addEquipment(tx, { farmId: w.home, name: "Hired ute", owner: "hired" }, members));
+    expect(hired.data.releaserUserIds).toEqual([]);
+    // The owner can add and take off releasers.
+    const added = await as(owner)((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 2, releaserUserIds: [mechanic.id, staff.id] }, members));
+    expect(added.data.releaserUserIds).toEqual([mechanic.id, staff.id].sort());
+    const removed = await as(owner)((tx) => changeEquipment(tx, tractor.recordId, { expectedVersion: 3, change: "corrected", why: "Mere isn't trained on it", releaserUserIds: [mechanic.id] }, members));
+    expect(removed.data.releaserUserIds).toEqual([mechanic.id]);
+    expect((await as(owner)((tx) => listEquipment(tx, w.home))).equipment.find((item) => item.recordId === tractor.recordId)?.canRelease).toBe(true);
+    expect((await as(staff)((tx) => listEquipment(tx, w.home))).equipment.find((item) => item.recordId === tractor.recordId)?.canRelease).toBe(false);
+    expect((await as(mechanic)((tx) => listEquipment(tx, w.home))).equipment.find((item) => item.recordId === tractor.recordId)?.canRelease).toBe(true);
   });
 
   it("FS32 the training register: expiry, and the person confirms their own record", async () => {

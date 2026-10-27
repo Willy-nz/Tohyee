@@ -9,7 +9,7 @@ import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Notice, ui } from "@/components/ui";
-import { addDraft, type Draft, DRAFT_STATUS_LABELS, type DraftKind, type DraftStatus, dismissDraft, draftsFor, moveWalk, openWalk, saveWalkReading, startWalk, type Walk, waitingElsewhere, walkReading } from "@/lib/farming/drafts";
+import { addDraft, type Draft, type DraftKind, type DraftStatus, dismissDraft, draftStatusLabel, draftsFor, moveWalk, openWalk, saveWalkReading, startWalk, type Walk, waitingElsewhere, walkReading } from "@/lib/farming/drafts";
 import { addDays, coverText, mobText, shortDate } from "@/lib/farming/farm-words";
 import type { PaddockStatus } from "@/lib/farming/paddock-status";
 import type { GrazingRecord, Supplement } from "@/lib/farming/pasture";
@@ -32,8 +32,28 @@ type Flow = { kind: "cover" | "in" | "out" | "feed"; paddockId?: string | null; 
 
 const STATUS_TONE: Record<DraftStatus, "neutral" | "green" | "amber"> = { saved: "neutral", synced: "green", attention: "amber" };
 
-export function StatusBadge({ status }: { status: DraftStatus }) {
-  return <Badge tone={STATUS_TONE[status]}>{DRAFT_STATUS_LABELS[status]}</Badge>;
+export function StatusBadge({ status, stored = true }: { status: DraftStatus; stored?: boolean }) {
+  return <Badge tone={status === "saved" && !stored ? "amber" : STATUS_TONE[status]}>{draftStatusLabel(status, stored)}</Badge>;
+}
+
+/** When the phone's storage refused the records (full or blocked): they're only on this page until sent (#463). */
+function StorageWarning({ stored, waiting, onRetry, onSend }: { stored: boolean; waiting: number; onRetry: () => boolean; onSend: () => void }) {
+  const [failedAgain, setFailedAgain] = useState(false);
+  if (stored || !waiting) return null;
+  return (
+    <Notice tone="warning">
+      <p>
+        This phone couldn&apos;t save {waiting === 1 ? "a record" : `${waiting} records`}: its storage is full or blocked (private browsing can do this). {waiting === 1 ? "It's" : "They're"} kept on this page only. Don&apos;t close or reload the page until {waiting === 1 ? "it shows" : "they show"} Synced.
+      </p>
+      {failedAgain ? <p>Still couldn&apos;t save. Free up space on the phone or leave private browsing, then try again.</p> : null}
+      <div className={styles.actions}>
+        <Button variant="secondary" onClick={() => setFailedAgain(!onRetry())}>
+          Try saving on this phone again
+        </Button>
+        <Button onClick={onSend}>Send now</Button>
+      </div>
+    </Notice>
+  );
 }
 
 export function FarmLog(context: FarmContext) {
@@ -58,7 +78,7 @@ export function FarmLog(context: FarmContext) {
 }
 
 function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (flow: Flow) => void }) {
-  const { store, change, sync } = useFarmDrafts(organisationId);
+  const { store, change, sync, stored, retryStorage } = useFarmDrafts(organisationId);
   const walk = openWalk(store, farm.id);
   const mine = draftsFor(store, farm.id).slice(-12).reverse();
   const elsewhere = waitingElsewhere(store, farm.id);
@@ -106,8 +126,9 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
         <p className={ui.muted}>Not kept in Tohyee yet: rainfall, voice notes, animal treatments, and births and deaths.</p>
       </Card>
       <Card title="On this phone" description="Each record is saved here first, then sent. Nothing is lost without a signal.">
+        <StorageWarning stored={stored} waiting={store.drafts.filter((draft) => draft.status === "saved").length} onRetry={retryStorage} onSend={() => void sync()} />
         {!mine.length ? <p className={ui.muted}>Nothing recorded on this phone for {farm.name} lately.</p> : null}
-        {mine.length ? <DraftList drafts={mine} onDismiss={(id) => change((current) => dismissDraft(current, id))} /> : null}
+        {mine.length ? <DraftList drafts={mine} stored={stored} onDismiss={(id) => change((current) => dismissDraft(current, id))} /> : null}
         {waiting ? (
           <Button variant="secondary" onClick={() => void sync()}>
             Send {waiting} now
@@ -123,13 +144,13 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
   );
 }
 
-function DraftList({ drafts, onDismiss }: { drafts: Draft[]; onDismiss?: (operationId: string) => void }) {
+function DraftList({ drafts, stored, onDismiss }: { drafts: Draft[]; stored: boolean; onDismiss?: (operationId: string) => void }) {
   return (
     <ul className={styles.links}>
       {drafts.map((draft) => (
         <li key={draft.operationId} style={{ display: "grid", gap: 4, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
           <span>
-            {draft.label} <StatusBadge status={draft.status} />
+            {draft.label} <StatusBadge status={draft.status} stored={stored} />
           </span>
           {draft.error ? (
             <span className={ui.muted}>
@@ -245,7 +266,7 @@ const TITLES = { cover: "Cover reading", in: "Mob in", out: "Mob out", feed: "Fe
 
 function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" }>; onClose: () => void }) {
   const today = todayInBrowser();
-  const { store, change, sync } = useFarmDrafts(organisationId);
+  const { store, change, sync, stored, retryStorage } = useFarmDrafts(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });
   const recentGrazings = useApiData<{ grazings: GrazingRecord[] }>(flow.kind === "in" ? `/api/farming/farms/${farm.id}/grazings` : null, { organisationId, limit: 50 });
   const recentFeed = useApiData<{ supplements: Supplement[] }>(flow.kind === "feed" ? `/api/farming/farms/${farm.id}/supplements` : null, { organisationId, limit: 50 });
@@ -273,9 +294,10 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
     return (
       <Card title={`${TITLES[flow.kind]} recorded`}>
         <p>
-          {draft?.label} {draft ? <StatusBadge status={draft.status} /> : null}
+          {draft?.label} {draft ? <StatusBadge status={draft.status} stored={stored} /> : null}
         </p>
         {draft?.error ? <Notice tone="warning">{draft.error}</Notice> : null}
+        <StorageWarning stored={stored} waiting={draft?.status === "saved" ? 1 : 0} onRetry={retryStorage} onSend={() => void sync()} />
         <div className={styles.actions}>
           <Button onClick={onClose}>Done</Button>
         </div>
@@ -470,7 +492,7 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
 
 function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: () => void }) {
   const today = todayInBrowser();
-  const { store, change, sync } = useFarmDrafts(organisationId);
+  const { store, change, sync, stored, retryStorage } = useFarmDrafts(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });
   const walk = openWalk(store, farm.id);
   const [method, setMethod] = useState<PastureMethod>("plate_meter");
@@ -512,7 +534,8 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
   if (walk.position >= walk.order.length) {
     return (
       <Card title={`Farm walk · ${farm.name}`} description={`${walkDrafts.length} reading${walkDrafts.length === 1 ? "" : "s"}, ${formatDate(walk.measuredOn)}, ${PASTURE_METHOD_LABELS[walk.method as PastureMethod] ?? walk.method}.`}>
-        <DraftList drafts={walkDrafts} />
+        <StorageWarning stored={stored} waiting={walkDrafts.filter((draft) => draft.status === "saved").length} onRetry={retryStorage} onSend={() => void sync()} />
+        <DraftList drafts={walkDrafts} stored={stored} />
         <div className={styles.actions}>
           <Button variant="secondary" onClick={() => change((current) => moveWalk(current, walk.walkId, walk.order.length - 1))}>
             Back to the last paddock
@@ -546,6 +569,7 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
       title={`Farm walk · Paddock ${paddock.name}`}
       description={`${walk.position + 1} of ${walk.order.length} · ${done} saved · ${formatDate(walk.measuredOn)}, ${PASTURE_METHOD_LABELS[walk.method as PastureMethod] ?? walk.method}`}
     >
+      <StorageWarning stored={stored} waiting={walkDrafts.filter((entry) => entry.status === "saved").length} onRetry={retryStorage} onSend={() => void sync()} />
       <form
         style={{ display: "grid", gap: 16 }}
         onSubmit={(event) => {
@@ -563,7 +587,7 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
         {value !== "" && cover === null ? <p role="alert">A whole number from 0 to 20,000.</p> : null}
         {draft ? (
           <p>
-            {draft.label} <StatusBadge status={draft.status} />
+            {draft.label} <StatusBadge status={draft.status} stored={stored} />
             {draft.error ? <span className={ui.muted}> {draft.error}</span> : null}
           </p>
         ) : null}
