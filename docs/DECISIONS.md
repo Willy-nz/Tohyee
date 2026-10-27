@@ -9384,3 +9384,96 @@ October 2026; not legal advice.
      Synced, with **Try saving on this phone again** (also tried every 30
      seconds). Another tab's change never drops the only copy. Claude, from
      the review in #463, 28 October 2026.
+
+### Farm safety on a farm phone (#446 layout follow-up; decisions 976-989)
+
+From the "Layout follow-up: make Safety quick to use on a farm phone"
+comment on #446 (Jess: "look at chat gpts suggestions and do them"). Where
+the comment suggested an answer, that answer was taken. All are **not yet
+reviewed by Jess**. Claude, 28 October 2026.
+
+976. **An overview and focused screens.** The Safety tab is no longer one
+     long page of every register. It shows the farm's emergency strip,
+     three everyday actions, Needs doing and Browse safety; each register
+     opens on its own screen, at its own address
+     (`/operations/farm/safety?farm=&view=&<record>=`). The data, the rules
+     and who may do what are unchanged. The old
+     `/operations/farming/safety` address redirects there, so printed QR
+     codes keep working; the Farm menu's Safety link goes to the workspace.
+977. **Phone navigation stays Today · Map · Log · Safety · More.** Focused
+     screens have **Back to Safety** and the farm's name instead of another
+     row of tabs; the browser's Back works because each screen is a page
+     address. On a desktop the overview is two restrained columns and
+     focused screens are no wider than 860 px.
+978. **The emergency strip.** Call 111, the address and entrance, and one
+     tap to the full details (the full card is unchanged: contacts, first
+     aid, Print, the copy kept on the phone with when it was saved). The
+     strip also keeps and shows that copy when Tohyee can't be reached.
+979. **Needs doing is Today's list, with links.** Built from the same data
+     as Today's Safety card (no second to-do system), most urgent first:
+     machines out of use, your overdue actions, inductions to sign, your
+     other actions, then (for those who keep the registers) others' overdue
+     actions, actions to check, expired then expiring training, hazard
+     reviews and self-declared visitors on site. The overview shows a count
+     and the first five, with View all; Today shows up to ten. Each line
+     opens its exact record on that farm. Actions not on a report (on a
+     hazard, from a failed pre-start check, or on their own) had nowhere to
+     be seen; they're now listed under **Other actions** on Reports and
+     actions until checked and closed, so those links open something. A
+     failed load says so and never shows "nothing needs doing".
+980. **Report something in two short steps.** Three large choices (hazard,
+     near miss, incident, each with a line saying what it means), then step
+     1: photo, what, where (typed, "where I am now", paddock), what
+     happened, when; step 2: what was done straight away, how bad, injury
+     details, WorkSafe's questions and, folded away as optional, who'll put
+     it right (it can be added later on the report). The farm is named on
+     the form and on the save button. The notifiable-event prompt shows as
+     soon as a Yes is chosen.
+981. **Pre-start checks.** A machine's QR code (or choosing it under Check
+     equipment) opens that machine alone with its checklist open. The
+     machine and farm stay at the top of the check; OK / Fault / Not
+     applicable are large whole-label choices with nothing chosen; a fault
+     asks what's wrong and only then offers a photo. Critical-fault
+     handling and release are unchanged. Equipment has a search when there
+     are more than four machines. The QR code button and checklist list are
+     for those who keep the registers.
+982. **An unanswered WorkSafe question is not a No.** The questions are Yes
+     / No with nothing chosen (and Clear); an unanswered one is sent as not
+     answered, as the server already stored it, and the form says how many
+     are unanswered. Previously an unticked box looked like No.
+983. **People and inductions: yours first, then the managers'.** On site
+     (Sign me in), your inductions with your own status (signed, sign
+     again and why, not signed yet) and Read and sign, and training; then,
+     only for those who keep the registers, **For managers**: who has
+     signed, adding and changing inductions, recording for someone, and the
+     sign-in link. "Self-declared, no login" wording is unchanged.
+984. **Links carry the farm.** Every Safety link names its farm; opening one
+     selects that farm (as `?farm=` already did elsewhere). A record in a
+     link is only looked for on that farm, so after switching farms another
+     farm's record isn't opened. Half-filled forms belong to their farm
+     (decision 902) and never move with a switch.
+985. **Half-filled reports are kept in the browser tab, truthfully.** While
+     moving around Safety, and across a reload, the report being filled in
+     is kept in this tab's session storage, per person, organisation and
+     farm, with its save id so it's still recorded once. The form says "Not
+     sent yet. Kept in this browser tab…" only when the browser stored it
+     and reads it back; otherwise "this browser isn't keeping a copy: stay
+     on this screen until it's saved". Sending is unchanged: saved on the
+     phone first, then sent, with Waiting to send.
+986. **Big targets, words not just colour.** Primary controls, list rows and
+     check choices are at least 44 px (rows 48 px); chosen choices have a
+     tick and border as well as colour; every Needs doing line has a word
+     badge. Focus rings show on all new controls.
+987. **Hazards: the list first, the map on request.** A List / Map switch;
+     the map also shows while adding a hazard. Tapping a hazard on the
+     farm map, or on a paddock card, opens that hazard.
+988. **Hash details only under Records and settings.** Daily screens' history
+     shows each version and its entry number, not its hash; checking the
+     chain, comparing with a copy, the weekly copy and the pack stay under
+     Records and settings, not for farm staff (decision 961).
+989. **Not done here.** The farmer test (3-5 farmers or contractors, without
+     coaching) is for people to run, not code; its results should decide
+     whether this is actually easier. Not checked on real phones, with a
+     screen reader or with real browser zoom (a 195 px wide window stood in
+     for 200% zoom). No claim is made of being better than SafeAg or
+     SiteSmart.

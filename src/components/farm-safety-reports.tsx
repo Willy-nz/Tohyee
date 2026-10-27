@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { DateInput } from "@/components/date-input";
 import { EnteredLine, newOperationId, SafetyHistory } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
@@ -12,6 +12,7 @@ import type { Farm, Paddock } from "@/lib/farming/paddocks";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import type { SafetyFile } from "@/lib/safety/files";
 import type { ReportView } from "@/lib/safety/reports";
+import { createFormMemory, formMemoryKey, recordAnchor, unansweredQuestions } from "@/lib/safety/screens";
 import {
   ACTION_STATE_LABELS,
   type ActionData,
@@ -34,6 +35,7 @@ import {
   WORKSAFE_NOTIFIABLE_GUIDE_URL,
   WORKSAFE_NOTIFY_URL,
 } from "@/lib/safety/shared";
+import styles from "./farm-safety.module.css";
 
 /*
  * Reporting a hazard, near miss or incident on a phone, and following it
@@ -43,7 +45,7 @@ import {
  */
 
 type Person = { userId: string; name: string; role: string };
-export type ReportsData = { reports: ReportView[]; access: SafetyAccess; people: Person[] };
+export type ReportsData = { reports: ReportView[]; otherActions: Array<CurrentRecord<ActionData>>; access: SafetyAccess; people: Person[] };
 
 /** A farm's reports, actions and people, for the Safety page. */
 export function useReports(organisationId: string, farmId: string, includeWithdrawn: boolean) {
@@ -194,12 +196,23 @@ function Thumbnails({ organisationId, files }: { organisationId: string; files: 
 
 // Reporting ----------------------------------------------------------------------------------------
 
+/**
+ * Report something (decision 980): choose what it is with large buttons,
+ * then a short first step (photo, what, where, what happened) and a second
+ * with the follow-up questions.
+ */
 export function ReportSomething({ organisationId, farm, paddocks, people, access, onSent }: { organisationId: string; farm: Farm; paddocks: Paddock[]; people: Person[]; access: SafetyAccess; onSent: () => void }) {
-  const [type, setType] = useState<ReportType | null>(null);
+  const { user } = useWorkspace();
+  const [type, setType] = useState<ReportType | null>(() => (typeof window === "undefined" ? null : memory.read<{ type: ReportType }>(memoryKey(user.id, organisationId, farm.id, "type"))?.type ?? null));
   const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; text: string; notifiable: boolean } | null>(null);
-  if (!access.canReport) return null;
+  const choose = (next: ReportType | null) => {
+    setType(next);
+    if (next) memory.write(memoryKey(user.id, organisationId, farm.id, "type"), { type: next });
+    else memory.clear(memoryKey(user.id, organisationId, farm.id, "type"));
+  };
+  if (!access.canReport) return <Notice tone="info">Your role on {farm.name} doesn&apos;t record safety reports. Tell the farm manager, or phone 111 in an emergency.</Notice>;
   return (
-    <Card title="Report something" description="A hazard you've spotted, a near miss, or someone hurt. It's saved on this phone first, then sent.">
+    <Card title={type ? REPORT_TYPE_LABELS[type] : "What are you reporting?"} description={`On ${farm.name}. It's saved on this phone first, then sent.`}>
       {result ? (
         <>
           <Notice tone={result.tone}>{result.text}</Notice>
@@ -214,19 +227,20 @@ export function ReportSomething({ organisationId, farm, paddocks, people, access
           type={type}
           paddocks={paddocks}
           people={people}
-          onCancel={() => setType(null)}
+          onCancel={() => choose(null)}
           onDone={(outcome) => {
-            setType(null);
+            choose(null);
             setResult(outcome);
             onSent();
           }}
         />
       ) : (
-        <div className={ui.actions} style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
+        <div className={styles.typeChoices}>
           {(["hazard", "near_miss", "incident"] as const).map((each) => (
-            <Button key={each} variant={each === "incident" ? "danger" : "secondary"} onClick={() => { setResult(null); setType(each); }}>
-              {REPORT_TYPE_LABELS[each]}
-            </Button>
+            <button key={each} type="button" className={styles.typeChoice} data-type={each} onClick={() => { setResult(null); choose(each); }}>
+              <strong>{REPORT_TYPE_LABELS[each]}</strong>
+              <small>{each === "hazard" ? "Something that could hurt someone" : each === "near_miss" ? "It nearly hurt someone" : "Someone was hurt or made ill, or damage was done"}</small>
+            </button>
           ))}
         </div>
       )}
@@ -234,20 +248,48 @@ export function ReportSomething({ organisationId, farm, paddocks, people, access
   );
 }
 
+/** Half-filled reports, kept in this tab while the person moves around Safety (decision 985). */
+const memory = createFormMemory(() => (typeof window === "undefined" ? null : window.sessionStorage));
+const memoryKey = (userId: string, organisationId: string, farmId: string, form: string) => formMemoryKey({ userId, organisationId, farmId, form: `report.${form}` });
+
+type ReportDraftForm = { title: string; happenedOn: string; time: string; whatHappened: string; where: string; paddockIds: string[]; immediateAction: string; severity: Severity };
+type ReportMemory = { operationId: string; step: 1 | 2; form: ReportDraftForm; point: Position | null; photos: SafetyFile[]; injured: boolean; details: { injuredPerson: string; injury: string; treatment: string }; detailPhotos: SafetyFile[]; answers: NotifiableAnswers; action: { title: string; assignedToUserId: string; assignedToName: string; due: string } };
+
 export function ReportForm({ organisationId, farm, type, paddocks, people, onCancel, onDone }: { organisationId: string; farm: Farm; type: ReportType; paddocks: Paddock[]; people: Person[]; onCancel: () => void; onDone: (outcome: { tone: "success" | "warning" | "error"; text: string; notifiable: boolean }) => void }) {
   const { user } = useWorkspace();
-  const [operationId] = useState(newOperationId);
-  const [form, setForm] = useState({ title: "", happenedOn: todayInBrowser(), time: "", whatHappened: "", where: "", paddockIds: [] as string[], immediateAction: "", severity: (type === "incident" ? "moderate" : "minor") as Severity });
-  const [point, setPoint] = useState<Position | null>(null);
-  const [photos, setPhotos] = useState<SafetyFile[]>([]);
-  const [injured, setInjured] = useState(type === "incident");
-  const [details, setDetails] = useState({ injuredPerson: "", injury: "", treatment: "" });
-  const [detailPhotos, setDetailPhotos] = useState<SafetyFile[]>([]);
-  const [answers, setAnswers] = useState<NotifiableAnswers>({});
-  const [action, setAction] = useState({ title: "", assignedToUserId: "", assignedToName: "", due: "" });
+  const key = memoryKey(user.id, organisationId, farm.id, type);
+  const [kept] = useState(() => memory.read<ReportMemory>(key));
+  // The same id after moving away and back, so the report is still kept once (decision 933).
+  const [operationId] = useState(() => kept?.operationId ?? newOperationId());
+  const [step, setStep] = useState<1 | 2>(kept?.step ?? 1);
+  const [form, setForm] = useState<ReportDraftForm>(kept?.form ?? { title: "", happenedOn: todayInBrowser(), time: "", whatHappened: "", where: "", paddockIds: [], immediateAction: "", severity: type === "incident" ? "moderate" : "minor" });
+  const [point, setPoint] = useState<Position | null>(kept?.point ?? null);
+  const [photos, setPhotos] = useState<SafetyFile[]>(kept?.photos ?? []);
+  const [injured, setInjured] = useState(kept?.injured ?? type === "incident");
+  const [details, setDetails] = useState(kept?.details ?? { injuredPerson: "", injury: "", treatment: "" });
+  const [detailPhotos, setDetailPhotos] = useState<SafetyFile[]>(kept?.detailPhotos ?? []);
+  const [answers, setAnswers] = useState<NotifiableAnswers>(kept?.answers ?? {});
+  const [action, setAction] = useState(kept?.action ?? { title: "", assignedToUserId: "", assignedToName: "", due: "" });
   const [locating, setLocating] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Whether this tab is holding the half-filled report; said truthfully (decision 985).
+  const [held, setHeld] = useState<boolean | null>(kept ? true : null);
   const notifiable = mayBeNotifiable(answers);
+  const unanswered = type === "hazard" ? 0 : unansweredQuestions(NOTIFIABLE_QUESTIONS.map((question) => question.key), answers);
+  useEffect(() => {
+    const started = form.title || form.whatHappened || form.where || photos.length || form.immediateAction;
+    if (!started) return;
+    const value: ReportMemory = { operationId, step, form, point, photos, injured, details, detailPhotos, answers, action };
+    const ok = memory.write(key, value);
+    let current = true;
+    // Shown after the write, as the browser's answer about it.
+    void Promise.resolve().then(() => {
+      if (current) setHeld(ok);
+    });
+    return () => {
+      current = false;
+    };
+  }, [key, operationId, step, form, point, photos, injured, details, detailPhotos, answers, action]);
   const locate = () => {
     if (!navigator.geolocation) return setLocating("This phone can't share its location.");
     setLocating("Finding where you are…");
@@ -276,156 +318,204 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
       action: action.title ? { title: action.title, assignedToUserId: action.assignedToUserId || null, assignedToName: action.assignedToUserId ? null : action.assignedToName || null, due: action.due || null } : undefined,
     };
     const draft: Omit<SafetyDraft, "savedAt" | "status" | "problem"> = { operationId, userId: user.id, organisationId, farmId: farm.id, farmName: farm.name, label: `${REPORT_TYPE_LABELS[type]}: ${form.title}`, path: "/api/farming/safety/reports", body };
-    const kept = drafts.save(draft);
+    const savedOnPhone = drafts.save(draft);
     draftsChanged();
     const outcome = await sendDraft(drafts, { ...draft, savedAt: new Date().toISOString(), status: "saved", problem: null }, (path, payload) => api(path, { method: "POST", body: payload }));
     draftsChanged();
     setBusy(false);
+    // Sent, or handed to Waiting to send: the half-filled copy in this tab isn't needed. If neither kept it, it stays.
+    if (outcome.result === "sent" || savedOnPhone) memory.clear(key);
     if (outcome.result === "sent") onDone({ tone: "success", text: `Recorded for ${farm.name}.${notifiable ? " Tohyee hasn't told WorkSafe." : ""}`, notifiable });
-    else if (outcome.result === "kept") onDone({ tone: "warning", text: kept ? `Saved on this phone, not sent yet (${outcome.reason}). It's sent when you press Send now with a connection.` : `Not sent (${outcome.reason}) and this phone couldn't keep a copy. Write it down and try again.`, notifiable });
+    else if (outcome.result === "kept") onDone({ tone: "warning", text: savedOnPhone ? `Saved on this phone, not sent yet (${outcome.reason}). It's sent when you press Send now with a connection.` : `Not sent (${outcome.reason}) and this phone couldn't keep a copy. Write it down and try again.`, notifiable });
     else onDone({ tone: "error", text: `Not recorded: ${outcome.reason} It's kept on this phone under Waiting to send.`, notifiable });
+  };
+  const cancel = () => {
+    const started = form.title || form.whatHappened || form.where || photos.length;
+    if (started && !window.confirm("Throw away this report? It hasn't been sent.")) return;
+    memory.clear(key);
+    onCancel();
   };
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        if (step === 1) setStep(2);
+        else void submit();
       }}
       aria-label={REPORT_TYPE_LABELS[type]}
     >
       <p style={{ marginTop: 0 }}>
-        <Badge tone={type === "incident" ? "red" : type === "near_miss" ? "amber" : "neutral"}>{REPORT_TYPE_LABELS[type]}</Badge> on <strong>{farm.name}</strong>
+        <Badge tone={type === "incident" ? "red" : type === "near_miss" ? "amber" : "neutral"}>{REPORT_TYPE_LABELS[type]}</Badge> on <strong>{farm.name}</strong> · step {step} of 2
       </p>
-      <PhotoPicker organisationId={organisationId} farmId={farm.id} files={photos} onChange={setPhotos} label="Photo (take it now if you can)" />
-      <Field label="What it was, in a few words">
-        <input value={form.title} required maxLength={150} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-      </Field>
-      <div className={ui.inlineForm}>
-        <Field label="When">
-          <DateInput value={form.happenedOn} max={todayInBrowser()} onChange={(event) => setForm({ ...form, happenedOn: event.target.value })} />
-        </Field>
-        <Field label="Time">
-          <input type="time" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} />
-        </Field>
-      </div>
-      <Field label="Where">
-        <input value={form.where} maxLength={300} onChange={(event) => setForm({ ...form, where: event.target.value })} placeholder="e.g. the yard gate by the shed" />
-      </Field>
-      <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-        <Button variant="secondary" size="small" onClick={locate}>
-          Where I am now
-        </Button>
-        {point ? (
-          <Button variant="secondary" size="small" onClick={() => { setPoint(null); setLocating(null); }}>
-            Clear place
-          </Button>
-        ) : null}
-      </div>
-      {locating ? <p className={ui.muted}>{locating}</p> : null}
-      {paddocks.length ? (
-        <Field label="Paddock">
-          <select value={form.paddockIds[0] ?? ""} onChange={(event) => setForm({ ...form, paddockIds: event.target.value ? [event.target.value] : [] })}>
-            <option value="">Not in a paddock / not sure</option>
-            {paddocks.filter((paddock) => paddock.status === "active").map((paddock) => (
-              <option key={paddock.id} value={paddock.id}>
-                {paddock.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      ) : null}
-      <Field label="What happened">
-        <textarea value={form.whatHappened} rows={3} maxLength={4000} onChange={(event) => setForm({ ...form, whatHappened: event.target.value })} />
-      </Field>
-      <Field label="What was done straight away">
-        <textarea value={form.immediateAction} rows={2} maxLength={2000} onChange={(event) => setForm({ ...form, immediateAction: event.target.value })} />
-      </Field>
-      <Field label="How bad">
-        <select value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value as Severity })}>
-          {SEVERITIES.map((severity) => (
-            <option key={severity} value={severity}>
-              {SEVERITY_LABELS[severity]}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {type !== "hazard" ? (
+      <p className={ui.muted} role="status" style={{ marginTop: 0, fontSize: "var(--text-sm)" }}>
+        {held === null ? "Not sent yet." : held ? "Not sent yet. Kept in this browser tab while you move around Safety." : "Not sent yet, and this browser isn't keeping a copy: stay on this screen until it's saved."}
+      </p>
+      {step === 1 ? (
         <>
-          <label className={ui.checkbox}>
-            <input type="checkbox" checked={injured} onChange={(event) => setInjured(event.target.checked)} /> Someone was hurt or made ill
-          </label>
-          {injured ? (
-            <fieldset style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 10, margin: "8px 0" }}>
-              <legend className={ui.fieldLabel}>Injury details (restricted)</legend>
-              <p className={ui.muted} style={{ marginTop: 0 }}>
-                Only you, the owner and people the owner chooses see these. The rest of the farm team sees the report without them.
-              </p>
-              <Field label="Who">
-                <input value={details.injuredPerson} maxLength={150} onChange={(event) => setDetails({ ...details, injuredPerson: event.target.value })} />
-              </Field>
-              <Field label="Injury or illness">
-                <textarea value={details.injury} rows={2} maxLength={2000} onChange={(event) => setDetails({ ...details, injury: event.target.value })} />
-              </Field>
-              <Field label="Treatment">
-                <textarea value={details.treatment} rows={2} maxLength={2000} onChange={(event) => setDetails({ ...details, treatment: event.target.value })} />
-              </Field>
-              <PhotoPicker organisationId={organisationId} farmId={farm.id} restricted files={detailPhotos} onChange={setDetailPhotos} label="Photo of the injury (restricted)" />
-            </fieldset>
-          ) : null}
-          <fieldset style={{ border: 0, padding: 0, margin: "8px 0" }}>
-            <legend className={ui.fieldLabel}>WorkSafe&apos;s questions</legend>
-            <p className={ui.muted} style={{ margin: "0 0 6px", fontSize: "var(--text-sm)" }}>
-              From WorkSafe&apos;s quick guide.{" "}
-              <a href={WORKSAFE_NOTIFIABLE_GUIDE_URL} target="_blank" rel="noreferrer">
-                Check WorkSafe&apos;s current guide
-              </a>{" "}
-              if you&apos;re not sure.
-            </p>
-            {NOTIFIABLE_QUESTIONS.map((question) => (
-              <label key={question.key} className={ui.checkbox} style={{ alignItems: "flex-start", marginBottom: 6 }}>
-                <input type="checkbox" checked={answers[question.key] === true} onChange={(event) => setAnswers({ ...answers, [question.key]: event.target.checked })} /> {question.text}
-              </label>
-            ))}
-          </fieldset>
-          {notifiable ? <NotifiablePrompt /> : null}
-        </>
-      ) : null}
-      <fieldset style={{ border: 0, padding: 0, margin: "8px 0" }}>
-        <legend className={ui.fieldLabel}>Who&apos;ll put it right (optional)</legend>
-        <Field label="What needs doing">
-          <input value={action.title} maxLength={200} onChange={(event) => setAction({ ...action, title: event.target.value })} />
-        </Field>
-        {action.title ? (
-          <div className={ui.inlineForm}>
-            <Field label="Who">
-              <select value={action.assignedToUserId} onChange={(event) => setAction({ ...action, assignedToUserId: event.target.value })}>
-                <option value="">Someone without a login…</option>
-                {people.map((person) => (
-                  <option key={person.userId} value={person.userId}>
-                    {person.name}
+          <PhotoPicker organisationId={organisationId} farmId={farm.id} files={photos} onChange={setPhotos} label="Photo (take it now if you can)" />
+          <Field label="What it was, in a few words">
+            <input value={form.title} required maxLength={150} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+          </Field>
+          <Field label="Where">
+            <input value={form.where} maxLength={300} onChange={(event) => setForm({ ...form, where: event.target.value })} placeholder="e.g. the yard gate by the shed" />
+          </Field>
+          <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+            <Button variant="secondary" onClick={locate}>
+              Where I am now
+            </Button>
+            {point ? (
+              <Button variant="secondary" onClick={() => { setPoint(null); setLocating(null); }}>
+                Clear place
+              </Button>
+            ) : null}
+          </div>
+          {locating || point ? <p className={ui.muted}>{locating ?? "Your place is marked."}</p> : null}
+          {paddocks.length ? (
+            <Field label="Paddock">
+              <select value={form.paddockIds[0] ?? ""} onChange={(event) => setForm({ ...form, paddockIds: event.target.value ? [event.target.value] : [] })}>
+                <option value="">Not in a paddock / not sure</option>
+                {paddocks.filter((paddock) => paddock.status === "active").map((paddock) => (
+                  <option key={paddock.id} value={paddock.id}>
+                    {paddock.name}
                   </option>
                 ))}
               </select>
             </Field>
-            {!action.assignedToUserId ? (
-              <Field label="Their name">
-                <input value={action.assignedToName} maxLength={150} onChange={(event) => setAction({ ...action, assignedToName: event.target.value })} />
-              </Field>
-            ) : null}
-            <Field label="By">
-              <DateInput value={action.due} onChange={(event) => setAction({ ...action, due: event.target.value })} />
+          ) : null}
+          <Field label="What happened">
+            <textarea value={form.whatHappened} rows={3} maxLength={4000} onChange={(event) => setForm({ ...form, whatHappened: event.target.value })} />
+          </Field>
+          <div className={ui.inlineForm}>
+            <Field label="When">
+              <DateInput value={form.happenedOn} max={todayInBrowser()} onChange={(event) => setForm({ ...form, happenedOn: event.target.value })} />
+            </Field>
+            <Field label="Time">
+              <input type="time" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} />
             </Field>
           </div>
-        ) : null}
-      </fieldset>
-      <div className={ui.actions}>
-        <Button type="submit" disabled={busy || !form.title.trim()}>
-          {busy ? "Saving…" : "Save report"}
-        </Button>
-        <Button variant="secondary" disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
+          <div className={ui.actions}>
+            <Button type="submit" disabled={!form.title.trim()}>
+              Next: a few more questions
+            </Button>
+            <Button variant="secondary" onClick={cancel}>
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>{form.title}</strong>
+            {form.where ? <span className={ui.muted}> · {form.where}</span> : null}{" "}
+            <Button variant="secondary" size="small" onClick={() => setStep(1)}>
+              Change
+            </Button>
+          </p>
+          <Field label="What was done straight away">
+            <textarea value={form.immediateAction} rows={2} maxLength={2000} onChange={(event) => setForm({ ...form, immediateAction: event.target.value })} />
+          </Field>
+          <Field label="How bad">
+            <select value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value as Severity })}>
+              {SEVERITIES.map((severity) => (
+                <option key={severity} value={severity}>
+                  {SEVERITY_LABELS[severity]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {type !== "hazard" ? (
+            <>
+              <label className={ui.checkbox} style={{ minHeight: 44 }}>
+                <input type="checkbox" checked={injured} onChange={(event) => setInjured(event.target.checked)} /> Someone was hurt or made ill
+              </label>
+              {injured ? (
+                <fieldset style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 10, margin: "8px 0" }}>
+                  <legend className={ui.fieldLabel}>Injury details (restricted)</legend>
+                  <p className={ui.muted} style={{ marginTop: 0 }}>
+                    Only you, the owner and people the owner chooses see these. The rest of the farm team sees the report without them.
+                  </p>
+                  <Field label="Who">
+                    <input value={details.injuredPerson} maxLength={150} onChange={(event) => setDetails({ ...details, injuredPerson: event.target.value })} />
+                  </Field>
+                  <Field label="Injury or illness">
+                    <textarea value={details.injury} rows={2} maxLength={2000} onChange={(event) => setDetails({ ...details, injury: event.target.value })} />
+                  </Field>
+                  <Field label="Treatment">
+                    <textarea value={details.treatment} rows={2} maxLength={2000} onChange={(event) => setDetails({ ...details, treatment: event.target.value })} />
+                  </Field>
+                  <PhotoPicker organisationId={organisationId} farmId={farm.id} restricted files={detailPhotos} onChange={setDetailPhotos} label="Photo of the injury (restricted)" />
+                </fieldset>
+              ) : null}
+              {notifiable ? <NotifiablePrompt /> : null}
+              <fieldset style={{ border: 0, padding: 0, margin: "8px 0" }}>
+                <legend className={ui.fieldLabel}>WorkSafe&apos;s questions</legend>
+                <p className={ui.muted} style={{ margin: "0 0 6px", fontSize: "var(--text-sm)" }}>
+                  From WorkSafe&apos;s quick guide.{" "}
+                  <a href={WORKSAFE_NOTIFIABLE_GUIDE_URL} target="_blank" rel="noreferrer">
+                    Check WorkSafe&apos;s current guide
+                  </a>{" "}
+                  if you&apos;re not sure. A question left unanswered is kept as not answered, not as No.
+                </p>
+                {NOTIFIABLE_QUESTIONS.map((question) => (
+                  <fieldset key={question.key} className={styles.question}>
+                    <legend>{question.text}</legend>
+                    <div className={styles.choices}>
+                      {([true, false] as const).map((value) => (
+                        <label key={String(value)} className={styles.choice} data-result={value ? "yes" : "no"}>
+                          <input type="radio" name={`${operationId}-${question.key}`} checked={answers[question.key] === value} onChange={() => setAnswers({ ...answers, [question.key]: value })} />
+                          <span>{value ? "Yes" : "No"}</span>
+                        </label>
+                      ))}
+                      {answers[question.key] !== undefined ? (
+                        <button type="button" className={ui.linkButton} onClick={() => { const next = { ...answers }; delete next[question.key]; setAnswers(next); }}>
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                  </fieldset>
+                ))}
+                {unanswered ? <p className={ui.muted}>{unanswered} not answered yet.</p> : null}
+              </fieldset>
+            </>
+          ) : null}
+          <details>
+            <summary>Who&apos;ll put it right (optional; it can be added later)</summary>
+            <Field label="What needs doing">
+              <input value={action.title} maxLength={200} onChange={(event) => setAction({ ...action, title: event.target.value })} />
+            </Field>
+            {action.title ? (
+              <div className={ui.inlineForm}>
+                <Field label="Who">
+                  <select value={action.assignedToUserId} onChange={(event) => setAction({ ...action, assignedToUserId: event.target.value })}>
+                    <option value="">Someone without a login…</option>
+                    {people.map((person) => (
+                      <option key={person.userId} value={person.userId}>
+                        {person.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                {!action.assignedToUserId ? (
+                  <Field label="Their name">
+                    <input value={action.assignedToName} maxLength={150} onChange={(event) => setAction({ ...action, assignedToName: event.target.value })} />
+                  </Field>
+                ) : null}
+                <Field label="By">
+                  <DateInput value={action.due} onChange={(event) => setAction({ ...action, due: event.target.value })} />
+                </Field>
+              </div>
+            ) : null}
+          </details>
+          <div className={ui.actions}>
+            <Button type="submit" disabled={busy || !form.title.trim()}>
+              {busy ? "Saving…" : `Save the report for ${farm.name}`}
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={() => setStep(1)}>
+              Back
+            </Button>
+          </div>
+        </>
+      )}
     </form>
   );
 }
@@ -483,6 +573,7 @@ export function WaitingToSend({ organisationId, onSent }: { organisationId: stri
 export function ReportsCard({
   organisationId,
   data,
+  openReport = null,
   paddockNames,
   showWithdrawn,
   onShowWithdrawn,
@@ -490,12 +581,14 @@ export function ReportsCard({
 }: {
   organisationId: string;
   data: ReportsData;
+  /** A report to open, from a link (Today, Needs doing). */
+  openReport?: string | null;
   paddockNames: ReadonlyMap<string, string>;
   showWithdrawn: boolean;
   onShowWithdrawn: (value: boolean) => void;
   onChanged: () => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(openReport);
   const { reports, access, people } = data;
   const openCount = reports.filter((report) => report.state === "open" || report.state === "actions").length;
   return (
@@ -504,7 +597,7 @@ export function ReportsCard({
         {!reports.length ? <Empty>Nothing reported on this farm yet.</Empty> : null}
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {reports.map((report) => (
-            <li key={report.recordId} style={{ borderTop: "1px solid var(--border)", padding: "10px 0" }}>
+            <li key={report.recordId} id={recordAnchor("report", report.recordId)} style={{ borderTop: "1px solid var(--border)", padding: "10px 0", scrollMarginTop: 72 }}>
               <button type="button" className={ui.linkButton} style={{ fontWeight: 600, textAlign: "left" }} aria-expanded={open === report.recordId} onClick={() => setOpen(open === report.recordId ? null : report.recordId)}>
                 {report.data.title}
               </button>{" "}
@@ -528,7 +621,15 @@ export function ReportsCard({
           <input type="checkbox" checked={showWithdrawn} onChange={(event) => onShowWithdrawn(event.target.checked)} /> Show reports withdrawn as mistakes
         </label>
       </Card>
-      {access.isOwner ? <RestrictedAccessCard organisationId={organisationId} people={people} /> : null}
+      {data.otherActions.length ? (
+        <Card title={`Other actions (${data.otherActions.length})`} description="Actions on a hazard, from a failed pre-start check, or on their own, not yet checked and closed.">
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {data.otherActions.map((each) => (
+              <ActionRow key={each.recordId} organisationId={organisationId} action={each} access={access} people={people} onChanged={onChanged} />
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </>
   );
 }
@@ -707,7 +808,7 @@ function ActionRow({ organisationId, action, access, people, onChanged }: { orga
       },
     );
   return (
-    <li style={{ padding: "6px 0", borderTop: "1px dashed var(--border)" }}>
+    <li id={recordAnchor("action", action.recordId)} style={{ padding: "6px 0", borderTop: "1px dashed var(--border)", scrollMarginTop: 72 }}>
       <strong>{action.data.title}</strong> <Badge tone={state === "overdue" ? "red" : state === "verified" ? "green" : state === "done" ? "blue" : "neutral"}>{ACTION_STATE_LABELS[state]}</Badge>
       <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
         {who}
@@ -751,7 +852,7 @@ function ActionRow({ organisationId, action, access, people, onChanged }: { orga
 }
 
 /** Owners choose who else sees incident and medical details (decision 936). */
-function RestrictedAccessCard({ organisationId, people }: { organisationId: string; people: Person[] }) {
+export function RestrictedAccessCard({ organisationId, people }: { organisationId: string; people: Person[] }) {
   const granted = useApiData<{ members: Array<{ userId: string }> }>("/api/farming/safety/restricted", { organisationId });
   const { busy, error, run } = useRun();
   const allowed = new Set((granted.data?.members ?? []).map((member) => member.userId));

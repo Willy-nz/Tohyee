@@ -1,27 +1,13 @@
-"use client";
+import { redirect } from "next/navigation";
+import { readSafetyLink, safetyHref } from "@/lib/safety/screens";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import { RequireOrganisation } from "@/components/books";
-import { FarmSafetyHome } from "@/components/farm-safety";
-import { Page, PageHeader } from "@/components/ui";
-
-/** Farm safety (#446). `?farm=` opens a particular farm. */
-function ForFarm() {
-  const search = useSearchParams();
-  const farm = search.get("farm");
-  // `?equipment=` (from a machine's QR code) opens its pre-start check.
-  const equipment = search.get("equipment");
-  return <RequireOrganisation>{(organisationId) => <FarmSafetyHome key={`${organisationId}:${farm ?? ""}`} organisationId={organisationId} farmId={farm} equipmentId={equipment} />}</RequireOrganisation>;
-}
-
-export default function FarmSafetyPage() {
-  return (
-    <Page>
-      <PageHeader title="Safety" description="Emergency details, hazards and no-go zones, kept as records that can't be quietly changed." />
-      <Suspense fallback={null}>
-        <ForFarm />
-      </Suspense>
-    </Page>
-  );
+/**
+ * The first Safety page's address (#446). Safety now lives in the farmer's
+ * workspace as an overview and focused screens (decision 976); this keeps
+ * old links and machines' printed QR codes (`?farm=&equipment=`) working,
+ * opening the same farm and machine there.
+ */
+export default async function OldFarmSafetyPage({ searchParams }: PageProps<"/operations/farming/safety">) {
+  const params = await searchParams;
+  redirect(safetyHref(readSafetyLink({ get: (name) => (typeof params[name] === "string" ? (params[name] as string) : null) })));
 }

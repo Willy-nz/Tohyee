@@ -21,6 +21,7 @@ import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { GrazingRecord, PastureReading } from "@/lib/farming/pasture";
 import { PASTURE_METHOD_LABELS } from "@/lib/farming/pasture-rules";
 import { todayInBrowser } from "@/lib/format";
+import { safetyHref } from "@/lib/safety/screens";
 import { type CurrentRecord, HAZARD_LEVEL_LABELS, type HazardData, hazardState } from "@/lib/safety/shared";
 import styles from "./farm-workspace.module.css";
 
@@ -45,13 +46,14 @@ export const FARM_TABS: Array<{ key: FarmTab; label: string; href: string; icon:
 
 export type FarmContext = { organisationId: string; farm: Farm; farms: Farm[] };
 
-export function FarmWorkspace({ tab, children }: { tab: FarmTab; children: (context: FarmContext) => ReactNode }) {
-  return <RequireOrganisation>{(organisationId) => <Workspace key={organisationId} organisationId={organisationId} tab={tab} render={children} />}</RequireOrganisation>;
+/** `linkedFarmId` (a link's `?farm=`) opens that farm, so a link to a record opens it on the right farm (decision 984). */
+export function FarmWorkspace({ tab, linkedFarmId = null, children }: { tab: FarmTab; linkedFarmId?: string | null; children: (context: FarmContext) => ReactNode }) {
+  return <RequireOrganisation>{(organisationId) => <Workspace key={`${organisationId}:${linkedFarmId ?? ""}`} organisationId={organisationId} tab={tab} linkedFarmId={linkedFarmId} render={children} />}</RequireOrganisation>;
 }
 
-function Workspace({ organisationId, tab, render }: { organisationId: string; tab: FarmTab; render: (context: FarmContext) => ReactNode }) {
+function Workspace({ organisationId, tab, linkedFarmId, render }: { organisationId: string; tab: FarmTab; linkedFarmId: string | null; render: (context: FarmContext) => ReactNode }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? []);
+  const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], linkedFarmId);
   const active = (farms.data?.farms ?? []).filter((entry) => entry.isActive);
   return (
     <div className={styles.workspace}>
@@ -282,8 +284,8 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const router = useRouter();
   const hazards = useHazards(organisationId, farm.id);
   const activeHazards = (hazards.data?.hazards ?? []).filter((hazard) => hazardState(hazard) === "active");
-  // Hazards and no-go zones over the paddocks (#446): a tap opens Safety.
-  const overlays = hazardOverlays(activeHazards, () => router.push("/operations/farm/safety"));
+  // Hazards and no-go zones over the paddocks (#446): a tap opens that hazard in Safety.
+  const overlays = hazardOverlays(activeHazards, (id) => router.push(safetyHref({ farmId: farm.id, screen: "hazards", hazard: id })));
   return (
     <div className={styles.grid}>
       <Card title="Paddocks" description="Tap a paddock for its cover, mob and recent records. Colours show what was recorded, not whether it's good or bad. Red and amber triangles and dashed outlines are hazards and no-go zones.">
@@ -356,14 +358,17 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {here.map((hazard) => (
                 <li key={hazard.recordId}>
-                  <strong>{hazard.data.noGo ? "No-go: " : ""}{hazard.data.title}</strong> ({HAZARD_LEVEL_LABELS[hazard.data.level]}){hazard.data.controls ? `: ${hazard.data.controls}` : ""}
+                  <Link href={safetyHref({ farmId: farm.id, screen: "hazards", hazard: hazard.recordId })}>
+                    <strong>{hazard.data.noGo ? "No-go: " : ""}{hazard.data.title}</strong>
+                  </Link>{" "}
+                  ({HAZARD_LEVEL_LABELS[hazard.data.level]}){hazard.data.controls ? `: ${hazard.data.controls}` : ""}
                 </li>
               ))}
             </ul>
           ) : (
             "None recorded for this paddock. "
           )}
-          <Link href="/operations/farm/safety">See Safety</Link>
+          <Link href={safetyHref({ farmId: farm.id, screen: "hazards" })}>All hazards on {farm.name}</Link>
         </dd>
       </dl>
       {recent.length ? (

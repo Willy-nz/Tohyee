@@ -700,6 +700,15 @@ that something happened.
   its site exceptions in the prompt, gate-link sign-offs labelled
   "self-declared, no login" (with the suggestion to invite regular
   contractors as Farm staff), and a short privacy notice on the gate page.
+  Since FS49-FS51 (#446 layout follow-up, decisions 976-989, not yet
+  reviewed by Jess): Safety is a small overview (emergency strip with Call
+  111 and the address, **Report something**, **Check equipment**, **Sign in
+  / induction**, **Needs doing** with links to each record, and **Browse
+  safety** with counts) and focused screens with their own addresses and
+  Back to Safety; a machine's QR code opens its check directly; reports in
+  two short steps, kept in the tab while moving around; WorkSafe's
+  questions as Yes / No with unanswered never taken as No; large check
+  choices; and actions not on a report listed under Other actions.
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

@@ -347,5 +347,20 @@ export async function openActions(tx: OrgTx, options: { mine?: boolean } = {}) {
     .map((action) => ({ ...action, state: actionState(action, today) }));
 }
 
+/**
+ * A farm's actions that aren't on a report (on a hazard, from a failed
+ * pre-start check, or on their own) and aren't yet checked and closed, so
+ * they can be seen and marked done (decision 979). Newest first.
+ */
+export async function farmActionsWithoutReport(tx: OrgTx, farmIdInput: unknown) {
+  const farmId = requireId(farmIdInput, "Farm");
+  if (!(await canSeeFarm(tx, farmId))) throw new NotFoundError("Farm not found.");
+  const today = todayIsoDate();
+  return (await currentRecords<ActionData>(tx, "action", { farmId }))
+    .filter((action) => action.farmId === farmId && !action.data.reportId && action.change !== "withdrawn" && !action.data.verified)
+    .map((action) => ({ ...action, state: actionState(action, today) }))
+    .reverse();
+}
+
 /** Whether this person may see restricted details (for the screens). */
 export { canSeeRestricted };

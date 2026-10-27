@@ -1,0 +1,356 @@
+/* Safety on a farm phone (#446 layout follow-up, decisions 976-989). Uses the theme's variables, light and dark. */
+
+.overview {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Desktop: a restrained two columns, not full-width registers (decision 977). */
+@media (min-width: 900px) {
+  .overview {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  .overviewWide {
+    grid-column: 1 / -1;
+  }
+}
+
+.column {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* The emergency strip: 111 and the address, one tap to the full details. */
+.strip {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 2px solid var(--danger-border, var(--border));
+  border-radius: var(--radius-lg, 12px);
+  background: var(--danger-bg, var(--surface));
+  color: var(--text);
+}
+
+.stripTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.call {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  min-height: 48px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--danger, #c81e1e);
+  color: #fff;
+  font-size: var(--text-lg);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.call:focus-visible,
+.bigAction:focus-visible,
+.browse a:focus-visible,
+.needs a:focus-visible,
+.rowButton:focus-visible,
+.typeChoice:focus-visible,
+.back:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.stripPlace {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stripLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+/* Three everyday actions, large and labelled; the icon only supports the words. */
+.bigActions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 10px;
+}
+
+.bigAction {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.bigAction:hover {
+  border-color: var(--accent);
+}
+
+.bigAction small {
+  display: block;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-soft, var(--surface-sunken));
+  color: var(--accent-soft-text, var(--text));
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Needs doing and Browse: rows that are links, each at least 48px tall. */
+.needs,
+.browse {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.needs a,
+.browse a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.needs li:last-child a,
+.browse li:last-child a {
+  border-bottom: 0;
+}
+
+.needs a::after,
+.browse a::after {
+  content: "›";
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--text-muted);
+}
+
+.rowText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rowText small {
+  display: block;
+  color: var(--text-muted);
+}
+
+.count {
+  flex: none;
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--neutral-bg, var(--surface-sunken));
+  color: var(--neutral-text, var(--text));
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: center;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+.screenHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.screenHead h2 {
+  margin: 0;
+  font-size: var(--text-xl, 20px);
+}
+
+.screen {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  max-width: 860px;
+}
+
+/* A row's main button, e.g. "Check the quad". */
+.rowButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-radius: var(--radius, 8px);
+  background: var(--accent);
+  color: var(--accent-text, #fff);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* Report something: what it is, as three large choices. */
+.typeChoices {
+  display: grid;
+  gap: 10px;
+}
+
+.typeChoice {
+  display: grid;
+  gap: 2px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-left-width: 6px;
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.typeChoice[data-type="hazard"] {
+  border-left-color: var(--warning-border, var(--border));
+}
+
+.typeChoice[data-type="near_miss"] {
+  border-left-color: var(--warning, var(--border));
+}
+
+.typeChoice[data-type="incident"] {
+  border-left-color: var(--danger, var(--border));
+}
+
+.typeChoice small {
+  color: var(--text-muted);
+}
+
+/* Pre-start checks and WorkSafe's questions: whole labelled choices, 44px or more, nothing chosen to start with. */
+.checkForm {
+  display: grid;
+  gap: 8px;
+  max-width: 640px;
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.checkHeader {
+  position: sticky;
+  top: 60px;
+  z-index: 2;
+  padding: 6px 0;
+  background: var(--surface);
+}
+
+.checkItem,
+.question {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0 4px;
+  border: 0;
+}
+
+.checkItem legend,
+.question legend {
+  padding: 0;
+  font-weight: 600;
+}
+
+.question legend {
+  font-weight: 400;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.choice {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 88px;
+  max-width: 180px;
+  cursor: pointer;
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.choice span {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 6px 12px;
+  border: 2px solid var(--border-strong, var(--border));
+  border-radius: var(--radius, 8px);
+  background: var(--surface);
+  font-weight: 700;
+}
+
+.choice input:focus-visible + span {
+  box-shadow: var(--focus-ring);
+}
+
+/* Chosen: a tick and a border as well as a colour, so it isn't colour alone. */
+.choice input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--surface-sunken));
+  color: var(--accent-soft-text, var(--text));
+}
+
+.choice input:checked + span::before {
+  content: "✓ ";
+  white-space: pre;
+}
+
+.choice[data-result="fault"] input:checked + span,
+.choice[data-result="yes"] input:checked + span {
+  border-color: var(--danger, #c81e1e);
+  background: var(--danger-bg, var(--surface));
+  color: var(--danger-text, var(--text));
+}

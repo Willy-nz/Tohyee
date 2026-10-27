@@ -48,9 +48,10 @@ export async function safetyToday(tx: OrgTx, farmIdInput: unknown) {
   const selfDeclared = manager ? (await onSite(tx, farmId)).here.filter((visit) => visit.data.signedHow === "link" && visit.data.audience === "contractor") : [];
   return {
     selfDeclaredOnSite: selfDeclared.map((visit) => ({ id: visit.recordId, name: visit.data.person.name, company: visit.data.person.company })),
-    myActions: mine.map((action) => ({ id: action.recordId, title: action.data.title, due: action.data.due, state: action.state })),
-    overdueActions: overdue.map((action) => ({ id: action.recordId, title: action.data.title, due: action.data.due })),
-    actionsToCheck: toCheck.map((action) => ({ id: action.recordId, title: action.data.title })),
+    // Each action carries its report or hazard, so Today and Safety can open it (decision 979).
+    myActions: mine.map((action) => ({ id: action.recordId, title: action.data.title, due: action.data.due, state: action.state, reportId: action.data.reportId, hazardId: action.data.hazardId })),
+    overdueActions: overdue.map((action) => ({ id: action.recordId, title: action.data.title, due: action.data.due, reportId: action.data.reportId, hazardId: action.data.hazardId })),
+    actionsToCheck: toCheck.map((action) => ({ id: action.recordId, title: action.data.title, reportId: action.data.reportId, hazardId: action.data.hazardId })),
     importantHazards: hazards.filter((hazard) => hazard.data.noGo || hazard.data.level === "high").map((hazard) => ({ id: hazard.recordId, title: hazard.data.title, noGo: hazard.data.noGo })),
     reviewsDue: manager ? hazards.filter((hazard) => reviewOverdue(hazard.data, today)).map((hazard) => ({ id: hazard.recordId, title: hazard.data.title, reviewDue: hazard.data.reviewDue })) : [],
     outOfUse: inUse.filter((item) => !item.available).map((item) => ({ id: item.recordId, name: item.data.name })),

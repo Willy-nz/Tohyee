@@ -182,7 +182,7 @@ export const MENUS: Menu[] = [
           ]),
           ...section("Records", [
             { href: "/operations/farming/calendar", label: "Farm calendar" },
-            { href: "/operations/farming/safety", label: "Safety" },
+            { href: "/operations/farm/safety", label: "Safety" },
             { href: "/operations/farming/notebook", label: "Farm notebook" },
             { href: "/operations/livestock", label: "Livestock", module: "livestock" },
             { href: "/operations/farming/co-op-shares", label: "Co-op shares" },

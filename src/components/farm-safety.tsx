@@ -2,18 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "@/components/date-input";
-import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
-import { ChemicalsCard, EquipmentCard, TrainingCard } from "@/components/farm-safety-equipment";
-import { InductionsAndSignIn } from "@/components/farm-safety-inductions";
-import { ReportsCard, ReportSomething, useReports, WaitingToSend } from "@/components/farm-safety-reports";
 import { useApiData } from "@/components/hooks";
 import { useWorkspace } from "@/components/workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
-import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
+import type { Farm, Paddock } from "@/lib/farming/paddocks";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import type { SafetyChainReport } from "@/lib/safety/records";
+import { recordAnchor } from "@/lib/safety/screens";
 import {
   type CurrentRecord,
   type EmergencyData,
@@ -39,7 +36,7 @@ import {
  * new version; nothing is deleted.
  */
 
-type Overview = { hazards: Array<CurrentRecord<HazardData>>; emergency: CurrentRecord<EmergencyData> | null; access: SafetyAccess };
+export type Overview = { hazards: Array<CurrentRecord<HazardData>>; emergency: CurrentRecord<EmergencyData> | null; access: SafetyAccess };
 
 function useRun() {
   const [busy, setBusy] = useState(false);
@@ -100,8 +97,9 @@ export function SafetyHistory({ organisationId, recordId, paddockNames }: { orga
               </div>
             ))}
           </dl>
-          <span className={ui.muted} style={{ fontSize: "var(--text-xs)", overflowWrap: "anywhere" }}>
-            Entry {version.seq} · hash {version.hash.slice(0, 16)}…
+          {/* The hash is checked under Records and settings; daily screens just give the entry number (decision 988). */}
+          <span className={ui.muted} style={{ fontSize: "var(--text-xs)" }}>
+            Entry {version.seq}
           </span>
         </li>
       ))}
@@ -109,75 +107,15 @@ export function SafetyHistory({ organisationId, recordId, paddockNames }: { orga
   );
 }
 
-// The page ---------------------------------------------------------------------------------------
-
-export function FarmSafetyHome({ organisationId, farmId = null, equipmentId = null }: { organisationId: string; farmId?: string | null; equipmentId?: string | null }) {
-  const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
-  const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId });
-  const { farm, stale, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], farmId);
-  if (farms.error) return <Notice tone="error">{farms.error}</Notice>;
-  if (!farms.data) return <p className={ui.muted}>Loading…</p>;
-  const active = farms.data.farms.filter((entry) => entry.isActive);
-  if (!active.length) return <Empty>Add your farm first, under Farms and paddocks.</Empty>;
-  return (
-    <>
-      <FarmSelector farms={active} farm={farm} stale={stale} onChange={selectFarm} />
-      {farm ? <FarmSafety key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} equipmentId={equipmentId} /> : null}
-      <p className={ui.muted}>
-        Tohyee keeps these records; it doesn&apos;t decide what the law needs you to keep. Check WorkSafe&apos;s guidance, or ask someone who knows health and safety law.
-      </p>
-    </>
-  );
-}
-
-export function FarmSafety({ organisationId, farm, imageryKey, equipmentId }: { organisationId: string; farm: Farm; imageryKey: string | null; equipmentId: string | null }) {
-  const [showWithdrawn, setShowWithdrawn] = useState(false);
-  const overview = useApiData<Overview>("/api/farming/safety", { organisationId, farmId: farm.id, includeWithdrawn: showWithdrawn });
-  const paddocks = useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farm.id}/paddocks`, { organisationId });
-  const paddockNames = useMemo(() => new Map((paddocks.data?.paddocks ?? []).map((paddock) => [paddock.id, paddock.name])), [paddocks.data]);
-  const [showWithdrawnReports, setShowWithdrawnReports] = useState(false);
-  const reports = useReports(organisationId, farm.id, showWithdrawnReports);
-  return (
-    <>
-      <EmergencyCard organisationId={organisationId} farm={farm} overview={overview.data} loadError={overview.error} onSaved={overview.reload} />
-      <WaitingToSend organisationId={organisationId} onSent={reports.reload} />
-      {reports.data ? <ReportSomething organisationId={organisationId} farm={farm} paddocks={paddocks.data?.paddocks ?? []} people={reports.data.people} access={reports.data.access} onSent={reports.reload} /> : null}
-      {overview.error ? null : !overview.data ? (
-        <p className={ui.muted}>Loading…</p>
-      ) : (
-        <HazardsCard
-          organisationId={organisationId}
-          farm={farm}
-          hazards={overview.data.hazards}
-          access={overview.data.access}
-          paddocks={paddocks.data?.paddocks ?? []}
-          paddockNames={paddockNames}
-          imageryKey={imageryKey}
-          showWithdrawn={showWithdrawn}
-          onShowWithdrawn={setShowWithdrawn}
-          onSaved={overview.reload}
-        />
-      )}
-      {reports.error ? <Notice tone="error">{reports.error}</Notice> : reports.data ? <ReportsCard organisationId={organisationId} data={reports.data} paddockNames={paddockNames} showWithdrawn={showWithdrawnReports} onShowWithdrawn={setShowWithdrawnReports} onChanged={reports.reload} /> : null}
-      <InductionsAndSignIn organisationId={organisationId} farm={farm} />
-      <EquipmentCard organisationId={organisationId} farm={farm} openEquipment={equipmentId} />
-      <TrainingCard organisationId={organisationId} farm={farm} />
-      <ChemicalsCard organisationId={organisationId} farm={farm} />
-      {/* Checking the history and the WorkSafe pack are for viewers and above, not farm staff (decision 961). */}
-      {overview.data && !overview.data.access.farmStaff ? <RecordsCard organisationId={organisationId} farm={farm} /> : null}
-    </>
-  );
-}
-
 // Emergency details ----------------------------------------------------------------------------------
 
-type CachedEmergency = { savedAt: string; farmName: string; emergency: CurrentRecord<EmergencyData> | null };
+export type CachedEmergency = { savedAt: string; farmName: string; emergency: CurrentRecord<EmergencyData> | null };
 
 function cacheKey(organisationId: string, farmId: string) {
   return `tohyee.safety.emergency.${organisationId}.${farmId}`;
 }
 
-function readCache(organisationId: string, farmId: string): CachedEmergency | null {
+export function readCache(organisationId: string, farmId: string): CachedEmergency | null {
   try {
     const raw = window.localStorage.getItem(cacheKey(organisationId, farmId));
     return raw ? (JSON.parse(raw) as CachedEmergency) : null;
@@ -186,7 +124,7 @@ function readCache(organisationId: string, farmId: string): CachedEmergency | nu
   }
 }
 
-function writeCache(organisationId: string, farmId: string, value: CachedEmergency) {
+export function writeCache(organisationId: string, farmId: string, value: CachedEmergency) {
   try {
     window.localStorage.setItem(cacheKey(organisationId, farmId), JSON.stringify(value));
   } catch {
@@ -199,7 +137,7 @@ function writeCache(organisationId: string, farmId: string, value: CachedEmergen
  * phone each time they load, so they still show (with their age) when the
  * server can't be reached (decision 940).
  */
-function EmergencyCard({ organisationId, farm, overview, loadError, onSaved }: { organisationId: string; farm: Farm; overview: Overview | null; loadError: string | null; onSaved: () => void }) {
+export function EmergencyCard({ organisationId, farm, overview, loadError, onSaved }: { organisationId: string; farm: Farm; overview: Overview | null; loadError: string | null; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
   // Only read when the server couldn't be reached (an error only comes after the browser asked).
   const cached = useMemo(() => (loadError ? readCache(organisationId, farm.id) : null), [loadError, organisationId, farm.id]);
@@ -427,7 +365,7 @@ export function hazardOverlays(hazards: Array<CurrentRecord<HazardData>>, onSele
     }));
 }
 
-function HazardBadges({ hazard, today }: { hazard: CurrentRecord<HazardData>; today: string }) {
+export function HazardBadges({ hazard, today }: { hazard: CurrentRecord<HazardData>; today: string }) {
   const state = hazardState(hazard);
   return (
     <>
@@ -439,9 +377,10 @@ function HazardBadges({ hazard, today }: { hazard: CurrentRecord<HazardData>; to
   );
 }
 
-function HazardsCard({
+export function HazardsCard({
   organisationId,
   farm,
+  openHazard = null,
   hazards,
   access,
   paddocks,
@@ -453,6 +392,8 @@ function HazardsCard({
 }: {
   organisationId: string;
   farm: Farm;
+  /** A hazard to open, from a link (Today, a paddock, the map). */
+  openHazard?: string | null;
   hazards: Array<CurrentRecord<HazardData>>;
   access: SafetyAccess;
   paddocks: Paddock[];
@@ -462,7 +403,9 @@ function HazardsCard({
   onShowWithdrawn: (value: boolean) => void;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(openHazard);
+  // List first; the map on request, so it doesn't push the hazards down a phone screen (decision 987).
+  const [showMap, setShowMap] = useState(false);
   const [adding, setAdding] = useState(false);
   const [placing, setPlacing] = useState<{ mode: "point" | "zone"; points: Position[] } | null>(null);
   const [formPlace, setFormPlace] = useState<{ point: Position | null; zone: Position[] | null }>({ point: null, zone: null });
@@ -471,7 +414,7 @@ function HazardsCard({
   const other = hazards.filter((hazard) => hazardState(hazard) !== "active");
   const overlays = hazardOverlays(hazards, (id) => {
     setOpen(id);
-    document.getElementById(`hazard-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    document.getElementById(recordAnchor("hazard", id))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   if (formPlace.point) overlays.push({ id: "new-point", label: "The new hazard", tone: "warning", point: formPlace.point });
   if (formPlace.zone && formPlace.zone.length > 3) overlays.push({ id: "new-zone", label: "The new zone", tone: "danger", ring: formPlace.zone });
@@ -508,6 +451,14 @@ function HazardsCard({
           </Button>
         </Notice>
       ) : null}
+      <div className={ui.tabs} role="group" aria-label="Show hazards as">
+        {([false, true] as const).map((map) => (
+          <button key={String(map)} type="button" aria-pressed={showMap === map} className={`${ui.tab} ${showMap === map ? ui.tabActive : ""}`} onClick={() => setShowMap(map)}>
+            {map ? "Map" : "List"}
+          </button>
+        ))}
+      </div>
+      {showMap || adding || placing ? (
       <PaddockMap
         paddocks={paddocks}
         selected={null}
@@ -523,6 +474,7 @@ function HazardsCard({
           } else setPlacing({ ...placing, points: [...placing.points, position] });
         }}
       />
+      ) : null}
       {adding ? (
         <HazardForm
           organisationId={organisationId}
@@ -546,7 +498,7 @@ function HazardsCard({
       {!hazards.length ? <Empty>No hazards recorded for this farm yet. Start with the ones that could kill or badly hurt someone: water, power lines, steep ground, machinery, chemicals, bulls.</Empty> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {[...sorted, ...other].map((hazard) => (
-          <li key={hazard.recordId} id={`hazard-${hazard.recordId}`} style={{ borderTop: "1px solid var(--border)", padding: "10px 0" }}>
+          <li key={hazard.recordId} id={recordAnchor("hazard", hazard.recordId)} style={{ borderTop: "1px solid var(--border)", padding: "10px 0", scrollMarginTop: 72 }}>
             <button type="button" className={ui.linkButton} aria-expanded={open === hazard.recordId} onClick={() => setOpen(open === hazard.recordId ? null : hazard.recordId)} style={{ fontWeight: 600, textAlign: "left" }}>
               {hazard.data.title}
             </button>{" "}
@@ -883,7 +835,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
 
 // Records and checks ------------------------------------------------------------------------------
 
-function RecordsCard({ organisationId, farm }: { organisationId: string; farm: Farm }) {
+export function RecordsCard({ organisationId, farm }: { organisationId: string; farm: Farm }) {
   const [report, setReport] = useState<(SafetyChainReport & { copy: "found" | "different" | "missing" | null }) | null>(null);
   const [copy, setCopy] = useState({ seq: "", hash: "" });
   const today = todayInBrowser();
