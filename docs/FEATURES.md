@@ -662,10 +662,15 @@ that something happened.
   The **WorkSafe pack** is a zip of everything in a date range with its full
   history and a checker that runs anywhere. Restricted incident and medical
   details are for owners, members an owner names, and their author. A
-  record-keeping tool, not a compliance claim. Not yet: incidents and near
-  misses, inductions and sign-offs, pre-start checks, training, chemicals,
-  photos, the weekly copy emailed off the farm, and the farm workspace
-  links (#447).
+  record-keeping tool, not a compliance claim. Since FS13-FS20 (decisions
+  942-947): **Report something** (hazard spotted, near miss, incident) on a
+  phone, saved on the phone first and sent once; injury details kept apart
+  and restricted; WorkSafe's notifiable-event questions prompting a person
+  to tell WorkSafe (Tohyee never does) and recording when they did; photos
+  with the camera's date and their hash; corrective actions through done
+  and checked to a closed report, never closed by an AI or app. Not yet:
+  inductions and sign-offs, pre-start checks, training, chemicals, the
+  weekly copy emailed off the farm, and the farm workspace links (#447).
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

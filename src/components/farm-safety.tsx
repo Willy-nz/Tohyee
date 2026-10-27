@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
+import { ReportsCard, ReportSomething, useReports, WaitingToSend } from "@/components/farm-safety-reports";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
@@ -131,9 +132,13 @@ function FarmSafety({ organisationId, farm, imageryKey }: { organisationId: stri
   const overview = useApiData<Overview>("/api/farming/safety", { organisationId, farmId: farm.id, includeWithdrawn: showWithdrawn });
   const paddocks = useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farm.id}/paddocks`, { organisationId });
   const paddockNames = useMemo(() => new Map((paddocks.data?.paddocks ?? []).map((paddock) => [paddock.id, paddock.name])), [paddocks.data]);
+  const [showWithdrawnReports, setShowWithdrawnReports] = useState(false);
+  const reports = useReports(organisationId, farm.id, showWithdrawnReports);
   return (
     <>
       <EmergencyCard organisationId={organisationId} farm={farm} overview={overview.data} loadError={overview.error} onSaved={overview.reload} />
+      <WaitingToSend organisationId={organisationId} onSent={reports.reload} />
+      {reports.data ? <ReportSomething organisationId={organisationId} farm={farm} paddocks={paddocks.data?.paddocks ?? []} people={reports.data.people} access={reports.data.access} onSent={reports.reload} /> : null}
       {overview.error ? null : !overview.data ? (
         <p className={ui.muted}>Loading…</p>
       ) : (
@@ -150,6 +155,7 @@ function FarmSafety({ organisationId, farm, imageryKey }: { organisationId: stri
           onSaved={overview.reload}
         />
       )}
+      {reports.error ? <Notice tone="error">{reports.error}</Notice> : reports.data ? <ReportsCard organisationId={organisationId} data={reports.data} paddockNames={paddockNames} showWithdrawn={showWithdrawnReports} onShowWithdrawn={setShowWithdrawnReports} onChanged={reports.reload} /> : null}
       <RecordsCard organisationId={organisationId} farm={farm} />
     </>
   );
