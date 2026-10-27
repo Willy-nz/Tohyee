@@ -8867,4 +8867,52 @@ MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
      benchmarks instead of money cards. Safety is a stub in its own file
      (`src/components/farm-safety-tab.tsx`) for #446 to replace. The old
      farm pages stay, reached from More › Details and the Farm menu.
+911. **Quick logs, one question a screen; only what Tohyee keeps** (27
+     October 2026, #447 recommendations 10 and 11 and the comment's second
+     step; not yet reviewed by Jess). As LIC MINDA records a calving: Mob
+     in (paddock, mob, head, day in, cover before), Mob out (which mob, day
+     out, cover after), Cover reading (paddock, cover, how measured, day)
+     and Feed (what, how much, in what, paddock, day), each answer on its
+     own screen with big buttons, today and the paddock or mob already
+     filled in from the paddock card, recent mobs and feeds offered, then a
+     check screen. The farm walk goes paddock by paddock in name order
+     (1, 2 … 10) with one big number box; it doesn't wait to save the lot
+     at the end. Only records Tohyee already has are offered; rainfall,
+     photos and voice notes, animal treatments, and births and deaths have
+     no record in Tohyee yet and are named on the Log page as not kept, not
+     invented here. Near misses are #446's. Farm staff and bookkeepers and
+     up record; others see a sentence saying who can.
+912. **Every record from the phone has its own operation id** (27 October
+     2026, the comment's "stable operation IDs, duplicate prevention and
+     conflict handling"; Tohyee's idempotency rule in STYLE-GUIDE.md; not
+     yet reviewed by Jess). A UUID made on the phone when the record is
+     made (from `crypto.getRandomValues`, which works on plain http too) is
+     sent with it and kept on the reading, grazing or feed line with a
+     fingerprint of the request (tenant migration 0188). Sent again, the
+     same request finds the first record and makes nothing new; the same
+     id with different details, or from another person, is refused with
+     nothing changed. A day out sent again is already done; a different day
+     out isn't written over the one recorded. A farm app may send
+     `operationId` too.
+913. **Saved on this phone, Synced, Needs attention; offline designed, not
+     built** (27 October 2026, the comment's second change; not yet
+     reviewed by Jess). Records and the farm walk in progress are kept in
+     the browser's storage per person and organisation, each tied to the
+     farm it was made on; switching farms never moves one, and the other
+     farm's waiting records are named. They're sent oldest first when the
+     Log page opens, when the signal comes back and every 30 seconds while
+     any wait, each to its own farm's address (decision 902). No signal or
+     a server error leaves a record saved to try again; a refusal marks it
+     Needs attention with Tohyee's reason, and it's never sent again by
+     itself; the person checks and lets it go. A reading is changed in
+     place only while it's never been sent; after that a change is a new
+     reading. Synced records are let go after a week. **Not built:** a
+     service worker to open the farm pages with no signal at all. The
+     design, for when it's wanted (#447 question 3 is unanswered): cache
+     the built app files and the `/operations/farm` pages, plus the last
+     paddock status and calendar answers for the farms the person works on;
+     only farm field pages (never the books) work offline; records keep
+     using these drafts; nothing is cached for a farm the person can no
+     longer see, and signing out clears it. Today, a page opened before the
+     signal went keeps working, and what's recorded waits on the phone.
 

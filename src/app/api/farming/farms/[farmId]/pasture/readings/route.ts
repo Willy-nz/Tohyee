@@ -11,11 +11,11 @@ export const GET = route<Context>(async (request, context) => {
   return json({ readings: page.rows, next: page.next });
 });
 
-/** Adds a cover reading (`paddockId`, `measuredOn`, `cover`, `method`, `note`). Bookkeepers and above (PF1, PF8). */
+/** Adds a cover reading (`paddockId`, `measuredOn`, `cover`, `method`, `note`, and the phone's `operationId` so a resend finds the first; decision 912). Farm staff, bookkeepers and above (PF1, PF8, decision 904). */
 export const POST = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const body = await readJson(request);
   // The farm in the address must be the paddock's farm (decision 902).
-  const reading = await withFarmWork(request, body.organisationId, "record", (tx) => addReading(tx, { farmId, paddockId: body.paddockId, measuredOn: body.measuredOn, cover: body.cover, method: body.method, note: body.note }));
+  const reading = await withFarmWork(request, body.organisationId, "record", (tx) => addReading(tx, { farmId, paddockId: body.paddockId, measuredOn: body.measuredOn, cover: body.cover, method: body.method, note: body.note, operationId: body.operationId }));
   return json({ reading }, { status: 201 });
 });

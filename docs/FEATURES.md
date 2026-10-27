@@ -2819,6 +2819,21 @@ that something happened.
   Manage integrations for the keys; a tile never holds a key (tenant
   migration 0187). Paddock numbers on the map stay readable on a phone.
 
+- **Quick logs and the farm walk** (#447, decisions 911-913): the Log tab
+  records a mob in, a mob out, a cover reading or feed, one question a
+  screen with today and the paddock or mob filled in where known, then a
+  check before saving. **Farm walk** goes paddock by paddock with a big
+  number box, saving each reading on the phone as it's typed, so closing
+  the app and coming back carries on where it was. Every record is kept on
+  the phone first (Saved on this phone), sent when there's a signal
+  (Synced), or marked Needs attention if Tohyee refuses it; it's never sent
+  to another farm or written over another person's record. Each carries
+  its own operation id (tenant migration 0188), so sending it twice makes
+  it once. The pages themselves still need a signal to open: there's no
+  offline app yet (decision 913 says how it would work). Not kept in
+  Tohyee yet: rainfall, photos and voice notes, treatments, births and
+  deaths.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

@@ -26,6 +26,7 @@ import { requireFarming } from "@/lib/farming/paddocks";
 import { historyConditions, type HistoryInput, type HistoryPage, parseHistoryQuery, toPage } from "@/lib/farming/history";
 import { fileRows, type ImportOrigin, importSource } from "@/lib/farming/soil";
 import { optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
+import { requestHash } from "@/lib/idempotency";
 
 /*
  * Pasture and feed records (#249 stage 4; examples PF1-PF8, decision 559):
@@ -148,17 +149,52 @@ function requireSameFarm(paddock: PaddockRow, farmIdInput: unknown) {
   if (requireId(farmIdInput, "farmId") !== paddock.farm_id) throw new ConflictError(`${paddock.name} isn't on the farm this was recorded for. Nothing was saved: check the farm and try again.`);
 }
 
-export async function addReading(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; measuredOn: unknown; cover: unknown; method: unknown; note?: unknown }): Promise<PastureReading> {
+// Operation ids (decision 912) ------------------------------------------------------------------------
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A phone's own id for a record it made (a UUID), or null when none was sent. */
+export function optionalOperationId(input: unknown): string | null {
+  if (input === undefined || input === null || input === "") return null;
+  if (typeof input !== "string" || !UUID.test(input)) throw new ValidationError("operationId must be a UUID.");
+  return input.toLowerCase();
+}
+
+type OperationTable = "pasture_readings" | "grazings" | "supplements_fed";
+
+/**
+ * The record an operation id already made, when the same request is sent
+ * again (a sync replayed after the signal dropped): its id, so the caller
+ * answers with it and nothing new is made. The same id with different
+ * details, or from someone else, is refused: nothing is overwritten.
+ */
+async function replayed(tx: OrgTx, table: OperationTable, operationId: string | null, hash: string, what: string): Promise<string | null> {
+  if (!operationId) return null;
+  const row = await tx.query<{ id: string; request_hash: string | null; created_by_email: string; status: string }>(`select id::text, request_hash, created_by_email, status from ${table} where operation_id = $1`, [operationId]);
+  const found = row.rows[0];
+  if (!found) return null;
+  if (found.created_by_email !== tx.actor.email || found.request_hash !== hash) {
+    throw new ConflictError(`This ${what} was already sent with different details. Nothing was changed: check it and record it again.`);
+  }
+  if (found.status !== "active") throw new ConflictError(`This ${what} was saved and then removed. Nothing was changed.`);
+  return found.id;
+}
+
+export async function addReading(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; measuredOn: unknown; cover: unknown; method: unknown; note?: unknown; operationId?: unknown }): Promise<PastureReading> {
   const paddock = await requireActivePaddock(tx, input.paddockId);
   requireSameFarm(paddock, input.farmId);
   const measuredOn = parseIsoDate(input.measuredOn, "Measured on");
   const cover = requireCover(input.cover, "Cover");
   const method = requireOneOf(input.method, "Method", PASTURE_METHODS);
   const note = optionalString(input.note, "Note", { maxLength: 200 });
+  const operationId = optionalOperationId(input.operationId);
+  const hash = requestHash("pasture_reading", { paddockId: paddock.id, measuredOn, cover, method, note });
+  const again = await replayed(tx, "pasture_readings", operationId, hash, "reading");
+  if (again) return (await loadReadings(tx, "r.id = $1", [again]))[0];
   const row = await tx.query<{ id: string }>(
-    "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, note, source, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id::text",
+    "insert into pasture_readings (farm_id, paddock_id, measured_on, cover, method, note, source, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text",
     // Recorded by a farm app, the record says which (FA3).
-    [paddock.farm_id, paddock.id, measuredOn, cover, method, note, (tx.actor.via ? `Recorded via ${tx.actor.via}` : "Entered in Tohyee").slice(0, 200), tx.actor.email],
+    [paddock.farm_id, paddock.id, measuredOn, cover, method, note, (tx.actor.via ? `Recorded via ${tx.actor.via}` : "Entered in Tohyee").slice(0, 200), tx.actor.email, operationId, operationId ? hash : null],
   );
   await writeAuditEvent(tx, { eventType: "farming.pasture_reading_added", entityType: "pasture_reading", entityId: row.rows[0].id, details: { paddockId: paddock.id, measuredOn, cover, method } });
   return (await loadReadings(tx, "r.id = $1", [row.rows[0].id]))[0];
@@ -345,36 +381,52 @@ function optionalHead(input: unknown): number | null {
   return value;
 }
 
-export async function addGrazing(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; mob: unknown; head?: unknown; inOn: unknown; outOn?: unknown; preCover?: unknown; postCover?: unknown; note?: unknown }): Promise<GrazingRecord> {
+export async function addGrazing(tx: OrgTx, input: { farmId?: unknown; paddockId: unknown; mob: unknown; head?: unknown; inOn: unknown; outOn?: unknown; preCover?: unknown; postCover?: unknown; note?: unknown; operationId?: unknown }): Promise<GrazingRecord> {
   const paddock = await requireActivePaddock(tx, input.paddockId);
   requireSameFarm(paddock, input.farmId);
   const mob = requireString(input.mob, "Mob", { maxLength: 100 });
   const inOn = parseIsoDate(input.inOn, "Day in");
   const outOn = input.outOn === undefined || input.outOn === null || input.outOn === "" ? null : parseIsoDate(input.outOn, "Day out");
   if (outOn !== null && outOn < inOn) throw new ValidationError("The day out can't be before the day in.");
+  const head = optionalHead(input.head);
+  const preCover = optionalCover(input.preCover, "Cover before");
+  const postCover = optionalCover(input.postCover, "Cover after");
+  const note = optionalString(input.note, "Note", { maxLength: 200 });
+  const operationId = optionalOperationId(input.operationId);
+  const hash = requestHash("grazing", { paddockId: paddock.id, mob, head, inOn, outOn, preCover, postCover, note });
+  const again = await replayed(tx, "grazings", operationId, hash, "grazing");
+  if (again) return (await loadGrazings(tx, "g.id = $1", [again]))[0];
   if (outOn === null) {
     const open = await tx.query("select 1 from grazings where paddock_id = $1 and status = 'active' and out_on is null", [paddock.id]);
     if (open.rowCount) throw new ConflictError(`${paddock.name} already has a mob in it. Record the day out first.`);
   }
   const row = await tx.query<{ id: string }>(
-    "insert into grazings (farm_id, paddock_id, mob, head, in_on, out_on, pre_cover, post_cover, note, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text",
-    [paddock.farm_id, paddock.id, mob, optionalHead(input.head), inOn, outOn, optionalCover(input.preCover, "Cover before"), optionalCover(input.postCover, "Cover after"), optionalString(input.note, "Note", { maxLength: 200 }), tx.actor.email],
+    "insert into grazings (farm_id, paddock_id, mob, head, in_on, out_on, pre_cover, post_cover, note, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id::text",
+    [paddock.farm_id, paddock.id, mob, head, inOn, outOn, preCover, postCover, note, tx.actor.email, operationId, operationId ? hash : null],
   );
   await writeAuditEvent(tx, { eventType: "farming.grazing_added", entityType: "grazing", entityId: row.rows[0].id, details: { paddockId: paddock.id, mob, inOn, outOn } });
   return (await loadGrazings(tx, "g.id = $1", [row.rows[0].id]))[0];
 }
 
 /** Records the day out (and optionally the cover after) for a mob still in a paddock. */
-export async function closeGrazing(tx: OrgTx, idInput: unknown, input: { outOn: unknown; postCover?: unknown }): Promise<GrazingRecord> {
+export async function closeGrazing(tx: OrgTx, idInput: unknown, input: { outOn: unknown; postCover?: unknown; farmId?: unknown }): Promise<GrazingRecord> {
   await requireFarming(tx);
   const id = requireId(idInput, "grazingId");
   await requireRecordAccess(tx, "grazings", id, "Grazing not found.");
-  const current = await tx.query<{ in_on: string; out_on: string | null }>("select in_on::text, out_on::text from grazings where id = $1 and status = 'active' for update", [id]);
+  const current = await tx.query<{ in_on: string; out_on: string | null; post_cover: number | null; farm_id: string }>("select in_on::text, out_on::text, post_cover, farm_id::text from grazings where id = $1 and status = 'active' for update", [id]);
   if (!current.rows[0]) throw new NotFoundError("Grazing not found.");
-  if (current.rows[0].out_on !== null) throw new ConflictError("That mob's day out is already recorded.");
+  // Recorded for one farm, it must be that farm's mob (decision 902).
+  if (input.farmId !== undefined && input.farmId !== null && input.farmId !== "" && requireId(input.farmId, "farmId") !== current.rows[0].farm_id) {
+    throw new ConflictError("That mob isn't on the farm this was recorded for. Nothing was saved: check the farm and try again.");
+  }
   const outOn = parseIsoDate(input.outOn, "Day out");
-  if (outOn < current.rows[0].in_on) throw new ValidationError("The day out can't be before the day in.");
   const postCover = optionalCover(input.postCover, "Cover after");
+  if (current.rows[0].out_on !== null) {
+    // The same day out sent again (a replayed sync) is already done; a different one isn't written over (decision 912).
+    if (current.rows[0].out_on === outOn && (postCover === null || postCover === current.rows[0].post_cover)) return (await loadGrazings(tx, "g.id = $1", [id]))[0];
+    throw new ConflictError("That mob's day out is already recorded.");
+  }
+  if (outOn < current.rows[0].in_on) throw new ValidationError("The day out can't be before the day in.");
   await tx.query("update grazings set out_on = $2, post_cover = coalesce($3, post_cover) where id = $1", [id, outOn, postCover]);
   await writeAuditEvent(tx, { eventType: "farming.grazing_closed", entityType: "grazing", entityId: id, details: { outOn, postCover } });
   return (await loadGrazings(tx, "g.id = $1", [id]))[0];
@@ -425,7 +477,7 @@ export async function listSupplements(tx: OrgTx, input: HistoryFilter, options?:
   return toPage(await loadSupplements(tx, where, params, limit + 1), limit, (row) => ({ date: row.fedOn, id: row.id }));
 }
 
-export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown; fedOn: unknown; feed: unknown; quantity: unknown; unit: unknown; kgDm?: unknown; mob?: unknown; note?: unknown }): Promise<Supplement> {
+export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddockId?: unknown; fedOn: unknown; feed: unknown; quantity: unknown; unit: unknown; kgDm?: unknown; mob?: unknown; note?: unknown; operationId?: unknown }): Promise<Supplement> {
   const farmId = await requireFarm(tx, input.farmId);
   let paddockId: string | null = null;
   if (input.paddockId !== undefined && input.paddockId !== null && input.paddockId !== "") {
@@ -439,9 +491,17 @@ export async function addSupplement(tx: OrgTx, input: { farmId: unknown; paddock
   if (unit === "kg_dm") {
     if (kgDm !== null) throw new ValidationError("A quantity in kg DM is its own kg DM; leave kg DM blank.");
   }
+  const fedOn = parseIsoDate(input.fedOn, "Fed on");
+  const feed = requireString(input.feed, "Feed", { maxLength: 100 });
+  const mob = optionalString(input.mob, "Mob", { maxLength: 100 });
+  const note = optionalString(input.note, "Note", { maxLength: 200 });
+  const operationId = optionalOperationId(input.operationId);
+  const hash = requestHash("supplement", { farmId, paddockId, fedOn, feed, quantity, unit, kgDm, mob, note });
+  const again = await replayed(tx, "supplements_fed", operationId, hash, "feed line");
+  if (again) return (await loadSupplements(tx, "s.id = $1", [again]))[0];
   const row = await tx.query<{ id: string }>(
-    "insert into supplements_fed (farm_id, paddock_id, fed_on, feed, quantity, unit, kg_dm, mob, note, created_by_email) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text",
-    [farmId, paddockId, parseIsoDate(input.fedOn, "Fed on"), requireString(input.feed, "Feed", { maxLength: 100 }), quantity, unit, kgDm, optionalString(input.mob, "Mob", { maxLength: 100 }), optionalString(input.note, "Note", { maxLength: 200 }), tx.actor.email],
+    "insert into supplements_fed (farm_id, paddock_id, fed_on, feed, quantity, unit, kg_dm, mob, note, created_by_email, operation_id, request_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id::text",
+    [farmId, paddockId, fedOn, feed, quantity, unit, kgDm, mob, note, tx.actor.email, operationId, operationId ? hash : null],
   );
   await writeAuditEvent(tx, { eventType: "farming.supplement_added", entityType: "supplement_fed", entityId: row.rows[0].id, details: { farmId, unit, quantity, kgDm } });
   return (await loadSupplements(tx, "s.id = $1", [row.rows[0].id]))[0];

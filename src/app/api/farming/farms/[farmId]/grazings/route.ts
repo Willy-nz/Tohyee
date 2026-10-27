@@ -20,7 +20,7 @@ export const POST = route<Context>(async (request, context) => {
   const { farmId } = await context.params;
   const body = await readJson(request);
   const grazing = await withFarmWork(request, body.organisationId, "record", (tx) =>
-    addGrazing(tx, { farmId, paddockId: body.paddockId, mob: body.mob, head: body.head, inOn: body.inOn, outOn: body.outOn, preCover: body.preCover, postCover: body.postCover, note: body.note }),
+    addGrazing(tx, { farmId, paddockId: body.paddockId, mob: body.mob, head: body.head, inOn: body.inOn, outOn: body.outOn, preCover: body.preCover, postCover: body.postCover, note: body.note, operationId: body.operationId }),
   );
   return json({ grazing }, { status: 201 });
 });
