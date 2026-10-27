@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { revokeUserAiKeys } from "@/lib/ai/tokens";
+import { endPasskeys } from "@/lib/auth/passkey-end";
 import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
 import { configuredOrigin } from "@/lib/auth/origin";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
@@ -190,6 +191,7 @@ export async function completeAccountSetup(input: { token: unknown; password: un
     await client.query("delete from user_backup_codes where user_id = $1", [userId]);
     await client.query("delete from sessions where user_id = $1", [userId]);
     await revokeUserAiKeys(client, userId);
+    await endPasskeys(client, userId);
     const row = updated.rows[0];
     await writeAdminAuditEvent(client, { userId, email: row.email }, { eventType: "user.setup_completed", entityType: "user", entityId: userId });
     const session = await createSession(client, userId, meta, { pending: twoStepRequired() });
