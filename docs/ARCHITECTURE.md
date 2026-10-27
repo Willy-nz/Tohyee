@@ -21,7 +21,8 @@ tohyee                  core database (DATABASE_URL)
 ├─ organisations        registry: id, name, database_name, status
 ├─ users, sessions      logins, two-step sign-in (authenticator key encrypted),
 │                       user_backup_codes, two_step_reset_tokens,
-│                       user_google_identities and google_sign_in_states (#424)
+│                       user_google_identities and google_sign_in_states (#424),
+│                       user_passkeys and passkey_challenges (#450)
 ├─ server_settings      email sending and remote access (secrets encrypted with
 │                       TOHYEE_SECRET_KEY; never accounting data)
 ├─ organisation_members who can open which organisation, with what role
@@ -252,8 +253,27 @@ re-runs the whole sequence.
   invited address) or from Your account (password again). A Google session
   (`sessions.sign_in_method = 'google'`) is full without Tohyee's two-step,
   as Xero's is; server admins always keep a password.
+- **Passkeys** (#450, decisions 885-899): WebAuthn through SimpleWebAuthn
+  (`@simplewebauthn/server` and `/browser`, pinned), never hand-made CBOR
+  or signature checks. Discoverable passkeys, `userVerification:
+  "required"`, attestation `none`, ES256/EdDSA/RS256. `user_passkeys` keeps
+  the credential ID, public key, use count, transports, backed-up flags,
+  the address it was made on (`rp_id`) and a name; `users.passkey_user_handle`
+  is a random ID the passkeys carry instead of the login's own. Challenges
+  (`passkey_challenges`, hashes only) are used once within 5 minutes, and
+  only from the session (adding) or the browser cookie (`tohyee_passkey`,
+  signing in) that asked for them. The relying party ID is the host of the
+  address in use (`returnOrigin`): Tohyee's web address or `localhost`,
+  never an IP address or home-network name. A passkey session
+  (`sign_in_method = 'passkey'`, `passkey_id`) is full, counting as
+  two-step; removing the passkey ends it. Adding needs the password again
+  (Google-only logins: a sign-in in the last 5 minutes). A password or
+  two-step reset, a setup link, turning a login off and changing your own
+  password end every passkey (`endPasskeys`); a server admin removing them
+  also disconnects apps (`revokeUserAiKeys`).
 - Security alerts are emailed (when Email is set up in the server settings) for two-step
-  turned on or reset, a backup code used, new backup codes and a lockout.
+  turned on or reset, a backup code used, new backup codes, a lockout, and a
+  passkey added, removed or refused.
   A failed alert never blocks the action.
 - Five failed sign-ins lock the account for 15 minutes. Unknown emails take
   about the same time to reject as wrong passwords (a dummy password check
@@ -261,7 +281,7 @@ re-runs the whole sequence.
 - State-changing requests from another site are rejected (`Origin` /
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
 - Every API route needs a signed-in user and checks their role, except the sign-in routes themselves
-  (`/api/auth/*`: setup, login, logout, two-step, setup links and the emailed reset), `/api/health`
+  (`/api/auth/*`: setup, login, logout, two-step, setup links, the emailed reset and passkey sign-in), `/api/health`
   (which, through remote access, says only whether the server is up: no version or database state),
   `/api/mcp` (below), the CRM's web lead forms (`/api/lead-forms/<organisation>/<random
   key>`, decision 493: the key finds the form; what's sent is only ever an
