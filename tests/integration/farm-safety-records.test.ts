@@ -180,7 +180,7 @@ describeWithDatabase("farm safety records", () => {
 
   it("FS9 a member sees and records only on their farms", async () => {
     await as(owner)((tx) => addHazard(tx, { farmId: w.runoff, title: "Old quarry", paddockIds: [w.runoffPaddock] }));
-    await expect(as(staff)((tx) => listHazards(tx, w.runoff))).resolves.toEqual([]);
+    await expect(as(staff)((tx) => listHazards(tx, w.runoff))).rejects.toThrow(/Farm not found/);
     await expect(as(staff)((tx) => addHazard(tx, { farmId: w.runoff, title: "Not mine" }))).rejects.toThrow(/Farm not found/);
     const runoffHazard = (await as(owner)((tx) => listHazards(tx, w.runoff)))[0];
     await expect(as(staff)((tx) => recordHistory(tx, runoffHazard.recordId))).rejects.toThrow(/wasn't found/);
@@ -188,8 +188,7 @@ describeWithDatabase("farm safety records", () => {
     // A paddock on another farm can't be named.
     await expect(as(owner)((tx) => addHazard(tx, { farmId: w.home, title: "x", paddockIds: [w.runoffPaddock] }))).rejects.toThrow(/isn't on this farm/);
     const response = await call(staff, overviewRoute.GET as Handler, `/api/farming/safety?farmId=${w.runoff}`);
-    const body = (await response.json()) as { hazards: unknown[] };
-    expect(body.hazards).toEqual([]);
+    expect(response.status).toBe(404);
   });
 
   it("an archived farm takes no new safety records", async () => {

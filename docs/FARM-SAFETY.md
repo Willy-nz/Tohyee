@@ -248,6 +248,31 @@ accepted it; otherwise the screen shows the last problem and the next
 hourly check tries again. Copies sent can't be changed or deleted.
 `TOHYEE_SAFETY_COPY=off` stops the job.
 
+## In the farmer's workspace, and farm staff (decisions 960-962)
+
+- **Safety tab** (#447's Today · Map · Log · Safety · More): the whole
+  Safety page for the farm in the farm bar.
+- **Map**: hazards and no-go zones over the paddocks (tap one to open
+  Safety); a **paddock card** lists that paddock's hazards and has **Report
+  a hazard**.
+- **Log**: **Report a hazard**, **Near miss** and **Incident** open the same
+  report as the Safety page, saved on the phone first.
+- **Today**: a Safety card with your open actions, overdue actions and
+  actions to check (for those who keep the registers), machines out of use
+  or not checked today, inductions to sign (or sign again), training to
+  renew and hazard reviews due, and the farm's high and no-go hazards.
+- **Farm calendar**: **Safety due** for the next 30 days (actions due,
+  training expiring, hazard reviews).
+- **Farm staff** (#447's role) on their assigned farms only: read Safety;
+  report hazards, near misses and incidents (with injury details and
+  photos); do pre-start checks; sign inductions and sign in for themselves;
+  mark their own actions done; see their own training. They don't keep the
+  registers (hazards, equipment, checklists, inductions, training,
+  chemicals, sign-in links), check or reopen actions, record for someone
+  else, or get the WorkSafe pack or history check. **They never see injury
+  or medical details or restricted photos**, not even ones they entered
+  or if an owner names them; another farm is "not found".
+
 ## Worked examples
 
 Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
@@ -399,10 +424,27 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
   (after 6am) the next copy starts the day after the last one ended. Off,
   nothing is sent.
 
+- **FS39 Staff read their farm.** Hemi (farm staff, Home farm) gets Home
+  farm's Safety (canReport, not canRecord, no restricted details); the
+  runoff is 404; the pack is 403.
+- **FS40 Staff report.** A hazard report on Home farm (201); on the runoff
+  404; adding to the hazard register 403.
+- **FS41 No injury details.** Hemi reports a cut hand with details and a
+  restricted photo; he then sees "injury details are restricted" and can't
+  open the photo, even after the owner names him; the owner sees them.
+- **FS42 Checks and actions.** Hemi's failed brakes check puts the quad
+  out of use and gives him the action; he can't add actions; he marks his
+  own done but can't check it, or mark someone else's done.
+- **FS43 Inductions and training.** Today says "Not signed yet."; he signs
+  for himself, not for someone else; he sees only his own training and
+  can't add any.
+- **FS44 Today and the calendar.** Today shows the pond (high, no-go), the
+  quad out of use, and an action given to him; the calendar's 2099-01-05
+  action shows for him, and the runoff is "not found".
+
 ## Not done yet
 
-The farm workspace (#447) links (Today, map, Log, calendar, the farm staff
-role) follow as a further change on #446. The weekly copy's sending through
+Safety drafts still use their own phone store, not #447's (same rules). The weekly copy's sending through
 a real mail account wasn't tried: tests use a stand-in for the mail server. Not in equipment yet: hours-based
 service reminders and lockout/tagout steps; policies and procedures as
 documents. Not in inductions yet: photos of ID, a contractor's own induction of

@@ -89,7 +89,7 @@ export function toVersion<T>(row: EntryRow): SafetyVersion<T> {
 
 // Access ----------------------------------------------------------------------------------------
 
-/** Adding and changing safety records: bookkeepers and above (decision 935). */
+/** Keeping the safety registers (hazards, equipment, inductions, training...): bookkeepers and above (decision 935). */
 export function canRecordSafety(tx: OrgTx): boolean {
   return !tx.actor.userId || (tx.actor.role !== undefined && roleAtLeast(tx.actor.role, "bookkeeper"));
 }
@@ -98,9 +98,34 @@ export function requireSafetyRecorder(tx: OrgTx): void {
   if (!canRecordSafety(tx)) throw new ForbiddenError("Recording safety needs the bookkeeper role or higher in this organisation.");
 }
 
+/** Farm staff (#447's farm_worker role) on their own farms, decision 960. */
+export function isFarmStaff(tx: OrgTx): boolean {
+  return tx.actor.role === "farm_worker";
+}
+
+/**
+ * Reporting a hazard, near miss or incident, doing a pre-start check and
+ * adding its photos: farm staff as well as bookkeepers and above (decision
+ * 960). Which farms is checked as always (decision 744).
+ */
+export function canReportSafety(tx: OrgTx): boolean {
+  return canRecordSafety(tx) || isFarmStaff(tx);
+}
+
+export function requireSafetyReporter(tx: OrgTx): void {
+  if (!canReportSafety(tx)) throw new ForbiddenError("Reporting needs the farm staff or bookkeeper role or higher in this organisation.");
+}
+
+/** Whether the person sees restricted details they entered themselves: everyone but farm staff (decision 961). */
+function seesOwnRestricted(tx: OrgTx): boolean {
+  return !isFarmStaff(tx);
+}
+
 /** Whether the person sees restricted incident and medical details (decision 936). */
 export async function canSeeRestricted(tx: OrgTx): Promise<boolean> {
   if (!tx.actor.userId) return true;
+  // Farm staff never see injury or medical details, even if named (decision 961).
+  if (isFarmStaff(tx)) return false;
   if (tx.actor.role === "owner") return true;
   const row = await tx.query("select 1 from safety_restricted_members where user_id = $1", [tx.actor.userId]);
   return row.rowCount > 0;
@@ -109,7 +134,7 @@ export async function canSeeRestricted(tx: OrgTx): Promise<boolean> {
 /** Whether this person may read this version (farm and restricted rules). */
 async function canRead(tx: OrgTx, row: Pick<EntryRow, "farm_id" | "restricted" | "entered_by_user_id">, restricted: boolean): Promise<boolean> {
   if (row.farm_id && !(await canSeeFarm(tx, row.farm_id))) return false;
-  if (row.restricted && !restricted && row.entered_by_user_id !== tx.actor.userId) return false;
+  if (row.restricted && !restricted && (!seesOwnRestricted(tx) || row.entered_by_user_id !== tx.actor.userId)) return false;
   return true;
 }
 
@@ -215,7 +240,7 @@ export async function currentRecords<T>(tx: OrgTx, kind: SafetyKind, filter: { f
         and ($4 or e.change <> 'withdrawn')
         and ($5 or not e.restricted or f.entered_by_user_id = $6)
       order by f.seq`,
-    [kind, filter.farmId ?? null, visible, filter.includeWithdrawn ?? false, restricted, tx.actor.userId],
+    [kind, filter.farmId ?? null, visible, filter.includeWithdrawn ?? false, restricted, seesOwnRestricted(tx) ? tx.actor.userId : null],
   );
   return rows.rows.map((row) => ({ ...toVersion<T>(row), firstEnteredAt: row.first_entered_at, firstEnteredByEmail: row.first_entered_by_email }));
 }

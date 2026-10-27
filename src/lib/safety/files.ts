@@ -5,7 +5,7 @@ import { NotFoundError, PayloadTooLargeError, ValidationError } from "@/lib/erro
 import { canSeeFarm } from "@/lib/farming/access";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { photoTakenAt } from "@/lib/safety/photo-date";
-import { canSeeRestricted, requireSafetyRecorder } from "@/lib/safety/records";
+import { canSeeRestricted, isFarmStaff, requireSafetyReporter } from "@/lib/safety/records";
 import type { SafetyFileRef } from "@/lib/safety/shared";
 import { requireId } from "@/lib/validation";
 
@@ -41,7 +41,7 @@ function toFile(row: FileRow): SafetyFile {
  */
 export async function uploadSafetyFile(tx: OrgTx, input: { farmId?: unknown; fileName?: unknown; contentType?: unknown; contentBase64?: unknown; phoneFileTime?: unknown; restricted?: unknown }): Promise<SafetyFile> {
   await requireFarming(tx);
-  requireSafetyRecorder(tx);
+  requireSafetyReporter(tx);
   const farmId = requireId(input.farmId, "Farm");
   if (!(await canSeeFarm(tx, farmId))) throw new NotFoundError("Farm not found.");
   const contentType = String(input.contentType ?? "");
@@ -73,7 +73,7 @@ export async function uploadSafetyFile(tx: OrgTx, input: { farmId?: unknown; fil
 
 async function readable(tx: OrgTx, row: Pick<FileRow, "farm_id" | "restricted" | "uploaded_by_user_id">): Promise<boolean> {
   if (row.farm_id && !(await canSeeFarm(tx, row.farm_id))) return false;
-  if (row.restricted && row.uploaded_by_user_id !== tx.actor.userId && !(await canSeeRestricted(tx))) return false;
+  if (row.restricted && (isFarmStaff(tx) || row.uploaded_by_user_id !== tx.actor.userId) && !(await canSeeRestricted(tx))) return false;
   return true;
 }
 
@@ -111,7 +111,9 @@ export async function fileRefs(tx: OrgTx, input: unknown, farmId: string | null,
   for (const id of ids) {
     const row = found.get(id);
     // A record for every farm (e.g. training) may name a file kept on any farm the person sees.
-    if (!row || (farmId !== null && row.farm_id !== farmId) || !(await readable(tx, row))) throw new ValidationError("One of those files wasn't found.");
+    // Someone may name a file they added themselves, even a restricted one they can't open again (farm staff, decision 961).
+    const own = row?.uploaded_by_user_id !== null && row?.uploaded_by_user_id === tx.actor.userId;
+    if (!row || (farmId !== null && row.farm_id !== farmId) || !(own || (await readable(tx, row)))) throw new ValidationError("One of those files wasn't found.");
     if (row.restricted !== restricted) throw new ValidationError(restricted ? "Photos with restricted details must be added as restricted." : "A restricted photo can only go with restricted details.");
     refs.push({ id: row.id, name: row.file_name, sha256: row.sha256 });
   }

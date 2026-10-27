@@ -9253,3 +9253,29 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
      and retried at the next hourly check, never shown as sent. Sending
      happens outside database transactions. Not tried with a real mail
      account: tests use a stand-in for the mail server.
+
+### Farm safety in the farmer's workspace, and farm staff (#446 with #447; decisions 960-962)
+
+960. **Farm staff report, check and sign on their farms.** The farm_worker
+     role (#447, decision 904) reads Safety through the field-work routes
+     and may report hazards, near misses and incidents (with photos and
+     injury details), do pre-start checks (a failed one still makes its
+     action), sign inductions and sign in for themselves, and mark their own
+     actions done. Keeping the registers, checking and reopening actions,
+     recording for someone else, the WorkSafe pack and the history check
+     stay with bookkeepers and above (William: staff "record authorised
+     field work on assigned farms without becoming bookkeepers"). Not yet
+     reviewed by Jess.
+961. **Farm staff never see injury or medical details.** Not their own once
+     sent, not if an owner names them, not restricted photos (Jess: "never
+     see injury/medical details or other farms"). They see only their own
+     training. A farm they aren't assigned is "not found" on every safety
+     route, including the hazard list.
+962. **Safety in the workspace.** The Safety tab is the Safety page for the
+     farm in the farm bar; the map shows hazards and no-go zones and the
+     paddock card lists its hazards; Log has Report a hazard, Near miss and
+     Incident; Today has a Safety card; the farm calendar has Safety due for
+     the next 30 days. All worked out from the records each time (William:
+     "use the existing calendar to display assigned safety actions, but keep
+     ... evidence ... in dedicated safety records"). Safety reports keep their
+     own phone drafts (decision 944) rather than #447's store.

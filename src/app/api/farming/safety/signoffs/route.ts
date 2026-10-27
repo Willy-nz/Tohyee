@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, withFarmWork } from "@/lib/api/http";
 import { signInduction } from "@/lib/safety/inductions";
 
 /**
@@ -8,6 +8,6 @@ import { signInduction } from "@/lib/safety/inductions";
  */
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const signoff = await withOrganisation(request, body.organisationId, "viewer", (tx) => signInduction(tx, body));
+  const signoff = await withFarmWork(request, body.organisationId, "read", (tx) => signInduction(tx, body));
   return json({ signoff }, { status: 201 });
 });

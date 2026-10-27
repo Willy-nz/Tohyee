@@ -3,7 +3,7 @@ import { parseIsoDate, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { canSeeFarm } from "@/lib/farming/access";
 import { describeFiles, fileRefs, type SafetyFile } from "@/lib/safety/files";
-import { appendEntry, canSeeRestricted, currentRecord, currentRecords, requireSafetyRecorder } from "@/lib/safety/records";
+import { appendEntry, canSeeRestricted, currentRecord, currentRecords, requireSafetyRecorder, requireSafetyReporter } from "@/lib/safety/records";
 import {
   type ActionData,
   actionState,
@@ -150,7 +150,8 @@ export async function listReports(tx: OrgTx, farmIdInput: unknown, options: { in
  * those are saved as a separate restricted record at the same time.
  */
 export async function addReport(tx: OrgTx, input: ReportInput & { farmId?: unknown; happenedOn?: unknown; details?: unknown; action?: unknown; operationId?: unknown }, members: ReadonlyMap<string, string> = new Map()) {
-  requireSafetyRecorder(tx);
+  // Farm staff report on their farms too (decision 960).
+  requireSafetyReporter(tx);
   const farmId = requireId(input.farmId, "Farm");
   if (!(await canSeeFarm(tx, farmId))) throw new NotFoundError("Farm not found.");
   const happenedOn = parseIsoDate(input.happenedOn ?? todayIsoDate(), "When it happened");
@@ -258,7 +259,8 @@ async function assignee(tx: OrgTx, input: Record<string, unknown>, members: Read
  * database, for choosing who's responsible.
  */
 export async function addAction(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>, options: { checkId?: string } = {}) {
-  requireSafetyRecorder(tx);
+  // A failed pre-start check makes its own action, whoever did the check (decision 955).
+  if (!options.checkId) requireSafetyRecorder(tx);
   let farmId: string;
   let reportId: string | null = null;
   let hazardId: string | null = null;
@@ -298,9 +300,11 @@ const ACTION_STEPS = ["update", "done", "verify", "reopen", "withdraw"] as const
  * found it not right, with why) or "withdraw" (entered by mistake).
  */
 export async function changeAction(tx: OrgTx, recordId: unknown, input: Record<string, unknown>, members: ReadonlyMap<string, string>) {
-  requireSafetyRecorder(tx);
   const current = await currentRecord<ActionData>(tx, "action", recordId);
   const step = input.step as (typeof ACTION_STEPS)[number];
+  // Farm staff may mark their own actions done; everything else is for bookkeepers and above (decision 960).
+  if (step === "done" && current.data.assignedToUserId && current.data.assignedToUserId === tx.actor.userId) requireSafetyReporter(tx);
+  else requireSafetyRecorder(tx);
   if (!ACTION_STEPS.includes(step)) throw new ValidationError("Choose what to do with the action.");
   if (current.data.verified && step !== "reopen") throw new ValidationError("This action is checked and closed. Reopen it to change it.");
   let data: ActionData = { ...current.data };

@@ -1,4 +1,4 @@
-import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, route, searchParams, withFarmWork } from "@/lib/api/http";
 import { inductionToRead } from "@/lib/safety/inductions";
 
 type Context = { params: Promise<{ recordId: string }> };
@@ -7,6 +7,6 @@ type Context = { params: Promise<{ recordId: string }> };
 export const GET = route<Context>(async (request, context) => {
   const { recordId } = await context.params;
   const params = searchParams(request);
-  const toRead = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) => inductionToRead(tx, recordId, params.get("farmId")));
+  const toRead = await withFarmWork(request, params.get("organisationId"), "read", (tx) => inductionToRead(tx, recordId, params.get("farmId")));
   return json(toRead);
 });

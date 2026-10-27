@@ -78,7 +78,7 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
   // The first version says who entered a restricted record; they may see their own.
   const authors = new Map<string, string | null>();
   for (const row of rows.rows) if (row.version === 1) authors.set(row.record_id, row.entered_by_user_id);
-  const entries = rows.rows.map((row) => toChainEntry(row, row.restricted && !restricted && (input.withholdRestricted || authors.get(row.record_id) !== tx.actor.userId)));
+  const entries = rows.rows.map((row) => toChainEntry(row, row.restricted && !restricted && (input.withholdRestricted || tx.actor.role === "farm_worker" || authors.get(row.record_id) !== tx.actor.userId)));
   const chainRows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e order by e.seq`);
   const chainOk = verifyChain(chainRows.rows.map((row) => toChainEntry(row))).problems.length === 0;
   const chain = chainRows.rows.map((row) => ({ seq: row.seq, previousHash: row.previous_hash, hash: row.hash }));

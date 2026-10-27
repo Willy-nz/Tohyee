@@ -1,4 +1,4 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, readJson, route, searchParams, withFarmWork } from "@/lib/api/http";
 import { addInduction, listInductions, listSignoffs, listSiteLinks, onSite } from "@/lib/safety/inductions";
 import { canRecordSafety } from "@/lib/safety/records";
 
@@ -6,7 +6,7 @@ import { canRecordSafety } from "@/lib/safety/records";
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const farmId = params.get("farmId");
-  const result = await withOrganisation(request, params.get("organisationId"), "viewer", async (tx) => ({
+  const result = await withFarmWork(request, params.get("organisationId"), "read", async (tx) => ({
     inductions: await listInductions(tx, farmId),
     signoffs: await listSignoffs(tx, farmId),
     onSite: await onSite(tx, farmId),
@@ -19,6 +19,6 @@ export const GET = route(async (request) => {
 /** Adds an induction (`farmId`, or none to share it across farms; `title`, `audiences`, `sections`). */
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const induction = await withOrganisation(request, body.organisationId, "viewer", (tx) => addInduction(tx, body));
+  const induction = await withFarmWork(request, body.organisationId, "read", (tx) => addInduction(tx, body));
   return json({ induction }, { status: 201 });
 });

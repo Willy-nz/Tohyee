@@ -1,6 +1,6 @@
-import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { json, route, searchParams, withFarmWork } from "@/lib/api/http";
 import { getEmergency, listHazards } from "@/lib/safety/hazards";
-import { canRecordSafety, canSeeRestricted } from "@/lib/safety/records";
+import { canRecordSafety, canReportSafety, canSeeRestricted } from "@/lib/safety/records";
 
 /**
  * GET: one farm's safety overview (#446): its hazards and no-go zones
@@ -9,10 +9,10 @@ import { canRecordSafety, canSeeRestricted } from "@/lib/safety/records";
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const overview = await withOrganisation(request, params.get("organisationId"), "viewer", async (tx) => ({
+  const overview = await withFarmWork(request, params.get("organisationId"), "read", async (tx) => ({
     hazards: await listHazards(tx, params.get("farmId"), { includeWithdrawn: params.get("includeWithdrawn") === "true" }),
     emergency: await getEmergency(tx, params.get("farmId")),
-    access: { canRecord: canRecordSafety(tx), canSeeRestricted: await canSeeRestricted(tx), isOwner: tx.actor.role === "owner" },
+    access: { canRecord: canRecordSafety(tx), canReport: canReportSafety(tx), farmStaff: tx.actor.role === "farm_worker", canSeeRestricted: await canSeeRestricted(tx), isOwner: tx.actor.role === "owner" },
   }));
   return json(overview);
 });

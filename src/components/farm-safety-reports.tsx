@@ -186,7 +186,7 @@ function Thumbnails({ organisationId, files }: { organisationId: string; files: 
 export function ReportSomething({ organisationId, farm, paddocks, people, access, onSent }: { organisationId: string; farm: Farm; paddocks: Paddock[]; people: Person[]; access: SafetyAccess; onSent: () => void }) {
   const [type, setType] = useState<ReportType | null>(null);
   const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; text: string; notifiable: boolean } | null>(null);
-  if (!access.canRecord) return null;
+  if (!access.canReport) return null;
   return (
     <Card title="Report something" description="A hazard you've spotted, a near miss, or someone hurt. It's saved on this phone first, then sent.">
       {result ? (
@@ -223,7 +223,7 @@ export function ReportSomething({ organisationId, farm, paddocks, people, access
   );
 }
 
-function ReportForm({ organisationId, farm, type, paddocks, people, onCancel, onDone }: { organisationId: string; farm: Farm; type: ReportType; paddocks: Paddock[]; people: Person[]; onCancel: () => void; onDone: (outcome: { tone: "success" | "warning" | "error"; text: string; notifiable: boolean }) => void }) {
+export function ReportForm({ organisationId, farm, type, paddocks, people, onCancel, onDone }: { organisationId: string; farm: Farm; type: ReportType; paddocks: Paddock[]; people: Person[]; onCancel: () => void; onDone: (outcome: { tone: "success" | "warning" | "error"; text: string; notifiable: boolean }) => void }) {
   const { user } = useWorkspace();
   const [operationId] = useState(newOperationId);
   const [form, setForm] = useState({ title: "", happenedOn: todayInBrowser(), time: "", whatHappened: "", where: "", paddockIds: [] as string[], immediateAction: "", severity: (type === "incident" ? "moderate" : "minor") as Severity });
@@ -666,7 +666,10 @@ function ReportDetail({ organisationId, report, access, people, paddockNames, on
 }
 
 function ActionRow({ organisationId, action, access, people, onChanged }: { organisationId: string; action: CurrentRecord<ActionData>; access: SafetyAccess; people: Person[]; onChanged: () => void }) {
+  const { user } = useWorkspace();
   const today = todayInBrowser();
+  // Farm staff mark their own actions done; checking and reopening are for bookkeepers and above (decision 960).
+  const mineToDo = access.canReport && action.data.assignedToUserId === user.id;
   const state = actionState(action, today);
   const [step, setStep] = useState<"done" | "verify" | "reopen" | null>(null);
   const [note, setNote] = useState("");
@@ -694,7 +697,7 @@ function ActionRow({ organisationId, action, access, people, onChanged }: { orga
         {action.data.verified ? ` · checked${action.data.verified.note ? `: ${action.data.verified.note}` : ""} by ${action.enteredByName || action.enteredByEmail}` : ""}
       </div>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {access.canRecord && state !== "withdrawn" ? (
+      {(access.canRecord || mineToDo) && state !== "withdrawn" ? (
         <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
           {!action.data.done ? (
             <Button variant="secondary" size="small" onClick={() => setStep(step === "done" ? null : "done")}>
@@ -748,6 +751,31 @@ function RestrictedAccessCard({ organisationId, people }: { organisationId: stri
           {person.name}
         </label>
       ))}
+    </Card>
+  );
+}
+
+/**
+ * The Log tab's safety report (#447's workspace, decision 962): the same
+ * report as the Safety page, for the farm being worked on, opened from Log.
+ */
+export function LogSafetyReport({ organisationId, farm, type, onClose }: { organisationId: string; farm: Farm; type: ReportType; onClose: () => void }) {
+  const paddocks = useApiData<{ paddocks: Paddock[] }>(`/api/farming/farms/${farm.id}/paddocks`, { organisationId });
+  const reports = useReports(organisationId, farm.id, false);
+  const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; text: string; notifiable: boolean } | null>(null);
+  if (result) {
+    return (
+      <Card title={REPORT_TYPE_LABELS[type]}>
+        <Notice tone={result.tone}>{result.text}</Notice>
+        {result.notifiable ? <NotifiablePrompt /> : null}
+        <Button onClick={onClose}>Done</Button>
+      </Card>
+    );
+  }
+  if (!paddocks.data || !reports.data) return <p className={ui.muted}>Loading…</p>;
+  return (
+    <Card title={`${REPORT_TYPE_LABELS[type]} on ${farm.name}`} description="Saved on this phone first, then sent.">
+      <ReportForm organisationId={organisationId} farm={farm} type={type} paddocks={paddocks.data.paddocks} people={reports.data.people} onCancel={onClose} onDone={setResult} />
     </Card>
   );
 }
