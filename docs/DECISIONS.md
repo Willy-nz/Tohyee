@@ -9169,3 +9169,39 @@ worked examples FS1-FS12 in `docs/FARM-SAFETY.md`.
 947. **Owners choose who sees injury details** on the Safety page (decision
      936). Not in this change: emailing or notifying staff about a report,
      and people involved besides the injured person.
+
+### Farm safety: inductions, sign-offs and signing in on site (#446; decisions 948-952)
+
+948. **Inductions are versioned safety records; shared ones show each
+     farm's own details.** An induction can be for every farm (no farm) or
+     one; reading it always shows that farm's active hazards and emergency
+     details (William: "Share reusable templates across farms, while keeping
+     local hazards, emergency details and completed records specific to the
+     relevant farm"). Not yet reviewed by Jess.
+949. **A sign-off keeps what was shown; "sign again" is explicit.** Each
+     sign-off records the induction version, each hazard's id and version,
+     the emergency details' version and how it was signed. It's no longer up
+     to date after a version saved with "everyone must sign again", or when a
+     high or no-go hazard is added or changed after it (William: "Changes to
+     material hazards/instructions should have an explicit re-acknowledgement
+     workflow"). Low and medium hazard changes don't, so people aren't asked
+     to sign for every small edit. Not yet reviewed by Jess.
+950. **Who signed, honestly.** A member signs on their own login (Jess:
+     "Worker sign-offs on their own phone"); a bookkeeper or above can record
+     a sign-off for someone without a login, shown as recorded, not their
+     signature; the sign-in link records the name as typed. Every sign-off
+     says it shows someone was told, not that they can do the job safely.
+     Wording not yet reviewed by Jess.
+951. **On site is a reported presence.** Signing in and out are safety
+     records; the screen says it's what people reported, not a location, and
+     shows when. A missed sign-out is corrected with when they say they left
+     and why (WorkSafe's contractor guidance: agree check-in and check-out).
+952. **A farm sign-in link for people without a login, done safely**
+     (tenant migration 0190). A random 43-letter token per link (only its
+     hash kept), optional end date, turned off rather than deleted, rate
+     limited, "not found" alike for every refusal; it shows only that farm's
+     emergency details, hazards and visitor/contractor inductions, never
+     people, worker-only inductions or reports; sign-out from the same phone
+     uses its own one-time token. Anyone with the link can read the farm's
+     hazards and emergency details, which is its purpose. Not yet reviewed by
+     Jess (privacy wording is an open question).

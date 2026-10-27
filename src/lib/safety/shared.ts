@@ -373,3 +373,55 @@ export function reportState(record: Pick<SafetyVersion<ReportData>, "change" | "
   if (record.data.closed) return "closed";
   return actions.some((action) => action.change !== "withdrawn" && !action.data.verified) ? "actions" : "open";
 }
+
+// Inductions, sign-offs and signing in on site ---------------------------------------------------------
+
+export const AUDIENCES = ["worker", "contractor", "visitor"] as const;
+export type Audience = (typeof AUDIENCES)[number];
+export const AUDIENCE_LABELS: Record<Audience, string> = { worker: "Workers", contractor: "Contractors", visitor: "Visitors" };
+
+export type InductionSection = { heading: string; text: string };
+
+export type InductionData = {
+  title: string;
+  audiences: Audience[];
+  sections: InductionSection[];
+  /** Set on a version that changes something people must read again (decision 949). */
+  needsResign: boolean;
+  why?: string | null;
+};
+
+/** Who signed: a member signing for themselves, a member recording for someone else, or someone through the farm's sign-in link. */
+export type SignedHow = "self" | "recorded" | "link";
+export const SIGNED_HOW_LABELS: Record<SignedHow, string> = { self: "signed on their own login", recorded: "recorded for them (not their own signature)", link: "signed through the farm's sign-in link (name as typed)" };
+
+export type SafetyPerson = { userId: string | null; name: string; company: string | null; phone: string | null };
+
+/** The words someone agrees to when they sign (decision 950). Not yet reviewed by Jess. */
+export const SIGN_STATEMENT = "I have read this induction, the farm's hazards and its emergency details, and I'll ask if anything isn't clear.";
+export const NOT_COMPETENCE = "Signing shows someone was told about the farm and its hazards. It doesn't show they can do a job safely: that's training and supervision.";
+
+export type SignoffData = {
+  inductionId: string;
+  inductionVersion: number;
+  person: SafetyPerson;
+  audience: Audience;
+  signedHow: SignedHow;
+  statement: string;
+  /** The hazards shown when they signed: id and version (decision 949). */
+  hazards: Array<{ id: string; version: number }>;
+  emergencyVersion: number | null;
+  why?: string | null;
+};
+
+export type VisitData = {
+  person: SafetyPerson;
+  audience: Audience;
+  purpose: string | null;
+  /** Set on the version that signs out; the time is that version's entry time. */
+  signedOut: boolean;
+  /** A missed sign-out corrected later: when they say they left (decision 951). */
+  leftAt: string | null;
+  signedHow: SignedHow;
+  why?: string | null;
+};

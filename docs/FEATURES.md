@@ -668,9 +668,15 @@ that something happened.
   and restricted; WorkSafe's notifiable-event questions prompting a person
   to tell WorkSafe (Tohyee never does) and recording when they did; photos
   with the camera's date and their hash; corrective actions through done
-  and checked to a closed report, never closed by an AI or app. Not yet:
-  inductions and sign-offs, pre-start checks, training, chemicals, the
-  weekly copy emailed off the farm, and the farm workspace links (#447).
+  and checked to a closed report, never closed by an AI or app. Since
+  FS21-FS27 (decisions 948-952, tenant migration 0190): inductions (shared
+  or per farm) read with the farm's hazards and emergency details, signed on
+  your own login or recorded for someone, kept with the version and hazards
+  shown, and "sign again" after a marked change or a new high or no-go
+  hazard; On site now (sign in and out, missed sign-outs corrected); and a
+  farm sign-in link with a QR code for visitors and contractors without a
+  login. Not yet: pre-start checks, training, chemicals, the weekly copy
+  emailed off the farm, and the farm workspace links (#447).
 - **My mail: a private copy of an Owner's own mail** (user menu › My mail;
   #250 with #340, PM1-PM29, decisions 610-619 and 720-726, tenant
   migrations 0168, 0169 and 0180, not

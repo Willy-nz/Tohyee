@@ -156,6 +156,49 @@ stays in the chain, so the rest still checks.
   Open actions per person are ready for Today and the calendar (#447).
 - **Owners choose** who else sees injury details, on the Safety page.
 
+## Inductions, sign-offs and signing in on site (decisions 948-952)
+
+- **Inductions** are safety records too (versions). One can be shared by
+  every farm; each farm's own active hazards and emergency details always
+  show with it, so templates are shared and local details stay local.
+  Sections of text, and who it's for (workers, contractors, visitors).
+- **Signing.** **Read and sign** shows the induction, the farm's hazards and
+  emergency details, then the statement "I have read this induction, the
+  farm's hazards and its emergency details, and I'll ask if anything isn't
+  clear." A sign-off keeps the induction version, every hazard shown (id and
+  version) and the emergency details' version, and how it was signed:
+  - on their own login (a worker on their own phone),
+  - **recorded for someone** without a login by a bookkeeper or above,
+    shown as "recorded for them (not their own signature)", or
+  - through the farm's **sign-in link** (name as typed).
+  Every sign-off page says signing shows someone was told; it doesn't show
+  they can do a job safely (William: "Do not equate a completed induction
+  with demonstrated competence").
+- **Sign again.** A sign-off stops being up to date when a new version of
+  the induction is saved with "Everyone who signed before must read and
+  sign again", or a high or no-go hazard is added or changed after they
+  signed. Smaller changes (a low hazard, wording without the tick) don't.
+  Who has signed shows **Up to date** or **Sign again**, with the reasons.
+- **On site now.** **Sign me in**, or **Sign someone in** (name, company,
+  phone, visitor/contractor/worker, what for); **Sign out now**. It's what
+  people reported, not where their phone is: the sign-in time shows, and
+  someone still signed in from an earlier day says so. A missed sign-out is
+  fixed with **They left earlier…**: when they say they left and why, saved
+  as a correction (not after now, not before they signed in).
+- **The sign-in link** (bookkeeper or above): a QR code and address for the
+  gate, optionally until a date, turned off when not wanted (links aren't
+  deleted; last used shows). With no Tohyee login, the page shows that
+  farm's emergency details (tap to call), hazards and visitor/contractor
+  induction, takes name, company, phone, what for and the tick, then signs
+  the induction and signs them in. Their phone keeps a one-time sign-out
+  token so they can sign out from the same phone. It never shows who else
+  is on site, worker-only inductions, or any report; every wrong, expired
+  or turned-off link is the same "not found", and it's rate limited. The
+  details are kept on the phone and shown with their age when there's no
+  signal (signing in then needs a connection). Anyone holding the link can
+  read the farm's hazards and emergency details: that's its purpose, and
+  why it can be turned off.
+
 ## Worked examples
 
 Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
@@ -236,11 +279,42 @@ Tests cite these IDs (`tests/integration/farm-safety-records.test.ts`,
   `verify.mjs` checks them; Aroha's has only the open one and still checks
   out.
 
+- **FS21 Shared induction, local details.** "Farm induction" for every farm
+  is read on Home farm with Home farm's two hazards and assembly point; Mere
+  (Home farm only) can't open it for the runoff.
+- **FS22 Signing on your own login.** Not ticked, or from an older version:
+  refused. Mere's sign-off is entered by Mere, version 1, with both hazards
+  at version 1 and emergency details version 1, up to date.
+- **FS23 Sign again.** A changed low hazard, or a new version without the
+  tick: still up to date. A new high hazard: "New since they signed: Bull in
+  paddock 9." Version 3 with the tick: "The induction has changed and
+  needs signing again." Mere signs version 3: up to date.
+- **FS24 Recorded for someone.** Mere records Hemi (Hemi Fencing): recorded,
+  entered by Mere. A viewer can sign for themselves but not record for
+  someone else.
+- **FS25 On site.** Mere and Ana (vet, recorded by Mere) are on site; a
+  viewer can't sign Ana out; Mere signs out (version 2), can't twice; Ana's
+  missed sign-out can't be in the future, before she signed in, or without
+  why, and is saved as a correction. Both show as left today.
+- **FS26 The sign-in link.** The address is `/site/{organisation}/{43-letter
+  token}` with a QR code. The page shows Home farm's three hazards and the
+  induction for contractors and visitors; not the runoff's hazard, the
+  incident, injury details, or anyone's name or email. Rawiri (Spray Co)
+  signs the induction and signs in through it (entered by "site sign-in
+  link"); without the tick it's refused; a wrong sign-out token isn't found;
+  he signs out once. A wrong token, another organisation, or the link once
+  turned off: not found (404). A link can't end in the past, or be made for
+  a farm the member doesn't work on.
+- **FS27 Like every safety record.** Visits and sign-offs have versions and
+  the history checks out.
+
 ## Not done yet
 
-Inductions and sign-offs, sign in on site, pre-start checks, training,
-chemicals, the weekly copy emailed off the farm, and the farm workspace
-(#447) links follow as further changes on #446. Not in reports yet: telling
+Pre-start checks, training, chemicals, the weekly copy emailed off the
+farm, and the farm workspace (#447) links follow as further changes on
+#446. Not in inductions yet: photos of ID, a contractor's own induction of
+the farmer, sending an induction by email or text, and signing in for
+several people at once. Not in reports yet: telling
 staff by email or notification when something is reported (no message is
 sent, and nothing claims one was), people involved besides the injured
 person, and photos kept in drafts while offline.
@@ -264,3 +338,9 @@ Wording or rules that touch the law, *not yet reviewed by Jess*:
    (phone for a death, Notify WorkSafe otherwise, leave the site as it is
    with WorkSafe's exceptions).
 7. The minor/moderate/serious scale for reports.
+8. The sign-off statement and the "doesn't show they can do a job safely"
+   sentence; whether a sign-off through the link (name as typed, no
+   identity check) is good enough for contractors.
+9. What the gate page tells people about their details ("The farm keeps
+   your name, company, phone and the times you sign in and out"): is a
+   fuller privacy notice needed (Privacy Act 2020)?
