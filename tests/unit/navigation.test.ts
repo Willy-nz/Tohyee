@@ -343,6 +343,7 @@ describe("farm staff (decision 904)", () => {
     const menus = visibleMenus("accounting", access);
     expect(menus.map((menu) => menu.label)).toEqual(["Farm"]);
     expect(menus[0].groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
+      "/operations/farm",
       "/operations/farming/pasture",
       "/operations/farming",
       "/operations/farming/soil",
@@ -357,6 +358,7 @@ describe("farm staff (decision 904)", () => {
     expect(farmWorkAllowsPath("/operations/farming")).toBe(true);
     expect(farmWorkAllowsPath("/operations/farming/pasture")).toBe(true);
     expect(farmWorkAllowsPath("/operations/profile")).toBe(true);
+    expect(farmWorkAllowsPath("/operations/farm/map")).toBe(true);
     for (const path of ["/operations", "/operations/invoices", "/operations/farming/benchmarks", "/operations/farming/fertiliser", "/operations/farming/notebook", "/operations/livestock"]) expect(farmWorkAllowsPath(path)).toBe(false);
   });
 });

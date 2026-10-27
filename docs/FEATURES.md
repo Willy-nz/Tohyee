@@ -2804,6 +2804,21 @@ that something happened.
   top bar has the Farm menu's field pages only. Farm app keys work for them,
   on their farms. Removing a record stays with bookkeepers and up.
 
+- **The farmer's workspace** (#447, decisions 907-910): Farm › Today, map and
+  log (`/operations/farm`) has **Today · Map · Log · Safety · More**, as
+  tabs along the bottom of a phone. The farm being worked on stays at the
+  top. **Today** has today's and the next few days' jobs from the farm
+  calendar, the mobs in now, a compact map that opens to its full height,
+  and the farm's app tiles. **Map** colours paddocks by days since grazed
+  or by the cover reading's age, with a key, and a list of every paddock;
+  tapping one opens its card (cover and how old it is, mob, last grazed,
+  recent records, Add cover and Mob in or out). **Safety** is a placeholder
+  until farm health and safety (#446). **More** has every table under
+  Details, and year-end and setup. Farm staff land on Today. **App tiles**
+  (a name and an address) are added by admins on Farm apps, now headed
+  Manage integrations for the keys; a tile never holds a key (tenant
+  migration 0187). Paddock numbers on the map stay readable on a phone.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
