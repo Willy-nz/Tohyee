@@ -3,9 +3,9 @@
   "items": [
     {
       "date": "2026-10-27",
-      "title": "Tohyee 0.15.0: invite people, and a security update",
-      "body": "New: invite people from People and roles, with a setup link emailed to new people. Next.js is updated to fix critical security problems, so update soon. The demo farm is now added from the server's Organisations page.",
-      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.15.0"
+      "title": "Tohyee 0.16.0: farm safety and farmer-friendly screens",
+      "body": "New: farm safety (hazards on the map, incidents, inductions, machinery checks, training, chemicals, a WorkSafe pack and a weekly emailed copy); Today, Map, Log and Safety on a phone with a farm walk that saves as you go; a Farm staff role; passkeys; and inviting people from People and roles. Next.js is updated to fix critical security problems, so update soon.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.16.0"
     },
     {
       "date": "2026-10-24",

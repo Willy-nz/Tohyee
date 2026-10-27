@@ -43,7 +43,7 @@ accepted.
 > [licence](LICENSE)).
 
 **Release availability, checked 27 October 2026:** the latest packaged
-release is [v0.15.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.15.0),
+release is [v0.16.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.16.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -74,7 +74,16 @@ what you can use; developer and server setup instructions follow it.
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
 
-## New in 0.15.0: invite people, and a security update
+## New in 0.16.0: farm safety and farmer-friendly screens
+
+| Area | What's new |
+| --- | --- |
+| **Farm safety** | Hazards on the map, incidents, inductions, machinery checks, training, chemicals, a WorkSafe pack and a weekly emailed copy, with records that can't be quietly changed. |
+| **Farm screens** | Today, Map, Log, Safety and More on a phone, a farm walk that saves as you go, and a Farm staff role. |
+| **Sign in** | Passkeys (Face ID, fingerprint), and inviting people from People and roles. |
+| **Security** | Next.js 16.4.1, fixing critical security problems. |
+
+## Prepared as 0.15.0 (included in 0.16.0)
 
 | Area | What's new |
 | --- | --- |
