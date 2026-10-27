@@ -169,6 +169,9 @@ export const MENUS: Menu[] = [
       {
         heading: "Farm",
         links: [
+          ...section("On the farm", [
+            { href: "/operations/farm", label: "Today, map and log" },
+          ]),
           ...section("Paddocks and soil", [
             { href: "/operations/farming", label: "Farms and paddocks" },
             { href: "/operations/farming/compare", label: "All farms compared" },
@@ -529,7 +532,7 @@ export const AREAS: Record<string, string[]> = {
   ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/repeating-bills", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
   Payroll: ["/operations/payroll"],
-  Farm: ["/operations/farming"],
+  Farm: ["/operations/farming", "/operations/farm"],
   Banking: ["/operations/bank-accounts", "/operations/bank-rules", "/operations/exchange-rates", "/operations/fx-revaluation"],
   Reports: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
   Accounting: ["/operations/accounts", "/operations/ledger-journals", "/operations/inventory", "/operations/fixed-assets", "/operations/livestock", "/operations/period-close"],
@@ -580,6 +583,7 @@ export const FARM_WORK_MENUS: Menu[] = [
       {
         heading: "Farm",
         links: [
+          { href: "/operations/farm", label: "Today, map and log" },
           { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming", label: "Farms and paddocks" },
           { href: "/operations/farming/soil", label: "Soil tests" },
@@ -592,7 +596,7 @@ export const FARM_WORK_MENUS: Menu[] = [
 ];
 
 /** Where farm staff may go; anywhere else in Accounting sends them to the first. */
-export const FARM_WORK_PATHS = ["/operations/farming/pasture", "/operations/farming/soil", "/operations/farming/calendar", "/operations/farming/apps", "/operations/profile"];
+export const FARM_WORK_PATHS = ["/operations/farm", "/operations/farming/pasture", "/operations/farming/soil", "/operations/farming/calendar", "/operations/farming/apps", "/operations/profile"];
 
 export function farmWorkAllowsPath(pathname: string): boolean {
   if (pathname === "/operations/farming") return true;

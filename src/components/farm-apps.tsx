@@ -7,6 +7,8 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { FarmAppKey } from "@/lib/farm-apps/keys";
 import { FARM_APP_SCOPE_LABELS, FARM_APP_SCOPES, type FarmAppScope } from "@/lib/farm-apps/scopes";
 import { formatDate } from "@/lib/format";
+import type { FarmAppLauncher } from "@/lib/farming/launchers";
+import { useWorkspace } from "@/components/workspace";
 
 /**
  * Farming › Apps (#249 stage 5; FA1-FA8, decision 561): the signed-in
@@ -52,6 +54,8 @@ export function FarmApps({ organisationId }: { organisationId: string }) {
   const active = keys.data?.keys.filter((key) => !key.revokedAt) ?? [];
   return (
     <>
+      <AppTiles organisationId={organisationId} />
+      <h2>Manage integrations</h2>
       <Card title="Apps you build or use" description="An app key lets an app read farm data and record field work through Tohyee's Farming API, as you, and only what you tick. It can't reach the books, payroll or contacts, and it posts nothing.">
         <p>
           The API is at <code>{base}</code>, described in <a href={`${base}/openapi.json`}>openapi.json</a>. The <a href={GUIDE}>guide</a> shows an AI tool how to build an app against it, and the{" "}
@@ -135,3 +139,79 @@ export function FarmApps({ organisationId }: { organisationId: string }) {
     </>
   );
 }
+
+/**
+ * Launch tiles (#447, decision 908): the apps the farm uses, by name and
+ * address, shown on the farm's Today and More pages. Admins add and remove
+ * them; a tile never holds a key.
+ */
+function AppTiles({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const launchers = useApiData<{ launchers: FarmAppLauncher[] }>("/api/farming/launchers", { organisationId });
+  const [form, setForm] = useState({ name: "", url: "", description: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      launchers.reload();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const list = launchers.data?.launchers ?? [];
+  return (
+    <Card title="App tiles" description="Apps the farm uses, shown as tiles on the farm's Today and More pages. A tile is only a name and an address: each app asks for its own key.">
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {launchers.error ? <Notice tone="error">{launchers.error}</Notice> : null}
+      {launchers.data && !list.length ? <Empty>No app tiles yet.</Empty> : null}
+      {list.length ? (
+        <ul>
+          {list.map((launcher) => (
+            <li key={launcher.id}>
+              <a href={launcher.url} target="_blank" rel="noreferrer noopener">
+                {launcher.name}
+              </a>
+              {launcher.description ? <span className={ui.muted}> · {launcher.description}</span> : null}{" "}
+              {can("admin") ? (
+                <button type="button" className={ui.linkButton} disabled={busy} onClick={() => void run(async () => void (await api(`/api/farming/launchers/${launcher.id}`, { method: "DELETE", query: { organisationId } })))}>
+                  Remove tile
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {can("admin") ? (
+        <form
+          className={ui.inlineForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              await api("/api/farming/launchers", { method: "POST", body: { organisationId, ...form, description: form.description || null } });
+              setForm({ name: "", url: "", description: "" });
+            });
+          }}
+        >
+          <Field label="Name">
+            <input value={form.name} maxLength={60} required onChange={(event) => setForm({ ...form, name: event.target.value })} />
+          </Field>
+          <Field label="Address" hint="https://…">
+            <input type="url" value={form.url} maxLength={500} required onChange={(event) => setForm({ ...form, url: event.target.value })} />
+          </Field>
+          <Field label="What it's for">
+            <input value={form.description} maxLength={200} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          </Field>
+          <Button type="submit" disabled={busy}>
+            Add tile
+          </Button>
+        </form>
+      ) : null}
+    </Card>
+  );
+}
+

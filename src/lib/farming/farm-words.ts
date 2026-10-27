@@ -36,3 +36,8 @@ export function coverText(cover: number): string {
 export function mobText(mob: string, head: number | null): string {
   return head ? `${mob} (${head.toLocaleString("en-NZ")})` : mob;
 }
+
+/** An ISO date `days` after another (before, when negative). */
+export function addDays(iso: string, days: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}

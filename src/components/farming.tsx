@@ -4,7 +4,7 @@ import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { FarmRowList, farmRowStyles } from "@/components/farm-rows";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { PaddockPastureSummary } from "@/components/pasture";
 import { PaddockRecords } from "@/components/soil";
@@ -88,8 +88,14 @@ export function PaddockMap({
   imageryKey,
   drawing,
   onMapTap,
+  fills,
+  label = "Map of the paddocks",
 }: {
-  paddocks: Paddock[];
+  /** A colour (a CSS colour or var()) for each paddock id, for the farm map's bands (decision 907). */
+  fills?: Record<string, string>;
+  /** What the map shows, for screen readers. */
+  label?: string;
+  paddocks: Pick<Paddock, "id" | "name" | "geometry" | "effectiveHa" | "mappedHa">[];
   selected: string | null;
   onSelect?: (id: string) => void;
   imageryKey?: string | null;
@@ -103,6 +109,16 @@ export function PaddockMap({
   // A click follows the end of a drag: it mustn't also choose a paddock.
   const dragged = useRef(false);
   const svg = useRef<SVGSVGElement | null>(null);
+  // Paddock numbers stay about 13px on screen however narrow the map is (#447: they were too small to read on a phone).
+  const [shownWidth, setShownWidth] = useState(MAP_WIDTH);
+  useEffect(() => {
+    const element = svg.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => setShownWidth(entries[0]?.contentRect.width || MAP_WIDTH));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const labelSize = Math.max(14, Math.min(36, (13 * MAP_WIDTH) / Math.max(shownWidth, 1)));
   const shaped = paddocks.filter((paddock) => paddock.geometry);
   const box = bounds(shaped.map((paddock) => paddock.geometry!));
   const imagery = Boolean(imageryKey);
@@ -143,7 +159,7 @@ export function PaddockMap({
           ref={svg}
           viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
           role="img"
-          aria-label={imagery ? "Map of the paddocks over aerial imagery" : "Map of the paddocks"}
+          aria-label={imagery ? `${label}, over aerial imagery` : label}
           style={{ width: "100%", height: "auto", background: imagery ? "#5b6b4e" : "var(--surface-muted, #eef3ea)", borderRadius: 10, touchAction: "none", cursor: drawing ? "crosshair" : "grab", display: "block" }}
           onPointerDown={(event) => {
             const [x, y] = toDrawing(event);
@@ -193,8 +209,9 @@ export function PaddockMap({
             const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
             const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
             const isSelected = paddock.id === selected;
-            const fill = imagery ? (isSelected ? "rgba(255, 214, 10, 0.35)" : "rgba(255, 255, 255, 0.08)") : isSelected ? "#9ccf7a" : "#c9e3b4";
-            const stroke = imagery ? (isSelected ? "#ffd60a" : "#ffffff") : isSelected ? "#1f5fae" : "#4f7a3a";
+            const banded = fills?.[paddock.id];
+            const fill = banded ?? (imagery ? (isSelected ? "rgba(255, 214, 10, 0.35)" : "rgba(255, 255, 255, 0.08)") : isSelected ? "#9ccf7a" : "#c9e3b4");
+            const stroke = banded ? (isSelected ? "var(--text)" : "var(--surface)") : imagery ? (isSelected ? "#ffd60a" : "#ffffff") : isSelected ? "#1f5fae" : "#4f7a3a";
             return (
               <g
                 key={paddock.id}
@@ -202,17 +219,18 @@ export function PaddockMap({
                 style={{ cursor: onSelect && !drawing ? "pointer" : undefined }}
               >
                 <title>{`${paddock.name}: ${paddock.effectiveHa ?? "?"} ha effective, ${paddock.mappedHa} ha mapped`}</title>
-                <path d={path} fill={fill} stroke={stroke} strokeWidth={isSelected ? 3 : 1.5} fillRule="evenodd" />
+                {/* Theme colours are CSS variables, so they go in style (an SVG attribute can't use var()). */}
+                <path d={path} style={{ fill, fillOpacity: banded && imagery ? 0.75 : undefined, stroke }} strokeWidth={isSelected ? 4 : 1.5} fillRule="evenodd" />
                 <text
                   x={cx}
                   y={cy}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={14}
+                  fontSize={labelSize}
                   fontWeight={600}
-                  fill={imagery ? "#ffffff" : "#203a18"}
-                  stroke={imagery ? "rgba(0, 0, 0, 0.7)" : "none"}
-                  strokeWidth={imagery ? 3 : 0}
+                  fill={imagery || banded ? "#ffffff" : "#203a18"}
+                  stroke={imagery || banded ? "rgba(0, 0, 0, 0.75)" : "none"}
+                  strokeWidth={imagery || banded ? 3 : 0}
                   paintOrder="stroke"
                   style={{ pointerEvents: "none" }}
                 >

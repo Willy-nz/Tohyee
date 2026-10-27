@@ -8957,4 +8957,47 @@ MINDA, Halter and AgriWebb, and are **not yet reviewed by Jess** (decision
      kept as removed, decision 559). AgriWebb lets staff edit their own
      records; that can come later, once there's a rule for how long a record
      stays theirs to change.
+907. **The map shows facts: days since grazed and the cover reading's age**
+     (27 October 2026, #447 recommendation 9 and question 4, unanswered; not
+     yet reviewed by Jess). The farm map colours each paddock by how many
+     days since its last mob came out (or "Mob in now"), or by how old its
+     latest cover reading is, in bands (0-7, 8-14, 15-21, 22-30, more than
+     30 days; 0-7, 8-14, 15-30, more than 30) with a key. These are facts,
+     not judgements, so decisions 516 and 559 ("records, doesn't judge")
+     hold: the words say what was recorded ("Grazed 8-14 days ago"), never
+     "ready", "due", "high" or "low", and the map says the colours aren't
+     good or bad. Colours are the chart theme's sequential blues (decisions
+     599-601), so they follow light and dark, with amber for a mob in now.
+     Colouring by cover itself (shades relative to the farm's average) and
+     farmer-set pre- and post-graze targets wait for Jess's answer to
+     question 4. Each paddock's facts come from one query a paddock
+     (`/api/farming/farms/{id}/paddock-status`), whatever the history's
+     size. A list of every paddock sits beside the map, for screen readers
+     and paddocks without a shape.
+908. **App tiles hold an address, never a key** (27 October 2026, the
+     comment's "useful launch tiles", with keys and scopes under Manage
+     integrations; not yet reviewed by Jess). An admin adds a tile (name,
+     address, what it's for, one farm or all) on Farm apps; everyone who
+     works on that farm sees it on Today and More, and it opens the app in
+     a new tab. The address must be https (http only for localhost) with no
+     user name, password or Tohyee key in it, because everyone on the farm
+     sees it; each app asks for its own key, which stays with the person who
+     made it. Up to 24 tiles. Tenant migration 0187.
+909. **The paddock card** (27 October 2026, the comment's "concise card";
+     not yet reviewed by Jess). Tapping a paddock, on the map or in the
+     list, opens its card: area, cover with how long ago and how it was
+     measured, the mob in now, when it was last grazed, its latest four
+     records, a link to Safety for hazards (until #446), and big buttons to
+     add a cover or move a mob in or out, for people who may record (farm
+     staff, bookkeepers and up). The tables are one tap away (Details).
+910. **Today · Map · Log · Safety · More** (27 October 2026, the comment's
+     phone navigation; not yet reviewed by Jess). Pages under
+     `/operations/farm`, tabs at the bottom of a phone (56px tall, like the
+     farm apps people know) and along the top on a computer. The selected
+     farm is always at the top, with a switch for two or more; switching
+     clears anything half-filled (decision 902). Today leads with jobs and
+     mobs, not money; owners and accountants get a link to Home and
+     benchmarks instead of money cards. Safety is a stub in its own file
+     (`src/components/farm-safety-tab.tsx`) for #446 to replace. The old
+     farm pages stay, reached from More › Details and the Farm menu.
 
