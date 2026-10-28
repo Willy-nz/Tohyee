@@ -6,6 +6,8 @@ import { useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { newOperationId } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
+import { type PickedFile, pendingOf, pickSafetyFile, submitThroughQueue, useOfflineQueue, waitForFiles } from "@/components/offline-queue";
+import { useOnline } from "@/components/offline-support";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Farm } from "@/lib/farming/paddocks";
@@ -59,6 +61,7 @@ async function upload(organisationId: string, farmId: string, file: File) {
  */
 export function EquipmentCard({ organisationId, farm, openEquipment }: { organisationId: string; farm: Farm; openEquipment: string | null }) {
   const data = useApiData<EquipmentData>("/api/farming/safety/equipment", { organisationId, farmId: farm.id });
+  const { items: queued } = useOfflineQueue(organisationId);
   const [checking, setChecking] = useState<string | null>(openEquipment);
   const [adding, setAdding] = useState<"equipment" | "checklist" | null>(null);
   const [search, setSearch] = useState("");
@@ -107,10 +110,17 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {shown.map((item) => (
           <li key={item.recordId} id={recordAnchor("equipment", item.recordId)} style={{ borderTop: only ? 0 : "1px solid var(--border)", padding: "10px 0", scrollMarginTop: 72 }}>
-            {only ? null : <strong>{item.data.name}</strong>} {item.available ? <Badge tone="green">In use</Badge> : <Badge tone="red">Out of use</Badge>} {item.data.owner !== "owned" ? <Badge>{EQUIPMENT_OWNER_LABELS[item.data.owner]}</Badge> : null}
+            {only ? null : <strong>{item.data.name}</strong>} {item.available && !pendingOf(queued, "safety.check", farm.id).some((check) => check.meta.equipmentId === item.recordId && Array.isArray(check.meta.criticalFaults) && check.meta.criticalFaults.length) ? <Badge tone="green">In use</Badge> : <Badge tone="red">Out of use</Badge>} {item.data.owner !== "owned" ? <Badge>{EQUIPMENT_OWNER_LABELS[item.data.owner]}</Badge> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
               {[item.data.type, item.data.ownerName, item.checklist ? `checklist: ${item.checklist.data.title}` : "no checklist yet", item.lastCheck ? `last checked ${formatDateTime(item.lastCheck.enteredAt)} by ${item.lastCheck.enteredByName || item.lastCheck.enteredByEmail}${item.lastCheck.data.passed ? "" : " (faults)"}` : "not checked yet"].filter(Boolean).join(" · ")}
             </div>
+            {pendingOf(queued, "safety.check", farm.id)
+              .filter((check) => check.meta.equipmentId === item.recordId && Array.isArray(check.meta.criticalFaults) && check.meta.criticalFaults.length)
+              .map((check) => (
+                <div key={check.operationId} style={{ color: "var(--danger, #c81e1e)" }}>
+                  <Badge tone="red">Fault on this device</Badge> Failed a critical check here ({(check.meta.criticalFaults as string[]).join("; ")}), not sent yet: don&apos;t use it. Nobody has been told yet.
+                </div>
+              ))}
             {item.failedCheck ? (
               <div style={{ color: "var(--danger, #c81e1e)" }}>
                 Failed {formatDateTime(item.failedCheck.enteredAt)}: {item.failedCheck.data.answers.filter((answer) => answer.critical && answer.result === "fault").map((answer) => `${answer.text} (${answer.note})`).join("; ")}. {LOCKOUT_NOTE}
@@ -181,10 +191,12 @@ function QrButton({ farm, item }: { farm: Farm; item: EquipmentView }) {
 function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: { organisationId: string; farm: Farm; item: EquipmentView; checklist: CurrentRecord<ChecklistData>; onDone: () => void; onCancel: () => void }) {
   const [answers, setAnswers] = useState<Record<string, { result: string; note: string }>>({});
   const [hours, setHours] = useState("");
-  const [photos, setPhotos] = useState<SafetyFile[]>([]);
+  const [photos, setPhotos] = useState<PickedFile[]>([]);
   const [operationId] = useState(newOperationId);
   const [outcome, setOutcome] = useState<string | null>(null);
   const { busy, error, run } = useRun();
+  const { queue } = useOfflineQueue(organisationId);
+  const criticalFaults = checklist.data.items.filter((entry) => entry.critical && answers[entry.key]?.result === "fault").map((entry) => entry.text);
   const complete = checklist.data.items.every((entry) => answers[entry.key]?.result && (answers[entry.key].result !== "fault" || answers[entry.key].note.trim()));
   const answered = checklist.data.items.filter((entry) => answers[entry.key]?.result).length;
   const anyFault = Object.values(answers).some((answer) => answer.result === "fault");
@@ -192,11 +204,27 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        // Against the checklist version shown (decision 954), kept on this device first (decision 1013).
         void run(
-          () => api<{ outOfUse: boolean }>("/api/farming/safety/checks", { method: "POST", body: { organisationId, operationId, equipmentId: item.recordId, checklistId: checklist.recordId, checklistVersion: checklist.version, hoursOrKm: hours, files: photos.map((file) => ({ id: file.id })), answers: checklist.data.items.map((entry) => ({ key: entry.key, result: answers[entry.key]?.result, note: answers[entry.key]?.note })) } }),
+          () =>
+            submitThroughQueue(queue, {
+              operationId,
+              kind: "safety.check",
+              label: `Pre-start check: ${item.data.name}${criticalFaults.length ? " (critical fault)" : ""}`,
+              farmId: farm.id,
+              farmName: farm.name,
+              meta: { equipmentId: item.recordId, criticalFaults },
+              request: {
+                method: "POST",
+                path: "/api/farming/safety/checks",
+                body: { equipmentId: item.recordId, checklistId: checklist.recordId, checklistVersion: checklist.version, hoursOrKm: hours, files: photos.map((file) => ({ id: file.id })), answers: checklist.data.items.map((entry) => ({ key: entry.key, result: answers[entry.key]?.result, note: answers[entry.key]?.note })) },
+                refs: waitForFiles(photos, ["files"]),
+              },
+            }),
           (result) => {
-            setOutcome(result.outOfUse ? `${item.data.name} is now out of use and an action has been made to fix it. Don't use it. ${LOCKOUT_NOTE}` : "Check saved.");
-            setTimeout(onDone, 1500);
+            if (result.state === "synced") setOutcome((result.result as { outOfUse?: boolean }).outOfUse ? `${item.data.name} is now out of use and an action has been made to fix it. Don't use it. ${LOCKOUT_NOTE}` : "Check saved.");
+            else setOutcome(criticalFaults.length ? `Saved on this device: ${item.data.name} failed a critical check, so don't use it. Nobody has been told yet: tell whoever is in charge. Tohyee records it, puts it out of use and makes the action when it's sent.` : "Check saved on this device, waiting to send.");
+            setTimeout(onDone, result.state === "synced" ? 1500 : 4000);
           },
         );
       }}
@@ -210,7 +238,7 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
         </div>
       </div>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {outcome ? <Notice tone={outcome.startsWith("Check") ? "success" : "warning"}>{outcome}</Notice> : null}
+      {outcome ? <Notice tone={outcome.startsWith("Check saved.") ? "success" : "warning"}>{outcome}</Notice> : null}
       {checklist.data.items.map((entry) => {
         const answer = answers[entry.key] ?? { result: "", note: "" };
         return (
@@ -245,12 +273,12 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
             onChange={(event) => {
               const chosen = event.target.files?.[0];
               event.target.value = "";
-              if (chosen) void run(() => upload(organisationId, farm.id, chosen), (file) => setPhotos([...photos, file]));
+              if (chosen) void run(() => pickSafetyFile(queue, { farm, file: chosen }), (file) => setPhotos([...photos, file]));
             }}
           />
         </label>
       ) : null}
-      {photos.length ? <p className={ui.muted}>{photos.length} photo(s) kept.</p> : null}
+      {photos.length ? <p className={ui.muted}>{photos.length} photo(s) kept{photos.some((file) => file.pending) ? " (on this device until sent)" : ""}.</p> : null}
       <Field label="Hours or km (optional)">
         <input inputMode="decimal" value={hours} maxLength={30} onChange={(event) => setHours(event.target.value)} />
       </Field>
@@ -269,6 +297,7 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
 
 function ReleaseForm({ organisationId, farm, item, onDone }: { organisationId: string; farm: Farm; item: EquipmentView; onDone: () => void }) {
   const [open, setOpen] = useState(false);
+  const online = useOnline();
   const [whatWasDone, setWhatWasDone] = useState("");
   const [photos, setPhotos] = useState<SafetyFile[]>([]);
   const { busy, error, run } = useRun();
@@ -289,7 +318,8 @@ function ReleaseForm({ organisationId, farm, item, onDone }: { organisationId: s
         Photo (optional)
         <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" style={{ display: "block" }} onChange={(event) => { const chosen = event.target.files?.[0]; event.target.value = ""; if (chosen) void run(() => upload(organisationId, farm.id, chosen), (file) => setPhotos([...photos, file])); }} />
       </label>
-      <Button type="submit" disabled={busy || !whatWasDone.trim()}>
+      {!online ? <p className={ui.muted}>Releasing a machine needs a connection: Tohyee checks at the time who may release it (decision 955), so it can&apos;t wait on this device.</p> : null}
+      <Button type="submit" disabled={busy || !whatWasDone.trim() || !online}>
         Release it
       </Button>
       <p className={ui.muted}>It&apos;s recorded with your name and the time. Take the tag off the machine yourself.</p>

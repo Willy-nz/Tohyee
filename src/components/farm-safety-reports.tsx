@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { EnteredLine, newOperationId, SafetyHistory } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { type PickedFile, pickSafetyFile, QueuedWork, submitThroughQueue, useOfflineQueue, waitForFiles } from "@/components/offline-queue";
+import { useOnline } from "@/components/offline-support";
+import { placeText } from "@/lib/offline/photos";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import { createDraftStore, type SafetyDraft, sendDraft } from "@/lib/client/safety-drafts";
 import type { Farm, Paddock } from "@/lib/farming/paddocks";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
-import type { SafetyFile } from "@/lib/safety/files";
 import type { ReportView } from "@/lib/safety/reports";
 import { createFormMemory, formMemoryKey, recordAnchor, unansweredQuestions } from "@/lib/safety/screens";
 import {
@@ -50,28 +51,6 @@ export type ReportsData = { reports: ReportView[]; otherActions: Array<CurrentRe
 /** A farm's reports, actions and people, for the Safety page. */
 export function useReports(organisationId: string, farmId: string, includeWithdrawn: boolean) {
   return useApiData<ReportsData>("/api/farming/safety/reports", { organisationId, farmId, includeWithdrawn });
-}
-
-const drafts = createDraftStore(() => (typeof window === "undefined" ? null : window.localStorage));
-let draftVersion = 0;
-const draftListeners = new Set<() => void>();
-function draftsChanged() {
-  draftVersion += 1;
-  for (const listener of draftListeners) listener();
-}
-function useDraftVersion() {
-  return useSyncExternalStore(
-    (listener) => {
-      draftListeners.add(listener);
-      window.addEventListener("storage", listener);
-      return () => {
-        draftListeners.delete(listener);
-        window.removeEventListener("storage", listener);
-      };
-    },
-    () => draftVersion,
-    () => 0,
-  );
 }
 
 function useRun() {
@@ -128,17 +107,17 @@ export function NotifiablePrompt() {
   );
 }
 
-async function readAsBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  return btoa(binary);
-}
-
-/** Photo picker that keeps each photo as soon as it's chosen (needs a connection). */
-function PhotoPicker({ organisationId, farmId, restricted = false, files, onChange, label = "Photos" }: { organisationId: string; farmId: string; restricted?: boolean; files: SafetyFile[]; onChange: (files: SafetyFile[]) => void; label?: string }) {
+/**
+ * Photo picker (decision 1012): each photo is kept as soon as it's chosen,
+ * as a compressed copy with the phone's time and, if asked, where it was
+ * taken. With no connection it's kept on this device and sent before the
+ * record that uses it.
+ */
+function PhotoPicker({ organisationId, farmId, farmName = "", restricted = false, files, onChange, label = "Photos" }: { organisationId: string; farmId: string; farmName?: string; restricted?: boolean; files: PickedFile[]; onChange: (files: PickedFile[]) => void; label?: string }) {
   const { busy, error, run } = useRun();
+  const { queue } = useOfflineQueue(organisationId);
+  const [withPlace, setWithPlace] = useState(false);
+  const pending = files.filter((file) => file.pending).length;
   return (
     <div style={{ margin: "8px 0" }}>
       <label className={ui.fieldLabel}>
@@ -154,37 +133,41 @@ function PhotoPicker({ organisationId, farmId, restricted = false, files, onChan
             event.target.value = "";
             if (!chosen) return;
             void run(
-              async () =>
-                (
-                  await api<{ file: SafetyFile }>("/api/farming/safety/files", {
-                    method: "POST",
-                    body: { organisationId, farmId, restricted, fileName: chosen.name, contentType: chosen.type, contentBase64: await readAsBase64(chosen), phoneFileTime: new Date(chosen.lastModified).toISOString() },
-                  })
-                ).file,
+              () => pickSafetyFile(queue, { farm: { id: farmId, name: farmName }, file: chosen, restricted, place: withPlace }),
               (file) => onChange([...files, file]),
             );
           }}
         />
       </label>
+      <label className={styles.check}>
+        <input type="checkbox" checked={withPlace} onChange={(event) => setWithPlace(event.target.checked)} /> Add where I am to the photo
+      </label>
       {busy ? <p className={ui.muted}>Keeping the photo…</p> : null}
-      {error ? <Notice tone="error">{error} Photos need a connection; the report itself can be saved on this phone.</Notice> : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
       {files.length ? (
         <p className={ui.muted}>
-          {files.length} photo{files.length === 1 ? "" : "s"} kept{files.some((file) => file.photoTaken) ? `; camera date ${files.find((file) => file.photoTaken)?.photoTaken}` : ""}.
+          {files.length} photo{files.length === 1 ? "" : "s"} kept{pending ? ` (${pending} on this device, sent with the record)` : ""}{files.some((file) => file.photoTaken) ? `; camera date ${files.find((file) => file.photoTaken)?.photoTaken}` : ""}.
         </p>
       ) : null}
     </div>
   );
 }
 
-function Thumbnails({ organisationId, files }: { organisationId: string; files: SafetyFile[] }) {
+function Thumbnails({ organisationId, files }: { organisationId: string; files: PickedFile[] }) {
   if (!files.length) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "6px 0" }}>
       {files.map((file) => {
+        if (file.pending) {
+          return (
+            <span key={file.id} className={styles.pendingPhoto}>
+              Photo on this device
+            </span>
+          );
+        }
         const href = `/api/farming/safety/files/${file.id}?organisationId=${encodeURIComponent(organisationId)}`;
         return (
-          <a key={file.id} href={href} target="_blank" rel="noreferrer" title={`Received ${formatDateTime(file.receivedAt)}${file.photoTaken ? `; camera date ${file.photoTaken}` : ""}`}>
+          <a key={file.id} href={href} target="_blank" rel="noreferrer" title={`Received ${formatDateTime(file.receivedAt)}${file.photoTaken ? `; camera date ${file.photoTaken}` : ""}${file.phoneFileTime ? `; phone time ${formatDateTime(file.phoneFileTime)}` : ""}${file.place ? `; where the phone said: ${placeText(file.place)}` : ""}`}>
             {/* eslint-disable-next-line @next/next/no-img-element -- a private, signed-in file; next/image would cache it */}
             <img src={href} alt={`${file.name}${file.restricted ? " (restricted)" : ""}`} style={{ width: 88, height: 88, objectFit: "cover", borderRadius: 6, border: file.restricted ? "2px solid var(--danger, #c81e1e)" : "1px solid var(--border)" }} />
           </a>
@@ -253,7 +236,7 @@ const memory = createFormMemory(() => (typeof window === "undefined" ? null : wi
 const memoryKey = (userId: string, organisationId: string, farmId: string, form: string) => formMemoryKey({ userId, organisationId, farmId, form: `report.${form}` });
 
 type ReportDraftForm = { title: string; happenedOn: string; time: string; whatHappened: string; where: string; paddockIds: string[]; immediateAction: string; severity: Severity };
-type ReportMemory = { operationId: string; step: 1 | 2; form: ReportDraftForm; point: Position | null; photos: SafetyFile[]; injured: boolean; details: { injuredPerson: string; injury: string; treatment: string }; detailPhotos: SafetyFile[]; answers: NotifiableAnswers; action: { title: string; assignedToUserId: string; assignedToName: string; due: string } };
+type ReportMemory = { operationId: string; step: 1 | 2; form: ReportDraftForm; point: Position | null; photos: PickedFile[]; injured: boolean; details: { injuredPerson: string; injury: string; treatment: string }; detailPhotos: PickedFile[]; answers: NotifiableAnswers; action: { title: string; assignedToUserId: string; assignedToName: string; due: string } };
 
 export function ReportForm({ organisationId, farm, type, paddocks, people, onCancel, onDone }: { organisationId: string; farm: Farm; type: ReportType; paddocks: Paddock[]; people: Person[]; onCancel: () => void; onDone: (outcome: { tone: "success" | "warning" | "error"; text: string; notifiable: boolean }) => void }) {
   const { user } = useWorkspace();
@@ -264,10 +247,12 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
   const [step, setStep] = useState<1 | 2>(kept?.step ?? 1);
   const [form, setForm] = useState<ReportDraftForm>(kept?.form ?? { title: "", happenedOn: todayInBrowser(), time: "", whatHappened: "", where: "", paddockIds: [], immediateAction: "", severity: type === "incident" ? "moderate" : "minor" });
   const [point, setPoint] = useState<Position | null>(kept?.point ?? null);
-  const [photos, setPhotos] = useState<SafetyFile[]>(kept?.photos ?? []);
+  const [photos, setPhotos] = useState<PickedFile[]>(kept?.photos ?? []);
   const [injured, setInjured] = useState(kept?.injured ?? type === "incident");
   const [details, setDetails] = useState(kept?.details ?? { injuredPerson: "", injury: "", treatment: "" });
-  const [detailPhotos, setDetailPhotos] = useState<SafetyFile[]>(kept?.detailPhotos ?? []);
+  const [detailPhotos, setDetailPhotos] = useState<PickedFile[]>(kept?.detailPhotos ?? []);
+  const { queue } = useOfflineQueue(organisationId);
+  const [problem, setProblem] = useState<string | null>(null);
   const [answers, setAnswers] = useState<NotifiableAnswers>(kept?.answers ?? {});
   const [action, setAction] = useState(kept?.action ?? { title: "", assignedToUserId: "", assignedToName: "", due: "" });
   const [locating, setLocating] = useState<string | null>(null);
@@ -304,8 +289,8 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
   };
   const submit = async () => {
     setBusy(true);
+    setProblem(null);
     const body: Record<string, unknown> = {
-      organisationId,
       farmId: farm.id,
       type,
       ...form,
@@ -317,17 +302,19 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
       details: injured ? { ...details, files: detailPhotos.map((file) => ({ id: file.id })) } : undefined,
       action: action.title ? { title: action.title, assignedToUserId: action.assignedToUserId || null, assignedToName: action.assignedToUserId ? null : action.assignedToName || null, due: action.due || null } : undefined,
     };
-    const draft: Omit<SafetyDraft, "savedAt" | "status" | "problem"> = { operationId, userId: user.id, organisationId, farmId: farm.id, farmName: farm.name, label: `${REPORT_TYPE_LABELS[type]}: ${form.title}`, path: "/api/farming/safety/reports", body };
-    const savedOnPhone = drafts.save(draft);
-    draftsChanged();
-    const outcome = await sendDraft(drafts, { ...draft, savedAt: new Date().toISOString(), status: "saved", problem: null }, (path, payload) => api(path, { method: "POST", body: payload }));
-    draftsChanged();
-    setBusy(false);
-    // Sent, or handed to Waiting to send: the half-filled copy in this tab isn't needed. If neither kept it, it stays.
-    if (outcome.result === "sent" || savedOnPhone) memory.clear(key);
-    if (outcome.result === "sent") onDone({ tone: "success", text: `Recorded for ${farm.name}.${notifiable ? " Tohyee hasn't told WorkSafe." : ""}`, notifiable });
-    else if (outcome.result === "kept") onDone({ tone: "warning", text: savedOnPhone ? `Saved on this phone, not sent yet (${outcome.reason}). It's sent when you press Send now with a connection.` : `Not sent (${outcome.reason}) and this phone couldn't keep a copy. Write it down and try again.`, notifiable });
-    else onDone({ tone: "error", text: `Not recorded: ${outcome.reason} It's kept on this phone under Waiting to send.`, notifiable });
+    // Kept on this device first, then sent once (decisions 944 and 1010); photos still on the device go first.
+    const refs = [...waitForFiles(photos, ["files"]), ...(injured ? waitForFiles(detailPhotos, ["details", "files"]) : [])];
+    try {
+      const outcome = await submitThroughQueue(queue, { operationId, kind: "safety.report", label: `${REPORT_TYPE_LABELS[type]}: ${form.title}`, farmId: farm.id, farmName: farm.name, request: { method: "POST", path: "/api/farming/safety/reports", body, refs } });
+      memory.clear(key);
+      if (outcome.state === "synced") onDone({ tone: "success", text: `Recorded for ${farm.name}.${notifiable ? " Tohyee hasn't told WorkSafe." : ""}`, notifiable });
+      else if (outcome.state === "waiting") onDone({ tone: "warning", text: `Saved on this device, waiting to send. Nobody has been told yet. It goes by itself when Tohyee can be reached.${notifiable ? " Tohyee never tells WorkSafe." : ""}`, notifiable });
+      else onDone({ tone: "warning", text: "This device's storage wouldn't keep it. Keep Tohyee open until it shows Synced below, or write it down.", notifiable });
+    } catch (caught) {
+      setProblem(`Not recorded: ${errorMessage(caught)}`);
+    } finally {
+      setBusy(false);
+    }
   };
   const cancel = () => {
     const started = form.title || form.whatHappened || form.where || photos.length;
@@ -350,9 +337,10 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
       <p className={ui.muted} role="status" style={{ marginTop: 0, fontSize: "var(--text-sm)" }}>
         {held === null ? "Not sent yet." : held ? "Not sent yet. Kept in this browser tab while you move around Safety." : "Not sent yet, and this browser isn't keeping a copy: stay on this screen until it's saved."}
       </p>
+      {problem ? <Notice tone="error">{problem}</Notice> : null}
       {step === 1 ? (
         <>
-          <PhotoPicker organisationId={organisationId} farmId={farm.id} files={photos} onChange={setPhotos} label="Photo (take it now if you can)" />
+          <PhotoPicker organisationId={organisationId} farmId={farm.id} farmName={farm.name} files={photos} onChange={setPhotos} label="Photo (take it now if you can)" />
           <Field label="What it was, in a few words">
             <input value={form.title} required maxLength={150} onChange={(event) => setForm({ ...form, title: event.target.value })} />
           </Field>
@@ -443,7 +431,7 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
                   <Field label="Treatment">
                     <textarea value={details.treatment} rows={2} maxLength={2000} onChange={(event) => setDetails({ ...details, treatment: event.target.value })} />
                   </Field>
-                  <PhotoPicker organisationId={organisationId} farmId={farm.id} restricted files={detailPhotos} onChange={setDetailPhotos} label="Photo of the injury (restricted)" />
+                  <PhotoPicker organisationId={organisationId} farmId={farm.id} farmName={farm.name} restricted files={detailPhotos} onChange={setDetailPhotos} label="Photo of the injury (restricted)" />
                 </fieldset>
               ) : null}
               {notifiable ? <NotifiablePrompt /> : null}
@@ -520,52 +508,9 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
   );
 }
 
-/** Reports saved on this phone and not yet recorded (decision 944). */
-export function WaitingToSend({ organisationId, onSent }: { organisationId: string; onSent: () => void }) {
-  const { user } = useWorkspace();
-  useDraftVersion();
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const waiting = typeof window === "undefined" ? [] : drafts.list(user.id, organisationId);
-  if (!waiting.length) return null;
-  const sendAll = async () => {
-    setBusy(true);
-    let sent = 0;
-    for (const draft of waiting) {
-      const outcome = await sendDraft(drafts, draft, (path, body) => api(path, { method: "POST", body }));
-      if (outcome.result === "sent") sent += 1;
-    }
-    draftsChanged();
-    setBusy(false);
-    setMessage(sent === waiting.length ? `All ${sent} sent and recorded.` : `${sent} of ${waiting.length} sent. The rest are still on this phone.`);
-    if (sent) onSent();
-  };
-  return (
-    <Card title={`Waiting to send (${waiting.length})`} description="Saved on this phone, not yet recorded in Tohyee. Nobody has been told about these yet.">
-      {message ? <Notice tone="info">{message}</Notice> : null}
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {waiting.map((draft) => (
-          <li key={draft.operationId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
-            <strong>{draft.label}</strong> <span className={ui.muted}>· {draft.farmName} · saved {formatDateTime(draft.savedAt)}</span>{" "}
-            {draft.status === "needs_attention" ? <Badge tone="red">Needs attention</Badge> : <Badge tone="amber">Saved on this phone</Badge>}
-            {draft.problem ? <div style={{ color: "var(--danger, #c81e1e)" }}>{draft.problem}</div> : null}
-            {draft.status === "needs_attention" ? (
-              <div>
-                <Button variant="secondary" size="small" onClick={() => { if (window.confirm("Discard this report from the phone? It was never recorded.")) { drafts.remove(draft.operationId); draftsChanged(); } }}>
-                  Discard
-                </Button>
-              </div>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      <div className={ui.actions}>
-        <Button disabled={busy} onClick={() => void sendAll()}>
-          {busy ? "Sending…" : "Send now"}
-        </Button>
-      </div>
-    </Card>
-  );
+/** Safety recorded on this device and not yet in Tohyee (decisions 944, 1009): reports, checks, sign-offs, sign-ins and photos. */
+export function WaitingToSend({ organisationId, farmId, onSent }: { organisationId: string; farmId: string; onSent: () => void }) {
+  return <QueuedWork organisationId={organisationId} farmId={farmId} kinds={["safety."]} title="Safety recorded on this device" onSynced={onSent} />;
 }
 
 // Following reports through -------------------------------------------------------------------------------
@@ -793,13 +738,28 @@ function ActionRow({ organisationId, action, access, people, onChanged }: { orga
   const state = actionState(action, today);
   const [step, setStep] = useState<"done" | "verify" | "reopen" | null>(null);
   const [note, setNote] = useState("");
-  const [photos, setPhotos] = useState<SafetyFile[]>([]);
+  const [photos, setPhotos] = useState<PickedFile[]>([]);
   const [operationId, setOperationId] = useState(newOperationId);
   const { busy, error, run } = useRun();
+  const { queue, items } = useOfflineQueue(organisationId);
+  const online = useOnline();
+  const doneHere = items.find((item) => item.kind === "safety.action.done" && item.meta.actionId === action.recordId && item.status !== "synced");
   const who = action.data.assignedToUserId ? (people.find((person) => person.userId === action.data.assignedToUserId)?.name ?? "a member") : action.data.assignedToName;
   const submit = () =>
     void run(
-      () => api(`/api/farming/safety/actions/${action.recordId}`, { method: "POST", body: { organisationId, operationId, step, expectedVersion: action.version, note: step === "reopen" ? undefined : note, why: step === "reopen" ? note : undefined, files: step === "done" ? photos.map((file) => ({ id: file.id })) : undefined } }),
+      // Marking done can wait on this device (with the version it was done against); checking and reopening are approvals and always go to Tohyee (decision 1015).
+      () =>
+        step === "done"
+          ? submitThroughQueue(queue, {
+              operationId,
+              kind: "safety.action.done",
+              label: `Done: ${action.data.title}`,
+              farmId: action.farmId,
+              farmName: null,
+              meta: { actionId: action.recordId },
+              request: { method: "POST", path: `/api/farming/safety/actions/${action.recordId}`, body: { step, expectedVersion: action.version, note, files: photos.map((file) => ({ id: file.id })) }, refs: waitForFiles(photos, ["files"]) },
+            })
+          : api(`/api/farming/safety/actions/${action.recordId}`, { method: "POST", body: { organisationId, operationId, step, expectedVersion: action.version, note: step === "reopen" ? undefined : note, why: step === "reopen" ? note : undefined } }),
       () => {
         setStep(null);
         setNote("");
@@ -817,7 +777,8 @@ function ActionRow({ organisationId, action, access, people, onChanged }: { orga
         {action.data.verified ? ` · checked${action.data.verified.note ? `: ${action.data.verified.note}` : ""} by ${action.enteredByName || action.enteredByEmail}` : ""}
       </div>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {(access.canRecord || mineToDo) && state !== "withdrawn" ? (
+      {doneHere ? <p className={ui.muted}>Marked done on this device: waiting to send. It isn&apos;t done in Tohyee until it&apos;s sent.</p> : null}
+      {(access.canRecord || mineToDo) && state !== "withdrawn" && !doneHere ? (
         <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
           {!action.data.done ? (
             <Button variant="secondary" size="small" onClick={() => setStep(step === "done" ? null : "done")}>
@@ -842,7 +803,8 @@ function ActionRow({ organisationId, action, access, people, onChanged }: { orga
             <textarea value={note} rows={2} maxLength={2000} required={step !== "verify"} onChange={(event) => setNote(event.target.value)} />
           </Field>
           {step === "done" && action.farmId ? <PhotoPicker organisationId={organisationId} farmId={action.farmId} files={photos} onChange={setPhotos} label="Photo of what was done" /> : null}
-          <Button type="submit" disabled={busy || (step !== "verify" && !note.trim())}>
+          {step !== "done" && !online ? <p className={ui.muted}>Checking and reopening need a connection: Tohyee checks who may do it at the time.</p> : null}
+          <Button type="submit" disabled={busy || (step !== "verify" && !note.trim()) || (step !== "done" && !online)}>
             Save
           </Button>
         </form>

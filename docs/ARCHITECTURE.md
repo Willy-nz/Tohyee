@@ -1690,6 +1690,12 @@ device, the 14-day offline session). `OfflineSupport` in the app shell
 registers the worker and sends the queue. Only one account's copies are on
 a device; unsent work is never deleted by signing out.
 
+Field work offline (decisions 1008-1016) goes through the queue: safety
+reports, checks, sign-offs, sign-ins and the Log's drafts. A photo's
+operation id becomes its `safety_files.id`, so a resend finds it;
+`safety_files.place` (tenant migration 0193) keeps where the phone said it
+was, and visits keep `phoneTime`. Approvals never go through the queue.
+
 ## Background work
 
 The only background job so far is the bank feed sync: every 15 minutes the

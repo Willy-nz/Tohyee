@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { NotFoundError, PayloadTooLargeError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, PayloadTooLargeError, ValidationError } from "@/lib/errors";
 import { canSeeFarm } from "@/lib/farming/access";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { photoTakenAt } from "@/lib/safety/photo-date";
@@ -27,19 +27,44 @@ const TYPES: Record<string, (bytes: Buffer) => boolean> = {
   "application/pdf": (bytes) => bytes.subarray(0, 5).toString("latin1") === "%PDF-",
 };
 
-export type SafetyFile = SafetyFileRef & { contentType: string; sizeBytes: number; photoTaken: string | null; phoneFileTime: string | null; receivedAt: string; uploadedByEmail: string; restricted: boolean };
+/** Where the phone said it was when the photo was taken (#472, decision 1012): as given, never checked against anything. */
+export type PhotoPlace = { latitude: number; longitude: number; accuracyM: number | null; at: string | null };
 
-type FileRow = { id: string; farm_id: string | null; restricted: boolean; file_name: string; content_type: string; size_bytes: number; sha256: string; photo_taken: string | null; phone_file_time: string | null; received_at: string; uploaded_by_user_id: string | null; uploaded_by_email: string };
+export type SafetyFile = SafetyFileRef & { contentType: string; sizeBytes: number; photoTaken: string | null; phoneFileTime: string | null; receivedAt: string; uploadedByEmail: string; restricted: boolean; place: PhotoPlace | null };
+
+type FileRow = { id: string; farm_id: string | null; restricted: boolean; file_name: string; content_type: string; size_bytes: number; sha256: string; photo_taken: string | null; phone_file_time: string | null; received_at: string; uploaded_by_user_id: string | null; uploaded_by_email: string; place: PhotoPlace | null };
+
+const FILE_COLUMNS = "id::text, farm_id::text, restricted, file_name, content_type, size_bytes, sha256, photo_taken, phone_file_time, received_at, uploaded_by_user_id::text, uploaded_by_email, place";
 
 function toFile(row: FileRow): SafetyFile {
-  return { id: row.id, name: row.file_name, sha256: row.sha256, contentType: row.content_type, sizeBytes: row.size_bytes, photoTaken: row.photo_taken, phoneFileTime: row.phone_file_time, receivedAt: row.received_at, uploadedByEmail: row.uploaded_by_email, restricted: row.restricted };
+  return { id: row.id, name: row.file_name, sha256: row.sha256, contentType: row.content_type, sizeBytes: row.size_bytes, photoTaken: row.photo_taken, phoneFileTime: row.phone_file_time, receivedAt: row.received_at, uploadedByEmail: row.uploaded_by_email, restricted: row.restricted, place: row.place ?? null };
+}
+
+/** The phone's place for a photo, if it sent one: numbers in range, or nothing. */
+export function parsePhotoPlace(input: unknown): PhotoPlace | null {
+  if (input === null || input === undefined || input === "") return null;
+  if (typeof input !== "object") throw new ValidationError("The photo's place isn't a place.");
+  const value = input as Record<string, unknown>;
+  const latitude = Number(value.latitude);
+  const longitude = Number(value.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new ValidationError("The photo's place isn't a place.");
+  const accuracy = value.accuracyM === null || value.accuracyM === undefined ? null : Number(value.accuracyM);
+  if (accuracy !== null && (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100000)) throw new ValidationError("The photo's place accuracy isn't a distance.");
+  let at: string | null = null;
+  if (value.at !== null && value.at !== undefined && value.at !== "") {
+    const parsed = new Date(String(value.at));
+    if (Number.isNaN(parsed.getTime())) throw new ValidationError("The photo's place time isn't a time.");
+    at = parsed.toISOString();
+  }
+  // Six decimal places is about 10 cm: more is only noise from the phone.
+  return { latitude: Math.round(latitude * 1e6) / 1e6, longitude: Math.round(longitude * 1e6) / 1e6, accuracyM: accuracy === null ? null : Math.round(accuracy), at };
 }
 
 /**
  * Keeps a photo or PDF for a safety record on a farm. `restricted` files
  * (with incident or medical details) are seen like restricted details.
  */
-export async function uploadSafetyFile(tx: OrgTx, input: { farmId?: unknown; fileName?: unknown; contentType?: unknown; contentBase64?: unknown; phoneFileTime?: unknown; restricted?: unknown }): Promise<SafetyFile> {
+export async function uploadSafetyFile(tx: OrgTx, input: { farmId?: unknown; fileName?: unknown; contentType?: unknown; contentBase64?: unknown; phoneFileTime?: unknown; restricted?: unknown; operationId?: unknown; place?: unknown }): Promise<SafetyFile> {
   await requireFarming(tx);
   requireSafetyReporter(tx);
   const farmId = requireId(input.farmId, "Farm");
@@ -61,11 +86,24 @@ export async function uploadSafetyFile(tx: OrgTx, input: { farmId?: unknown; fil
   }
   // Anyone recording may add a restricted photo (to details they're entering themselves); only they and those with restricted access see it.
   const restricted = input.restricted === true;
+  const place = parsePhotoPlace(input.place);
+  // A photo sent from the phone's queue carries its operation id, which becomes the file's id: sent again
+  // (a dropped connection), the same photo is found instead of kept twice (#472, decision 1012).
+  const operationId = input.operationId === undefined || input.operationId === null || input.operationId === "" ? null : String(input.operationId);
+  if (operationId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) throw new ValidationError("The operation id isn't valid.");
+  if (operationId) {
+    const existing = await tx.query<FileRow & { same: boolean }>(`select ${FILE_COLUMNS}, sha256 = encode(sha256($2::bytea), 'hex') as same from safety_files where id = $1`, [operationId, bytes]);
+    const found = existing.rows[0];
+    if (found) {
+      if (found.uploaded_by_user_id !== tx.actor.userId || !found.same || found.farm_id !== farmId || found.restricted !== restricted) throw new ConflictError("That operation id was already used for another file.");
+      return toFile(found);
+    }
+  }
   const row = await tx.query<FileRow>(
-    `insert into safety_files (id, farm_id, restricted, file_name, content_type, size_bytes, sha256, content, photo_taken, phone_file_time, uploaded_by_user_id, uploaded_by_email)
-     values ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, $11)
-     returning id::text, farm_id::text, restricted, file_name, content_type, size_bytes, sha256, photo_taken, phone_file_time, received_at, uploaded_by_user_id::text, uploaded_by_email`,
-    [randomUUID(), farmId, restricted, fileName, contentType, "0".repeat(64), bytes, contentType === "image/jpeg" ? photoTakenAt(bytes) : null, phoneFileTime, tx.actor.userId, tx.actor.email],
+    `insert into safety_files (id, farm_id, restricted, file_name, content_type, size_bytes, sha256, content, photo_taken, phone_file_time, uploaded_by_user_id, uploaded_by_email, place)
+     values ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, $11, $12)
+     returning ${FILE_COLUMNS}`,
+    [operationId ?? randomUUID(), farmId, restricted, fileName, contentType, "0".repeat(64), bytes, contentType === "image/jpeg" ? photoTakenAt(bytes) : null, phoneFileTime, tx.actor.userId, tx.actor.email, place === null ? null : JSON.stringify(place)],
   );
   await writeAuditEvent(tx, { eventType: "safety.file_added", entityType: "safety_file", entityId: row.rows[0].id, details: { sha256: row.rows[0].sha256, restricted } });
   return toFile(row.rows[0]);
@@ -83,7 +121,7 @@ export async function readSafetyFile(tx: OrgTx, idInput: unknown): Promise<Safet
   const id = typeof idInput === "string" && /^[0-9a-f-]{36}$/i.test(idInput) ? idInput : null;
   const row = id
     ? await tx.query<FileRow & { content: Buffer }>(
-        "select id::text, farm_id::text, restricted, file_name, content_type, size_bytes, sha256, content, photo_taken, phone_file_time, received_at, uploaded_by_user_id::text, uploaded_by_email from safety_files where id = $1",
+        `select ${FILE_COLUMNS}, content from safety_files where id = $1`,
         [id],
       )
     : { rows: [] };
@@ -103,7 +141,7 @@ export async function fileRefs(tx: OrgTx, input: unknown, farmId: string | null,
   if (!ids.length) return [];
   if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) throw new ValidationError("One of those files wasn't found.");
   const rows = await tx.query<FileRow>(
-    "select id::text, farm_id::text, restricted, file_name, content_type, size_bytes, sha256, photo_taken, phone_file_time, received_at, uploaded_by_user_id::text, uploaded_by_email from safety_files where id = any($1::uuid[])",
+    `select ${FILE_COLUMNS} from safety_files where id = any($1::uuid[])`,
     [ids],
   );
   const found = new Map(rows.rows.map((row) => [row.id, row]));
@@ -124,7 +162,7 @@ export async function fileRefs(tx: OrgTx, input: unknown, farmId: string | null,
 export async function describeFiles(tx: OrgTx, refs: readonly SafetyFileRef[]): Promise<SafetyFile[]> {
   if (!refs.length) return [];
   const rows = await tx.query<FileRow>(
-    "select id::text, farm_id::text, restricted, file_name, content_type, size_bytes, sha256, photo_taken, phone_file_time, received_at, uploaded_by_user_id::text, uploaded_by_email from safety_files where id = any($1::uuid[])",
+    `select ${FILE_COLUMNS} from safety_files where id = any($1::uuid[])`,
     [refs.map((ref) => ref.id)],
   );
   const files: SafetyFile[] = [];

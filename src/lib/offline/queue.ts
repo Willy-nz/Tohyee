@@ -113,6 +113,8 @@ export type QueueItem = {
   createdAt: string;
   updatedAt: string;
   syncedAt: string | null;
+  /** Small facts for the screen that made it (the machine checked, a walk's paddock); never sent. */
+  meta: Record<string, unknown>;
 };
 
 export type NewQueueItem = {
@@ -126,6 +128,8 @@ export type NewQueueItem = {
   ready?: boolean;
   /** Files kept with it, by name (photos as compressed copies). */
   blobs?: Record<string, Blob>;
+  /** Small facts for the screen that made it; never sent. */
+  meta?: Record<string, unknown>;
 };
 
 /**
@@ -254,7 +258,7 @@ export type OfflineQueue = {
   storageProblem(): string | null;
   add(item: NewQueueItem): Promise<{ item: QueueItem; stored: boolean }>;
   /** Changes an item never sent (label, body, ready). Refused once a send was tried: make a new item. */
-  change(operationId: string, patch: { label?: string; body?: Record<string, unknown>; ready?: boolean }): Promise<{ item: QueueItem; stored: boolean }>;
+  change(operationId: string, patch: { label?: string; body?: Record<string, unknown>; ready?: boolean; meta?: Record<string, unknown> }): Promise<{ item: QueueItem; stored: boolean }>;
   /** Saved on this device → Waiting to send. */
   markReady(operationId: string): Promise<{ item: QueueItem; stored: boolean }>;
   /** Keeps or replaces a file for an item (tractor mode keeps its track this way as it records). */
@@ -266,6 +270,8 @@ export type OfflineQueue = {
   sync(sender?: Sender): Promise<SyncReport>;
   /** Re-reads the device's copy (another tab changed it). */
   reload(): Promise<void>;
+  /** Tries again to store what only this page has (storage was full or blocked). True when the device now has everything. */
+  retryStorage(): Promise<boolean>;
   subscribe(listener: () => void): () => void;
 };
 
@@ -444,6 +450,7 @@ export async function openQueue(scope: QueueScope, options: QueueOptions = {}): 
         createdAt: time,
         updatedAt: time,
         syncedAt: null,
+        meta: input.meta ?? {},
       };
       const blobs = Object.entries(input.blobs ?? {}).map(([name, blob]) => ({ key: `${operationId}/${name}`, operationId, name, blob }));
       const stored = await put(item, blobs);
@@ -458,6 +465,7 @@ export async function openQueue(scope: QueueScope, options: QueueOptions = {}): 
         label: patch.label ?? current.label,
         request: patch.body ? { ...current.request, body: patch.body } : current.request,
         status: patch.ready === undefined ? current.status : patch.ready ? "waiting" : "saved",
+        meta: patch.meta ?? current.meta,
         updatedAt: now(),
       };
       return { item, stored: await put(item) };
@@ -496,6 +504,11 @@ export async function openQueue(scope: QueueScope, options: QueueOptions = {}): 
       return result ?? { sent: 0, refused: 0, stoppedBecause: "busy" };
     },
     reload,
+    async retryStorage() {
+      const ok = await flush();
+      notify();
+      return ok;
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => {
@@ -504,6 +517,20 @@ export async function openQueue(scope: QueueScope, options: QueueOptions = {}): 
     },
   };
   return queue;
+}
+
+const shared = new Map<string, Promise<OfflineQueue>>();
+
+/** One queue per scope for the whole page, so every screen sees the same items. */
+export function sharedQueue(scope: QueueScope): Promise<OfflineQueue> {
+  const key = scopeKey(scope);
+  let found = shared.get(key);
+  if (!found) {
+    found = openQueue(scope);
+    shared.set(key, found);
+    found.catch(() => shared.delete(key));
+  }
+  return found;
 }
 
 /** Unsent items for an account on this server, in every organisation (the sign-out warning). */

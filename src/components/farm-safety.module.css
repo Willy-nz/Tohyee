@@ -354,3 +354,25 @@
   background: var(--danger-bg, var(--surface));
   color: var(--danger-text, var(--text));
 }
+
+/* A photo kept on this device until it's sent (#472, decision 1012). */
+.pendingPhoto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  padding: 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}

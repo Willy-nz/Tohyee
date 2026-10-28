@@ -5,8 +5,9 @@ import type { ConfirmFunction } from "@/components/confirm-dialog";
 import { setOfflineReader } from "@/lib/client/api";
 import { forgetAccount, recordOnlineSignIn, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
 import { answerOffline, refreshPacks, type RefreshProgress } from "@/lib/offline/packs";
+import { importOldSafetyDrafts } from "@/components/offline-queue";
 import { PACK_REFRESH_MINUTES } from "@/lib/offline/pack-inventory";
-import { openQueue, unsentForAccount } from "@/lib/offline/queue";
+import { openQueue, sharedQueue, unsentForAccount } from "@/lib/offline/queue";
 import styles from "./offline-support.module.css";
 
 /*
@@ -165,10 +166,11 @@ export function OfflineSupport({ userId, organisationId }: { userId: string; org
       const queue = await queuePromise.catch(() => null);
       if (queue && !cancelled) await queue.sync().catch(() => undefined);
     };
-    queuePromise = openQueue({ server: window.location.origin, userId, organisationId });
+    queuePromise = sharedQueue({ server: window.location.origin, userId, organisationId });
     queuePromise.then(
       (queue) => {
         if (cancelled) return;
+        void importOldSafetyDrafts(queue, userId, organisationId).catch(() => 0);
         setUnsent(queue.unsentCount());
         unsubscribe = queue.subscribe(() => setUnsent(queue.unsentCount()));
         void sync();
