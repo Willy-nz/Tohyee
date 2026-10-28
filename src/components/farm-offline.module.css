@@ -1,0 +1,79 @@
+/* Offline farm information (#472 stage 3). */
+
+.status {
+  margin: -8px 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.status a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.page {
+  display: grid;
+  gap: 16px;
+  max-width: 860px;
+}
+
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table th,
+.table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.table tbody th {
+  font-weight: 600;
+}
+
+.size {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.includes {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.problem {
+  display: block;
+  margin-top: 2px;
+  color: var(--danger-text);
+}
+
+.kept {
+  min-width: 7.5rem;
+}

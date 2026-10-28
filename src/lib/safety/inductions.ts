@@ -222,8 +222,23 @@ export async function signIn(tx: OrgTx, input: Record<string, unknown>, how: Sig
     signedHow = "self";
   }
   const audience = audienceOf(input.audience ?? (person.userId ? "worker" : "visitor"), AUDIENCES);
-  const data: VisitData = { person, audience, purpose: optionalString(input.purpose, "What for", { maxLength: 300 }), signedOut: false, leftAt: null, signedHow };
+  const phoneTime = how === "link" ? null : phoneTimeOf(input.phoneTime);
+  const data: VisitData = { person, audience, purpose: optionalString(input.purpose, "What for", { maxLength: 300 }), signedOut: false, leftAt: null, signedHow, ...(phoneTime ? { phoneTime } : {}) };
   return appendEntry<VisitData>(tx, { kind: "visit", change: "created", farmId, happenedOn: todayIsoDate(), data: { ...data }, operationId: input.operationId });
+}
+
+/**
+ * The phone's time for a sign-in or sign-out recorded without a connection
+ * and sent later (#472, decision 1014): kept as the phone's, shown as such,
+ * never in the future, and no more than 7 days back.
+ */
+export function phoneTimeOf(input: unknown, now = Date.now()): string | null {
+  if (input === undefined || input === null || input === "") return null;
+  const time = new Date(String(input));
+  if (Number.isNaN(time.getTime())) throw new ValidationError("The phone's time isn't a date and time.");
+  if (time.getTime() > now + 5 * 60_000) throw new ValidationError("The phone's time is in the future. Check the phone's clock.");
+  if (time.getTime() < now - 7 * 86_400_000) throw new ValidationError("This was recorded on the phone more than 7 days ago. Ask whoever keeps the registers to record it with when it happened.");
+  return time.toISOString();
 }
 
 /**
@@ -231,6 +246,14 @@ export async function signIn(tx: OrgTx, input: Record<string, unknown>, how: Sig
  * fixed with `leftAt` (when they say they left) and why, as a correction.
  */
 export async function signOut(tx: OrgTx, recordId: unknown, input: Record<string, unknown> = {}) {
+  // A sign-out sent again from the phone's queue (a dropped connection) finds the first (#472).
+  if (input.operationId) {
+    const again = await tx.query<{ record_id: string }>("select record_id::text from safety_entries where operation_id = $1 and kind = 'visit'", [String(input.operationId).slice(0, 100)]);
+    if (again.rows[0]) {
+      if (again.rows[0].record_id !== String(recordId)) throw new ConflictError("This save was already sent with different details. Reload and check the record.");
+      return currentRecord<VisitData>(tx, "visit", recordId);
+    }
+  }
   const current = await currentRecord<VisitData>(tx, "visit", recordId);
   if (current.data.signedOut) throw new ValidationError("They're already signed out.");
   const own = current.data.person.userId !== null && current.data.person.userId === tx.actor.userId;
@@ -243,7 +266,11 @@ export async function signOut(tx: OrgTx, recordId: unknown, input: Record<string
     const why = requireString(input.why, "Why it's corrected (e.g. forgot to sign out)", { maxLength: 1000 });
     return appendEntry<VisitData>(tx, { kind: "visit", recordId: current.recordId, expectedVersion: current.version, change: "corrected", farmId: current.farmId, happenedOn: current.happenedOn, data: { ...current.data, signedOut: true, leftAt: leftAt.toISOString(), why } });
   }
-  return appendEntry<VisitData>(tx, { kind: "visit", recordId: current.recordId, expectedVersion: current.version, change: "updated", farmId: current.farmId, happenedOn: current.happenedOn, data: { ...current.data, signedOut: true, leftAt: null } });
+  // Signed out on a phone with no connection: when they left is the phone's time (decision 1014).
+  const phoneTime = phoneTimeOf(input.phoneTime);
+  const signedInAt = current.data.phoneTime ?? current.enteredAt;
+  if (phoneTime && phoneTime < new Date(signedInAt).toISOString()) throw new ValidationError("The phone's sign-out time is before they signed in. Check the phone's clock.");
+  return appendEntry<VisitData>(tx, { kind: "visit", recordId: current.recordId, expectedVersion: current.version, change: "updated", farmId: current.farmId, happenedOn: current.happenedOn, data: { ...current.data, signedOut: true, leftAt: phoneTime, ...(phoneTime ? { phoneTime } : {}) }, operationId: input.operationId });
 }
 
 /** Who has signed in and not out (any day), and today's sign-outs: a reported presence, with when each was last updated. */

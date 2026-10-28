@@ -140,7 +140,7 @@ function SafetyOverview({ organisationId, farm }: { organisationId: string; farm
     <div className={styles.overview}>
       <div className={styles.column}>
         <EmergencyStrip organisationId={organisationId} farm={farm} overview={overview.data} loadError={overview.error} canRecord={Boolean(access?.canRecord)} />
-        <WaitingToSend organisationId={organisationId} onSent={reports.reload} />
+        <WaitingToSend organisationId={organisationId} farmId={farm.id} onSent={reports.reload} />
         <nav aria-label="Everyday safety" className={styles.bigActions}>
           <Link className={styles.bigAction} href={safetyHref({ farmId: farm.id, screen: "report" })}>
             <span className={styles.icon} aria-hidden="true">!</span>
@@ -313,7 +313,7 @@ function ReportScreen({ organisationId, farm }: { organisationId: string; farm: 
   const reports = useReports(organisationId, farm.id, false);
   return (
     <>
-      <WaitingToSend organisationId={organisationId} onSent={reports.reload} />
+      <WaitingToSend organisationId={organisationId} farmId={farm.id} onSent={reports.reload} />
       {reports.error ? <Notice tone="error">{reports.error}</Notice> : null}
       {!reports.data && !reports.error ? <p className={ui.muted}>Loading…</p> : null}
       {reports.data ? <ReportSomething organisationId={organisationId} farm={farm} paddocks={paddocks.list} people={reports.data.people} access={reports.data.access} onSent={reports.reload} /> : null}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { newOperationId } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
+import { pendingOf, submitThroughQueue, type SubmitResult, useOfflineQueue } from "@/components/offline-queue";
 import { useWorkspace } from "@/components/workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
@@ -73,10 +74,15 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
   const [fix, setFix] = useState({ leftAt: "", why: "" });
   const [operationId, setOperationId] = useState(newOperationId);
   const { busy, error, run } = useRun();
-  const done = () => {
+  const { queue, items } = useOfflineQueue(organisationId);
+  const [kept, setKept] = useState<string | null>(null);
+  const pendingIn = pendingOf(items, "safety.visit.in", farm.id);
+  const pendingOut = new Set(pendingOf(items, "safety.visit.out", farm.id).map((item) => String(item.meta.visitId)));
+  const done = (result?: SubmitResult) => {
     setAdding(null);
     setFixing(null);
     setOperationId(newOperationId());
+    setKept(result && result.state !== "synced" ? "Saved on this device, waiting to send. Tohyee's On site list doesn't show it until it's sent." : null);
     onChanged();
   };
   return (
@@ -101,7 +107,20 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void run(() => api("/api/farming/safety/visits", { method: "POST", body: { organisationId, farmId: farm.id, operationId, purpose: person.purpose, ...(adding === "someone" ? { person: { name: person.name, company: person.company, phone: person.phone }, audience: person.audience } : {}) } }), done);
+            // Kept on this device first, with the phone's time (decision 1014).
+            void run(
+              () =>
+                submitThroughQueue(queue, {
+                  operationId,
+                  kind: "safety.visit.in",
+                  label: `Signed in: ${adding === "someone" ? person.name : "me"}`,
+                  farmId: farm.id,
+                  farmName: farm.name,
+                  meta: { who: adding === "someone" ? person.name : "You" },
+                  request: { method: "POST", path: "/api/farming/safety/visits", body: { farmId: farm.id, purpose: person.purpose, phoneTime: new Date().toISOString(), ...(adding === "someone" ? { person: { name: person.name, company: person.company, phone: person.phone }, audience: person.audience } : {}) } },
+                }),
+              done,
+            );
           }}
           style={{ marginBottom: 8 }}
         >
@@ -133,21 +152,48 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
           </Button>
         </form>
       ) : null}
-      {!data.onSite.here.length ? <Empty>Nobody is signed in on {farm.name}.</Empty> : null}
+      {kept ? <Notice tone="warning">{kept}</Notice> : null}
+      {pendingIn.length ? (
+        <ul style={{ listStyle: "none", padding: 0, margin: "0 0 8px" }}>
+          {pendingIn.map((item) => (
+            <li key={item.operationId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
+              <strong>{String(item.meta.who ?? "Someone")}</strong> <Badge tone="amber">Pending</Badge>
+              <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
+                Signed in on this device {formatDateTime(item.createdAt)}, not sent yet. Don&apos;t count on this list for a headcount: others&apos; sign-ins on their own phones may not have arrived either.
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {!data.onSite.here.length && !pendingIn.length ? <Empty>Nobody is signed in on {farm.name}.</Empty> : null}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {data.onSite.here.map((visit) => (
           <li key={visit.recordId} id={recordAnchor("visit", visit.recordId)} style={{ borderTop: "1px solid var(--border)", padding: "8px 0", scrollMarginTop: 72 }}>
             <strong>{whoText(visit.data.person)}</strong> <Badge>{AUDIENCE_LABELS[visit.data.audience].replace(/s$/, "")}</Badge>
             {visit.data.signedHow === "link" ? <> <Badge>{SELF_DECLARED}</Badge></> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
-              Signed in {formatDateTime(visit.firstEnteredAt)}
+              Signed in {visit.data.phoneTime && Date.parse(visit.firstEnteredAt) - Date.parse(visit.data.phoneTime) > 120_000 ? `${formatDateTime(visit.data.phoneTime)} on a phone, sent ${formatDateTime(visit.firstEnteredAt)}` : formatDateTime(visit.firstEnteredAt)}
               {visit.data.purpose ? ` · ${visit.data.purpose}` : ""} · {SIGNED_HOW_LABELS[visit.data.signedHow]}
               {visit.happenedOn && visit.happenedOn < new Date().toISOString().slice(0, 10) ? " · still signed in from an earlier day" : ""}
             </div>
             <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-              <Button size="small" variant="secondary" disabled={busy} onClick={() => void run(() => api(`/api/farming/safety/visits/${visit.recordId}`, { method: "POST", body: { organisationId } }), done)}>
-                Sign out now
-              </Button>
+              {pendingOut.has(visit.recordId) ? (
+                <Badge tone="amber">Signed out on this device, not sent yet</Badge>
+              ) : (
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(
+                      () => submitThroughQueue(queue, { operationId: newOperationId(), kind: "safety.visit.out", label: `Signed out: ${whoText(visit.data.person)}`, farmId: farm.id, farmName: farm.name, meta: { visitId: visit.recordId }, request: { method: "POST", path: `/api/farming/safety/visits/${visit.recordId}`, body: { phoneTime: new Date().toISOString() } } }),
+                      done,
+                    )
+                  }
+                >
+                  Sign out now
+                </Button>
+              )}
               {data.canRecord ? (
                 <Button size="small" variant="secondary" onClick={() => setFixing(fixing === visit.recordId ? null : visit.recordId)}>
                   They left earlier…
@@ -158,7 +204,7 @@ function OnSiteCard({ organisationId, farm, data, onChanged }: { organisationId:
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void run(() => api(`/api/farming/safety/visits/${visit.recordId}`, { method: "POST", body: { organisationId, leftAt: new Date(fix.leftAt).toISOString(), why: fix.why } }), done);
+                  void run(() => api(`/api/farming/safety/visits/${visit.recordId}`, { method: "POST", body: { organisationId, leftAt: new Date(fix.leftAt).toISOString(), why: fix.why } }), () => done());
                 }}
               >
                 <div className={ui.inlineForm}>
@@ -372,6 +418,7 @@ export function ReadAndSign({ organisationId, farm, inductionId, forSomeone, onD
   const [audience, setAudience] = useState<Audience | "">("");
   const [operationId] = useState(newOperationId);
   const { busy, error, run } = useRun();
+  const { queue } = useOfflineQueue(organisationId);
   if (toRead.error) return <Notice tone="error">{toRead.error}</Notice>;
   if (!toRead.data) return <p className={ui.muted}>Loading…</p>;
   const { induction, hazards, emergency } = toRead.data;
@@ -406,7 +453,20 @@ export function ReadAndSign({ organisationId, farm, inductionId, forSomeone, onD
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void run(() => api("/api/farming/safety/signoffs", { method: "POST", body: { organisationId, farmId: farm.id, inductionId, inductionVersion: induction.version, acknowledged: ticked, audience: chosen, operationId, ...(forSomeone ? { person } : {}) } }), onDone);
+          // Signed against the version shown; kept on this device first (decision 1014). A newer version on Tohyee refuses it, and it asks to read again.
+          void run(
+            () =>
+              submitThroughQueue(queue, {
+                operationId,
+                kind: "safety.signoff",
+                label: `Signed: ${induction.data.title} (version ${induction.version})${forSomeone ? ` for ${person.name}` : ""}`,
+                farmId: farm.id,
+                farmName: farm.name,
+                meta: { inductionId, inductionVersion: induction.version },
+                request: { method: "POST", path: "/api/farming/safety/signoffs", body: { farmId: farm.id, inductionId, inductionVersion: induction.version, acknowledged: ticked, audience: chosen, ...(forSomeone ? { person } : {}) } },
+              }),
+            onDone,
+          );
         }}
         style={{ marginTop: 12 }}
       >

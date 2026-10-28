@@ -37,7 +37,7 @@ export function StatusBadge({ status, stored = true }: { status: DraftStatus; st
 }
 
 /** When the phone's storage refused the records (full or blocked): they're only on this page until sent (#463). */
-function StorageWarning({ stored, waiting, onRetry, onSend }: { stored: boolean; waiting: number; onRetry: () => boolean; onSend: () => void }) {
+function StorageWarning({ stored, waiting, onRetry, onSend }: { stored: boolean; waiting: number; onRetry: () => Promise<boolean>; onSend: () => void }) {
   const [failedAgain, setFailedAgain] = useState(false);
   if (stored || !waiting) return null;
   return (
@@ -47,8 +47,8 @@ function StorageWarning({ stored, waiting, onRetry, onSend }: { stored: boolean;
       </p>
       {failedAgain ? <p>Still couldn&apos;t save. Free up space on the phone or leave private browsing, then try again.</p> : null}
       <div className={styles.actions}>
-        <Button variant="secondary" onClick={() => setFailedAgain(!onRetry())}>
-          Try saving on this phone again
+        <Button variant="secondary" onClick={async () => setFailedAgain(!(await onRetry()))}>
+          Try saving on this device again
         </Button>
         <Button onClick={onSend}>Send now</Button>
       </div>

@@ -9478,6 +9478,253 @@ reviewed by Jess**. Claude, 28 October 2026.
      for 200% zoom). No claim is made of being better than SafeAg or
      SiteSmart.
 
+### Tohyee on phones and tablets: install and the offline queue (#472 stage 2; decisions 990-998)
+
+From the "Plan, with Jess's answers" comment on #472 (28 October 2026): an
+installable web app first, no app store; offline farm information and
+safety before tractor mode. Where Jess's answers didn't settle a detail,
+the choice below follows what the platforms document and is **not yet
+reviewed by Jess**. Claude, 28 October 2026. Not yet tried on a real
+iPhone or Android phone (stage 1's spike is for people with the phones).
+
+990. **An installable web app, served by Tohyee itself.** A web app
+     manifest (`/manifest.webmanifest`: Tohyee, opening `/` on the server it
+     was added from, in its own window), the app icon as PNGs (192, 512, a
+     maskable 512 and the 180 px Apple touch icon, drawn from
+     `src/app/icon.svg`) and a small hand-written service worker
+     (`public/sw.js`, rules in `public/sw-rules.js`), not a library: it's
+     about 300 lines with no dependencies, and Serwist (the library Next's
+     guide names) would add a build step for little gain. The worker is
+     always checked with the server (`Cache-Control: no-cache`), so a new
+     Tohyee replaces it at once. No app store, no native app (Jess).
+991. **Get Tohyee on this device** (`/get-tohyee`): open signed in or not,
+     so it can be sent as a link; linked from the account menu, the phone
+     menu, the sign-in page and Farm › More. It works out the device and
+     shows its steps first (iPhone and iPad: Safari › Share › Add to Home
+     Screen › Add, and sign in once more in the installed app because iOS
+     keeps its sign-in separate from Safari's; Android: Chrome › Install or
+     ⋮ › Install app, with an **Install Tohyee** button where Chrome offers
+     one; computers: the install icon in Chrome or Edge), the other devices
+     folded away, and what works offline. It names the server it opens.
+992. **HTTPS or this computer only, and saying why.** Browsers only allow a
+     service worker in a secure context. On a plain-http home-network
+     address (192.168.x.x and the like, `.local`) the page says to use the
+     Tohyee web address from Remote access instead; on a Tailscale address
+     without HTTPS (100.64.0.0/10 or `.ts.net`) it says to turn on HTTPS
+     certificates in Tailscale and use `tailscale serve`, which keeps it
+     private to the tailnet. Tohyee still works in the browser there; it
+     just can't be installed or used offline.
+993. **One account's copies per device, kept apart, signing out safely.**
+     The worker keeps pages per server and account (a cache named by a hash
+     of both; another server's are another origin's anyway); farm
+     information (stage 3) and the queue are per server, account and
+     organisation. When a different account signs in online on the device,
+     the previous account's pages and farm information are deleted first.
+     Signing out asks first if anything isn't sent: **Send now** or not,
+     then, if some still can't go, says they stay on this device only for
+     that account and go at its next sign-in there, and that nobody has
+     been told; then it deletes the pages and farm information. Unsent work
+     is never deleted by signing out. Switching organisation (each tab keeps
+     its own, #143) doesn't delete anything: copies are only ever read for
+     their own organisation, and a person switching between their own
+     organisations would otherwise lose their offline farm each time.
+994. **The offline session: 14 days.** The device's copies open without a
+     connection only within 14 days of the last time Tohyee confirmed the
+     sign-in online (the same 14 days a session lasts without use). After
+     that the worker shows "Sign in to open Tohyee's offline copies" instead
+     of a saved page, and stage 3's farm information stays locked, until an
+     online sign-in. A sign-in revoked on the server can't reach a phone
+     that's offline: the phone keeps what it had for up to those 14 days,
+     and nothing it sends is accepted once the session has ended (every
+     send is checked by the server as usual). Pages that need Tohyee say
+     so, with links to the pages saved on the device; opening the app's
+     icon with no connection goes to the farm's Today.
+995. **One durable queue in IndexedDB** (`src/lib/offline/queue.ts`,
+     database `tohyee-offline`), never localStorage. It generalises #447's
+     drafts (decisions 912-913, 971-972) for every kind of field work,
+     including tractor mode (stage 5): `openQueue(scope)`, `add`, `change`
+     (only before a send was tried), `markReady`, `putBlob`, `sync`,
+     `dismiss`, `subscribe`. Statuses: **Unsaved** (storage refused it;
+     only this page has it), **Saved on this device** (kept, not ready to
+     send), **Waiting to send**, **Synced**, **Needs attention** (refused,
+     with Tohyee's reason). A full device says so in words. Synced items go
+     after a week, unless a waiting item still uses them.
+996. **Sending: once, in order, honestly.** Each item carries its stable
+     operation id and is sent to its own farm's address with
+     `organisationId` and `operationId` added. The latest stored copy is
+     read before each send and only that item changes. No connection, a
+     timeout, a rate limit or a server error stops the run and keeps
+     everything waiting in order; a 401 waits for sign-in; another 4xx
+     (including a version conflict, 409) is Needs attention and is never
+     sent again by itself. Files are kept as blobs beside the item and put
+     into the request (base64) only when sent; a later item can use an
+     earlier one's answer (a report naming the photo uploaded before it)
+     and waits until that one is synced. "Resumable" here means each photo
+     is its own step that is tried again from the start, without making a
+     second record; uploads aren't split into parts.
+997. **When it sends.** On opening a signed-in page, when the connection
+     comes back, when the app is brought back to the screen and every 30
+     seconds while something waits. One tab sends at a time (a Web Lock);
+     the server's operation ids catch anything that slips through.
+     Background Sync isn't relied on (it's Chrome-only).
+998. **Approvals never wait in the queue.** Releasing equipment, checking,
+     closing or reopening an action, and permission changes are refused by
+     the queue: they need the server's current permission when they're
+     given (#446 decisions 946, 955 and 969; #472's safety comment).
+
+### Offline farm information, kept automatically (#472 stage 3; decisions 999-1007)
+
+Jess, 28 October 2026: "Kept offline automatically: all the person's
+permitted farms, the last 12 months of records, and small copies of
+photos. Originals and older history are downloaded on request." The rest
+is **not yet reviewed by Jess**. Claude, 28 October 2026. Not yet tried on
+a real phone.
+
+999. **Kept by itself, a section at a time.** After an online sign-in, and
+     whenever Tohyee is open with a connection (opening a page, the
+     connection coming back, the app coming back to the screen, and every
+     15 minutes), every active farm the person can see is kept on the
+     device in IndexedDB (`src/lib/offline/packs.ts`), one part (section)
+     at a time, most useful first: farms and settings, safety, map and
+     paddocks, pasture, calendar, equipment, inductions and training,
+     fertiliser plans, soil, notebook, photos. A part kept in the last 15
+     minutes isn't fetched again. One tab does it at a time (a Web Lock).
+     Farms the person can no longer see (access removed, farm archived) are
+     deleted from the device at the next update. Nobody has to open each
+     screen first.
+1000. **Built by the server from the screens' own reads.** `GET
+     /api/farming/offline-pack` lists the farms and parts; with `section`
+     and `farmId` it builds one part by calling the very route handlers the
+     farm screens call, with the person's own request, so roles, farm
+     access (decision 744), farm staff (decision 961) and restricted
+     details apply exactly as on the screens. A read the role doesn't allow
+     (the notebook and fertiliser plans for farm staff) is left out and
+     named. History is the last 12 months (grazings, feed, readings,
+     closed safety reports, the calendar back a year and ahead three
+     months); open safety reports and mobs still in are always kept.
+1001. **Never in a pack, whoever asks:** injury and medical details and
+     restricted photos (even for an owner who may see them online: a lost
+     phone mustn't carry them), the email text behind calendar items (farm
+     mail is its member's own, decision 571), farm mail itself, the books,
+     and payroll. The farm routes never return the books or payroll in the
+     first place.
+1002. **Screens read the pack when Tohyee can't be reached.** `api()`
+     answers a farm read from the device when the request fails (or a
+     gateway says the computer is off: 502, 503, 504, 52x, 530), for the
+     signed-in person and organisation only, within the 14-day offline
+     session (decision 994); locked after that. Values that change day to
+     day (the date asked about, page sizes) are ignored, so the answer is
+     the last known one; the calendar is narrowed to the dates asked and
+     the notebook's search and category work on what's kept. Under the
+     farm bar a notice says **Last known information, kept on this
+     device**, with the oldest part's time, that mobs, machinery, actions
+     and people on site may have changed, and that lists and searches only
+     cover what's kept. Online, the same place says **Ready offline**,
+     **Partly ready offline** or **Preparing for offline use**, with a
+     count while it's being prepared.
+1003. **The last good copy stays until a new one has fully arrived.** A
+     part is replaced in one IndexedDB write only once its new copy is
+     complete. A refused part keeps its previous copy and shows why; no
+     connection part way stops the update, keeping what arrived; a full
+     device keeps the previous copy and says storage is full. A farm is
+     **Ready offline** only when every part is kept and its last update
+     worked. Photos are small copies (800 pixels, made on the server with
+     the `sharp` library Next.js already installs; the original if that
+     isn't there and it's small); documents up to 2 MB; each fetched once
+     (files never change once kept, decision 945). The service worker
+     shows a kept photo when Tohyee can't be reached.
+1004. **Extras on request, per farm:** **Keep 3 years of history** and
+     **Keep original photos and large files** on the Offline page; they're
+     fetched at the next update and dropped again when turned off.
+1005. **The Offline page** (`/operations/farm/offline`, Farm › More ›
+     Offline on this device; opens offline too): each farm's parts with
+     when they were kept, size and any problem, what was left out, the
+     browser's storage figures, **Ask to keep it** (persistent storage),
+     **Update now**, extras, and removing one farm or everything kept.
+     Removing never touches work waiting to be sent, and the count of
+     waiting work is shown. What's removed comes back at the next update
+     (it's automatic), which the confirmation says.
+1006. **Switching farms never mixes records.** Every kept answer belongs
+     to the farm and query it was asked for; a read for another farm, or
+     another organisation or account, is never answered from it.
+1007. **Not in this change:** LINZ imagery offline (its terms need
+     checking in the spike; boundaries and paddocks work without it), a
+     separate livestock register (mobs come from grazings, as on the
+     screens), other farm contacts beyond the emergency details, and the
+     emergency card's own localStorage copy (decision 940), which stays as
+     it was.
+
+### Offline work through the queue, and safety offline (#472 stage 4; decisions 1008-1016)
+
+From the plan on #472 ("one local queue in IndexedDB, building on #458's
+operation IDs; photos with GPS and time, plus resumable uploads; safety …
+following #446's layout; honest status, with approvals always needing the
+server") and the safety comment on #472. **Not yet reviewed by Jess.**
+Claude, 28 October 2026. Not yet tried on a real phone.
+
+1008. **Kept on the device first, then sent.** Safety reports, pre-start
+     checks, marking an action done, induction sign-offs, signing in and
+     out, photos, and the Log's records all go through the one queue
+     (decision 995): kept on the device, then sent straight away when
+     Tohyee can be reached. A refusal straight away (a mistake in the
+     form) is shown on the form as before and nothing is left on the
+     device; with no connection the form says **Saved on this device,
+     waiting to send. Nobody has been told yet**, and it goes by itself
+     when Tohyee can be reached (decision 997).
+1009. **What's waiting is listed where it was made.** The Safety overview
+     lists the farm's safety records on this device with their status in
+     words, Tohyee's reason when one was refused, **Let it go** for those,
+     and **Send now**; synced ones stay listed for the day. Records for
+     other farms are counted and go to their own farm.
+1010. **Safety reports move from their own store into the queue** (decision
+     944's "it moves to #447's shared drafts" when the rules match). Reports
+     an earlier version kept in localStorage are moved in once, with their
+     operation ids, and let go there only when the queue has them.
+1011. **The Log's drafts live in the queue too.** The Log keeps its rules
+     (decisions 912-913, 971-972): each draft is a queue item with its
+     operation id, sent to its own farm's address; the walk in progress is
+     kept beside the queue in IndexedDB. Drafts in localStorage from an
+     earlier version are moved in the same way. "Saved on this phone" is
+     now **Waiting to send**, and "Not saved on this phone" **Unsaved**,
+     the queue's words.
+1012. **Photos: small copies, the phone's time, and where only if asked**
+     (tenant migration 0193). A photo is compressed on the phone (1600
+     pixels, JPEG) and kept as soon as it's chosen; with no connection it
+     waits on the device and the record naming it waits for it. Its
+     operation id becomes the file's id on Tohyee, so a photo sent again is
+     found, not kept twice. "Add where I am to the photo" (off unless
+     ticked) keeps the phone's latitude, longitude, accuracy and fix time
+     as the phone gave them (`safety_files.place`); the phone's file time
+     is kept as before (decision 945) and Tohyee's receipt time is the
+     server's. A copy loses the camera's EXIF date (the phone's time
+     stays). Each photo is one step, tried again from the start; uploads
+     aren't split into parts.
+1013. **Pre-start checks offline, against the checklist shown.** The check
+     is saved with the checklist version on the phone (decision 954); if
+     the checklist changed before it arrives, Tohyee refuses it and it
+     needs attention ("The checklist has changed since it was opened. Open
+     it again."). A failed critical item shows at once on the machine as
+     **Fault on this device**: don't use it, nobody has been told yet; the
+     machine is put out of use and the action made only when Tohyee records
+     the check (decision 955).
+1014. **Sign-offs, signing in and out offline.** A sign-off carries the
+     induction version read; a newer version on Tohyee refuses it and asks
+     for it to be read again (decision 949). Signing in and out keep the
+     phone's time (`phoneTime` on the visit, at most 7 days back and not in
+     the future), shown as "on a phone, sent …" when it arrived later; a
+     sign-out's time is when the phone says they left. Pending sign-ins are
+     listed as **Pending** with a warning not to rely on the list for a
+     headcount. A sign-out sent twice signs out once (its operation id).
+1015. **Approvals always need Tohyee.** Releasing a machine, checking,
+     closing and reopening actions say they need a connection and can't be
+     saved for later (decision 998); marking your own action done can, with
+     the version it was done against, and is refused if someone changed it
+     first.
+1016. **Not in this change:** hazards added offline by those who keep the
+     registers (they still need a connection), editing emergency details
+     offline, training and chemicals offline, and the emergency card's own
+     localStorage copy (decision 940), which stays.
+
 ### Tractor and spreader mode (#472 stage 5; decisions 1020-1027)
 
 Jess decided (#472, "Plan, with Jess's answers", 28 October 2026): tractor

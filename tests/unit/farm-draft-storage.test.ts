@@ -25,7 +25,7 @@ describe("draft storage", () => {
       storage.subscribe(() => (notified += 1));
       expect(storage.write("k", "draft A")).toBe(false);
       expect(storage.stored("k")).toBe(false);
-      expect(draftStatusLabel("saved", storage.stored("k"))).toBe("Not saved on this phone");
+      expect(draftStatusLabel("saved", storage.stored("k"))).toBe("Unsaved");
       // The record is still there to show and send.
       expect(storage.read("k")).toBe("draft A");
       // Another tab's change doesn't throw away the only copy.
@@ -37,7 +37,7 @@ describe("draft storage", () => {
       disk.failWith = null;
       expect(storage.retry("k")).toBe(true);
       expect(storage.stored("k")).toBe(true);
-      expect(draftStatusLabel("saved", storage.stored("k"))).toBe("Saved on this phone");
+      expect(draftStatusLabel("saved", storage.stored("k"))).toBe("Waiting to send");
       expect(createDraftStorage(() => disk).read("k")).toBe("draft A");
       expect(notified).toBeGreaterThanOrEqual(3);
     });
@@ -50,7 +50,7 @@ describe("draft storage", () => {
     expect(storage.read("k")).toBe("x");
   });
 
-  it("says Saved on this phone only when storage took it; synced and needs attention are unchanged", () => {
+  it("says Waiting to send only when storage took it (Unsaved otherwise, #472); synced and needs attention are unchanged", () => {
     const disk = new FakeStorage();
     const storage = createDraftStorage(() => disk);
     expect(storage.write("k", "x")).toBe(true);

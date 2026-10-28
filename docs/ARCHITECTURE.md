@@ -1657,6 +1657,45 @@ Hardening (#208, decision 483):
 - **HSTS** (`max-age=31536000`, no subdomains) on every response; browsers
   ignore it over plain HTTP.
 
+## Tohyee on phones and tablets (#472)
+
+An installable web app, not a native one (decisions 990-998;
+docs/MOBILE-APP.md). `src/app/manifest.ts` and the icons make it
+installable; `public/sw.js` (rules in `public/sw-rules.js`, tested in
+`tests/unit/offline-device.test.ts`) is a hand-written service worker:
+
+- Built files (`/_next/static/`), icons and the manifest: cache first, in
+  `tohyee-static-v1`.
+- The farm pages and `/get-tohyee`: network first (8 seconds), and a copy
+  kept in `tohyee-pages-<hash of server and account>`; with no connection
+  the copy, only within 14 days of the last online sign-in. Every other
+  page: network only, with a page saying it needs a connection.
+- Never the API: data for offline use is kept by the page in IndexedDB,
+  where permissions and expiry apply.
+- The page tells the worker who's signed in (`context`, which deletes other
+  accounts' pages) and when they sign out (`signedOut`).
+
+Offline farm packs (decisions 999-1007): `GET /api/farming/offline-pack`
+builds one part of one farm by calling the farm routes' own GET handlers
+with the person's request (so permissions are the screens'), then removes
+restricted details and mail text (`src/lib/offline/pack-redact.ts`). The
+page keeps each part in `packSections`, replacing it only once a new copy
+has fully arrived, and `api()` answers farm reads from it when Tohyee
+can't be reached. Photos are small copies made with `sharp`.
+
+`src/lib/offline/` holds the `tohyee-offline` IndexedDB database (stores
+`meta`, `queue`, `blobs`, `packs`, `packSections`), the queue of work
+waiting for the server, and the device rules (one account's copies per
+device, the 14-day offline session). `OfflineSupport` in the app shell
+registers the worker and sends the queue. Only one account's copies are on
+a device; unsent work is never deleted by signing out.
+
+Field work offline (decisions 1008-1016) goes through the queue: safety
+reports, checks, sign-offs, sign-ins and the Log's drafts. A photo's
+operation id becomes its `safety_files.id`, so a resend finds it;
+`safety_files.place` (tenant migration 0193) keeps where the phone said it
+was, and visits keep `phoneTime`. Approvals never go through the queue.
+
 ## Background work
 
 The only background job so far is the bank feed sync: every 15 minutes the

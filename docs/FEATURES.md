@@ -2914,6 +2914,53 @@ that something happened.
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
   deaths.
 
+- **Tohyee on phones and tablets: install** (#472, decisions 990-998;
+  [MOBILE-APP.md](MOBILE-APP.md)): **Get Tohyee on this device**
+  (`/get-tohyee`) gives each device's steps (iPhone and iPad: Safari ›
+  Share › Add to Home Screen; Android: Chrome › Install), with the app icon
+  and a web app manifest, so Tohyee opens from the Home Screen on the server
+  it was added from. A service worker keeps the farm pages (Today, Map, Log,
+  Safety, More) so they open with no signal, for 14 days after the last
+  online sign-in; other pages say they need a connection. Copies are kept
+  per server and account; signing out deletes them after offering to send
+  anything not sent, which is kept. A durable queue in IndexedDB
+  (`src/lib/offline/queue.ts`) holds work recorded on the device with
+  Unsaved / Saved on this device / Waiting to send / Synced / Needs
+  attention, sending each once by its operation id; approvals are never
+  queued. Needs HTTPS (Remote access or Tailscale HTTPS); a home-network
+  http address works in the browser but not offline. Not yet tried on a
+  real iPhone or Android phone. Next: offline farm information (#472 stage
+  3), then offline safety and Log work through the queue (stage 4).
+
+- **Offline farm information, kept automatically** (#472 stage 3, decisions
+  999-1007): every farm the person can see is kept on the device after an
+  online sign-in and whenever Tohyee is open with a connection, a part at a
+  time: safety (emergency details, hazards, reports without injury
+  details), map and paddocks, pasture, grazing and feed for 12 months, the
+  calendar, equipment, inductions and training, fertiliser plans, soil,
+  the notebook and small copies of photos. Built on the server from the
+  farm screens' own reads as the person, so permissions match; never
+  injury or medical details, restricted photos, farm mail, the books or
+  payroll. With no connection the farm screens show it, labelled **Last
+  known information**. The last good copy of each part stays until a new
+  one has arrived. Farm › More › **Offline on this device** shows what's
+  kept, when and how big, with extras (3 years, original photos), Update
+  now and removal (never of unsent work). Not yet tried on a real phone.
+
+- **Offline work and safety without a signal** (#472 stage 4, decisions
+  1008-1016): safety reports with photos, pre-start checks, marking your
+  action done, induction sign-offs, signing in and out, and the Log's
+  records are kept on the device first and sent once when Tohyee can be
+  reached, through the one queue (the Log's and safety's old localStorage
+  drafts move into it). Photos are compressed copies with the phone's time
+  and, if asked, where the phone was (tenant migration 0193); a photo's
+  operation id is its file id, so it's never kept twice. A failed critical
+  check shows **Fault on this device** at once; a changed checklist or
+  induction makes a queued check or sign-off need attention; sign-ins keep
+  the phone's time and show as **Pending**. Releasing machines and
+  checking or closing actions always need a connection. Not yet tried on a
+  real phone.
+
 - **Tractor and spreader mode** (#472 stage 5, decisions 1020-1027; tenant
   migration 0197): Farm › Map › **Tractor mode** (also under More). Choose
   spreading, spraying, mowing or other work, the paddocks (or none, an
