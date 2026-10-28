@@ -194,6 +194,9 @@ export function LoginForm({
               Forgotten your password? A server admin can reset it from Users, or on the server with{" "}
               <code>npm run admin -- set-password</code>.
             </p>
+            <p className={styles.text}>
+              <a href="/get-tohyee">Get Tohyee on this device</a>: put it on your phone or tablet&apos;s Home Screen.
+            </p>
           </>
         ) : null}
       </div>

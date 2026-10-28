@@ -9477,3 +9477,97 @@ reviewed by Jess**. Claude, 28 October 2026.
      screen reader or with real browser zoom (a 195 px wide window stood in
      for 200% zoom). No claim is made of being better than SafeAg or
      SiteSmart.
+
+### Tohyee on phones and tablets: install and the offline queue (#472 stage 2; decisions 990-998)
+
+From the "Plan, with Jess's answers" comment on #472 (28 October 2026): an
+installable web app first, no app store; offline farm information and
+safety before tractor mode. Where Jess's answers didn't settle a detail,
+the choice below follows what the platforms document and is **not yet
+reviewed by Jess**. Claude, 28 October 2026. Not yet tried on a real
+iPhone or Android phone (stage 1's spike is for people with the phones).
+
+990. **An installable web app, served by Tohyee itself.** A web app
+     manifest (`/manifest.webmanifest`: Tohyee, opening `/` on the server it
+     was added from, in its own window), the app icon as PNGs (192, 512, a
+     maskable 512 and the 180 px Apple touch icon, drawn from
+     `src/app/icon.svg`) and a small hand-written service worker
+     (`public/sw.js`, rules in `public/sw-rules.js`), not a library: it's
+     about 300 lines with no dependencies, and Serwist (the library Next's
+     guide names) would add a build step for little gain. The worker is
+     always checked with the server (`Cache-Control: no-cache`), so a new
+     Tohyee replaces it at once. No app store, no native app (Jess).
+991. **Get Tohyee on this device** (`/get-tohyee`): open signed in or not,
+     so it can be sent as a link; linked from the account menu, the phone
+     menu, the sign-in page and Farm › More. It works out the device and
+     shows its steps first (iPhone and iPad: Safari › Share › Add to Home
+     Screen › Add, and sign in once more in the installed app because iOS
+     keeps its sign-in separate from Safari's; Android: Chrome › Install or
+     ⋮ › Install app, with an **Install Tohyee** button where Chrome offers
+     one; computers: the install icon in Chrome or Edge), the other devices
+     folded away, and what works offline. It names the server it opens.
+992. **HTTPS or this computer only, and saying why.** Browsers only allow a
+     service worker in a secure context. On a plain-http home-network
+     address (192.168.x.x and the like, `.local`) the page says to use the
+     Tohyee web address from Remote access instead; on a Tailscale address
+     without HTTPS (100.64.0.0/10 or `.ts.net`) it says to turn on HTTPS
+     certificates in Tailscale and use `tailscale serve`, which keeps it
+     private to the tailnet. Tohyee still works in the browser there; it
+     just can't be installed or used offline.
+993. **One account's copies per device, kept apart, signing out safely.**
+     The worker keeps pages per server and account (a cache named by a hash
+     of both; another server's are another origin's anyway); farm
+     information (stage 3) and the queue are per server, account and
+     organisation. When a different account signs in online on the device,
+     the previous account's pages and farm information are deleted first.
+     Signing out asks first if anything isn't sent: **Send now** or not,
+     then, if some still can't go, says they stay on this device only for
+     that account and go at its next sign-in there, and that nobody has
+     been told; then it deletes the pages and farm information. Unsent work
+     is never deleted by signing out. Switching organisation (each tab keeps
+     its own, #143) doesn't delete anything: copies are only ever read for
+     their own organisation, and a person switching between their own
+     organisations would otherwise lose their offline farm each time.
+994. **The offline session: 14 days.** The device's copies open without a
+     connection only within 14 days of the last time Tohyee confirmed the
+     sign-in online (the same 14 days a session lasts without use). After
+     that the worker shows "Sign in to open Tohyee's offline copies" instead
+     of a saved page, and stage 3's farm information stays locked, until an
+     online sign-in. A sign-in revoked on the server can't reach a phone
+     that's offline: the phone keeps what it had for up to those 14 days,
+     and nothing it sends is accepted once the session has ended (every
+     send is checked by the server as usual). Pages that need Tohyee say
+     so, with links to the pages saved on the device; opening the app's
+     icon with no connection goes to the farm's Today.
+995. **One durable queue in IndexedDB** (`src/lib/offline/queue.ts`,
+     database `tohyee-offline`), never localStorage. It generalises #447's
+     drafts (decisions 912-913, 971-972) for every kind of field work,
+     including tractor mode (stage 5): `openQueue(scope)`, `add`, `change`
+     (only before a send was tried), `markReady`, `putBlob`, `sync`,
+     `dismiss`, `subscribe`. Statuses: **Unsaved** (storage refused it;
+     only this page has it), **Saved on this device** (kept, not ready to
+     send), **Waiting to send**, **Synced**, **Needs attention** (refused,
+     with Tohyee's reason). A full device says so in words. Synced items go
+     after a week, unless a waiting item still uses them.
+996. **Sending: once, in order, honestly.** Each item carries its stable
+     operation id and is sent to its own farm's address with
+     `organisationId` and `operationId` added. The latest stored copy is
+     read before each send and only that item changes. No connection, a
+     timeout, a rate limit or a server error stops the run and keeps
+     everything waiting in order; a 401 waits for sign-in; another 4xx
+     (including a version conflict, 409) is Needs attention and is never
+     sent again by itself. Files are kept as blobs beside the item and put
+     into the request (base64) only when sent; a later item can use an
+     earlier one's answer (a report naming the photo uploaded before it)
+     and waits until that one is synced. "Resumable" here means each photo
+     is its own step that is tried again from the start, without making a
+     second record; uploads aren't split into parts.
+997. **When it sends.** On opening a signed-in page, when the connection
+     comes back, when the app is brought back to the screen and every 30
+     seconds while something waits. One tab sends at a time (a Web Lock);
+     the server's operation ids catch anything that slips through.
+     Background Sync isn't relied on (it's Chrome-only).
+998. **Approvals never wait in the queue.** Releasing equipment, checking,
+     closing or reopening an action, and permission changes are refused by
+     the queue: they need the server's current permission when they're
+     given (#446 decisions 946, 955 and 969; #472's safety comment).

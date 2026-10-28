@@ -442,6 +442,9 @@ export function FarmMore({ organisationId, farm }: FarmContext) {
         </Card>
       )}
       <AppTiles organisationId={organisationId} farmId={farm.id} manage />
+      <Card title="This phone or tablet" description="Put Tohyee on the Home Screen. The farm pages then open without a signal.">
+        <LinkList links={[{ href: "/get-tohyee", label: "Get Tohyee on this device", staff: true }]} />
+      </Card>
     </div>
   );
 }

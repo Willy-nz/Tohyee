@@ -2914,6 +2914,24 @@ that something happened.
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
   deaths.
 
+- **Tohyee on phones and tablets: install** (#472, decisions 990-998;
+  [MOBILE-APP.md](MOBILE-APP.md)): **Get Tohyee on this device**
+  (`/get-tohyee`) gives each device's steps (iPhone and iPad: Safari ›
+  Share › Add to Home Screen; Android: Chrome › Install), with the app icon
+  and a web app manifest, so Tohyee opens from the Home Screen on the server
+  it was added from. A service worker keeps the farm pages (Today, Map, Log,
+  Safety, More) so they open with no signal, for 14 days after the last
+  online sign-in; other pages say they need a connection. Copies are kept
+  per server and account; signing out deletes them after offering to send
+  anything not sent, which is kept. A durable queue in IndexedDB
+  (`src/lib/offline/queue.ts`) holds work recorded on the device with
+  Unsaved / Saved on this device / Waiting to send / Synced / Needs
+  attention, sending each once by its operation id; approvals are never
+  queued. Needs HTTPS (Remote access or Tailscale HTTPS); a home-network
+  http address works in the browser but not offline. Not yet tried on a
+  real iPhone or Android phone. Next: offline farm information (#472 stage
+  3), then offline safety and Log work through the queue (stage 4).
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
