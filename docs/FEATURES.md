@@ -2932,6 +2932,21 @@ that something happened.
   real iPhone or Android phone. Next: offline farm information (#472 stage
   3), then offline safety and Log work through the queue (stage 4).
 
+- **Offline farm information, kept automatically** (#472 stage 3, decisions
+  999-1007): every farm the person can see is kept on the device after an
+  online sign-in and whenever Tohyee is open with a connection, a part at a
+  time: safety (emergency details, hazards, reports without injury
+  details), map and paddocks, pasture, grazing and feed for 12 months, the
+  calendar, equipment, inductions and training, fertiliser plans, soil,
+  the notebook and small copies of photos. Built on the server from the
+  farm screens' own reads as the person, so permissions match; never
+  injury or medical details, restricted photos, farm mail, the books or
+  payroll. With no connection the farm screens show it, labelled **Last
+  known information**. The last good copy of each part stays until a new
+  one has arrived. Farm › More › **Offline on this device** shows what's
+  kept, when and how big, with extras (3 years, original photos), Update
+  now and removal (never of unsent work). Not yet tried on a real phone.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

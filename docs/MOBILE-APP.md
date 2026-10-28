@@ -47,15 +47,49 @@ Phones only install a web app and keep it offline on an HTTPS address (or
 
 | | Offline |
 |---|---|
-| Farm › Today, Map, Log, Safety, More (the pages) | Open, once opened with a connection |
+| Farm › Today, Map, Log, Safety, More, Offline (the pages) | Open, once Tohyee has been opened with a connection |
+| Your farms' information (below) | Kept automatically; shown as **last known** |
 | Get Tohyee on this device | Opens |
 | The books, reports, settings and everything else | Needs a connection; says so |
 | Recording field work | Kept on the device and sent later (as each screen adds it) |
 | Approvals (releasing equipment, checking or closing actions) | Always need a connection |
 
-The farm information those pages show offline arrives with offline farm
-packs (#472 stage 3). Until then, a farm page opened offline shows that
-Tohyee can't be reached.
+### Farm information kept on the device
+
+After you sign in with a connection, and whenever Tohyee is open with one,
+every farm you can see is kept on the device by itself (decisions
+999-1007). Nobody has to open each screen first. Farm › More › **Offline on
+this device** shows each farm's parts, when each was kept and its size.
+
+| Part | What's kept |
+|---|---|
+| Farms and settings | The farms you can see, which farm you were on, map settings, farm app tiles |
+| Safety | Emergency details, hazards and no-go zones, reports and actions (never injury or medical details), what needs doing |
+| Map and paddocks | Paddocks with boundaries and areas; each paddock's last known cover, mob and grazing |
+| Pasture, grazing and feed | Farm cover and wedge; readings, grazings and feed for the last 12 months; mobs in now |
+| Calendar and jobs | Your farm calendar, 12 months back to 3 months ahead (no email text) |
+| Equipment and checklists | Machines, checklists, last known status and recent checks; chemicals |
+| Inductions and training | Inductions to read and sign, with the farm's hazards and emergency details; training |
+| Fertiliser plans | The farm's plans and their applications; products (not for Farm staff) |
+| Soil tests | Samples, results and the summary |
+| Farm notebook | The notebook (not for Farm staff) |
+| Photos and documents | Small copies of safety photos (800 pixels); safety data sheets up to 2 MB |
+
+Never kept on a device, whoever you are: injury and medical details and
+restricted photos (even for owners), farm mail and the email text behind
+calendar items, the books, and payroll.
+
+What you see offline is the **last known** information: a notice under the
+farm bar says when it was kept, that mobs, machinery, actions and who's on
+site may have changed, and that lists and searches only cover what's kept.
+If an update fails part way, the previous copy of that part stays. On the
+Offline page you can keep 3 years of history or original photos for a farm,
+update now, or remove a farm's copy (it's kept again at the next update).
+
+Not kept yet: LINZ aerial imagery (whether it may be kept offline is for
+the spike; paddock boundaries show without it), a separate livestock
+register (mobs come from grazings), and farm contacts beyond the emergency
+details.
 
 ### Limits
 
@@ -124,3 +158,9 @@ waits. Each record carries its own id, so sending it twice records it once.
   page) sends the queue; screens can call `queue.sync()` too.
 - `src/lib/offline/device.ts`: platform and address checks, the service
   worker messages, the 14-day rule and one account per device.
+- Farm packs: `src/lib/offline/pack-inventory.ts` (the parts and answering
+  a read from them), `pack-server.ts` (built from the farm routes' own
+  handlers), `pack-redact.ts` (what never goes in), `packs.ts` (keeping
+  and reading them on the device), `GET /api/farming/offline-pack` and
+  `/api/farming/offline-pack/file`. `api()` asks the pack when Tohyee
+  can't be reached (`setOfflineReader`).

@@ -235,6 +235,55 @@ function withTimeout(promise, ms) {
   });
 }
 
+/** Opens the page's offline database only if it's there (never creates it: the page owns its layout). */
+function openOfflineData() {
+  return new Promise(function (resolve) {
+    var req = indexedDB.open("tohyee-offline");
+    req.onupgradeneeded = function () {
+      req.transaction.abort();
+    };
+    req.onsuccess = function () {
+      resolve(req.result);
+    };
+    req.onerror = function () {
+      resolve(null);
+    };
+  });
+}
+
+/** A safety photo or document kept in an offline farm pack (#472 stage 3), for this account only, within its offline session. */
+function packFile(fileId) {
+  return readContext().then(function (ctx) {
+    if (!ctx || !R.sessionState(ctx.verifiedAt, Date.now()).open) return null;
+    var prefix = encodeURIComponent(self.location.origin) + "|" + encodeURIComponent(ctx.userId) + "|";
+    return openOfflineData().then(function (db) {
+      if (!db || !db.objectStoreNames.contains("packSections")) return null;
+      return new Promise(function (resolve) {
+        var found = null;
+        var req = db.transaction("packSections", "readonly").objectStore("packSections").openCursor();
+        req.onsuccess = function () {
+          var cursor = req.result;
+          if (!cursor || found) {
+            db.close();
+            resolve(found);
+            return;
+          }
+          var value = cursor.value || {};
+          if (String(value.scope || "").indexOf(prefix) === 0) {
+            (value.files || []).forEach(function (file) {
+              if (file.id === fileId) found = file;
+            });
+          }
+          cursor.continue();
+        };
+        req.onerror = function () {
+          resolve(null);
+        };
+      });
+    });
+  });
+}
+
 self.addEventListener("install", function () {
   self.skipWaiting();
 });
@@ -314,6 +363,19 @@ self.addEventListener("fetch", function (event) {
   if (req.method !== "GET") return;
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  var fileMatch = /^\/api\/farming\/safety\/files\/([0-9a-f-]{36})$/i.exec(url.pathname);
+  if (fileMatch) {
+    // Photos open from the offline farm pack when Tohyee can't be reached.
+    event.respondWith(
+      fetch(req).catch(function (error) {
+        return packFile(fileMatch[1]).then(function (file) {
+          if (!file) throw error;
+          return new Response(file.blob, { status: 200, headers: { "content-type": file.contentType, "cache-control": "no-store", "x-tohyee-offline-copy": file.copy } });
+        });
+      }),
+    );
+    return;
+  }
   if (url.pathname.indexOf("/api/") === 0) return;
 
   if (R.isStaticAsset(url.pathname)) {

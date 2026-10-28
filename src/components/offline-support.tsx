@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ConfirmFunction } from "@/components/confirm-dialog";
+import { setOfflineReader } from "@/lib/client/api";
 import { forgetAccount, recordOnlineSignIn, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
+import { answerOffline, refreshPacks, type RefreshProgress } from "@/lib/offline/packs";
+import { PACK_REFRESH_MINUTES } from "@/lib/offline/pack-inventory";
 import { openQueue, unsentForAccount } from "@/lib/offline/queue";
 import styles from "./offline-support.module.css";
 
@@ -56,11 +59,61 @@ async function verifyOnline(): Promise<boolean> {
   }
 }
 
+// Offline farm packs being prepared (#472 stage 3): for the farm bar and the Offline page.
+let progress: (RefreshProgress & { running: boolean }) | null = null;
+const progressListeners = new Set<() => void>();
+function setProgress(next: typeof progress) {
+  progress = next;
+  progressListeners.forEach((listener) => listener());
+}
+
+/** The pack refresh running in this tab, if any. */
+export function usePackProgress() {
+  return useSyncExternalStore(
+    (listener) => {
+      progressListeners.add(listener);
+      return () => {
+        progressListeners.delete(listener);
+      };
+    },
+    () => progress,
+    () => null,
+  );
+}
+
+const NOT_FARMING_KEY = "tohyee.offline.notFarming";
+
+/** Keeps the person's farms on the device (decision 999). Runs at most one at a time; sections kept in the last 15 minutes are skipped. */
+export async function refreshFarmPacks(userId: string, organisationId: string, options: { force?: boolean; farmId?: string } = {}) {
+  try {
+    if (window.sessionStorage.getItem(`${NOT_FARMING_KEY}.${organisationId}`) && !options.force) return null;
+  } catch {
+    // fine
+  }
+  if (!navigator.onLine) return null;
+  setProgress({ done: 0, total: 0, farmName: null, section: null, running: true });
+  try {
+    const result = await refreshPacks({ server: window.location.origin, userId, organisationId }, { ...options, onProgress: (next) => setProgress({ ...next, running: true }) });
+    if (result.outcome === "not_farming") {
+      try {
+        window.sessionStorage.setItem(`${NOT_FARMING_KEY}.${organisationId}`, "1");
+      } catch {
+        // fine
+      }
+    }
+    return result;
+  } catch {
+    return null;
+  } finally {
+    setProgress(null);
+  }
+}
+
 export function OfflineSupport({ userId, organisationId }: { userId: string; organisationId: string | null }) {
   const online = useOnline();
   const [unsent, setUnsent] = useState(0);
 
-  // The service worker, and who it keeps pages for.
+  // The service worker, who it keeps pages for, then the farm packs.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -69,9 +122,35 @@ export function OfflineSupport({ userId, organisationId }: { userId: string; org
       if (cancelled) return;
       if (verified) await recordOnlineSignIn(window.location.origin, userId, new Date()).catch(() => undefined);
       if (registration) await tellServiceWorker({ type: "context", userId, organisationId, online: verified });
+      if (!cancelled && organisationId) await refreshFarmPacks(userId, organisationId);
     })();
     return () => {
       cancelled = true;
+    };
+  }, [userId, organisationId]);
+
+  // Screens' reads answered from the device when Tohyee can't be reached; packs refreshed when the connection comes back.
+  useEffect(() => {
+    if (!organisationId) return;
+    const scope = { server: window.location.origin, userId, organisationId };
+    setOfflineReader(async (path, query) => {
+      if (!path.startsWith("/api/farming/") && path !== "/api/farm-notebook") return null;
+      if (query.organisationId !== organisationId) return null;
+      const answer = await answerOffline(scope, path, query);
+      return answer.found ? { body: answer.body, savedAt: answer.savedAt } : answer.locked ? { locked: true } : null;
+    });
+    const refresh = () => void refreshFarmPacks(userId, organisationId);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(refresh, PACK_REFRESH_MINUTES * 60_000);
+    return () => {
+      setOfflineReader(null);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
     };
   }, [userId, organisationId]);
 
@@ -114,7 +193,7 @@ export function OfflineSupport({ userId, organisationId }: { userId: string; org
   if (online) return null;
   return (
     <div className={styles.banner} role="status" data-print="hide">
-      <strong>You&apos;re offline.</strong> Farm pages saved on this device still open.
+      <strong>You&apos;re offline.</strong> Farm pages and farm information kept on this device still open.
       {unsent ? ` ${unsent} record${unsent === 1 ? " is" : "s are"} waiting on this device to be sent.` : " Anything you record waits on this device until Tohyee can be reached."}
     </div>
   );

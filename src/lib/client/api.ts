@@ -42,6 +42,55 @@ export function setApiTransport(next: ApiTransport | null): void {
   transport = next;
 }
 
+/**
+ * Answers a read when Tohyee can't be reached, from what's kept on this
+ * device (#472 offline farm packs). Set by OfflineSupport for the signed-in
+ * person and organisation; null answers "nothing kept".
+ */
+export type OfflineReader = (path: string, query: Record<string, string | number | boolean | null | undefined>) => Promise<{ body: unknown; savedAt: string } | { locked: true } | null>;
+let offlineReader: OfflineReader | null = null;
+
+export function setOfflineReader(next: OfflineReader | null): void {
+  offlineReader = next;
+}
+
+/** Reads this page answered from the device, and when each was kept: for the "last known" label. */
+const offlineServed = new Map<string, string>();
+const servedListeners = new Set<() => void>();
+let servedSnapshot: ReadonlyMap<string, string> = new Map();
+
+export function subscribeOfflineServed(listener: () => void): () => void {
+  servedListeners.add(listener);
+  return () => {
+    servedListeners.delete(listener);
+  };
+}
+
+export function offlineServedSnapshot(): ReadonlyMap<string, string> {
+  return servedSnapshot;
+}
+
+function noteServed(path: string, savedAt: string | null) {
+  if (savedAt === null ? !offlineServed.has(path) : offlineServed.get(path) === savedAt) return;
+  if (savedAt === null) offlineServed.delete(path);
+  else offlineServed.set(path, savedAt);
+  servedSnapshot = new Map(offlineServed);
+  servedListeners.forEach((listener) => listener());
+}
+
+/** Gateway answers that mean Tohyee itself couldn't be reached (a tunnel with the computer off). */
+const UNREACHABLE_STATUSES = new Set([502, 503, 504, 521, 522, 523, 530]);
+
+async function fromDevice<T>(path: string, options: Options): Promise<T> {
+  const answer = offlineReader && (options.method ?? "GET") === "GET" ? await offlineReader(path, options.query ?? {}).catch(() => null) : null;
+  if (answer && "locked" in answer) throw new ApiError("What's kept on this device is locked: it's more than 14 days since you signed in with a connection. Sign in with a connection to open it.", 0, "offline_locked");
+  if (answer) {
+    noteServed(path, answer.savedAt);
+    return answer.body as T;
+  }
+  throw new ApiError(OFFLINE_MESSAGE, 0, "offline");
+}
+
 /** What a request says when Tohyee can't be reached. */
 export const OFFLINE_MESSAGE = "Tohyee can't be reached from this device just now. Check the connection, then try again.";
 
@@ -64,9 +113,17 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
       credentials: "same-origin",
     });
   } catch {
-    // No connection (or the server is down): say so in words, not "Failed to fetch" (#472).
-    throw new ApiError(OFFLINE_MESSAGE, 0, "offline");
+    // No connection (or the server is down): what's kept on the device, or say so in words, not "Failed to fetch" (#472).
+    return fromDevice<T>(path, options);
   }
+  if (UNREACHABLE_STATUSES.has(response.status) && (options.method ?? "GET") === "GET") {
+    try {
+      return await fromDevice<T>(path, options);
+    } catch {
+      // Nothing kept: the gateway's own answer below.
+    }
+  }
+  if (response.ok && (options.method ?? "GET") === "GET") noteServed(path, null);
   let payload: unknown = null;
   try {
     payload = await response.json();
