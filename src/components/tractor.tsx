@@ -51,6 +51,7 @@ import {
 } from "@/lib/farming/tractor-shared";
 import { hazardNote, hazardsForMap, type PackHazards, reviewedJob, SEND_STATE_LABELS, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
 import { forgetSent, localJobs, localPoints, type LocalJob, removeLocal, saveLocal, tractorStoreAvailable } from "@/lib/farming/tractor-store";
+import { clearGapNote, readGapNote, type TrackWriter, trackWriter, unsavedGap, type WriterStatus } from "@/lib/farming/tractor-writer";
 import { answerOffline } from "@/lib/offline/packs";
 import type { OfflineQueue, QueueItem } from "@/lib/offline/queue";
 import type { CurrentRecord, HazardData } from "@/lib/safety/shared";
@@ -105,6 +106,8 @@ function clockNow(): number {
  */
 async function handOver(queue: OfflineQueue, job: LocalJob): Promise<LocalJob> {
   const points = await localPoints(job.id);
+  // Only the whole track as recorded goes: never one with fixes the device didn't keep (decision 1057).
+  if (points.length !== job.pointCount) throw new Error(`${job.pointCount - points.length} GPS fixes aren't kept on this device yet, so the job wasn't sent. Keep this screen open, free up some space and try again.`);
   const { stored } = await queue.add(tractorQueueItem(job, points));
   // Not stored: only this page has it (the device's storage refused it); the job stays "finished" and is handed over again.
   return stored ? saveLocal({ ...job, state: "queued", problem: null }) : job;
@@ -598,7 +601,8 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
   const [points, setPoints] = useState<TrackPoint[]>([]);
   const [coverage, setCoverage] = useState<{ result: CoverageResult; upTo: number } | null>(null);
   const [wake, setWake] = useState<WakeState>("off");
-  const [saveProblem, setSaveProblem] = useState<string | null>(null);
+  const [writeStatus, setWriteStatus] = useState<WriterStatus | null>(null);
+  const [gapNotice, setGapNotice] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [follow, setFollow] = useState(true);
   const [now, setNow] = useState(() => Date.now());
@@ -609,27 +613,27 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
   const [widthOpen, setWidthOpen] = useState(false);
   const jobRef = useRef(job);
   const pointsRef = useRef<TrackPoint[]>([]);
-  const writes = useRef<Promise<unknown>>(Promise.resolve());
   const [loaded, setLoaded] = useState(false);
+  // Everything recorded waits here until the device has kept it, and is written in order (decision 1057).
+  const writer = useMemo(() => trackWriter({ save: saveLocal, initial, onChange: setWriteStatus }), [initial]);
+  useEffect(() => () => writer.stop(), [writer]);
+  const saveProblem = savedProblemText(writeStatus);
 
   /** Applies a recorder step: keeps it in memory and on the device, in order. */
-  const apply = useCallback((step: Step) => {
-    if (!step.points.length && !step.events.length && step.state === jobRef.current.recorder) return;
-    const before = jobRef.current;
-    const next: LocalJob = { ...before, recorder: step.state, events: [...before.events, ...step.events], pointCount: before.pointCount };
-    jobRef.current = { ...next, pointCount: before.pointCount + step.points.length };
-    setJob(jobRef.current);
-    if (step.points.length) {
-      pointsRef.current = [...pointsRef.current, ...step.points];
-      setPoints(pointsRef.current);
-    }
-    writes.current = writes.current
-      .then(() => saveLocal(next, step.points))
-      .then(
-        () => setSaveProblem(null),
-        (error) => setSaveProblem(`NOT SAVED ON THIS DEVICE: ${errorMessage(error)} Free up space; what's on screen will be lost if Tohyee closes.`),
-      );
-  }, []);
+  const apply = useCallback(
+    (step: Step) => {
+      if (!step.points.length && !step.events.length && step.state === jobRef.current.recorder) return;
+      const before = jobRef.current;
+      jobRef.current = { ...before, recorder: step.state, events: [...before.events, ...step.events], pointCount: before.pointCount + step.points.length };
+      setJob(jobRef.current);
+      if (step.points.length) {
+        pointsRef.current = [...pointsRef.current, ...step.points];
+        setPoints(pointsRef.current);
+      }
+      writer.push(jobRef.current, step.points);
+    },
+    [writer],
+  );
 
   // Load what's already recorded; a job that was recording when Tohyee closed comes back paused.
   useEffect(() => {
@@ -639,6 +643,13 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
       pointsRef.current = stored;
       setPoints(stored);
       setLoaded(true);
+      // Tohyee closed while some fixes weren't kept: record the gap, never join the track across it.
+      const gap = unsavedGap(readGapNote(initial.id), stored.length);
+      clearGapNote(initial.id);
+      if (gap) {
+        setGapNotice(`Some GPS fixes from ${new Date(gap.since).toLocaleTimeString("en-NZ", { timeStyle: "short" })} weren't kept on this device before Tohyee closed (its storage was full). The track has a gap there; nothing was made up to fill it.`);
+        apply({ state: { ...jobRef.current.recorder, breakNext: true }, points: [], events: [{ t: gap.since, kind: "not_saved" }] });
+      }
       if (initial.pointCount > 0 || initial.events.length > 1) {
         if (initial.recorder.status !== "finished") apply(reopenRecorder(jobRef.current.recorder, Date.now()));
       }
@@ -790,7 +801,7 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
   const where = paddockLabel(job.paddockNames);
 
   if (reviewing) {
-    return <FinishReview job={job} points={points} imageryKey={imageryKey} onSaved={(next) => setJob(next)} onClose={onClose} />;
+    return <FinishReview job={job} points={points} imageryKey={imageryKey} writer={writer} writeStatus={writeStatus} gapNotice={gapNotice} onSaved={(next) => setJob(next)} onClose={onClose} />;
   }
 
   return (
@@ -812,6 +823,11 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
         {saveProblem ? (
           <div className={styles.banner} data-tone="danger" role="alert">
             <strong>{saveProblem}</strong>
+          </div>
+        ) : null}
+        {gapNotice ? (
+          <div className={styles.banner} data-tone="warning" role="status">
+            <span>{gapNotice}</span>
           </div>
         ) : null}
       </header>
@@ -906,7 +922,7 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
                 const done: LocalJob = { ...jobRef.current, finishedAt: Date.now(), state: "finished" };
                 jobRef.current = done;
                 setJob(done);
-                writes.current = writes.current.then(() => saveLocal({ ...done, pointCount: done.pointCount }, []));
+                writer.push(done);
                 setAskFinish(false);
                 setReviewing(true);
               }}
@@ -971,7 +987,32 @@ function WidthSheet({ current, onClose, onSave }: { current: JobSettings | undef
 
 // Finishing ------------------------------------------------------------------------------------------------
 
-function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: LocalJob; points: TrackPoint[]; imageryKey: string | null; onSaved: (job: LocalJob) => void; onClose: (sent: boolean) => void }) {
+/** The warning while some of what was recorded isn't kept on the device (decision 1057). Null once it all is. */
+export function savedProblemText(status: WriterStatus | null): string | null {
+  if (!status?.problem) return null;
+  const what = status.unsavedFixes ? `${status.unsavedFixes} GPS fix${status.unsavedFixes === 1 ? "" : "es"}${status.since ? ` since ${new Date(status.since).toLocaleTimeString("en-NZ", { timeStyle: "short" })}` : ""} ${status.unsavedFixes === 1 ? "is" : "are"} only on this screen` : "The latest changes are only on this screen";
+  return `NOT SAVED ON THIS DEVICE: ${status.problem} ${what}. Free up space: Tohyee keeps trying, and they'll be lost if it closes first.`;
+}
+
+function FinishReview({
+  job,
+  points,
+  imageryKey,
+  writer,
+  writeStatus,
+  gapNotice,
+  onSaved,
+  onClose,
+}: {
+  job: LocalJob;
+  points: TrackPoint[];
+  imageryKey: string | null;
+  writer: TrackWriter;
+  writeStatus: WriterStatus | null;
+  gapNotice: string | null;
+  onSaved: (job: LocalJob) => void;
+  onClose: (sent: boolean) => void;
+}) {
   // The numbers from every fix, not the last few seconds' estimate.
   const shown = useMemo(() => computeCoverage({ settings: job.settings, points }, job.boundaries.map((entry) => entry.geometry)), [job.settings, job.boundaries, points]);
   const [notes, setNotes] = useState(job.notes ?? "");
@@ -989,11 +1030,22 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
   const [reviewedAt] = useState(() => Date.now());
   const summary = shown.summary;
   const typed = () => ({ notes, product, rate, rateUnit, quantity, quantityUnit });
+  const unsaved = savedProblemText(writeStatus);
+  /** Keeps the reviewed job, and every fix still waiting, on the device. Null when the device still refuses (nothing is sent then). */
+  const keep = async (): Promise<LocalJob | null> => {
+    const reviewed = reviewedJob(job, typed());
+    writer.push(reviewed);
+    if (!(await writer.flush())) return null;
+    return { ...reviewed, pointCount: writer.status().kept };
+  };
+  const notKept = () => setOutcome({ sent: false, tone: "error", text: `${savedProblemText(writer.status()) ?? "It couldn't be saved on this device."} Nothing was sent: the job goes only once all of its track is kept here.` });
   // Send later keeps what was typed: the job goes with the rest of the work on this device either way (decision 1048).
   const later = async () => {
     setSending(true);
     try {
-      onSaved(await saveLocal(reviewedJob(job, typed())));
+      const kept = await keep();
+      if (!kept) return notKept();
+      onSaved(kept);
       onClose(false);
     } catch (error) {
       setOutcome({ sent: false, tone: "error", text: `It couldn't be saved on this device: ${errorMessage(error)}` });
@@ -1004,7 +1056,8 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
   const send = async () => {
     setSending(true);
     try {
-      const saved = await saveLocal(reviewedJob(job, typed()));
+      const saved = await keep();
+      if (!saved) return notKept();
       onSaved(saved);
       if (!queue) {
         setOutcome({ sent: false, tone: "warning", text: "Saved on this device. It will be sent from the tractor page when the device's list of work to send opens." });
@@ -1085,6 +1138,8 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
       <Field label="Notes">
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} rows={3} />
       </Field>
+      {gapNotice ? <Notice tone="warning">{gapNotice}</Notice> : null}
+      {unsaved && !outcome ? <Notice tone="error">{unsaved} It can&apos;t be sent until all of its track is kept here.</Notice> : null}
       {outcome?.sent ? <Notice tone="success">Sent. The job is on the server and can be seen on the website.</Notice> : null}
       {outcome && !outcome.sent ? <Notice tone={outcome.tone}>{outcome.text}</Notice> : null}
       <div className={styles.row}>

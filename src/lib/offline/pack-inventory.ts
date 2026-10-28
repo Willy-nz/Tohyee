@@ -56,8 +56,8 @@ export const NEVER_IN_A_PACK = [
 /** One stored read: the API path, the query it was asked with (no organisationId), and the answer. */
 export type PackEntry = { path: string; query: Record<string, string>; body: unknown };
 
-/** Query values that change from day to day (or page to page): ignored when answering from the pack. */
-const VOLATILE = new Set(["organisationId", "onDate", "from", "to", "limit", "cursor", "version"]);
+/** Query values that never change an answer (the organisation is the scope's; a version only reloads). */
+const IGNORED = new Set(["organisationId", "version"]);
 
 /** The query as api() sends it: strings, no empty values; a false flag is the same as none (`includeWithdrawn: false`). */
 export function normaliseQuery(query: Record<string, string | number | boolean | null | undefined>): Record<string, string> {
@@ -66,30 +66,101 @@ export function normaliseQuery(query: Record<string, string | number | boolean |
   return out;
 }
 
-function sameKeys(a: Record<string, string>, b: Record<string, string>): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((key) => !VOLATILE.has(key) && !FILTERED.has(key)));
-  for (const key of keys) if ((a[key] ?? "") !== (b[key] ?? "")) return false;
+/** A downloaded history (grazings, feed, cover readings): every record from `heldFrom`, paged on the device (decision 1054). */
+export type HistoryRead = { pattern: RegExp; rows: string; date: string };
+
+export const HISTORY_READS: HistoryRead[] = [
+  { pattern: /^\/api\/farming\/farms\/[^/]+\/grazings$/, rows: "grazings", date: "inOn" },
+  { pattern: /^\/api\/farming\/farms\/[^/]+\/supplements$/, rows: "supplements", date: "fedOn" },
+  { pattern: /^\/api\/farming\/farms\/[^/]+\/pasture\/readings$/, rows: "readings", date: "measuredOn" },
+];
+
+/** What a downloaded history covers, kept with it: from this date, and whether every record since then is there. */
+export type HistoryBounds = { heldFrom: string; complete: boolean; count: number };
+
+/** A history page's size when none is asked for: the server's (decision 901). */
+export const HISTORY_PAGE_SIZE = 25;
+/** Records per read when a pack downloads a history: the server's most. */
+export const HISTORY_DOWNLOAD_PAGE = 1000;
+/** A pack keeps at most this many of one history; more is said, never implied (decision 1054). */
+export const HISTORY_DOWNLOAD_MAX = 20_000;
+
+/** Query values a history answers on the device: dates, paddock and paging. */
+const HISTORY_LOCAL = new Set(["from", "to", "paddockId", "cursor", "limit"]);
+/** Query values the calendar and notebook answer by filtering what's stored. */
+const FILTERED: Record<string, Set<string>> = {
+  "/api/farming/calendar": new Set(["from", "to"]),
+  "/api/farming/safety/due": new Set(["from", "to"]),
+  "/api/farm-notebook": new Set(["search", "category"]),
+};
+
+function historyRead(path: string): HistoryRead | null {
+  return HISTORY_READS.find((read) => read.pattern.test(path)) ?? null;
+}
+
+/** Whether a stored read answers this query: every value must match, bar those answered on the device and a summary's date. */
+function matches(entry: PackEntry, path: string, query: Record<string, string>, local: Set<string>): boolean {
+  const keys = new Set([...Object.keys(entry.query), ...Object.keys(query)].filter((key) => !IGNORED.has(key) && !local.has(key) && key !== "onDate"));
+  for (const key of keys) if ((entry.query[key] ?? "") !== (query[key] ?? "")) return false;
+  // A summary for a date (the farm's cover on a day) is only the saved one's day or later: an earlier day was never worked out here (decision 1055).
+  if (query.onDate && entry.query.onDate && query.onDate < entry.query.onDate) return false;
   return true;
 }
 
-/** Query values answered by filtering what's stored (so they work offline), rather than by a separate stored answer. */
-const FILTERED = new Set(["search", "category"]);
-
 type Item = Record<string, unknown>;
 
+/** Newest first by date, then id (ids are whole numbers as text). */
+function before(a: { date: string; id: string }, b: { date: string; id: string }): boolean {
+  if (a.date !== b.date) return a.date < b.date;
+  if (a.id.length !== b.id.length) return a.id.length < b.id.length;
+  return a.id < b.id;
+}
+
+const CURSOR = /^(\d{4}-\d{2}-\d{2})_([1-9]\d{0,17})$/;
+
 /**
- * Answers a read from a pack's entries, or null. Day-to-day values (the
- * date asked about, a page size) are ignored: the answer is the last known
- * one, which the screen labels. A few reads are narrowed to what was asked:
- * the calendar to its dates, the notebook to its search and category.
+ * A page of a downloaded history, as the server would give it for the
+ * records on the device: dates, paddock, cursor and page size honoured,
+ * newest first, ending with `next: null` (decision 1054). Undefined for a
+ * cursor that isn't one.
+ */
+export function historyPage(body: Item, read: HistoryRead, query: Record<string, string>): Item | undefined {
+  const rows = (Array.isArray(body[read.rows]) ? (body[read.rows] as Item[]) : []).map((row) => ({ row, date: String(row[read.date] ?? ""), id: String(row.id ?? "") }));
+  rows.sort((a, b) => (before(a, b) ? 1 : before(b, a) ? -1 : 0));
+  let after: { date: string; id: string } | null = null;
+  if (query.cursor) {
+    const match = CURSOR.exec(query.cursor);
+    if (!match) return undefined;
+    after = { date: match[1], id: match[2] };
+  }
+  const limit = query.limit && /^\d+$/.test(query.limit) ? Math.max(1, Math.min(Number(query.limit), HISTORY_DOWNLOAD_PAGE)) : HISTORY_PAGE_SIZE;
+  const chosen = rows.filter(
+    (entry) => (!query.paddockId || String(entry.row.paddockId ?? "") === query.paddockId) && (!query.from || entry.date >= query.from) && (!query.to || entry.date <= query.to) && (!after || before(entry, after)),
+  );
+  const page = chosen.slice(0, limit);
+  const last = page[page.length - 1];
+  const next = chosen.length > limit && last ? `${last.date}_${last.id}` : null;
+  const bounds = (body.offline as HistoryBounds | undefined) ?? null;
+  return { ...body, [read.rows]: page.map((entry) => entry.row), next, offline: bounds };
+}
+
+/**
+ * Answers a read from a pack's entries, or null. Downloaded histories are
+ * paged on the device (decision 1054); the calendar is narrowed to its
+ * dates, the notebook to its search and category. A summary for a date is
+ * answered only for the saved day or later, as the last known one, which
+ * the screen labels (decision 1055). Anything else must match exactly.
  */
 export function answerFromEntries(entries: PackEntry[], path: string, rawQuery: Record<string, string | number | boolean | null | undefined>): unknown | undefined {
   const query = normaliseQuery(rawQuery);
-  const entry = entries.find((candidate) => candidate.path === path && sameKeys(candidate.query, query));
+  const history = query.open ? null : historyRead(path);
+  const local = history ? HISTORY_LOCAL : (FILTERED[path] ?? new Set<string>());
+  const entry = entries.find((candidate) => candidate.path === path && matches(candidate, path, query, local));
   if (!entry) return undefined;
-  if (path === "/api/farming/calendar" && query.from && query.to && entry.body && typeof entry.body === "object") {
+  if (history && entry.body && typeof entry.body === "object") return historyPage(entry.body as Item, history, query);
+  if ((path === "/api/farming/calendar" || path === "/api/farming/safety/due") && entry.body && typeof entry.body === "object") {
     const body = entry.body as { items?: Item[] };
-    return { ...body, items: (body.items ?? []).filter((item) => typeof item.date !== "string" || (item.date >= query.from && item.date <= query.to)) };
+    return { ...body, items: (body.items ?? []).filter((item) => typeof item.date !== "string" || ((!query.from || item.date >= query.from) && (!query.to || item.date <= query.to))) };
   }
   if (path === "/api/farm-notebook" && entry.body && typeof entry.body === "object") {
     const body = entry.body as { notes?: Item[] };
@@ -111,4 +182,13 @@ export function monthsBack(today: string, months: number): string {
 
 export function daysAhead(today: string, days: number): string {
   return new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** What a history answered from the device covers, in words (decision 1054). Null when it came from Tohyee. */
+export function offlineHistoryNote(bounds: HistoryBounds | null | undefined): string | null {
+  if (!bounds || typeof bounds.heldFrom !== "string") return null;
+  const from = new Date(`${bounds.heldFrom}T00:00:00Z`).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  return bounds.complete
+    ? `From this device: records from ${from} on. Older ones need a connection.`
+    : `From this device: only the newest ${bounds.count.toLocaleString("en-NZ")} records since ${from} are kept here. The rest need a connection.`;
 }

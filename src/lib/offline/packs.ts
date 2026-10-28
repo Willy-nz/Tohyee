@@ -10,6 +10,7 @@
  * Browser-safe; tests use fake-indexeddb and a pretend server.
  */
 
+import { expectedAccountHeaders, isAccountChanged } from "./account";
 import { offlineSession, readDeviceAccount } from "./device";
 import { openOfflineDb } from "./idb";
 import { answerFromEntries, EXTRA_PACK_MONTHS, PACK_MONTHS, PACK_REFRESH_MINUTES, PACK_SECTIONS, type PackEntry, type SectionInfo, type SectionKey } from "./pack-inventory";
@@ -84,14 +85,18 @@ function sizeOf(entries: PackEntry[], files: PackFile[]): number {
 
 export type PackFetcher = (path: string, query: Record<string, string>) => Promise<{ status: number; body: unknown; blob?: Blob; headers?: Headers }>;
 
-/** Reads with fetch on this server (same origin, the session cookie). Status 0: Tohyee couldn't be reached. */
-export function fetchPackFetcher(fetcher: typeof fetch = fetch): PackFetcher {
+/**
+ * Reads with fetch on this server (same origin, the session cookie), naming
+ * the account the pack is for: Tohyee refuses them if someone else is
+ * signed in now (decision 1050). Status 0: Tohyee couldn't be reached.
+ */
+export function fetchPackFetcher(fetcher: typeof fetch = fetch, userId?: string): PackFetcher {
   return async (path, query) => {
     const url = new URL(path, typeof window === "undefined" ? "http://localhost" : window.location.origin);
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
     let response: Response;
     try {
-      response = await fetcher(url, { cache: "no-store", credentials: "same-origin" });
+      response = await fetcher(url, { cache: "no-store", credentials: "same-origin", headers: userId ? expectedAccountHeaders(userId) : {} });
     } catch {
       return { status: 0, body: null };
     }
@@ -109,7 +114,7 @@ export function fetchPackFetcher(fetcher: typeof fetch = fetch): PackFetcher {
 export type RefreshProgress = { done: number; total: number; farmName: string | null; section: string | null };
 
 export type RefreshResult = {
-  outcome: "done" | "unreachable" | "sign_in" | "not_farming" | "busy" | "locked";
+  outcome: "done" | "unreachable" | "sign_in" | "account_changed" | "stopped" | "not_farming" | "busy" | "locked";
   updated: number;
   failed: number;
 };
@@ -124,6 +129,8 @@ type RefreshOptions = {
   farmId?: string;
   onProgress?: (progress: RefreshProgress) => void;
   locks?: LockManager | null;
+  /** Checked before each read and before keeping it: true stops (the account changed, decision 1051). */
+  shouldStop?: () => boolean;
 };
 
 function errorText(body: unknown, status: number): string {
@@ -163,7 +170,10 @@ export async function refreshPacks(scope: QueueScope, options: RefreshOptions = 
 }
 
 async function runRefresh(scope: QueueScope, options: RefreshOptions): Promise<RefreshResult> {
-  const fetcher = options.fetcher ?? fetchPackFetcher();
+  const fetcher = options.fetcher ?? fetchPackFetcher(fetch, scope.userId);
+  const stop = options.shouldStop ?? (() => false);
+  /** What a refused read means: sign in again, or someone else is signed in now. */
+  const signInOutcome = (body: unknown): RefreshResult["outcome"] => (isAccountChanged(401, body) ? "account_changed" : "sign_in");
   const now = options.now ?? (() => new Date());
   const db = await openOfflineDb(options.factory === undefined ? undefined : options.factory);
   const key = scopeKey(scope);
@@ -175,7 +185,8 @@ async function runRefresh(scope: QueueScope, options: RefreshOptions): Promise<R
 
   const index = await fetcher("/api/farming/offline-pack", { organisationId: scope.organisationId });
   if (index.status === 0 || index.status >= 500) return { ...result, outcome: "unreachable" };
-  if (index.status === 401) return { ...result, outcome: "sign_in" };
+  if (index.status === 401) return { ...result, outcome: signInOutcome(index.body) };
+  if (stop()) return { ...result, outcome: "stopped" };
   if (index.status >= 400) return { ...result, outcome: "not_farming" };
   const { farms, sections } = index.body as { farms: Array<{ id: string; name: string }>; sections: SectionInfo[] };
 
@@ -207,12 +218,13 @@ async function runRefresh(scope: QueueScope, options: RefreshOptions): Promise<R
     const existing = await db.get<SectionRecord>("packSections", id);
     options.onProgress?.({ done, total: work.length, farmName: farm?.name ?? null, section: section.label });
     done += 1;
+    if (stop()) return { ...result, outcome: "stopped" };
     if (!options.force && existing?.savedAt && Date.parse(existing.savedAt) > fresh && !existing.error && !existing.due) continue;
     const pack = settings.get(farmKey);
     const months = pack?.months ?? PACK_MONTHS;
     const answer = await fetcher("/api/farming/offline-pack", { organisationId: scope.organisationId, section: section.key, ...(farm ? { farmId: farm.id } : {}), ...(months !== PACK_MONTHS ? { months: String(months) } : {}) });
     if (answer.status === 0 || answer.status >= 500) return { ...result, outcome: "unreachable" };
-    if (answer.status === 401) return { ...result, outcome: "sign_in" };
+    if (answer.status === 401) return { ...result, outcome: signInOutcome(answer.body) };
     const time = now().toISOString();
     if (answer.status >= 400) {
       result.failed += 1;
@@ -241,6 +253,7 @@ async function runRefresh(scope: QueueScope, options: RefreshOptions): Promise<R
         files.push({ id: ref.id, name: ref.name, contentType: file.blob.type || ref.contentType || "application/octet-stream", bytes: file.blob.size, blob: file.blob, copy: file.headers?.get("x-tohyee-copy") === "small" ? "small" : "original" });
       }
     }
+    if (stop()) return { ...result, outcome: "stopped" };
     try {
       await saveSection(db, {
         id,

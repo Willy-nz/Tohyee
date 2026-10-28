@@ -39,6 +39,7 @@
  * it's sent. Browser-safe; tests use fake-indexeddb.
  */
 
+import { expectedAccountHeaders, isAccountChanged } from "./account";
 import { isQuotaError, openOfflineDb, request } from "./idb";
 
 export type QueueScope = { server: string; userId: string; organisationId: string };
@@ -138,7 +139,7 @@ export type NewQueueItem = {
  */
 export const SERVER_ONLY_KINDS = new Set(["safety.release", "safety.action.check", "safety.action.close", "safety.action.reopen", "permission.change"]);
 
-export type SendResult = { outcome: "done"; result: unknown } | { outcome: "refused"; message: string } | { outcome: "unreachable"; signIn?: boolean };
+export type SendResult = { outcome: "done"; result: unknown } | { outcome: "refused"; message: string } | { outcome: "unreachable"; signIn?: boolean; accountChanged?: boolean };
 
 /** A failed send's outcome from its HTTP status: 4xx (bar sign-in, timeouts and limits) is a refusal; anything else is tried again. */
 export function sendOutcome(status: number | null, message: string): SendResult {
@@ -149,14 +150,19 @@ export function sendOutcome(status: number | null, message: string): SendResult 
 
 export type Sender = (item: QueueItem, body: Record<string, unknown>) => Promise<SendResult>;
 
-/** Sends with fetch to the item's own server (same origin), with Origin set by the browser. */
+/**
+ * Sends with fetch to the item's own server (same origin), with Origin set
+ * by the browser. Each send names the account that made the item; if the
+ * browser is now signed in as someone else, Tohyee refuses it and it stays
+ * waiting for its own account (decision 1050).
+ */
 export function fetchSender(fetcher: typeof fetch = fetch): Sender {
   return async (item, body) => {
     let response: Response;
     try {
       response = await fetcher(item.request.path, {
         method: item.request.method,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...expectedAccountHeaders(item.userId) },
         body: JSON.stringify(body),
         cache: "no-store",
         credentials: "same-origin",
@@ -171,6 +177,7 @@ export function fetchSender(fetcher: typeof fetch = fetch): Sender {
       payload = null;
     }
     if (response.ok) return { outcome: "done", result: payload };
+    if (isAccountChanged(response.status, payload)) return { outcome: "unreachable", accountChanged: true };
     const message = payload && typeof payload === "object" && "error" in payload && typeof (payload as { error: unknown }).error === "string" ? (payload as { error: string }).error : `Tohyee refused it (${response.status}).`;
     return sendOutcome(response.status, message);
   };
@@ -244,7 +251,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
 
 type BlobRecord = { key: string; operationId: string; name: string; blob: Blob };
 
-export type SyncReport = { sent: number; refused: number; stoppedBecause: "done" | "unreachable" | "sign_in" | "busy" };
+export type SyncReport = { sent: number; refused: number; stoppedBecause: "done" | "unreachable" | "sign_in" | "account_changed" | "held" | "busy" };
 
 export type OfflineQueue = {
   readonly scope: QueueScope;
@@ -275,7 +282,31 @@ export type OfflineQueue = {
   subscribe(listener: () => void): () => void;
 };
 
-export type QueueOptions = { factory?: IDBFactory | null; now?: () => string; locks?: LockManager | null; channel?: boolean };
+export type QueueOptions = {
+  factory?: IDBFactory | null;
+  now?: () => string;
+  locks?: LockManager | null;
+  channel?: boolean;
+  /**
+   * Checked before each send: false holds everything (this tab's account
+   * was signed out and someone else signed in, decision 1051).
+   */
+  maySend?: () => boolean;
+};
+
+let held = false;
+function sendingAllowed(): boolean {
+  return !held;
+}
+
+/**
+ * Holds every queue in this page (true) or lets them send again. Used when
+ * this tab's account was signed out and someone else signed in elsewhere
+ * in the browser (decision 1051): its work waits for its own account.
+ */
+export function holdSending(hold: boolean): void {
+  held = hold;
+}
 
 /** Opens the queue for one server, account and organisation. Rejects only when the device has no IndexedDB at all. */
 export async function openQueue(scope: QueueScope, options: QueueOptions = {}): Promise<OfflineQueue> {
@@ -382,15 +413,21 @@ export async function openQueue(scope: QueueScope, options: QueueOptions = {}): 
     const report: SyncReport = { sent: 0, refused: 0, stoppedBecause: "done" };
     const tried = new Set<string>();
     for (;;) {
+      if (!(options.maySend ?? sendingAllowed)()) {
+        report.stoppedBecause = "held";
+        break;
+      }
       const all = await readAll();
       const next = all.find((item) => item.status === "waiting" && !tried.has(item.operationId) && blockedBy(item, all) === null);
       if (!next) break;
+      // Never another account's or organisation's item, whatever is signed in (decision 1050).
+      if (next.scope !== key || next.userId !== scope.userId || next.organisationId !== scope.organisationId) break;
       tried.add(next.operationId);
       const attempt: QueueItem = { ...next, attempts: next.attempts + 1, updatedAt: now() };
       await put(attempt);
       const result = await sendOne(attempt, all, sender);
       if (result.outcome === "unreachable") {
-        report.stoppedBecause = result.signIn ? "sign_in" : "unreachable";
+        report.stoppedBecause = result.accountChanged ? "account_changed" : result.signIn ? "sign_in" : "unreachable";
         break;
       }
       // Only this item changes, from its latest stored copy.
@@ -539,4 +576,17 @@ export async function unsentForAccount(server: string, userId: string, factory?:
   const prefix = `${encodeURIComponent(server)}|${encodeURIComponent(userId)}|`;
   const all = await request(db.db.transaction("queue", "readonly").objectStore("queue").getAll());
   return (all as QueueItem[]).filter((item) => item.scope.startsWith(prefix) && item.status !== "synced").length;
+}
+
+/**
+ * Unsent items on this server made by other accounts (someone signed out
+ * here with work not sent). They're held for their own account and never
+ * sent as this one (decision 1051).
+ */
+export async function heldForOtherAccounts(server: string, userId: string, factory?: IDBFactory | null): Promise<number> {
+  const db = await openOfflineDb(factory === undefined ? undefined : factory);
+  const serverPrefix = `${encodeURIComponent(server)}|`;
+  const own = `${serverPrefix}${encodeURIComponent(userId)}|`;
+  const all = await request(db.db.transaction("queue", "readonly").objectStore("queue").getAll());
+  return (all as QueueItem[]).filter((item) => item.scope.startsWith(serverPrefix) && !item.scope.startsWith(own) && item.status !== "synced").length;
 }
