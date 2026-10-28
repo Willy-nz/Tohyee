@@ -36,6 +36,7 @@ export const TRACK_EVENTS = [
   "gps_denied",
   "wake_lock_lost",
   "reopened",
+  "not_saved",
   "finish",
 ] as const;
 export type TrackEventKind = (typeof TRACK_EVENTS)[number];
@@ -55,6 +56,7 @@ export const EVENT_LABELS: Record<TrackEventKind, string> = {
   gps_denied: "Location permission removed",
   wake_lock_lost: "The screen was allowed to sleep",
   reopened: "Tohyee reopened after stopping unexpectedly",
+  not_saved: "GPS fixes from here weren't kept on the device (storage full): the track has a gap",
   finish: "Finished",
 };
 

@@ -258,7 +258,7 @@ function Readings({ organisationId, farmId, paddocks, canEdit, version, onChange
           </div>
         </>
       ) : null}
-      <HistoryFooter shown={history.rows.length} hasMore={history.hasMore} loading={history.loading} error={history.error} onMore={history.loadMore} noun={history.rows.length === 1 ? "reading" : "readings"} />
+      <HistoryFooter shown={history.rows.length} hasMore={history.hasMore} loading={history.loading} error={history.error} onMore={history.loadMore} offline={history.offline} noun={history.rows.length === 1 ? "reading" : "readings"} />
     </Card>
   );
 }
@@ -777,7 +777,7 @@ function Grazings({ organisationId, farmId, paddocks, canEdit, canRemove, versio
           </div>
         </>
       ) : null}
-      <HistoryFooter shown={history.rows.length} hasMore={history.hasMore} loading={history.loading} error={history.error} onMore={history.loadMore} noun={history.rows.length === 1 ? "grazing" : "grazings"} />
+      <HistoryFooter shown={history.rows.length} hasMore={history.hasMore} loading={history.loading} error={history.error} onMore={history.loadMore} offline={history.offline} noun={history.rows.length === 1 ? "grazing" : "grazings"} />
     </Card>
   );
 }
@@ -1001,7 +1001,7 @@ function Supplements({
           </div>
         </>
       ) : null}
-      <HistoryFooter shown={history.rows.length} hasMore={history.hasMore} loading={history.loading} error={history.error} onMore={history.loadMore} noun="lines" />
+      <HistoryFooter shown={history.rows.length} hasMore={history.hasMore} loading={history.loading} error={history.error} onMore={history.loadMore} offline={history.offline} noun="lines" />
     </Card>
   );
 }

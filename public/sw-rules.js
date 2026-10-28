@@ -7,8 +7,28 @@
 (function (scope) {
   "use strict";
 
-  /** Pages that open with no connection: the farm workspace (Today, Map, Log, Safety, More, Offline) and the install page. */
-  var OFFLINE_PAGES = ["/operations/farm", "/operations/farm/map", "/operations/farm/log", "/operations/farm/safety", "/operations/farm/more", "/operations/farm/offline", "/get-tohyee"];
+  /**
+   * Pages that open with no connection: the farm workspace (Today, Map,
+   * Log, Safety, More, Offline), tractor mode, the farm sections More links
+   * to (decision 1056), and the install page. The same list as
+   * OFFLINE_SCREENS in src/lib/offline/screens.ts (tested).
+   */
+  var PAGE_NAMES = {
+    "/operations/farm": "Today",
+    "/operations/farm/map": "Map",
+    "/operations/farm/log": "Log",
+    "/operations/farm/safety": "Safety",
+    "/operations/farm/more": "More",
+    "/operations/farm/offline": "Offline on this device",
+    "/operations/farm/tractor": "Tractor mode",
+    "/operations/farming": "Farms and paddocks",
+    "/operations/farming/pasture": "Pasture and feed",
+    "/operations/farming/soil": "Soil tests",
+    "/operations/farming/calendar": "Farm calendar",
+    "/operations/farming/fertiliser": "Fertiliser plans",
+    "/operations/farming/notebook": "Farm notebook",
+  };
+  var OFFLINE_PAGES = Object.keys(PAGE_NAMES).concat(["/get-tohyee"]);
   /** Built files (names change with every build), icons, fonts and the manifest. */
   var STATIC_CACHE = "tohyee-static-v1";
   var PAGE_CACHE_PREFIX = "tohyee-pages-";
@@ -62,6 +82,21 @@
     return type.indexOf("text/html") !== -1;
   }
 
+  /**
+   * What an answer from /api/auth/session says about `userId` (decision
+   * 1052; the page's copy is sessionCheck in src/lib/offline/account.ts).
+   * Only "verified" renews the device's offline session: never a page,
+   * public or not, never another account, never a refusal.
+   */
+  function sessionCheck(status, body, userId) {
+    if (status === 401 || status === 403) return "signed_out";
+    if (status !== 200 || !body || typeof body !== "object") return "unreachable";
+    var user = body.user;
+    var id = user && typeof user === "object" ? user.id : undefined;
+    if (typeof id !== "string" || !id) return "unreachable";
+    return id === userId ? "verified" : "other_account";
+  }
+
   /** The built files a page loads, so they're kept with it. */
   function assetUrlsFromHtml(html) {
     var found = {};
@@ -77,7 +112,6 @@
     });
   }
 
-  var PAGE_NAMES = { "/operations/farm": "Today", "/operations/farm/map": "Map", "/operations/farm/log": "Log", "/operations/farm/safety": "Safety", "/operations/farm/more": "More", "/operations/farm/offline": "Offline on this device" };
 
   /**
    * The page shown when a page can't be opened: no connection and no copy
@@ -127,6 +161,7 @@
 
   scope.TohyeeSw = {
     OFFLINE_PAGES: OFFLINE_PAGES,
+    PAGE_NAMES: PAGE_NAMES,
     STATIC_CACHE: STATIC_CACHE,
     OFFLINE_SESSION_DAYS: OFFLINE_SESSION_DAYS,
     MAX_STATIC_ENTRIES: MAX_STATIC_ENTRIES,
@@ -137,6 +172,7 @@
     isPageCache: isPageCache,
     sessionState: sessionState,
     isSignedInPage: isSignedInPage,
+    sessionCheck: sessionCheck,
     assetUrlsFromHtml: assetUrlsFromHtml,
     offlinePageHtml: offlinePageHtml,
   };
