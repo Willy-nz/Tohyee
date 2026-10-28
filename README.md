@@ -42,8 +42,8 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 27 October 2026:** the latest packaged
-release is [v0.16.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.16.0),
+**Release availability, checked 28 October 2026:** the latest packaged
+release is [v0.17.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.17.0),
 with everything below. Check
 the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
 for the contents of newer downloads, or [run from source](#run-it-locally).
@@ -74,7 +74,14 @@ what you can use; developer and server setup instructions follow it.
 
 <sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
 
-## New in 0.16.0: farm safety and farmer-friendly screens
+## New in 0.17.0: Tohyee on your phone
+
+| Area | What's new |
+| --- | --- |
+| **Phone app** | Add Tohyee to your home screen from your server; farm information kept offline automatically; logs, photos and safety without a signal. |
+| **Tractor mode** | A spreading and spraying coverage map from the phone, with overlaps counted once. |
+
+## New in 0.16.0 (included in 0.17.0): farm safety and farmer-friendly screens
 
 | Area | What's new |
 | --- | --- |
