@@ -9477,3 +9477,92 @@ reviewed by Jess**. Claude, 28 October 2026.
      screen reader or with real browser zoom (a 195 px wide window stood in
      for 200% zoom). No claim is made of being better than SafeAg or
      SiteSmart.
+
+### Tractor and spreader mode (#472 stage 5; decisions 1020-1027)
+
+Jess decided (#472, "Plan, with Jess's answers", 28 October 2026): tractor
+mode is part of the installable web app, records only while the screen is
+on with the phone mounted and kept awake, and must show plainly when
+recording stops. Unmapped jobs are allowed, the run becomes a paddock
+record linked to the fertiliser plan, nothing posts to the books, and
+GeoJSON and GPX exports are given. The rest below has no answer from Jess
+and no Xero or NetSuite equivalent; it follows the issue's text and the
+Spreadify review comment, and is **not yet reviewed**.
+
+1020. **Coverage is worked out, not typed in, the same way on the phone and
+      the server.** One pure module (`src/lib/farming/coverage.ts`) turns the
+      track into a worked footprint: a rectangle the working width wide for
+      each stretch between two fixes recorded with Working ON at the same
+      settings while moving, moved by the implement's offset, with corners
+      filled. Positions go onto a flat local grid in metres around the job
+      (WGS84 radii at its centre); over a farm that's within 0.1% of geodesic
+      area (tested). Union, intersection and difference use Turf 7.4.0
+      (`@turf/union`, `@turf/intersect`, `@turf/difference`, pinned exactly;
+      MIT). The server works the numbers out again when a job arrives and
+      ignores any the phone sends. Areas are floats rounded to 0.0001 ha in
+      the summary and 0.01 ha in the list: they're estimates, never money.
+1021. **Gaps are gaps.** Thresholds (documented in the code and tested):
+      a fix with accuracy worse than ±20 m isn't used (±10 m or better is
+      good, between is fair); no usable fix for more than 10 seconds breaks
+      the track; faster than 12 m/s (43 km/h) between fixes is a jump and
+      is dropped, unless the next fix agrees with it, when the track starts
+      again from there; slower than 0.5 m/s over 5 seconds (or by the
+      device's own speed) is standing still and paints nothing; moves under
+      2 m wait for the next fix; a pass's centreline is straightened only
+      where it strays under 0.5 m. A pause, the screen going off, another
+      app, lost GPS or removed permission also break it. Nothing is ever
+      painted across a break; it's shown as a red dashed gap with its
+      reason and length. The second or so where Working is switched isn't
+      counted, so the estimate errs low.
+1022. **Overlap counts once and is shown on its own.** Unique worked area is
+      the union of everything. A pass ends at a turn of more than 60
+      degrees or a gap; overlap is ground covered by more than one pass,
+      drawn in orange and given in hectares. With paddocks chosen, worked
+      and overlap are clipped to their boundaries, with worked outside them
+      and not covered inside them shown separately, and a share of the
+      paddocks. With none ("Unassigned paddock") only the swept area is
+      given: no share of a paddock. The paddocks can be chosen later; the
+      same track is clipped to their current shapes and the boundary
+      versions used are stored with the job.
+1023. **Foreground recording, saved fix by fix, and never quietly stopped.**
+      Each fix is written to the browser's IndexedDB as it arrives (a job
+      row and a row per fix, kept per server, person and organisation).
+      Screen Wake Lock keeps the screen on where the browser has it; where
+      it doesn't, or it's released, the screen says to keep it on. When the
+      page is hidden (screen off, another app, a call) nothing is recorded
+      and a red NOT RECORDING banner shows on return, with the gap in the
+      track and an event in its history. Reopening Tohyee after it closed
+      mid-job offers Carry on, which comes back paused. A job stays on the
+      device until the server has it, and is removed a week after. Until
+      the shared offline queue (#472 stages 2-4, PR #473) is merged, tractor
+      mode sends its own jobs, retrying when the connection returns; moving
+      the sending to that queue is a follow-up.
+1024. **Equipment keeps its width and offsets as dated versions.** A
+      spreader, sprayer or mower has a name, kind, optionally its machine in
+      Safety's equipment register (its out-of-use status is shown before a
+      job) and the fixed asset in the books (bookkeepers and above). A
+      change of width or offset is a new row with its time (tenant
+      migration 0197, append-only); the job keeps the settings it was driven
+      with, so later changes never recalculate it. The width can also be
+      changed for the rest of one job without changing the equipment.
+1025. **Who sees and does what.** Recording needs the farm work record level
+      (farm staff, or bookkeeper and above) on a farm the person can see
+      (decision 744). Farm staff see and change only their own jobs; viewers
+      and above see every job on their farms; changing a job is for the
+      person who drove it or a bookkeeper and above. Linking to a fertiliser
+      plan is for bookkeepers and above, as plans are. Who drove comes from
+      the sign-in, never from the request. A track, its farm, operator and
+      times can't be changed (a database trigger); a job is withdrawn with a
+      reason, never deleted.
+1026. **Sending twice makes one job.** The phone makes the job's id. The same
+      job sent again returns the saved one; a different track under the same
+      id is refused (409) and the job stays on the device as Needs attention.
+1027. **Entered isn't measured, and nothing posts.** Product, rate and
+      quantity are labelled entered on screen and in exports; GPS travel
+      isn't proof that product was applied. Links to a fertiliser plan (and
+      an application on it) and to a chemical in Safety's register are links
+      only: they change no plan, application, stock or journal. Hazards and
+      no-go zones from Safety are drawn on the map as at the job's start, as
+      a reminder only. **Not tried in a real paddock or on a real phone**:
+      checked with automated tests and in Chromium with a simulated GPS
+      route only.

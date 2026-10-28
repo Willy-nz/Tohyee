@@ -2914,6 +2914,31 @@ that something happened.
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
   deaths.
 
+- **Tractor and spreader mode** (#472 stage 5, decisions 1020-1027; tenant
+  migration 0197): Farm › Map › **Tractor mode** (also under More). Choose
+  spreading, spraying, mowing or other work, the paddocks (or none, an
+  **Unassigned paddock** job) and the equipment, whose working width and
+  implement offset are saved as dated versions. **Start** opens a
+  full-screen map (portrait phone or landscape tablet) with the GPS
+  accuracy, a big **Working ON/OFF** separate from recording, **Pause**,
+  **Finish**, follow and recentre, north up, the estimated worked area,
+  overlap and share of the paddocks, and Safety's hazards and no-go zones as
+  a reminder. It records only while Tohyee is on screen, keeping the screen
+  awake where the browser allows, and says **NOT RECORDING** when the screen
+  went off, GPS was lost or weak, or location permission was removed. Each
+  GPS fix is kept on the device as it comes; Carry on picks a job up after
+  Tohyee closed. Coverage is worked out from the width swept with Working
+  ON, overlapping passes counted once, clipped to the paddocks, with GPS
+  gaps, jumps and standing still shown as gaps, not invented coverage.
+  **Finish** shows the map and numbers, takes the product, rate and
+  quantity (marked entered, not measured) and sends the job; sending twice
+  makes it once. On the website each job shows the track against the
+  worked footprint, what happened when, the settings used, links to a
+  fertiliser plan or a chemical, re-clipping to chosen paddocks,
+  withdrawal, and **GeoJSON** and **GPX** exports. Everything says it's a
+  phone GPS estimate. Nothing posts to the books. Not tried in a real
+  paddock or on a real phone yet.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

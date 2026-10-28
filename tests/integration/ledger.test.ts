@@ -145,6 +145,7 @@ describeWithDatabase("ledger", () => {
         "safety_files",
         "sales_platform_sync_log",
         "stock_transfers",
+        "tractor_equipment_settings",
       ].map((table) => [table, UPDATE_DELETE_TRUNCATE]),
     );
     await expect(inOrg((tx) => tx.query("truncate audit_events"))).rejects.toThrow(/append-only/);

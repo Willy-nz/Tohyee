@@ -288,7 +288,15 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const overlays = hazardOverlays(activeHazards, (id) => router.push(safetyHref({ farmId: farm.id, screen: "hazards", hazard: id })));
   return (
     <div className={styles.grid}>
-      <Card title="Paddocks" description="Tap a paddock for its cover, mob and recent records. Colours show what was recorded, not whether it's good or bad. Red and amber triangles and dashed outlines are hazards and no-go zones.">
+      <Card
+        title="Paddocks"
+        description="Tap a paddock for its cover, mob and recent records. Colours show what was recorded, not whether it's good or bad. Red and amber triangles and dashed outlines are hazards and no-go zones."
+        actions={
+          <Link className={styles.bigButton} href={`/operations/farm/tractor?farm=${farm.id}`}>
+            Tractor mode
+          </Link>
+        }
+      >
         <ColouringSwitch value={colouring} onChange={setColouring} />
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {shapes.data && statuses.data ? (
@@ -410,6 +418,7 @@ export { FarmSafetyTab };
 type MoreLink = { href: string; label: string; note?: string; staff?: boolean; minRole?: "viewer" | "bookkeeper" | "admin" };
 
 const DETAILS: MoreLink[] = [
+  { href: "/operations/farm/tractor", label: "Tractor mode", note: "Spreading, spraying and mowing coverage from the phone's GPS", staff: true },
   { href: "/operations/farming/pasture", label: "Pasture and feed", note: "Readings, grazings and feed, with tables", staff: true },
   { href: "/operations/farming", label: "Farms and paddocks", note: "Areas, boundaries and drawing paddocks", staff: true },
   { href: "/operations/farming/soil", label: "Soil tests", staff: true },
