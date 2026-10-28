@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 import type { TrackPoint } from "@/lib/farming/coverage";
-import { ageText, hazardNote, hazardsForMap, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
+import { ageText, hazardNote, hazardsForMap, jobRequestBody, reviewedJob, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
 import type { LocalJob } from "@/lib/farming/tractor-store";
 import { openQueue, type QueueItem, type Sender } from "@/lib/offline/queue";
 import type { CurrentRecord, HazardData } from "@/lib/safety/shared";
@@ -159,3 +159,15 @@ describe("hazards on the tractor map", () => {
     expect(hazardNote({ hazards: [], at: null, from: "device" }, now)).toBeNull();
   });
 });
+
+describe("Check and send: what was typed goes with the job (decision 1048)", () => {
+  it("keeps the product, rate, quantity and notes for Send and Send later alike", () => {
+    // Found testing the phone app: Send later closed without them, and the job was sent without them.
+    const finished = reviewedJob(job({ state: "recording" }), { notes: " Refilled at the gate ", product: "Urea", rate: "30", rateUnit: "kg/ha", quantity: "", quantityUnit: "t" });
+    expect(finished).toMatchObject({ state: "finished", notes: "Refilled at the gate", product: "Urea", declaredRate: "30", declaredRateUnit: "kg/ha", declaredQuantity: null });
+    expect(jobRequestBody(finished)).toMatchObject({ product: "Urea", declaredRate: "30", declaredRateUnit: "kg/ha", declaredQuantity: null, declaredQuantityUnit: null, notes: "Refilled at the gate" });
+    // Nothing typed: nothing sent, rather than empty text.
+    expect(reviewedJob(job(), { notes: "  ", product: "", rate: "", rateUnit: "kg/ha", quantity: "", quantityUnit: "t" })).toMatchObject({ notes: null, product: null, declaredRate: null });
+  });
+});
+

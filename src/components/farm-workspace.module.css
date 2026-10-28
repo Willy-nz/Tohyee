@@ -245,6 +245,15 @@
     padding-bottom: 76px;
   }
 
+  /*
+   * When the browser brings something into view (moving with the keyboard,
+   * or a form opening on a field), it stops above the tabs rather than
+   * behind them (found testing the phone app, decision 1046).
+   */
+  :global(html):has(.workspace) {
+    scroll-padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
   .tabs {
     position: fixed;
     right: 0;

@@ -9905,4 +9905,37 @@ the same services a person uses, as the demo farm's owner.
       the first job one run spread twice and a trip out to refill (Working
       off, paused for nine minutes). The coverage is worked out by the same
       code as a real job.
+### The phone app: fixes from testing it on our side (Jess, 29 October 2026; decisions 1046-1049)
+
+Jess, 29 October 2026: "Can you test it on your side?" The phone app (#472)
+was walked through as a farmer in Chromium at a phone's size, on a copy of
+the demo farm, online and with the connection switched off. These are the
+problems that were clearly bugs.
+
+1046. **Nothing the browser scrolls into view stops behind the farm tabs.**
+      On a phone the farm tabs are fixed at the bottom of the screen. A
+      field or button the browser brought into view (moving with the
+      keyboard, or a long form) could stop behind them, so it couldn't be
+      seen or tapped until the page was scrolled by hand (WCAG 2.2's "focus
+      not obscured"). The page now keeps room above the tabs
+      (`scroll-padding-bottom` on the page while the farm workspace is
+      showing).
+1047. **A pre-start check saved on the device shows on its machine, and the
+      machines are read again once it's sent.** Before, only a failed
+      critical check showed on the machine; a passing check saved with no
+      signal left the machine looking as it was ("last checked" earlier),
+      and when the check was sent the equipment screen and the Safety
+      overview's "out of use" count weren't read again until the page was
+      opened afresh. Now the machine shows **Checked on this device** until
+      it's sent, and both are read again when this device sends a check.
+1048. **Send later keeps what was typed.** On tractor mode's Check and send,
+      Send later closed without keeping the product, rate, quantity and
+      notes; the finished job then went with the rest of the work on the
+      device without them. Both buttons now keep them first. (Closing the
+      app on that screen still sends the job as finished, without anything
+      typed but not yet saved; the job's page on the website can add them.)
+1049. **Loading… isn't shown beside an error.** Tractor mode showed
+      "Loading…" under "Tohyee can't be reached" for the server's jobs and
+      the paddocks when there was no connection; it now shows only the
+      message.
 

@@ -49,7 +49,7 @@ import {
   type TractorJob,
   type TractorJobListItem,
 } from "@/lib/farming/tractor-shared";
-import { hazardNote, hazardsForMap, type PackHazards, SEND_STATE_LABELS, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
+import { hazardNote, hazardsForMap, type PackHazards, reviewedJob, SEND_STATE_LABELS, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
 import { forgetSent, localJobs, localPoints, type LocalJob, removeLocal, saveLocal, tractorStoreAvailable } from "@/lib/farming/tractor-store";
 import { answerOffline } from "@/lib/offline/packs";
 import type { OfflineQueue, QueueItem } from "@/lib/offline/queue";
@@ -297,7 +297,7 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
       {!canRecord ? <Notice tone="info">Recording tractor jobs needs the farm staff or bookkeeper role. You can look at jobs below.</Notice> : null}
       <Card title="Jobs on the server" description={`${farm.name}. Open one to see its map, numbers and exports.`}>
         {server.error ? <Notice tone="error">{server.error}</Notice> : null}
-        {!server.data ? <p className={ui.muted}>Loading…</p> : null}
+        {!server.data && !server.error ? <p className={ui.muted}>Loading…</p> : null}
         {server.data && server.data.jobs.length === 0 ? <Empty>No tractor jobs yet.</Empty> : null}
         {server.data?.jobs.length ? (
           <ul className={styles.list}>
@@ -399,7 +399,7 @@ function TractorSetup({ organisationId, farm, userId, onStart }: { organisationI
       <fieldset className={styles.choices}>
         <legend>Paddocks</legend>
         {paddocks.error ? <Notice tone="error">{paddocks.error}</Notice> : null}
-        {!paddocks.data ? <p className={ui.muted}>Loading…</p> : null}
+        {!paddocks.data && !paddocks.error ? <p className={ui.muted}>Loading…</p> : null}
         {active.map((paddock) => (
           <label key={paddock.id} className={styles.choice}>
             <input type="checkbox" checked={chosen.includes(paddock.id)} onChange={(event) => setChosen(event.target.checked ? [...chosen, paddock.id] : chosen.filter((id) => id !== paddock.id))} />
@@ -988,10 +988,23 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
   const hazards = shownHazards(job, pack, online);
   const [reviewedAt] = useState(() => Date.now());
   const summary = shown.summary;
+  const typed = () => ({ notes, product, rate, rateUnit, quantity, quantityUnit });
+  // Send later keeps what was typed: the job goes with the rest of the work on this device either way (decision 1048).
+  const later = async () => {
+    setSending(true);
+    try {
+      onSaved(await saveLocal(reviewedJob(job, typed())));
+      onClose(false);
+    } catch (error) {
+      setOutcome({ sent: false, tone: "error", text: `It couldn't be saved on this device: ${errorMessage(error)}` });
+    } finally {
+      setSending(false);
+    }
+  };
   const send = async () => {
     setSending(true);
     try {
-      const saved = await saveLocal({ ...job, notes: notes || null, product: product || null, declaredRate: rate || null, declaredRateUnit: rateUnit, declaredQuantity: quantity || null, declaredQuantityUnit: quantityUnit, state: "finished" });
+      const saved = await saveLocal(reviewedJob(job, typed()));
       onSaved(saved);
       if (!queue) {
         setOutcome({ sent: false, tone: "warning", text: "Saved on this device. It will be sent from the tractor page when the device's list of work to send opens." });
@@ -1089,7 +1102,7 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
             <Button onClick={send} disabled={sending}>
               {sending ? "Sending…" : "Send"}
             </Button>
-            <Button variant="secondary" onClick={() => onClose(false)}>
+            <Button variant="secondary" onClick={later} disabled={sending}>
               Send later
             </Button>
           </>

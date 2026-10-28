@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { type CachedEmergency, EmergencyCard, HazardsCard, type Overview, readCache, RecordsCard, writeCache } from "@/components/farm-safety";
 import { ChemicalsCard, EquipmentCard, TrainingCard } from "@/components/farm-safety-equipment";
 import { InductionsAndSignIn } from "@/components/farm-safety-inductions";
@@ -118,6 +118,13 @@ function SafetyOverview({ organisationId, farm }: { organisationId: string; farm
   const equipment = useApiData<{ equipment: EquipmentView[] }>("/api/farming/safety/equipment", { organisationId, farmId: farm.id });
   const people = useApiData<InductionsSummary>("/api/farming/safety/inductions", { organisationId, farmId: farm.id });
   const chemicals = useApiData<{ chemicals: ChemicalView[] }>("/api/farming/safety/chemicals", { organisationId, farmId: farm.id });
+  // Something recorded on this device reached Tohyee: its reports and machines are read again (a check can put one out of use, decision 1047).
+  const { reload: reloadReports } = reports;
+  const { reload: reloadEquipment } = equipment;
+  const afterSend = useCallback(() => {
+    reloadReports();
+    reloadEquipment();
+  }, [reloadReports, reloadEquipment]);
   const access = overview.data?.access ?? reports.data?.access ?? null;
   const hazards = (overview.data?.hazards ?? []).filter((hazard) => hazardState(hazard) === "active");
   const machines = (equipment.data?.equipment ?? []).filter((item) => item.change !== "withdrawn" && !item.data.retired);
@@ -140,7 +147,7 @@ function SafetyOverview({ organisationId, farm }: { organisationId: string; farm
     <div className={styles.overview}>
       <div className={styles.column}>
         <EmergencyStrip organisationId={organisationId} farm={farm} overview={overview.data} loadError={overview.error} canRecord={Boolean(access?.canRecord)} />
-        <WaitingToSend organisationId={organisationId} farmId={farm.id} onSent={reports.reload} />
+        <WaitingToSend organisationId={organisationId} farmId={farm.id} onSent={afterSend} />
         <nav aria-label="Everyday safety" className={styles.bigActions}>
           <Link className={styles.bigAction} href={safetyHref({ farmId: farm.id, screen: "report" })}>
             <span className={styles.icon} aria-hidden="true">!</span>

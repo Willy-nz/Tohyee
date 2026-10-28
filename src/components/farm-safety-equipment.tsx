@@ -2,11 +2,11 @@
 
 import QRCode from "qrcode";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { newOperationId } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
-import { type PickedFile, pendingOf, pickSafetyFile, submitThroughQueue, useOfflineQueue, waitForFiles } from "@/components/offline-queue";
+import { type PickedFile, pickSafetyFile, submitThroughQueue, useOfflineQueue, waitForFiles } from "@/components/offline-queue";
 import { useOnline } from "@/components/offline-support";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
@@ -16,7 +16,7 @@ import type { EquipmentView } from "@/lib/safety/equipment";
 import type { SafetyFile } from "@/lib/safety/files";
 import type { ChemicalView, TrainingView } from "@/lib/safety/register";
 import styles from "./farm-safety.module.css";
-import { recordAnchor, safetyHref } from "@/lib/safety/screens";
+import { checksOnDevice, recordAnchor, safetyHref, sentChecks } from "@/lib/safety/screens";
 import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER_LABELS, EQUIPMENT_OWNERS, type EquipmentOwner, LOCKOUT_NOTE, SDS_CHECK, SDS_RULE, TRAINING_STATE_LABELS } from "@/lib/safety/shared";
 
 /*
@@ -62,6 +62,12 @@ async function upload(organisationId: string, farmId: string, file: File) {
 export function EquipmentCard({ organisationId, farm, openEquipment }: { organisationId: string; farm: Farm; openEquipment: string | null }) {
   const data = useApiData<EquipmentData>("/api/farming/safety/equipment", { organisationId, farmId: farm.id });
   const { items: queued } = useOfflineQueue(organisationId);
+  // A check sent from this device (the signal came back): read the machines again so it shows (decision 1047).
+  const sent = sentChecks(queued, farm.id);
+  const { reload } = data;
+  useEffect(() => {
+    if (sent) reload();
+  }, [sent, reload]);
   const [checking, setChecking] = useState<string | null>(openEquipment);
   const [adding, setAdding] = useState<"equipment" | "checklist" | null>(null);
   const [search, setSearch] = useState("");
@@ -110,17 +116,20 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {shown.map((item) => (
           <li key={item.recordId} id={recordAnchor("equipment", item.recordId)} style={{ borderTop: only ? 0 : "1px solid var(--border)", padding: "10px 0", scrollMarginTop: 72 }}>
-            {only ? null : <strong>{item.data.name}</strong>} {item.available && !pendingOf(queued, "safety.check", farm.id).some((check) => check.meta.equipmentId === item.recordId && Array.isArray(check.meta.criticalFaults) && check.meta.criticalFaults.length) ? <Badge tone="green">In use</Badge> : <Badge tone="red">Out of use</Badge>} {item.data.owner !== "owned" ? <Badge>{EQUIPMENT_OWNER_LABELS[item.data.owner]}</Badge> : null}
+            {only ? null : <strong>{item.data.name}</strong>} {item.available && !checksOnDevice(queued, farm.id, item.recordId).faults.length ? <Badge tone="green">In use</Badge> : <Badge tone="red">Out of use</Badge>} {item.data.owner !== "owned" ? <Badge>{EQUIPMENT_OWNER_LABELS[item.data.owner]}</Badge> : null}
             <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
               {[item.data.type, item.data.ownerName, item.checklist ? `checklist: ${item.checklist.data.title}` : "no checklist yet", item.lastCheck ? `last checked ${formatDateTime(item.lastCheck.enteredAt)} by ${item.lastCheck.enteredByName || item.lastCheck.enteredByEmail}${item.lastCheck.data.passed ? "" : " (faults)"}` : "not checked yet"].filter(Boolean).join(" · ")}
             </div>
-            {pendingOf(queued, "safety.check", farm.id)
-              .filter((check) => check.meta.equipmentId === item.recordId && Array.isArray(check.meta.criticalFaults) && check.meta.criticalFaults.length)
-              .map((check) => (
-                <div key={check.operationId} style={{ color: "var(--danger, #c81e1e)" }}>
-                  <Badge tone="red">Fault on this device</Badge> Failed a critical check here ({(check.meta.criticalFaults as string[]).join("; ")}), not sent yet: don&apos;t use it. Nobody has been told yet.
-                </div>
-              ))}
+            {checksOnDevice(queued, farm.id, item.recordId).faults.map((check) => (
+              <div key={check.operationId} style={{ color: "var(--danger, #c81e1e)" }}>
+                <Badge tone="red">Fault on this device</Badge> Failed a critical check here ({check.criticalFaults.join("; ")}), not sent yet: don&apos;t use it. Nobody has been told yet.
+              </div>
+            ))}
+            {checksOnDevice(queued, farm.id, item.recordId).waiting.map((check) => (
+              <div key={check.operationId}>
+                <Badge tone="amber">Checked on this device</Badge> {check.status === "attention" ? "Tohyee refused this check: see Recorded on this device on Safety." : "Saved here, waiting to send. It goes by itself when Tohyee can be reached."}
+              </div>
+            ))}
             {item.failedCheck ? (
               <div style={{ color: "var(--danger, #c81e1e)" }}>
                 Failed {formatDateTime(item.failedCheck.enteredAt)}: {item.failedCheck.data.answers.filter((answer) => answer.critical && answer.result === "fault").map((answer) => `${answer.text} (${answer.note})`).join("; ")}. {LOCKOUT_NOTE}
