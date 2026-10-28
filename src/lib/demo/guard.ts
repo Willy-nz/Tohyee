@@ -25,6 +25,8 @@ const REFUSED: RegExp[] = [
   /^\/api\/online-payments\//,
   /^\/api\/my-mail(\/|$)/,
   /^\/api\/farming\/mail(\/|$)/,
+  // The safety weekly copy's "Send a copy now" (its settings can still be saved: nothing sends them, decision 1042).
+  /^\/api\/farming\/safety\/weekly-copy\/send$/,
   /^\/api\/sales-platforms\//,
   /^\/api\/organisations\/[^/]+\/analytics\/report-emails(\/|$)/,
   /^\/api\/organisations\/[^/]+\/(members|handover)(\/|$)/,

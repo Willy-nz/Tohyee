@@ -8,6 +8,8 @@ import { demoContext, type DemoContext } from "@/lib/demo/build/context";
 import { calendarAndNotebook, farmMonth, seasonFigures, setUpCoopShares, setUpFarm } from "@/lib/demo/build/farm";
 import { countHerd, livestockMonth, openingHerdValue, setUpLivestock } from "@/lib/demo/build/livestock";
 import { payrollMonth, setUpPayroll } from "@/lib/demo/build/payroll";
+import { farmSafety } from "@/lib/demo/build/safety";
+import { farmWorkspace, tractorJobs } from "@/lib/demo/build/workspace";
 import { demoMonths, demoStart, lastDayOf, seasonEnd, seedFor } from "@/lib/demo/plan";
 
 /** Progress as the build goes: a short description and how far through (0-100). */
@@ -49,6 +51,10 @@ export async function buildDemoFarm(organisation: OrganisationRecord, actor: Act
   await progress("Adding the budget, calendar and notebook", 86);
   await seasonBudget(ctx);
   await calendarAndNotebook(ctx);
+  await progress("Adding farm safety, this week's farm work and tractor jobs", 87);
+  await farmSafety(ctx, farm);
+  await farmWorkspace(ctx, farm);
+  await tractorJobs(ctx);
   await progress("Copying the books into Analytics and making the reports", 90);
   await setUpAnalytics(ctx);
   await progress("Done", 100);

@@ -24,7 +24,13 @@ that something happened.
   culls, bulls and year-end counts, two farms with paddock maps, farm walks,
   grazings, supplements, fertiliser plans with applications and linked bills,
   soil tests, co-op shares and dividends, benchmark figures, a season budget,
-  the farm calendar and notebook, and Analytics (the books copied in, a
+  the farm calendar and notebook, farm safety (hazards and no-go zones,
+  emergency details, an induction with sign-offs and a gate sign-in,
+  equipment with pre-start checks and one machine out of use, training,
+  chemicals with made-up safety data sheets, a near miss and an incident;
+  decisions 1040-1042), this week's mobs, readings and calendar jobs, three
+  finished spreader jobs with GPS tracks linked to fertiliser applications
+  (decisions 1043-1045), and Analytics (the books copied in, a
   shaped table of milk solids beside the ledger, and four reports: Farm
   performance with working expenses per kg MS, Accounts: profit, cash and
   GST, Farm and Business overview). A **DEMO** badge shows on every page.

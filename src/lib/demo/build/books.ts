@@ -189,7 +189,7 @@ export async function openBooks(ctx: DemoContext, livestockValue: string): Promi
     ctx.ids.set("assetType:plant", plant.type.id);
     ctx.ids.set("assetType:buildings", buildings.type.id);
     for (const asset of OPENING_ASSETS) {
-      await createFixedAsset(tx, {
+      const made = await createFixedAsset(tx, {
         idempotencyKey: ctx.key("asset"),
         name: asset.name,
         typeId: asset.type === "plant" ? plant.type.id : buildings.type.id,
@@ -198,6 +198,8 @@ export async function openBooks(ctx: DemoContext, livestockValue: string): Promi
         openingDate,
         openingAccumulatedDepreciation: asset.depreciation,
       });
+      // For the safety equipment and tractor mode, which name the machines' fixed assets.
+      ctx.ids.set(`asset:${asset.name}`, made.asset.id);
     }
     const bank = (await listBankAccounts(tx)).find((account) => account.code === "1000");
     if (!bank) throw new Error("The demo farm has no bank account 1000.");
