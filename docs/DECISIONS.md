@@ -9725,7 +9725,7 @@ Claude, 28 October 2026. Not yet tried on a real phone.
      offline, training and chemicals offline, and the emergency card's own
      localStorage copy (decision 940), which stays.
 
-### Tractor and spreader mode (#472 stage 5; decisions 1020-1027)
+### Tractor and spreader mode (#472 stage 5; decisions 1020-1030)
 
 Jess decided (#472, "Plan, with Jess's answers", 28 October 2026): tractor
 mode is part of the installable web app, records only while the screen is
@@ -9813,3 +9813,42 @@ Spreadify review comment, and is **not yet reviewed**.
       a reminder only. **Not tried in a real paddock or on a real phone**:
       checked with automated tests and in Chromium with a simulated GPS
       route only.
+1028. **A finished job is sent through the device's one queue.** When
+      stages 2-4 landed (#473, #475, #476), tractor mode's own sending was
+      replaced: Finish hands the job to the queue (`src/lib/offline/queue.ts`)
+      as one item, kind `tractor.job`, whose operation id is the job's id,
+      so the queue and the server agree that a second send is the same job
+      (decision 1026). The track goes as one file beside the item (sent as
+      `trackBase64`, the track's JSON) rather than in the item's body, so a
+      long job isn't held in memory with every queued item and the file is
+      let go once Tohyee has it. The server takes either `track` or
+      `trackBase64`. The queue's statuses are shown on the tractor page
+      (Saved on this device, Waiting to send, Synced, Needs attention,
+      Unsaved), and it's sent with everything else: on opening a page, when
+      the connection comes back, on resume and every 30 seconds. A refusal
+      straight after Finish takes the item back off the queue so the
+      product, rate or notes can be fixed and sent again, as other forms do
+      (decision 1008); a later refusal shows Needs attention with Tohyee's
+      reason, **Send again** and **Remove from this device** (asks first:
+      the job is lost).
+1029. **The track is still kept fix by fix in tractor mode's own store
+      while recording.** The queue keeps whole items and files, and
+      `putBlob` replaces a file: rewriting a growing track every second
+      would get slower as a job got longer, and one failed write could lose
+      more than a second. So each fix is still written as it arrives to
+      `tohyee-tractor` (decision 1023); only a finished job goes to the
+      queue. The job stays in tractor mode's store until the queue says it's
+      synced, then is removed a week later, so "Let it go" on the device's
+      list of work never loses the track: the tractor page shows the job as
+      Not sent with Send again.
+1030. **Hazards offline come from the farm's offline copy, with its age.**
+      The tractor map normally shows Safety's hazards and no-go zones as at
+      the job's start. With no connection, if the farm's offline copy
+      (#472 stage 3) is newer, or the job started without hazards, the map
+      shows that copy instead, with a line saying it's what's kept on this
+      device, how long ago it was updated, and that it's a reminder only and
+      may have changed. When the setup screen itself read the hazards from
+      the device, the job keeps the copy's time, not the time it started.
+      Advisory only, as in decision 1027: nothing stops the tractor or
+      warns at a zone. Same approach as other screens' **Last known
+      information** label (decision 1002).

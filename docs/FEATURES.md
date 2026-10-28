@@ -2961,7 +2961,7 @@ that something happened.
   checking or closing actions always need a connection. Not yet tried on a
   real phone.
 
-- **Tractor and spreader mode** (#472 stage 5, decisions 1020-1027; tenant
+- **Tractor and spreader mode** (#472 stage 5, decisions 1020-1030; tenant
   migration 0197): Farm › Map › **Tractor mode** (also under More). Choose
   spreading, spraying, mowing or other work, the paddocks (or none, an
   **Unassigned paddock** job) and the equipment, whose working width and
@@ -2978,8 +2978,11 @@ that something happened.
   ON, overlapping passes counted once, clipped to the paddocks, with GPS
   gaps, jumps and standing still shown as gaps, not invented coverage.
   **Finish** shows the map and numbers, takes the product, rate and
-  quantity (marked entered, not measured) and sends the job; sending twice
-  makes it once. On the website each job shows the track against the
+  quantity (marked entered, not measured) and sends the job through the
+  device's one queue, with the same statuses as other work kept on the
+  device (decisions 1028-1029); sending twice makes it once. With no
+  connection the map's hazards can come from the farm's offline copy,
+  with its age (decision 1030). On the website each job shows the track against the
   worked footprint, what happened when, the settings used, links to a
   fertiliser plan or a chemical, re-clipping to chosen paddocks,
   withdrawal, and **GeoJSON** and **GPX** exports. Everything says it's a

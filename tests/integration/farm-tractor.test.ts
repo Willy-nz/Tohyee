@@ -136,6 +136,13 @@ describeWithDatabase("tractor mode jobs", () => {
     const replay = await call(worker, jobsRoute.POST as Handler, "/api/farming/tractor/jobs", {}, "POST", { id: w.job, farmId: w.home, paddockIds: [w.p1], operation: "spreading", equipmentId: w.spreader, track: { ...straightTrack(10), settings: [{ widthM: 10, lateralM: 0, backM: 0, settingsId: w.settings12 }] } });
     expect(replay.status).toBe(200);
     expect(replay.body.created).toBe(false);
+    // The device's queue sends the track as a file (base64 of its JSON) with the operation id: the same job (decision 1028).
+    const sameTrack = { ...straightTrack(10), settings: [{ widthM: 10, lateralM: 0, backM: 0, settingsId: w.settings12 }] };
+    const queued = await call(worker, jobsRoute.POST as Handler, "/api/farming/tractor/jobs", {}, "POST", { id: w.job, operationId: w.job, farmId: w.home, paddockIds: [w.p1], operation: "spreading", equipmentId: w.spreader, trackBase64: Buffer.from(JSON.stringify(sameTrack)).toString("base64") });
+    expect(queued.status).toBe(200);
+    expect(queued.body.created).toBe(false);
+    const broken = await call(worker, jobsRoute.POST as Handler, "/api/farming/tractor/jobs", {}, "POST", { id: w.job, farmId: w.home, paddockIds: [w.p1], operation: "spreading", trackBase64: "not base64!" });
+    expect(broken.status).toBe(400);
     const different = await call(worker, jobsRoute.POST as Handler, "/api/farming/tractor/jobs", {}, "POST", { id: w.job, farmId: w.home, paddockIds: [w.p1], operation: "spreading", track: straightTrack(20) });
     expect(different.status).toBe(409);
     const count = await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query<{ n: number }>("select count(*)::int as n from tractor_jobs"));

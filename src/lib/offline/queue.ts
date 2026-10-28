@@ -2,7 +2,7 @@
  * The device's queue of work waiting for the server (#472, decisions
  * 995-998). One durable queue in IndexedDB for everything recorded on a
  * phone or tablet: farm Log records, safety reports, checks, sign-offs,
- * photos, and tractor runs (#472 stage 5). It generalises #447's drafts
+ * photos, and finished tractor jobs (#472 stage 5, decision 1028). It generalises #447's drafts
  * (decisions 912-913, 971-972) and keeps their rules:
  *
  * - Every item has a stable operation id (a UUID made on the device) that
@@ -98,7 +98,7 @@ export type QueueItem = {
   organisationId: string;
   farmId: string | null;
   farmName: string | null;
-  /** What it is, e.g. "safety.report", "farm.reading", "tractor.run". */
+  /** What it is, e.g. "safety.report", "farm.reading", "tractor.job". */
   kind: string;
   /** In words, for lists ("Near miss: tractor on the race"). */
   label: string;
@@ -261,7 +261,7 @@ export type OfflineQueue = {
   change(operationId: string, patch: { label?: string; body?: Record<string, unknown>; ready?: boolean; meta?: Record<string, unknown> }): Promise<{ item: QueueItem; stored: boolean }>;
   /** Saved on this device → Waiting to send. */
   markReady(operationId: string): Promise<{ item: QueueItem; stored: boolean }>;
-  /** Keeps or replaces a file for an item (tractor mode keeps its track this way as it records). */
+  /** Keeps or replaces a file for an item before its first send. (Tractor mode keeps its track fix by fix in its own store and hands over a finished job: decision 1029.) */
   putBlob(operationId: string, name: string, blob: Blob): Promise<boolean>;
   blob(operationId: string, name: string): Promise<Blob | null>;
   /** Lets go of an item that needs attention or is synced. Never one still waiting. */

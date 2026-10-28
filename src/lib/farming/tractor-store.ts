@@ -11,17 +11,24 @@ import type { JobSettings, Operation, TrackEvent } from "@/lib/farming/tractor-s
  * the app, a reload or a flat battery loses at most the last second. Each
  * job is kept under the server (the browser keeps each site apart), the
  * signed-in person and the organisation, so switching never mixes them.
- * A job stays here until the server has it; then it's marked sent and
- * removed a week later.
  *
- * When the shared offline queue (#472 stages 2-4) lands, sending moves to
- * it; the track itself stays here.
+ * Sending goes through the device's one queue (decisions 1028-1029): a
+ * finished job is handed to it as one item with the track as one file
+ * (tractor-queue.ts), and marked "queued" here. The track stays here too
+ * until the queue says Tohyee has it; then it's marked sent and removed a
+ * week later. The queue isn't used while recording: it keeps whole items,
+ * and rewriting a growing track every second would slow down long jobs.
  */
 
 const DB_NAME = "tohyee-tractor";
 const DB_VERSION = 1;
 
-export type LocalJobState = "recording" | "finished" | "sending" | "sent" | "needs_attention";
+/**
+ * recording; finished (not yet handed to the queue); queued (the queue has
+ * it); sent (Tohyee has it). "sending" and "needs_attention" are from
+ * before the queue and are handed to it like "finished".
+ */
+export type LocalJobState = "recording" | "finished" | "queued" | "sending" | "sent" | "needs_attention";
 
 export type LocalJob = {
   id: string;
@@ -38,6 +45,8 @@ export type LocalJob = {
   /** Hazards and no-go zones when the job started (advisory), and when they were loaded. */
   hazards: Array<{ id: string; title: string; noGo: boolean; point: [number, number] | null; ring: Array<[number, number]> | null }>;
   hazardsAt: string | null;
+  /** "device" when they came from the farm's offline copy (the setup screen had no connection). */
+  hazardsFrom?: "job" | "device";
   operation: Operation;
   equipmentId: string | null;
   equipmentName: string | null;
@@ -129,6 +138,15 @@ export async function localPoints(jobId: string): Promise<TrackPoint[]> {
   const range = IDBKeyRange.bound([jobId, 0], [jobId, Number.MAX_SAFE_INTEGER]);
   const rows = (await result(db.transaction("points", "readonly").objectStore("points").getAll(range))) as Array<{ n: number; p: TrackPoint }>;
   return rows.sort((a, b) => a.n - b.n).map((row) => row.p);
+}
+
+/** Removes a job from this device, with its track (only once the queue no longer needs it). */
+export async function removeLocal(id: string): Promise<void> {
+  const db = await open();
+  const transaction = db.transaction(["jobs", "points"], "readwrite");
+  transaction.objectStore("points").delete(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
+  transaction.objectStore("jobs").delete(id);
+  await done(transaction);
 }
 
 /** Removes a job the server has had for more than a week. Never one that hasn't been sent. */

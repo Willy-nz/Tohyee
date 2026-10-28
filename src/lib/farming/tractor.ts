@@ -228,6 +228,22 @@ export function parseTrack(input: unknown): JobTrack {
   return { version: 1, settings, points, events };
 }
 
+/**
+ * The track as sent: `track` (JSON in the body), or `trackBase64` (the
+ * track's JSON as a file, which is how the device's queue sends it so a long
+ * track isn't held in memory with the queue's items; decision 1028).
+ */
+export function trackFromInput(input: Record<string, unknown>): unknown {
+  if (input.track !== undefined && input.track !== null) return input.track;
+  if (typeof input.trackBase64 !== "string") return undefined;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(input.trackBase64)) throw new ValidationError("The job's track file isn't valid.");
+  try {
+    return JSON.parse(Buffer.from(input.trackBase64, "base64").toString("utf8"));
+  } catch {
+    throw new ValidationError("The job's track file isn't valid.");
+  }
+}
+
 export function trackHash(track: JobTrack): string {
   return createHash("sha256").update(JSON.stringify(track)).digest("hex");
 }
@@ -311,7 +327,7 @@ export async function saveTractorJob(tx: OrgTx, input: Record<string, unknown>):
   const id = requireUuid(input.id, "Job id");
   const farmId = requireId(input.farmId, "Farm");
   await requireFarmAccess(tx, farmId);
-  const track = parseTrack(input.track);
+  const track = parseTrack(trackFromInput(input));
   const hash = trackHash(track);
   const existing = await tx.query<{ farm_id: string; track_sha256: string; operator_user_id: string }>("select farm_id::text, track_sha256, operator_user_id::text from tractor_jobs where id = $1", [id]);
   if (existing.rows[0]) {

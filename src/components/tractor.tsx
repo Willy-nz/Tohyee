@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/components/confirm-dialog";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import { useApiData } from "@/components/hooks";
-import { TractorLegend, TractorMap, type TractorMapHazard } from "@/components/tractor-map";
+import { useOfflineQueue } from "@/components/offline-queue";
+import { useOnline } from "@/components/offline-support";
+import { TractorLegend, TractorMap } from "@/components/tractor-map";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { api, ApiError, errorMessage } from "@/lib/client/api";
+import { api, errorMessage, offlineServedSnapshot } from "@/lib/client/api";
 import { computeCoverage, type CoverageResult, gpsQuality, THRESHOLDS, type TrackPoint } from "@/lib/farming/coverage";
 import type { FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import {
@@ -38,7 +41,6 @@ import {
   OPERATION_LABELS,
   type Operation,
   OPERATIONS,
-  packPoint,
   paddockLabel,
   QUANTITY_UNITS,
   RATE_UNITS,
@@ -47,8 +49,11 @@ import {
   type TractorJob,
   type TractorJobListItem,
 } from "@/lib/farming/tractor-shared";
-import { forgetSent, localJobs, localPoints, type LocalJob, saveLocal, tractorStoreAvailable } from "@/lib/farming/tractor-store";
-import { type CurrentRecord, type HazardData, hazardState } from "@/lib/safety/shared";
+import { hazardNote, hazardsForMap, type PackHazards, SEND_STATE_LABELS, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
+import { forgetSent, localJobs, localPoints, type LocalJob, removeLocal, saveLocal, tractorStoreAvailable } from "@/lib/farming/tractor-store";
+import { answerOffline } from "@/lib/offline/packs";
+import type { OfflineQueue, QueueItem } from "@/lib/offline/queue";
+import type { CurrentRecord, HazardData } from "@/lib/safety/shared";
 import styles from "./tractor.module.css";
 
 /*
@@ -64,12 +69,6 @@ const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" 
 
 function useImageryKey(organisationId: string) {
   return useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId }).data?.settings.imageryKey ?? null;
-}
-
-function hazardsForMap(hazards: Array<CurrentRecord<HazardData>>): TractorMapHazard[] {
-  return hazards
-    .filter((hazard) => hazardState(hazard) === "active" && (hazard.data.point || hazard.data.zone))
-    .map((hazard) => ({ id: hazard.recordId, title: hazard.data.title, noGo: hazard.data.noGo, point: hazard.data.point, ring: hazard.data.zone?.coordinates[0] ?? null }));
 }
 
 function newId(): string {
@@ -99,46 +98,37 @@ function clockNow(): number {
 
 // Sending ---------------------------------------------------------------------------------------------------
 
-/** Sends a finished job. The job's id makes a resend safe: the server returns the one it already has. */
-async function sendJob(job: LocalJob): Promise<LocalJob> {
+/**
+ * Hands a finished job to the device's queue (decision 1028), which sends
+ * it once, by the job's id, whenever Tohyee can be reached. The track stays
+ * in tractor mode's own store until Tohyee has it.
+ */
+async function handOver(queue: OfflineQueue, job: LocalJob): Promise<LocalJob> {
   const points = await localPoints(job.id);
-  const sending = await saveLocal({ ...job, state: "sending", problem: null });
-  try {
-    await api<{ created: boolean; job: TractorJob }>("/api/farming/tractor/jobs", {
-      method: "POST",
-      body: {
-        organisationId: job.organisationId,
-        id: job.id,
-        farmId: job.farmId,
-        paddockIds: job.paddockIds,
-        operation: job.operation,
-        equipmentId: job.equipmentId,
-        startedAt: job.startedAt,
-        finishedAt: job.finishedAt ?? Date.now(),
-        track: { version: 1, settings: job.settings, points: points.map(packPoint), events: job.events },
-        notes: job.notes,
-        product: job.product,
-        declaredRate: job.declaredRate,
-        declaredRateUnit: job.declaredRate ? job.declaredRateUnit : null,
-        declaredQuantity: job.declaredQuantity,
-        declaredQuantityUnit: job.declaredQuantity ? job.declaredQuantityUnit : null,
-      },
-    });
-    return saveLocal({ ...sending, state: "sent", sentAt: Date.now(), problem: null });
-  } catch (error) {
-    // A refusal needs a person; no connection just waits.
-    const refused = error instanceof ApiError && error.status >= 400 && error.status < 500;
-    return saveLocal({ ...sending, state: refused ? "needs_attention" : "finished", problem: refused ? errorMessage(error) : "Not sent yet: no connection to the Tohyee server. It's saved on this device and will be sent when there's a connection." });
-  }
+  const { stored } = await queue.add(tractorQueueItem(job, points));
+  // Not stored: only this page has it (the device's storage refused it); the job stays "finished" and is handed over again.
+  return stored ? saveLocal({ ...job, state: "queued", problem: null }) : job;
 }
 
-const LOCAL_STATE_LABELS: Record<LocalJob["state"], string> = {
-  recording: "Not finished",
-  finished: "Saved on this device · waiting to send",
-  sending: "Sending…",
-  sent: "Sent",
-  needs_attention: "Needs attention",
-};
+/** The farm's hazards from its offline copy on this device, read again when the connection changes (decision 1030). */
+function usePackHazards(job: Pick<LocalJob, "organisationId" | "userId" | "farmId">, online: boolean): PackHazards | null {
+  const [pack, setPack] = useState<PackHazards | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    answerOffline({ server: window.location.origin, userId: job.userId, organisationId: job.organisationId }, "/api/farming/safety", { farmId: job.farmId }).then(
+      (answer) => {
+        if (cancelled || !answer.found) return;
+        const body = answer.body as { hazards?: Array<CurrentRecord<HazardData>> };
+        setPack({ hazards: hazardsForMap(body.hazards ?? []), savedAt: answer.savedAt });
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [job.organisationId, job.userId, job.farmId, online]);
+  return pack;
+}
 
 // The tractor page ------------------------------------------------------------------------------------------
 
@@ -150,6 +140,8 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
   const [jobs, setJobs] = useState<LocalJob[] | null>(null);
   const [storageProblem, setStorageProblem] = useState<string | null>(null);
   const [driving, setDriving] = useState<LocalJob | null>(null);
+  const { queue, items, problem: queueProblem } = useOfflineQueue(organisationId);
+  const confirm = useConfirm();
   const server = useApiData<{ jobs: TractorJobListItem[] }>("/api/farming/tractor/jobs", { organisationId, farmId: farm.id });
   const reloadServer = server.reload;
 
@@ -168,24 +160,43 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
     }
   }, [scope]);
 
-  // Sends whatever's waiting, now and whenever the connection comes back.
-  const sendWaiting = useCallback(async () => {
-    if (!tractorStoreAvailable()) return;
-    const waiting = (await localJobs(scope)).filter((job) => job.state === "finished" || job.state === "sending");
-    for (const job of waiting) await sendJob(job);
-    if (waiting.length) {
-      await refresh();
-      reloadServer();
-    }
-  }, [scope, refresh, reloadServer]);
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading from the device's storage once
-    void refresh().then(() => sendWaiting());
-    const online = () => void sendWaiting();
-    window.addEventListener("online", online);
-    return () => window.removeEventListener("online", online);
-  }, [refresh, sendWaiting]);
+    void refresh();
+  }, [refresh]);
+
+  // Finished jobs go to the queue; jobs the queue has sent are marked sent. The queue sends them (OfflineSupport, or Send now).
+  const drivingId = driving?.id ?? null;
+  const tractorItems = useMemo(() => items.filter((item) => item.kind === TRACTOR_QUEUE_KIND), [items]);
+  // Jobs this page has handed over; one the device's storage refused isn't handed over again and again.
+  const handedOver = useRef(new Set<string>());
+  const syncedIds = tractorItems.filter((item) => item.status === "synced").map((item) => item.operationId).join(",");
+  useEffect(() => {
+    if (!queue || !jobs) return;
+    const synced = new Set(syncedIds.split(",").filter(Boolean));
+    const toHandOver = jobs.filter((job) => job.id !== drivingId && !handedOver.current.has(job.id) && (job.state === "finished" || job.state === "sending" || job.state === "needs_attention"));
+    const toMarkSent = jobs.filter((job) => job.state !== "sent" && job.state !== "recording" && synced.has(job.id));
+    if (!toHandOver.length && !toMarkSent.length) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        for (const job of toMarkSent) await saveLocal({ ...job, state: "sent", sentAt: Date.now(), problem: null });
+        for (const job of toHandOver) {
+          handedOver.current.add(job.id);
+          if (!synced.has(job.id)) await handOver(queue, job);
+        }
+      } catch (error) {
+        if (!cancelled) setStorageProblem(`This device's storage isn't working: ${errorMessage(error)}`);
+      }
+      if (cancelled) return;
+      await refresh();
+      if (toMarkSent.length) reloadServer();
+      if (toHandOver.length && navigator.onLine) void queue.sync();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queue, jobs, syncedIds, drivingId, refresh, reloadServer]);
 
   if (driving) {
     return (
@@ -203,11 +214,13 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
 
   const here = (jobs ?? []).filter((job) => job.farmId === farm.id);
   const unfinished = here.filter((job) => job.state === "recording");
-  const waiting = here.filter((job) => job.state === "finished" || job.state === "sending" || job.state === "needs_attention");
+  const waiting = here.filter((job) => job.state !== "recording" && job.state !== "sent");
+  const itemFor = (job: LocalJob): QueueItem | undefined => tractorItems.find((item) => item.operationId === job.id);
   return (
     <div className={styles.home}>
       <Notice tone="info">{TRACTOR_NOTICE} Recording only happens while Tohyee is on screen: mount the phone and keep the screen on.</Notice>
       {storageProblem ? <Notice tone="error">{storageProblem}</Notice> : null}
+      {queueProblem ? <Notice tone="error">{queueProblem}</Notice> : null}
       {unfinished.map((job) => (
         <Card key={job.id} title="A job isn't finished" description={`${OPERATION_LABELS[job.operation]} · ${paddockLabel(job.paddockNames)} · started ${new Date(job.startedAt).toLocaleString("en-NZ")}`}>
           <p>Tohyee stopped while this job was recording (the app closed, the phone restarted or the page reloaded). What was recorded is safe on this device. The time it was stopped is a gap.</p>
@@ -217,29 +230,57 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
         </Card>
       ))}
       {waiting.length ? (
-        <Card title="On this device" description="Finished jobs stay here until the server has them.">
+        <Card title="On this device" description="Finished jobs stay here until Tohyee has them. They're sent with the rest of the work on this device, whenever Tohyee can be reached.">
           <ul className={styles.list}>
-            {waiting.map((job) => (
-              <li key={job.id}>
-                <div>
-                  <strong>{OPERATION_LABELS[job.operation]}</strong> · {paddockLabel(job.paddockNames)} · {new Date(job.startedAt).toLocaleString("en-NZ")}
+            {waiting.map((job) => {
+              const item = itemFor(job);
+              const state = sendState(job, item, item && queue ? queue.shownStatus(item) : undefined);
+              const stuck = state.status === "attention" || state.status === "let_go";
+              return (
+                <li key={job.id}>
                   <div>
-                    <Badge tone={job.state === "needs_attention" ? "red" : "amber"}>{LOCAL_STATE_LABELS[job.state]}</Badge>
+                    <strong>{OPERATION_LABELS[job.operation]}</strong> · {paddockLabel(job.paddockNames)} · {new Date(job.startedAt).toLocaleString("en-NZ")}
+                    <div>
+                      <Badge tone={stuck || state.status === "unsaved" ? "red" : state.status === "synced" ? "green" : "amber"}>{SEND_STATE_LABELS[state.status]}</Badge>
+                    </div>
+                    {state.problem ? <p className={ui.muted}>{state.status === "attention" ? `Tohyee said: ${state.problem}` : state.problem}</p> : null}
                   </div>
-                  {job.problem ? <p className={ui.muted}>{job.problem}</p> : null}
-                </div>
-                <Button
-                  variant="secondary"
-                  onClick={async () => {
-                    await sendJob(job);
-                    await refresh();
-                    reloadServer();
-                  }}
-                >
-                  Send now
-                </Button>
-              </li>
-            ))}
+                  <div className={styles.row}>
+                    {stuck && queue ? (
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          if (item) await queue.dismiss(item.operationId);
+                          await handOver(queue, { ...job, state: "finished" });
+                          await refresh();
+                          if (navigator.onLine) await queue.sync();
+                        }}
+                      >
+                        Send again
+                      </Button>
+                    ) : null}
+                    {!stuck && queue && item?.status === "waiting" ? (
+                      <Button variant="secondary" onClick={() => void queue.sync()}>
+                        Send now
+                      </Button>
+                    ) : null}
+                    {stuck && queue ? (
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          if (!(await confirm("The job and its track are removed from this device. Tohyee hasn't got it, so it will be lost.", { title: "Remove this job?", confirmLabel: "Remove", danger: true }))) return;
+                          if (item) await queue.dismiss(item.operationId);
+                          await removeLocal(job.id);
+                          await refresh();
+                        }}
+                      >
+                        Remove from this device
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       ) : null}
@@ -314,7 +355,9 @@ function TractorSetup({ organisationId, farm, userId, onStart }: { organisationI
         paddockNames: active.filter((paddock) => chosen.includes(paddock.id)).map((paddock) => paddock.name),
         boundaries: active.filter((paddock) => chosen.includes(paddock.id) && paddock.geometry).map((paddock) => ({ paddockId: paddock.id, geometry: paddock.geometry! })),
         hazards: hazardsForMap(hazards.data?.hazards ?? []),
-        hazardsAt: hazards.data ? new Date().toISOString() : null,
+        // Read from the farm's offline copy when there was no connection: its age, not now (decision 1030).
+        hazardsAt: hazards.data ? (offlineServedSnapshot().get("/api/farming/safety") ?? new Date(now).toISOString()) : null,
+        hazardsFrom: hazards.data && offlineServedSnapshot().has("/api/farming/safety") ? "device" : "job",
         operation,
         equipmentId: selected.id,
         equipmentName: selected.name,
@@ -559,6 +602,8 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
   const [online, setOnline] = useState(true);
   const [follow, setFollow] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  const pack = usePackHazards(initial, online);
+  const mapHazards = shownHazards(job, pack, online);
   const [reviewing, setReviewing] = useState(initial.recorder.status === "finished");
   const [askFinish, setAskFinish] = useState(false);
   const [widthOpen, setWidthOpen] = useState(false);
@@ -774,7 +819,7 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
         <TractorMap
           label={`Map: ${where}, worked area so far and where the tractor is`}
           paddocks={job.boundaries.map((entry, index) => ({ id: entry.paddockId, name: job.paddockNames[index] ?? "", geometry: entry.geometry, chosen: true }))}
-          hazards={job.hazards}
+          hazards={mapHazards.hazards}
           footprint={coverage?.result.footprint}
           overlap={coverage?.result.overlap}
           lines={coverage?.result.lines}
@@ -786,7 +831,7 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
           imageryKey={imageryKey}
           large
         />
-        {job.hazards.length ? <p className={styles.mapNote}>Hazards as at {job.hazardsAt ? new Date(job.hazardsAt).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" }) : "unknown"}: a reminder only.</p> : null}
+        {hazardNote(mapHazards, now) ? <p className={styles.mapNote}>{hazardNote(mapHazards, now)}</p> : null}
       </div>
       <section className={styles.panel} aria-label="Controls">
         <dl className={styles.stats}>
@@ -936,15 +981,42 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
   const [quantity, setQuantity] = useState(job.declaredQuantity ?? "");
   const [quantityUnit, setQuantityUnit] = useState(job.declaredQuantityUnit ?? "t");
   const [sending, setSending] = useState(false);
-  const [outcome, setOutcome] = useState<LocalJob | null>(null);
+  const [outcome, setOutcome] = useState<{ sent: boolean; tone: "warning" | "error"; text: string } | null>(null);
+  const { queue } = useOfflineQueue(job.organisationId);
+  const online = useOnline();
+  const pack = usePackHazards(job, online);
+  const hazards = shownHazards(job, pack, online);
+  const [reviewedAt] = useState(() => Date.now());
   const summary = shown.summary;
   const send = async () => {
     setSending(true);
-    const saved = await saveLocal({ ...job, notes: notes || null, product: product || null, declaredRate: rate || null, declaredRateUnit: rateUnit, declaredQuantity: quantity || null, declaredQuantityUnit: quantityUnit, state: "finished" });
-    onSaved(saved);
-    const after = await sendJob(saved);
-    setOutcome(after);
-    setSending(false);
+    try {
+      const saved = await saveLocal({ ...job, notes: notes || null, product: product || null, declaredRate: rate || null, declaredRateUnit: rateUnit, declaredQuantity: quantity || null, declaredQuantityUnit: quantityUnit, state: "finished" });
+      onSaved(saved);
+      if (!queue) {
+        setOutcome({ sent: false, tone: "warning", text: "Saved on this device. It will be sent from the tractor page when the device's list of work to send opens." });
+        return;
+      }
+      const queued = await handOver(queue, saved);
+      onSaved(queued);
+      if (navigator.onLine) await queue.sync();
+      const item = queue.items({ kind: TRACTOR_QUEUE_KIND }).find((entry) => entry.operationId === job.id);
+      if (item?.status === "synced") {
+        onSaved(await saveLocal({ ...queued, state: "sent", sentAt: Date.now() }));
+        setOutcome({ sent: true, tone: "warning", text: "" });
+      } else if (item?.status === "attention") {
+        // Refused straight away: taken back off the queue so it can be fixed here and sent again.
+        await queue.dismiss(item.operationId);
+        onSaved(await saveLocal({ ...queued, state: "finished" }));
+        setOutcome({ sent: false, tone: "error", text: `Tohyee refused it: ${item.error ?? "no reason given"}. The job is still on this device.` });
+      } else {
+        setOutcome({ sent: false, tone: "warning", text: item && queue.shownStatus(item) === "unsaved" ? "Not sent yet, and this device's storage wouldn't keep it. Keep Tohyee open until it's sent." : "Not sent yet: no connection to Tohyee. It's saved on this device and goes with the rest of the work on this device when there's a connection." });
+      }
+    } catch (error) {
+      setOutcome({ sent: false, tone: "error", text: `It couldn't be saved on this device: ${errorMessage(error)}` });
+    } finally {
+      setSending(false);
+    }
   };
   return (
     <div className={styles.review}>
@@ -956,7 +1028,7 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
         <TractorMap
           label="The job's track and estimated worked area"
           paddocks={job.boundaries.map((entry, index) => ({ id: entry.paddockId, name: job.paddockNames[index] ?? "", geometry: entry.geometry, chosen: true }))}
-          hazards={job.hazards}
+          hazards={hazards.hazards}
           footprint={shown.footprint}
           overlap={shown.overlap}
           missed={shown.missed}
@@ -965,6 +1037,7 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
           imageryKey={imageryKey}
         />
       </div>
+      {hazardNote(hazards, reviewedAt) ? <p className={ui.muted}>{hazardNote(hazards, reviewedAt)}</p> : null}
       <TractorLegend withPaddocks={job.boundaries.length > 0} />
       <SummaryFacts summary={summary} />
       <Notice tone="info">{TRACTOR_NOTICE}</Notice>
@@ -999,10 +1072,10 @@ function FinishReview({ job, points, imageryKey, onSaved, onClose }: { job: Loca
       <Field label="Notes">
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} rows={3} />
       </Field>
-      {outcome?.state === "sent" ? <Notice tone="success">Sent. The job is on the server and can be seen on the website.</Notice> : null}
-      {outcome && outcome.state !== "sent" ? <Notice tone={outcome.state === "needs_attention" ? "error" : "warning"}>{outcome.problem}</Notice> : null}
+      {outcome?.sent ? <Notice tone="success">Sent. The job is on the server and can be seen on the website.</Notice> : null}
+      {outcome && !outcome.sent ? <Notice tone={outcome.tone}>{outcome.text}</Notice> : null}
       <div className={styles.row}>
-        {outcome?.state === "sent" ? (
+        {outcome?.sent ? (
           <>
             <Link className={styles.linkAsButton} href={`/operations/farm/tractor/${job.id}?farm=${job.farmId}`}>
               Open the job
