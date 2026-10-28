@@ -22,15 +22,16 @@
 export type DraftKind = "reading" | "grazing_in" | "grazing_out" | "feed";
 export type DraftStatus = "saved" | "synced" | "attention";
 
+/** The device queue's words (#472, decision 1011): a draft is kept on the device and waiting to send until Tohyee has it. */
 export const DRAFT_STATUS_LABELS: Record<DraftStatus, string> = {
-  saved: "Saved on this phone",
+  saved: "Waiting to send",
   synced: "Synced",
   attention: "Needs attention",
 };
 
-/** The label for a draft: "Saved on this phone" only when the phone's storage really has it (#463, decision 972). */
+/** The label for a draft: "Waiting to send" only when the device's storage really has it, otherwise "Unsaved" (#463, decision 972). */
 export function draftStatusLabel(status: DraftStatus, stored: boolean): string {
-  return status === "saved" && !stored ? "Not saved on this phone" : DRAFT_STATUS_LABELS[status];
+  return status === "saved" && !stored ? "Unsaved" : DRAFT_STATUS_LABELS[status];
 }
 
 export type Draft = {

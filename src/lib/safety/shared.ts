@@ -551,6 +551,8 @@ export type VisitData = {
   leftAt: string | null;
   signedHow: SignedHow;
   why?: string | null;
+  /** Recorded on a phone with no connection (#472, decision 1014): the phone's time of the sign-in or sign-out, sent later. */
+  phoneTime?: string | null;
 };
 
 // Equipment and pre-start checks ------------------------------------------------------------------------

@@ -51,7 +51,9 @@ Phones only install a web app and keep it offline on an HTTPS address (or
 | Your farms' information (below) | Kept automatically; shown as **last known** |
 | Get Tohyee on this device | Opens |
 | The books, reports, settings and everything else | Needs a connection; says so |
-| Recording field work | Kept on the device and sent later (as each screen adds it) |
+| Log: cover readings, mob in and out, feed, the farm walk | Kept on the device, sent later |
+| Safety: report a hazard, near miss or incident (with photos) | Kept on the device, sent later |
+| Safety: pre-start checks, marking your action done, signing an induction, signing in and out | Kept on the device, sent later |
 | Approvals (releasing equipment, checking or closing actions) | Always need a connection |
 
 ### Farm information kept on the device
@@ -125,6 +127,26 @@ details.
 It's sent when a Tohyee page opens, when the connection comes back, when
 the app comes back to the screen and every 30 seconds while anything
 waits. Each record carries its own id, so sending it twice records it once.
+
+### Safety without a signal
+
+- **Emergency details and hazards** come from the farm information kept on
+  the device, with their age shown. Call 111 always works.
+- **Report something** works offline; photos are kept as small copies (and
+  where the phone was, if you tick "Add where I am to the photo") and sent
+  first.
+- **Pre-start checks** are saved against the checklist version on the
+  device. A failed critical check shows **Fault on this device** on the
+  machine straight away: don't use it. Nobody has been told until it's
+  sent; then Tohyee puts it out of use and makes the action. If the
+  checklist changed meanwhile, the check needs doing again.
+- **Signing an induction** is saved against the version you read; if it
+  changed meanwhile, you're asked to read it again.
+- **Signing in and out** keep the phone's time. Pending sign-ins aren't on
+  Tohyee's On site list until they're sent: don't rely on it for a
+  headcount.
+- **Releasing a machine, checking or closing actions** always need a
+  connection, because Tohyee checks who may do it at the time.
 
 ## For developers
 

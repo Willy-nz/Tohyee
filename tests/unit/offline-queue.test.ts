@@ -242,7 +242,7 @@ describe("the queue", () => {
   });
 
   it("lets go of synced items after a week unless a waiting item uses them", () => {
-    const base = { scope: "s", userId: "u", organisationId: "o", farmId: null, farmName: null, kind: "k", label: "l", attempts: 1, error: null, result: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" };
+    const base = { scope: "s", userId: "u", organisationId: "o", farmId: null, farmName: null, kind: "k", label: "l", attempts: 1, error: null, result: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", meta: {} };
     const items: QueueItem[] = [
       { ...base, operationId: "old", status: "synced", syncedAt: "2026-10-01T00:00:00Z", request: { method: "POST", path: "/x", body: {} } },
       { ...base, operationId: "used", status: "synced", syncedAt: "2026-10-01T00:00:00Z", request: { method: "POST", path: "/x", body: {} } },

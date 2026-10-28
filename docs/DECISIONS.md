@@ -9653,3 +9653,74 @@ a real phone.
      screens), other farm contacts beyond the emergency details, and the
      emergency card's own localStorage copy (decision 940), which stays as
      it was.
+
+### Offline work through the queue, and safety offline (#472 stage 4; decisions 1008-1016)
+
+From the plan on #472 ("one local queue in IndexedDB, building on #458's
+operation IDs; photos with GPS and time, plus resumable uploads; safety …
+following #446's layout; honest status, with approvals always needing the
+server") and the safety comment on #472. **Not yet reviewed by Jess.**
+Claude, 28 October 2026. Not yet tried on a real phone.
+
+1008. **Kept on the device first, then sent.** Safety reports, pre-start
+     checks, marking an action done, induction sign-offs, signing in and
+     out, photos, and the Log's records all go through the one queue
+     (decision 995): kept on the device, then sent straight away when
+     Tohyee can be reached. A refusal straight away (a mistake in the
+     form) is shown on the form as before and nothing is left on the
+     device; with no connection the form says **Saved on this device,
+     waiting to send. Nobody has been told yet**, and it goes by itself
+     when Tohyee can be reached (decision 997).
+1009. **What's waiting is listed where it was made.** The Safety overview
+     lists the farm's safety records on this device with their status in
+     words, Tohyee's reason when one was refused, **Let it go** for those,
+     and **Send now**; synced ones stay listed for the day. Records for
+     other farms are counted and go to their own farm.
+1010. **Safety reports move from their own store into the queue** (decision
+     944's "it moves to #447's shared drafts" when the rules match). Reports
+     an earlier version kept in localStorage are moved in once, with their
+     operation ids, and let go there only when the queue has them.
+1011. **The Log's drafts live in the queue too.** The Log keeps its rules
+     (decisions 912-913, 971-972): each draft is a queue item with its
+     operation id, sent to its own farm's address; the walk in progress is
+     kept beside the queue in IndexedDB. Drafts in localStorage from an
+     earlier version are moved in the same way. "Saved on this phone" is
+     now **Waiting to send**, and "Not saved on this phone" **Unsaved**,
+     the queue's words.
+1012. **Photos: small copies, the phone's time, and where only if asked**
+     (tenant migration 0193). A photo is compressed on the phone (1600
+     pixels, JPEG) and kept as soon as it's chosen; with no connection it
+     waits on the device and the record naming it waits for it. Its
+     operation id becomes the file's id on Tohyee, so a photo sent again is
+     found, not kept twice. "Add where I am to the photo" (off unless
+     ticked) keeps the phone's latitude, longitude, accuracy and fix time
+     as the phone gave them (`safety_files.place`); the phone's file time
+     is kept as before (decision 945) and Tohyee's receipt time is the
+     server's. A copy loses the camera's EXIF date (the phone's time
+     stays). Each photo is one step, tried again from the start; uploads
+     aren't split into parts.
+1013. **Pre-start checks offline, against the checklist shown.** The check
+     is saved with the checklist version on the phone (decision 954); if
+     the checklist changed before it arrives, Tohyee refuses it and it
+     needs attention ("The checklist has changed since it was opened. Open
+     it again."). A failed critical item shows at once on the machine as
+     **Fault on this device**: don't use it, nobody has been told yet; the
+     machine is put out of use and the action made only when Tohyee records
+     the check (decision 955).
+1014. **Sign-offs, signing in and out offline.** A sign-off carries the
+     induction version read; a newer version on Tohyee refuses it and asks
+     for it to be read again (decision 949). Signing in and out keep the
+     phone's time (`phoneTime` on the visit, at most 7 days back and not in
+     the future), shown as "on a phone, sent …" when it arrived later; a
+     sign-out's time is when the phone says they left. Pending sign-ins are
+     listed as **Pending** with a warning not to rely on the list for a
+     headcount. A sign-out sent twice signs out once (its operation id).
+1015. **Approvals always need Tohyee.** Releasing a machine, checking,
+     closing and reopening actions say they need a connection and can't be
+     saved for later (decision 998); marking your own action done can, with
+     the version it was done against, and is refused if someone changed it
+     first.
+1016. **Not in this change:** hazards added offline by those who keep the
+     registers (they still need a connection), editing emergency details
+     offline, training and chemicals offline, and the emergency card's own
+     localStorage copy (decision 940), which stays.

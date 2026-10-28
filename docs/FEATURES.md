@@ -2947,6 +2947,20 @@ that something happened.
   kept, when and how big, with extras (3 years, original photos), Update
   now and removal (never of unsent work). Not yet tried on a real phone.
 
+- **Offline work and safety without a signal** (#472 stage 4, decisions
+  1008-1016): safety reports with photos, pre-start checks, marking your
+  action done, induction sign-offs, signing in and out, and the Log's
+  records are kept on the device first and sent once when Tohyee can be
+  reached, through the one queue (the Log's and safety's old localStorage
+  drafts move into it). Photos are compressed copies with the phone's time
+  and, if asked, where the phone was (tenant migration 0193); a photo's
+  operation id is its file id, so it's never kept twice. A failed critical
+  check shows **Fault on this device** at once; a changed checklist or
+  induction makes a queued check or sign-off need attention; sign-ins keep
+  the phone's time and show as **Pending**. Releasing machines and
+  checking or closing actions always need a connection. Not yet tried on a
+  real phone.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
