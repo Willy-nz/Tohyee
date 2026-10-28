@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { operationId, useFarmDrafts } from "@/components/farm-drafts";
+import { EffluentLogButtons } from "@/components/farm-effluent-log";
 import { LogSafetyReport } from "@/components/farm-safety-reports";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
@@ -123,6 +124,7 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
             <small>Someone hurt, or damage done</small>
           </button>
         </div>
+        <EffluentLogButtons organisationId={organisationId} farm={farm} buttonClass={styles.bigButtons} itemClass={styles.bigButton} />
         <p className={ui.muted}>Not kept in Tohyee yet: rainfall, voice notes, animal treatments, and births and deaths.</p>
       </Card>
       <Card title="On this phone" description="Each record is saved here first, then sent. Nothing is lost without a signal.">

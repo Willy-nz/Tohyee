@@ -25,6 +25,8 @@ import { GET as launchersGet } from "@/app/api/farming/launchers/route";
 import { GET as paddockPastureGet } from "@/app/api/farming/paddocks/[paddockId]/pasture/route";
 import { GET as planGet } from "@/app/api/farming/plans/[planId]/route";
 import { GET as productsGet } from "@/app/api/farming/products/route";
+import { GET as effluentLogGet } from "@/app/api/farming/effluent/log/route";
+import { GET as effluentGet } from "@/app/api/farming/effluent/route";
 import { GET as chemicalsGet } from "@/app/api/farming/safety/chemicals/route";
 import { GET as equipmentChecksGet } from "@/app/api/farming/safety/equipment/[recordId]/checks/route";
 import { GET as equipmentGet } from "@/app/api/farming/safety/equipment/route";
@@ -190,6 +192,11 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(trainingGet, "/api/farming/safety/training", {}, {});
       break;
     }
+    case "effluent":
+      // The effluent screens' reads (#487): the setup, and the log's last 30 days.
+      await r.read(effluentGet, "/api/farming/effluent", {}, { farmId: farm });
+      await r.read(effluentLogGet, "/api/farming/effluent/log", {}, { farmId: farm });
+      break;
     case "photos": {
       // The files named in the farm's safety records; the page fetches each as a small copy.
       const sources = reader(request, organisationId);

@@ -29,6 +29,7 @@ import { isoDateAt } from "@/lib/dates";
 import { paddockBand } from "@/lib/farming/map-colours";
 import { paddockStatuses } from "@/lib/farming/paddock-status";
 import { getTractorJob, listTractorEquipment, listTractorJobs } from "@/lib/farming/tractor";
+import { effluentLog } from "@/lib/effluent/log";
 import { effluentSetup } from "@/lib/effluent/setup";
 import { listEquipment } from "@/lib/safety/equipment";
 import { readSafetyFile } from "@/lib/safety/files";
@@ -414,6 +415,16 @@ describeWithDatabase("the demo farm (#437)", () => {
     expect(setup.consents).toHaveLength(1);
     expect(setup.consents[0]).toMatchObject({ version: 2, data: { council: "orc", template: "orc", maxDepthMm: "25", fromTemplate: expect.arrayContaining(["buffers"]) } });
     expect((await as((tx) => checkSafetyHistory(tx))).problems).toEqual([]);
+  });
+
+  it("has a fortnight's effluent log: runs, pond readings, wet days stored, one ponding, one too soon, the pods running now (decision 1089)", async () => {
+    const homeId = (await as((tx) => tx.query<{ id: string }>("select id::text from farms where name = 'Home farm'"))).rows[0].id;
+    const log = await as((tx) => effluentLog(tx, homeId, { from: "2026-10-01", to: TODAY }));
+    expect(log.applications.filter((each) => each.running).map((each) => log.setup.systems.find((system) => system.recordId === each.data.systemId)?.data.name)).toEqual(["Pods (K-line)"]);
+    expect(log.deferrals.map((each) => each.data.reason)).toEqual(["too_wet", "too_wet"]);
+    expect(log.summary).toMatchObject({ overDepth: 0, ponding: 1, runoff: 0, tooSoon: 1, inBuffer: 0, whileOutOfUse: 0, noPondingCheck: 0 });
+    expect(log.applications.every((each) => each.running || each.data.depthWorkedOut !== null)).toBe(true);
+    expect(log.lastMoved.map((each) => each.systemName).sort()).toEqual(["Pods (K-line)", "Travelling irrigator"]);
   });
 
   it("has Analytics reports that all run", async () => {

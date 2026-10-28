@@ -86,6 +86,54 @@ Every setup record is a version in the safety history: dated by the
 database, never changed or deleted, a correction says what was wrong, and a
 record entered by mistake is withdrawn (it stays, marked).
 
+## The daily log (decisions 1080-1089)
+
+Farm staff, and bookkeepers and above, record on their farms: More ›
+Effluent › **Irrigation log** and **Ponds and storage**, or from the Log
+tab's Effluent buttons (shown on farms with a system). Everything is saved
+on the device first and sent through the phone's one queue, so it works
+with no signal and is kept once however often it's sent.
+
+- **A run**: the system, block, paddock and run or line; started (and, if
+  it's already finished, stopped); where the pods or irrigator were set
+  (the phone's place, if allowed); weather and soil notes; photos (each
+  keeps the camera's time, the phone's time and, if ticked, where it was).
+  **Shifted** adds a position with its time; **Stopped** needs the
+  **ponding and runoff check** (none, ponding or runoff, and what was seen
+  if any). A tanker or spreader run records loads and the area.
+- **Depth as entered and as worked out.** The person may enter a measured
+  depth. Tohyee also works one out from the system's settings when it's
+  saved, and keeps it with the settings used (a later change to the
+  settings never rewrites an old run): travelling irrigator, flow ÷ (width
+  × speed); pods and sprinklers, rate × the longest time at a position ×
+  the share of time running; tanker, loads × tank ÷ area (10 m³ on a
+  hectare is 1 mm). Both show side by side, labelled.
+- **Last moved**: each pod line's or irrigator's last position and time
+  shows on the log's map and on Farm › Map, with "shift due" from the
+  system's shift interval.
+- **Pond readings** against the pond's gauge, with a photo: about how full,
+  storage left (worked out as if the sides were straight, so a guide) and
+  days of storage at the daily inflow entered; **High** and **Low** at the
+  pond's warning levels; **Not read today**.
+- **Not applied today** (deferred irrigation): too wet, raining, frozen or
+  snow, pond too low, system out of use, or other, with a note.
+- **A system out of use** in Safety can still be recorded running: the
+  record says what happened, marked "recorded while out of use".
+- **Corrections**: the person who entered a record, or a bookkeeper or
+  above, can correct it (with why) or withdraw it; nothing is deleted.
+
+### Compared with the consent, in neutral words
+
+The log counts, for the last 30 days: runs over the most depth entered (as
+entered, else as worked out); runs by a system whose rate is over the most
+rate entered; runs on a paddock sooner than the days between applications
+entered; ponding and runoff recorded; positions inside a buffer on the map
+(a point's distance from a bore or house, or from a drawn outline); runs
+recorded while out of use; runs stopped with no ponding check; runs with no
+depth. A limit not entered is "not compared". Each run lists what to look
+at. **These count the records against the conditions as entered. They
+don't say whether the farm complies.**
+
 ## Worked checks (tests)
 
 `tests/integration/farm-effluent-setup.test.ts`:
@@ -106,6 +154,29 @@ record entered by mistake is withdrawn (it stays, marked).
 - **EF7** effluent records stay out of the WorkSafe pack and the weekly
   copy, but are in the same history.
 - **EF8** the setup route answers farm staff on their farm.
+
+`tests/integration/farm-effluent-log.test.ts`:
+
+- **EF9** a travelling irrigator run keeps depth as entered and as worked
+  out; changing the settings later doesn't rewrite it.
+- **EF10** stopping needs the ponding check; ponding needs what was seen;
+  times can't be backwards or in the future; a run needs a place.
+- **EF11** pods: shifts are positions with times; depth from the longest
+  position; last moved and shift due; no shift after the stop.
+- **EF12** a tanker run's depth is loads × tank ÷ area.
+- **EF13** the comparison counts over depth, too soon, in a buffer, ponding
+  and recorded while out of use (the pods failed a critical check).
+- **EF14** pond readings give percent full, storage and days left, and the
+  high warning; days not applied need a reason.
+- **EF15** farm staff record on their farm only; viewers can't; only the
+  person or a bookkeeper or above corrects; withdrawals keep the history
+  whole.
+- **EF16** the phone's queue sends a photo, a run, its shift and its stop
+  once each, though three answers were lost; the shift and stop find the
+  run's id from the first answer.
+
+`tests/unit/effluent-log-rules.test.ts`: depth for each type, times,
+pond state, buffers, and neutral summary wording.
 
 `tests/unit/effluent-setup-rules.test.ts`: templates name their sources
 and leave the limits to the consent, every type has settings and a

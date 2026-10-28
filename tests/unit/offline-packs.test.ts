@@ -119,8 +119,9 @@ describe("keeping farms on the device", () => {
     const { fetcher, state } = pretendServer();
     const progress: number[] = [];
     const result = await refreshPacks(SCOPE, { fetcher, factory, locks: null, onProgress: (next) => progress.push(next.done) });
-    expect(result).toEqual({ outcome: "done", updated: 2 + 9 * 2, failed: 0 });
-    expect(progress.at(-1)).toBe(20);
+    // Ten per-farm sections (effluent added for #487) for each of two farms, and the two organisation-wide ones.
+    expect(result).toEqual({ outcome: "done", updated: 2 + 10 * 2, failed: 0 });
+    expect(progress.at(-1)).toBe(22);
     const rows = await readiness(SCOPE, factory);
     expect(rows.map((row) => [row.farmName, row.state])).toEqual([
       ["Organisation", "ready"],
@@ -168,7 +169,7 @@ describe("keeping farms on the device", () => {
     const before = state.calls.length;
     await refreshPacks(SCOPE, { fetcher, factory, locks: null });
     const asked = state.calls.slice(before);
-    expect(asked.filter((call) => call.includes("farmId=f1") && call.includes("months=36")).length).toBe(9);
+    expect(asked.filter((call) => call.includes("farmId=f1") && call.includes("months=36")).length).toBe(10);
     expect(asked.some((call) => call.includes("fileId=photo-f1") && call.includes("original=1"))).toBe(true);
     expect(asked.some((call) => call.includes("farmId=f2") && call.includes("section="))).toBe(false);
     expect(await offlineFile(SCOPE, "photo-f1", factory)).toMatchObject({ copy: "original" });
