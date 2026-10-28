@@ -6,6 +6,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { setMemberFarmAccess } from "@/lib/farming/access";
 import { addPaddock, saveFarm, setFarmingEnabled } from "@/lib/farming/paddocks";
+import { answerFromEntries } from "@/lib/offline/pack-inventory";
 import { uploadSafetyFile } from "@/lib/safety/files";
 import { addHazard, saveEmergency } from "@/lib/safety/hazards";
 import { addReport } from "@/lib/safety/reports";
@@ -121,17 +122,58 @@ describeWithDatabase("offline farm packs", () => {
 
   it("keeps the map, pasture and calendar for the farm, with a year of history", async () => {
     const map = await section(worker, "map", w.home);
-    expect(map.body.entries.map((entry) => entry.path)).toEqual([`/api/farming/farms/${w.home}/paddocks`, `/api/farming/farms/${w.home}/paddock-status`]);
+    expect(map.body.entries.map((entry) => entry.path)).toEqual([`/api/farming/farms/${w.home}/paddocks`, `/api/farming/farms/${w.home}/paddock-status`, `/api/farming/paddocks/${w.paddock}`]);
     const pasture = await section(worker, "pasture", w.home);
     expect(pasture.body.entries.map((entry) => entry.path)).toEqual([
       `/api/farming/farms/${w.home}/pasture`,
       `/api/farming/farms/${w.home}/grazings`,
       `/api/farming/farms/${w.home}/grazings`,
       `/api/farming/farms/${w.home}/supplements`,
+      `/api/farming/farms/${w.home}/pasture/readings`,
       `/api/farming/paddocks/${w.paddock}/pasture`,
     ]);
     const calendar = await section(worker, "calendar", w.home);
     expect(calendar.status).toBe(200);
-    expect(calendar.body.entries.map((entry) => entry.query.view ?? "range")).toEqual(["range", "check"]);
+    expect(calendar.body.entries.map((entry) => `${entry.path} ${entry.query.view ?? "range"}`)).toEqual(["/api/farming/calendar range", "/api/farming/calendar check", "/api/farming/safety/due range"]);
+  });
+
+  it("keeps what the farm sections' screens read: soil histories, tractor machines and jobs (#477)", async () => {
+    const soil = await section(owner, "soil", w.home);
+    expect(soil.body.entries.map((entry) => entry.path)).toContain(`/api/farming/paddocks/${w.paddock}/history`);
+    const equipment = await section(owner, "equipment", w.home);
+    expect(equipment.body.entries.map((entry) => entry.path)).toEqual(expect.arrayContaining(["/api/farming/tractor/equipment", "/api/farming/tractor/jobs"]));
+  });
+
+  it("keeps every grazing of the year, past the server's 1,000 a read, and pages them on the device without repeats (#479)", async () => {
+    const paddock = (await as(owner)((tx) => addPaddock(tx, { farmId: w.home, name: "History", effectiveHa: "3" }))).id;
+    const today = new Date().toISOString().slice(0, 10);
+    await as(owner)((tx) =>
+      tx.query(
+        "insert into grazings (farm_id, paddock_id, mob, head, in_on, out_on, created_by_email) select $1, $2, 'Heifers', 40, ($3::date - (n / 4)), ($3::date - (n / 4)), 'pack-owner@example.com' from generate_series(1, 1200) as n",
+        [w.home, paddock, today],
+      ),
+    );
+    const pasture = await section(owner, "pasture", w.home);
+    const history = pasture.body.entries.find((entry) => entry.path === `/api/farming/farms/${w.home}/grazings` && !entry.query.open)!;
+    const body = history.body as { grazings: Array<{ id: string }>; next: string | null; offline: { complete: boolean; count: number } };
+    expect(body.grazings).toHaveLength(1200);
+    expect(body.next).toBeNull();
+    expect(body.offline).toMatchObject({ complete: true, count: 1200 });
+
+    // Paged on the device as the screen asks: 25 at a time, each row once, ending.
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const page = answerFromEntries(pasture.body.entries, history.path, { organisationId: ORG, paddockId: paddock, cursor }) as { grazings: Array<{ id: string }>; next: string | null };
+      for (const row of page.grazings) {
+        expect(seen.has(row.id)).toBe(false);
+        seen.add(row.id);
+      }
+      cursor = page.next;
+      pages += 1;
+    } while (cursor && pages < 100);
+    expect(seen.size).toBe(1200);
+    expect(pages).toBe(48);
   });
 });

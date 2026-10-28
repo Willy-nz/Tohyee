@@ -7,10 +7,11 @@ import {
   type SessionState,
   type SessionUser,
 } from "@/lib/auth/sessions";
-import { ForbiddenError, NotFoundError, UnauthorizedError } from "@/lib/errors";
+import { ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from "@/lib/errors";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
 import { assertLocalAdminRequest } from "@/lib/server-admin/local";
 import { assertRemoteAllowed } from "@/lib/auth/remote";
+import { ACCOUNT_CHANGED_CODE, ACCOUNT_CHANGED_MESSAGE, EXPECTED_ACCOUNT_HEADER } from "@/lib/offline/account";
 
 export type AuthContext = {
   sessionId: string;
@@ -23,6 +24,9 @@ export async function authenticate(request: Request): Promise<AuthContext> {
   if (!session) {
     throw new UnauthorizedError();
   }
+  // Offline work names the account that made it; it's never recorded as whoever is signed in now (decision 1050).
+  const expected = request.headers.get(EXPECTED_ACCOUNT_HEADER);
+  if (expected !== null && expected !== session.user.id) throw new HttpError(401, ACCOUNT_CHANGED_CODE, ACCOUNT_CHANGED_MESSAGE);
   return session;
 }
 

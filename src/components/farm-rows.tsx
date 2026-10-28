@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { Button, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
+import { type HistoryBounds, offlineHistoryNote } from "@/lib/offline/pack-inventory";
 import styles from "./farm-rows.module.css";
 
 export { styles as farmRowStyles };
@@ -163,7 +164,8 @@ export function useHistory<T>(path: string, rowsKey: string, organisationId: str
     next: string | null;
     error: string | null;
     loading: boolean;
-  }>({ key: "", rows: [], next: null, error: null, loading: true });
+    offline: string | null;
+  }>({ key: "", rows: [], next: null, error: null, loading: true, offline: null });
   const key = JSON.stringify([path, organisationId, filters, version]);
   const load = async (cursor: string | null, append: boolean) => {
     setState((current) => ({
@@ -174,7 +176,7 @@ export function useHistory<T>(path: string, rowsKey: string, organisationId: str
       rows: append ? current.rows : [],
     }));
     try {
-      const answer = await api<Record<string, unknown> & { next: string | null }>(path, {
+      const answer = await api<Record<string, unknown> & { next: string | null; offline?: HistoryBounds | null }>(path, {
         query: {
           organisationId,
           from: filters.from,
@@ -193,6 +195,7 @@ export function useHistory<T>(path: string, rowsKey: string, organisationId: str
               next: answer.next,
               error: null,
               loading: false,
+              offline: offlineHistoryNote(answer.offline),
             },
       );
     } catch (caught) {
@@ -209,6 +212,8 @@ export function useHistory<T>(path: string, rowsKey: string, organisationId: str
     error: current ? state.error : null,
     loading: !current || state.loading,
     hasMore: current && state.next !== null,
+    /** When answered from the device: what it covers (decision 1054). */
+    offline: current ? state.offline : null,
     loadMore: () => (state.next ? void load(state.next, true) : undefined),
   };
 }
@@ -250,10 +255,11 @@ export function HistoryFilters({ value, onChange, paddocks }: { value: HistoryFi
   );
 }
 
-export function HistoryFooter({ shown, hasMore, loading, error, onMore, noun }: { shown: number; hasMore: boolean; loading: boolean; error: string | null; onMore: () => void; noun: string }) {
+export function HistoryFooter({ shown, hasMore, loading, error, onMore, noun, offline }: { shown: number; hasMore: boolean; loading: boolean; error: string | null; onMore: () => void; noun: string; offline?: string | null }) {
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {offline ? <p className={ui.muted}>{offline}</p> : null}
       <div className={styles.footer}>
         <span className={ui.muted}>{loading && shown === 0 ? "Loading…" : `Showing ${shown.toLocaleString("en-NZ")} ${noun}${hasMore ? ", newest first" : ""}.`}</span>
         {hasMore ? (

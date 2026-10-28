@@ -32,9 +32,11 @@ describe("answering a read from what's kept", () => {
     { path: "/api/farm-notebook", query: {}, body: { notes: [{ title: "Water trough", body: "Fix the ballcock", category: "repairs" }, { title: "Rain", body: "12 mm", category: "weather" }] } },
   ];
 
-  it("ignores day-to-day values (the date asked about, page sizes) and organisationId", () => {
+  it("answers a summary for its own day or later as the last known one, and ignores organisationId", () => {
     expect(answerFromEntries(entries, "/api/farming/farms/f1/paddock-status", { organisationId: "org-1", onDate: "2026-10-28" })).toEqual({ paddocks: [{ paddockId: "p1" }] });
-    expect(answerFromEntries(entries, "/api/farming/farms/f1/grazings", { organisationId: "org-1", limit: 50 })).toEqual({ grazings: ["all"] });
+    expect(answerFromEntries(entries, "/api/farming/farms/f1/paddock-status", { organisationId: "org-1", onDate: "2026-10-01" })).toEqual({ paddocks: [{ paddockId: "p1" }] });
+    // An earlier day was never worked out on this device: not answered (decision 1055).
+    expect(answerFromEntries(entries, "/api/farming/farms/f1/paddock-status", { organisationId: "org-1", onDate: "2026-09-30" })).toBeUndefined();
     expect(answerFromEntries(entries, "/api/farming/farms/f1/grazings", { organisationId: "org-1", open: 1, version: 3 })).toEqual({ grazings: ["open"] });
   });
 
