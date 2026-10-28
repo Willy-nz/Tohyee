@@ -39,7 +39,7 @@ export function KeySteps({ pasteHere }: { pasteHere: React.ReactNode }) {
         </span>
       </li>
       <li>
-        <strong>Copy the &quot;API Key&quot; box.</strong> On the LINZ Basemaps page, open its menu and find the box labelled <em>API Key</em>: a long line of letters and numbers. Copy all of it (the copy button beside it does that).
+        <strong>Copy the &quot;API Key&quot; box.</strong> On the LINZ Basemaps page, open the menu at the top right. Under <em>Individual API keys</em>, the first box is labelled <em>API Key</em>: a long line of letters and numbers. Tap the copy button beside it.
       </li>
       <li>
         <strong>Paste it here.</strong> {pasteHere}
