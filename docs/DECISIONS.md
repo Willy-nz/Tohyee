@@ -9571,3 +9571,85 @@ iPhone or Android phone (stage 1's spike is for people with the phones).
      closing or reopening an action, and permission changes are refused by
      the queue: they need the server's current permission when they're
      given (#446 decisions 946, 955 and 969; #472's safety comment).
+
+### Offline farm information, kept automatically (#472 stage 3; decisions 999-1007)
+
+Jess, 28 October 2026: "Kept offline automatically: all the person's
+permitted farms, the last 12 months of records, and small copies of
+photos. Originals and older history are downloaded on request." The rest
+is **not yet reviewed by Jess**. Claude, 28 October 2026. Not yet tried on
+a real phone.
+
+999. **Kept by itself, a section at a time.** After an online sign-in, and
+     whenever Tohyee is open with a connection (opening a page, the
+     connection coming back, the app coming back to the screen, and every
+     15 minutes), every active farm the person can see is kept on the
+     device in IndexedDB (`src/lib/offline/packs.ts`), one part (section)
+     at a time, most useful first: farms and settings, safety, map and
+     paddocks, pasture, calendar, equipment, inductions and training,
+     fertiliser plans, soil, notebook, photos. A part kept in the last 15
+     minutes isn't fetched again. One tab does it at a time (a Web Lock).
+     Farms the person can no longer see (access removed, farm archived) are
+     deleted from the device at the next update. Nobody has to open each
+     screen first.
+1000. **Built by the server from the screens' own reads.** `GET
+     /api/farming/offline-pack` lists the farms and parts; with `section`
+     and `farmId` it builds one part by calling the very route handlers the
+     farm screens call, with the person's own request, so roles, farm
+     access (decision 744), farm staff (decision 961) and restricted
+     details apply exactly as on the screens. A read the role doesn't allow
+     (the notebook and fertiliser plans for farm staff) is left out and
+     named. History is the last 12 months (grazings, feed, readings,
+     closed safety reports, the calendar back a year and ahead three
+     months); open safety reports and mobs still in are always kept.
+1001. **Never in a pack, whoever asks:** injury and medical details and
+     restricted photos (even for an owner who may see them online: a lost
+     phone mustn't carry them), the email text behind calendar items (farm
+     mail is its member's own, decision 571), farm mail itself, the books,
+     and payroll. The farm routes never return the books or payroll in the
+     first place.
+1002. **Screens read the pack when Tohyee can't be reached.** `api()`
+     answers a farm read from the device when the request fails (or a
+     gateway says the computer is off: 502, 503, 504, 52x, 530), for the
+     signed-in person and organisation only, within the 14-day offline
+     session (decision 994); locked after that. Values that change day to
+     day (the date asked about, page sizes) are ignored, so the answer is
+     the last known one; the calendar is narrowed to the dates asked and
+     the notebook's search and category work on what's kept. Under the
+     farm bar a notice says **Last known information, kept on this
+     device**, with the oldest part's time, that mobs, machinery, actions
+     and people on site may have changed, and that lists and searches only
+     cover what's kept. Online, the same place says **Ready offline**,
+     **Partly ready offline** or **Preparing for offline use**, with a
+     count while it's being prepared.
+1003. **The last good copy stays until a new one has fully arrived.** A
+     part is replaced in one IndexedDB write only once its new copy is
+     complete. A refused part keeps its previous copy and shows why; no
+     connection part way stops the update, keeping what arrived; a full
+     device keeps the previous copy and says storage is full. A farm is
+     **Ready offline** only when every part is kept and its last update
+     worked. Photos are small copies (800 pixels, made on the server with
+     the `sharp` library Next.js already installs; the original if that
+     isn't there and it's small); documents up to 2 MB; each fetched once
+     (files never change once kept, decision 945). The service worker
+     shows a kept photo when Tohyee can't be reached.
+1004. **Extras on request, per farm:** **Keep 3 years of history** and
+     **Keep original photos and large files** on the Offline page; they're
+     fetched at the next update and dropped again when turned off.
+1005. **The Offline page** (`/operations/farm/offline`, Farm › More ›
+     Offline on this device; opens offline too): each farm's parts with
+     when they were kept, size and any problem, what was left out, the
+     browser's storage figures, **Ask to keep it** (persistent storage),
+     **Update now**, extras, and removing one farm or everything kept.
+     Removing never touches work waiting to be sent, and the count of
+     waiting work is shown. What's removed comes back at the next update
+     (it's automatic), which the confirmation says.
+1006. **Switching farms never mixes records.** Every kept answer belongs
+     to the farm and query it was asked for; a read for another farm, or
+     another organisation or account, is never answered from it.
+1007. **Not in this change:** LINZ imagery offline (its terms need
+     checking in the spike; boundaries and paddocks work without it), a
+     separate livestock register (mobs come from grazings, as on the
+     screens), other farm contacts beyond the emergency details, and the
+     emergency card's own localStorage copy (decision 940), which stays as
+     it was.

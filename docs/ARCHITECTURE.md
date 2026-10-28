@@ -1675,6 +1675,14 @@ installable; `public/sw.js` (rules in `public/sw-rules.js`, tested in
 - The page tells the worker who's signed in (`context`, which deletes other
   accounts' pages) and when they sign out (`signedOut`).
 
+Offline farm packs (decisions 999-1007): `GET /api/farming/offline-pack`
+builds one part of one farm by calling the farm routes' own GET handlers
+with the person's request (so permissions are the screens'), then removes
+restricted details and mail text (`src/lib/offline/pack-redact.ts`). The
+page keeps each part in `packSections`, replacing it only once a new copy
+has fully arrived, and `api()` answers farm reads from it when Tohyee
+can't be reached. Photos are small copies made with `sharp`.
+
 `src/lib/offline/` holds the `tohyee-offline` IndexedDB database (stores
 `meta`, `queue`, `blobs`, `packs`, `packSections`), the queue of work
 waiting for the server, and the device rules (one account's copies per

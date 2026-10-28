@@ -6,6 +6,7 @@ import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
+import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
 import { PaddockMap } from "@/components/farming";
@@ -92,6 +93,7 @@ function Workspace({ organisationId, tab, linkedFarmId, render }: { organisation
       ) : farms.data && active.length ? (
         <FarmSelector farms={active} farm={null} stale={stale} deciding={deciding} onChange={selectFarm} />
       ) : null}
+      {farm ? <FarmOfflineStatus organisationId={organisationId} farmId={farm.id} /> : null}
       {/* Keyed by farm: anything half-filled belongs to the farm it was opened on, and goes when the farm changes (decision 902). */}
       {farm ? <div key={farm.id}>{render({ organisationId, farm, farms: active })}</div> : null}
     </div>
@@ -443,7 +445,12 @@ export function FarmMore({ organisationId, farm }: FarmContext) {
       )}
       <AppTiles organisationId={organisationId} farmId={farm.id} manage />
       <Card title="This phone or tablet" description="Put Tohyee on the Home Screen. The farm pages then open without a signal.">
-        <LinkList links={[{ href: "/get-tohyee", label: "Get Tohyee on this device", staff: true }]} />
+        <LinkList
+          links={[
+            { href: "/get-tohyee", label: "Get Tohyee on this device", staff: true },
+            { href: OFFLINE_PAGE, label: "Offline on this device", note: "What's kept, and when it was updated", staff: true },
+          ]}
+        />
       </Card>
     </div>
   );

@@ -91,10 +91,11 @@ function AddressHelp({ kind, host }: { kind: AddressKind; host: string }) {
 function OfflineStatus({ status }: { status: WorkerStatus | null }) {
   if (!status?.context) return <p className={styles.text}>Nothing is saved on this device yet. Sign in and open the farm pages once with a connection.</p>;
   const farmPages = status.pages.filter((path) => path.startsWith("/operations/farm")).length;
+  const allFarmPages = 6;
   return (
     <ul className={styles.facts}>
       <li>
-        Farm pages saved on this device: <strong>{farmPages}</strong> of 5
+        Farm pages saved on this device: <strong>{farmPages}</strong> of {allFarmPages}
       </li>
       {status.context.verifiedAt ? (
         <li>
@@ -190,7 +191,8 @@ export function GetTohyee() {
             What works without a connection
           </h2>
           <ul className={styles.facts}>
-            <li>The farm pages (Today, Map, Log, Safety and More) open once you&apos;ve opened them with a connection.</li>
+            <li>The farm pages (Today, Map, Log, Safety and More) open once you&apos;ve signed in with a connection.</li>
+            <li>Every farm you can see is kept on the device by itself, with the last 12 months of records and small copies of photos. Injury and medical details, mail, the books and payroll never are.</li>
             <li>Everything else, including the books, needs a connection to Tohyee.</li>
             <li>
               After {OFFLINE_SESSION_DAYS} days without signing in with a connection, what&apos;s saved on the device is locked until you do. Work waiting to be sent isn&apos;t lost.

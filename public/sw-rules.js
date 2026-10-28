@@ -7,8 +7,8 @@
 (function (scope) {
   "use strict";
 
-  /** Pages that open with no connection: the farm workspace (Today, Map, Log, Safety, More) and the install page. */
-  var OFFLINE_PAGES = ["/operations/farm", "/operations/farm/map", "/operations/farm/log", "/operations/farm/safety", "/operations/farm/more", "/get-tohyee"];
+  /** Pages that open with no connection: the farm workspace (Today, Map, Log, Safety, More, Offline) and the install page. */
+  var OFFLINE_PAGES = ["/operations/farm", "/operations/farm/map", "/operations/farm/log", "/operations/farm/safety", "/operations/farm/more", "/operations/farm/offline", "/get-tohyee"];
   /** Built files (names change with every build), icons, fonts and the manifest. */
   var STATIC_CACHE = "tohyee-static-v1";
   var PAGE_CACHE_PREFIX = "tohyee-pages-";
@@ -77,7 +77,7 @@
     });
   }
 
-  var PAGE_NAMES = { "/operations/farm": "Today", "/operations/farm/map": "Map", "/operations/farm/log": "Log", "/operations/farm/safety": "Safety", "/operations/farm/more": "More" };
+  var PAGE_NAMES = { "/operations/farm": "Today", "/operations/farm/map": "Map", "/operations/farm/log": "Log", "/operations/farm/safety": "Safety", "/operations/farm/more": "More", "/operations/farm/offline": "Offline on this device" };
 
   /**
    * The page shown when a page can't be opened: no connection and no copy
