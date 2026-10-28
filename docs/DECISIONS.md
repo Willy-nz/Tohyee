@@ -9939,3 +9939,58 @@ problems that were clearly bugs.
       the paddocks when there was no connection; it now shows only the
       message.
 
+### Farm dairy effluent: setup (#487 part 1; decisions 1070-1079)
+
+Jess, 29 October 2026: "Do we have an effluent module… so we can upload
+timestamped photos as well with reminders and whatever and so we follow the
+rules. Select irrigators and types and maintenance etc." Farms under Otago
+Regional Council and Environment Southland. Details and sources in
+docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
+
+1070. **Effluent lives under More, with its daily jobs on Today and the
+      Log.** The farm workspace keeps five tabs (a phone's bottom bar has room
+      for five) and effluent is daily work on some farms only. More ›
+      Effluent has its own overview and screens with their own addresses,
+      like Safety; Today and the Log get its due jobs and quick entries.
+1071. **Owners and admins keep the setup and the consent conditions; farm
+      staff log, check and report on their assigned farms** (the issue's
+      access rules). Bookkeepers and above log too, as they report in
+      Safety. Everyone who sees the farm reads the setup. Farm access is
+      Safety's (decision 744).
+1072. **Effluent records are kept in the safety history.** Same append-only,
+      hash-chained versions (decisions 930-934), photos with their camera
+      time and the phone's place (945, 1012), and history check, with new
+      kinds (tenant migration 0200). They're left out of the WorkSafe pack
+      and, for now, the weekly copy; the chain still lists every entry.
+1073. **Templates per council, never the law.** The consent's conditions are
+      the farm's to enter. A starting template (ORC or ES) fills in only
+      what that council's published pages say (buffers, when not to apply,
+      records, who to tell, other conditions), lists the fields still as the
+      template had them, links its pages, and shows "check against your own
+      consent" until every one has been changed. Depth, rate and return
+      period are never filled in by a template.
+1074. **A consent can be replaced, not deleted.** The one in force is the
+      latest neither replaced nor withdrawn.
+1075. **A system is a machine in Safety's equipment register.** Its checks,
+      faults, "out of use" and release (only an owner, an admin or someone
+      named, never an AI or app; decisions 955 and 969) are Safety's,
+      unchanged. Fixed assets link through the machine.
+1076. **Starting checklists from DairyNZ's staff guides.** A new system
+      without a machine gets one with a checklist for its type (travelling
+      irrigator: wire rope, winch, brake and anchor, couplings, fail-safe;
+      pods: cam locks and end valves, hoses, fail-safe; and so on). Each
+      farm changes its own in Safety. Checks are due each day it's used, or
+      each week.
+1077. **Settings for working out depth are the farm's figures.** Flow,
+      wetted width and speed (travelling irrigator), application rate and
+      pulsing (pods, sprinklers), tank volume (tanker), from the farm's
+      bucket tests or designer; none are assumed (DairyNZ's untested 4 mm/h
+      isn't used).
+1078. **Buffers on the map are pictures.** A point's buffer is drawn as a
+      circle of the consent's distance; an outline's buffer is named, not
+      drawn. Neither is a survey.
+1079. **The demo farm has an effluent setup**: a travelling irrigator, pods
+      and a slurry tanker, the main pond and a yard sump, two blocks, a
+      stream, a bore and a neighbour's house, and an ORC-template consent
+      with made-up figures.
+

@@ -420,6 +420,7 @@ export { FarmSafetyTab };
 type MoreLink = { href: string; label: string; note?: string; staff?: boolean; minRole?: "viewer" | "bookkeeper" | "admin" };
 
 const DETAILS: MoreLink[] = [
+  { href: "/operations/farm/effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents and the council pack", staff: true },
   { href: "/operations/farm/tractor", label: "Tractor mode", note: "Spreading, spraying and mowing coverage from the phone's GPS", staff: true },
   { href: "/operations/farming/pasture", label: "Pasture and feed", note: "Readings, grazings and feed, with tables", staff: true },
   { href: "/operations/farming", label: "Farms and paddocks", note: "Areas, boundaries and drawing paddocks", staff: true },

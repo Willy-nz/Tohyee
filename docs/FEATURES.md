@@ -2995,6 +2995,21 @@ that something happened.
   phone GPS estimate. Nothing posts to the books. Not tried in a real
   paddock or on a real phone yet.
 
+- **Farm dairy effluent** (#487, decisions 1070-1099, docs/FARM-EFFLUENT.md;
+  tenant migration 0200): Farm › More › **Effluent**. Setup (owners and
+  admins): systems (travelling irrigator, pods or K-line, slurry tanker or
+  spreader, fixed sprinklers or rain gun), each a machine in Safety's
+  equipment register with a starting checklist from DairyNZ's staff guides,
+  so checks, faults, out of use and release follow Safety's rules; ponds and
+  sumps with capacity, gauge marks and warning levels; effluent blocks and
+  no-apply zones with buffers on the map; and the consent conditions,
+  optionally started from an Otago Regional Council or Environment
+  Southland template that fills in what the council's pages say, links
+  them, and says "check against your own consent". Kept in the safety
+  history (versions, nothing deleted, corrections marked), but not in the
+  WorkSafe pack. Tohyee never says a farm complies and never sends anything
+  to a council. Not yet reviewed by Jess.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
