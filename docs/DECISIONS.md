@@ -9940,6 +9940,104 @@ problems that were clearly bugs.
       message.
 
 
+### The phone app: fixes from ChatGPT's review (#477-#481; decisions 1050-1057)
+
+ChatGPT reviewed the phone app (#473-#476 and tractor mode, #474) and
+raised five problems. Each was checked against main after #483 and #484
+landed; all five were still there. Where Jess hadn't said how something
+should work, it does what the platforms' own rules and similar apps do,
+and says so.
+
+1050. **Offline work is recorded only as the account that made it.** A
+      browser shares one sign-in between its tabs. An old tab could hold
+      work made by A after A signed out and B signed in elsewhere, and send
+      it with B's sign-in: Tohyee would record A's work as B. Now every
+      request the device sends for queued work, and every farm pack read,
+      names the account it's for (the `x-tohyee-expected-user` header), and
+      Tohyee refuses it when someone else is signed in (`401`,
+      `account_changed`), before any permission is looked at, so it's the
+      same whether B can record on that farm or not. The queue treats that
+      as "can't send now": the work stays **Waiting to send** for its own
+      account (never Needs attention), and goes when that account signs in
+      here again. A pack read refused this way keeps nothing. The server
+      check is what makes it safe; the page's checks below only make it
+      clear.
+1051. **A tab whose account changed is held, with a clear choice.** When
+      another tab signs in as someone else (it says so on a browser
+      channel), or Tohyee says the signed-in account isn't this tab's, or a
+      send or pack read is refused as above, the tab stops sending and
+      refreshing, stops answering screens from the device's copy, and says:
+      "Someone else is signed in to Tohyee in this browser now", how many
+      records made there are held for that account, and offers **Continue
+      as the account signed in now** (reloads) or **Sign in again as this
+      tab's account**. The person now signed in sees on Offline on this
+      device how many records someone else left held here, that they're
+      never sent as them, and how to let the other person send them. (Like
+      Gmail and Slack, which make an old tab reload when the account
+      changes rather than act as the new one.)
+1052. **Only Tohyee confirming the same account renews the 14 days.** The
+      service worker used to renew the device's 14-day offline session on
+      any page that answered (public Get Tohyee included), even when the
+      session had been revoked. Now both the worker and the page renew it
+      only when `/api/auth/session` answers signed in as this same account:
+      never a page, never another account, never a refusal or no
+      connection. The worker asks Tohyee itself, so the page saying
+      "online" isn't enough. Both clocks (the worker's for saved pages and
+      photos, the page's for farm information) are renewed by the same
+      check.
+1053. **What a stale tab may still do.** It keeps showing what it showed,
+      and anything recorded in it is still kept on the device for its own
+      account (it's that person's work), but nothing is sent or fetched
+      until the tab is reloaded or that account signs in again.
+1054. **Downloaded histories honour dates, paddock and paging.** Grazings,
+      feed and cover readings are downloaded whole for the months kept,
+      every page of them (the server gives at most 1,000 a read), up to
+      20,000 records each, and kept with what they cover (from which date,
+      and whether that's all of them). Offline, a screen's From and To,
+      paddock, page size and cursor are applied on the device exactly as
+      the server applies them, newest first, so paging never repeats a row
+      and always ends. Below the list it says the records are from the
+      device, from which date, and (past 20,000) that only the newest are
+      kept. Before, the saved answer was given whatever was asked, with its
+      own next-page cursor, so paging looped and date filters were
+      ignored.
+1055. **A summary for a day is never shown as another day's.** The farm's
+      cover, paddock status and similar reads for a day are kept for the
+      day they were downloaded. Offline they're shown (as last known) for
+      that day or later; an earlier day was never worked out on the device,
+      so the screen says it needs a connection rather than show today's
+      numbers as that day's. The calendar and the safety dates beside it
+      are narrowed to the dates asked for, as before.
+1056. **The farm sections open offline, and Ready offline means both.**
+      The service worker now saves tractor mode and the farm sections More
+      links to (Farms and paddocks, Pasture and feed, Soil tests, Farm
+      calendar, Fertiliser plans, Farm notebook), with the built files they
+      load, after an online sign-in, without anyone visiting them. The
+      packs now also keep what those screens read: cover readings, each
+      paddock's page and soil history, the safety dates on the calendar,
+      and tractor mode's machines and the farm's jobs (#474). A farm shows
+      **Ready offline** only when its information and every one of those
+      screens are on the device; otherwise **Partly ready offline**, with
+      the screens still missing listed on Offline on this device. Still
+      needing a connection: a tractor job's own page on the website, farm
+      mail and the calendar's email links, bills to link to a fertiliser
+      plan, and anything else not listed.
+1057. **A tractor track is kept whole, or the gap is said.** A GPS fix the
+      device refused to keep (storage full, a write aborted) used to be
+      forgotten once the next fix saved, and the warning cleared, so the
+      job could be sent with part of its track missing, joined across the
+      gap. Now everything recorded waits in memory until the device has
+      it, and each write takes every fix not yet kept, in order, with the
+      job's latest details (width changes, events, Finish). The warning
+      stays, with how many fixes and since when, until all of it is kept,
+      and Tohyee keeps trying every few seconds. Send and Send later keep
+      everything first and send nothing until the whole track is kept; the
+      queue also refuses a track shorter than the job says. If Tohyee
+      closes before the fixes are kept, a small note (in the browser's
+      other storage, when it has room) says so; reopening the job records
+      **GPS fixes from here weren't kept** in its history, breaks the track
+      there and says so, so nothing is made up across the gap.
+
 ### Aerial photos on farm maps with your own LINZ key (#485; Jess, 29 October 2026; decisions 1060-1066)
 
 Jess: "just go with what is easy but try make it as easy as possible".

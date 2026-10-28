@@ -10,7 +10,9 @@ import { useWorkspace } from "@/components/workspace";
 import { offlineServedSnapshot, subscribeOfflineServed } from "@/lib/client/api";
 import { EXTRA_PACK_MONTHS, NEVER_IN_A_PACK, PACK_MONTHS, PACK_SECTIONS } from "@/lib/offline/pack-inventory";
 import { type FarmReadiness, ORGANISATION_KEY, packsVersion, readiness, removePacks, setExtras, subscribePacks } from "@/lib/offline/packs";
-import { openQueue } from "@/lib/offline/queue";
+import { tellServiceWorker } from "@/lib/offline/device";
+import { heldForOtherAccounts, openQueue } from "@/lib/offline/queue";
+import { type OfflineScreen, screensMissing } from "@/lib/offline/screens";
 import styles from "./farm-offline.module.css";
 
 /*
@@ -60,6 +62,33 @@ function useReadiness(organisationId: string) {
 }
 
 /**
+ * The screens not yet saved on this device for use offline (decision
+ * 1056), from the service worker. Null while it's asked, or when there's no
+ * service worker (then nothing opens offline and the address explains why
+ * on Get Tohyee).
+ */
+export function useMissingScreens(): OfflineScreen[] | null {
+  const version = useSyncExternalStore(subscribePacks, packsVersion, () => 0);
+  const [missing, setMissing] = useState<OfflineScreen[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void tellServiceWorker<{ pages?: string[] }>({ type: "status" }, 2000).then((status) => {
+      if (!cancelled) setMissing(status?.pages ? screensMissing(status.pages) : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [version]);
+  return missing;
+}
+
+/** A farm's readiness with its screens: "Ready offline" needs both the information and the screens to show it (decision 1056). */
+export function readinessLabel(state: FarmReadiness["state"], missingScreens: number): string {
+  if (state === "ready" && missingScreens > 0) return READINESS_LABEL.partial;
+  return READINESS_LABEL[state];
+}
+
+/**
  * Under the farm bar: whether this farm is ready offline, and, when a
  * screen is showing what's kept on the device, that it's the last known
  * information and how old it is.
@@ -68,6 +97,7 @@ export function FarmOfflineStatus({ organisationId, farmId }: { organisationId: 
   const served = useSyncExternalStore(subscribeOfflineServed, offlineServedSnapshot, () => new Map<string, string>());
   const rows = useReadiness(organisationId);
   const running = usePackProgress();
+  const missing = useMissingScreens();
   const farm = rows?.find((row) => row.farmId === farmId) ?? null;
   const times = [...served.values()].sort();
   if (times.length) {
@@ -88,7 +118,8 @@ export function FarmOfflineStatus({ organisationId, farmId }: { organisationId: 
   return (
     <p className={styles.status}>
       <Link href={OFFLINE_PAGE}>
-        {READINESS_LABEL[farm.state]}
+        {readinessLabel(farm.state, missing?.length ?? 0)}
+        {farm.state === "ready" && missing?.length ? ` · ${missing.length} screen${missing.length === 1 ? "" : "s"} not saved yet` : ""}
         {farm.oldestSavedAt ? ` · updated ${when(farm.oldestSavedAt)}` : ""}
       </Link>
     </p>
@@ -106,6 +137,8 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [unsent, setUnsent] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [heldOthers, setHeldOthers] = useState(0);
+  const missing = useMissingScreens();
   const scope = { server: typeof window === "undefined" ? "" : window.location.origin, userId: user.id, organisationId };
   const version = useSyncExternalStore(subscribePacks, packsVersion, () => 0);
 
@@ -119,6 +152,7 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
     }
     const queue = await openQueue({ server: window.location.origin, userId: user.id, organisationId }).catch(() => null);
     setUnsent(queue ? queue.unsentCount() : null);
+    setHeldOthers(await heldForOtherAccounts(window.location.origin, user.id).catch(() => 0));
   }, [organisationId, user.id]);
 
   useEffect(() => {
@@ -132,6 +166,7 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
     if (!result) setMessage(online ? "Another update is already running." : "No connection: what's kept stays as it is.");
     else if (result.outcome === "unreachable") setMessage("Tohyee couldn't be reached part way through. What arrived is kept; the rest is tried next time.");
     else if (result.outcome === "sign_in") setMessage("Sign in again to update what's kept.");
+    else if (result.outcome === "account_changed" || result.outcome === "stopped") setMessage("Someone else is signed in to Tohyee in this browser now, so nothing was updated.");
     else if (result.outcome === "locked") setMessage("Sign in with a connection first.");
     else setMessage(result.failed ? `Updated ${result.updated} part${result.updated === 1 ? "" : "s"}; ${result.failed} couldn't be updated (see below). Their previous copies are kept.` : `Updated ${result.updated} part${result.updated === 1 ? "" : "s"}.`);
   }
@@ -175,8 +210,24 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
         </Notice>
       ) : null}
 
+      {heldOthers ? (
+        <Notice tone="warning">
+          {heldOthers} record{heldOthers === 1 ? " made by someone else who signed in on this device hasn't" : "s made by someone else who signed in on this device haven't"} reached Tohyee yet. {heldOthers === 1 ? "It's" : "They're"} held here for that account and never sent as you. To send {heldOthers === 1 ? "it" : "them"}, sign out and let them sign in here with a connection.
+        </Notice>
+      ) : null}
       <Card title="This device">
         <ul className={styles.facts}>
+          <li>
+            {missing === null ? (
+              "This browser can't save Tohyee's screens for use offline here."
+            ) : missing.length === 0 ? (
+              <>Screens saved for use offline: <strong>all of them</strong>.</>
+            ) : (
+              <>
+                Screens not saved for use offline yet: <strong>{missing.map((screen) => screen.name).join(", ")}</strong>. They&apos;re saved next time Tohyee opens with a connection.
+              </>
+            )}
+          </li>
           <li>
             Waiting to be sent: <strong>{unsent ?? "…"}</strong>. Work waiting to be sent is never removed from this page.
           </li>
@@ -224,7 +275,7 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
             key={farm.farmId}
             title={isOrganisation ? "Farms, settings and notebook" : farm.farmName}
             description={`${sizeText(farm.bytes)}${farm.oldestSavedAt ? ` · updated ${when(farm.oldestSavedAt)}` : ""}`}
-            actions={<Badge tone={farm.state === "ready" ? "green" : farm.state === "partial" ? "amber" : "neutral"}>{READINESS_LABEL[farm.state]}</Badge>}
+            actions={<Badge tone={farm.state === "ready" && !missing?.length ? "green" : farm.state === "preparing" ? "neutral" : "amber"}>{readinessLabel(farm.state, missing?.length ?? 0)}</Badge>}
           >
             <table className={styles.table}>
               <thead>

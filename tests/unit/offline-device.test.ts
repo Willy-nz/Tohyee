@@ -101,13 +101,14 @@ describe("the offline session", () => {
 describe("the service worker's rules", () => {
   const rules = loadRules();
 
-  it("keeps only the farm pages and the install page for offline use", () => {
+  it("keeps the farm pages, tractor mode, the farm sections and the install page for offline use", () => {
     expect(rules.isOfflinePage("/operations/farm")).toBe(true);
     expect(rules.isOfflinePage("/operations/farm/safety/")).toBe(true);
     expect(rules.isOfflinePage("/get-tohyee")).toBe(true);
     expect(rules.isOfflinePage("/operations")).toBe(false);
     expect(rules.isOfflinePage("/operations/invoices")).toBe(false);
-    expect(rules.isOfflinePage("/operations/farming/pasture")).toBe(false);
+    expect(rules.isOfflinePage("/operations/farming/pasture")).toBe(true);
+    expect(rules.isOfflinePage("/operations/farming/benchmarks")).toBe(false);
     expect(rules.isStaticAsset("/_next/static/chunks/app.js")).toBe(true);
     expect(rules.isStaticAsset("/icons/tohyee-192.png")).toBe(true);
     expect(rules.isStaticAsset("/api/farming/farms")).toBe(false);

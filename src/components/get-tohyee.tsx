@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { useHydrated } from "@/components/hooks";
 import { Button, Notice } from "@/components/ui";
+import { OFFLINE_SCREENS, screensMissing } from "@/lib/offline/screens";
 import { addressKind, type AddressKind, isInstalled, isIosSafari, OFFLINE_SESSION_DAYS, type Platform, platformOf, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
 import styles from "./get-tohyee.module.css";
 
@@ -90,8 +91,8 @@ function AddressHelp({ kind, host }: { kind: AddressKind; host: string }) {
 
 function OfflineStatus({ status }: { status: WorkerStatus | null }) {
   if (!status?.context) return <p className={styles.text}>Nothing is saved on this device yet. Sign in and open the farm pages once with a connection.</p>;
-  const farmPages = status.pages.filter((path) => path.startsWith("/operations/farm")).length;
-  const allFarmPages = 6;
+  const allFarmPages = OFFLINE_SCREENS.length;
+  const farmPages = allFarmPages - screensMissing(status.pages).length;
   return (
     <ul className={styles.facts}>
       <li>
@@ -191,7 +192,7 @@ export function GetTohyee() {
             What works without a connection
           </h2>
           <ul className={styles.facts}>
-            <li>The farm pages (Today, Map, Log, Safety and More) open once you&apos;ve signed in with a connection.</li>
+            <li>The farm pages (Today, Map, Log, Safety, More, tractor mode, and pasture, soil tests, calendar, fertiliser and the notebook) open once you&apos;ve signed in with a connection.</li>
             <li>Every farm you can see is kept on the device by itself, with the last 12 months of records and small copies of photos. Injury and medical details, mail, the books and payroll never are.</li>
             <li>Everything else, including the books, needs a connection to Tohyee.</li>
             <li>

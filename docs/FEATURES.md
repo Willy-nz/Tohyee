@@ -2963,6 +2963,19 @@ that something happened.
   kept, when and how big, with extras (3 years, original photos), Update
   now and removal (never of unsent work). Not yet tried on a real phone.
 
+- **Phone app fixes from ChatGPT's review** (#477-#481, decisions
+  1050-1057): queued work and farm pack reads name the account they're
+  for, and Tohyee refuses them when someone else is signed in, so work is
+  never recorded as another person; an old tab whose account changed is
+  held and says so. Only Tohyee confirming the same account renews the 14
+  offline days (never a public page). Offline histories honour dates,
+  paddock and paging, and say what's on the device; a past day's summary
+  isn't shown from today's copy. Tractor mode and the farm sections
+  (pasture, soil, calendar, fertiliser, notebook, Farms and paddocks) open
+  offline with what they read kept in the pack; Ready offline needs both.
+  A tractor fix the device refused is kept trying, in order, and a job
+  isn't sent until its whole track is kept. Not yet tried on a real phone.
+
 - **Offline work and safety without a signal** (#472 stage 4, decisions
   1008-1016): safety reports with photos, pre-start checks, marking your
   action done, induction sign-offs, signing in and out, and the Log's

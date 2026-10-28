@@ -49,7 +49,8 @@ Phones only install a web app and keep it offline on an HTTPS address (or
 
 | | Offline |
 |---|---|
-| Farm › Today, Map, Log, Safety, More, Offline (the pages) | Open, once Tohyee has been opened with a connection |
+| Farm › Today, Map, Log, Safety, More, Offline, Tractor mode (the pages) | Open, once Tohyee has been opened with a connection |
+| Farms and paddocks, Pasture and feed, Soil tests, Farm calendar, Fertiliser plans, Farm notebook | Open the same way (decision 1056), showing what's kept |
 | Your farms' information (below) | Kept automatically; shown as **last known** |
 | Get Tohyee on this device | Opens |
 | The books, reports, settings and everything else | Needs a connection; says so |
@@ -70,13 +71,13 @@ this device** shows each farm's parts, when each was kept and its size.
 |---|---|
 | Farms and settings | The farms you can see, which farm you were on, map settings, farm app tiles |
 | Safety | Emergency details, hazards and no-go zones, reports and actions (never injury or medical details), what needs doing |
-| Map and paddocks | Paddocks with boundaries and areas; each paddock's last known cover, mob and grazing |
-| Pasture, grazing and feed | Farm cover and wedge; readings, grazings and feed for the last 12 months; mobs in now |
-| Calendar and jobs | Your farm calendar, 12 months back to 3 months ahead (no email text) |
-| Equipment and checklists | Machines, checklists, last known status and recent checks; chemicals |
+| Map and paddocks | Paddocks with boundaries and areas, and each paddock's own page; each paddock's last known cover, mob and grazing |
+| Pasture, grazing and feed | Farm cover and wedge; every cover reading, grazing and feed record for the last 12 months (up to 20,000 each); mobs in now |
+| Calendar and jobs | Your farm calendar, 12 months back to 3 months ahead (no email text); safety dates for the next 3 months |
+| Equipment and checklists | Machines, checklists, last known status and recent checks; chemicals; tractor mode's machines and the farm's tractor jobs |
 | Inductions and training | Inductions to read and sign, with the farm's hazards and emergency details; training |
 | Fertiliser plans | The farm's plans and their applications; products (not for Farm staff) |
-| Soil tests | Samples, results and the summary |
+| Soil tests | Samples, results, the summary and each paddock's soil history |
 | Farm notebook | The notebook (not for Farm staff) |
 | Photos and documents | Small copies of safety photos (800 pixels); safety data sheets up to 2 MB |
 
@@ -87,6 +88,11 @@ calendar items, the books, and payroll.
 What you see offline is the **last known** information: a notice under the
 farm bar says when it was kept, that mobs, machinery, actions and who's on
 site may have changed, and that lists and searches only cover what's kept.
+Histories (readings, grazings, feed) page and filter by date and paddock on
+the device as they do online, and say from which date they're kept. A
+summary for a day earlier than the one kept (the farm's cover on a past
+date) needs a connection (decisions 1054-1055). A farm is **Ready offline**
+only when its information and all its screens are on the device.
 If an update fails part way, the previous copy of that part stays. On the
 Offline page you can keep 3 years of history or original photos for a farm,
 update now, or remove a farm's copy (it's kept again at the next update).
@@ -138,6 +144,10 @@ on this device** on the Offline page.
 - **Access removed on the server** can't reach a phone with no signal. It
   keeps what it had for up to 14 days, and the server refuses anything it
   sends after the session ended.
+- **Another account signed in.** Work saved on the device is only ever sent
+  as the account that made it. If someone else signs in in the same
+  browser, an older tab stops sending and says so, and the work waits for
+  its own account (decisions 1050-1051).
 - **iPhone storage:** Apple may clear a web app's storage if it isn't used
   for a while. Not yet checked on a real iPhone.
 
@@ -184,7 +194,11 @@ signal, while Tohyee is on screen.
 
 - **While recording**, each GPS fix is kept on the device as it arrives,
   in tractor mode's own store. If Tohyee closes, **Carry on** picks the job
-  up.
+  up. If the device's storage refuses a fix (it's full), **NOT SAVED ON
+  THIS DEVICE** stays on screen with how many fixes are waiting, Tohyee
+  keeps trying, and they're kept in order once there's room; the job isn't
+  sent until its whole track is kept. If Tohyee closes first, the job's
+  history shows the gap (decision 1057).
 - **Finish** hands the job to the same list of work on this device as
   everything else, with the same statuses. **Send** and **Send later** both
   keep the product, rate and notes typed on Check and send; Send later
@@ -198,8 +212,8 @@ signal, while Tohyee is on screen.
   job started. With no signal, if the farm's offline copy is newer (or the
   job started without them), the map shows that copy and says how long ago
   it was updated. They're a reminder only and may have changed.
-- Starting a new job needs the equipment list from Tohyee, which isn't in
-  the offline copy yet, so start the job where there's a signal.
+- Starting a new job uses the machines kept in the farm's offline copy
+  when there's no signal (decision 1056).
 
 ## For developers
 
