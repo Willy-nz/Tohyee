@@ -29,9 +29,39 @@ one switch.
   server has `TOHYEE_SECRET_KEY`; payroll needs it), the herd's movements and
   year-end counts, two farms with paddock maps, farm walks, grazings,
   supplements, fertiliser plans and applications, soil tests, co-op shares,
-  benchmark figures, a season budget, the farm calendar and notebook, and
-  Analytics (the books copied in, a shaped table and four reports). It takes
-  about 20-40 seconds on a typical server.
+  benchmark figures, a season budget, the farm calendar and notebook, farm
+  safety, this week's farm work, finished tractor jobs, and Analytics (the
+  books copied in, a shaped table and four reports). It takes about 20-40
+  seconds on a typical server.
+- **Farm safety** (#446, decisions 1040-1042): five hazards (two no-go
+  zones drawn on the map, one review overdue), emergency details for both
+  farms with a made-up address, contacts and assembly point, an induction
+  with two versions (one sign-off on the old version needs signing again)
+  and a contractor signed in at the gate through the sign-in link
+  (self-declared, still on site), five machines with three checklists and
+  pre-start checks (the quad and tractor are linked to their fixed assets;
+  **Quad bike 2** failed its brakes and is out of use, with its action),
+  the training register (one expiring soon, one expired), four chemicals
+  with made-up safety data sheets (one over five years old, diesel with
+  none), a near miss and a minor incident with actions, and the weekly
+  copy turned on to `safety-copy@example.com`. It never sends: the demo
+  farm's jobs are paused, and **Send a copy now** and the sending itself
+  are refused for it. Safety records are dated by the database, so they all
+  show as entered on the day the demo farm was made, with the day each
+  happened beside it.
+- **This week's farm work** (#447, decisions 1043-1044): the R1 heifers
+  moving round the runoff a week a paddock (in one now), a quick cover look
+  at four runoff paddocks yesterday, and farm calendar jobs for this week,
+  beside the milkers' daily rotation, so the Map's colours vary on both
+  farms. No Farm staff member: the demo farm refuses adding people
+  (decision 858), so Farm staff can't be tried on it.
+- **Tractor mode** (#472, decision 1045): the spreader (18 m, linked to the
+  safety record's machine) and three finished spreading jobs on the last
+  day of spreading on the home farm, one paddock each, linked to that
+  paddock's fertiliser application. Their GPS tracks are generated over the
+  paddocks' own boundaries: runs up and down with Working off on the
+  headland turns, and on the first job one run spread twice (overlap) and a
+  trip out to the gate to refill (Working off, paused).
 - The dates move with today: the books start on 1 June at least twelve months
   back (12 to 23 months of data), and the same day always gives the same farm
   (a seeded random number source).
@@ -69,6 +99,8 @@ were that date.
      handover routes under `src/app/api/organisations/[organisationId]/`:
      the `assertDemoAllows` lines.
    - `src/lib/email/documents.ts` (`requireAccount`): the
+     `assertNotDemoForEmail` line.
+   - `src/lib/safety/weekly-copy.ts` (`accountSender`): the
      `assertNotDemoForEmail` line.
    - `src/lib/organisations/registry.ts`: the `demo` field, its two columns
      and the `demo_status` condition in `listMembershipsForUser`.
