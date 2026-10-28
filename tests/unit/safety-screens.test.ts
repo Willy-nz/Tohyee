@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createFormMemory, emptyLink, formMemoryKey, linkAnchor, linkedRecord, needsDoing, readSafetyLink, safetyHref, type SafetyTodayData, unansweredQuestions } from "@/lib/safety/screens";
+import { checksOnDevice, createFormMemory, emptyLink, formMemoryKey, linkAnchor, linkedRecord, needsDoing, readSafetyLink, safetyHref, type SafetyTodayData, sentChecks, unansweredQuestions } from "@/lib/safety/screens";
 
 /** Safety on a farm phone (#446 layout follow-up, decisions 976-989). */
 
@@ -147,5 +147,32 @@ describe("WorkSafe's questions", () => {
     const keys = ["death", "hospital", "seriousInjury", "dangerousIncident"];
     expect(unansweredQuestions(keys, {})).toBe(4);
     expect(unansweredQuestions(keys, { death: false, hospital: true })).toBe(2);
+  });
+});
+
+describe("pre-start checks on this device (decision 1047)", () => {
+  const item = (operationId: string, status: string, meta: Record<string, unknown>, farmId = "1", kind = "safety.check") => ({ operationId, status, meta, farmId, kind });
+  const items = [
+    item("a", "waiting", { equipmentId: "quad-1", criticalFaults: [] }),
+    item("b", "waiting", { equipmentId: "quad-2", criticalFaults: ["Brakes work"] }),
+    item("c", "synced", { equipmentId: "quad-1", criticalFaults: [] }),
+    item("d", "attention", { equipmentId: "quad-1" }),
+    item("e", "waiting", { equipmentId: "quad-1", criticalFaults: [] }, "2"),
+    item("f", "waiting", { equipmentId: "quad-1" }, "1", "safety.report"),
+  ];
+  it("shows a check waiting to send on its machine, not only a failed one", () => {
+    expect(checksOnDevice(items, "1", "quad-1")).toEqual({
+      faults: [],
+      waiting: [
+        { operationId: "a", status: "waiting", criticalFaults: [] },
+        { operationId: "d", status: "attention", criticalFaults: [] },
+      ],
+    });
+    expect(checksOnDevice(items, "1", "quad-2").faults).toEqual([{ operationId: "b", status: "waiting", criticalFaults: ["Brakes work"] }]);
+    expect(checksOnDevice(items, "1", "tractor")).toEqual({ faults: [], waiting: [] });
+  });
+  it("counts the farm's checks sent from this device, so the machines are read again", () => {
+    expect(sentChecks(items, "1")).toBe(1);
+    expect(sentChecks(items, "2")).toBe(0);
   });
 });

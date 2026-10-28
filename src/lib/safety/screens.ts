@@ -224,3 +224,30 @@ export function createFormMemory(storage: () => StorageLike | null) {
 export function unansweredQuestions(keys: readonly string[], answers: Partial<Record<string, boolean>>): number {
   return keys.filter((key) => answers[key] !== true && answers[key] !== false).length;
 }
+
+/** A queued item as the safety screens read it (the device's list of work, src/lib/offline/queue.ts). */
+type QueuedLike = { kind: string; farmId: string | null; status: string; operationId: string; meta: Record<string, unknown> };
+
+export type CheckOnDevice = { operationId: string; criticalFaults: string[]; status: string };
+
+/**
+ * One machine's pre-start checks recorded on this device and not yet with
+ * Tohyee (decision 1047): those that failed a critical check (don't use it)
+ * and those waiting to send. Without these, a check saved with no signal
+ * left the machine looking unchecked.
+ */
+export function checksOnDevice(items: readonly QueuedLike[], farmId: string, equipmentId: string): { faults: CheckOnDevice[]; waiting: CheckOnDevice[] } {
+  const mine = items
+    .filter((item) => item.kind === "safety.check" && item.farmId === farmId && item.status !== "synced" && item.meta.equipmentId === equipmentId)
+    .map((item) => ({ operationId: item.operationId, status: item.status, criticalFaults: Array.isArray(item.meta.criticalFaults) ? (item.meta.criticalFaults as unknown[]).map(String) : [] }));
+  return { faults: mine.filter((check) => check.criticalFaults.length > 0), waiting: mine.filter((check) => check.criticalFaults.length === 0) };
+}
+
+/**
+ * The farm's pre-start checks this device has sent (kept in its list for the
+ * day): when the number goes up, the equipment screen reads the machines
+ * again, so a check sent when the signal came back shows (decision 1047).
+ */
+export function sentChecks(items: readonly QueuedLike[], farmId: string): number {
+  return items.filter((item) => item.kind === "safety.check" && item.farmId === farmId && item.status === "synced").length;
+}

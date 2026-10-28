@@ -7,7 +7,9 @@ lets you use, and keeps the farm pages working when there's no signal
 
 **Not yet tried on a real iPhone or Android phone.** Everything here was
 checked in Chromium on a computer, with the server switched off to stand in
-for no signal. Stage 1 of #472 (a spike on real phones) is still to do:
+for no signal, and again on 29 October 2026 in Chromium with a phone's
+screen size and touch (no WebKit, so not Safari), its connection switched
+off and a simulated GPS route for tractor mode (decisions 1046-1049). Stage 1 of #472 (a spike on real phones) is still to do:
 offline reopening, storage limits and whether iOS clears them, the camera,
 GPS, Wake Lock, and reaching the server through Remote access and Tailscale.
 
@@ -137,7 +139,8 @@ waits. Each record carries its own id, so sending it twice records it once.
   where the phone was, if you tick "Add where I am to the photo") and sent
   first.
 - **Pre-start checks** are saved against the checklist version on the
-  device. A failed critical check shows **Fault on this device** on the
+  device. The machine shows **Checked on this device** until it's sent,
+  and the machines are read again once it is. A failed critical check shows **Fault on this device** on the
   machine straight away: don't use it. Nobody has been told until it's
   sent; then Tohyee puts it out of use and makes the action. If the
   checklist changed meanwhile, the check needs doing again.
@@ -158,7 +161,9 @@ signal, while Tohyee is on screen.
   in tractor mode's own store. If Tohyee closes, **Carry on** picks the job
   up.
 - **Finish** hands the job to the same list of work on this device as
-  everything else, with the same statuses. It's sent once, whenever Tohyee
+  everything else, with the same statuses. **Send** and **Send later** both
+  keep the product, rate and notes typed on Check and send; Send later
+  just doesn't wait for the answer. It's sent once, whenever Tohyee
   can be reached. The tractor page shows each finished job's status; if
   Tohyee refuses one, it shows the reason, **Send again** and **Remove from
   this device**.

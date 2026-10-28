@@ -138,3 +138,27 @@ export function hazardNote(shown: ShownHazards, now: number): string | null {
   if (shown.from === "device" && shown.at) return `Hazards and no-go zones from what's kept on this device, updated ${ageText(shown.at, now)}. A reminder only: they may have changed.`;
   return `Hazards and no-go zones as at ${shown.at ? new Date(shown.at).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" }) : "an unknown time"}: a reminder only.`;
 }
+
+/** What the driver types on the Check and send screen (entered, not measured). */
+export type ReviewFields = { notes: string; product: string; rate: string; rateUnit: string; quantity: string; quantityUnit: string };
+
+/**
+ * The finished job with what was typed on Check and send, for both Send and
+ * Send later (decision 1048). A finished job goes to the device's list of
+ * work whichever is tapped, so Send later must keep the product, rate and
+ * notes too: before, it closed without them and the job was sent without
+ * them.
+ */
+export function reviewedJob(job: LocalJob, fields: ReviewFields): LocalJob {
+  const text = (value: string) => (value.trim() ? value.trim() : null);
+  return {
+    ...job,
+    notes: text(fields.notes),
+    product: text(fields.product),
+    declaredRate: text(fields.rate),
+    declaredRateUnit: fields.rateUnit,
+    declaredQuantity: text(fields.quantity),
+    declaredQuantityUnit: fields.quantityUnit,
+    state: "finished",
+  };
+}
