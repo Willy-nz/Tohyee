@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { DateInput } from "@/components/date-input";
+import { ChecksScreen, IncidentsScreen, ReminderList, useEffluentCare } from "@/components/farm-effluent-care";
 import { LogScreen, PondsScreen, useEffluentLog } from "@/components/farm-effluent-log";
 import { newOperationId, SafetyHistory } from "@/components/farm-safety";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
@@ -101,6 +102,10 @@ export function FarmEffluent({ organisationId, farm, link }: EffluentContext & {
         <LogScreen organisationId={organisationId} farm={farm} />
       ) : link.screen === "ponds" ? (
         <PondsScreen organisationId={organisationId} farm={farm} />
+      ) : link.screen === "checks" ? (
+        <ChecksScreen organisationId={organisationId} farm={farm} />
+      ) : link.screen === "incidents" ? (
+        <IncidentsScreen organisationId={organisationId} farm={farm} />
       ) : (
         <Notice tone="info">This part of Effluent isn&apos;t built yet.</Notice>
       )}
@@ -133,7 +138,9 @@ function EffluentOverview({ organisationId, farm }: EffluentContext) {
   const data = setup.data;
   const systems = (data?.systems ?? []).filter((system) => !system.data.retired);
   const consent = data ? activeConsent(data.consents) : null;
+  const care = useEffluentCare(organisationId, farm.id);
   const running = (log.data?.applications ?? []).filter((application) => application.running);
+  const openIncidents = (care.data?.incidents ?? []).filter((incident) => incident.state === "open" || incident.state === "actions");
   const ponds = log.data?.ponds ?? [];
   return (
     <div className={styles.overview}>
@@ -148,6 +155,13 @@ function EffluentOverview({ organisationId, farm }: EffluentContext) {
                 <small>{running.length ? `${running.length} running: shift or stop` : "Start or record a run"}</small>
               </span>
             </Link>
+            <Link className={styles.bigAction} href={effluentHref({ farmId: farm.id, screen: "incidents" })}>
+              <span className={styles.icon} aria-hidden="true">!</span>
+              <span>
+                Incident
+                <small>Spill, ponding, runoff, a failure</small>
+              </span>
+            </Link>
             <Link className={styles.bigAction} href={effluentHref({ farmId: farm.id, screen: "ponds" })}>
               <span className={styles.icon} aria-hidden="true">≋</span>
               <span>
@@ -156,6 +170,11 @@ function EffluentOverview({ organisationId, farm }: EffluentContext) {
               </span>
             </Link>
           </nav>
+        ) : null}
+        {care.data && systems.length ? (
+          <Card title="Needs doing">
+            <ReminderList farm={farm} reminders={care.data.reminders} />
+          </Card>
         ) : null}
         {ponds.length ? (
           <Card title="Ponds and sumps">
@@ -191,6 +210,14 @@ function EffluentOverview({ organisationId, farm }: EffluentContext) {
             <li>
               <Link href={effluentHref({ farmId: farm.id, screen: "ponds" })}>{EFFLUENT_SCREEN_TITLES.ponds}</Link>
               <span className={ui.muted}> · levels, storage left and days not applied</span>
+            </li>
+            <li>
+              <Link href={effluentHref({ farmId: farm.id, screen: "checks" })}>{EFFLUENT_SCREEN_TITLES.checks}</Link>
+              <span className={ui.muted}> · {care.data ? `${care.data.systems.filter((system) => !system.available && !system.data.retired).length} out of use` : "…"}</span>
+            </li>
+            <li>
+              <Link href={effluentHref({ farmId: farm.id, screen: "incidents" })}>{EFFLUENT_SCREEN_TITLES.incidents}</Link>
+              <span className={ui.muted}> · {care.data ? `${openIncidents.length} open` : "…"}</span>
             </li>
             <li>
               <Link href={effluentHref({ farmId: farm.id, screen: "setup" })}>{EFFLUENT_SCREEN_TITLES.setup}</Link>

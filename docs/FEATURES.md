@@ -3016,6 +3016,14 @@ that something happened.
   system's settings; last moved on the map; pond readings with percent
   full, storage and days left and high or low warnings; days not applied
   and why; and counts against the consent's entered limits in neutral words.
+  **Checks, faults and servicing**: Safety's pre-start checks on each
+  system, faults reported with "don't use it" (out of use until released in
+  Safety), servicing, repairs and Effluent WoF with the next ones worked
+  out. **Incidents** with photos and actions for named people (Safety's
+  actions), the consent's council contact as a prompt and "council told"
+  recorded by a person; closed once the actions are checked. **Reminders**
+  on Today and Effluent due on the farm calendar. Never sends anything to a
+  council; no phone notifications yet.
 
 ## Not built yet, on purpose
 

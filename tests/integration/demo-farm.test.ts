@@ -29,6 +29,7 @@ import { isoDateAt } from "@/lib/dates";
 import { paddockBand } from "@/lib/farming/map-colours";
 import { paddockStatuses } from "@/lib/farming/paddock-status";
 import { getTractorJob, listTractorEquipment, listTractorJobs } from "@/lib/farming/tractor";
+import { effluentCare } from "@/lib/effluent/care";
 import { effluentLog } from "@/lib/effluent/log";
 import { effluentSetup } from "@/lib/effluent/setup";
 import { listEquipment } from "@/lib/safety/equipment";
@@ -425,6 +426,21 @@ describeWithDatabase("the demo farm (#437)", () => {
     expect(log.summary).toMatchObject({ overDepth: 0, ponding: 1, runoff: 0, tooSoon: 1, inBuffer: 0, whileOutOfUse: 0, noPondingCheck: 0 });
     expect(log.applications.every((each) => each.running || each.data.depthWorkedOut !== null)).toBe(true);
     expect(log.lastMoved.map((each) => each.systemName).sort()).toEqual(["Pods (K-line)", "Travelling irrigator"]);
+  });
+
+  it("has effluent checks, servicing and incidents: one closed, one open with the council prompt (decision 1098)", async () => {
+    const homeId = (await as((tx) => tx.query<{ id: string }>("select id::text from farms where name = 'Home farm'"))).rows[0].id;
+    const care = await as((tx) => effluentCare(tx, homeId));
+    expect(care.incidents.map((incident) => [incident.data.type, incident.state, Boolean(incident.tellCouncil)])).toEqual([
+      ["spill", "actions", true],
+      ["ponding", "closed", false],
+    ]);
+    const irrigator = care.systems.find((system) => system.data.name === "Travelling irrigator")!;
+    expect(irrigator).toMatchObject({ available: true, lastService: expect.any(String), nextService: expect.any(String) });
+    expect(irrigator.lastCheckedAt).not.toBeNull();
+    const pods = care.systems.find((system) => system.data.name === "Pods (K-line)")!;
+    expect(pods.available).toBe(true);
+    expect(pods.faults.map((check) => check.data.faultReport)).toEqual([true]);
   });
 
   it("has Analytics reports that all run", async () => {

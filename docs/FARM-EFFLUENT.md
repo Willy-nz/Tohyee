@@ -134,6 +134,46 @@ depth. A limit not entered is "not compared". Each run lists what to look
 at. **These count the records against the conditions as entered. They
 don't say whether the farm complies.**
 
+## Checks, faults, servicing and incidents (decisions 1090-1098)
+
+More › Effluent › **Checks, faults and servicing** and **Incidents**.
+
+- **Checks** are Safety's pre-start checks on each system's machine ("Do
+  the check" opens it in Safety). Systems are checked each day they're used,
+  or each week, as the setup says.
+- **Report a fault** between checks: what's wrong, a photo, and whether to
+  stop using it. "Don't use it" keeps it as a Safety check with that fault
+  as a critical item, so the system is **out of use** until an owner, an
+  admin or someone named on the machine releases it in Safety, saying what
+  was done (never through an AI or app). Either way an action goes to
+  whoever looks after it. A fault reported isn't counted as a check.
+  Tohyee's "out of use" is a record, not a lock.
+- **Servicing, repairs and the Effluent WoF** are records of work done: when,
+  who did it, what was done, the report or invoice as a photo or PDF, and
+  the next one (as the assessor said, or the system's interval from the last
+  service). DairyNZ's Effluent WoF is voluntary and not recognised by
+  councils; Tohyee only keeps its dates.
+- **Incidents**: spill or overflow, ponding, runoff, inside a buffer, over
+  the depth or rate, power failure, pump or pipe failure, or other; when,
+  which system, what happened, what was done straight away, whether it
+  reached water, photos, and **actions with the person responsible** for
+  each and a date. Actions are Safety's, so they're on that person's Today
+  and are marked done and checked in Safety. An incident closes (a
+  bookkeeper or above, in person) once its actions are checked and closed.
+- **Telling the council**: the incident shows the consent conditions'
+  contact and when to tell them, and "Council not recorded as told" until a
+  person records that they did (when, how, who they spoke to, reference).
+  **Tohyee never contacts a council.**
+- **Reminders**, worked out each time (never stored): shift the pods or
+  irrigator (from the last move and the shift interval), read each pond (not
+  read today), the weekly check, the pre-start check of a system used
+  today, servicing within 14 days, the Effluent WoF within 30 days and the
+  consent's expiry within 90 days. They show on **Today** (only on farms with
+  effluent), on Effluent's overview, and the dated ones (servicing, WoF,
+  consent expiry) on the **farm calendar** under Effluent due. Incident
+  actions are under Safety due. No phone notifications yet: Tohyee has no
+  notifications to send them with.
+
 ## Worked checks (tests)
 
 `tests/integration/farm-effluent-setup.test.ts`:
@@ -175,6 +215,27 @@ don't say whether the farm complies.**
   once each, though three answers were lost; the shift and stop find the
   run's id from the first answer.
 
+`tests/integration/farm-effluent-care.test.ts`:
+
+- **EF17** a fault puts the system out of use with an action for whoever
+  looks after it; sending twice makes one; a minor one doesn't; release
+  only by someone allowed, never an AI key.
+- **EF18** servicing and the WoF: who or what is needed; the next ones from
+  the last; reminders soon.
+- **EF19** reminders: shift, pond, weekly check, pre-start check of a system
+  used today, in order; a weekly system isn't "not checked today" in Safety.
+- **EF20** an incident with actions and their people; the council prompt
+  comes from the consent; "council told" is a person's, never an app's;
+  nothing is emailed.
+- **EF21** closing needs its actions checked and closed, by a bookkeeper or
+  above in person; the history checks out.
+- **EF22** farm staff report on their farm only; corrections are the
+  reporter's or a bookkeeper's.
+- **EF23** the calendar's dates; incident actions come through Safety's.
+
+`tests/unit/effluent-reminders.test.ts`: months, service and WoF dates,
+reminder order, calendar dates.
+
 `tests/unit/effluent-log-rules.test.ts`: depth for each type, times,
 pond state, buffers, and neutral summary wording.
 
@@ -193,3 +254,8 @@ checklist, the consent in force, buffer circles, and screen addresses.
    source, or wait for ORC's Land and Water Regional Plan?
 3. Should bookkeepers (not just owners and admins) be able to keep the
    effluent setup, as they can Safety's registers?
+4. Phone notifications for "shift the pods" and "read the pond": Tohyee
+   doesn't send phone notifications yet. Wanted, once it can (web push
+   needs the app installed and permission on each phone)?
+5. Should an incident of some types (a spill that reached water) be made
+   to record whether the council was told before it can close?

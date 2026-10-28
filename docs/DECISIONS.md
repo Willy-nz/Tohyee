@@ -10034,3 +10034,41 @@ docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
       reading each morning, two wet days stored, one run with a little
       ponding, and the pods running today.
 
+### Farm dairy effluent: checks, faults, servicing, incidents and reminders (#487 part 3; decisions 1090-1098)
+
+1090. **A fault reported from Effluent is a Safety check with one fault.**
+      Kept as a `check` on the system's machine (`faultReport: true`), with
+      the fault critical when the person says not to use it, so "out of use"
+      and its release are Safety's rules, unchanged (decisions 955, 969),
+      and an action goes to whoever looks after it as for a failed check. A
+      fault report isn't counted as the machine's last check (in Safety too).
+1091. **Servicing, repairs and the Effluent WoF are records of work done**
+      (who, what, the report), not a status typed in. The next service is
+      the one given, else the system's interval from the last service; the
+      next WoF is what the assessor gave, else the setup's date.
+1092. **Tohyee never contacts a council.** An incident shows the consent's
+      contact and when to tell them; "council told" is recorded by a person
+      in Tohyee (not an AI or app) after they've done it.
+1093. **Incidents close like Safety's reports**: a bookkeeper or above, in
+      person, once every action is checked and closed. Corrections and
+      withdrawals are the reporter's or a bookkeeper's.
+1094. **Incident actions are Safety's actions** (`effluentIncidentId`), so the
+      person responsible sees them on Today and in Safety, and they're
+      marked done and checked there. The reporter may add them, as a failed
+      check makes its own.
+1095. **Reminders are worked out, never stored**: shift (the last move plus
+      the interval), read each pond (not read today), the weekly check, the
+      pre-start check of a system used today, servicing within 14 days, the
+      WoF within 30 days, consent expiry within 90 days. Today shows them
+      only on farms with effluent.
+1096. **A weekly system isn't "not checked today" in Safety**; Effluent
+      reminds about its weekly check instead.
+1097. **The farm calendar shows Effluent due** (servicing, WoF, consent
+      expiry) beside Safety due. Incident actions stay under Safety due, so
+      they aren't listed twice. No phone notifications: Tohyee has none yet.
+1098. **The demo farm's checks, servicing and incidents**: the pods' weekly
+      and irrigator's pre-start checks, a service five months ago, a repair,
+      a worn nozzle noted without taking the pods out of use, the ponding as
+      an incident closed after its action was checked, and a sump overflow
+      still open with an action due and the council not recorded as told.
+
