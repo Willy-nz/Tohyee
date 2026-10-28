@@ -54,6 +54,7 @@ Phones only install a web app and keep it offline on an HTTPS address (or
 | Log: cover readings, mob in and out, feed, the farm walk | Kept on the device, sent later |
 | Safety: report a hazard, near miss or incident (with photos) | Kept on the device, sent later |
 | Safety: pre-start checks, marking your action done, signing an induction, signing in and out | Kept on the device, sent later |
+| Tractor mode: recording a job, Finish | Kept on the device fix by fix, sent later |
 | Approvals (releasing equipment, checking or closing actions) | Always need a connection |
 
 ### Farm information kept on the device
@@ -148,6 +149,28 @@ waits. Each record carries its own id, so sending it twice records it once.
 - **Releasing a machine, checking or closing actions** always need a
   connection, because Tohyee checks who may do it at the time.
 
+### Tractor mode without a signal
+
+Tractor and spreader mode (decisions 1020-1030) records with or without a
+signal, while Tohyee is on screen.
+
+- **While recording**, each GPS fix is kept on the device as it arrives,
+  in tractor mode's own store. If Tohyee closes, **Carry on** picks the job
+  up.
+- **Finish** hands the job to the same list of work on this device as
+  everything else, with the same statuses. It's sent once, whenever Tohyee
+  can be reached. The tractor page shows each finished job's status; if
+  Tohyee refuses one, it shows the reason, **Send again** and **Remove from
+  this device**.
+- **The track stays on the device** until Tohyee has it, even if the job is
+  let go from the list of work.
+- **Hazards and no-go zones** on the tractor map are the ones from when the
+  job started. With no signal, if the farm's offline copy is newer (or the
+  job started without them), the map shows that copy and says how long ago
+  it was updated. They're a reminder only and may have changed.
+- Starting a new job needs the equipment list from Tohyee, which isn't in
+  the offline copy yet, so start the job where there's a signal.
+
 ## For developers
 
 - `public/sw.js` and `public/sw-rules.js`: the service worker (built files
@@ -178,6 +201,11 @@ waits. Each record carries its own id, so sending it twice records it once.
   before the first send; after that, make a new item. Approval kinds
   (`SERVER_ONLY_KINDS`) are refused. `OfflineSupport` (in every signed-in
   page) sends the queue; screens can call `queue.sync()` too.
+- Tractor mode: `src/lib/farming/tractor-store.ts` keeps each fix as it
+  arrives (database `tohyee-tractor`); `src/lib/farming/tractor-queue.ts`
+  turns a finished job into one queue item (kind `tractor.job`, operation
+  id = the job's id) with the track as a file sent as `trackBase64`
+  (decisions 1028-1029), and picks the hazards shown (decision 1030).
 - `src/lib/offline/device.ts`: platform and address checks, the service
   worker messages, the 14-day rule and one account per device.
 - Farm packs: `src/lib/offline/pack-inventory.ts` (the parts and answering

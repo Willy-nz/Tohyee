@@ -9724,3 +9724,131 @@ Claude, 28 October 2026. Not yet tried on a real phone.
      registers (they still need a connection), editing emergency details
      offline, training and chemicals offline, and the emergency card's own
      localStorage copy (decision 940), which stays.
+
+### Tractor and spreader mode (#472 stage 5; decisions 1020-1030)
+
+Jess decided (#472, "Plan, with Jess's answers", 28 October 2026): tractor
+mode is part of the installable web app, records only while the screen is
+on with the phone mounted and kept awake, and must show plainly when
+recording stops. Unmapped jobs are allowed, the run becomes a paddock
+record linked to the fertiliser plan, nothing posts to the books, and
+GeoJSON and GPX exports are given. The rest below has no answer from Jess
+and no Xero or NetSuite equivalent; it follows the issue's text and the
+Spreadify review comment, and is **not yet reviewed**.
+
+1020. **Coverage is worked out, not typed in, the same way on the phone and
+      the server.** One pure module (`src/lib/farming/coverage.ts`) turns the
+      track into a worked footprint: a rectangle the working width wide for
+      each stretch between two fixes recorded with Working ON at the same
+      settings while moving, moved by the implement's offset, with corners
+      filled. Positions go onto a flat local grid in metres around the job
+      (WGS84 radii at its centre); over a farm that's within 0.1% of geodesic
+      area (tested). Union, intersection and difference use Turf 7.4.0
+      (`@turf/union`, `@turf/intersect`, `@turf/difference`, pinned exactly;
+      MIT). The server works the numbers out again when a job arrives and
+      ignores any the phone sends. Areas are floats rounded to 0.0001 ha in
+      the summary and 0.01 ha in the list: they're estimates, never money.
+1021. **Gaps are gaps.** Thresholds (documented in the code and tested):
+      a fix with accuracy worse than ±20 m isn't used (±10 m or better is
+      good, between is fair); no usable fix for more than 10 seconds breaks
+      the track; faster than 12 m/s (43 km/h) between fixes is a jump and
+      is dropped, unless the next fix agrees with it, when the track starts
+      again from there; slower than 0.5 m/s over 5 seconds (or by the
+      device's own speed) is standing still and paints nothing; moves under
+      2 m wait for the next fix; a pass's centreline is straightened only
+      where it strays under 0.5 m. A pause, the screen going off, another
+      app, lost GPS or removed permission also break it. Nothing is ever
+      painted across a break; it's shown as a red dashed gap with its
+      reason and length. The second or so where Working is switched isn't
+      counted, so the estimate errs low.
+1022. **Overlap counts once and is shown on its own.** Unique worked area is
+      the union of everything. A pass ends at a turn of more than 60
+      degrees or a gap; overlap is ground covered by more than one pass,
+      drawn in orange and given in hectares. With paddocks chosen, worked
+      and overlap are clipped to their boundaries, with worked outside them
+      and not covered inside them shown separately, and a share of the
+      paddocks. With none ("Unassigned paddock") only the swept area is
+      given: no share of a paddock. The paddocks can be chosen later; the
+      same track is clipped to their current shapes and the boundary
+      versions used are stored with the job.
+1023. **Foreground recording, saved fix by fix, and never quietly stopped.**
+      Each fix is written to the browser's IndexedDB as it arrives (a job
+      row and a row per fix, kept per server, person and organisation).
+      Screen Wake Lock keeps the screen on where the browser has it; where
+      it doesn't, or it's released, the screen says to keep it on. When the
+      page is hidden (screen off, another app, a call) nothing is recorded
+      and a red NOT RECORDING banner shows on return, with the gap in the
+      track and an event in its history. Reopening Tohyee after it closed
+      mid-job offers Carry on, which comes back paused. A job stays on the
+      device until the server has it, and is removed a week after. Until
+      the shared offline queue (#472 stages 2-4, PR #473) is merged, tractor
+      mode sends its own jobs, retrying when the connection returns; moving
+      the sending to that queue is a follow-up.
+1024. **Equipment keeps its width and offsets as dated versions.** A
+      spreader, sprayer or mower has a name, kind, optionally its machine in
+      Safety's equipment register (its out-of-use status is shown before a
+      job) and the fixed asset in the books (bookkeepers and above). A
+      change of width or offset is a new row with its time (tenant
+      migration 0197, append-only); the job keeps the settings it was driven
+      with, so later changes never recalculate it. The width can also be
+      changed for the rest of one job without changing the equipment.
+1025. **Who sees and does what.** Recording needs the farm work record level
+      (farm staff, or bookkeeper and above) on a farm the person can see
+      (decision 744). Farm staff see and change only their own jobs; viewers
+      and above see every job on their farms; changing a job is for the
+      person who drove it or a bookkeeper and above. Linking to a fertiliser
+      plan is for bookkeepers and above, as plans are. Who drove comes from
+      the sign-in, never from the request. A track, its farm, operator and
+      times can't be changed (a database trigger); a job is withdrawn with a
+      reason, never deleted.
+1026. **Sending twice makes one job.** The phone makes the job's id. The same
+      job sent again returns the saved one; a different track under the same
+      id is refused (409) and the job stays on the device as Needs attention.
+1027. **Entered isn't measured, and nothing posts.** Product, rate and
+      quantity are labelled entered on screen and in exports; GPS travel
+      isn't proof that product was applied. Links to a fertiliser plan (and
+      an application on it) and to a chemical in Safety's register are links
+      only: they change no plan, application, stock or journal. Hazards and
+      no-go zones from Safety are drawn on the map as at the job's start, as
+      a reminder only. **Not tried in a real paddock or on a real phone**:
+      checked with automated tests and in Chromium with a simulated GPS
+      route only.
+1028. **A finished job is sent through the device's one queue.** When
+      stages 2-4 landed (#473, #475, #476), tractor mode's own sending was
+      replaced: Finish hands the job to the queue (`src/lib/offline/queue.ts`)
+      as one item, kind `tractor.job`, whose operation id is the job's id,
+      so the queue and the server agree that a second send is the same job
+      (decision 1026). The track goes as one file beside the item (sent as
+      `trackBase64`, the track's JSON) rather than in the item's body, so a
+      long job isn't held in memory with every queued item and the file is
+      let go once Tohyee has it. The server takes either `track` or
+      `trackBase64`. The queue's statuses are shown on the tractor page
+      (Saved on this device, Waiting to send, Synced, Needs attention,
+      Unsaved), and it's sent with everything else: on opening a page, when
+      the connection comes back, on resume and every 30 seconds. A refusal
+      straight after Finish takes the item back off the queue so the
+      product, rate or notes can be fixed and sent again, as other forms do
+      (decision 1008); a later refusal shows Needs attention with Tohyee's
+      reason, **Send again** and **Remove from this device** (asks first:
+      the job is lost).
+1029. **The track is still kept fix by fix in tractor mode's own store
+      while recording.** The queue keeps whole items and files, and
+      `putBlob` replaces a file: rewriting a growing track every second
+      would get slower as a job got longer, and one failed write could lose
+      more than a second. So each fix is still written as it arrives to
+      `tohyee-tractor` (decision 1023); only a finished job goes to the
+      queue. The job stays in tractor mode's store until the queue says it's
+      synced, then is removed a week later, so "Let it go" on the device's
+      list of work never loses the track: the tractor page shows the job as
+      Not sent with Send again.
+1030. **Hazards offline come from the farm's offline copy, with its age.**
+      The tractor map normally shows Safety's hazards and no-go zones as at
+      the job's start. With no connection, if the farm's offline copy
+      (#472 stage 3) is newer, or the job started without hazards, the map
+      shows that copy instead, with a line saying it's what's kept on this
+      device, how long ago it was updated, and that it's a reminder only and
+      may have changed. When the setup screen itself read the hazards from
+      the device, the job keeps the copy's time, not the time it started.
+      Advisory only, as in decision 1027: nothing stops the tractor or
+      warns at a zone. Same approach as other screens' **Last known
+      information** label (decision 1002).

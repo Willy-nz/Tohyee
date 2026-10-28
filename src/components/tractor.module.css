@@ -1,0 +1,557 @@
+/* Tractor and spreader mode (#472 stage 5): big controls for a mounted phone or tablet. */
+
+.home {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.list li:last-child {
+  border-bottom: 0;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.choices legend {
+  width: 100%;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.choice input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.profile {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted, var(--surface));
+}
+
+.inlineForm {
+  display: grid;
+  gap: 4px;
+  max-width: 520px;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.startButton {
+  width: 100%;
+  min-height: 64px;
+  font-size: 1.4rem;
+}
+
+.linkAsButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px 16px;
+  margin: 12px 0;
+}
+
+.facts dt {
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.85rem);
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.events {
+  max-height: 240px;
+  overflow: auto;
+  padding-left: 18px;
+}
+
+.events li[data-kind="hidden"],
+.events li[data-kind="gps_lost"],
+.events li[data-kind="gps_denied"],
+.events li[data-kind="reopened"],
+.events li[data-kind="wake_lock_lost"] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* The map ----------------------------------------------------------------------------- */
+
+.mapBox {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.mapControls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.mapControls button,
+.northUp {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid #c4ccd8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d2733;
+  font-size: 18px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.mapControls button {
+  cursor: pointer;
+}
+
+.mapControls button[aria-pressed="true"] {
+  background: #1c6edc;
+  border-color: #1c6edc;
+  color: #ffffff;
+}
+
+.northUp {
+  font-size: 12px;
+}
+
+.mapControlsLarge button,
+.mapControlsLarge .northUp {
+  min-width: 56px;
+  height: 56px;
+  font-size: 24px;
+}
+
+.mapControlsLarge .northUp {
+  font-size: 14px;
+}
+
+.scale {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1d2733;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scale span {
+  display: inline-block;
+  height: 6px;
+  border: 2px solid #1d2733;
+  border-top: 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm, 0.85rem);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend span {
+  display: inline-block;
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.legend .legendLine {
+  height: 3px;
+}
+
+.legend .legendDashed {
+  height: 0;
+  border-top: 3px dashed;
+  border-radius: 0;
+}
+
+.reviewMap {
+  height: min(60vh, 520px);
+}
+
+/* Driving: the whole screen ------------------------------------------------------------- */
+
+.drive {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "header" "map" "panel";
+  background: var(--surface);
+  color: var(--text);
+}
+
+.driveHeader {
+  grid-area: header;
+  display: grid;
+  gap: 4px;
+  padding: max(6px, env(safe-area-inset-top)) 8px 6px;
+}
+
+.banner {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--surface-muted, var(--surface));
+}
+
+.banner strong {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.banner span {
+  font-size: 0.95rem;
+}
+
+.banner[data-tone="ok"] {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-text);
+}
+
+.banner[data-tone="warning"] {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.banner[data-tone="danger"] {
+  background: var(--danger-text);
+  border-color: var(--danger-text);
+  color: var(--surface);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.banner[data-tone="paused"] {
+  background: var(--neutral-bg, var(--surface-muted));
+  color: var(--neutral-text, var(--text));
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.82;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner[data-tone="danger"] {
+    animation: none;
+  }
+}
+
+.headerFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.gps {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.gps[data-quality="good"] {
+  color: var(--success-text);
+}
+
+.gps[data-quality="weak"] {
+  color: var(--warning-text);
+}
+
+.gps[data-quality="poor"],
+.gps[data-quality="none"] {
+  color: var(--danger-text);
+}
+
+.driveMap {
+  grid-area: map;
+  position: relative;
+  min-height: 0;
+  padding: 0 8px;
+}
+
+.driveMap .mapBox {
+  min-height: 0;
+}
+
+.mapNote {
+  position: absolute;
+  left: 16px;
+  top: 8px;
+  margin: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1d2733;
+  font-size: 12px;
+}
+
+.panel {
+  grid-area: panel;
+  display: grid;
+  gap: 8px;
+  padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.stats dt {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent, var(--link, inherit));
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.workingButton {
+  display: grid;
+  place-items: center;
+  min-height: 84px;
+  border: 3px solid var(--border-strong, var(--border));
+  border-radius: 14px;
+  background: var(--surface-muted, var(--surface));
+  color: var(--text);
+  cursor: pointer;
+}
+
+.workingButton span {
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.workingButton small {
+  font-size: 0.9rem;
+}
+
+.workingButton[data-on="true"] {
+  border-color: var(--tractor-worked);
+  background: var(--tractor-worked);
+  color: #ffffff;
+}
+
+.workingButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.controlRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.bigControl {
+  min-height: 64px;
+  border: 2px solid var(--border-strong, var(--border));
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.finishControl {
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.panel .legend {
+  font-size: 0.75rem;
+}
+
+.sheet {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 1001;
+  display: grid;
+  gap: 8px;
+  width: min(480px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%);
+}
+
+.sheet h2 {
+  margin: 0;
+}
+
+/* Landscape tablet: map on the left, controls on the right. */
+@media (orientation: landscape) and (min-width: 700px) {
+  .drive {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "header header" "map panel";
+  }
+
+  .driveMap {
+    padding: 0 0 8px 8px;
+  }
+
+  .panel {
+    align-content: start;
+    overflow-y: auto;
+  }
+
+  .workingButton {
+    min-height: 120px;
+  }
+
+  .controlRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Finishing ----------------------------------------------------------------------------- */
+
+.review {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  color: var(--text);
+}
+
+.review h2 {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .pair {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
