@@ -31,11 +31,12 @@ export function KeySteps({ pasteHere }: { pasteHere: React.ReactNode }) {
   return (
     <ol className={styles.steps}>
       <li>
-        <strong>Open LINZ Basemaps.</strong>{" "}
-        <a href={LINZ_BASEMAPS_URL} target="_blank" rel="noreferrer" className={ui.linkButton}>
-          Open LINZ Basemaps
-        </a>{" "}
-        <span className={ui.muted}>It opens in a new tab. It&apos;s free and needs no sign-up.</span>
+        <strong>Open LINZ Basemaps</strong> in a new tab. It&apos;s free and needs no sign-up.
+        <span className={styles.open}>
+          <a href={LINZ_BASEMAPS_URL} target="_blank" rel="noreferrer" className={`${ui.button} ${ui.secondary}`}>
+            Open LINZ Basemaps<span className={styles.visuallyHidden}> (opens in a new tab)</span>
+          </a>
+        </span>
       </li>
       <li>
         <strong>Copy the &quot;API Key&quot; box.</strong> On the LINZ Basemaps page, open its menu and find the box labelled <em>API Key</em>: a long line of letters and numbers. Copy all of it (the copy button beside it does that).
@@ -304,7 +305,7 @@ export function FarmPhotosOffline({ organisationId, online }: { organisationId: 
       ) : (
         <>
           <p className={ui.muted}>
-            Phones and tablets keep LINZ&apos;s aerial photos for each farm&apos;s area (the paddocks plus 300 m around them), zoom {OFFLINE_MIN_ZOOM} to {OFFLINE_MAX_ZOOM}, by themselves. At most {OFFLINE_MAX_TILES.toLocaleString("en-NZ")} photos and {sizeText(OFFLINE_MAX_BYTES)} on a device; a big farm keeps fewer close-up zooms. Imagery © LINZ CC BY 4.0.
+            Phones and tablets keep LINZ&apos;s aerial photos for each farm&apos;s area (the paddocks plus 300 m around them), zoom {OFFLINE_MIN_ZOOM} to {OFFLINE_MAX_ZOOM}, by themselves. At most {OFFLINE_MAX_TILES.toLocaleString("en-NZ")} photos and {OFFLINE_MAX_BYTES / 1024 / 1024} MB on a device; a big farm keeps fewer close-up zooms. Imagery © LINZ CC BY 4.0.
           </p>
           {message ? <Notice>{message}</Notice> : null}
           {progress ? <Notice>Keeping aerial photos: {progress.done.toLocaleString("en-NZ")} of {progress.total.toLocaleString("en-NZ")}…</Notice> : null}
