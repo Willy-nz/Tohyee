@@ -1805,10 +1805,20 @@ that something happened.
   adds a boundary version; shapes that cross themselves, aren't closed or
   are in NZTM metres are skipped with the reason. The same file can't be
   imported twice. The **map** draws the paddock outlines to scale, north
-  up. With an organisation's own **LINZ Basemaps key** (an admin adds it on
-  the Farms and paddocks page), **aerial imagery** shows under the outlines.
-  The browser loads it straight from LINZ, with LINZ's attribution, and it
-  can be switched off. In **Analytics**, while Farming is on, the books copy
+  up. With an organisation's own free **LINZ Basemaps key**, **aerial
+  photos** show under the outlines (#485, decisions 1060-1066). An owner or
+  admin adds it in three steps on Settings › **Aerial photos for farm maps**
+  (also on Farms and paddocks): open LINZ Basemaps, copy its API Key box,
+  paste it. Tohyee checks it straight away by loading one photo in the
+  browser and says "Aerial photos are on" or what went wrong. Tohyee keeps
+  the day the key was saved; from day 80 of a standard key's 90 owners and
+  admins are reminded on Farm Home and in Settings. When photos stop
+  loading, the map says so and shows the same three steps. Without a key,
+  maps show the outlines on a plain background with "Add aerial photos
+  (free, 1 minute)". The browser loads photos straight from LINZ, with
+  LINZ's attribution; Tohyee's server never fetches or keeps them. Phones
+  keep each farm's area (zoom 14-18, capped) for use without a signal (see
+  docs/MOBILE-APP.md). Photos can be switched off on the map. In **Analytics**, while Farming is on, the books copy
   also carries these tables, row for row as recorded:
   - `tohyee_farm_paddocks` (with each one's current boundary as GeoJSON)
   - `tohyee_farm_fertiliser_products`

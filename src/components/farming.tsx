@@ -3,6 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
+import { AddAerialPhotos, AerialPhotosCard, AerialPhotosFailed } from "@/components/farm-imagery";
 import { FarmRowList, farmRowStyles } from "@/components/farm-rows";
 import { useEffect, useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -86,7 +87,8 @@ const MAX_ZOOM = 19;
 /**
  * The paddocks' outlines to scale, north up, in Web Mercator, with zoom and
  * pan. With a LINZ Basemaps key, aerial imagery is drawn underneath, loaded
- * by the browser straight from LINZ (nothing is stored by Tohyee). While
+ * by the browser straight from LINZ (Tohyee's server stores none; a phone
+ * keeps the farm's area, #485). While
  * `drawing` is set, a tap adds a corner (`onMapTap`) instead of choosing a
  * paddock.
  */
@@ -100,7 +102,10 @@ export function PaddockMap({
   fills,
   label = "Map of the paddocks",
   overlays = [],
+  offerImagery = false,
 }: {
+  /** No key is set: say "Add aerial photos (free, 1 minute)" under the outlines (decision 1060). */
+  offerImagery?: boolean;
   /** A colour (a CSS colour or var()) for each paddock id, for the farm map's bands (decision 907). */
   fills?: Record<string, string>;
   /** What the map shows, for screen readers. */
@@ -163,11 +168,7 @@ export function PaddockMap({
   return (
     <>
       {/* Above the map, where it's seen, rather than under a tall map. */}
-      {imagery && failedHere > 0 ? (
-        <Notice tone="warning">
-          {failedHere === view.tiles.length ? "The aerial imagery didn't load." : "Some of the aerial imagery didn't load."} LINZ may be unavailable, there may be no imagery this close, or the key may have expired (standard LINZ keys last 90 days). An admin can change the key below.
-        </Notice>
-      ) : null}
+      {imagery && failedHere > 0 ? <AerialPhotosFailed all={failedHere === view.tiles.length} online={typeof navigator === "undefined" || navigator.onLine} /> : null}
       <div style={{ position: "relative" }}>
         <svg
           ref={svg}
@@ -320,7 +321,7 @@ export function PaddockMap({
         </div>
       </div>
       {locating ? <p className={ui.muted}>{locating}</p> : null}
-      {imagery ? <LinzAttribution /> : null}
+      {imagery ? <LinzAttribution /> : offerImagery ? <AddAerialPhotos /> : null}
     </>
   );
 }
@@ -340,49 +341,8 @@ export function FarmingHome({ organisationId, farmId = null }: { organisationId:
       <FarmSelector farms={active} farm={farm} stale={stale} deciding={deciding} onChange={selectFarm} />
       {farm ? <FarmView key={farm.id} organisationId={organisationId} farm={farm} imageryKey={settings.data?.settings.imageryKey ?? null} onChanged={() => farms.reload()} /> : null}
       {can("bookkeeper") ? <AddFarm organisationId={organisationId} first={active.length === 0} knownIds={farms.data.farms.map((entry) => entry.id)} onSaved={(added) => { if (added) selectFarm(added); farms.reload(); }} /> : null}
-      {can("admin") && settings.data ? <ImagerySettings organisationId={organisationId} imageryKey={settings.data.settings.imageryKey} onSaved={() => settings.reload()} /> : null}
+      {can("admin") && settings.data ? <AerialPhotosCard organisationId={organisationId} settings={settings.data.settings} onSaved={() => settings.reload()} /> : null}
     </>
-  );
-}
-
-/** An admin adds the organisation's own LINZ Basemaps key; Tohyee doesn't ship one. */
-function ImagerySettings({ organisationId, imageryKey, onSaved }: { organisationId: string; imageryKey: string | null; onSaved: () => void }) {
-  const [key, setKey] = useState("");
-  const { busy, error, run } = useRun();
-  const save = (value: string | null) =>
-    void run(
-      () => api("/api/farming/settings", { method: "PATCH", body: { organisationId, imageryKey: value } }),
-      () => {
-        setKey("");
-        onSaved();
-      },
-    );
-  return (
-    <Card
-      title="Aerial imagery"
-      description="Aerial photos from LINZ Basemaps, currently free under LINZ's terms of use. Get an API key at basemaps.linz.govt.nz (a standard key lasts 90 days; LINZ issues longer-lasting developer keys on request) and paste it here. The tiles load in each person's browser straight from LINZ, so everyone who can see the map can see the key."
-    >
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {imageryKey ? <p>A key ending {imageryKey.slice(-4)} is set.</p> : null}
-      <div className={ui.inlineForm}>
-        <Field label={imageryKey ? "New key" : "LINZ Basemaps API key"}>
-          <input value={key} autoComplete="off" spellCheck={false} maxLength={128} onChange={(event) => setKey(event.target.value)} />
-        </Field>
-        <Button disabled={busy || !key.trim()} onClick={() => save(key.trim())}>
-          Save key
-        </Button>
-        {imageryKey ? (
-          <Button variant="secondary" disabled={busy} onClick={() => save(null)}>
-            Remove key
-          </Button>
-        ) : null}
-      </div>
-      <p className={ui.muted}>
-        <a href="https://www.linz.govt.nz/guidance/data-service/linz-basemaps-guide/linz-basemaps-terms-use" target="_blank" rel="noreferrer">
-          LINZ Basemaps terms of use
-        </a>
-      </p>
-    </Card>
   );
 }
 
@@ -550,6 +510,7 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
           selected={drawing?.paddock?.id ?? selected}
           onSelect={setSelected}
           imageryKey={showImagery ? imageryKey : null}
+          offerImagery={!imageryKey}
           drawing={drawing?.points ?? null}
           onMapTap={(point) => setDrawing((was) => (was ? { ...was, points: [...was.points, point] } : was))}
         />
@@ -572,7 +533,6 @@ function FarmView({ organisationId, farm, imageryKey, onChanged }: { organisatio
         ) : (
           <p className={ui.muted}>
             Paddock outlines to scale, north up. Drag to move the map, and tap a paddock for its details.
-            {imageryKey ? null : " An admin can add a LINZ Basemaps key below to show aerial imagery behind them."}
           </p>
         )}
       </Card>

@@ -4,7 +4,7 @@
  * worker straight away. Used by next.config.ts, so it imports nothing.
  */
 export function serviceWorkerHeaderRules(): Array<{ source: string; headers: Array<{ key: string; value: string }> }> {
-  return ["/sw.js", "/sw-rules.js"].map((source) => ({
+  return ["/sw.js", "/sw-rules.js", "/sw-tiles.js"].map((source) => ({
     source,
     headers: [
       { key: "Content-Type", value: "application/javascript; charset=utf-8" },

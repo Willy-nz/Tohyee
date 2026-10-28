@@ -9939,3 +9939,88 @@ problems that were clearly bugs.
       the paddocks when there was no connection; it now shows only the
       message.
 
+
+### Aerial photos on farm maps with your own LINZ key (#485; Jess, 29 October 2026; decisions 1060-1066)
+
+Jess: "just go with what is easy but try make it as easy as possible".
+Tohyee doesn't ask LINZ for a developer key; each organisation uses the
+free standard key LINZ Basemaps gives anyone.
+
+What LINZ says (read 29 October 2026; LINZ's own attribution page and the
+key's place on the Basemaps page couldn't be opened from here): the
+Basemaps terms of use say nothing about caching or keeping tiles; standard
+access is "limited use … without registration", currently 1,000 tiles a
+minute and 1,000,000 a month, and LINZ may restrict use outside that or
+"any other unreasonable use". The technical documentation says standard
+keys expire after 90 days (developer keys don't), aerial imagery in Web
+Mercator goes to zoom 22, and products must always show the attribution
+with links. The imagery is CC BY 4.0, which allows copying and keeping it
+with credit and a link to the licence.
+
+1060. **Three steps, in Settings.** Settings has an **Aerial photos for farm
+      maps** card when Farming is on (also on Farms and paddocks, where the
+      key used to be): 1. **Open LINZ Basemaps** (a button, new tab);
+      2. **Copy the "API Key" box** (a short description: open the page's
+      menu, find the box labelled API Key, copy all of it); 3. **Paste it
+      here.** The description of where the box is was written without
+      seeing the current Basemaps page: **Jess to check it** and say if a
+      picture is wanted. A map with no key shows the outlines on a plain
+      background and "Add aerial photos (free, 1 minute)" (a link to the
+      card for owners and admins; others are told an owner or admin can).
+      When photos fail to load, the map says so in plain words and offers
+      the same three steps (the third links to Settings).
+1061. **Tohyee keeps the day the key was saved and reminds at 80 days.** A
+      new column, `farming_settings.linz_basemaps_key_saved_at` (tenant
+      migration 0199), set when a different key is saved and cleared with
+      it; saving the same key again keeps its date. Keys saved before this
+      take the time of the last "key set" audit event. From day 80 owners
+      and admins see the reminder on Farm Home and on the Settings card
+      ("runs out about …"). From day 90 the browser loads one photo: if it
+      still loads (a developer key, or a key LINZ renewed some other way)
+      nothing is shown; if it doesn't, Farm Home says the photos have
+      stopped loading. Tohyee only knows when the key was **saved**, not
+      when LINZ issued it, so the reminder may be a few days late if the
+      key sat unused first.
+1062. **The key is checked where the photos load: in the browser.** "Check
+      and save" asks LINZ for one photo (central Wellington, zoom 12) with
+      the key. If the browser can read LINZ's answer, a refusal (401 or
+      403) is told apart ("LINZ didn't accept that key"); otherwise the
+      photo is loaded as an image and Tohyee says only whether it worked.
+      No connection is said as such. If the check fails, **Save it anyway**
+      is offered (the browser may be what's blocked, not the key). The
+      server doesn't check, because it may not reach LINZ and the photos
+      never go through it.
+1063. **Phones keep the farm's area, with the offline farm pack.** After the
+      offline farm pack is updated (#472), a phone or tablet (or Tohyee
+      opened from a Home Screen icon) keeps the photos for every farm the
+      person can see. Computers don't by themselves; the Offline page has
+      **Keep aerial photos on this device** for any device. They live in
+      Cache Storage (one cache per server, account and organisation, keyed
+      by the photo's address without the key) under the pack's storage
+      rules: signing out or someone else signing in deletes them, the
+      service worker only answers from them for the signed-in account
+      within its 14-day offline session, and removing the key deletes
+      them at the next update. The map asks LINZ first and uses the kept
+      copy only when LINZ can't be reached or refuses. The Offline page
+      shows how many photos, their size, the zooms and any problem, with
+      Update and Remove.
+1064. **How much is kept.** The paddocks' bounding box plus 300 m, zooms 14
+      (the whole farm) to 18 (gateways and troughs); at most 1,500 photos a
+      farm, 4,000 and 100 MB on a device. A big farm drops the closest
+      zooms first, so it keeps its whole area. A dairy farm of about 200 ha
+      is a few hundred photos (around 5-10 MB). Photos are fetched one
+      every 125 ms (under 500 a minute, half LINZ's standard limit), only
+      those not already kept or kept more than 90 days ago, at most every
+      12 hours; the first refusal or lost connection stops the update and
+      what arrived is kept. This stays well inside LINZ's stated limits;
+      **Jess to check** that keeping the farm's area on a phone is
+      "reasonable use" (the terms don't mention caching).
+1065. **No server-side cache.** The terms don't say a standard key's photos
+      may be kept and served to others, a standard key is issued to the
+      person, not to an organisation's server, and the server may not
+      reach LINZ. So Tohyee's server never fetches or keeps photos. Left
+      for Jess: revisit if LINZ confirms it's allowed.
+1066. **Attribution wherever photos show.** "Imagery © LINZ CC BY 4.0 ©
+      Imagery Basemap contributors" with links (as before), on the map
+      whenever photos show, including kept copies offline, and on the
+      Offline page.
