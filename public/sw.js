@@ -7,6 +7,8 @@
  * - The farm pages and the install page: fetched from Tohyee first; a copy
  *   is kept per server and account. With no connection the copy opens,
  *   only within 14 days of the last online sign-in (then a "locked" page).
+ *   Only Tohyee saying this same account is signed in renews those 14 days
+ *   (decision 1052), never opening a page.
  * - Every other page needs Tohyee: with no connection it says so and links
  *   the pages saved on this device.
  * - The API is never cached here: farm information for offline use is kept
@@ -149,10 +151,26 @@ function keepPage(path, response) {
   });
 }
 
-function markVerified() {
-  return readContext().then(function (ctx) {
-    if (ctx) return saveContext(Object.assign({}, ctx, { verifiedAt: new Date().toISOString() }));
-  });
+/**
+ * Asks Tohyee who's signed in. The offline session is renewed only when it
+ * says this same account (decision 1052): opening a page, even a signed-in
+ * one, never renews it (a public page like Get Tohyee answers whoever asks).
+ */
+function checkSession(userId) {
+  return withTimeout(fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" }), 8000)
+    .then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return null;
+        })
+        .then(function (body) {
+          return R.sessionCheck(response.status, body, userId);
+        });
+    })
+    .catch(function () {
+      return "unreachable";
+    });
 }
 
 /** Fetches the offline pages in the background, so they open later without a connection. */
@@ -317,12 +335,19 @@ self.addEventListener("message", function (event) {
   };
   if (data.type === "context" && data.userId) {
     event.waitUntil(
-      readContext().then(function (ctx) {
+      Promise.all([readContext(), data.online ? checkSession(data.userId) : Promise.resolve("unreachable")]).then(function (found) {
+        var ctx = found[0];
+        var verified = found[1] === "verified";
         var sameUser = ctx && ctx.userId === data.userId;
+        if (found[1] === "other_account") {
+          // An old tab: someone else is signed in now. Nothing changes for either account.
+          reply({ ok: false, reason: "other_account" });
+          return;
+        }
         var next = { userId: data.userId, organisationId: data.organisationId || null, verifiedAt: sameUser ? ctx.verifiedAt : null, warmedAt: sameUser ? ctx.warmedAt || null : null };
-        if (data.online) next.verifiedAt = new Date().toISOString();
+        if (verified) next.verifiedAt = new Date().toISOString();
         // Pages are fetched again at most every 30 minutes (each visit refreshes its own page anyway).
-        var warmNow = data.online && (data.force || !next.warmedAt || Date.now() - Date.parse(next.warmedAt) > 30 * 60000);
+        var warmNow = verified && (data.force || !next.warmedAt || Date.now() - Date.parse(next.warmedAt) > 30 * 60000);
         if (warmNow) next.warmedAt = new Date().toISOString();
         // Only one account's pages on a device (decision 993).
         return saveContext(next)
@@ -403,11 +428,8 @@ self.addEventListener("fetch", function (event) {
   event.respondWith(
     withTimeout(fetch(req), 8000)
       .then(function (response) {
-        if (offlinePage && R.isSignedInPage(response)) {
-          event.waitUntil(markVerified().then(function () {
-            return keepPage(url.pathname.replace(/\/+$/, "") || "/", response.clone());
-          }));
-        }
+        // Kept for offline use; this never renews the offline session (decision 1052).
+        if (offlinePage && R.isSignedInPage(response)) event.waitUntil(keepPage(url.pathname.replace(/\/+$/, "") || "/", response.clone()));
         return response;
       })
       .catch(function () {
