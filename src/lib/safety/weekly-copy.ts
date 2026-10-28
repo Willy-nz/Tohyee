@@ -10,6 +10,7 @@ import { requireFarming } from "@/lib/farming/paddocks";
 import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { loadPackData, renderPack } from "@/lib/safety/pack";
+import { assertNotDemoForEmail } from "@/lib/demo/guard";
 
 /*
  * The weekly copy off the farm (#446, decisions 958-959; Jess: "A copy you
@@ -134,6 +135,8 @@ export type CopySender = (organisation: OrganisationRecord, message: Omit<Outgoi
 
 /** Sends through the organisation's own email account (as document emails do). */
 const accountSender: CopySender = async (organisation, message) => {
+  // The demo farm never sends email, whatever asked (decision 1042).
+  assertNotDemoForEmail(organisation);
   const account = await withOrganisationTransaction(organisation, COPY_ACTOR, (tx) => readSendingAccount(tx));
   let sender;
   try {

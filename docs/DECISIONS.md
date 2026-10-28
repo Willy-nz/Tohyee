@@ -9853,6 +9853,58 @@ Spreadify review comment, and is **not yet reviewed**.
       warns at a zone. Same approach as other screens' **Last known
       information** label (decision 1002).
 
+### The demo farm: safety, this week's farm work and tractor jobs (Jess, 29 October 2026; decisions 1040-1045)
+
+Jess, 29 October 2026: "Can you add data to the fake farm?" The demo farm
+(decisions 855-866, 880-884) was made before farm safety (#446), the farm
+workspace (#447) and tractor mode (#472). Its build now adds them, through
+the same services a person uses, as the demo farm's owner.
+
+1040. **Safety records are entered as they are for anyone: dated by the
+      database.** The safety history is a hash chain with entry times set by
+      the database (decision 932), so the demo farm doesn't fake them. Every
+      safety record shows as entered on the day the demo farm was made, with
+      the day it happened beside it (shown as entered late where it's more
+      than a day after). Writing earlier entry times would mean writing
+      round the chain, which nothing else does.
+1041. **What's in it.** Five hazards (two no-go zones drawn inside
+      paddocks, one review overdue), emergency details for both farms (one
+      changed once), an induction with a second version that needs signing
+      again, sign-offs on both versions (one recorded for a worker, one by
+      the owner) and a contractor signed in through the farm's sign-in link
+      (self-declared, and left on site), five machines with checklists (the
+      quads and tractor linked to their fixed assets; one failed critical
+      check left out of use, with its action), the training register (one
+      expiring soon, one expired), chemicals with made-up one-page safety
+      data sheets (one over five years old, one with none), and a near miss
+      and a minor incident with actions. Names, products, phone numbers and
+      the address are made up; injury details are generic and say so.
+1042. **The weekly copy is on, and never sends.** Its settings are saved
+      (to `safety-copy@example.com`) so the screen shows a working setup.
+      The demo farm's jobs are paused, so the hourly check never reaches
+      it; **Send a copy now** is refused for it (`src/lib/demo/guard.ts`),
+      and the copy's sender refuses the demo farm whatever called it, as
+      document emails do (decision 858).
+1043. **Mobs and readings so the map's colours vary.** Beside the milkers'
+      daily rotation, the R1 heifers move round the runoff a week a paddock
+      (in one now) and four runoff paddocks have a quick cover reading from
+      yesterday, so Days since grazed and Cover reading age both show
+      several bands on both farms.
+1044. **No Farm staff member.** The demo farm refuses adding people
+      (decision 858), so it has only its owner, and Farm staff can't be
+      tried on it. Worker names in the safety records (Tama Whitfield and
+      Ella Brodie, the payroll staff) are names only. Calendar jobs for
+      this week are added beside the existing ones.
+1045. **Tractor jobs are generated over the paddocks' own boundaries.**
+      Three finished spreading jobs on the last day the home farm was
+      spread, one paddock each, linked to that paddock's fertiliser
+      application, with the product and the rate from the application. The
+      tracks are made, not driven: runs across the paddock 17 m apart for
+      the 18 m spreader at about 13 km/h, a fix a second with a little
+      wobble and 3-6 m accuracy, Working off on the headland turns, and on
+      the first job one run spread twice and a trip out to refill (Working
+      off, paused for nine minutes). The coverage is worked out by the same
+      code as a real job.
 ### The phone app: fixes from testing it on our side (Jess, 29 October 2026; decisions 1046-1049)
 
 Jess, 29 October 2026: "Can you test it on your side?" The phone app (#472)

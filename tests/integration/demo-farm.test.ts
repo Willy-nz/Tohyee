@@ -24,6 +24,20 @@ import { resumeOrganisationJobs } from "@/lib/backups/service";
 import { addDemoFarm, deleteDemoFarm, getDemoFarm } from "@/lib/demo/service";
 import { demoStart, gstPeriods } from "@/lib/demo/plan";
 import { plain } from "@/lib/demo/build/books";
+import * as weeklyCopySendRoute from "@/app/api/farming/safety/weekly-copy/send/route";
+import { isoDateAt } from "@/lib/dates";
+import { paddockBand } from "@/lib/farming/map-colours";
+import { paddockStatuses } from "@/lib/farming/paddock-status";
+import { getTractorJob, listTractorEquipment, listTractorJobs } from "@/lib/farming/tractor";
+import { listEquipment } from "@/lib/safety/equipment";
+import { readSafetyFile } from "@/lib/safety/files";
+import { getEmergency, listHazards } from "@/lib/safety/hazards";
+import { listInductions, listSignoffs, onSite } from "@/lib/safety/inductions";
+import { checkSafetyHistory } from "@/lib/safety/records";
+import { listChemicals, listTraining } from "@/lib/safety/register";
+import { listReports, openActions } from "@/lib/safety/reports";
+import { reviewOverdue, sdsState, trainingState } from "@/lib/safety/shared";
+import { copySettings, sendSafetyCopy } from "@/lib/safety/weekly-copy";
 import {
   apiRequest,
   createTestOrganisation,
@@ -269,8 +283,115 @@ describeWithDatabase("the demo farm (#437)", () => {
     expect(row.purchases).toBeGreaterThanOrEqual(2);
     expect(row.soil).toBe(11);
     expect(row.dividends).toBe(3);
-    expect(row.calendar).toBe(11);
+    // The demo farm's own calendar items, and this week's farm jobs (decision 1044).
+    expect(row.calendar).toBe(15);
     expect(row.budgets).toBe(1);
+  });
+
+  it("has farm safety records: hazards, emergency details, an induction, equipment, training, chemicals and reports (decisions 1040-1042)", async () => {
+    const home = await as((tx) => tx.query<{ id: string }>("select id::text from farms where name = 'Home farm'"));
+    const farmId = home.rows[0].id;
+    const hazards = await as((tx) => listHazards(tx, farmId));
+    expect(hazards.length).toBe(4);
+    expect(hazards.filter((hazard) => hazard.data.noGo).map((hazard) => hazard.data.title)).toEqual(["Effluent pond"]);
+    expect(hazards.filter((hazard) => reviewOverdue(hazard.data, TODAY)).map((hazard) => hazard.data.title)).toEqual(["Steep face above the creek"]);
+    const runoffId = (await as((tx) => tx.query<{ id: string }>("select id::text from farms where name = 'Runoff'"))).rows[0].id;
+    expect((await as((tx) => listHazards(tx, runoffId))).map((hazard) => [hazard.data.title, hazard.data.noGo])).toEqual([["Tomo (sinkhole) in R3", true]]);
+    const emergency = await as((tx) => getEmergency(tx, farmId));
+    expect(emergency).toMatchObject({ version: 2, data: { assemblyPoint: expect.stringContaining("dairy shed") } });
+    expect(emergency!.data.contacts).toHaveLength(4);
+    // The induction has two versions; the gate sign-in is self-declared and still on site.
+    const inductions = await as((tx) => listInductions(tx, farmId));
+    expect(inductions.map((induction) => [induction.version, induction.signVersion])).toEqual([[2, 2]]);
+    const signoffs = await as((tx) => listSignoffs(tx, farmId));
+    expect(signoffs.map((signoff) => [signoff.data.person.userId ? "owner" : signoff.data.person.name, signoff.data.signedHow, signoff.current]).sort()).toEqual(
+      [
+        ["owner", "self", true],
+        ["Rob Tane", "link", true],
+        ["Tama Whitfield", "recorded", false],
+      ].sort(),
+    );
+    const site = await as((tx) => onSite(tx, farmId));
+    expect(site.here.map((visit) => [visit.data.person.name, visit.data.signedHow])).toEqual([["Rob Tane", "link"]]);
+    // Equipment, linked to the fixed assets; Quad bike 2 out of use after a critical fault, with its action.
+    const { equipment, checklists } = await as((tx) => listEquipment(tx, farmId));
+    expect(checklists).toHaveLength(3);
+    expect(equipment.map((item) => [item.data.name, item.available]).sort()).toEqual(
+      [
+        ["Boom sprayer", true],
+        ["Fertiliser spreader", true],
+        ["Quad bike 1", true],
+        ["Quad bike 2", false],
+        ["Tractor (110 hp)", true],
+      ].sort(),
+    );
+    expect(equipment.filter((item) => item.data.fixedAssetId).length).toBe(3);
+    const actions = await as((tx) => openActions(tx));
+    expect(actions.map((action) => action.data.title)).toEqual(expect.arrayContaining(["Fix Quad bike 2: Brakes work (front and rear)", "Put gravel on the steep part of the track and a sign at the top"]));
+    // Training: one expiring soon, one expired.
+    const training = await as((tx) => listTraining(tx));
+    expect(training.map((entry) => trainingState(entry, TODAY)).sort()).toEqual(["current", "current", "expired", "expiring", "no_expiry"]);
+    // Chemicals with made-up data sheets (PDFs), one sheet over five years old, diesel without one.
+    const chemicals = await as((tx) => listChemicals(tx, farmId));
+    expect(chemicals).toHaveLength(4);
+    expect(chemicals.map((chemical) => sdsState(chemical.data, TODAY)).sort()).toEqual(["check", "missing", "ok", "ok"]);
+    const sheet = await as((tx) => readSafetyFile(tx, chemicals.find((chemical) => chemical.data.sds)!.data.sds!.id));
+    expect(sheet.contentType).toBe("application/pdf");
+    expect(sheet.content.subarray(0, 5).toString()).toBe("%PDF-");
+    // A near miss and a minor incident with actions; the incident's details are restricted and generic.
+    const reports = await as((tx) => listReports(tx, farmId));
+    expect(reports.map((report) => [report.data.type, report.data.severity]).sort()).toEqual([["incident", "minor"], ["near_miss", "moderate"]]);
+    const details = await as((tx) => tx.query<{ body: string }>("select body from safety_entries where kind = 'report_details'"));
+    expect(details.rows).toHaveLength(1);
+    expect(JSON.parse(details.rows[0].body).injury).toMatch(/made up/);
+    // The whole safety history checks out.
+    expect((await as((tx) => checkSafetyHistory(tx))).problems).toEqual([]);
+    // The weekly copy is on, to a made-up address, and never sends: Send a copy now is refused.
+    expect((await as((tx) => copySettings(tx))).settings).toMatchObject({ on: true, toAddresses: ["safety-copy@example.com"] });
+    const send = await weeklyCopySendRoute.POST(apiRequest("/api/farming/safety/weekly-copy/send", { method: "POST", cookie: await sessionCookieFor(jess), body: { organisationId: org } }), undefined as never);
+    expect(send.status).toBe(403);
+    await expect(sendSafetyCopy((await getOrganisation(org))!, { force: true })).resolves.toMatchObject({ sent: null, problem: expect.stringMatching(/demo farm/) });
+    expect((await as((tx) => tx.query("select 1 from safety_copies"))).rowCount).toBe(0);
+  });
+
+  it("has this week's farm work: a mob in on the runoff, recent readings, and spreader jobs with tracks linked to fertiliser (decisions 1043-1045)", async () => {
+    const homeId = (await as((tx) => tx.query<{ id: string }>("select id::text from farms where name = 'Home farm'"))).rows[0].id;
+    const runoffId = (await as((tx) => tx.query<{ id: string }>("select id::text from farms where name = 'Runoff'"))).rows[0].id;
+    // The map's colours vary on both farms: a mob in now on each, and paddocks grazed at different times.
+    for (const farmId of [homeId, runoffId]) {
+      const statuses = await as((tx) => paddockStatuses(tx, { farmId, onDate: TODAY }));
+      const bands = new Set(statuses.map((status) => paddockBand({ inNow: status.inNow !== null, lastGrazedOn: status.lastGrazedOn, coverOn: status.cover?.measuredOn ?? null }, "grazed", TODAY).key));
+      expect(bands.has("in"), farmId).toBe(true);
+      expect(bands.size).toBeGreaterThanOrEqual(3);
+    }
+    const yesterday = await as((tx) => tx.query<{ n: number }>("select count(*)::int as n from pasture_readings where measured_on = $1", ["2026-10-23"]));
+    expect(yesterday.rows[0].n).toBeGreaterThanOrEqual(4);
+    const week = await as((tx) => tx.query<{ n: number }>("select count(*)::int as n from farm_calendar_items where item_date between $1 and $2", [TODAY, "2026-10-30"]));
+    expect(week.rows[0].n).toBeGreaterThanOrEqual(5);
+    // Three finished spreader jobs on the last day of spreading, each linked to its paddock's application.
+    const jobs = await as((tx) => listTractorJobs(tx, { farmId: homeId }));
+    expect(jobs).toHaveLength(3);
+    for (const item of jobs) {
+      const job = await as((tx) => getTractorJob(tx, item.id));
+      expect(job.equipmentName).toBe("Fertiliser spreader");
+      expect(job.fertiliserApplicationId).not.toBeNull();
+      const application = await as((tx) => tx.query<{ paddock_id: string; applied_on: string }>("select paddock_id::text, applied_on::text from fertiliser_applications where id = $1", [job.fertiliserApplicationId]));
+      expect(job.paddockIds).toEqual([application.rows[0].paddock_id]);
+      // Started that morning in New Zealand.
+      expect(isoDateAt(new Date(job.startedAt), "Pacific/Auckland")).toBe(application.rows[0].applied_on);
+      expect(job.track.points.length).toBeGreaterThan(500);
+      // Most of the paddock is covered (a phone GPS estimate), and little falls outside it.
+      expect(job.summary.coveredPct).toBeGreaterThan(80);
+      expect(job.track.events.map((event) => event.kind)).toEqual(expect.arrayContaining(["start", "working_on", "working_off", "finish"]));
+    }
+    // One job went over a run twice and stopped to refill: more overlap than the others, and a paused off segment.
+    const full = await Promise.all(jobs.map((item) => as((tx) => getTractorJob(tx, item.id))));
+    const refilled = full.find((job) => job.notes?.includes("twice"))!;
+    expect(refilled.track.events.map((event) => event.kind)).toEqual(expect.arrayContaining(["pause", "resume"]));
+    for (const other of full.filter((job) => job !== refilled)) expect(refilled.summary.overlapHa).toBeGreaterThan(other.summary.overlapHa);
+    // The spreader is the safety record's machine too.
+    const equipment = await as((tx) => listTractorEquipment(tx));
+    expect(equipment.map((item) => [item.name, item.kind, item.current?.widthM, Boolean(item.safetyEquipmentId)])).toEqual([["Fertiliser spreader", "spreader", "18", true]]);
   });
 
   it("has Analytics reports that all run", async () => {
