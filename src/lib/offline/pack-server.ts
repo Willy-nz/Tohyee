@@ -22,7 +22,13 @@ import { GET as supplementsGet } from "@/app/api/farming/farms/[farmId]/suppleme
 import { GET as farmsGet } from "@/app/api/farming/farms/route";
 import { GET as lastFarmGet } from "@/app/api/farming/last-farm/route";
 import { GET as launchersGet } from "@/app/api/farming/launchers/route";
+import { GET as paddockHistoryGet } from "@/app/api/farming/paddocks/[paddockId]/history/route";
 import { GET as paddockPastureGet } from "@/app/api/farming/paddocks/[paddockId]/pasture/route";
+import { GET as paddockGet } from "@/app/api/farming/paddocks/[paddockId]/route";
+import { GET as readingsGet } from "@/app/api/farming/farms/[farmId]/pasture/readings/route";
+import { GET as safetyDueGet } from "@/app/api/farming/safety/due/route";
+import { GET as tractorEquipmentGet } from "@/app/api/farming/tractor/equipment/route";
+import { GET as tractorJobsGet } from "@/app/api/farming/tractor/jobs/route";
 import { GET as planGet } from "@/app/api/farming/plans/[planId]/route";
 import { GET as productsGet } from "@/app/api/farming/products/route";
 import { GET as effluentLogGet } from "@/app/api/farming/effluent/log/route";
@@ -39,7 +45,7 @@ import { GET as trainingGet } from "@/app/api/farming/safety/training/route";
 import { GET as settingsGet } from "@/app/api/farming/settings/route";
 import { GET as notebookGet } from "@/app/api/farm-notebook/route";
 import { ValidationError } from "@/lib/errors";
-import { daysAhead, monthsBack, type PackEntry, type SectionKey } from "./pack-inventory";
+import { daysAhead, HISTORY_DOWNLOAD_MAX, HISTORY_DOWNLOAD_PAGE, type HistoryBounds, monthsBack, type PackEntry, type SectionKey } from "./pack-inventory";
 import { fileRefs, isRecord, type Item, type PackFileRef, redact } from "./pack-redact";
 
 /** Any route handler (its context type varies by route; it's given `{ params }`). */
@@ -89,6 +95,33 @@ function reader(request: Request, organisationId: string): Reader {
   };
 }
 
+/**
+ * A farm history (grazings, feed, readings) from `since`, every page of it
+ * up to HISTORY_DOWNLOAD_MAX records, kept as one answer that says what it
+ * covers (decision 1054). The device pages it as the server would.
+ */
+async function readHistory(r: Reader, handler: Handler, path: string, params: Record<string, string>, rowsKey: string, since: string): Promise<void> {
+  const rows: unknown[] = [];
+  let cursor: string | null = null;
+  let complete = true;
+  for (;;) {
+    const before = r.entries.length;
+    const page = await r.read(handler, path, params, { from: since, limit: String(HISTORY_DOWNLOAD_PAGE), ...(cursor ? { cursor } : {}) });
+    if (page === null) return;
+    const kept = r.entries.splice(before, 1)[0];
+    const body = isRecord(kept?.body) ? kept.body : {};
+    rows.push(...(Array.isArray(body[rowsKey]) ? (body[rowsKey] as unknown[]) : []));
+    cursor = typeof body.next === "string" ? body.next : null;
+    if (!cursor) break;
+    if (rows.length >= HISTORY_DOWNLOAD_MAX) {
+      complete = false;
+      break;
+    }
+  }
+  const offline: HistoryBounds = { heldFrom: since, complete, count: rows.length };
+  r.entries.push({ path, query: {}, body: { [rowsKey]: rows, next: null, offline } });
+}
+
 function ids(body: unknown, key: string, idField: string): string[] {
   if (!isRecord(body) || !Array.isArray(body[key])) return [];
   return (body[key] as Item[]).map((item) => item[idField]).filter((value): value is string => typeof value === "string");
@@ -116,15 +149,18 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(notebookGet, "/api/farm-notebook", {}, {});
       break;
     case "map": {
-      await r.read(paddocksGet, `/api/farming/farms/${farm}/paddocks`, f, {});
+      const paddocks = await r.read(paddocksGet, `/api/farming/farms/${farm}/paddocks`, f, {});
       await r.read(paddockStatusGet, `/api/farming/farms/${farm}/paddock-status`, f, { onDate: today });
+      // Each paddock's own page on Farms and paddocks (#477).
+      for (const paddockId of ids(paddocks, "paddocks", "id")) await r.read(paddockGet, `/api/farming/paddocks/${paddockId}`, { paddockId }, {});
       break;
     }
     case "pasture": {
       await r.read(pastureGet, `/api/farming/farms/${farm}/pasture`, f, { onDate: today });
-      await r.read(grazingsGet, `/api/farming/farms/${farm}/grazings`, f, { from: since, limit: "1000" });
+      await readHistory(r, grazingsGet, `/api/farming/farms/${farm}/grazings`, f, "grazings", since);
       await r.read(grazingsGet, `/api/farming/farms/${farm}/grazings`, f, { open: "1" });
-      await r.read(supplementsGet, `/api/farming/farms/${farm}/supplements`, f, { from: since, limit: "1000" });
+      await readHistory(r, supplementsGet, `/api/farming/farms/${farm}/supplements`, f, "supplements", since);
+      await readHistory(r, readingsGet, `/api/farming/farms/${farm}/pasture/readings`, f, "readings", since);
       // Each paddock's card: its readings and grazings, trimmed to the months kept.
       const paddocks = await r.read(paddocksGet, `/api/farming/farms/${farm}/paddocks`, f, {});
       r.entries.pop(); // the map section keeps the paddocks
@@ -155,6 +191,8 @@ export async function buildSection(request: Request, input: { organisationId: st
         pastEntry.query = { from: since, to: daysAhead(today, 92), farmId: farm };
       }
       await r.read(calendarGet, "/api/farming/calendar", {}, { view: "check", farmId: farm });
+      // The safety dates shown above the calendar (#477).
+      await r.read(safetyDueGet, "/api/farming/safety/due", {}, { from: today, to: daysAhead(today, 92) });
       break;
     }
     case "plans": {
@@ -163,11 +201,16 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(productsGet, "/api/farming/products", {}, {});
       break;
     }
-    case "soil":
+    case "soil": {
       await r.read(soilSamplesGet, `/api/farming/farms/${farm}/soil-samples`, f, {});
       await r.read(soilTestsGet, `/api/farming/farms/${farm}/soil-tests`, f, {});
       await r.read(soilSummaryGet, `/api/farming/farms/${farm}/soil-summary`, f, {});
+      // Each paddock's soil history, opened from the summary (#477).
+      const reads = reader(request, organisationId);
+      const paddocks = await reads.read(paddocksGet, `/api/farming/farms/${farm}/paddocks`, f, {});
+      for (const paddockId of ids(paddocks, "paddocks", "id")) await r.read(paddockHistoryGet, `/api/farming/paddocks/${paddockId}/history`, { paddockId }, {});
       break;
+    }
     case "safety": {
       await r.read(safetyGet, "/api/farming/safety", {}, { farmId: farm });
       await r.read(safetyTodayGet, "/api/farming/safety/today", {}, { farmId: farm });
@@ -184,6 +227,9 @@ export async function buildSection(request: Request, input: { organisationId: st
       const equipment = await r.read(equipmentGet, "/api/farming/safety/equipment", {}, { farmId: farm });
       for (const recordId of ids(equipment, "equipment", "recordId")) await r.read(equipmentChecksGet, `/api/farming/safety/equipment/${recordId}/checks`, { recordId }, {});
       await r.read(chemicalsGet, "/api/farming/safety/chemicals", {}, { farmId: farm });
+      // Tractor mode: machines with their widths, and the farm's jobs (#474, #477).
+      await r.read(tractorEquipmentGet, "/api/farming/tractor/equipment", {}, {});
+      await r.read(tractorJobsGet, "/api/farming/tractor/jobs", {}, { farmId: farm });
       break;
     }
     case "people": {
