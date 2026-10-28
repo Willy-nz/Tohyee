@@ -42,6 +42,9 @@ export function setApiTransport(next: ApiTransport | null): void {
   transport = next;
 }
 
+/** What a request says when Tohyee can't be reached. */
+export const OFFLINE_MESSAGE = "Tohyee can't be reached from this device just now. Check the connection, then try again.";
+
 /** Calls the Tohyee API with the session cookie. Signs you out on 401. */
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
   if (transport) return (await transport(path, options)) as T;
@@ -51,13 +54,19 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
       url.searchParams.set(name, String(value));
     }
   }
-  const response = await fetch(url, {
-    method: options.method ?? "GET",
-    headers: options.body === undefined ? undefined : { "content-type": "application/json" },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    cache: "no-store",
-    credentials: "same-origin",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: options.method ?? "GET",
+      headers: options.body === undefined ? undefined : { "content-type": "application/json" },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+  } catch {
+    // No connection (or the server is down): say so in words, not "Failed to fetch" (#472).
+    throw new ApiError(OFFLINE_MESSAGE, 0, "offline");
+  }
   let payload: unknown = null;
   try {
     payload = await response.json();

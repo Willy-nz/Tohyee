@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+import { serviceWorkerHeaderRules } from "./src/lib/offline/headers";
 import { securityHeaderRules } from "./src/lib/office/csp";
 
 /*
@@ -40,7 +41,7 @@ const nextConfig: NextConfig = {
   // CSP including frame-ancestors (src/lib/api/upload.ts); X-Frame-Options
   // still covers every API response.
   async headers() {
-    return securityHeaderRules();
+    return [...securityHeaderRules(), ...serviceWorkerHeaderRules()];
   },
   // Folders a running copy writes real data into (backups, analytics' DuckDB
   // copies of the books, data) stay out of the routes' traces even if a

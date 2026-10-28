@@ -19,8 +19,10 @@ import {
 import { type AppKey, AppSwitcher } from "@/components/app-switcher";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette } from "@/components/command-palette";
+import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { type Modules, useModules } from "@/components/modules";
+import { OfflineSupport, prepareSignOut } from "@/components/offline-support";
 import {
   AI_LINK,
   type Destination,
@@ -360,6 +362,9 @@ function UserMenu({ onSignOut }: { onSignOut: () => void }) {
           <Link href="/operations/profile" className={styles.dropdownLink} onClick={close}>
             Profile and two-step sign-in
           </Link>
+          <Link href="/get-tohyee" className={styles.dropdownLink} onClick={close}>
+            Get Tohyee on this device
+          </Link>
           {current?.role === "owner" ? (
             // An Owner's private copy of their own mail (#250).
             <Link href="/operations/my-mail" className={styles.dropdownLink} onClick={close}>
@@ -581,6 +586,9 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
             <Link href="/operations/profile" onClick={close}>
               Profile and two-step sign-in
             </Link>
+            <Link href="/get-tohyee" onClick={close}>
+              Get Tohyee on this device
+            </Link>
             {current?.role === "owner" ? (
               <Link href="/operations/my-mail" onClick={close}>
                 My mail
@@ -734,7 +742,8 @@ function AccountingOff() {
 function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; warnings: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { can, current } = useWorkspace();
+  const { can, current, user, organisations } = useWorkspace();
+  const confirm = useConfirm();
   const modules = useModules(current?.id ?? null);
   const reportViewer = current?.role === "report_viewer";
   const owner = current?.role === "owner";
@@ -814,6 +823,8 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   }, []);
 
   async function signOut() {
+    // Unsent work is offered for sending first, and kept if it can't go (decision 993).
+    if (!(await prepareSignOut(confirm, user.id, organisations.map((organisation) => organisation.id)))) return;
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     router.replace("/login");
     router.refresh();
@@ -846,6 +857,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
           </Suspense>
         </div>
       </header>
+      <OfflineSupport userId={user.id} organisationId={current?.id ?? null} />
       <main id="main-content" className={styles.content} tabIndex={-1}>
         <div ref={page} className={styles.page}>
           {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}

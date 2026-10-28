@@ -53,6 +53,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "fake-indexeddb": "6.2.5",
     "mailparser": "^3.12.4",
     "smtp-server": "^3.21.1",
     "tsx": "^4.23.15",

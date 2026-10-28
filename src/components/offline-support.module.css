@@ -1,0 +1,8 @@
+.banner {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
