@@ -5,7 +5,9 @@ import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
 import { AddAerialPhotos, AerialPhotosCard, AerialPhotosFailed } from "@/components/farm-imagery";
 import { FarmRowList, farmRowStyles } from "@/components/farm-rows";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { GpsButton, GpsStatus, useGps } from "@/components/gps-control";
+import gpsStyles from "@/components/gps-control.module.css";
 import { useApiData } from "@/components/hooks";
 import { PaddockPastureSummary } from "@/components/pasture";
 import { PaddockRecords } from "@/components/soil";
@@ -14,8 +16,9 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { resolveSelectedFarm } from "@/lib/client/farm-selection";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
-import { areaHectares, bounds, fitBox, hectaresText, linzAerialTileUrl, mapViewAt, outlinesOverlap, type PaddockGeometry, parseGeometry, type Position } from "@/lib/farming/geometry";
+import { areaHectares, bounds, fitBox, hectaresText, linzAerialTileUrl, type MapView, mapViewAt, outlinesOverlap, type PaddockGeometry, parseGeometry, type Position } from "@/lib/farming/geometry";
 import type { BoundaryVersion, Farm, FarmingSettings, ImportPreview, Paddock } from "@/lib/farming/paddocks";
+import { accuracyText, type GpsFix } from "@/lib/location/gps";
 
 /**
  * Farming, stage 1 (#249): farms, paddocks with their effective and mapped
@@ -100,6 +103,21 @@ const NZ_VIEW = { centre: [172.6, -41.3] as Position, zoom: 4.6 };
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 19;
 
+/** Where you are (#498 item 6): a blue dot with its accuracy circle, to scale. Drawn on this device only. */
+function YouAreHere({ fix, view, scale }: { fix: GpsFix; view: MapView; scale: number }) {
+  const [x, y] = view.project([fix.lon, fix.lat]);
+  const metresPerUnit = (156_543.033_92 * Math.cos((fix.lat * Math.PI) / 180)) / 2 ** view.zoom;
+  const radius = fix.accuracy != null ? Math.min(2000, fix.accuracy / metresPerUnit) : 0;
+  return (
+    <g style={{ pointerEvents: "none" }} data-testid="you-are-here">
+      <title>{`You are here, ${accuracyText(fix.accuracy)}`}</title>
+      {radius > 8 * scale ? <circle cx={x} cy={y} r={radius} fill="rgba(26, 115, 232, 0.16)" stroke="rgba(26, 115, 232, 0.6)" strokeWidth={1.5 * scale} /> : null}
+      {/* About 16px across on screen, however wide the map is shown. */}
+      <circle cx={x} cy={y} r={8 * scale} fill="#1a73e8" stroke="#ffffff" strokeWidth={3 * scale} />
+    </g>
+  );
+}
+
 /**
  * The paddocks' outlines to scale, north up, in Web Mercator, with zoom and
  * pan. With a LINZ Basemaps key, aerial imagery is drawn underneath, loaded
@@ -136,7 +154,10 @@ export function PaddockMap({
 }) {
   const [moved, setMoved] = useState<{ centre: Position; zoom: number } | null>(null);
   const [failed, setFailed] = useState<{ key: string; count: number }>({ key: "", count: 0 });
-  const [locating, setLocating] = useState<string | null>(null);
+  // Use my location (#498 item 6): always offered; centring on yourself only moves this map.
+  const gps = useGps((fix) => setMoved({ centre: [fix.lon, fix.lat], zoom: 16 }));
+  const you = gps.state.status === "granted" ? gps.state.fix : null;
+  const gpsStatusId = useId();
   const drag = useRef<{ x: number; y: number; centre: Position; moved: boolean } | null>(null);
   // A click follows the end of a drag: it mustn't also choose a paddock.
   const dragged = useRef(false);
@@ -168,18 +189,7 @@ export function PaddockMap({
     const rect = svg.current!.getBoundingClientRect();
     return [((event.clientX - rect.left) * MAP_WIDTH) / rect.width, ((event.clientY - rect.top) * MAP_HEIGHT) / rect.height];
   };
-  const locate = () => {
-    if (!navigator.geolocation) return setLocating("This browser can't share its location.");
-    setLocating("Finding where you are…");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocating(null);
-        setMoved({ centre: [position.coords.longitude, position.coords.latitude], zoom: 16 });
-      },
-      () => setLocating("The location wasn't shared, so the map didn't move."),
-      { enableHighAccuracy: true, timeout: 15_000 },
-    );
-  };
+
   const control: React.CSSProperties = { minWidth: 32, height: 32, padding: "0 8px", borderRadius: 8, border: "1px solid #c4ccd8", background: "#ffffff", color: "#1d2733", fontSize: 13, fontWeight: 600, cursor: "pointer", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.15)" };
   return (
     <>
@@ -332,6 +342,7 @@ export function PaddockMap({
               })}
             </g>
           ) : null}
+          {you ? <YouAreHere fix={you} view={view} scale={MAP_WIDTH / Math.max(shownWidth, 1)} /> : null}
         </svg>
         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
           <button type="button" style={control} aria-label="Zoom in" onClick={() => zoomBy(1)}>
@@ -345,12 +356,10 @@ export function PaddockMap({
               Fit
             </button>
           ) : null}
-          <button type="button" style={control} onClick={locate}>
-            My location
-          </button>
+          <GpsButton gps={gps} className={gpsStyles.mapButton} onShowHelp={() => document.getElementById(gpsStatusId)?.scrollIntoView({ block: "nearest", behavior: "smooth" })} />
         </div>
       </div>
-      {locating ? <p className={ui.muted}>{locating}</p> : null}
+      <GpsStatus gps={gps} id={gpsStatusId} />
       {imagery ? <LinzAttribution /> : offerImagery ? <AddAerialPhotos /> : null}
     </>
   );

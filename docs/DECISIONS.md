@@ -10410,3 +10410,113 @@ WorkSafe by itself (decision 943).
       or complete; keeping records in Tohyee, self-hosted or encrypted,
       doesn't make them legally privileged. The Safety card "Records that
       stand up" is now "Records and their history".
+
+### Farm on the phone, from real use (#498 items 1-6 and 8; decisions 1110-1124)
+
+Jess and William raised #498 after using Tohyee on their phones. Item 7
+(farm members on the map) is separate work. The issue's text decides
+these; where it gives no detail, this follows what Xero does with its own
+apps (each app has its own top bar, with a switcher between them), and is
+**not yet reviewed**. None of it is accounting behaviour.
+
+Already met on main before this (checked 30 October 2026): the chosen
+farm carries between farm pages, because a link's `?farm=` becomes the
+tab's choice and the last farm opens otherwise (`src/components/farm-selector.tsx`,
+decisions 740 and 900); the tabs already allowed for the phone's bottom bar
+(decision 1046); the paddock map had a "My location" button that only
+centred it (`src/components/farming.tsx`); tractor mode already kept real
+gaps and said NOT RECORDING when GPS or the screen stopped
+(`src/lib/farming/tractor-recorder.ts`, decisions 1020-1030).
+
+1110. **Farm is its own app**, beside Accounting, CRM and Analytics, in the
+      app switcher, the phone menu and Ctrl K. It needs Farming on (and
+      Accounting, as Farming always has). Farm pages keep their addresses
+      under `/operations/farm` and `/operations/farming`; the shell shows
+      the Farm top bar on them (`appForPath`). Its top bar is Today, Map,
+      Log, Safety, Effluent and More; Accounting's top bar no longer has a
+      Farm menu. Ctrl K finds farm pages from any app. Farm staff have Farm
+      only, so there's no switcher for them. Roles and the server's checks
+      are unchanged. Livestock, livestock valuation and co-op shares are
+      linked from Farm but stay Accounting pages.
+1111. **The Farm tabs come from a shared layout**, not each page: the
+      layouts of `/operations/farm` and `/operations/farming` draw Today ·
+      Map · Log · Safety · More before the page's data loads, so a direct
+      link, a reload or a page opened offline has them. Tractor mode marks
+      Map; Effluent and the other farm pages mark More. Pages leave
+      `80px + the phone's safe area` under their last button. Farm pages
+      don't slide in when opened (a moving page carried the fixed tabs
+      with it). On wide screens, where the top bar has the same places, the
+      tabs are hidden. More opens with a **Farm menu** of big buttons:
+      Effluent, Tractor mode, Pasture and feed, Farm calendar, Soil tests,
+      Farms and paddocks.
+1112. **Install steps follow the browser**, never only the browser's
+      install event: Safari on iPhone and iPad (Share › Add to Home
+      Screen), Chrome, Edge and Firefox on iOS 16.4+ (their Share), Chrome,
+      Edge, Samsung Internet, Firefox (⋮ › Install, as Mozilla's own help
+      says) and Opera on Android, Chrome and Edge on a computer, Firefox
+      on Windows (Add tab to taskbar, from version 143, where it's there),
+      Safari on macOS Sonoma or later (File › Add to Dock), and an app's
+      built-in browser (open it in a browser first). The Install button
+      still shows where Chrome or Edge offer it. The page says it's a web
+      app added by the browser: not an app-store app and not an APK.
+1113. **Where a browser can't install, the page says so plainly**:
+      Firefox on a Mac or Linux can't, which is Firefox's limit, not a
+      fault, and Tohyee works in the tab. Where it depends on the version,
+      it says what to do if the option isn't there. The browser is worked
+      out from its user agent, which can be wrong, so every other
+      browser's steps are listed below.
+1114. **Why HTTPS is needed is always one tap away** on the install page:
+      browsers only install, keep offline copies or give a location to an
+      HTTPS address; a home-network address works in the browser only;
+      Tailscale HTTPS certificates with `tailscale serve` keep it private
+      to the tailnet. The manifest and service worker use only standard
+      features Firefox also has (install, activate, fetch and message
+      events, Cache Storage, IndexedDB).
+1115. **Use my location is on every map**, as one reusable control
+      (`src/components/gps-control.tsx`): every paddock map (Today, Map,
+      Farms and paddocks, Safety's hazards, Effluent's setup and log) has
+      it in its own controls, and tractor mode has **Check GPS** before
+      Start. The map works without it.
+1116. **The location's state is said, not guessed**: not asked, finding,
+      allowed (with the position and its accuracy, rounded), blocked,
+      unavailable (no location in this browser, a plain-http address, or
+      the phone couldn't find itself) or timed out after 15 seconds, with
+      Try again. A block is shown as soon as the page opens where the
+      browser can say (the Permissions API), not only after a tap.
+1117. **Blocked isn't asked again.** Browsers say no without asking once
+      it's blocked, so the button changes to **Location blocked: how to
+      fix**, and the steps for that browser (Safari, Chrome, Edge,
+      Firefox, Samsung Internet; iPhone, Android, an installed icon or a
+      computer) are shown with **Check again**, which asks the browser's
+      permission state and finds you if it's now allowed. Where there's no
+      Permissions API it tries once; a still-blocked browser answers at
+      once without asking.
+1118. **Centring on yourself isn't sharing.** The position is drawn as a
+      blue dot with its accuracy circle on this device and sent nowhere;
+      the screen says so. How old the position is keeps counting, so an
+      old one never reads as "just now". Sharing a position with other
+      people is #498 item 7, and is separate and opt-in.
+1119. **Safety has Emergency details, not a big Call 111 button.** The
+      Safety page's first card is labelled Emergency details: the farm's
+      address and entrance, up to three emergency contacts to tap, "phone
+      111 first" with 111 as an ordinary phone link, and the full details.
+      The copy kept on the phone still shows with no signal.
+1120. **Effluent is found where farm work is**: in the Farm top bar, the
+      Farm app's phone menu, first in More's Farm menu, through Ctrl K, and
+      from the map's pods and irrigator markers. It stays off the five
+      bottom tabs, which the issue asked to keep uncluttered.
+1121. **Tractor mode helps when location is blocked mid-job**: under the
+      controls it shows the same steps and Check again, then Resume. The
+      time it was off stays a gap.
+1124. **Tractor mode says it's limited**, in the issue's words: "Limited —
+      keep Tohyee open and your screen unlocked while recording. Locking
+      your phone or switching apps may interrupt GPS and leave gaps in
+      your track." It's at the top of tractor mode, before Start and
+      beside the recording controls. No new tractor features; nothing
+      records in the background (deferred in #498).
+
+Checked: unit tests for the browser detection, install steps, GPS state
+and restore steps, menus and tabs; Playwright at 390 wide in Chromium only
+(no Firefox or WebKit is installed here) on copies of the demo databases.
+Firefox and Safari were stood in for by their user agents for the install
+steps, which isn't the same as trying them. Not tried on a real phone.

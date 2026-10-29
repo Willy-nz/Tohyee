@@ -7,7 +7,7 @@ export default function FarmMorePage() {
   return (
     <Page>
       <PageHeader title="More" />
-      <FarmWorkspace tab="more">{(context) => <FarmMore {...context} />}</FarmWorkspace>
+      <FarmWorkspace>{(context) => <FarmMore {...context} />}</FarmWorkspace>
     </Page>
   );
 }

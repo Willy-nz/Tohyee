@@ -12,8 +12,9 @@ export type MenuSection = { heading: string | null; links: MenuLink[] };
 export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
 
 /**
- * The accounting menus: Home, Sales, Purchases, Banking, Payroll, Farm,
- * Reports, Accounting, Tax and Settings (#375, decision 700). Each opens to a panel of a few labelled groups.
+ * The accounting menus: Home, Sales, Purchases, Banking, Payroll,
+ * Reports, Accounting, Tax and Settings (#375, decision 700). Farm is its
+ * own app now, beside Accounting (#498, decision 1110): FARM_MENUS. Each opens to a panel of a few labelled groups.
  * Making something new lives in the "+ New" menu (NEW_ACTIONS), not here.
  * Server settings aren't here: they open only on the server computer.
  */
@@ -158,40 +159,6 @@ export const MENUS: Menu[] = [
           { href: "/operations/payroll/pay-items", label: "Pay items", minRole: "bookkeeper" },
           { href: "/operations/settings/bank-files", label: "Bank file settings", minRole: "bookkeeper" },
           { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Farm",
-    module: "farming",
-    groups: [
-      {
-        heading: "Farm",
-        links: [
-          ...section("On the farm", [
-            { href: "/operations/farm", label: "Today, map and log" },
-          ]),
-          ...section("Paddocks and soil", [
-            { href: "/operations/farming", label: "Farms and paddocks" },
-            { href: "/operations/farming/compare", label: "All farms compared" },
-            { href: "/operations/farming/soil", label: "Soil tests" },
-            { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
-            { href: "/operations/farming/pasture", label: "Pasture and feed" },
-            { href: "/operations/farming/import", label: "Import paddock shapes", minRole: "bookkeeper" },
-          ]),
-          ...section("Records", [
-            { href: "/operations/farming/calendar", label: "Farm calendar" },
-            { href: "/operations/farm/safety", label: "Safety" },
-            { href: "/operations/farming/notebook", label: "Farm notebook" },
-            { href: "/operations/livestock", label: "Livestock", module: "livestock" },
-            { href: "/operations/farming/co-op-shares", label: "Co-op shares" },
-          ]),
-          ...section("Insights and apps", [
-            { href: "/operations/farming/benchmarks", label: "Benchmarks" },
-            { href: "/operations/ai/workspace", label: "AI dashboards and data" },
-            { href: "/operations/farming/apps", label: "Farm apps" },
-          ]),
         ],
       },
     ],
@@ -533,7 +500,6 @@ export const AREAS: Record<string, string[]> = {
   ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/repeating-bills", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
   Payroll: ["/operations/payroll"],
-  Farm: ["/operations/farming", "/operations/farm"],
   Banking: ["/operations/bank-accounts", "/operations/bank-rules", "/operations/exchange-rates", "/operations/fx-revaluation"],
   Reports: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
   Accounting: ["/operations/accounts", "/operations/ledger-journals", "/operations/inventory", "/operations/fixed-assets", "/operations/livestock", "/operations/period-close"],
@@ -541,9 +507,12 @@ export const AREAS: Record<string, string[]> = {
   Settings: ["/operations/settings", "/operations/members", "/operations/modules"],
 };
 
+/** Home pages whose menu is current on that page only, not the pages under it. */
+const EXACT_AREAS = new Set(["/operations", "/crm", "/analytics", "/operations/farm"]);
+
 export function inArea(pathname: string, menu: Menu): boolean {
   return (menu.area ?? AREAS[menu.label] ?? []).some((path) =>
-    path === "/operations" || path === "/crm" || path === "/analytics" ? pathname === path : pathname === path || pathname.startsWith(`${path}/`),
+    EXACT_AREAS.has(path) ? pathname === path : pathname === path || pathname.startsWith(`${path}/`),
   );
 }
 
@@ -573,28 +542,67 @@ export function menuSections(group: MenuGroup): MenuSection[] {
 type Access = { can(role: Role): boolean; modules: Modules | null; farmWorker?: boolean };
 
 /**
- * Farm staff (decision 904) have the field-work pages only: no books, no
- * settings, nothing to make in "+ New".
+ * The Farm app's top bar (#498, decisions 1110-1111): the same five places
+ * as the phone's bottom tabs, with Effluent beside them, and everything
+ * else on the farm under More. Livestock valuation and co-op shares stay
+ * linked to the books; they open in Accounting where they live.
  */
-export const FARM_WORK_MENUS: Menu[] = [
+export const FARM_MENUS: Menu[] = [
+  { label: "Today", href: "/operations/farm", module: "farming", groups: [], area: ["/operations/farm"] },
+  { label: "Map", href: "/operations/farm/map", module: "farming", groups: [], area: ["/operations/farm/map", "/operations/farm/tractor"] },
+  { label: "Log", href: "/operations/farm/log", module: "farming", groups: [], area: ["/operations/farm/log"] },
+  { label: "Safety", href: "/operations/farm/safety", module: "farming", groups: [], area: ["/operations/farm/safety", "/operations/farming/safety"] },
+  { label: "Effluent", href: "/operations/farm/effluent", module: "farming", groups: [], area: ["/operations/farm/effluent"] },
   {
-    label: "Farm",
+    label: "More",
     module: "farming",
+    area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farming"],
     groups: [
       {
-        heading: "Farm",
+        heading: "Paddocks and feed",
         links: [
-          { href: "/operations/farm", label: "Today, map and log" },
-          { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming", label: "Farms and paddocks" },
+          { href: "/operations/farming/pasture", label: "Pasture and feed" },
           { href: "/operations/farming/soil", label: "Soil tests" },
+          { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
+          { href: "/operations/farming/compare", label: "All farms compared" },
+          { href: "/operations/farming/import", label: "Import paddock shapes", minRole: "bookkeeper" },
+        ],
+      },
+      {
+        heading: "Records",
+        links: [
           { href: "/operations/farming/calendar", label: "Farm calendar" },
+          { href: "/operations/farm/tractor", label: "Tractor mode" },
+          { href: "/operations/farming/notebook", label: "Farm notebook" },
+          { href: "/operations/livestock", label: "Livestock", module: "livestock" },
+          { href: "/operations/farming/co-op-shares", label: "Co-op shares" },
+        ],
+      },
+      {
+        heading: "Insights and apps",
+        links: [
+          { href: "/operations/farming/benchmarks", label: "Benchmarks" },
+          { href: "/operations/livestock/valuation", label: "Livestock valuation", module: "livestock" },
           { href: "/operations/farming/apps", label: "Farm apps" },
+        ],
+      },
+      {
+        heading: "This device",
+        links: [
+          { href: "/operations/farm/offline", label: "Offline on this device" },
+          { href: "/get-tohyee", label: "Get Tohyee on this device" },
         ],
       },
     ],
   },
 ];
+
+/** Which app's top bar a page shows: farm pages are in the Farm app, though they live under /operations (decision 1110). */
+export function appForPath(app: "accounting" | "farm" | "crm" | "analytics", pathname: string): "accounting" | "farm" | "crm" | "analytics" {
+  if (app !== "accounting") return app;
+  return ["/operations/farm", "/operations/farming"].some((path) => pathname === path || pathname.startsWith(`${path}/`)) ? "farm" : app;
+}
 
 /** Where farm staff may go; anywhere else in Accounting sends them to the first. */
 export const FARM_WORK_PATHS = ["/operations/farm", "/operations/farming/pasture", "/operations/farming/soil", "/operations/farming/calendar", "/operations/farming/apps", "/operations/profile"];
@@ -620,12 +628,22 @@ function filterGroups(groups: MenuGroup[], access: Access): MenuGroup[] {
     .filter((group) => group.links.length > 0);
 }
 
+/** Farm staff see the farm pages they may open (decision 904), and Get Tohyee on this device. */
+function farmWorkLink(href: string): boolean {
+  return href === "/get-tohyee" || farmWorkAllowsPath(href.split("?")[0]);
+}
+
 /** The menus someone may see in an app: their role and the organisation's modules decide. */
-export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Access): Menu[] {
-  // MOD2: no Accounting menus while it's off.
-  if (app === "accounting" && access.modules?.accounting === false) return [];
-  if (access.farmWorker) return app === "accounting" ? FARM_WORK_MENUS.filter((menu) => moduleOn(menu.module, access.modules)) : [];
-  return (app === "crm" ? CRM_MENUS : app === "analytics" ? ANALYTICS_MENUS : MENUS)
+export function visibleMenus(app: "accounting" | "farm" | "crm" | "analytics", access: Access): Menu[] {
+  // MOD2: no Accounting menus while it's off; Farm needs Accounting (#249).
+  if ((app === "accounting" || app === "farm") && access.modules?.accounting === false) return [];
+  if (access.farmWorker) {
+    if (app !== "accounting" && app !== "farm") return [];
+    return FARM_MENUS.filter((menu) => moduleOn(menu.module, access.modules) && (!menu.href || farmWorkLink(menu.href)))
+      .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access).map((group) => ({ ...group, links: group.links.filter((link) => farmWorkLink(link.href)) })).filter((group) => group.links.length > 0) }))
+      .filter((menu) => menu.href || menu.groups.length > 0);
+  }
+  return (app === "crm" ? CRM_MENUS : app === "analytics" ? ANALYTICS_MENUS : app === "farm" ? FARM_MENUS : MENUS)
     .filter((menu) => moduleOn(menu.module, access.modules) && (!menu.minRole || access.can(menu.minRole)))
     .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access) }))
     // A dropdown left with nothing in it isn't shown.

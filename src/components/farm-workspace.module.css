@@ -33,41 +33,6 @@
   font-weight: 600;
 }
 
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 64px;
-  min-height: 44px;
-  padding: 6px 14px;
-  border-bottom: 3px solid transparent;
-  color: var(--text-muted);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-.tab[aria-current="page"] {
-  border-bottom-color: var(--accent);
-  color: var(--text);
-}
-
-.tabIcon {
-  display: none;
-  font-size: 18px;
-  line-height: 1;
-}
-
 .grid {
   display: grid;
   align-items: start;
@@ -237,55 +202,4 @@
   content: "›";
   margin-left: auto;
   color: var(--text-muted);
-}
-
-/* On a phone the tabs sit at the bottom of the screen, like the farm apps people know. */
-@media (max-width: 700px) {
-  .workspace {
-    padding-bottom: 76px;
-  }
-
-  /*
-   * When the browser brings something into view (moving with the keyboard,
-   * or a form opening on a field), it stops above the tabs rather than
-   * behind them (found testing the phone app, decision 1046).
-   */
-  :global(html):has(.workspace) {
-    scroll-padding-bottom: calc(84px + env(safe-area-inset-bottom));
-  }
-
-  .tabs {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 30;
-    justify-content: space-around;
-    gap: 0;
-    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--border);
-    border-bottom: 0;
-    background: var(--surface);
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
-  }
-
-  .tab {
-    flex: 1 1 0;
-    min-width: 0;
-    min-height: 56px;
-    padding: 4px 2px;
-    border-top: 3px solid transparent;
-    border-bottom: 0;
-    font-size: var(--text-xs, 12px);
-  }
-
-  .tab[aria-current="page"] {
-    border-top-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .tabIcon {
-    display: block;
-    margin-bottom: 2px;
-  }
 }

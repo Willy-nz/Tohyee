@@ -1,0 +1,138 @@
+/* Use my location (#498 item 6, decisions 1115-1118). */
+
+.control {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--accent);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.button[data-gps="denied"] {
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.status {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.status[data-tone="warning"] {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.message,
+.note,
+.helpTitle {
+  margin: 0;
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.status[data-tone="warning"] .note {
+  color: inherit;
+}
+
+.helpTitle {
+  font-weight: 700;
+}
+
+.help {
+  display: grid;
+  gap: 6px;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.steps li + li {
+  margin-top: 4px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #1a73e8;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* The same button inside a map's own controls (over the map: fixed colours, readable on aerial photos in both themes). */
+.mapButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid #c4ccd8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d2733;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.mapButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.mapButton[data-gps="denied"] {
+  border-color: #b26b00;
+  color: #7a4600;
+}
