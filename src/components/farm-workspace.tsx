@@ -13,6 +13,7 @@ import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
 import { PaddockMap } from "@/components/farming";
+import { PaddockPhotoDiary } from "@/components/pasture-photos";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -398,6 +399,8 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
           <FarmRowList label="Recent records" rows={recent.map((entry) => ({ key: entry.key, title: shortDate(entry.date, today), parts: [entry.text] }))} />
         </>
       ) : null}
+      <h3>Photo diary</h3>
+      <PaddockPhotoDiary organisationId={organisationId} paddockId={status.paddockId} readings={history.data?.pasture.readings ?? []} />
       {canRecord ? (
         <div className={styles.actions}>
           <Link className={styles.bigButton} href={logHref("hazard")}>
@@ -405,6 +408,9 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
           </Link>
           <Link className={styles.bigButton} href={logHref("cover")}>
             Add cover
+          </Link>
+          <Link className={styles.bigButton} href={logHref("photo")}>
+            Add photo
           </Link>
           {status.inNow ? (
             <Link className={styles.bigButton} href={logHref("out", `&grazing=${status.inNow.grazingId}`)}>
