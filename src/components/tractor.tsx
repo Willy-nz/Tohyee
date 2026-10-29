@@ -32,12 +32,15 @@ import {
 import {
   distanceText,
   durationText,
+  EARLIER_EDITS_NOT_RECORDED,
   EQUIPMENT_KIND_LABELS,
   EQUIPMENT_KINDS,
   type EquipmentKind,
   EVENT_LABELS,
   hectares,
   type JobSettings,
+  type JobVersion,
+  notWorkingText,
   OPERATION_LABELS,
   type Operation,
   OPERATIONS,
@@ -45,6 +48,7 @@ import {
   QUANTITY_UNITS,
   RATE_UNITS,
   TRACTOR_NOTICE,
+  TRACTOR_RECORD_NOTE,
   type TractorEquipment,
   type TractorJob,
   type TractorJobListItem,
@@ -1244,7 +1248,7 @@ export function TractorJobReview({ organisationId, jobId }: { organisationId: st
   const paddocks = useApiData<{ paddocks: Paddock[] }>(job ? `/api/farming/farms/${job.farmId}/paddocks` : null, { organisationId });
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!job) return <p className={ui.muted}>Loading…</p>;
-  const exportHref = (format: "geojson" | "gpx") => `/api/farming/tractor/jobs/${job.id}/export?format=${format}&organisationId=${encodeURIComponent(organisationId)}`;
+  const exportHref = (format: "geojson" | "gpx" | "summary") => `/api/farming/tractor/jobs/${job.id}/export?format=${format}&organisationId=${encodeURIComponent(organisationId)}`;
   const shapes = (paddocks.data?.paddocks ?? []).filter((paddock) => paddock.status === "active");
   const chosenShapes = job.boundaries.map((entry) => entry.paddockId);
   return (
@@ -1263,6 +1267,9 @@ export function TractorJobReview({ organisationId, jobId }: { organisationId: st
             </a>
             <a className={styles.linkAsButton} href={exportHref("gpx")} download>
               GPX
+            </a>
+            <a className={styles.linkAsButton} href={exportHref("summary")} download>
+              Summary
             </a>
           </div>
         }
@@ -1284,7 +1291,15 @@ export function TractorJobReview({ organisationId, jobId }: { organisationId: st
         </div>
         <TractorLegend withPaddocks={job.boundaries.length > 0} />
         <SummaryFacts summary={job.summary} />
-        <Notice tone="info">{TRACTOR_NOTICE}</Notice>
+        {job.notWorking.length ? (
+          <Notice tone="warning">
+            Corrected: {job.notWorking.length === 1 ? "one time was" : `${job.notWorking.length} times were`} marked not working after the job, so the estimate leaves {job.notWorking.length === 1 ? "it" : "them"} out. The track still shows Working as it was switched.
+            {job.firstSummary ? ` As first saved: ${hectares(job.firstSummary.workedHa)} worked (est.).` : ""}
+          </Notice>
+        ) : null}
+        <Notice tone="info">
+          {TRACTOR_NOTICE} {TRACTOR_RECORD_NOTE}
+        </Notice>
         <h3>Settings used</h3>
         <ul>
           {job.track.settings.map((entry, index) => (
@@ -1300,10 +1315,11 @@ export function TractorJobReview({ organisationId, jobId }: { organisationId: st
           ))}
         </ul>
         <p className={ui.muted}>
-          Device times. The server received it {new Date(job.receivedAt).toLocaleString("en-NZ")}.
+          Times above are the phone&apos;s clock. Tohyee received the job {new Date(job.receivedAt).toLocaleString("en-NZ")} (Tohyee&apos;s clock).
         </p>
       </Card>
       <JobDetails organisationId={organisationId} job={job} paddocks={shapes} onSaved={loaded.reload} />
+      <JobHistory job={job} />
     </div>
   );
 }
@@ -1321,12 +1337,16 @@ function JobDetails({ organisationId, job, paddocks, onSaved }: { organisationId
   const [plan, setPlan] = useState(job.fertiliserPlanId ?? "");
   const [chosen, setChosen] = useState<string[]>(job.paddockIds);
   const [why, setWhy] = useState("");
+  const [reason, setReason] = useState("");
+  const [paddockReason, setPaddockReason] = useState("");
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const editable = job.canChange && job.status === "active";
   const patch = async (body: Record<string, unknown>, done: string) => {
     try {
       await api(`/api/farming/tractor/jobs/${job.id}`, { method: "PATCH", body: { organisationId, ...body } });
       setMessage({ tone: "success", text: done });
+      setReason("");
+      setPaddockReason("");
       onSaved();
     } catch (error) {
       setMessage({ tone: "error", text: errorMessage(error) });
@@ -1380,8 +1400,9 @@ function JobDetails({ organisationId, job, paddocks, onSaved }: { organisationId
                 declaredQuantityUnit: quantity ? quantityUnit : null,
                 chemicalRecordId: chemical || null,
                 ...(job.canLink ? { fertiliserPlanId: plan || null, fertiliserApplicationId: plan && plan === job.fertiliserPlanId ? job.fertiliserApplicationId : null } : {}),
+                reason: reason || null,
               },
-              "Saved.",
+              "Saved. The earlier version is kept in the history.",
             );
           }}
         >
@@ -1439,6 +1460,9 @@ function JobDetails({ organisationId, job, paddocks, onSaved }: { organisationId
           <Field label="Notes">
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} maxLength={2000} />
           </Field>
+          <Field label="Why it's being corrected" hint="Needed when you change or remove something already entered, such as the wrong units or quantity. The earlier version stays in the history.">
+            <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} />
+          </Field>
           {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
           <div className={styles.row}>
             <Button type="submit">Save</Button>
@@ -1455,10 +1479,14 @@ function JobDetails({ organisationId, job, paddocks, onSaved }: { organisationId
             </label>
           ))}
         </fieldset>
-        <Button variant="secondary" onClick={() => void patch({ paddockIds: chosen }, "Paddocks changed and the area worked out again.")}>
+        <Field label="Why they're changing" hint="Needed when the job already had paddocks.">
+          <input value={paddockReason} onChange={(event) => setPaddockReason(event.target.value)} maxLength={1000} />
+        </Field>
+        <Button variant="secondary" onClick={() => void patch({ paddockIds: chosen, reason: paddockReason || null }, "Paddocks changed and the area worked out again. The earlier version is kept.")}>
           Use these paddocks
         </Button>
       </Card>
+      <NotWorkingCard job={job} onSave={patch} />
       <Card title="Withdraw" description="For a job recorded by mistake. It's kept, marked withdrawn, with why.">
         <Field label="Why">
           <input value={why} onChange={(event) => setWhy(event.target.value)} maxLength={1000} />
@@ -1468,5 +1496,110 @@ function JobDetails({ organisationId, job, paddocks, onSaved }: { organisationId
         </Button>
       </Card>
     </>
+  );
+}
+
+/** "2026-10-28T09:05:00Z" → "2026-10-28T22:05:00" in the browser's time, for a datetime-local input. */
+export function localInputValue(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * "Working was left ON" (decision 1102): mark a time as not working, with
+ * why. The track keeps Working as it was switched; the estimate leaves the
+ * time out, and the history keeps what it was before.
+ */
+function NotWorkingCard({ job, onSave }: { job: TractorJob; onSave: (body: Record<string, unknown>, done: string) => Promise<void> }) {
+  const [from, setFrom] = useState(localInputValue(job.startedAt));
+  const [to, setTo] = useState(localInputValue(job.finishedAt));
+  const [why, setWhy] = useState("");
+  const [removeWhy, setRemoveWhy] = useState("");
+  const list = job.notWorking.map((entry) => ({ from: entry.from, to: entry.to, why: entry.why }));
+  return (
+    <Card title="Working was left ON?" description="If Working stayed ON when nothing was being spread or sprayed (for example driving back to the shed), mark that time here. The track isn't changed; the estimate leaves the time out, and the history keeps the estimate as it was.">
+      {job.notWorking.length ? (
+        <ul style={{ paddingLeft: 18 }}>
+          {job.notWorking.map((entry, index) => (
+            <li key={`${entry.from}-${index}`}>{notWorkingText(entry)}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className={styles.pair}>
+        <Field label="From (phone time)">
+          <input type="datetime-local" step={1} value={from} min={localInputValue(job.startedAt)} max={localInputValue(job.finishedAt)} onChange={(event) => setFrom(event.target.value)} />
+        </Field>
+        <Field label="To (phone time)">
+          <input type="datetime-local" step={1} value={to} min={localInputValue(job.startedAt)} max={localInputValue(job.finishedAt)} onChange={(event) => setTo(event.target.value)} />
+        </Field>
+      </div>
+      <Field label="Why it wasn't working">
+        <input value={why} onChange={(event) => setWhy(event.target.value)} maxLength={500} />
+      </Field>
+      <Button variant="secondary" disabled={!why.trim() || !from || !to} onClick={() => void onSave({ notWorking: [...list, { from: new Date(from).toISOString(), to: new Date(to).toISOString(), why: why.trim() }] }, "Marked not working and the area worked out again. The earlier version is kept.")}>
+        Mark as not working
+      </Button>
+      {job.notWorking.length ? (
+        <details>
+          <summary>Undo the last one</summary>
+          <Field label="Why">
+            <input value={removeWhy} onChange={(event) => setRemoveWhy(event.target.value)} maxLength={1000} />
+          </Field>
+          <Button variant="secondary" disabled={!removeWhy.trim()} onClick={() => void onSave({ notWorking: list.slice(0, -1), reason: removeWhy.trim() }, "Removed. The earlier version is kept.")}>
+            Remove it
+          </Button>
+        </details>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Every version of the job's details, oldest first: who, when (Tohyee's clock), why, and what changed (decision 1100). */
+function JobHistory({ job }: { job: TractorJob }) {
+  return (
+    <Card title="History" description="Every version of this job's details. Nothing is overwritten: a correction adds a version, with who, when and why.">
+      {!job.historyComplete ? <Notice tone="warning">{EARLIER_EDITS_NOT_RECORDED}</Notice> : null}
+      <ol className={styles.history} aria-label="Versions, oldest first">
+        {job.history.map((version) => (
+          <JobVersionItem key={version.version} version={version} />
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+function JobVersionItem({ version }: { version: JobVersion }) {
+  return (
+    <li>
+      <strong>
+        Version {version.version}: {version.changeLabel}
+      </strong>{" "}
+      <span className={ui.muted}>
+        {new Date(version.enteredAt).toLocaleString("en-NZ", { dateStyle: "medium", timeStyle: "medium" })} by {version.enteredByEmail}
+      </span>
+      {version.reason ? <div>Why: {version.reason}</div> : null}
+      {version.changes.length ? (
+        <ul>
+          {version.changes.map((change) => (
+            <li key={change.field}>
+              {change.label}: <s>{change.from}</s> → {change.to}
+            </li>
+          ))}
+        </ul>
+      ) : version.version === 1 ? (
+        <div className={ui.muted}>
+          {[
+            version.details.product ? `Product ${version.details.product}` : null,
+            version.details.declaredRate ? `rate ${version.details.declaredRate} ${version.details.declaredRateUnit}` : null,
+            version.details.declaredQuantity ? `quantity ${version.details.declaredQuantity} ${version.details.declaredQuantityUnit}` : null,
+            `${hectares(version.details.summary.workedHa)} worked (est.)`,
+            version.details.notes ? `notes: ${version.details.notes}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+      ) : null}
+    </li>
   );
 }

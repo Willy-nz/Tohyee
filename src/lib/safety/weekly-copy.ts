@@ -10,6 +10,7 @@ import { requireFarming } from "@/lib/farming/paddocks";
 import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { loadPackData, renderPack } from "@/lib/safety/pack";
+import { HASH_LIMITS, WEEKLY_COPY_KEPT } from "@/lib/safety/shared";
 import { assertNotDemoForEmail } from "@/lib/demo/guard";
 
 /*
@@ -132,9 +133,11 @@ async function prepareCopy(organisation: OrganisationRecord, now: Date): Promise
     head ? head.hash : "",
     "",
     "Keep this email somewhere Tohyee can't change it. If the records are ever questioned, enter this number and hash under Farm, Safety, Compare with a copy: if the history was rewritten since, they won't match.",
+    HASH_LIMITS,
     data.chainOk ? "When this copy was made, every entry in the history checked out." : "WARNING: when this copy was made, the history did NOT check out. Look at Farm, Safety, Check the history.",
     "",
     "Injury and medical details are never in this email.",
+    `Sent to: ${toAddresses.join(", ")}. ${WEEKLY_COPY_KEPT}`,
     "Tohyee keeps these records; it doesn't decide what the law needs you to keep.",
   ].join("\n");
   return {

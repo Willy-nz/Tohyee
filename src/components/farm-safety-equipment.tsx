@@ -17,7 +17,7 @@ import type { SafetyFile } from "@/lib/safety/files";
 import type { ChemicalView, TrainingView } from "@/lib/safety/register";
 import styles from "./farm-safety.module.css";
 import { checksOnDevice, recordAnchor, safetyHref, sentChecks } from "@/lib/safety/screens";
-import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER_LABELS, EQUIPMENT_OWNERS, type EquipmentOwner, LOCKOUT_NOTE, SDS_CHECK, SDS_RULE, TRAINING_STATE_LABELS } from "@/lib/safety/shared";
+import { type CheckData, type ChecklistData, type CurrentRecord, EQUIPMENT_OWNER_LABELS, EQUIPMENT_OWNERS, type EquipmentOwner, LOCKOUT_NOTE, NOBODY_MESSAGED, SDS_CHECK, sentLaterText, SDS_RULE, TRAINING_STATE_LABELS } from "@/lib/safety/shared";
 
 /*
  * Equipment and pre-start checks, the training register and the chemicals
@@ -133,6 +133,7 @@ export function EquipmentCard({ organisationId, farm, openEquipment }: { organis
             {item.failedCheck ? (
               <div style={{ color: "var(--danger, #c81e1e)" }}>
                 Failed {formatDateTime(item.failedCheck.enteredAt)}: {item.failedCheck.data.answers.filter((answer) => answer.critical && answer.result === "fault").map((answer) => `${answer.text} (${answer.note})`).join("; ")}. {LOCKOUT_NOTE}
+                {sentLaterText(item.failedCheck.data.phoneTime, item.failedCheck.firstEnteredAt, formatDateTime) ? <div className={ui.muted}>{sentLaterText(item.failedCheck.data.phoneTime, item.failedCheck.firstEnteredAt, formatDateTime)} Out of use from when it reached Tohyee.</div> : null}
               </div>
             ) : null}
             <div className={ui.actions} style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
@@ -226,12 +227,12 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
               request: {
                 method: "POST",
                 path: "/api/farming/safety/checks",
-                body: { equipmentId: item.recordId, checklistId: checklist.recordId, checklistVersion: checklist.version, hoursOrKm: hours, files: photos.map((file) => ({ id: file.id })), answers: checklist.data.items.map((entry) => ({ key: entry.key, result: answers[entry.key]?.result, note: answers[entry.key]?.note })) },
+                body: { equipmentId: item.recordId, checklistId: checklist.recordId, checklistVersion: checklist.version, phoneTime: new Date().toISOString(), hoursOrKm: hours, files: photos.map((file) => ({ id: file.id })), answers: checklist.data.items.map((entry) => ({ key: entry.key, result: answers[entry.key]?.result, note: answers[entry.key]?.note })) },
                 refs: waitForFiles(photos, ["files"]),
               },
             }),
           (result) => {
-            if (result.state === "synced") setOutcome((result.result as { outOfUse?: boolean }).outOfUse ? `${item.data.name} is now out of use and an action has been made to fix it. Don't use it. ${LOCKOUT_NOTE}` : "Check saved.");
+            if (result.state === "synced") setOutcome((result.result as { outOfUse?: boolean }).outOfUse ? `${item.data.name} is now out of use and an action has been made to fix it. Don't use it. ${LOCKOUT_NOTE} ${NOBODY_MESSAGED}` : "Check saved.");
             else setOutcome(criticalFaults.length ? `Saved on this device: ${item.data.name} failed a critical check, so don't use it. Nobody has been told yet: tell whoever is in charge. Tohyee records it, puts it out of use and makes the action when it's sent.` : "Check saved on this device, waiting to send.");
             setTimeout(onDone, result.state === "synced" ? 1500 : 4000);
           },
@@ -347,6 +348,7 @@ function CheckHistory({ organisationId, equipmentId }: { organisationId: string;
         <li key={check.recordId}>
           {formatDateTime(check.enteredAt)} by {check.enteredByName || check.enteredByEmail}: {check.data.passed ? "passed" : check.data.criticalFault ? "FAILED (critical)" : "faults"}
           {check.data.hoursOrKm ? ` · ${check.data.hoursOrKm}` : ""} <span className={ui.muted}>(checklist version {check.data.checklistVersion})</span>
+          {sentLaterText(check.data.phoneTime, check.firstEnteredAt, formatDateTime) ? <div className={ui.muted}>{sentLaterText(check.data.phoneTime, check.firstEnteredAt, formatDateTime)}</div> : null}
           {check.data.passed ? null : <div className={ui.muted}>{check.data.answers.filter((answer) => answer.result === "fault").map((answer) => `${answer.text}: ${answer.note}`).join("; ")}</div>}
         </li>
       ))}

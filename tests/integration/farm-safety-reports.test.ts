@@ -15,6 +15,7 @@ import { readSafetyFile, uploadSafetyFile } from "@/lib/safety/files";
 import { loadPackData, renderPack } from "@/lib/safety/pack";
 import { addAction, addReport, changeAction, changeReport, listReports, openActions, saveReportDetails } from "@/lib/safety/reports";
 import { checkSafetyHistory } from "@/lib/safety/records";
+import { ACTION_STATE_LABELS, actionState, reportStateText, sentLaterText } from "@/lib/safety/shared";
 import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, params, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
 
 const ORG = "farm-safety-reports";
@@ -192,6 +193,28 @@ describeWithDatabase("farm safety reports and actions", () => {
     const [view] = (await as(owner)((tx) => listReports(tx, w.home))).filter((report) => report.recordId === w.report);
     expect(view.state).toBe("closed");
     await expect(as(staff)((tx) => addAction(tx, { reportId: w.report, title: "More", assignedToName: "Contractor" }, members))).rejects.toThrow(/closed or withdrawn/);
+  });
+
+  it("FS16a reported, done and checked read differently; a report saved offline keeps its phone time through a correction (#491)", async () => {
+    const savedOnPhone = new Date(Date.now() - 5 * 3_600_000).toISOString();
+    const reported = await as(staff)((tx) => addReport(tx, { farmId: w.home, type: "hazard", title: "Effluent pond fence down", whatHappened: "Saw the fence down by the pond, couldn't see why.", severity: "moderate", phoneTime: savedOnPhone }));
+    expect(reported.report.data.phoneTime).toBe(savedOnPhone);
+    const view = async () => (await as(owner)((tx) => listReports(tx, w.home))).find((report) => report.recordId === reported.report.recordId)!;
+    expect(reportStateText((await view()).state, (await view()).actions)).toBe("Reported, nothing done yet");
+    const action = await as(staff)((tx) => addAction(tx, { reportId: reported.report.recordId, title: "Fix the pond fence", assignedToUserId: staff.id }, members));
+    expect(reportStateText((await view()).state, (await view()).actions)).toBe("Actions open");
+    const done = await as(staff)((tx) => changeAction(tx, action.recordId, { step: "done", expectedVersion: 1, note: "Fence back up" }, members));
+    expect(actionState(done, "2026-10-29")).toBe("done");
+    expect(ACTION_STATE_LABELS.done).toBe("Done, to check");
+    expect(reportStateText((await view()).state, (await view()).actions)).toBe("Actions open");
+    const checked = await as(lead)((tx) => changeAction(tx, action.recordId, { step: "verify", expectedVersion: done.version, note: "Walked it" }, members));
+    expect(ACTION_STATE_LABELS[actionState(checked, "2026-10-29")]).toBe("Checked and closed");
+    expect(reportStateText((await view()).state, (await view()).actions)).toBe("Actions checked, to close");
+    // A correction keeps when it was first saved on the phone, and the earlier version.
+    const corrected = await as(staff)((tx) => changeReport(tx, reported.report.recordId, { step: "correct", expectedVersion: 1, title: "Pond fence down", why: "Shorter title" }));
+    expect(corrected.data.phoneTime).toBe(savedOnPhone);
+    expect(corrected.version).toBe(2);
+    expect(sentLaterText(corrected.data.phoneTime, corrected.enteredAt, (iso) => iso)).toContain("Until then only that phone had it.");
   });
 
   it("FS18 another farm's reports aren't found", async () => {

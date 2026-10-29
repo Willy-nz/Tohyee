@@ -8,7 +8,7 @@ import { CONTENT_WIDTH, PdfWriter } from "@/lib/pdf/writer";
 import { type ChainEntry, verifyChain } from "@/lib/safety/chain";
 import { PACK_VERIFY_SCRIPT } from "@/lib/safety/pack-verify-script";
 import { canSeeRestricted, ENTRY_COLUMNS, type EntryRow, toChainEntry } from "@/lib/safety/records";
-import { CHANGE_LABELS, KIND_LABELS, mayBeNotifiable, NOTIFIABLE_KEEP_RULE, type NotifiableAnswers, notifiableKeepText, recordFields, recordTitle, type WorkSafeNotice } from "@/lib/safety/shared";
+import { CHANGE_LABELS, HASH_LIMITS, KIND_LABELS, mayBeNotifiable, NOTIFIABLE_KEEP_RULE, type NotifiableAnswers, notifiableKeepText, recordFields, recordTitle, type WorkSafeNotice } from "@/lib/safety/shared";
 import { createZip, type ZipEntry } from "@/lib/zip/write";
 
 /*
@@ -185,7 +185,12 @@ What it can't prove on its own
 Someone with full control of the server could rewrite every entry after a point and work
 out new hashes. Compare the latest entry number and hash in chain.json with an earlier
 copy kept off the farm (for example the weekly email): if that entry's hash is different,
-the history was rewritten.
+the history was rewritten. ${HASH_LIMITS}
+
+What this pack covers
+Records on ${data.farms.map((farm) => farm.name).join(", ") || "no farms"} with an entry made, or a date given, from ${data.from} to ${data.to},
+with every version of each (corrections and withdrawals included, marked as such).
+Records on other farms, and records with nothing entered or dated in that range, aren't here.
 ${data.entries.some((entry) => entry.body === null) ? "\nSome restricted details (incident and medical) were withheld from this pack: only their hash is here.\n" : ""}
 Tohyee keeps these records; it doesn't decide what the law needs you to keep. Check
 WorkSafe's guidance, or ask someone who knows health and safety law.
@@ -216,7 +221,9 @@ export async function renderPack(data: PackData, options: PackOptions = {}): Pro
   pdf.text(`Made ${nzTime(data.generatedAt)} by ${data.generatedBy}.`, { muted: true, gap: 2 });
   const head = data.chain.at(-1);
   pdf.text(head ? `History: ${data.chain.length} entries; latest is number ${head.seq}, hash ${head.hash}.` : "History: no entries yet.", { muted: true, size: 8, gap: 2 });
-  pdf.text(data.chainOk ? "When this pack was made, every entry's hash checked out." : "When this pack was made, the history did NOT check out: see Records and checks in Tohyee.", { bold: !data.chainOk, gap: 12 });
+  pdf.text(data.chainOk ? "When this pack was made, every entry's hash checked out." : "When this pack was made, the history did NOT check out: see Records and checks in Tohyee.", { bold: !data.chainOk, gap: 2 });
+  pdf.text(HASH_LIMITS, { muted: true, size: 8, gap: 2 });
+  pdf.text("Corrections and withdrawals are new versions: each record shows every version, oldest first.", { muted: true, size: 8, gap: 12 });
 
   options.before?.(pdf);
   const byRecord = new Map<string, ChainEntry[]>();

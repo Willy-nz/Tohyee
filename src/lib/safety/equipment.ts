@@ -14,6 +14,7 @@ import {
   EQUIPMENT_OWNERS,
   type EquipmentData,
   type EquipmentOwner,
+  phoneTimeOrNull,
   type ReleaseData,
   type SafetyChange,
 } from "@/lib/safety/shared";
@@ -232,6 +233,8 @@ export async function recordCheck(tx: OrgTx, input: Record<string, unknown>, mem
     criticalFault,
     files: await fileRefs(tx, input.files, equipment.farmId, false),
   };
+  const phoneTime = phoneTimeOrNull(input.phoneTime);
+  if (phoneTime) data.phoneTime = phoneTime;
   const check = await appendEntry<CheckData>(tx, { kind: "check", change: "created", farmId: equipment.farmId, data: { ...data }, operationId: input.operationId });
   let action = null;
   if (criticalFault && check.version === 1) {

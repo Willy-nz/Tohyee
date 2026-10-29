@@ -103,6 +103,41 @@ export type SafetyVersion<T> = {
 
 export type CurrentRecord<T> = SafetyVersion<T> & { firstEnteredAt: string; firstEnteredByEmail: string; firstEnteredByName?: string };
 
+// Saved, sent, told: only what's measured (#491, decisions 1105-1106) ---------------------------------
+
+/**
+ * The phone's time for something saved on a phone and sent later, or null
+ * when the phone's clock can't be used (in the future, or more than 90 days
+ * back). Never refuses the record: a safety report is kept whatever the
+ * phone's clock says; only its time is left out.
+ */
+export function phoneTimeOrNull(input: unknown, now = Date.now()): string | null {
+  if (typeof input !== "string" || !input) return null;
+  const time = Date.parse(input);
+  if (!Number.isFinite(time) || time > now + 5 * 60_000 || time < now - 90 * 86_400_000) return null;
+  return new Date(time).toISOString();
+}
+
+/**
+ * "Saved on a phone 9:05 am (its clock) with no connection; reached Tohyee
+ * 2:40 pm." for a record that waited on a phone (more than two minutes), or
+ * null. Before it reached Tohyee only that phone had it.
+ */
+export function sentLaterText(phoneTime: string | null | undefined, reachedAt: string, format: (iso: string) => string): string | null {
+  if (!phoneTime) return null;
+  const waited = Date.parse(reachedAt) - Date.parse(phoneTime);
+  if (!Number.isFinite(waited) || waited <= 120_000) return null;
+  return `Saved on a phone ${format(phoneTime)} (the phone's clock); reached Tohyee ${format(reachedAt)}. Until then only that phone had it.`;
+}
+
+/**
+ * Tohyee doesn't message anyone about a safety record, and has no way to
+ * know who has read one: an assigned action shows on that person's Today
+ * list when they open Tohyee (decision 1106).
+ */
+export const NOBODY_MESSAGED = "Tohyee doesn't send a message about this, and can't tell who has read it. Tell whoever needs to know.";
+export const ASSIGNED_NOT_TOLD = "Assigning an action doesn't send a message: it shows on that person's Today list when they open Tohyee. Nothing here shows they've seen it.";
+
 /** Entered more than a day after the date it happened: both dates show (decision 932). */
 export function enteredLate(happenedOn: string | null, enteredAt: string, timeZone = "Pacific/Auckland"): boolean {
   if (!happenedOn) return false;
@@ -239,6 +274,33 @@ export function notifiableKeepText(notice: WorkSafeNotice | null, formatDay: (is
   return `Keep this record until at least ${formatDay(notifiableKeepUntil(notice.on))}: five years from when WorkSafe was told (Health and Safety at Work Act 2015, s 57).`;
 }
 
+// What the history and the copies show, and don't (#491, decisions 1108-1109) -----------------------------
+
+/** Beside every hash check, pack and copy: what a matching hash does and doesn't show. */
+export const HASH_LIMITS =
+  "A matching hash shows the history wasn't rewritten after that point. It doesn't show that what a record says is true or complete. Keeping records in Tohyee, on your own server or encrypted, doesn't make them legally privileged.";
+
+/** What the weekly copy has in it and leaves out (decision 1108), with or without the effluent records (#487). */
+export function weeklyCopyContents(includeEffluent: boolean): { includes: string[]; leavesOut: string[] } {
+  const includes = [
+    "Every safety record with a new entry since the last copy, on every farm, each with its full history: earlier versions and corrections included.",
+    "Hazards and no-go zones, emergency details, reports, actions, inductions and sign-offs.",
+    "Sign-ins on site, with the names, companies and phone numbers people gave.",
+    "Equipment, checklists, pre-start checks, releases, training and chemicals.",
+  ];
+  if (includeEffluent) includes.push("The effluent records: systems, ponds, blocks, consents, applications, pond readings, deferrals, servicing and incidents.");
+  includes.push("The latest entry's number and hash.");
+  const leavesOut = ["Injury and medical details (restricted): the PDF only says some were withheld.", "The photos and documents themselves: the PDF lists their names and hashes."];
+  if (!includeEffluent) leavesOut.push("The effluent records (not chosen).");
+  return { includes, leavesOut };
+}
+
+export const WEEKLY_COPY_KEPT =
+  "Each address keeps its own copy, outside Tohyee. Tohyee can't change or take back a copy once it's sent, even if you remove the address or turn the copy off.";
+
+/** What "sent" means for an email (decision 1106). */
+export const SENT_MEANS = "Sent means the mail server accepted it. Tohyee can't tell whether anyone opened or read it.";
+
 /** Restricted access for the overview: what the person may do. */
 export type SafetyAccess = { canRecord: boolean; canReport: boolean; farmStaff: boolean; canSeeRestricted: boolean; isOwner: boolean };
 
@@ -355,6 +417,7 @@ const FIELD_LABELS: Record<string, string> = {
   effluentIncidentId: "Effluent incident",
   councilTold: "Council told",
   checked: "Checked: what was found",
+  phoneTime: "First saved on a phone (its clock)",
 };
 
 /** A short name for a record, for lists and the pack. */
@@ -371,6 +434,7 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
   if (key === "paddockIds" && Array.isArray(value)) return value.length ? value.map((id) => paddockNames.get(String(id)) ?? `Paddock ${id}`).join(", ") : null;
   if (key === "point" && Array.isArray(value)) return `${Number(value[1]).toFixed(6)}, ${Number(value[0]).toFixed(6)} (latitude, longitude)`;
   if (key === "zone") return "Drawn on the map";
+  if (key === "phoneTime" && typeof value === "string") return `${new Intl.DateTimeFormat("en-NZ", { timeZone: "Pacific/Auckland", dateStyle: "medium", timeStyle: "medium" }).format(new Date(value))} (New Zealand time)`;
   if (key === "level" && typeof value === "string") return HAZARD_LEVEL_LABELS[value as HazardLevel] ?? value;
   if (key === "type" && typeof value === "string") return REPORT_TYPE_LABELS[value as ReportType] ?? value;
   if (key === "severity" && typeof value === "string") return SEVERITY_LABELS[value as Severity] ?? value;
@@ -497,6 +561,8 @@ export type ReportData = {
   closed: { why: string } | null;
   files: SafetyFileRef[];
   why?: string | null;
+  /** Saved on a phone and sent later: the phone's time it was first saved (#491, decision 1105). */
+  phoneTime?: string | null;
 };
 
 export type ReportDetailsData = {
@@ -540,6 +606,21 @@ export const ACTION_STATE_LABELS: Record<ActionState, string> = { open: "Open", 
 
 export type ReportState = "open" | "actions" | "closed" | "withdrawn";
 export const REPORT_STATE_LABELS: Record<ReportState, string> = { open: "Open", actions: "Actions open", closed: "Closed", withdrawn: "Withdrawn" };
+
+/**
+ * The report's state in words that say what's known (#491, decision 1107):
+ * a report is someone's account until something is done and checked. Open
+ * with no actions is "Reported, nothing done yet"; open with every action
+ * checked is "Actions checked, to close". Closing still needs every action
+ * checked first, and nothing here changes whether equipment may be used.
+ */
+export function reportStateText(state: ReportState, actions: ReadonlyArray<Pick<SafetyVersion<ActionData>, "change" | "data">>): string {
+  if (state !== "open") return REPORT_STATE_LABELS[state];
+  return actions.some((action) => action.change !== "withdrawn") ? "Actions checked, to close" : "Reported, nothing done yet";
+}
+
+/** Shown with every report: whose account it is (decision 1107). */
+export const REPORTED_ACCOUNT = "This is the account of whoever reported it, as they entered it. Tohyee doesn't decide what happened, or whether any rule was broken.";
 
 export function reportState(record: Pick<SafetyVersion<ReportData>, "change" | "data">, actions: ReadonlyArray<Pick<SafetyVersion<ActionData>, "change" | "data">>): ReportState {
   if (record.change === "withdrawn") return "withdrawn";
@@ -671,6 +752,8 @@ export type CheckData = {
   /** A fault reported from Effluent rather than a whole check (#487, decision 1090). */
   faultReport?: boolean;
   why?: string | null;
+  /** Saved on a phone and sent later: the phone's time (#491, decision 1105). */
+  phoneTime?: string | null;
 };
 
 export type ReleaseData = { equipmentId: string; checkId: string; whatWasDone: string; files: SafetyFileRef[]; why?: string | null };

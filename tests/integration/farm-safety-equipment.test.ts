@@ -9,6 +9,7 @@ import { uploadSafetyFile } from "@/lib/safety/files";
 import { checkSafetyHistory } from "@/lib/safety/records";
 import { addChemical, addTraining, changeChemical, changeTraining, listChemicals, listTraining } from "@/lib/safety/register";
 import { openActions } from "@/lib/safety/reports";
+import { sentLaterText } from "@/lib/safety/shared";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, startTestServer, type TestServer } from "../helpers/test-server";
 
 const ORG = "farm-safety-equipment";
@@ -93,6 +94,24 @@ describeWithDatabase("farm safety equipment, training and chemicals", () => {
     expect(released).toMatchObject({ enteredByEmail: "eq-mechanic@example.com", data: { checkId: failed.check.recordId } });
     expect((await as(staff)((tx) => listEquipment(tx, w.home))).equipment[0].available).toBe(true);
     await expect(as(owner)((tx) => releaseEquipment(tx, { equipmentId: w.quad, whatWasDone: "again" }))).rejects.toThrow(/isn't out of use/);
+  });
+
+  it("FS30b a fault saved on a phone offline and sent later keeps both times; it's out of use from when it arrived, and the report is the only release (#491)", async () => {
+    const savedOnPhone = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const failed = await as(staff)((tx) => recordCheck(tx, { equipmentId: w.quad, checklistVersion: 2, phoneTime: savedOnPhone, answers: ok(["brakes-work", "tyres-look-right", "lights-work"], { "tyres-look-right": { result: "fault", note: "Front tyre flat" } }) }, members));
+    expect(failed.outOfUse).toBe(true);
+    expect(failed.check.data.phoneTime).toBe(savedOnPhone);
+    // Entered (reached Tohyee) now, by the database: not back-dated to the phone's time.
+    expect(Date.parse(failed.check.enteredAt)).toBeGreaterThan(Date.parse(savedOnPhone) + 2 * 3_600_000);
+    expect(sentLaterText(failed.check.data.phoneTime, failed.check.enteredAt, (iso) => iso)).toBe(`Saved on a phone ${savedOnPhone} (the phone's clock); reached Tohyee ${failed.check.enteredAt}. Until then only that phone had it.`);
+    // Nothing claims anyone was told: the action is assigned, nothing more.
+    expect(JSON.stringify(failed)).not.toMatch(/notified|acknowledg/i);
+    // A phone clock in the future isn't kept, but the check still is.
+    const future = await as(staff)((tx) => recordCheck(tx, { equipmentId: w.quad, checklistVersion: 2, phoneTime: new Date(Date.now() + 86_400_000).toISOString(), answers: ok(["brakes-work", "tyres-look-right", "lights-work"]) }, members));
+    expect(future.check.data.phoneTime).toBeUndefined();
+    // A passing check after the fault doesn't put it back in use: only a release does.
+    expect((await as(staff)((tx) => listEquipment(tx, w.home))).equipment[0].available).toBe(false);
+    await as(mechanic)((tx) => releaseEquipment(tx, { equipmentId: w.quad, whatWasDone: "Tyre repaired" }));
   });
 
   it("FS30a only an owner or admin, in person, chooses who can release equipment (#464)", async () => {

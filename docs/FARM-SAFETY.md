@@ -63,7 +63,7 @@ reviewed since 2017, so they're a guide, not the law.
 
 ### The WorkSafe pack (decision 934)
 
-Safety › Records that stand up › WorkSafe pack: everything entered or dated in
+Safety › Records and their history › WorkSafe pack: everything entered or dated in
 a date range, for one farm or all of the person's farms, each record with
 its full history, as a zip:
 
@@ -265,7 +265,7 @@ stays in the chain, so the rest still checks.
 
 ## The weekly copy off the farm (decisions 958-959)
 
-Safety › Records that stand up › **Weekly copy off the farm** (owners and
+Safety › Records and their history › **Weekly copy off the farm** (owners and
 admins set it up; tenant migration 0191). Once a week, after 6am, a PDF of
 every safety record with an entry since the last copy (each with its
 history) is emailed through the organisation's own email account to up to 10 addresses

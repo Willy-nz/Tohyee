@@ -694,7 +694,14 @@ that something happened.
   organisation's own email, with the latest entry's number and hash, never
   injury details, recorded only when the mail server accepted it; each copy
   picks up after the last entry number a sent copy included, so nothing
-  entered between copies is missed (decision 970). Since
+  entered between copies is missed (decision 970); its settings list each
+  address, what's in it and left out, and that each address keeps its own
+  copy (#491, decision 1108). Since #491 (decisions 1105-1109): a report or
+  pre-start check saved offline shows the phone's time and when it reached
+  Tohyee; screens say Tohyee sends no message and can't tell who has read a
+  record; an open report reads "Reported, nothing done yet" or "Actions
+  checked, to close"; and the history check, pack and copy say a matching
+  hash isn't proof a record is true and doesn't make it privileged. Since
   FS39-FS44 (decisions 960-962): in the farmer's workspace (#447) the
   Safety tab, hazards on the map and paddock card, Report a hazard / Near
   miss / Incident in Log, a Safety card on Today and Safety due on the farm
@@ -3014,9 +3021,17 @@ that something happened.
   with its age (decision 1030). On the website each job shows the track against the
   worked footprint, what happened when, the settings used, links to a
   fertiliser plan or a chemical, re-clipping to chosen paddocks,
-  withdrawal, and **GeoJSON** and **GPX** exports. Everything says it's a
-  phone GPS estimate. Nothing posts to the books. Not tried in a real
-  paddock or on a real phone yet.
+  withdrawal, and **GeoJSON**, **GPX** and plain-text **Summary** exports.
+  Everything says it's a phone GPS estimate, that Working ON/OFF is the
+  operator's switch and that entered values aren't measured. Every change
+  to a job's details is kept as a version with who, Tohyee's time and,
+  for a correction (the wrong units, quantity or product), why; the
+  **History** card and every export show earlier → new values. **Working
+  was left ON?** marks a time as not working: the estimate leaves it out,
+  the track stays as recorded. Jobs changed before this show "Earlier
+  edits not recorded" (#491, decisions 1100-1104; tenant migration 0205).
+  Nothing posts to the books. Not tried in a real paddock or on a real
+  phone yet.
 
 - **Farm dairy effluent** (#487, decisions 1070-1099, docs/FARM-EFFLUENT.md;
   tenant migration 0200): Farm › More › **Effluent**. Setup (owners and
