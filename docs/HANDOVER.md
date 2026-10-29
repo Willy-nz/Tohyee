@@ -173,7 +173,12 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
-- **0.17.0 ready to publish from main** (28 Oct 2026): the phone app (#473-#476)
+- **0.18.0 ready to publish from main** (29 Oct 2026): effluent (#487),
+  LINZ aerial photos (#485), records accuracy (#491), phone fixes and
+  everything prepared as 0.15.0-0.17.0 (none published). Jess publishes
+  "Tohyee 0.18.0" on main with tag `v0.18.0` and pastes in
+  `docs/releases/0.18.0.md`.
+- **0.17.0 (not published) ready to publish from main** (28 Oct 2026): the phone app (#473-#476)
   plus everything prepared as 0.15.0 and 0.16.0 (not published). Jess publishes
   "Tohyee 0.17.0" on main with tag `v0.17.0` and pastes in
   `docs/releases/0.17.0.md`.
