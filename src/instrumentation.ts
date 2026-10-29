@@ -16,6 +16,9 @@
  * And the CRM mail sync, which syncs connected Gmail and Microsoft 365
  * mailboxes every 15 minutes (off with TOHYEE_MAIL_SYNC_SCHEDULER=off).
  *
+ * And the shared farm locations clean-up, which deletes positions whose
+ * sharing time is up every 10 minutes (#498; always on).
+ *
  * And the farm calendar's mailbox checks every 15 minutes (#319; off with
  * TOHYEE_FARM_MAIL_SCHEDULER=off).
  *
@@ -140,6 +143,12 @@ export async function register() {
   if (process.env.TOHYEE_MAIL_SYNC_SCHEDULER !== "off") {
     const { startMailScheduler } = await import("@/lib/crm/mail/service");
     startMailScheduler();
+  }
+
+  // Shared farm locations past their time are deleted every 10 minutes (#498, decision 1127). Always on: it keeps the retention promise.
+  {
+    const { startLocationSweep } = await import("@/lib/farming/locations-sweep");
+    startLocationSweep();
   }
 
   if (process.env.TOHYEE_FARM_MAIL_SCHEDULER !== "off") {

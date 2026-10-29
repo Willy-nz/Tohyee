@@ -253,6 +253,63 @@ signal, while Tohyee is on screen.
 - Starting a new job uses the machines kept in the farm's offline copy
   when there's no signal (decision 1056).
 
+## Sharing your location with the farm (privacy)
+
+Farm › Map › **People on the map** lets someone show the people who work on
+that farm where they are (#498 item 7, decisions 1125-1134; not yet
+reviewed by Jess). Privacy comes first:
+
+- **Your choice, each time.** It's never on by default and no one else can
+  turn it on for you. You press **Share my location…**, read the notice and
+  choose how long: 1, 2, 4 (the default), 8 or 12 hours. It stops by itself
+  at the time shown.
+- **Only while Tohyee is open.** The browser's location is used only while
+  Tohyee is open and on screen on that phone. Locking the phone, switching
+  apps or closing the tab stops it; showing Tohyee again carries on until
+  the end time. Nothing runs in the background.
+- **Stop sharing** is on every farm page while you share. It deletes your
+  position straight away.
+- **Who sees it:** people in the same organisation who work on that farm
+  (decision 744), checked by the server. No one in another farm or
+  organisation can ask for it.
+- **What's kept:** only your latest position, its accuracy and when it was
+  taken. Each new one replaces the last, so there's no trail of where
+  you've been.
+- **How long:** deleted when you stop, when your time runs out (the server
+  checks every 10 minutes) and never kept for more than 24 hours. If you
+  stop working on that farm or leave the organisation, it's deleted then.
+- **Never in:** exports, Analytics, AI tools, the audit trail, the offline
+  farm pack, or Tohyee's backups (they leave the table's rows out). The
+  database's own write-ahead log, and any disk or server snapshot taken
+  outside Tohyee, can hold a position until they're recycled; that's
+  unavoidable with PostgreSQL.
+- **Starting and stopping** are recorded in the audit trail, not your
+  positions.
+- **Old positions say so.** A marker updated in the last 5 minutes is solid
+  ("Updated 2 min ago"). Older is grey and dashed, "Last known … (not
+  live)". If you're looking at the map with no signal, everything reads
+  "not live". A rough fix (over 100 m) shows as an area, never a dot, and
+  one over 2 km out isn't kept.
+- **Staff privacy:** staff positions are personal information under the
+  Privacy Act 2020. Tohyee shows this notice before anyone shares, but a
+  farm may want a line about it in its own staff privacy statement. This
+  isn't legal advice.
+
+The notice shown before sharing (from `src/lib/farming/locations-shared.ts`):
+
+> Tohyee keeps only where you were last seen, how accurate it was and when.
+> No trail of where you've been. People in this organisation who work on
+> this farm can see it on the farm map while you share. No one else can. It
+> only sends while Tohyee is open on this phone. Locking the phone or
+> switching apps stops it. Your position is deleted when you stop sharing or
+> the time runs out, and never kept for more than 24 hours. It isn't in
+> exports, backups, the offline farm pack or AI tools. Starting and stopping
+> are recorded (not your positions). Sharing is your choice: you can stop at
+> any time, and no one can turn it on for you.
+
+**Not yet tried on a real phone**, like the rest of this page: checked in
+Chromium with a phone's screen size and a simulated location.
+
 ## For developers
 
 - `public/sw.js` and `public/sw-rules.js`: the service worker (built files

@@ -10520,3 +10520,99 @@ and restore steps, menus and tabs; Playwright at 390 wide in Chromium only
 (no Firefox or WebKit is installed here) on copies of the demo databases.
 Firefox and Safari were stood in for by their user agents for the install
 steps, which isn't the same as trying them. Not tried on a real phone.
+### Farm members on the map (#498 item 7; decisions 1125-1134)
+
+The issue asks for consenting farm members on the farm map, with privacy as
+the main requirement. Jess hasn't answered it, and Xero and NetSuite have
+nothing like it, so this follows the issue's text and what farm and field
+apps (AgriWebb's and Google Maps' location sharing) do: **not yet reviewed
+by Jess**. Staff locations are personal information under the Privacy Act
+2020, so this may need a privacy notice for staff from the farm as their
+employer (IPP 3): Tohyee shows a short plain one before anyone shares
+(decision 1133), but it isn't legal advice and a farm should check whether
+its own staff privacy statement needs a line about it.
+
+1125. **Sharing is a choice each person makes, each time.** Nothing is
+      shared unless the person presses **Share my location with <farm>
+      until <time>** on the farm map, after the notice. It's never on by
+      default, no setting turns it on for anyone, and who is sharing always
+      comes from the signed-in session, never the request, so no one
+      (owners included) can share for someone else. One session per person:
+      sharing with another farm ends the first. Owners, admins, bookkeepers,
+      viewers and Farm staff who can see a farm (decision 744) can share
+      with it; the CRM-only and report-viewer roles can't (they have no farm
+      records).
+1126. **It ends by itself.** Four hours unless the person chooses 1, 2, 8 or
+      12; twelve is the most (a long shift), and the database refuses more.
+      The banner and the button say the end time ("until 4:35 pm"). There's
+      no "until I stop" choice.
+1127. **Only the latest position, deleted soon.** The server keeps one row
+      per sharing session: latitude, longitude, accuracy, when the phone
+      took the fix and when Tohyee got it. Each new position replaces the
+      last, so there's no trail. The row is deleted when the person stops,
+      when the time runs out (every read and write here deletes expired
+      rows, and the server deletes them every 10 minutes even if no one
+      opens the map), when they stop working on that farm or leave the
+      organisation, and whatever else happens, 24 hours after it started.
+      Positions are never in exports, Analytics, AI tools, the audit trail
+      or the offline farm pack, and the screens don't store them on the
+      device. **Backups**: Tohyee's backups use `pg_dump
+      --exclude-table-data=farm_location_shares`, so the table's shape is
+      backed up but none of its rows (a restored organisation has no one
+      sharing). What can't be avoided: PostgreSQL's own write-ahead log
+      and any disk or server snapshot taken outside Tohyee hold whatever
+      was in the database at the time, until they're recycled or deleted.
+1128. **A Sharing banner on every farm page, with Stop sharing.** While you
+      share, every farm page with the farm tabs (Today, Map, Log, Safety,
+      More, Effluent) shows "Sharing your location with <farm> until
+      <time>", what's happening (sending, waiting for GPS, blocked, no
+      connection) and **Stop sharing**. Stopping deletes the position at
+      once. If Tohyee can't be reached, the phone stops sending and the
+      banner says the last position stays until the end time. When access
+      to the farm changes, sharing with it ends.
+1129. **Markers say how old they are.** Tohyee has no profile photos yet, so
+      everyone is an initials avatar in their own colour (photos can be the
+      marker once there are profile photos). Updated in the last 5 minutes
+      is **recent**: a solid avatar, "Updated 2 min ago". Older is **last
+      known**: grey, dashed, "Last known 12 min ago (not live)". No position
+      yet is **unavailable**, listed but not drawn. When the person looking
+      at the map can't reach Tohyee, every position reads "not live: you're
+      offline", however new. Tapping a marker (or the person in the list,
+      for keyboard and screen readers) shows their name, the accuracy, the
+      update time and when sharing ends.
+1130. **A rough fix isn't shown as a precise one.** Every marker has a
+      circle as wide as the fix's accuracy. Over 100 m it's dashed and the
+      card says "Rough position: somewhere within about 400 m". A fix over
+      2 km out isn't kept at all, nor one taken more than 2 minutes before
+      it arrived.
+1131. **Foreground only, rate-limited.** The phone uses the browser's
+      Geolocation `watchPosition` only while Tohyee is open and on screen;
+      it stops when the page is hidden, the screen locks or the tab closes,
+      and carries on when it's shown again (and after a reload, only on the
+      phone that started it, until the end time). It sends at most every 20
+      seconds, and the server refuses more than one position every 10
+      seconds per session. Background and locked-screen sharing are
+      deferred, as the issue says. The map asks for positions every 30
+      seconds while it's open and showing.
+1132. **Seen only by people who work on that farm, checked on the server.**
+      Reading positions needs the farm records role (Farm staff, viewer or
+      higher) in that organisation and access to that farm (decision 744).
+      Another farm, a farm in another organisation, or an organisation the
+      person isn't in is "not found", so its existence isn't given away.
+      Names come from the members list; emails aren't sent to the map. A
+      sharer who has left the organisation is taken off the map at once.
+1133. **A short notice before sharing** (Privacy Act 2020, IPP 3): what's
+      kept (the last position, its accuracy and time; no trail), who sees it
+      (people in the organisation who work on that farm), that it only sends
+      while Tohyee is open, when it's deleted (on stop or at the end time,
+      never more than 24 hours, and not in exports, backups, the offline
+      pack or AI tools), that starting and stopping are recorded, and that
+      it's their choice and they can stop at any time.
+1134. **Starting and stopping are audited, positions aren't.** Audit events
+      `farming.location_sharing_started` (with the hours and end time) and
+      `farming.location_sharing_stopped` (with why: stopped, replaced by
+      sharing with another farm, no longer working on the farm, or left
+      the organisation). Running out of time isn't a separate event: the
+      start's end time says when it ended. The "Use my location" button on
+      the maps (#498 item 6) stays separate: it only moves the map on that
+      device and never shares anything.

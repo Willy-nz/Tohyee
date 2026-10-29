@@ -75,6 +75,19 @@ export type BackupFile = {
 };
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Tables whose rows are never put in a backup, only their (empty) shape:
+ * farm members' shared locations (#498, decision 1127), which last 12 hours
+ * at most and would otherwise sit in backups for as long as those are kept.
+ * A restored organisation simply has no one sharing.
+ */
+export const BACKUP_EXCLUDED_DATA = ["farm_location_shares"] as const;
+
+/** pg_dump's arguments for a backup ("plain" only for tests that read what would be kept). */
+export function pgDumpArgs(format: "custom" | "plain"): string[] {
+  return [`--format=${format}`, "--no-owner", "--no-privileges", ...BACKUP_EXCLUDED_DATA.map((table) => `--exclude-table-data=${table}`)];
+}
 const SERVER_FOLDER = "_server";
 
 export function defaultBackupFolder(): string {
@@ -324,7 +337,7 @@ async function backUpTarget(root: string, target: Target, trigger: BackupRun["tr
         { code: "ENOSPC_ESTIMATE" },
       );
     }
-    const dump = startPgTool("pg_dump", ["--format=custom", "--no-owner", "--no-privileges"], target.databaseName);
+    const dump = startPgTool("pg_dump", pgDumpArgs("custom"), target.databaseName);
     dump.child.stdin?.end();
     const out = createWriteStream(partial, { mode: 0o600 });
     await Promise.all([

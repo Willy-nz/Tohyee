@@ -130,6 +130,8 @@ export async function setMemberFarmAccess(
   }
   // A remembered farm they can no longer see is forgotten (decision 900); it's also checked on every read.
   if (input.access !== "all") await tx.query("delete from farm_last_used where user_id = $1 and not (farm_id = any($2::bigint[]))", [userId, farmIds]);
+  // So does sharing their location with a farm they no longer work on (#498, decision 1128).
+  if (input.access !== "all") await endLocationSharing(tx, userId, farmIds, "no_farm_access");
   await writeAuditEvent(tx, { eventType: "farming.member_farms_set", entityType: "user", entityId: userId, details: { access: input.access, farmIds } });
   return listMemberFarmAccess(tx);
 }
@@ -138,4 +140,20 @@ export async function setMemberFarmAccess(
 export async function forgetMemberFarmAccess(tx: OrgTx, userId: string): Promise<void> {
   await tx.query("delete from farm_member_scopes where user_id = $1", [userId]);
   await tx.query("delete from farm_last_used where user_id = $1", [userId]);
+  await endLocationSharing(tx, userId, null, "left_organisation");
+}
+
+/**
+ * Ends a member's location sharing (#498, decision 1128) with any farm
+ * outside `keepFarmIds` (null: every farm), deleting their position. Here
+ * rather than in locations.ts so the two modules don't import each other.
+ */
+async function endLocationSharing(tx: OrgTx, userId: string, keepFarmIds: string[] | null, reason: string): Promise<void> {
+  const ended = await tx.query<{ farm_id: string }>(
+    "delete from farm_location_shares where user_id = $1 and ($2::bigint[] is null or not (farm_id = any($2::bigint[]))) returning farm_id::text",
+    [userId, keepFarmIds],
+  );
+  for (const row of ended.rows) {
+    await writeAuditEvent(tx, { eventType: "farming.location_sharing_stopped", entityType: "farm", entityId: row.farm_id, details: { reason, userId } });
+  }
 }

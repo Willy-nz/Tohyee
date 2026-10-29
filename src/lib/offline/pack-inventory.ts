@@ -51,6 +51,7 @@ export const NEVER_IN_A_PACK = [
   "Farm mail, and the email text behind calendar items",
   "The books: invoices, bills, bank, GST, reports",
   "Payroll and people's pay",
+  "Where farm members are: shared locations are live only and never kept on the device (#498)",
 ];
 
 /** One stored read: the API path, the query it was asked with (no organisationId), and the answer. */
