@@ -25,6 +25,7 @@ final class TohyeeServer {
 
     private static final String PREFS = "tohyee_server";
     private static final String KEY = "origin";
+    private static final String PREVIOUS = "previous";
 
     private TohyeeServer() {}
 
@@ -51,8 +52,16 @@ final class TohyeeServer {
         prefs(context).edit().putString(KEY, origin).apply();
     }
 
+    /** Forgets the address; it's kept as the previous one, to fill in on the first-run page. */
     static void clear(Context context) {
-        prefs(context).edit().remove(KEY).apply();
+        String origin = saved(context);
+        SharedPreferences.Editor editor = prefs(context).edit().remove(KEY);
+        if (origin != null) editor.putString(PREVIOUS, origin);
+        editor.apply();
+    }
+
+    static String previous(Context context) {
+        return origin(prefs(context).getString(PREVIOUS, null));
     }
 
     private static SharedPreferences prefs(Context context) {

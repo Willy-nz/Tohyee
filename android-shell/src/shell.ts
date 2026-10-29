@@ -9,7 +9,7 @@
 
 import { checkServerAddress } from "../../src/lib/native/server-address";
 
-type ServerPlugin = { get: () => Promise<{ url?: string | null }>; set: (options: { url: string }) => Promise<void> };
+type ServerPlugin = { get: () => Promise<{ url?: string | null; previous?: string | null }>; set: (options: { url: string }) => Promise<void> };
 
 function serverPlugin(): ServerPlugin | null {
   const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor;
@@ -86,7 +86,8 @@ function start() {
   void serverPlugin()
     ?.get()
     .then((saved) => {
-      if (saved?.url) element<HTMLInputElement>("address").value = saved.url;
+      const last = saved?.url ?? saved?.previous;
+      if (last) element<HTMLInputElement>("address").value = last;
     })
     .catch(() => undefined);
 }

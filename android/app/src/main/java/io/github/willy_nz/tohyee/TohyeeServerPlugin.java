@@ -25,7 +25,9 @@ public class TohyeeServerPlugin extends Plugin {
     public void get(PluginCall call) {
         String origin = TohyeeServer.saved(getContext());
         JSObject result = new JSObject();
+        String previous = TohyeeServer.previous(getContext());
         result.put("url", origin == null ? JSONObject.NULL : origin);
+        result.put("previous", previous == null ? JSONObject.NULL : previous);
         call.resolve(result);
     }
 
