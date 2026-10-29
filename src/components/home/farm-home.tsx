@@ -6,6 +6,7 @@ import { PinnedAnalyticsTile } from "@/components/analytics/pinned-tile";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Chart } from "@/components/analytics/chart";
+import { ImageryKeyReminder } from "@/components/farm-imagery";
 import { DashboardCardChooser, PageDashboardFrame, useDashboardPreferences } from "@/components/page-dashboard";
 import { Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -393,6 +394,7 @@ export function FarmHomeTiles({ organisationId }: { organisationId: string }) {
   const visible = dashboard.tiles.filter((tile) => (tile === "money" ? !money.error && (!moneyData || moneyHasData(moneyData)) : hasData(tile)));
   return (
     <>
+      <ImageryKeyReminder organisationId={organisationId} />
       <p className={ui.muted}>All farms in {current?.displayName ?? "this organisation"}. Money, livestock and performance figures cover the whole organisation. <Link href="/operations/farming">Choose a farm for maps and field records</Link>.</p>
       {dashboard.error ? <Notice tone="error">{dashboard.error}</Notice> : null}
       {money.error && wantsMoney ? <Notice tone="error">Couldn&apos;t load the money figures: {money.error}</Notice> : null}
