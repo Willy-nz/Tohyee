@@ -88,6 +88,30 @@ export type MapOverlay = {
   onSelect?: () => void;
 };
 
+/**
+ * A farm member sharing their location (#498 item 7, decisions 1129-1130):
+ * an initials avatar in their colour, with a circle as wide as the fix's
+ * accuracy. "stale" (not live) is grey and dashed; a rough fix has a dashed
+ * ring, so neither looks like a precise, live position.
+ */
+export type MapPersonMarker = {
+  id: string;
+  label: string;
+  initials: string;
+  colour: string;
+  point: Position;
+  accuracyMetres: number;
+  state: "recent" | "stale";
+  precise: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
+};
+
+/** Drawing pixels per metre at a latitude and zoom (Web Mercator, 256-pixel tiles). */
+function pixelsPerMetre(latitude: number, zoom: number): number {
+  return (256 * 2 ** zoom) / (40_075_016.686 * Math.cos((latitude * Math.PI) / 180));
+}
+
 const OVERLAY_COLOURS = {
   danger: { fill: "rgba(200, 30, 30, 0.28)", stroke: "#c81e1e" },
   warning: { fill: "rgba(230, 150, 0, 0.25)", stroke: "#b86e00" },
@@ -118,8 +142,11 @@ export function PaddockMap({
   fills,
   label = "Map of the paddocks",
   overlays = [],
+  people = [],
   offerImagery = false,
 }: {
+  /** Farm members sharing their location (#498), drawn over everything else. */
+  people?: MapPersonMarker[];
   /** No key is set: say "Add aerial photos (free, 1 minute)" under the outlines (decision 1060). */
   offerImagery?: boolean;
   /** A colour (a CSS colour or var()) for each paddock id, for the farm map's bands (decision 907). */
@@ -306,6 +333,25 @@ export function PaddockMap({
                       );
                     })()
                   : null}
+              </g>
+            );
+          })}
+          {people.map((person) => {
+            const [x, y] = view.project(person.point);
+            const radius = Math.min(MAP_WIDTH * 2, person.accuracyMetres * pixelsPerMetre(person.point[1], view.zoom));
+            const live = person.state === "recent";
+            const fill = live ? person.colour : "#6b7280";
+            const selectable = Boolean(person.onSelect) && !drawing;
+            return (
+              <g key={`person-${person.id}`} onClick={selectable ? () => (dragged.current ? undefined : person.onSelect!()) : undefined} style={{ cursor: selectable ? "pointer" : undefined }} opacity={live ? 1 : 0.75}>
+                <title>{person.label}</title>
+                <circle cx={x} cy={y} r={Math.max(radius, 1)} fill={fill} fillOpacity={0.14} stroke={fill} strokeWidth={1.5} strokeDasharray={live && person.precise ? undefined : "6 4"} />
+                <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}>
+                  <circle r={person.selected ? 17 : 15} fill={fill} stroke="#ffffff" strokeWidth={person.selected ? 3.5 : 2.5} strokeDasharray={live ? undefined : "4 3"} />
+                  <text y={5} textAnchor="middle" fontSize={13} fontWeight={700} fill="#ffffff" style={{ pointerEvents: "none" }}>
+                    {person.initials}
+                  </text>
+                </g>
               </g>
             );
           })}

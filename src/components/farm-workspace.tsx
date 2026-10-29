@@ -8,6 +8,7 @@ import { FarmEffluentToday } from "@/components/farm-effluent-care";
 import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-log";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
+import { FarmPeopleCard, LocationSharingBanner, peopleMarkers, useFarmPeople } from "@/components/farm-locations";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
@@ -96,6 +97,8 @@ function Workspace({ organisationId, tab, linkedFarmId, render }: { organisation
       ) : farms.data && active.length ? (
         <FarmSelector farms={active} farm={null} stale={stale} deciding={deciding} onChange={selectFarm} />
       ) : null}
+      {/* While you share your location, on every farm page (#498, decision 1128). */}
+      <LocationSharingBanner organisationId={organisationId} />
       {farm ? <FarmOfflineStatus organisationId={organisationId} farmId={farm.id} /> : null}
       {/* Keyed by farm: anything half-filled belongs to the farm it was opened on, and goes when the farm changes (decision 902). */}
       {farm ? <div key={farm.id}>{render({ organisationId, farm, farms: active })}</div> : null}
@@ -303,6 +306,13 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   // Where each effluent system's pods or irrigator were last moved (#487): a tap opens the irrigation log.
   const effluent = useEffluentLog(organisationId, farm.id);
   overlays.push(...lastMovedOverlays(effluent.data?.lastMoved ?? []).map((overlay) => ({ ...overlay, onSelect: () => router.push(effluentHref({ farmId: farm.id, screen: "log" })) })));
+  // Farm members who chose to share their location (#498 item 7): a tap opens their card under People on the map.
+  const people = useFarmPeople(organisationId, farm.id);
+  const [person, setPerson] = useState<string | null>(null);
+  const markers = peopleMarkers(people.people ?? [], new Date(), people.offline, person, (id) => {
+    setPerson(id);
+    requestAnimationFrame(() => document.getElementById("people-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  });
   return (
     <div className={styles.grid}>
       <Card
@@ -317,7 +327,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
         <ColouringSwitch value={colouring} onChange={setColouring} />
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {shapes.data && statuses.data ? (
-          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} offerImagery={noKey} fills={fills} overlays={overlays} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${overlays.length} hazards`} />
+          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} offerImagery={noKey} fills={fills} overlays={overlays} people={markers} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${overlays.length} hazards${markers.length ? ` and ${markers.length} people sharing their location (listed under People on the map)` : ""}`} />
         ) : (
           <p className={ui.muted}>Loading…</p>
         )}
@@ -326,6 +336,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
       <div>
         <div id="paddock-card" style={{ scrollMarginTop: 64 }}>
           {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} hazards={activeHazards} onClose={() => setSelected(null)} /> : null}
+        </div>
+        <div id="people-card" style={{ scrollMarginTop: 64 }}>
+          <FarmPeopleCard organisationId={organisationId} farm={farm} people={people} selected={person} onSelect={setPerson} />
         </div>
         <Card title="All paddocks">
           <FarmRowList

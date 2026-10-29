@@ -1,0 +1,173 @@
+/* Farm members on the map (#498 item 7, decisions 1125-1134). */
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.banner[data-tone="ended"] {
+  border-color: var(--border);
+  background: var(--neutral-bg);
+  color: var(--neutral-text);
+}
+
+.bannerText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.bannerDetail {
+  color: var(--text);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.bannerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bannerActions button {
+  min-height: 44px;
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.listButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.listButton:hover {
+  background: var(--surface-hover);
+}
+
+.listButton[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.avatar[data-live="no"] {
+  background: #6b7280;
+  outline: 2px dashed var(--border-strong);
+  outline-offset: 1px;
+}
+
+.personText {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.stateLine[data-state="recent"] {
+  color: var(--success-text);
+}
+
+.stateLine[data-state="stale"] {
+  color: var(--warning-text);
+}
+
+.stateLine[data-state="unavailable"] {
+  color: var(--text-muted);
+}
+
+.chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
+.person {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.share {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.shareTitle {
+  margin: 0;
+  font-size: var(--text-md, 1rem);
+}
+
+.notice {
+  padding: 10px 12px;
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius);
+  background: var(--info-bg);
+  color: var(--text);
+}
+
+.notice ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.notice li + li {
+  margin-top: 4px;
+}
+
+.shareActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.shareActions button {
+  min-height: 44px;
+}
