@@ -117,8 +117,8 @@ with no signal and is kept once however often it's sent.
   pond's warning levels; **Not read today**.
 - **Not applied today** (deferred irrigation): too wet, raining, frozen or
   snow, pond too low, system out of use, or other, with a note.
-- **A system out of use** in Safety can still be recorded running: the
-  record says what happened, marked "recorded while out of use".
+- **A system out of use** in Safety can't be recorded running until it's
+  released (Jess, 29 October 2026).
 - **Corrections**: the person who entered a record, or a bookkeeper or
   above, can correct it (with why) or withdraw it; nothing is deleted.
 
@@ -316,7 +316,18 @@ pond state, buffers, and neutral summary wording.
 and leave the limits to the consent, every type has settings and a
 checklist, the consent in force, buffer circles, and screen addresses.
 
-## Open questions for Jess
+## Jess's answers (29 October 2026)
+
+"dont tell the council anything we dont get asked for. But otherwise go with
+your suggestions." Runs on a system that's out of use are refused; closing an
+incident never needs "council told" (the consent's condition shows as
+information only); the council pack and the setup are owners' and admins'
+only; the weekly safety copy includes effluent by default on farms with an
+effluent system; the templates are to be checked against real ORC and ES
+consents and by a lawyer before farms rely on them. The questions below were
+asked before these answers.
+
+## Open questions for Jess (answered above)
 
 1. The ORC and ES templates are from the councils' published guidance, not
    a consent. Should they be checked against a real consent from each

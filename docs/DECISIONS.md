@@ -10284,6 +10284,31 @@ docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
       count of corrected and withdrawn records; and the pack says the hashes
       don't show the contents are true or make them privileged.
 
+### Farm dairy effluent: Jess's answers (#487; Jess, 29 October 2026)
+
+Jess, 29 October 2026: "dont tell the council anything we dont get asked
+for. But otherwise go with your suggestions." These change earlier decisions
+(no new numbers; the effluent range 1070-1099 is used):
+
+- **1083 changed:** a run on a system that's out of use in Safety is
+  **refused** until someone allowed releases it (no longer recorded and
+  marked).
+- **1092/1093 confirmed:** Tohyee never contacts a council, and closing an
+  incident **never needs "council told"** recorded. Where the farm's consent
+  conditions say to tell the council, the incident shows that condition as
+  information only (open or closed), with no "not recorded as told" badge;
+  the farm decides.
+- **1099(a) changed:** the council pack is for **owners and admins only**.
+- **1071 confirmed:** the effluent setup and consent conditions are owners'
+  and admins' only, not bookkeepers'.
+- **1099(c) changed:** the weekly safety copy **includes the effluent records
+  by default** when the organisation has an effluent system; an owner or
+  admin can still say no (tenant migration 0202 makes the setting empty for
+  "the default"). It goes only to the addresses the farm chose.
+- The templates are to be checked against a real ORC and ES consent, and the
+  wording reviewed by a lawyer, before farms rely on them: work for people,
+  nothing built.
+
 ### Records say what's known: tractor job history and safety wording (#491; decisions 1100-1109)
 
 William asked for #491 after reviewing whether records could add to the

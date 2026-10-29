@@ -221,7 +221,7 @@ function EffluentOverview({ organisationId, farm }: EffluentContext) {
               <Link href={effluentHref({ farmId: farm.id, screen: "incidents" })}>{EFFLUENT_SCREEN_TITLES.incidents}</Link>
               <span className={ui.muted}> · {care.data ? `${openIncidents.length} open` : "…"}</span>
             </li>
-            {data?.access.farmStaff ? null : (
+            {!data?.access.canManage ? null : (
               <li>
                 <Link href={effluentHref({ farmId: farm.id, screen: "pack" })}>{EFFLUENT_SCREEN_TITLES.pack}</Link>
                 <span className={ui.muted}> · download the records for the council</span>

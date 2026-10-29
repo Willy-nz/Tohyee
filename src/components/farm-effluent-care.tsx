@@ -517,13 +517,19 @@ function IncidentRow({ organisationId, farm, incident, canClose, people, onSaved
         <span className={ui.muted}>{INCIDENT_TYPE_LABELS[data.type]}</span>
         <Badge tone={STATE_TONE[incident.state]}>{STATE_LABEL[incident.state]}</Badge>
         {data.reachedWater ? <Badge tone="red">Reached water or a drain</Badge> : null}
-        {incident.tellCouncil ? <Badge tone="amber">Council not recorded as told</Badge> : null}
+        {/* The consent's condition as information only: the farm decides (Jess, 29 October 2026). */}
         {incident.state !== "withdrawn" ? incident.checkedOnSite ? <Badge tone="blue">Checked</Badge> : <Badge>Reported, not yet checked</Badge> : null}
       </div>
       <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
         Happened {formatDateTime(data.occurredAt)} · reported {formatDateTime(incident.firstEnteredAt)} by {incident.firstEnteredByName || incident.firstEnteredByEmail}
       </div>
       {data.checked ? <div>Checked: {data.checked.note}</div> : null}
+      {incident.tellCouncil && !data.councilTold ? (
+        <div className={ui.muted}>
+          For information, your consent conditions say: {incident.tellCouncil.who}
+          {incident.tellCouncil.phone ? `, ${incident.tellCouncil.phone}` : ""}: {incident.tellCouncil.when} The farm decides; Tohyee doesn&apos;t contact the council.
+        </div>
+      ) : null}
       {data.councilTold ? (
         <div>
           Council told {formatDate(data.councilTold.on)} {COUNCIL_TOLD_HOW[data.councilTold.how]}
@@ -717,7 +723,7 @@ export function FarmEffluentToday({ organisationId, farm }: Ctx) {
         <p>
           <Link href={effluentHref({ farmId: farm.id, screen: "incidents" })}>
             {today.openIncidents.length} open incident{today.openIncidents.length === 1 ? "" : "s"}
-            {today.openIncidents.some((incident) => incident.tellCouncil) ? " (council not recorded as told)" : ""}
+
           </Link>
         </p>
       ) : null}
@@ -754,7 +760,7 @@ export function PackScreen({ organisationId, farm }: Ctx) {
   const { current } = useWorkspace();
   const today = todayInBrowser();
   const [range, setRange] = useState({ from: `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`, to: today });
-  if (current?.role === "farm_worker") return <Notice tone="info">The council pack is for the people who keep the farm&apos;s records. Ask the farm manager.</Notice>;
+  if (current?.role !== "owner" && current?.role !== "admin") return <Notice tone="info">Only an owner or an admin can make the council pack.</Notice>;
   const href = `/api/farming/effluent/pack?${new URLSearchParams({ organisationId, farmId: farm.id, from: range.from, to: range.to }).toString()}`;
   return (
     <div className={styles.overview}>

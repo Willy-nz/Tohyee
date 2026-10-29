@@ -272,7 +272,7 @@ function StartForm({ organisationId, farm, log, paddocks, onDone, onCancel }: Ct
         aria-label="Record an effluent run"
       >
         {error ? <Notice tone="error">{error}</Notice> : null}
-        {system && !system.available ? <Notice tone="warning">{system.data.name} is out of use in Safety: {system.outOfUseBecause}. A run recorded now is kept, marked as recorded while out of use.</Notice> : null}
+        {system && !system.available ? <Notice tone="warning">{system.data.name} is out of use in Safety: {system.outOfUseBecause}. It can&apos;t be recorded running until someone allowed releases it in Safety.</Notice> : null}
         <Field label="System">
           <select value={form.systemId} onChange={(event) => set({ systemId: event.target.value })}>
             {systems.map((each) => (

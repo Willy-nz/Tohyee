@@ -156,6 +156,8 @@ export async function addApplication(tx: OrgTx, inputGiven: Record<string, unkno
       areaHa: input.areaHa || (isZero(dec(found.worked_ha)) ? null : toPlainString(divide(dec(found.worked_ha), dec("1"), 2))),
     };
   }
+  // Refused while it's out of use in Safety (Jess, 29 October 2026; decision 1083 as changed): release it first.
+  if (!available) throw new ValidationError(`${system.data.name} is out of use in Safety (${(system as { outOfUseBecause?: string | null }).outOfUseBecause ?? "a failed check"}). It can't be recorded running until someone allowed releases it.`);
   const paddocks = await farmPaddocks(tx, farmId);
   const block = await blockOn(tx, farmId, input.blockId);
   const startedAt = parseTime(input.startedAt, "Started");
@@ -182,7 +184,7 @@ export async function addApplication(tx: OrgTx, inputGiven: Record<string, unkno
     weather: optionalString(input.weather, "Weather", { maxLength: 500 }),
     soil: optionalString(input.soil, "Soil", { maxLength: 500 }),
     files: await fileRefs(tx, input.files, farmId, false),
-    usedWhileOutOfUse: !available,
+    usedWhileOutOfUse: false,
   };
   if (input.tractorJobId) data.tractorJobId = String(input.tractorJobId);
   if (stoppedAt && !data.ponding) throw new ValidationError("Do the ponding and runoff check before saying it's stopped.");
