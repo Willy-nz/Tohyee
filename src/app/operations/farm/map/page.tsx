@@ -7,7 +7,7 @@ export default function FarmMapPage() {
   return (
     <Page>
       <PageHeader title="Map" />
-      <FarmWorkspace tab="map">{(context) => <FarmMapTab {...context} />}</FarmWorkspace>
+      <FarmWorkspace>{(context) => <FarmMapTab {...context} />}</FarmWorkspace>
     </Page>
   );
 }

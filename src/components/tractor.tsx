@@ -8,6 +8,7 @@ import { useCanRecordFarmWork } from "@/components/farm-selector";
 import { useApiData } from "@/components/hooks";
 import { useOfflineQueue } from "@/components/offline-queue";
 import { useOnline } from "@/components/offline-support";
+import { GpsControl, GpsStatus, useGps } from "@/components/gps-control";
 import { TractorLegend, TractorMap } from "@/components/tractor-map";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -47,6 +48,7 @@ import {
   paddockLabel,
   QUANTITY_UNITS,
   RATE_UNITS,
+  TRACTOR_LIMITED,
   TRACTOR_NOTICE,
   TRACTOR_RECORD_NOTE,
   type TractorEquipment,
@@ -225,7 +227,10 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
   const itemFor = (job: LocalJob): QueueItem | undefined => tractorItems.find((item) => item.operationId === job.id);
   return (
     <div className={styles.home}>
-      <Notice tone="info">{TRACTOR_NOTICE} Recording only happens while Tohyee is on screen: mount the phone and keep the screen on.</Notice>
+      <Notice tone="warning">
+        <strong data-testid="tractor-limited">{TRACTOR_LIMITED}</strong>
+      </Notice>
+      <Notice tone="info">{TRACTOR_NOTICE}</Notice>
       {storageProblem ? <Notice tone="error">{storageProblem}</Notice> : null}
       {queueProblem ? <Notice tone="error">{queueProblem}</Notice> : null}
       {unfinished.map((job) => (
@@ -338,6 +343,7 @@ function TractorSetup({ organisationId, farm, userId, onStart }: { organisationI
   const [adding, setAdding] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const gps = useGps();
   const active = (paddocks.data?.paddocks ?? []).filter((paddock) => paddock.status === "active").sort((a, b) => NATURAL.compare(a.name, b.name));
   const list = (equipment.data?.equipment ?? []).filter((entry) => entry.isActive);
   const selected = list.find((entry) => entry.id === equipmentId) ?? null;
@@ -457,6 +463,9 @@ function TractorSetup({ organisationId, farm, userId, onStart }: { organisationI
       )}
       {hazards.data && hazardsForMap(hazards.data.hazards).length ? <p className={ui.muted}>{hazardsForMap(hazards.data.hazards).length} hazards and no-go zones will be shown on the map. They&apos;re a reminder only.</p> : null}
       {problem ? <Notice tone="error">{problem}</Notice> : null}
+      {/* Before Start (#498 items 6 and 8): whether the GPS can be used, and that recording is limited. */}
+      <GpsControl gps={gps} label="Check GPS" idleText="Check the phone can find itself before you start. The job can't record without location." />
+      <p className={styles.limited}>{TRACTOR_LIMITED}</p>
       <Button className={styles.startButton} disabled={!selected?.current || starting} onClick={start}>
         {starting ? "Starting…" : "Start"}
       </Button>
@@ -907,6 +916,8 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
             Finish
           </button>
         </div>
+        <p className={styles.limited}>{TRACTOR_LIMITED}</p>
+        {state.interruption === "gps_denied" ? <DriveLocationHelp /> : null}
         <TractorLegend withPaddocks={job.boundaries.length > 0} />
       </section>
       {askFinish ? (
@@ -951,6 +962,18 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** Location was blocked while recording (#498 item 6): this browser's steps, then Resume. Uses the shared control. */
+function DriveLocationHelp() {
+  // The recorder already knows it's blocked: start there, so a browser without the Permissions API still gets the steps.
+  const gps = useGps(undefined, { status: "denied", checkedAt: null });
+  return (
+    <div className={styles.locationHelp}>
+      <GpsStatus gps={gps} showWhenIdle />
+      <p className={styles.limited}>Once location is allowed again, tap Resume. The time it was off stays a gap in the track.</p>
     </div>
   );
 }

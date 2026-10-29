@@ -104,15 +104,16 @@ const MIN_ZOOM = 3;
 const MAX_ZOOM = 19;
 
 /** Where you are (#498 item 6): a blue dot with its accuracy circle, to scale. Drawn on this device only. */
-function YouAreHere({ fix, view }: { fix: GpsFix; view: MapView }) {
+function YouAreHere({ fix, view, scale }: { fix: GpsFix; view: MapView; scale: number }) {
   const [x, y] = view.project([fix.lon, fix.lat]);
   const metresPerUnit = (156_543.033_92 * Math.cos((fix.lat * Math.PI) / 180)) / 2 ** view.zoom;
   const radius = fix.accuracy != null ? Math.min(2000, fix.accuracy / metresPerUnit) : 0;
   return (
     <g style={{ pointerEvents: "none" }} data-testid="you-are-here">
       <title>{`You are here, ${accuracyText(fix.accuracy)}`}</title>
-      {radius > 9 ? <circle cx={x} cy={y} r={radius} fill="rgba(26, 115, 232, 0.16)" stroke="rgba(26, 115, 232, 0.6)" strokeWidth={1.5} /> : null}
-      <circle cx={x} cy={y} r={9} fill="#1a73e8" stroke="#ffffff" strokeWidth={3} />
+      {radius > 8 * scale ? <circle cx={x} cy={y} r={radius} fill="rgba(26, 115, 232, 0.16)" stroke="rgba(26, 115, 232, 0.6)" strokeWidth={1.5 * scale} /> : null}
+      {/* About 16px across on screen, however wide the map is shown. */}
+      <circle cx={x} cy={y} r={8 * scale} fill="#1a73e8" stroke="#ffffff" strokeWidth={3 * scale} />
     </g>
   );
 }
@@ -341,7 +342,7 @@ export function PaddockMap({
               })}
             </g>
           ) : null}
-          {you ? <YouAreHere fix={you} view={view} /> : null}
+          {you ? <YouAreHere fix={you} view={view} scale={MAP_WIDTH / Math.max(shownWidth, 1)} /> : null}
         </svg>
         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
           <button type="button" style={control} aria-label="Zoom in" onClick={() => zoomBy(1)}>

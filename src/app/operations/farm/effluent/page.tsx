@@ -15,7 +15,7 @@ import { readEffluentLink } from "@/lib/effluent/screens";
 function EffluentForLink() {
   const link = readEffluentLink(useSearchParams());
   return (
-    <FarmWorkspace tab="more" linkedFarmId={link.farmId}>
+    <FarmWorkspace linkedFarmId={link.farmId}>
       {(context) => <FarmEffluent organisationId={context.organisationId} farm={context.farm} link={link} />}
     </FarmWorkspace>
   );

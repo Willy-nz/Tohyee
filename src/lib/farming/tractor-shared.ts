@@ -11,6 +11,14 @@ export const TRACTOR_NOTICE =
   "Estimated from phone GPS. Phone GPS is usually within 3 to 10 metres and can be worse under trees, near sheds or in gullies. This is not precision guidance, and it isn't proof that product was applied. Gaps are times the GPS was weak or lost, or recording stopped.";
 
 /**
+ * Tractor mode is limited (#498 item 8, decision 1124): the issue's own
+ * words, beside the recording controls and before Start. Recording only
+ * happens while Tohyee is on screen; nothing records in the background.
+ */
+export const TRACTOR_LIMITED =
+  "Limited — keep Tohyee open and your screen unlocked while recording. Locking your phone or switching apps may interrupt GPS and leave gaps in your track.";
+
+/**
  * What the record does and doesn't establish (#491, decision 1104): shown
  * beside the estimate on screens and in every export.
  */

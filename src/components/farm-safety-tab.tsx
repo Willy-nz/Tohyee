@@ -206,10 +206,12 @@ function SafetyOverview({ organisationId, farm }: { organisationId: string; farm
 }
 
 /**
- * The emergency strip (decision 978): 111 to tap, the address and entrance,
- * and one tap to the full details. Like the full card, it keeps a copy on
- * the phone and shows that copy, with when it was saved, when Tohyee can't
- * be reached.
+ * Emergency details (decision 978, changed by #498 item 4 and decision
+ * 1119): a clearly labelled area with the address and entrance, the
+ * farm's emergency contacts to tap, 111 as an ordinary phone link, and one
+ * tap to the full details. No large Call 111 button on the everyday Safety
+ * page (William and Jess asked for it to go). It keeps a copy on the phone
+ * and shows that copy, with when it was saved, when Tohyee can't be reached.
  */
 function EmergencyStrip({ organisationId, farm, overview, loadError, canRecord }: { organisationId: string; farm: Farm; overview: Overview | null; loadError: string | null; canRecord: boolean }) {
   const cached = useMemo<CachedEmergency | null>(() => (loadError ? readCache(organisationId, farm.id) : null), [loadError, organisationId, farm.id]);
@@ -218,24 +220,36 @@ function EmergencyStrip({ organisationId, farm, overview, loadError, canRecord }
   }, [overview, organisationId, farm.id, farm.name]);
   const data = (overview ? overview.emergency : (cached?.emergency ?? null))?.data ?? null;
   const place = [data?.address, data?.entrance ? `Entrance: ${data.entrance}` : null].filter(Boolean).join(" · ");
+  const contacts = data?.contacts ?? [];
   return (
     <section className={styles.strip} aria-labelledby="safety-emergency-title">
-      <div className={styles.stripTop}>
-        <a className={styles.call} href="tel:111">
-          Call 111
-        </a>
-        <div className={styles.stripPlace}>
-          <strong id="safety-emergency-title">Emergency on {farm.name}</strong>
-          <div>{!overview && !loadError ? "Loading the address…" : place || (loadError && !cached ? "Couldn't load this farm's emergency details." : "No address saved for this farm yet.")}</div>
-        </div>
+      <h2 id="safety-emergency-title" className={styles.stripTitle}>
+        Emergency details
+      </h2>
+      <div className={styles.stripPlace}>
+        <strong>{farm.name}</strong>
+        <div>{!overview && !loadError ? "Loading the address…" : place || (loadError && !cached ? "Couldn't load this farm's emergency details." : "No address saved for this farm yet.")}</div>
       </div>
+      {contacts.length ? (
+        <ul className={styles.stripContacts} aria-label="Emergency contacts">
+          {contacts.slice(0, 3).map((contact) => (
+            <li key={`${contact.name}|${contact.phone}`}>
+              {contact.name}
+              {contact.role ? <span className={ui.muted}> · {contact.role}</span> : null} <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>{contact.phone}</a>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className={styles.stripNote}>
+        Someone badly hurt, a fire or a crash: phone <a href="tel:111">111</a> first.
+      </p>
       {loadError && cached ? (
         <span style={{ fontSize: "var(--text-sm)" }}>
           Couldn&apos;t reach Tohyee. This is the copy saved on this phone {formatDateTime(cached.savedAt)}; it may be out of date.
         </span>
       ) : null}
       <Link className={styles.stripLink} href={safetyHref({ farmId: farm.id, screen: "emergency" })}>
-        {data ? "Full emergency details: contacts, first aid, assembly point" : canRecord ? "Add this farm's emergency details" : "Emergency numbers and details"}
+        {data ? `All emergency details${contacts.length > 3 ? ` and ${contacts.length - 3} more contacts` : ""}: first aid, assembly point` : canRecord ? "Add this farm's emergency details" : "Emergency numbers and details"}
       </Link>
     </section>
   );
