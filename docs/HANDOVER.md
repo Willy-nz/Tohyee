@@ -143,6 +143,15 @@ kind".)
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
+- **Website and README refreshed** (29 Oct 2026): one page for two
+  audiences (small businesses and bookkeepers, and NZ farms), with the farm
+  app in phone frames, a feature overview, what's new and what isn't built
+  yet. Screenshots in `website/img/` (`phone-*` at 390 wide, `desk-*` at
+  1280, each with a `-dark` copy picked by the reader's colour scheme) are of
+  the demo farm made with `tohyee-admin demo add` on copied demo databases,
+  with every request outside localhost blocked so no aerial imagery shows.
+  The older pictures and drawn illustrations were removed. The site follows
+  the computer's light or dark setting and makes no third-party requests.
 - **Website and README farm pictures** (15 Oct 2026): a "From the paddock to
   the year-end" section with tabbed farm screenshots, a year-end statements
   picture, and drawn illustrations for each kind of user (`website/img/illo-*.svg`).

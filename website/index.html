@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tohyee: your business, your books, your server</title>
+    <title>Tohyee: your books and your farm, on your own server</title>
     <meta
       name="description"
-      content="Your books, customers, farm and reporting in one open-source workspace. Built for New Zealand, hosted on a server you control."
+      content="Free, open-source accounting made in New Zealand. Books, GST and payroll for small businesses and bookkeepers, and paddocks, farm safety and effluent records on your phone for farms. On a server you control."
     />
     <meta name="theme-color" content="#173a37" />
-    <meta property="og:title" content="Tohyee: your business, your books, your server" />
+    <meta property="og:title" content="Tohyee: your books and your farm, on your own server" />
     <meta
       property="og:description"
-      content="Free, open-source accounting made in New Zealand, on a computer you control. Every accounting rule is written down as a worked example and tested."
+      content="Free, open-source accounting made in New Zealand, with farm records on your phone. Every accounting rule is written down as a worked example and tested."
     />
     <meta property="og:image" content="https://willy-nz.github.io/Tohyee/img/og-home.png" />
     <meta property="og:type" content="website" />
@@ -21,398 +21,494 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/zilla-slab-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
     <script>document.documentElement.classList.replace("no-js", "js");</script>
-    <script src="site.js" defer>
-</script>
+    <script src="site.js" defer></script>
   </head>
   <body>
-<a class="skip" href="#main">Skip to content</a>
-<header class="site-header">
-<div class="wrap nav-row">
-<a class="brand" href="./">
-<img src="logo.svg" width="34" height="34" alt=""/>Tohyee<span class="brand-label">MADE IN NZ</span>
-</a>
-<button class="menu-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
-<nav class="site-nav" id="site-nav" aria-label="Main navigation">
-<a href="#platform">Platform</a>
-<a href="#analytics">Analytics</a>
-<a href="#farm">Farming</a>
-<a href="#ownership">Your server</a>
-</nav>
-<a class="button small" href="#install">Get Tohyee <span aria-hidden="true">↗</span>
-</a>
-</div>
-</header>
-<main id="main">
-<section class="hero wrap">
-<div class="eyebrow">
-<span class="status-dot">
-</span> OPEN SOURCE. OPEN POSSIBILITIES.</div>
-<h1>Big picture.<br/>
-<span>Every little detail.</span>
-</h1>
-<p class="hero-intro">Your books, customers, people and farm.<br class="desktop"/> One connected workspace. On a server you control.</p>
-<div class="actions">
-<a class="button" href="#install">Make it yours <span aria-hidden="true">↗</span>
-</a>
-<a class="text-link" href="#platform">Explore the platform <span aria-hidden="true">↓</span>
-</a>
-</div>
-<p class="hero-note">Built in New Zealand · No subscription · No per-user fees</p>
-<div class="showcase" aria-label="Illustrative Tohyee workspace using fictional data">
-<div class="window-bar">
-<span class="window-dots" aria-hidden="true">● ● ●</span>
-<span>YOUR BUSINESS, AT A GLANCE</span>
-<span class="demo-label">Illustrative demo</span>
-</div>
-<div class="workspace">
-<aside class="demo-sidebar">
-<strong>
-<img src="logo.svg" alt="" width="24" height="24"/>Tohyee</strong>
-<span class="selected">◈ &nbsp; Overview</span>
-<span>↗ &nbsp; Accounting</span>
-<span>◎ &nbsp; Customers</span>
-<span>▥ &nbsp; Analytics</span>
-<span>⌘ &nbsp; Farming</span>
-<div class="sidebar-bottom">YOUR WORKSPACE<br/>
-<b>Room to grow.</b>
-</div>
-</aside>
-<div class="demo-main">
-<div class="demo-heading">
-<div>
-<small>KŌWHAI DEMO BUSINESS</small>
-<h2>A little clarity for your day.</h2>
-</div>
-<span class="avatar">K</span>
-</div>
-<div class="metrics">
-<div>
-<span>Cash in bank</span>
-<strong>$74,229</strong>
-<small>Current balance</small>
-</div>
-<div>
-<span>Sales this month</span>
-<strong>$42,800</strong>
-<small>Fictional example</small>
-</div>
-<div>
-<span>Money owed to you</span>
-<strong>$2,625</strong>
-<small>Across customer invoices</small>
-</div>
-</div>
-<div class="demo-bottom">
-<div class="chart-card">
-<div class="card-heading">
-<h3>See the shape of your business</h3>
-<span>NZD · thousands</span>
-</div>
-<svg viewBox="0 0 600 190" role="img" aria-labelledby="hero-chart-title">
-<title id="hero-chart-title">Illustrative monthly sales: April $24,000, May $31,000, June $27,000, July $36,000, August $34,000, September $42,800.</title>
-<defs>
-<linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-<stop stop-color="#408b81" stop-opacity=".24"/>
-<stop offset="1" stop-color="#408b81" stop-opacity="0"/>
-</linearGradient>
-</defs>
-<g class="grid-lines">
-<path d="M40 25H580M40 80H580M40 135H580"/>
-</g>
-<g class="axis-text">
-<text x="4" y="29">45</text>
-<text x="4" y="84">30</text>
-<text x="4" y="139">15</text>
-</g>
-<path d="M40 102L148 76L256 91L364 58L472 65L580 33V155H40Z" fill="url(#area)"/>
-<path d="M40 102L148 76L256 91L364 58L472 65L580 33" class="chart-line"/>
-<g class="axis-text">
-<text x="40" y="180">Apr</text>
-<text x="148" y="180">May</text>
-<text x="256" y="180">Jun</text>
-<text x="364" y="180">Jul</text>
-<text x="472" y="180">Aug</text>
-<text x="558" y="180">Sep</text>
-</g>
-</svg>
-</div>
-<div class="todo-card">
-<h3>A clear next step</h3>
-<p>
-<span class="task-icon">↔</span> Match bank transactions</p>
-<p>
-<span class="task-icon">✓</span> Review draft invoices</p>
-<p>
-<span class="task-icon">▧</span> Prepare your GST return</p>
-<small>You stay in control of approvals.</small>
-</div>
-</div>
-</div>
-</div>
-</div>
-<p class="caption">An illustration of the connected workspace, not a live account or an exact app screen.</p>
-</section>
-<div class="capability-strip">
-<div class="wrap">
-<span>Accounting</span>
-<span>CRM</span>
-<span>Analytics</span>
-<span>Payroll & jobs</span>
-<span>Tax</span>
-<span>Farming</span>
-</div>
-</div>
-<section id="platform" class="section wrap">
-<div class="section-heading">
-<div>
-<p class="eyebrow">LESS SWITCHING. MORE DOING.</p>
-<h2>A home for the<br/>whole business.</h2>
-</div>
-<p>From the first quote to the year-end accounts, keep the work connected. Turn on the modules that fit your organisation.</p>
-</div>
-<div class="feature-grid">
-<article class="feature-card accounting">
-<div>
-<span class="index">01 / ACCOUNTING</span>
-<h3>The books, beautifully connected.</h3>
-<p>Invoices, bills, bank reconciliation, GST and financial statements. Follow a figure back to the records behind it.</p>
-</div>
-<img src="img/reconcile-light.webp" loading="lazy" width="1996" height="1248" alt="App screenshot showing bank reconciliation for a fictional business"/>
-</article>
-<article class="feature-card crm">
-<span class="index">02 / CUSTOMERS & COMMERCE</span>
-<h3>Keep the next<br/>conversation moving.</h3>
-<p>Contacts, opportunities and sales forecasts, with Shopify connections bringing shop activity into your workflow.</p>
-<div class="pipeline" aria-label="Illustrative sales pipeline">
-<div>
-<span>New lead</span>
-<i>
-</i>
-<i>
-</i>
-<i>
-</i>
-</div>
-<div>
-<span>In discussion</span>
-<i>
-</i>
-<i>
-</i>
-</div>
-<div>
-<span>Won</span>
-<i>
-</i>
-</div>
-</div>
-<small>Illustrative pipeline</small>
-</article>
-<article class="feature-card compact">
-<span class="index">03 / PEOPLE & WORK</span>
-<h3>People. Projects. Payday.</h3>
-<p>Payroll, leave, timesheets, expense claims, jobs and rosters, with access shaped around the work people do.</p>
-<a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">Explore the feature guide ↗</a>
-</article>
-<article class="feature-card compact tax">
-<span class="index">04 / NZ TAX</span>
-<h3>Look ahead, not just back.</h3>
-<p>Income-tax workings, forecasts and payment schedules. Import IRD account files for review alongside the books.</p>
-<small>IRD file imports are supported. A live myIR connection and direct income-tax filing are not.</small>
-</article>
-</div>
-</section>
-<section id="analytics" class="analytics section">
-<div class="wrap analytics-grid">
-<div>
-<p class="eyebrow">FROM DATA TO DIRECTION</p>
-<h2>Your numbers.<br/>A clearer story.</h2>
-<p>Bring spreadsheets and database sources into Analytics. Build charts, calculated measures and dashboards, then share the reports your team needs.</p>
-<div class="source-tags">
-<span>Excel & CSV</span>
-<span>SQL Server</span>
-<span>PostgreSQL</span>
-<span>MySQL</span>
-<span>Google Analytics</span>
-</div>
-<a class="text-link" href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">See supported connections ↗</a>
-</div>
-<div class="analytics-demo">
-<div class="card-heading">
-<h3>A different view. Same story.</h3>
-<span class="demo-label">Example data</span>
-</div>
-<div class="chart-switch" role="group" aria-label="Example chart metric">
-<button type="button" data-chart="sales" aria-pressed="true">Sales</button>
-<button type="button" data-chart="costs" aria-pressed="false">Costs</button>
-</div>
-<div class="chart-summary">
-<strong id="chart-total">$195,000</strong>
-<span id="chart-description">Example sales · April–September</span>
-</div>
-<div class="bar-chart" id="bar-chart" aria-label="Monthly sales in NZ dollars">
-<div>
-<span class="bar" style="--bar:48%" data-value="$24,000">
-</span>
-<small>Apr</small>
-</div>
-<div>
-<span class="bar" style="--bar:62%" data-value="$31,000">
-</span>
-<small>May</small>
-</div>
-<div>
-<span class="bar" style="--bar:54%" data-value="$27,000">
-</span>
-<small>Jun</small>
-</div>
-<div>
-<span class="bar" style="--bar:72%" data-value="$36,000">
-</span>
-<small>Jul</small>
-</div>
-<div>
-<span class="bar" style="--bar:68%" data-value="$34,000">
-</span>
-<small>Aug</small>
-</div>
-<div>
-<span class="bar" style="--bar:86%" data-value="$43,000">
-</span>
-<small>Sep</small>
-</div>
-</div>
-<p class="caption">Fictional data · NZD · bars share a $50,000 scale</p>
-<p class="sr-only" id="chart-accessible" aria-live="polite">Sales: April $24,000; May $31,000; June $27,000; July $36,000; August $34,000; September $43,000.</p>
-</div>
-</div>
-</section>
-<section id="farm" class="section wrap">
-<div class="section-heading">
-<div>
-<p class="eyebrow">BUILT FOR LIFE BEYOND THE OFFICE</p>
-<h2>The farm is part<br/>of the picture.</h2>
-</div>
-<p>Connect the paddocks, the livestock and the books. A farming workspace for the details that don't belong in a spreadsheet.</p>
-</div>
-<div class="farm-feature">
-<img src="img/farm-map-wide.webp" loading="lazy" width="1600" height="900" alt="App screenshot of a farm map with paddock boundaries"/>
-<div class="farm-copy">
-<span class="index">ON THE LAND. IN THE LOOP.</span>
-<h3>Know the place.<br/>Plan the season.</h3>
-<p>Paddock maps, pasture readings, soil tests, fertiliser plans and livestock records, alongside farm financial benchmarks. On a phone: Today, Map, Log, Safety and More.</p>
-<ul>
-<li>A map with paddocks coloured by days since grazed, and quick one-question logs</li>
-<li>A farm walk that saves each reading on the phone as you go</li>
-<li>Farm safety: hazards on the map, incidents, inductions, machinery checks, training and a WorkSafe pack</li>
-<li>A Farm staff role for recording field work without seeing the books</li>
-<li>A farm Home with seasonal cash and things to check</li>
-<li>A calendar with suggestions from selected mail folders</li>
-<li>A workspace for custom farm apps connected to Tohyee</li>
-<li>A demo farm, added from the server's Organisations page: a made-up dairy farm with books, farm records and reports to explore</li>
-</ul>
-<small>Review email suggestions before confirming. Private mail remains private; sharing calendar items is a separate choice. Safety keeps records; it doesn't decide what the law needs you to keep.</small>
-</div>
-</div>
-<p class="caption">App screenshots use demo data. Screen layouts may differ by version.</p>
-</section>
-<section id="ownership" class="ownership section">
-<div class="wrap">
-<p class="eyebrow">YOUR BUSINESS. YOUR BOOKS. YOUR SERVER.</p>
-<h2>Keep the keys<br/>to your own workspace.</h2>
-<div class="ownership-grid">
-<article>
-<span>01</span>
-<h3>Your data, your server.</h3>
-<p>Run Tohyee on a computer you control. Each organisation has its own accounting database, ready to back up or move independently.</p>
-</article>
-<article>
-<span>02</span>
-<h3>Recovery with a plan.</h3>
-<p>Encrypted backups, a recovery kit, weekly backup checks and a restore wizard for a replacement computer. Keep a separate recovery copy and test it.</p>
-</article>
-<article>
-<span>03</span>
-<h3>Open to inspection.</h3>
-<p>Read the code, follow the worked accounting examples and see the tests. AI suggestions and drafts still need the right approval.</p>
-</article>
-</div>
-</div>
-</section>
-<section class="section wrap" id="new">
-<div class="section-heading">
-<div>
-<p class="eyebrow">MOVING FORWARD</p>
-<h2>A growing platform.<br/>An honest roadmap.</h2>
-</div>
-<p>This overview reflects version 0.17.0, 28 October 2026. Check the release notes for what's in each download.</p>
-</div>
-<div class="updates">
-<article>
-<span class="pill">New in 0.16.0</span>
-<h3>Farm safety</h3>
-<p>Hazards, incidents, inductions, machinery checks and training, with records that can't be quietly changed and a weekly copy emailed off the farm.</p>
-</article>
-<article>
-<span class="pill">New in 0.16.0</span>
-<h3>Farm screens for your phone</h3>
-<p>Today, Map, Log and Safety, a farm walk that saves as you go, and a Farm staff role.</p>
-</article>
-<article>
-<span class="pill">New in 0.17.0</span>
-<h3>Tohyee on your phone</h3>
-<p>Add it to your home screen from your server. Farm information and safety work without a signal, plus a tractor and spreader coverage map.</p>
-</article>
-<article>
-<span class="pill neutral">Check release notes</span>
-<h3>Know what you're installing</h3>
-<p>Use the latest release notes for packaged features. Open pull requests are proposals until merged.</p>
-<a href="https://github.com/Willy-nz/Tohyee/releases">Read release notes ↗</a>
-</article>
-</div>
-</section>
-<section id="install" class="install wrap">
-<p class="eyebrow">START WITH A TEST ORGANISATION</p>
-<h2>A little more connected.<br/>A lot more yours.</h2>
-<p>Free, open-source software for the way you work.</p>
-<div class="actions">
-<a class="button" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows ↗</a>
-<a class="button secondary" href="https://github.com/Willy-nz/Tohyee#run-it-locally">Run from source ↗</a>
-</div>
-<p class="install-note">Early development · AGPL v3 · Review reports and returns before relying on them.<br/>Choose the Windows installer from the release assets. Hosting and connected services may have their own costs.</p>
-</section>
-<section class="faq wrap">
-<h2>A few practical things.</h2>
-<details>
-<summary>Do I need a separate computer for each organisation?</summary>
-<p>No. One Tohyee server can host multiple organisations. Each gets its own PostgreSQL database and its own memberships.</p>
-</details>
-<details>
-<summary>Can I use it on my phone?</summary>
-<p>The app opens in a browser, including on phones. The server needs to be running and reachable. See the setup guide for remote access options.</p>
-</details>
-<details>
-<summary>Does it connect directly to IRD?</summary>
-<p>The tax workspace supports imported IRD documents and account files. Do not assume a live myIR connection or direct income-tax filing; check the feature guide for the specific workflow you need.</p>
-</details>
-<details>
-<summary>Where do I get help or suggest something?</summary>
-<p>
-<a href="https://github.com/Willy-nz/Tohyee/issues">Open a GitHub issue</a> with what you were trying to do. Leave passwords, recovery codes and real financial data out of public reports.</p>
-</details>
-</section>
-</main>
-<footer class="wrap">
-<a class="brand" href="./">
-<img src="logo.svg" width="30" height="30" alt=""/>Tohyee</a>
-<p>Made in New Zealand. Yours to build on.</p>
-<div>
-<a href="https://github.com/Willy-nz/Tohyee">GitHub</a>
-<a href="https://github.com/Willy-nz/Tohyee/blob/main/SECURITY.md">Security</a>
-<a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">AGPL v3</a>
-</div>
-</footer>
-</body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap nav-row">
+        <a class="brand" href="./">
+          <img src="logo.svg" width="32" height="32" alt="" />
+          <span>Tohyee</span>
+        </a>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu</button>
+        <nav class="site-nav" id="site-nav" aria-label="Main">
+          <a href="#business">Business</a>
+          <a href="#farm">Farms</a>
+          <a href="#server">Your server</a>
+          <a href="#new">What's new</a>
+          <a class="nav-cta" href="#install">Get Tohyee</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="hero-kicker">Free and open source, made in New Zealand</p>
+            <h1 id="hero-title">Your books and your farm, on a server you own.</h1>
+            <p class="lede">
+              Invoices, bank, GST and payroll for small businesses and the people who keep their books.
+              Paddocks, safety and effluent records for farms, on the phone in your pocket, even out of signal.
+            </p>
+            <div class="actions">
+              <a class="button" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows</a>
+              <a class="button ghost" href="#farm">See the farm app</a>
+            </div>
+            <p class="small-print">No subscription and no per-user fees. Early development: try a test organisation first.</p>
+          </div>
+
+          <figure class="hero-visual">
+            <div class="browser">
+              <div class="browser-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+              <picture>
+                <source srcset="img/desk-home-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img src="img/desk-home.webp" width="1600" height="1000" alt="Tohyee's Home page for the demo farm: this week's jobs on the farm beside bank lines to reconcile" />
+              </picture>
+            </div>
+            <div class="phone hero-phone">
+              <picture>
+                <source srcset="img/phone-today-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img src="img/phone-today.webp" width="440" height="952" alt="The farm Today screen on a phone: today's jobs, the mobs in now and a small map" />
+              </picture>
+            </div>
+            <figcaption>Real screens with made-up demo data.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Two audiences -->
+      <section class="paths wrap" aria-label="Who Tohyee is for">
+        <a class="path" href="#business">
+          <h2>For small businesses and bookkeepers</h2>
+          <ul>
+            <li>Bank feeds, reconciliation and bank rules</li>
+            <li>GST returns, box by box, with the documents behind them</li>
+            <li>NZ payroll, payslips and payday filing files</li>
+            <li>Reports, budgets and year-end statements</li>
+          </ul>
+          <span class="path-link">The business tools</span>
+        </a>
+        <a class="path path-farm" href="#farm">
+          <h2>For New Zealand farms</h2>
+          <ul>
+            <li>Today, Map and Log on your phone, with or without signal</li>
+            <li>Hazards, incidents, inductions and pre-start checks</li>
+            <li>Effluent runs, pond levels and checks</li>
+            <li>Tractor and spreader coverage maps</li>
+          </ul>
+          <span class="path-link">The farm app</span>
+        </a>
+      </section>
+
+      <!-- Business -->
+      <section id="business" class="section" aria-labelledby="business-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="business-title">The books, connected to everything else.</h2>
+            <p>
+              Follow any figure back to the invoice, bill or bank line behind it. Bank matches, bank rules and
+              AI drafts are suggestions until someone says OK, and the database itself refuses unbalanced journals.
+            </p>
+          </div>
+
+          <div class="tabs" data-tabs>
+            <div class="tab-list" role="tablist" aria-label="Business screens">
+              <button type="button" role="tab" id="tab-bank" aria-controls="panel-bank" aria-selected="true">Bank reconciliation</button>
+              <button type="button" role="tab" id="tab-gst" aria-controls="panel-gst" aria-selected="false" tabindex="-1">GST return</button>
+              <button type="button" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false" tabindex="-1">Profit and loss</button>
+            </div>
+            <div class="tab-panel browser" role="tabpanel" tabindex="0" id="panel-bank" aria-labelledby="tab-bank">
+              <picture>
+                <source srcset="img/desk-reconcile-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img src="img/desk-reconcile.webp" loading="lazy" width="1600" height="1000" alt="Bank reconciliation: statement lines on the left, suggested matches on the right" />
+              </picture>
+            </div>
+            <div class="tab-panel browser" role="tabpanel" tabindex="0" id="panel-gst" aria-labelledby="tab-gst">
+              <picture>
+                <source srcset="img/desk-gst-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img src="img/desk-gst.webp" loading="lazy" width="1600" height="1000" alt="A GST return with each GST101A box and its amount" />
+              </picture>
+            </div>
+            <div class="tab-panel browser" role="tabpanel" tabindex="0" id="panel-report" aria-labelledby="tab-report">
+              <picture>
+                <source srcset="img/desk-report-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img src="img/desk-report.webp" loading="lazy" width="1600" height="1000" alt="A profit and loss report with trading income, cost of sales and gross profit" />
+              </picture>
+            </div>
+          </div>
+
+          <div class="feature-groups">
+            <section>
+              <h3>Sales and getting paid</h3>
+              <ul>
+                <li>Quotes, invoices, credit notes and repeating invoices</li>
+                <li>Pay now links through your own Stripe or PayPal</li>
+                <li>Customer statements and who owes what</li>
+                <li>Shopify and WooCommerce orders brought in</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Bank and bills</h3>
+              <ul>
+                <li>Feeds from Akahu, SimpleFIN, Stripe, PayPal and Wise, or statement files</li>
+                <li>Bank rules and one-click suggested matches</li>
+                <li>A bills inbox read from your mailbox</li>
+                <li>Approval rules and expense claims with mileage</li>
+              </ul>
+            </section>
+            <section>
+              <h3>GST and income tax</h3>
+              <ul>
+                <li>GST101A on the invoice, payments or hybrid basis</li>
+                <li>A GST audit report behind every box</li>
+                <li>Income tax workings and provisional tax, not yet reviewed by an accountant</li>
+                <li>IRD account files imported for you to check. No direct filing to IRD.</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Payroll, people and jobs</h3>
+              <ul>
+                <li>PAYE, KiwiSaver, Holidays Act leave and payslips</li>
+                <li>Payday filing files and bank files for wages</li>
+                <li>Timesheets, rosters and clocking in with a PIN</li>
+                <li>Jobs and site visits with Start and Finish on a phone</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Reports and year end</h3>
+              <ul>
+                <li>Profit and loss, balance sheet, budgets and a cash flow forecast</li>
+                <li>Year-end statements as one PDF, and an accountant pack</li>
+                <li>Tier 3 and Tier 4 reports for not-for-profits</li>
+                <li>Consolidation across several organisations</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Customers and sales</h3>
+              <ul>
+                <li>A built-in CRM: companies, people, leads and deals</li>
+                <li>Pipelines, forecasts and a sales dashboard</li>
+                <li>Follow-ups and sequences that make tasks, never send on their own</li>
+                <li>Sales staff who can't see the books</li>
+              </ul>
+            </section>
+          </div>
+          <p class="caption">These screens show the books of Kōwhai Dairies Ltd, Tohyee's made-up demo farm; a shop or a trades business has the same screens. <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">The full feature list</a> says what's built, what isn't, and why.</p>
+        </div>
+      </section>
+
+      <!-- Farm -->
+      <section id="farm" class="farm" aria-labelledby="farm-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="farm-title">Made for the paddock, not just the office.</h2>
+            <p>
+              Five tabs along the bottom of your phone: Today, Map, Log, Safety and More. Big buttons, one question
+              at a time, and records that wait on the phone until there's signal.
+            </p>
+          </div>
+
+          <ol class="phone-row" aria-label="Farm app screens" tabindex="0">
+            <li>
+              <figure>
+                <div class="phone">
+                  <picture>
+                    <source srcset="img/phone-map-dark.webp" media="(prefers-color-scheme: dark)" />
+                    <img src="img/phone-map.webp" loading="lazy" width="440" height="952" alt="The farm map on a phone, with paddocks coloured by days since they were grazed and a key" />
+                  </picture>
+                </div>
+                <figcaption><strong>Map</strong> Paddocks coloured by days since grazed. Tap one for its cover and mob.</figcaption>
+              </figure>
+            </li>
+            <li>
+              <figure>
+                <div class="phone">
+                  <picture>
+                    <source srcset="img/phone-safety-dark.webp" media="(prefers-color-scheme: dark)" />
+                    <img src="img/phone-safety.webp" loading="lazy" width="440" height="952" alt="The Safety overview on a phone: emergency details with Call 111, buttons to report something, check equipment or sign in, and what needs doing" />
+                  </picture>
+                </div>
+                <figcaption><strong>Safety</strong> Call 111, report something, check equipment or sign in.</figcaption>
+              </figure>
+            </li>
+            <li>
+              <figure>
+                <div class="phone">
+                  <picture>
+                    <source srcset="img/phone-effluent-dark.webp" media="(prefers-color-scheme: dark)" />
+                    <img src="img/phone-effluent.webp" loading="lazy" width="440" height="952" alt="The effluent irrigation log on a phone, with today's runs and pond levels" />
+                  </picture>
+                </div>
+                <figcaption><strong>Effluent</strong> Runs, pod shifts and pond levels, logged as you go.</figcaption>
+              </figure>
+            </li>
+            <li>
+              <figure>
+                <div class="phone">
+                  <picture>
+                    <source srcset="img/phone-tractor-dark.webp" media="(prefers-color-scheme: dark)" />
+                    <img src="img/phone-tractor.webp" loading="lazy" width="440" height="952" alt="A finished spreader job on a phone: the worked area on the paddock, overlaps and the estimated area covered" />
+                  </picture>
+                </div>
+                <figcaption><strong>Tractor mode</strong> The worked area, overlaps and gaps from the phone's GPS.</figcaption>
+              </figure>
+            </li>
+          </ol>
+
+          <div class="farm-points">
+            <section>
+              <h3>Your phone, your server</h3>
+              <p>
+                Open your Tohyee address on your phone and add it to the home screen. No app store. Your farms'
+                maps, paddocks, a year of pasture and grazing, jobs, checklists and safety details are kept on the
+                phone and refreshed while it's open, each saying when it was last updated.
+              </p>
+              <p>
+                Out of signal, logs, photos, safety reports, pre-start checks and inductions wait on the phone and
+                are sent once when you're back. The books, payroll, mail and injury details are never kept on it.
+              </p>
+            </section>
+            <section>
+              <h3>Farm safety</h3>
+              <p>
+                Hazards and no-go zones on the map, near misses and incidents with photos, inductions signed on
+                each person's own phone, a gate sign-in for visitors, pre-start checks from a machine's QR code,
+                training with expiry reminders, and chemicals with their safety data sheets.
+              </p>
+              <p>
+                Records can't be quietly changed: every edit keeps the earlier version. Export a WorkSafe pack for
+                any dates, and have a copy emailed off the farm each week.
+              </p>
+            </section>
+            <section>
+              <h3>Effluent <span class="tag">Next release</span></h3>
+              <p>
+                Set up your irrigators, pods, tanker and ponds, then log each run, shift and pond reading on the
+                phone. Checks, faults and servicing follow the safety rules, reminders show on Today, and a council
+                pack zips up any dates with photos and history, for you to download.
+              </p>
+            </section>
+            <section>
+              <h3>Tractor and spreader mode</h3>
+              <p>
+                Choose the paddock and the equipment's width, press Start and switch Working on and off. You get
+                the worked area, overlaps counted once and GPS gaps, saved to the paddock diary, with GeoJSON and
+                GPX exports.
+              </p>
+            </section>
+            <section>
+              <h3>Staff see the farm, not the money</h3>
+              <p>
+                The Farm staff role records field work and safety reports on the farms chosen for them, without the
+                books, reports or other farms. Owners keep the farm Home, benchmarks per kg of milk solids,
+                livestock for tax, soil tests and fertiliser plans.
+              </p>
+            </section>
+            <section>
+              <h3>Try the demo farm</h3>
+              <p>
+                A server admin can add Kōwhai Dairies Ltd, a made-up dairy farm with about 18 months of books,
+                payroll, farm records, safety and tractor jobs, from the server's Organisations page. It's marked
+                DEMO on every page and never emails or connects to anything.
+              </p>
+            </section>
+          </div>
+
+          <aside class="honest" aria-label="Good to know">
+            <h3>Good to know</h3>
+            <ul>
+              <li>The phone app and tractor mode haven't been tried on a real phone or in a paddock yet.</li>
+              <li>Adding Tohyee to your phone needs its https web address (Remote access or Tailscale HTTPS).</li>
+              <li>Phone GPS is an estimate, not proof of application. Tractor mode records only while the screen is on.</li>
+              <li>Safety and effluent keep records. They don't decide what the law or your consent needs, Tohyee never says a farm complies, and it never sends anything to WorkSafe or a council for you.</li>
+            </ul>
+          </aside>
+          <p class="caption">Farm screens show Kōwhai Dairies Ltd, Tohyee's demo farm. Everything in it is made up.</p>
+        </div>
+      </section>
+
+      <!-- Analytics and AI -->
+      <section id="analytics" class="section" aria-labelledby="analytics-title">
+        <div class="wrap split">
+          <div>
+            <h2 id="analytics-title">Reports you can click into.</h2>
+            <p>
+              Analytics brings in the books, spreadsheets and databases, and builds reports the way Power BI and
+              Looker Studio do: report pages, click a chart to filter the others, drill down by financial year,
+              slicers and bookmarks.
+            </p>
+            <dl class="facts">
+              <div>
+                <dt>Sources</dt>
+                <dd>Your books and CRM, Excel and CSV, SQL Server, PostgreSQL, MySQL and Google Analytics.</dd>
+              </div>
+              <div>
+                <dt>PowerPoint</dt>
+                <dd>An add-in puts a live report on a slide. Each viewer signs in and sees only what they're allowed to.</dd>
+              </div>
+              <div>
+                <dt>Your own AI</dt>
+                <dd>Connect Claude.ai, ChatGPT or another AI app by signing in to Tohyee. You choose what it may do, and can disconnect it at any time.</dd>
+              </div>
+            </dl>
+            <p class="note">The Analytics calculations aren't reviewed yet, so check figures before relying on them. The add-in and AI sign-in haven't been tried in real PowerPoint or with real AI apps yet, and both need Remote access.</p>
+          </div>
+          <figure class="browser">
+            <picture>
+              <source srcset="img/desk-analytics-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img src="img/desk-analytics.webp" loading="lazy" width="1600" height="1000" alt="The Farm performance report in Analytics: milk solids, milk price, working expenses per kg of milk solids and a monthly chart" />
+            </picture>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Server -->
+      <section id="server" class="section section-tint" aria-labelledby="server-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="server-title">Keep the keys yourself.</h2>
+            <p>Tohyee runs on a computer you control, like a media server at home. One server holds as many organisations as you need.</p>
+          </div>
+          <div class="server-grid">
+            <section>
+              <h3>One database each</h3>
+              <p>Every organisation gets its own PostgreSQL database, so it can be backed up, restored or moved on its own.</p>
+            </section>
+            <section>
+              <h3>Backups you can check</h3>
+              <p>Nightly encrypted backups, checked again each week, a recovery kit and a restore wizard for a replacement computer.</p>
+            </section>
+            <section>
+              <h3>Sign in your way</h3>
+              <p>A password with two-step, a passkey (Face ID, fingerprint or Windows Hello), or Google for invited people.</p>
+            </section>
+            <section>
+              <h3>Invite the team</h3>
+              <p>Invite people from People and roles with the role they need. New people get a setup link by email.</p>
+            </section>
+            <section>
+              <h3>Open to inspection</h3>
+              <p>AGPL v3. More than a thousand worked accounting examples, and more than 2,000 tests run against a real database.</p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- What's new and roadmap -->
+      <section id="new" class="section" aria-labelledby="new-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="new-title">What's new, and what isn't built yet.</h2>
+            <p>Each release has notes saying what changed, what to do before updating, and what hasn't been tried for real.</p>
+          </div>
+          <div class="news-grid">
+            <ol class="timeline">
+              <li>
+                <h3><span class="version">Next</span> Effluent and LINZ aerial photos</h3>
+                <p>Effluent systems, daily logs, pond levels, checks and a council pack. Aerial photos on farm maps with your own LINZ key. On the main branch now.</p>
+              </li>
+              <li>
+                <h3><span class="version">0.17</span> Tohyee on your phone</h3>
+                <p>Add it to your home screen, farm information kept offline, work without signal, and tractor and spreader mode. Includes 0.15 and 0.16: farm safety, Today, Map, Log and More on a phone, the Farm staff role, passkeys and invites.</p>
+              </li>
+              <li>
+                <h3><span class="version">0.14</span> The demo farm</h3>
+                <p>A made-up dairy farm with books, farm records and Analytics reports to explore.</p>
+              </li>
+              <li>
+                <h3><span class="version">0.13</span> AI and PowerPoint</h3>
+                <p>Connect AI apps by signing in, and the PowerPoint add-in for live reports.</p>
+              </li>
+              <li>
+                <h3><span class="version">0.12</span> Analytics like Power BI</h3>
+                <p>Many more charts and maps, report pages, click-to-filter, drill-down and calculations. Also several farms, backups you can check, and Sign in with Google.</p>
+              </li>
+            </ol>
+            <div class="roadmap">
+              <h3>Not built yet</h3>
+              <ul>
+                <li>Rainfall, photo and voice notes, animal treatments, and births and deaths in the farm Log</li>
+                <li>Phone notifications for effluent and safety reminders</li>
+                <li>Linking grazing mobs with livestock accounting classes</li>
+                <li>Filing GST or income tax directly to IRD</li>
+                <li>Stock bins, lots, serial numbers and variants</li>
+              </ul>
+              <h3>Next, in rough order</h3>
+              <ul>
+                <li>An accountant's review of the income tax examples</li>
+                <li>Supplier overpayments and prepayments</li>
+                <li>Backdated stock movements with proper re-costing</li>
+                <li>IRD's employee details file for payroll</li>
+              </ul>
+              <a class="text-link" href="https://github.com/Willy-nz/Tohyee/releases">All release notes</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Install -->
+      <section id="install" class="install" aria-labelledby="install-title">
+        <div class="wrap install-grid">
+          <div>
+            <h2 id="install-title">Start with a test organisation.</h2>
+            <p>Download the Windows installer, or run Tohyee from source on Linux or Docker. The server app walks you through the first organisation, backups and remote access.</p>
+          </div>
+          <div class="install-actions">
+            <a class="button" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows</a>
+            <a class="button ghost" href="https://github.com/Willy-nz/Tohyee#run-it-locally">Run from source</a>
+            <p class="small-print">Choose TohyeeSetup from the release's files. Early development, AGPL v3, no warranty. Review returns and reports before relying on them. Hosting and connected services may have their own costs.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="faq wrap" aria-labelledby="faq-title">
+        <h2 id="faq-title">A few practical things</h2>
+        <details>
+          <summary>Do I need a separate computer for each organisation?</summary>
+          <p>No. One Tohyee server can hold many organisations. Each gets its own PostgreSQL database and its own people.</p>
+        </details>
+        <details>
+          <summary>How do I get it on my phone?</summary>
+          <p>Open your Tohyee web address on the phone and follow "Get Tohyee on this device": on an iPhone, Safari, Share, Add to Home Screen; on Android, Chrome, Install. It needs an https address (Remote access or Tailscale HTTPS). A home-network address like 192.168.x.x works in the browser but not offline. See the <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/MOBILE-APP.md">phone app guide</a>.</p>
+        </details>
+        <details>
+          <summary>Does it connect directly to IRD?</summary>
+          <p>No. Tohyee works out GST and income tax figures and imports IRD account files for you to check, but it doesn't file returns, pay IRD or ask for your myIR password.</p>
+        </details>
+        <details>
+          <summary>Will it tell me if my farm is compliant?</summary>
+          <p>No. Farm safety and effluent keep careful records and packs you can hand over. They don't decide what the law or your consent needs. See <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FARM-SAFETY.md">farm safety</a> and <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FARM-EFFLUENT.md">effluent</a> for the details and open questions.</p>
+        </details>
+        <details>
+          <summary>Where do I get help or suggest something?</summary>
+          <p><a href="https://github.com/Willy-nz/Tohyee/issues">Open a GitHub issue</a> with what you were trying to do. Leave passwords, recovery codes and real financial data out of public reports.</p>
+        </details>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-row">
+        <a class="brand" href="./">
+          <img src="logo.svg" width="28" height="28" alt="" />
+          <span>Tohyee</span>
+        </a>
+        <p>Made in New Zealand. Yours to build on.</p>
+        <nav aria-label="Footer">
+          <a href="https://github.com/Willy-nz/Tohyee">GitHub</a>
+          <a href="https://github.com/Willy-nz/Tohyee/releases">Releases</a>
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">Features</a>
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/SECURITY.md">Security</a>
+          <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">AGPL v3</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
 </html>

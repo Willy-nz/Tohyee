@@ -7,7 +7,8 @@
 <p align="center">
   <strong>Your business. Your books. Your server.</strong><br />
   Free, open-source accounting made in New Zealand: invoices, GST, payroll,
-  jobs, rosters, CRM, analytics and livestock, on a server you control.
+  jobs, CRM and analytics, plus paddocks, farm safety and effluent records on
+  your phone, on a server you control.
 </p>
 
 <p align="center">
@@ -42,11 +43,11 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 28 October 2026:** the latest packaged
-release is [v0.17.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.17.0),
-with everything below. Check
-the [latest release notes](https://github.com/Willy-nz/Tohyee/releases/latest)
-for the contents of newer downloads, or [run from source](#run-it-locally).
+**Release availability, checked 29 October 2026:** the newest release notes
+are for [0.17.0](docs/releases/0.17.0.md). Effluent management and LINZ aerial
+photos with your own key are on `main` only, for the next release. Check the
+[latest release](https://github.com/Willy-nz/Tohyee/releases/latest) for what
+each download includes, or [run from source](#run-it-locally).
 
 **Want a look first?** On the server, choose **Add demo farm…** on the
 Organisations page of the Tohyee server app (or the server settings in the
@@ -62,127 +63,70 @@ delete it there whenever you like (see [the demo farm](docs/DEMO-FARM.md)).
 what you can use; developer and server setup instructions follow it.
 
 <p align="center">
-  <img src="website/img/home-light.webp" alt="Tohyee's Home page for a demo coffee roaster: cash in the bank, money owed, bills to pay, the next GST return and a to-do list" width="860" />
+  <img src="website/img/desk-home.webp" alt="Tohyee's Home page for the demo farm: this week's jobs on the farm beside bank lines to reconcile" width="860" />
 </p>
+
+## For small businesses and bookkeepers
 
 | | |
 | --- | --- |
 | **Bank feeds and reconciliation**<br />Akahu, SimpleFIN, Stripe, PayPal and Wise, or statement files; suggested matches are one click. | **GST, the NZ way**<br />The GST101A return box by box, with the documents behind every figure. |
-| <img src="website/img/reconcile-light.webp" alt="Bank reconciliation" width="420" /> | <img src="website/img/gst-light.webp" alt="GST return" width="420" /> |
-| **Invoices and getting paid**<br />GST per line, gap-free numbering, Pay now links, and who owes what. | **Find anything with Ctrl K**<br />Every screen, contact, invoice and report from the keyboard. |
-| <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
+| <img src="website/img/desk-reconcile.webp" alt="Bank reconciliation" width="420" /> | <img src="website/img/desk-gst.webp" alt="GST return" width="420" /> |
+| **Reports and year end**<br />Profit and loss, balance sheet, budgets, cash flow forecast and year-end statements as one PDF. | **Analytics like Power BI**<br />Report pages, click-to-filter, drill-down by financial year, and a PowerPoint add-in for live slides. |
+| <img src="website/img/desk-report.webp" alt="Profit and loss report" width="420" /> | <img src="website/img/desk-analytics.webp" alt="An Analytics report" width="420" /> |
 
-<sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
+Also: invoices, quotes, repeating invoices and Pay now links; bills inbox and
+approvals; NZ payroll with payday filing files; timesheets, rosters and jobs;
+a built-in CRM; Tier 3 and Tier 4 reports for not-for-profits; income tax
+workings (not yet reviewed by an accountant); and AI apps such as Claude.ai
+or ChatGPT connected by signing in.
 
-## New in 0.17.0: Tohyee on your phone
+<sub>Screenshots show the books of Kōwhai Dairies Ltd, Tohyee's made-up demo farm.</sub>
 
-| Area | What's new |
+## For farms, on your phone
+
+| Today | Map | Safety | Effluent | Tractor mode |
+| :---: | :---: | :---: | :---: | :---: |
+| <img src="website/img/phone-today.webp" alt="Farm Today screen on a phone" width="150" /> | <img src="website/img/phone-map.webp" alt="Farm map with paddocks coloured by days since grazed" width="150" /> | <img src="website/img/phone-safety.webp" alt="Safety overview with Call 111 and big buttons" width="150" /> | <img src="website/img/phone-effluent.webp" alt="Effluent irrigation log" width="150" /> | <img src="website/img/phone-tractor.webp" alt="A finished spreader job's coverage map" width="150" /> |
+
+- **The phone app:** add Tohyee to your home screen from your own server (no
+  app store; needs its https address). Farm maps, paddocks, a year of
+  pasture and grazing, jobs, checklists and safety details are kept on the
+  phone automatically, and logs, photos, safety reports and checks made
+  without signal are sent once when you're back ([guide](docs/MOBILE-APP.md)).
+- **Farm screens:** Today, Map, Log, Safety and More along the bottom, a
+  farm walk that saves each reading as you go, and a **Farm staff** role
+  that records field work without seeing the books.
+- **Farm safety:** hazards and no-go zones on the map, incidents, inductions,
+  gate sign-in, pre-start checks, training, chemicals, a WorkSafe pack and a
+  weekly copy off the farm. Records can't be quietly changed
+  ([details](docs/FARM-SAFETY.md)).
+- **Effluent** (on `main`, in the next release): systems, daily irrigation
+  log, pond levels, checks and servicing, incidents and a council pack you
+  download ([details](docs/FARM-EFFLUENT.md)).
+- **Tractor and spreader mode:** the worked area, overlaps and GPS gaps from
+  the phone, saved to the paddock diary, with GeoJSON and GPX exports.
+- Plus paddock maps, pasture and feed, soil tests, fertiliser plans, the
+  farm calendar from your email, several farms, livestock for tax and farm
+  benchmarks.
+
+Safety and effluent keep records; they don't decide what the law or your
+consent needs, and Tohyee never sends anything to WorkSafe or a council. Phone
+GPS is an estimate. The phone app and tractor mode haven't been tried on a
+real phone or in a paddock yet.
+
+<sub>Farm screenshots show Kōwhai Dairies Ltd, Tohyee's demo farm. Everything in it is made up.</sub>
+
+## Recent releases
+
+| Release | What's new |
 | --- | --- |
-| **Phone app** | Add Tohyee to your home screen from your server; farm information kept offline automatically; logs, photos and safety without a signal. |
-| **Tractor mode** | A spreading and spraying coverage map from the phone, with overlaps counted once. |
-
-## New in 0.16.0 (included in 0.17.0): farm safety and farmer-friendly screens
-
-| Area | What's new |
-| --- | --- |
-| **Farm safety** | Hazards on the map, incidents, inductions, machinery checks, training, chemicals, a WorkSafe pack and a weekly emailed copy, with records that can't be quietly changed. |
-| **Farm screens** | Today, Map, Log, Safety and More on a phone, a farm walk that saves as you go, and a Farm staff role. |
-| **Sign in** | Passkeys (Face ID, fingerprint), and inviting people from People and roles. |
-| **Security** | Next.js 16.4.1, fixing critical security problems. |
-
-## Prepared as 0.15.0 (included in 0.16.0)
-
-| Area | What's new |
-| --- | --- |
-| **People** | Invite someone from People and roles; new people get a setup link by email. |
-| **Security** | Next.js 16.4.1, fixing critical security problems. |
-| **Demo farm** | Added from the server's Organisations page. |
-
-## New in 0.14.0: try the demo farm
-
-| Area | What's new |
-| --- | --- |
-| **Demo farm** | Add Kōwhai Dairies Ltd, a made-up dairy farm with farm records, books, payroll, GST and Analytics reports, from the Organisations page of the server settings. |
-| **Security** | Removing Google sign-in disconnects that person's apps, and restoring people keeps their Google sign-in. |
-
-## New in 0.13.0: connect AI by signing in, and PowerPoint
-
-| Area | What's new |
-| --- | --- |
-| **AI** | Claude.ai, ChatGPT and other AI apps connect by signing in to Tohyee, no key to copy, and a much shorter AI page. |
-| **PowerPoint** | An add-in that puts live, clickable Analytics reports on slides, like Power BI's. |
-
-## New in 0.12.0: Analytics like Power BI, several farms and backups you can prove
-
-| Area | What's new |
-| --- | --- |
-| **Analytics** | Themes and formatting, many more chart types and maps, report pages, click-to-filter, drill-down by financial year, bookmarks, quick calculations, year to date and last year, calculated fields, what-if sliders, relationships between tables, and more Prepare data steps. Totals, currencies and balances are worked out correctly. |
-| **Several farms** | A shared farm selector, all farms compared, benchmarks by farm, and staff kept to the farms chosen for them. |
-| **Backups** | Checked backups with an honest status, a recovery kit and a restore wizard for a replacement computer. |
-| **Tax** (not yet reviewed by an accountant) | Income tax on its own pages, and IRD account files imported and reviewed before they count. |
-| **My mail** | File an email attachment into a bill, invoice, contact or other record, with a preview first. |
-| **Sign in** | Sign in with Google for invited people, alongside passwords. |
-| **Menus** | Accounting, Tax and Settings menus, and no mountain photo. |
-
-## New in 0.11.0: farm Home, private mail and better Analytics
-
-| Area | What's new |
-| --- | --- |
-| **Farming** | A farm dashboard as Home, a co-op share register, and a farm calendar that reads only the folders you tick, with your own items, repeats, sharing and a calendar link. |
-| **My mail** | A private copy of an owner's own email (only the ticked folders) that only they and their own AI can read. |
-| **Analytics** | SQL Server, PostgreSQL, MySQL and Google Analytics as data sources; chart formatting and a second axis; key figures with comparisons; flexible layouts; calculated values and templates. |
-| **Every graph** | One clean look in light and dark, checked for colour-blind readers. |
-| **CRM** | A shorter top bar, moving records between reps, replies as follow-ups, account plans and renewal reminders. |
-| **Tax** (not yet reviewed by an accountant) | Provisional tax payments allocated to instalments, with an excess towards instalment 1 counting in full, and homekill as one yearly adjustment. |
-| **Groups** | Membership dates, a group workspace and saved consolidated reports. |
-
-## New in 0.10.0: income tax
-
-| Area | What's new |
-| --- | --- |
-| **Income tax** (not yet reviewed by an accountant) | Taxable income from the books, provisional tax and use-of-money interest, tax depreciation and Investment Boost, the imputation credit account, and the IR10, IR4 and IR3 boxes. IRD documents read by your AI and checked by you. |
-| **Farming** | Pasture and feed records, a Farming API for your own apps, a farm calendar from your email (private to you), and your AI reading soil, fertiliser and pasture data. |
-| **Livestock** | Classes held for sale as current assets, and the herd scheme revaluation tied to your reporting basis. |
-| **Payroll** | Expected sick leave in the leave liability. |
-| **Easier to use** | Clearer bank reconciliation buttons, a cash forecast that leads with the shortfall and a chart, and date fields that say when a date can't be read. |
-| **Security** | Remote access pauses itself when someone is guessing passwords. |
-
-## New in 0.9.0
-
-| Area | What's new |
-| --- | --- |
-| **Not-for-profits** | Tier 3 and Tier 4 performance reports in XRB's categories, with a statement of service performance. |
-| **Repeating invoices** | Price changes across many templates at once, with a preview and undo. |
-| **Moving from MYOB and others** | Bring in a year's general ledger as history, one journal per transaction, to check reports against the old system. |
-| **Invoices and bills** | Free and negative lines, as Xero allows. |
-| **Rosters** | Copy last week. |
-
-## New in 0.8.0: farms
-
-<p align="center">
-  <img src="website/img/farm-map.webp" alt="Kōwhai Road farm in Tohyee: 38 numbered paddocks drawn to scale, 192.99 hectares effective" width="860" />
-</p>
-
-| | |
-| --- | --- |
-| **Livestock for tax**<br />Head counts that reconcile, herd scheme and national standard cost values, and the year-end journal with its workings. | **Farm benchmarks**<br />Farm working expenses and revenue per kg of milk solids, hectare, cow and stock unit. |
-| <img src="website/img/livestock-valuation.webp" alt="Livestock valuation and trading statement" width="420" /> | <img src="website/img/farm-benchmarks.webp" alt="Farm benchmarks per kgMS, hectare, cow and stock unit" width="420" /> |
-| **Your AI on the farm**<br />Leave it the herd app's export and it builds its own tables and dashboards; livestock it finds are suggestions you accept. | **Year-end statements**<br />Special purpose financial statements with comparatives and your own notes, as one PDF. |
-| <img src="website/img/ai-calving.webp" alt="A calving dashboard the AI made from a herd app export" width="420" /> | <img src="website/img/financial-statements.webp" alt="Year-end financial statements PDF" width="420" /> |
-
-<sub>Farm screenshots show a fictional dairy farm, Kōwhai Dairies Ltd.</sub>
-
-## Also new in 0.8.0
-
-| Area | What's new |
-| --- | --- |
-| **Farming** | Paddock maps from GeoJSON, KML/KMZ or shapefiles, LINZ aerial imagery, fertiliser plans against what was bought and applied, soil tests, a farm notebook and farm benchmarks. |
-| **CRM** | Leads and intake forms, sales roles and teams, duplicate handling, follow-up tasks, email templates and sequences, campaigns, team forecasts and a sales dashboard. |
-| **Deals and quotes** | Product lines and discounts, draft quotes and revisions, and an accepted quote linked to an invoice or sales order. |
-| **Livestock** | Cattle, sheep, deer and goats: movements, head count reconciliation, herd scheme and NSC valuations, high-priced animals, agent account sales and monthly management values. |
-| **Jobs and visits** | A job is a project with a site: visits on a calendar, Start and Finish on a phone, checklists, photos and a signature, materials on the invoice, service reminders and a calendar file. |
-| **Rosters and clocking in** | Weekly rosters costed against a budget, unavailability and leave warnings, publishing, staff clocking in with a PIN on a shared device, and clocked hours onto timesheets. |
-| **Year-end** | Financial statements with notes as one PDF, an accountant pack ZIP, statements of changes in equity and cash flows, and recoding a posted line. |
+| **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.17.0**](docs/releases/0.17.0.md) | Tohyee on your phone: home screen install, offline farm information, work without signal, tractor and spreader mode. Includes 0.15.0 and 0.16.0: farm safety, farmer-friendly farm screens, the Farm staff role, passkeys, invites, and Next.js security fixes. |
+| [**0.14.0**](docs/releases/0.14.0.md) | The demo farm, and sign-in security fixes. |
+| [**0.13.0**](docs/releases/0.13.0.md) | Connect AI apps by signing in, and the PowerPoint add-in. |
+| [**0.12.0**](docs/releases/0.12.0.md) | Analytics much closer to Power BI, several farms, backups you can check, IRD account file imports and Sign in with Google. |
+| [Older](https://github.com/Willy-nz/Tohyee/releases) | Income tax (0.10.0), farms and livestock (0.8.0), and more. |
 
 These features don't cover every workflow or tax treatment. See the scope below
 and the [feature register](docs/FEATURES.md).
@@ -334,6 +278,14 @@ and the [feature register](docs/FEATURES.md).
 - An AI workspace: a farm notebook and files your own AI can read, tables
   and dashboards it builds, and livestock movements it suggests for you to
   accept.
+- **On a phone:** Today, Map, Log, Safety and More, a farm walk, offline
+  farm information and work without signal, tractor and spreader mode, and
+  a Farm staff role ([phone app](docs/MOBILE-APP.md)).
+- **Farm safety:** hazards, incidents, inductions, pre-start checks,
+  training, chemicals, emergency details, a WorkSafe pack and a weekly copy,
+  with every edit kept ([farm safety](docs/FARM-SAFETY.md)).
+- **Effluent** (on `main`): systems, daily logs, pond levels, checks and a
+  council pack ([effluent](docs/FARM-EFFLUENT.md)).
 
 **Livestock**
 - An optional Accounting module for dairy and beef cattle, sheep, deer and
@@ -363,9 +315,13 @@ and the [feature register](docs/FEATURES.md).
 
 **Everything else**
 - Notes, files and history on transactions and contacts.
-- Organisation roles for accounting, CRM sales and shared analytics;
-  two-step sign-in in installer setups.
-- Nightly encrypted backups, restore as a copy, and remote access.
+- Organisation roles for accounting, CRM sales, farm staff and shared
+  analytics; invites from People and roles; two-step sign-in, passkeys, and
+  Sign in with Google for invited people.
+- AI apps (Claude.ai, ChatGPT and others) connected by signing in, and a
+  PowerPoint add-in for live Analytics reports.
+- Nightly encrypted backups checked weekly, a recovery kit and restore
+  wizard, restore as a copy, and remote access.
 - Works on phones: a ☰ menu and line editors that stack.
 
 See [docs/FEATURES.md](docs/FEATURES.md) for the full list, what's
