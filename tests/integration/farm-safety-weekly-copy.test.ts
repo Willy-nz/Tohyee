@@ -8,6 +8,7 @@ import { getOrganisation } from "@/lib/organisations/registry";
 import { addHazard } from "@/lib/safety/hazards";
 import { loadPackData } from "@/lib/safety/pack";
 import { appendEntry, checkSafetyHistory } from "@/lib/safety/records";
+import { HASH_LIMITS, WEEKLY_COPY_KEPT } from "@/lib/safety/shared";
 import { copySettings, saveCopySettings, sendSafetyCopy } from "@/lib/safety/weekly-copy";
 import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, startTestServer, type TestServer } from "../helpers/test-server";
 
@@ -67,6 +68,11 @@ describeWithDatabase("farm safety weekly copy", () => {
     expect(message.subject).toContain(`entry ${head.seq}`);
     expect(message.text).toContain(head.hash);
     expect(message.text).toContain("Injury and medical details are never in this email.");
+    // Who it went to, that they keep their own copies, and what a hash doesn't show (#491).
+    expect(message.text).toContain("Sent to: jess.personal@example.com, accountant@example.com.");
+    expect(message.text).toContain(WEEKLY_COPY_KEPT);
+    expect(message.text).toContain(HASH_LIMITS);
+    expect(message.text).not.toMatch(/\bproves?\b/i);
     expect(message.text).not.toContain("Private injury");
     expect(Buffer.from(message.attachment!.bytes).subarray(0, 5).toString()).toBe("%PDF-");
     // The owner may see restricted details, but the copy withholds them.

@@ -8,15 +8,23 @@ import { computeCoverage } from "@/lib/farming/coverage";
 import type { PaddockGeometry } from "@/lib/farming/geometry";
 import { requireFarming } from "@/lib/farming/paddocks";
 import {
+  checkNotWorking,
+  correctedTrack,
+  correctionFields,
   type EquipmentSettings,
   EQUIPMENT_KINDS,
+  JOB_CHANGE_LABELS,
+  type JobChangeKind,
+  jobChanges,
+  type JobSnapshot,
+  type JobVersion,
+  type NotWorking,
   type JobSettings,
   type JobTrack,
   OPERATIONS,
   type PackedPoint,
   QUANTITY_UNITS,
   RATE_UNITS,
-  toCoverageTrack,
   TRACK_EVENTS,
   type TrackEvent,
   type TractorEquipment,
@@ -39,6 +47,11 @@ import { optionalString, requireId, requireOneOf, requireString } from "@/lib/va
  * A job's id comes from the phone. Sending the same job again returns the
  * one already saved; a different job under the same id is refused, so a
  * retry never makes a second job (decision 1026).
+ *
+ * Every version of a job's details is kept in tractor_job_versions, with
+ * who, the database's time and, for a correction, why (#491, decisions
+ * 1100-1104). The track never changes; a time someone forgot to switch
+ * Working OFF is marked "not working", which the estimate leaves out.
  */
 
 export const MAX_POINTS = 100_000;
@@ -350,7 +363,7 @@ export async function saveTractorJob(tx: OrgTx, input: Record<string, unknown>):
   const links = await checkLinks(tx, farmId, input, { plan: null, application: null, chemical: null });
   const typed = declared(input, { product: null, rate: null, rateUnit: null, quantity: null, quantityUnit: null });
   const boundaries = await currentBoundaries(tx, paddockIds);
-  const { summary, ...coverage } = computeCoverage(toCoverageTrack(track), boundaries.map((entry) => entry.geometry));
+  const { summary, ...coverage } = computeCoverage(correctedTrack(track, []), boundaries.map((entry) => entry.geometry));
   await tx.query(
     `insert into tractor_jobs (id, farm_id, paddock_ids, boundary_ids, operation, equipment_id, operator_user_id, operator_email, started_at, finished_at,
                                point_count, track, track_sha256, summary, coverage, worked_ha, notes, fertiliser_plan_id, fertiliser_application_id, chemical_record_id,
@@ -385,6 +398,7 @@ export async function saveTractorJob(tx: OrgTx, input: Record<string, unknown>):
       typed.quantityUnit,
     ],
   );
+  await insertVersion(tx, id, 1, "saved", snapshotOf(await getTractorJob(tx, id)), null);
   await writeAuditEvent(tx, { eventType: "farming.tractor_job_saved", entityType: "tractor_job", entityId: id, details: { farmId, paddockIds, operation, points: track.points.length, workedHa: summary.workedHa } });
   return { created: true, job: await getTractorJob(tx, id) };
 }
@@ -483,9 +497,10 @@ export async function getTractorJob(tx: OrgTx, idInput: unknown): Promise<Tracto
       withdrawn_reason: string | null;
       updated_by_email: string | null;
       updated_at: string | null;
+      not_working: NotWorking[];
     }
   >(
-    `select ${LIST_COLUMNS}, j.track, j.coverage, j.notes, j.fertiliser_plan_id::text, p.name as plan_name, j.fertiliser_application_id::text, j.chemical_record_id::text,
+    `select ${LIST_COLUMNS}, j.track, j.coverage, j.not_working, j.notes, j.fertiliser_plan_id::text, p.name as plan_name, j.fertiliser_application_id::text, j.chemical_record_id::text,
             j.product, j.declared_rate::text, j.declared_rate_unit, j.declared_quantity::text, j.declared_quantity_unit, j.withdrawn_reason, j.updated_by_email,
             to_char(j.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
        from tractor_jobs j left join tractor_equipment e on e.id = j.equipment_id left join fertiliser_plans p on p.id = j.fertiliser_plan_id
@@ -504,9 +519,14 @@ export async function getTractorJob(tx: OrgTx, idInput: unknown): Promise<Tracto
     }
   }
   const mine = row.operator_user_id === tx.actor.userId;
+  const history = await jobHistory(tx, id, canLink(tx));
   return {
     ...toListItem(row, names),
     track: row.track,
+    notWorking: row.not_working ?? [],
+    history,
+    historyComplete: history[0]?.change !== "before_history",
+    firstSummary: history[0]?.change === "saved" ? history[0].details.summary : null,
     coverage: row.coverage,
     boundaries: await boundariesById(tx, row.boundary_ids),
     notes: row.notes,
@@ -528,41 +548,169 @@ export async function getTractorJob(tx: OrgTx, idInput: unknown): Promise<Tracto
   };
 }
 
+// History --------------------------------------------------------------------------------------------------
+
+/** A job's details as a version keeps them. */
+function snapshotOf(job: TractorJob): JobSnapshot {
+  return {
+    paddockIds: job.paddockIds,
+    paddockNames: job.paddockNames,
+    boundaryIds: job.boundaries.map((entry) => entry.boundaryId),
+    summary: job.summary,
+    notes: job.notes,
+    product: job.product,
+    declaredRate: job.declaredRate,
+    declaredRateUnit: job.declaredRateUnit,
+    declaredQuantity: job.declaredQuantity,
+    declaredQuantityUnit: job.declaredQuantityUnit,
+    fertiliserPlanId: job.fertiliserPlanId,
+    fertiliserPlanName: job.fertiliserPlanName,
+    fertiliserApplicationId: job.fertiliserApplicationId,
+    chemicalRecordId: job.chemicalRecordId,
+    chemicalName: job.chemicalName,
+    notWorking: job.notWorking,
+    status: job.status,
+    withdrawnReason: job.withdrawnReason,
+  };
+}
+
+async function insertVersion(tx: OrgTx, jobId: string, version: number, change: JobChangeKind, details: JobSnapshot, reason: string | null): Promise<void> {
+  await tx.query("insert into tractor_job_versions (job_id, version, change, details, reason, entered_by_user_id, entered_by_email) values ($1, $2, $3, $4::jsonb, $5, $6, $7)", [
+    jobId,
+    version,
+    change,
+    JSON.stringify(details),
+    reason,
+    tx.actor.userId,
+    tx.actor.email,
+  ]);
+}
+
+/** Every version, oldest first, with what changed. Without `withLinks`, fertiliser plan links are left out (decision 1025). */
+async function jobHistory(tx: OrgTx, jobId: string, withLinks: boolean): Promise<JobVersion[]> {
+  const rows = await tx.query<{ version: number; change: JobChangeKind; details: JobSnapshot; reason: string | null; entered_by_email: string; entered_at: string }>(
+    `select version, change, details, reason, entered_by_email, to_char(entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as entered_at
+       from tractor_job_versions where job_id = $1 order by tractor_job_versions.version`,
+    [jobId],
+  );
+  // Versions from before version history started have ids only: name them as they're called now.
+  const unnamed = [...new Set(rows.rows.filter((row) => !row.details.paddockNames).flatMap((row) => row.details.paddockIds))];
+  const names = await paddockNames(tx, unnamed);
+  const versions: JobVersion[] = [];
+  for (const row of rows.rows) {
+    const details: JobSnapshot = { ...row.details, notWorking: row.details.notWorking ?? [] };
+    if (!details.paddockNames) details.paddockNames = details.paddockIds.map((id) => names.get(id) ?? `#${id}`).sort(NATURAL.compare);
+    if (details.chemicalRecordId && details.chemicalName === undefined) details.chemicalName = (await namesFor(tx, details.chemicalRecordId, null)).chemicalName;
+    if (details.fertiliserPlanId && details.fertiliserPlanName === undefined) details.fertiliserPlanName = (await namesFor(tx, null, details.fertiliserPlanId)).planName;
+    if (!withLinks) Object.assign(details, { fertiliserPlanId: null, fertiliserPlanName: null, fertiliserApplicationId: null });
+    const before = versions.at(-1)?.details;
+    versions.push({
+      version: row.version,
+      change: row.change,
+      changeLabel: JOB_CHANGE_LABELS[row.change],
+      enteredAt: row.entered_at,
+      enteredByEmail: row.entered_by_email,
+      reason: row.reason,
+      details,
+      changes: before ? jobChanges(before, details, { withLinks }) : [],
+    });
+  }
+  return versions;
+}
+
+async function namesFor(tx: OrgTx, chemicalId: string | null, planId: string | null): Promise<{ chemicalName: string | null; planName: string | null }> {
+  let chemicalName: string | null = null;
+  if (chemicalId) {
+    try {
+      chemicalName = (await currentRecord<{ name: string }>(tx, "chemical", chemicalId)).data.name;
+    } catch {
+      chemicalName = null;
+    }
+  }
+  const plan = planId ? await tx.query<{ name: string }>("select name from fertiliser_plans where id = $1", [planId]) : null;
+  return { chemicalName, planName: plan?.rows[0]?.name ?? null };
+}
+
 /**
  * Changes a saved job's paddocks, notes, declared product, rate and
- * quantity, links, or withdraws it (`withdraw: "why"`). New paddocks clip
- * the same track to their current boundaries; the track never changes.
+ * quantity, links, times marked not working (`notWorking`: from, to, why),
+ * or withdraws it (`withdraw: "why"`). New paddocks clip the same track to
+ * their current boundaries; otherwise the boundary versions it was clipped
+ * to stay. The track never changes.
+ *
+ * Each change is a new version with who and when (decision 1100). One that
+ * replaces or removes something already entered is a correction and needs
+ * `reason` (decision 1101). A change that changes nothing adds no version.
  */
 export async function changeTractorJob(tx: OrgTx, idInput: unknown, input: Record<string, unknown>): Promise<TractorJob> {
   const job = await getTractorJob(tx, idInput);
   if (!job.canChange) throw new ForbiddenError("Only the person who drove it, or a bookkeeper or above, can change this job.");
   if (job.status === "withdrawn") throw new ValidationError("This job was withdrawn, so it can't be changed.");
   const row = await tx.query<{ fertiliser_plan_id: string | null; fertiliser_application_id: string | null }>("select fertiliser_plan_id::text, fertiliser_application_id::text from tractor_jobs where id = $1 for update", [job.id]);
+  const last = await tx.query<{ version: number }>("select coalesce(max(version), 0)::int as version from tractor_job_versions where job_id = $1", [job.id]);
   const links = await checkLinks(tx, job.farmId, input, { plan: row.rows[0].fertiliser_plan_id, application: row.rows[0].fertiliser_application_id, chemical: job.chemicalRecordId });
   const typed = declared(input, { product: job.product, rate: job.declaredRate, rateUnit: job.declaredRateUnit, quantity: job.declaredQuantity, quantityUnit: job.declaredQuantityUnit });
   const notes = input.notes !== undefined ? optionalString(input.notes, "Notes", { maxLength: 2000 }) : job.notes;
+  let notWorking = job.notWorking;
+  if (input.notWorking !== undefined) {
+    try {
+      notWorking = checkNotWorking(input.notWorking, job);
+    } catch (error) {
+      throw new ValidationError(error instanceof Error ? error.message : String(error));
+    }
+  }
+  const reason = optionalString(input.reason, "Why it's being corrected", { maxLength: 1000 });
   let paddockIds = job.paddockIds;
-  let boundaryIds = job.boundaries.map((entry) => entry.boundaryId);
+  let boundaries = job.boundaries;
   let summary = job.summary;
   let coverage = job.coverage;
   const repaddock = input.paddockIds !== undefined;
   if (repaddock) {
     paddockIds = await paddocksOnFarm(tx, job.farmId, input.paddockIds);
-    const boundaries = await currentBoundaries(tx, paddockIds);
-    boundaryIds = boundaries.map((entry) => entry.boundaryId);
-    const result = computeCoverage(toCoverageTrack(job.track), boundaries.map((entry) => entry.geometry));
-    ({ summary, ...coverage } = result);
+    boundaries = await currentBoundaries(tx, paddockIds);
+  }
+  if (repaddock || JSON.stringify(notWorking) !== JSON.stringify(job.notWorking)) {
+    ({ summary, ...coverage } = computeCoverage(correctedTrack(job.track, notWorking), boundaries.map((entry) => entry.geometry)));
   }
   const withdraw = input.withdraw !== undefined ? requireString(input.withdraw, "Why it's withdrawn", { maxLength: 1000 }) : null;
+  const names = await namesFor(tx, links.chemical, links.plan);
+  const paddockNamesNow = await paddockNames(tx, paddockIds);
+  // What it says now, from the job itself (plan links included, whoever is asking).
+  const planNow = await namesFor(tx, null, row.rows[0].fertiliser_plan_id);
+  const before: JobSnapshot = { ...snapshotOf(job), fertiliserPlanId: row.rows[0].fertiliser_plan_id, fertiliserApplicationId: row.rows[0].fertiliser_application_id, fertiliserPlanName: planNow.planName };
+  const after: JobSnapshot = {
+    paddockIds,
+    paddockNames: paddockIds.map((id) => paddockNamesNow.get(id) ?? `#${id}`).sort(NATURAL.compare),
+    boundaryIds: boundaries.map((entry) => entry.boundaryId),
+    summary,
+    notes,
+    product: typed.product,
+    declaredRate: typed.rate,
+    declaredRateUnit: typed.rateUnit,
+    declaredQuantity: typed.quantity,
+    declaredQuantityUnit: typed.quantityUnit,
+    fertiliserPlanId: links.plan,
+    fertiliserPlanName: names.planName,
+    fertiliserApplicationId: links.application,
+    chemicalRecordId: links.chemical,
+    chemicalName: names.chemicalName,
+    notWorking,
+    status: withdraw ? "withdrawn" : "active",
+    withdrawnReason: withdraw,
+  };
+  const changed = jobChanges(before, after);
+  if (!changed.length && !withdraw) return job;
+  const corrected = correctionFields(before, after);
+  if (corrected.length && !withdraw && !reason) throw new ValidationError(`Say why it's being corrected: ${corrected.join(", ").toLowerCase()} already had something entered. The earlier version is kept.`);
   await tx.query(
     `update tractor_jobs set paddock_ids = $2::bigint[], boundary_ids = $3::bigint[], summary = $4::jsonb, coverage = $5::jsonb, worked_ha = round($6::numeric, 2), notes = $7,
             fertiliser_plan_id = $8, fertiliser_application_id = $9, chemical_record_id = $10, product = $11, declared_rate = $12, declared_rate_unit = $13,
-            declared_quantity = $14, declared_quantity_unit = $15, status = $16, withdrawn_reason = $17, updated_by_email = $18, updated_at = now()
+            declared_quantity = $14, declared_quantity_unit = $15, status = $16, withdrawn_reason = $17, updated_by_email = $18, updated_at = now(), not_working = $19::jsonb
       where id = $1`,
     [
       job.id,
       paddockIds,
-      boundaryIds,
+      after.boundaryIds,
       JSON.stringify(summary),
       JSON.stringify(coverage),
       summary.workedHa,
@@ -575,16 +723,20 @@ export async function changeTractorJob(tx: OrgTx, idInput: unknown, input: Recor
       typed.rateUnit,
       typed.quantity,
       typed.quantityUnit,
-      withdraw ? "withdrawn" : "active",
+      after.status,
       withdraw,
       tx.actor.email,
+      JSON.stringify(notWorking),
     ],
   );
+  const version = last.rows[0].version + 1;
+  const kind: JobChangeKind = withdraw ? "withdrawn" : corrected.length ? "corrected" : "changed";
+  await insertVersion(tx, job.id, version, kind, after, withdraw ?? reason);
   await writeAuditEvent(tx, {
-    eventType: withdraw ? "farming.tractor_job_withdrawn" : "farming.tractor_job_changed",
+    eventType: withdraw ? "farming.tractor_job_withdrawn" : kind === "corrected" ? "farming.tractor_job_corrected" : "farming.tractor_job_changed",
     entityType: "tractor_job",
     entityId: job.id,
-    details: { paddockIds: repaddock ? paddockIds : undefined, workedHa: repaddock ? summary.workedHa : undefined, why: withdraw ?? undefined },
+    details: { version, changed: changed.map((entry) => entry.label), paddockIds: repaddock ? paddockIds : undefined, workedHa: summary.workedHa !== job.summary.workedHa ? summary.workedHa : undefined, why: withdraw ?? reason ?? undefined },
   });
   return getTractorJob(tx, job.id);
 }

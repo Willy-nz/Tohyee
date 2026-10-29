@@ -5,7 +5,9 @@ import * as jobsRoute from "@/app/api/farming/tractor/jobs/route";
 import * as jobRoute from "@/app/api/farming/tractor/jobs/[jobId]/route";
 import * as exportRoute from "@/app/api/farming/tractor/jobs/[jobId]/export/route";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import { coreQuery } from "@/lib/db/transactions";
+import { EARLIER_EDITS_NOT_RECORDED } from "@/lib/farming/tractor-shared";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { setMemberFarmAccess } from "@/lib/farming/access";
 import { localProjection } from "@/lib/farming/coverage";
@@ -229,10 +231,117 @@ describeWithDatabase("tractor mode jobs", () => {
     expect(gpx.headers.get("content-disposition")).toContain("tractor-2026-10-28-spreading.gpx");
   });
 
+  it("a wrong quantity corrected keeps the original, the reason, who and Tohyee's time, in the history and every export (#491)", async () => {
+    // Bookkeeper entered 5 t above; it was really 0.5 t, in the wrong units: 500 kg.
+    const noReason = await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { declaredQuantity: "500", declaredQuantityUnit: "kg" });
+    expect(noReason.status).toBe(400);
+    expect(String(noReason.body.error ?? JSON.stringify(noReason.body))).toMatch(/why it's being corrected/i);
+    const before = Date.now();
+    const fixed = await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { declaredQuantity: "500", declaredQuantityUnit: "kg", reason: "Typed tonnes instead of kilograms" });
+    expect(fixed.status).toBe(200);
+    const job = fixed.body.job as TractorJob;
+    expect(job.declaredQuantity).toBe("500");
+    expect(job.historyComplete).toBe(true);
+    const last = job.history.at(-1)!;
+    expect(last).toMatchObject({ change: "corrected", reason: "Typed tonnes instead of kilograms", enteredByEmail: "tractor-staff@example.com" });
+    expect(last.changes).toEqual([{ field: "quantity", label: "Quantity (entered)", from: "5 t", to: "500 kg" }]);
+    // Tohyee's time, not the phone's.
+    expect(Date.parse(last.enteredAt)).toBeGreaterThanOrEqual(Math.floor(before / 1000) * 1000 - 1000);
+    // The first version is the job as the phone sent it.
+    expect(job.history[0]).toMatchObject({ version: 1, change: "saved", enteredByEmail: "tractor-staff@example.com" });
+    expect(job.history[0].details.declaredQuantity).toBeNull();
+    // Farm staff don't see the plan link in the history either.
+    expect(job.history.some((version) => version.details.fertiliserPlanId !== null)).toBe(false);
+    expect(job.history.flatMap((version) => version.changes).some((change) => change.field === "plan")).toBe(false);
+    const forBooks = (await call(bookkeeper, jobRoute.GET as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job })).body.job as TractorJob;
+    expect(forBooks.history.flatMap((version) => version.changes).some((change) => change.field === "plan")).toBe(true);
+    // A change that changes nothing adds no version.
+    const same = await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { declaredQuantity: "500", declaredQuantityUnit: "kg" });
+    expect((same.body.job as TractorJob).history).toHaveLength(job.history.length);
+    // Exports carry it.
+    const geo = (await call(viewer, exportRoute.GET as Handler, `/api/farming/tractor/jobs/${w.job}/export?format=geojson`, { jobId: w.job })).body as { tohyee: { history: Array<{ reason: string | null; changes: Array<{ what: string; from: string; to: string }> }>; scope: string[]; historyComplete: boolean } };
+    expect(geo.tohyee.history.at(-1)).toMatchObject({ reason: "Typed tonnes instead of kilograms", changes: [{ what: "Quantity (entered)", from: "5 t", to: "500 kg" }] });
+    expect(geo.tohyee.scope.join(" ")).toMatch(/Corrected after it was saved/);
+    const gpx = String((await call(viewer, exportRoute.GET as Handler, `/api/farming/tractor/jobs/${w.job}/export?format=gpx`, { jobId: w.job })).body.text);
+    expect(gpx).toContain("Typed tonnes instead of kilograms");
+    expect(gpx).toContain("5 t → 500 kg");
+    const summary = await call(viewer, exportRoute.GET as Handler, `/api/farming/tractor/jobs/${w.job}/export?format=summary`, { jobId: w.job });
+    expect(summary.headers.get("content-type")).toContain("text/plain");
+    expect(String(summary.body.text)).toContain("Quantity (entered): 5 t → 500 kg");
+    expect(String(summary.body.text)).toContain("Entered by a person (not measured)");
+    // Versions can't be changed or deleted, even directly.
+    await expect(inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query("update tractor_job_versions set reason = 'x' where job_id = $1", [w.job]))).rejects.toThrow();
+    await expect(inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query("delete from tractor_job_versions where job_id = $1", [w.job]))).rejects.toThrow();
+  });
+
+  it("a corrected note keeps what it said before; adding a first note needs no reason", async () => {
+    const first = await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notes: "Spread along the creek paddock" });
+    expect(first.status).toBe(200);
+    expect((first.body.job as TractorJob).history.at(-1)!.change).toBe("changed");
+    expect((await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notes: "Kept 20 m back from the creek" })).status).toBe(400);
+    const corrected = (await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notes: "Kept 20 m back from the creek", reason: "First note was unclear" })).body.job as TractorJob;
+    expect(corrected.history.at(-1)!.changes).toEqual([{ field: "notes", label: "Notes", from: "Spread along the creek paddock", to: "Kept 20 m back from the creek" }]);
+  });
+
+  it("forgot Working OFF: a time marked not working comes out of the estimate; the track and the first estimate stay", async () => {
+    const before = (await call(worker, jobRoute.GET as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job })).body.job as TractorJob;
+    // The last 25 seconds of the run (x 50 to 100) were the drive back: half of it inside paddock 1 (x 25 to 75).
+    const marked = await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notWorking: [{ from: START + 25_000, to: START + 50_000, why: "Driving back to the gate, spinner off" }] });
+    expect(marked.status).toBe(200);
+    const job = marked.body.job as TractorJob;
+    expect(job.track).toEqual(before.track);
+    expect(job.track.points.every((point) => point[4] === 1)).toBe(true);
+    expect(job.summary.workedHa).toBeLessThan(before.summary.workedHa);
+    expect(job.firstSummary?.workedHa).toBeCloseTo(0.05, 3);
+    expect(job.boundaries.map((entry) => entry.boundaryId)).toEqual(before.boundaries.map((entry) => entry.boundaryId));
+    expect(job.history.at(-1)!.change).toBe("changed");
+    expect(job.history.at(-1)!.changes.map((change) => change.field)).toEqual(expect.arrayContaining(["notWorking", "estimate"]));
+    // Outside the job's times, or without why, is refused.
+    expect((await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notWorking: [{ from: START - 600_000, to: START, why: "x" }] })).status).toBe(400);
+    expect((await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notWorking: [{ from: START, to: START + 1000, why: "" }] })).status).toBe(400);
+    // Removing it is a correction: it needs why.
+    expect((await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notWorking: [] })).status).toBe(400);
+    const geo = (await call(viewer, exportRoute.GET as Handler, `/api/farming/tractor/jobs/${w.job}/export?format=geojson`, { jobId: w.job })).body as { tohyee: { markedNotWorking: unknown[]; estimatedAsFirstSaved: { workedHa: number }; recordNote: string }; features: Array<{ properties: { layer: string; working?: boolean; workingFrom?: string } }> };
+    expect(geo.tohyee.markedNotWorking).toHaveLength(1);
+    expect(geo.tohyee.estimatedAsFirstSaved.workedHa).toBeCloseTo(0.05, 3);
+    expect(geo.tohyee.recordNote).toMatch(/not a finding/);
+    // The track in the export is Working as switched: all ON.
+    expect(geo.features.filter((feature) => feature.properties.layer === "track").every((feature) => feature.properties.working === true && feature.properties.workingFrom === "operator switch")).toBe(true);
+  });
+
+  it("jobs from before version history: an unchanged one is as saved; a changed one says earlier edits weren't recorded, and nothing is made up", async () => {
+    const migration = tenantMigrations.find((entry) => entry.version === "0205")!.sql;
+    const backfill = migration.slice(migration.indexOf("insert into tractor_job_versions"), migration.indexOf("-- From here the time"));
+    const unchanged = "5f8f4f9e-3d1c-4b7a-9c55-1f2e3d4c5b6a";
+    const changed = "6a8f4f9e-3d1c-4b7a-9c55-1f2e3d4c5b6a";
+    await inOrganisation(ORG, { userId: owner.id, email: owner.email }, async (tx) => {
+      // Copies of a job as they'd have been before this version: no versions kept.
+      await tx.query("create temp table old_jobs on commit drop as select * from tractor_jobs where id = $1", [w.job]);
+      await tx.query("update old_jobs set id = $1, status = 'active', withdrawn_reason = null, updated_at = null, updated_by_email = null, notes = null", [unchanged]);
+      await tx.query("insert into tractor_jobs select * from old_jobs");
+      await tx.query("update old_jobs set id = $1, updated_at = now(), updated_by_email = 'tractor-staff@example.com', notes = 'Changed once'", [changed]);
+      await tx.query("insert into tractor_jobs select * from old_jobs");
+      await tx.query(backfill);
+    });
+    const a = (await call(worker, jobRoute.GET as Handler, `/api/farming/tractor/jobs/${unchanged}`, { jobId: unchanged })).body.job as TractorJob;
+    expect(a.historyComplete).toBe(true);
+    expect(a.history).toHaveLength(1);
+    expect(a.history[0]).toMatchObject({ change: "saved", enteredByEmail: "tractor-staff@example.com" });
+    const b = (await call(worker, jobRoute.GET as Handler, `/api/farming/tractor/jobs/${changed}`, { jobId: changed })).body.job as TractorJob;
+    expect(b.historyComplete).toBe(false);
+    expect(b.firstSummary).toBeNull();
+    expect(b.history).toHaveLength(1);
+    expect(b.history[0]).toMatchObject({ change: "before_history", enteredByEmail: "Tohyee (when version history started)" });
+    expect(b.history[0].details.notes).toBe("Changed once");
+    const text = String((await call(viewer, exportRoute.GET as Handler, `/api/farming/tractor/jobs/${changed}/export?format=summary`, { jobId: changed })).body.text);
+    expect(text).toContain(EARLIER_EDITS_NOT_RECORDED);
+  });
+
   it("withdrawing keeps the job, with why", async () => {
     const withdrawn = await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { withdraw: "Test run, not a real job" });
     expect(withdrawn.status).toBe(200);
     expect(withdrawn.body.job).toMatchObject({ status: "withdrawn", withdrawnReason: "Test run, not a real job" });
+    expect((withdrawn.body.job as TractorJob).history.at(-1)).toMatchObject({ change: "withdrawn", reason: "Test run, not a real job" });
     expect((await call(worker, jobRoute.PATCH as Handler, `/api/farming/tractor/jobs/${w.job}`, { jobId: w.job }, "PATCH", { notes: "again" })).status).toBe(400);
   });
 });

@@ -16,6 +16,7 @@ import {
   type EmergencyData,
   enteredLate,
   FIXED_NUMBERS,
+  HASH_LIMITS,
   HAZARD_LEVEL_LABELS,
   HAZARD_LEVELS,
   type HazardData,
@@ -26,6 +27,10 @@ import {
   reviewOverdue,
   type SafetyAccess,
   type SafetyVersion,
+  SENT_MEANS,
+  WEEKLY_COPY_INCLUDES,
+  WEEKLY_COPY_KEPT,
+  WEEKLY_COPY_LEAVES_OUT,
   WORKSAFE_NOTIFY_URL,
 } from "@/lib/safety/shared";
 
@@ -782,19 +787,27 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
     <>
       <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "16px 0 4px" }}>Weekly copy off the farm</h3>
       <p className={ui.muted} style={{ marginTop: 0 }}>
-        Each week, a PDF of what was entered and the latest entry&apos;s number and hash are emailed to addresses you choose, through this organisation&apos;s email. Kept where Tohyee can&apos;t change it, it shows later whether the history was rewritten. Injury and medical details are never in it.
+        Each week, a PDF of what was entered and the latest entry&apos;s number and hash are emailed to addresses you choose, through this organisation&apos;s email. Kept where Tohyee can&apos;t change it, it shows later whether the history was rewritten.
       </p>
+      <WeeklyCopyContents />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="info">{message}</Notice> : null}
       {settings.lastProblem ? <Notice tone="warning">The last copy wasn&apos;t sent ({settings.lastAttemptAt ? formatDateTime(settings.lastAttemptAt) : ""}): {settings.lastProblem}</Notice> : null}
-      <p>
-        {settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? `to ${settings.toAddresses.join(", ")}` : "No copy is sent."}
-      </p>
+      <p style={{ marginBottom: 4 }}>{settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? "Goes to:" : "No copy is sent."}</p>
+      {settings.on ? (
+        <ul style={{ paddingLeft: 18, marginTop: 0, overflowWrap: "anywhere" }} aria-label="Who gets the weekly copy">
+          {settings.toAddresses.map((address) => (
+            <li key={address}>{address}</li>
+          ))}
+        </ul>
+      ) : null}
+      <p className={ui.muted}>{WEEKLY_COPY_KEPT}</p>
+      {copies.length ? <p className={ui.muted} style={{ marginBottom: 4 }}>{SENT_MEANS}</p> : null}
       {copies.length ? (
         <ul style={{ paddingLeft: 18, marginTop: 0 }}>
           {copies.slice(0, 5).map((copy) => (
             <li key={copy.id} style={{ overflowWrap: "anywhere" }}>
-              Sent {formatDateTime(copy.sentAt)}: {copy.entries} entries ({formatDate(copy.periodFrom)} to {formatDate(copy.periodTo)}){copy.headSeq ? `; latest entry ${copy.headSeq}, hash ${copy.headHash}` : ""}
+              Sent {formatDateTime(copy.sentAt)} to {copy.toAddresses.join(", ")}: {copy.entries} entries ({formatDate(copy.periodFrom)} to {formatDate(copy.periodTo)}){copy.headSeq ? `; latest entry ${copy.headSeq}, hash ${copy.headHash}` : ""}
             </li>
           ))}
         </ul>
@@ -805,7 +818,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
             {settings.on ? "Change" : "Set up the weekly copy"}
           </Button>
           {settings.on ? (
-            <Button variant="secondary" size="small" disabled={busy} onClick={() => void run(() => api<{ sent: { headSeq: string | null } | null; problem: string | null }>("/api/farming/safety/weekly-copy/send", { method: "POST", body: { organisationId } }), (result) => { setMessage(result.sent ? `Sent: the mail server accepted it${result.sent.headSeq ? ` (latest entry ${result.sent.headSeq})` : ""}.` : `Not sent: ${result.problem ?? "nothing to send"}`); data.reload(); })}>
+            <Button variant="secondary" size="small" disabled={busy} onClick={() => void run(() => api<{ sent: { headSeq: string | null } | null; problem: string | null }>("/api/farming/safety/weekly-copy/send", { method: "POST", body: { organisationId } }), (result) => { setMessage(result.sent ? `Sent: the mail server accepted it${result.sent.headSeq ? ` (latest entry ${result.sent.headSeq})` : ""}. Tohyee can't tell whether anyone has read it.` : `Not sent: ${result.problem ?? "nothing to send"}`); data.reload(); })}>
               {busy ? "Sending…" : "Send a copy now"}
             </Button>
           ) : null}
@@ -819,6 +832,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
           <Field label="Send it to" hint="Addresses off the farm, separated by commas: your own personal email, your accountant. Up to 10.">
             <input value={form.toAddresses} maxLength={2000} onChange={(event) => setForm({ ...form, toAddresses: event.target.value })} />
           </Field>
+          <p className={ui.muted}>{WEEKLY_COPY_KEPT}</p>
           <div className={ui.actions}>
             <Button type="submit" disabled={busy}>
               Save
@@ -830,6 +844,26 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
         </form>
       ) : null}
     </>
+  );
+}
+
+/** What the weekly copy has in it and leaves out (decision 1108). */
+function WeeklyCopyContents() {
+  return (
+    <details style={{ margin: "4px 0 8px" }}>
+      <summary>What&apos;s in it</summary>
+      <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
+        {WEEKLY_COPY_INCLUDES.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <p style={{ margin: "4px 0 0" }}>Left out:</p>
+      <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
+        {WEEKLY_COPY_LEAVES_OUT.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -848,7 +882,10 @@ export function RecordsCard({ organisationId, farm }: { organisationId: string; 
     );
   const packUrl = `/api/farming/safety/pack?${new URLSearchParams({ organisationId, from: range.from, to: range.to, ...(range.scope === "farm" ? { farmId: farm.id } : {}) }).toString()}`;
   return (
-    <Card title="Records that stand up" description="Every safety record is dated by Tohyee when it's entered, never changed or deleted (a change or correction is a new version), and chained by hash, so a change made behind Tohyee's back shows up here.">
+    <Card title="Records and their history" description="Every safety record is dated by Tohyee when it's entered, never changed or deleted (a change or correction is a new version that keeps the earlier one), and chained by hash, so a change made behind Tohyee's back shows up here.">
+      <p className={ui.muted} style={{ marginTop: 0 }}>
+        {HASH_LIMITS}
+      </p>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
         <Button variant="secondary" disabled={busy} onClick={() => check(false)}>

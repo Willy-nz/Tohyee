@@ -10122,3 +10122,105 @@ with credit and a link to the licence.
       Imagery Basemap contributors" with links (as before), on the map
       whenever photos show, including kept copies offline, and on the
       Offline page.
+
+### Records say what's known: tractor job history and safety wording (#491; decisions 1100-1109)
+
+William asked for #491 after reviewing whether records could add to the
+farm's exposure after an incident. The aim is accurate, complete and
+understandable records, not hiding or deleting anything, and nothing here
+claims to protect anyone. Jess hasn't answered the issue; Xero and NetSuite
+have nothing like it, so this follows the issue's text and is **not yet
+reviewed**. Two checks need people, not code: a farm operator should go
+through the screens and exports, and an NZ environmental lawyer should look
+at any effluent compliance, retention or reporting claim against the farm's
+consent before one is made (none is made here).
+
+Already met on main before this (checked 29 October 2026): safety records
+are versioned and append-only, with the database's entry time
+(`src/lib/safety/records.ts`); a failed critical pre-start check puts
+equipment out of use until a person allowed releases it, and a report never
+changes that (`src/lib/safety/equipment.ts`, decision 955); actions go
+Open, Done (to check), Checked and closed, and a report closes only once
+every action is checked (`src/lib/safety/reports.ts`); work kept on a phone
+says "Nobody has been told yet" until sent (`src/lib/offline/queue.ts`);
+tractor screens and exports carry the phone GPS notice and mark entered
+values as not measured (`TRACTOR_NOTICE`); the WorkSafe pack labels its
+farms and dates, withholds restricted details and says what its hash can't
+prove (`src/lib/safety/pack.ts`); the weekly copy never has injury or
+medical details (decision 958); and nothing tells a council, supplier or
+WorkSafe by itself (decision 943).
+
+1100. **Every version of a tractor job's details is kept.** A job's
+      paddocks, the paddock boundary versions its estimate was clipped to,
+      the estimate's summary, notes, entered product, rate, quantity and
+      units, chemical and plan links, times marked not working, and
+      withdrawal are copied into a new row of `tractor_job_versions`
+      (tenant migration 0205) each time they change, with who and the
+      database's time. Rows can't be changed or deleted. A save that
+      changes nothing adds none. The job's review shows a **History** card
+      (each version, who, when, why, and each change as earlier → new); the
+      GeoJSON, GPX and the new plain-text **Summary** export carry the same
+      history. Farm staff don't see fertiliser plan links in it, as on the
+      job (decision 1025).
+1101. **A correction needs why.** Changing or removing something already
+      entered (paddocks, product, rate, quantity or their units, chemical,
+      notes, a time marked not working) is a "Corrected" version and needs
+      a reason; filling in a blank, adding a time marked not working (each
+      has its own why), or linking a plan doesn't. Like Xero's history and
+      notes: the earlier value stays visible, nothing is overwritten.
+1102. **"Working was left ON" is a note on the estimate, not a new track.**
+      Someone who forgot Working OFF marks a time (phone times, inside the
+      job) as not working, with why. The estimate is worked out again from
+      the same track with those fixes counted as OFF; the track, Working as
+      switched, the settings used and the boundary versions stay as they
+      were. The review says the estimate was corrected and gives the
+      estimate as first saved; exports list the times marked and keep the
+      track's Working flags as switched.
+1103. **Older jobs aren't given an invented history.** When the version
+      table arrived, a job never changed since it was saved gets its first
+      version as saved (its own received time and operator). A job already
+      changed gets one version dated the upgrade, by "Tohyee (when version
+      history started)", and shows **Earlier edits not recorded** on the
+      review and in every export: what it said before isn't known.
+1104. **What a tractor record establishes is said beside it.** Screens and
+      exports add: Working ON and OFF are the operator's switch, not a
+      sensor; product, rate and quantity were entered; a track near water,
+      a boundary or a no-go zone is a phone position, not a finding that
+      anything was spread or discharged. Exports also say what they cover
+      (one job, phone and Tohyee times) and leave out (paddock shapes, other
+      jobs, Safety, the books), whether it's withdrawn, and whether it was
+      corrected.
+1105. **A safety report or pre-start check saved offline keeps both
+      times.** The phone's time it was saved goes with it (as a visit's
+      already did, decision 1014) and shows as "Saved on a phone … (the
+      phone's clock); reached Tohyee …. Until then only that phone had it."
+      The entry time stays the database's. A phone clock in the future or
+      more than 90 days back is left out rather than the report refused.
+      Equipment is out of use from when the failed check reached Tohyee; the
+      phone still says "don't use it" from the moment it's saved there.
+1106. **Recording isn't telling.** Tohyee sends no message about a safety
+      record and can't know who has read one, so screens say so: a synced
+      report or failed check says Tohyee doesn't send a message and to tell
+      whoever needs to know; actions say assigning one shows on that
+      person's Today list but doesn't show they've seen it; a weekly copy's
+      "sent" means the mail server accepted it, not that anyone read it.
+      There is no "acknowledged" status, because nothing measures one.
+1107. **A report is someone's account until something is done and
+      checked.** No new statuses (the existing ones already separate
+      reported, done and checked): an open report with no actions reads
+      "Reported, nothing done yet", and one whose actions are all checked
+      reads "Actions checked, to close". Each report says it's the
+      reporter's account as entered, and that Tohyee doesn't decide what
+      happened or whether a rule was broken.
+1108. **The weekly copy says who gets it, what's in it, and that they keep
+      it.** Settings list each address, what's included (every record with
+      a new entry, with its full history, sign-ins with the names and phone
+      numbers given) and left out (injury and medical details; photos
+      themselves), and that each address keeps its own copy outside Tohyee,
+      even after it's removed. The email says who it went to.
+1109. **No claim of proof or privilege.** Beside the history check, in the
+      WorkSafe pack and in the weekly copy: a matching hash shows the
+      history wasn't rewritten after that point, not that a record is true
+      or complete; keeping records in Tohyee, self-hosted or encrypted,
+      doesn't make them legally privileged. The Safety card "Records that
+      stand up" is now "Records and their history".

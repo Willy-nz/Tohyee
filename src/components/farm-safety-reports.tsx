@@ -18,20 +18,24 @@ import {
   ACTION_STATE_LABELS,
   type ActionData,
   actionState,
+  ASSIGNED_NOT_TOLD,
   type CurrentRecord,
   FIXED_NUMBERS,
   mayBeNotifiable,
   NOTIFIABLE_QUESTIONS,
   notifiableKeepText,
   type NotifiableAnswers,
+  NOBODY_MESSAGED,
   type Position,
-  REPORT_STATE_LABELS,
   REPORT_TYPE_LABELS,
+  REPORTED_ACCOUNT,
+  reportStateText,
   type ReportType,
   type SafetyAccess,
   SEVERITIES,
   SEVERITY_LABELS,
   type Severity,
+  sentLaterText,
   SITE_EXCEPTIONS,
   WORKSAFE_NOTIFIABLE_GUIDE_URL,
   WORKSAFE_NOTIFY_URL,
@@ -301,13 +305,15 @@ export function ReportForm({ organisationId, farm, type, paddocks, people, onCan
       files: photos.map((file) => ({ id: file.id })),
       details: injured ? { ...details, files: detailPhotos.map((file) => ({ id: file.id })) } : undefined,
       action: action.title ? { title: action.title, assignedToUserId: action.assignedToUserId || null, assignedToName: action.assignedToUserId ? null : action.assignedToName || null, due: action.due || null } : undefined,
+      // When it was saved here: if it waits for a connection, both times show (#491).
+      phoneTime: new Date().toISOString(),
     };
     // Kept on this device first, then sent once (decisions 944 and 1010); photos still on the device go first.
     const refs = [...waitForFiles(photos, ["files"]), ...(injured ? waitForFiles(detailPhotos, ["details", "files"]) : [])];
     try {
       const outcome = await submitThroughQueue(queue, { operationId, kind: "safety.report", label: `${REPORT_TYPE_LABELS[type]}: ${form.title}`, farmId: farm.id, farmName: farm.name, request: { method: "POST", path: "/api/farming/safety/reports", body, refs } });
       memory.clear(key);
-      if (outcome.state === "synced") onDone({ tone: "success", text: `Recorded for ${farm.name}.${notifiable ? " Tohyee hasn't told WorkSafe." : ""}`, notifiable });
+      if (outcome.state === "synced") onDone({ tone: "success", text: `Recorded for ${farm.name}. ${NOBODY_MESSAGED}${notifiable ? " Tohyee hasn't told WorkSafe." : ""}`, notifiable });
       else if (outcome.state === "waiting") onDone({ tone: "warning", text: `Saved on this device, waiting to send. Nobody has been told yet. It goes by itself when Tohyee can be reached.${notifiable ? " Tohyee never tells WorkSafe." : ""}`, notifiable });
       else onDone({ tone: "warning", text: "This device's storage wouldn't keep it. Keep Tohyee open until it shows Synced below, or write it down.", notifiable });
     } catch (caught) {
@@ -547,7 +553,7 @@ export function ReportsCard({
                 {report.data.title}
               </button>{" "}
               <Badge tone={report.data.type === "incident" ? "red" : report.data.type === "near_miss" ? "amber" : "neutral"}>{REPORT_TYPE_LABELS[report.data.type]}</Badge>{" "}
-              <Badge tone={report.state === "closed" ? "green" : report.state === "withdrawn" ? "neutral" : "blue"}>{REPORT_STATE_LABELS[report.state]}</Badge>
+              <Badge tone={report.state === "closed" ? "green" : report.state === "withdrawn" ? "neutral" : "blue"}>{reportStateText(report.state, report.actions)}</Badge>
               {report.mayBeNotifiable && !report.data.workSafeNotified ? (
                 <>
                   {" "}
@@ -601,6 +607,15 @@ function ReportDetail({ organisationId, report, access, people, paddockNames, on
     <div style={{ marginTop: 8 }}>
       <p style={{ margin: "4px 0" }}>
         <EnteredLine record={report} />
+        {sentLaterText(report.data.phoneTime, report.firstEnteredAt, formatDateTime) ? (
+          <>
+            <br />
+            <span className={ui.muted}>{sentLaterText(report.data.phoneTime, report.firstEnteredAt, formatDateTime)}</span>
+          </>
+        ) : null}
+      </p>
+      <p className={ui.muted} style={{ margin: "4px 0" }}>
+        {REPORTED_ACCOUNT}
       </p>
       <dl style={{ display: "grid", gridTemplateColumns: "minmax(100px, max-content) 1fr", gap: "2px 12px", margin: "6px 0" }}>
         {(
@@ -634,7 +649,7 @@ function ReportDetail({ organisationId, report, access, people, paddockNames, on
       {report.mayBeNotifiable && report.data.workSafeNotified ? <p className={ui.muted}>{notifiableKeepText(report.data.workSafeNotified, formatDate)}</p> : null}
 
       <h4 style={{ margin: "10px 0 4px" }}>Actions</h4>
-      {!report.actions.length ? <p className={ui.muted}>None yet.</p> : null}
+      {!report.actions.length ? <p className={ui.muted}>None yet.</p> : <p className={ui.muted} style={{ margin: "0 0 4px" }}>{ASSIGNED_NOT_TOLD}</p>}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {report.actions.map((each) => (
           <ActionRow key={each.recordId} organisationId={organisationId} action={each} access={access} people={people} onChanged={onChanged} />

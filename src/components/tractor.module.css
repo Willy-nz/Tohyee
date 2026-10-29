@@ -555,3 +555,17 @@
     gap: 0;
   }
 }
+
+/* A job's history (#491): versions, oldest first. */
+.history {
+  padding-left: 20px;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+
+.history ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

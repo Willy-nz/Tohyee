@@ -11,6 +11,7 @@ import {
   mayBeNotifiable,
   NOTIFIABLE_QUESTIONS,
   type NotifiableAnswers,
+  phoneTimeOrNull,
   REPORT_TYPES,
   type ReportData,
   type ReportDetailsData,
@@ -96,6 +97,9 @@ async function reportData(tx: OrgTx, farmId: string, input: ReportInput, previou
     closed: previous?.closed ?? null,
     files: await fileRefs(tx, input.files, farmId, false),
   };
+  // When it was first saved on a phone stays with the record through later versions (#491).
+  const phoneTime = previous ? (previous.phoneTime ?? null) : phoneTimeOrNull(input.phoneTime);
+  if (phoneTime) data.phoneTime = phoneTime;
   return data;
 }
 

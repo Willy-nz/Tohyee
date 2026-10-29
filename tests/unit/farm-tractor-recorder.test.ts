@@ -148,8 +148,13 @@ describe("tractor exports", () => {
     ]);
   });
 
+  // The fields an export needs besides the track (#491): no corrections, history complete.
+  const plain = { receivedAt: "2026-10-28T10:00:00Z", status: "active" as const, withdrawnReason: null, notWorking: [], history: [], historyComplete: true, firstSummary: null };
+
   it("GPX has one segment per unbroken piece and the notice", () => {
-    const gpx = jobGpx({ id: "x", operation: "spraying", startedAt: "2026-10-28T09:00:00Z", paddockNames: [], track });
+    const coverage = computeCoverage({ settings: [{ widthM: 10, lateralM: 0, backM: 0 }], points });
+    const { summary, ...rest } = coverage;
+    const gpx = jobGpx({ ...plain, id: "x", operation: "spraying", startedAt: "2026-10-28T09:00:00Z", finishedAt: "2026-10-28T09:10:00Z", operatorEmail: "a@example.com", equipmentName: null, paddockNames: [], summary, track, coverage: rest, product: null, declaredRate: null, declaredRateUnit: null, declaredQuantity: null, declaredQuantityUnit: null });
     expect(gpx.match(/<trkseg>/g)).toHaveLength(2);
     expect(gpx).toContain("Unassigned paddock");
     expect(gpx).toContain("<type>working</type>");
@@ -159,7 +164,7 @@ describe("tractor exports", () => {
   it("GeoJSON marks estimates as not measured and declared values as entered", () => {
     const coverage = computeCoverage({ settings: [{ widthM: 10, lateralM: 0, backM: 0 }], points });
     const { summary, ...rest } = coverage;
-    const geo = jobGeoJson({ id: "x", operation: "spreading", startedAt: "", finishedAt: "", operatorEmail: "a@example.com", equipmentName: null, paddockNames: [], summary, track, coverage: rest, product: "Urea", declaredRate: "100", declaredRateUnit: "kg/ha", declaredQuantity: null, declaredQuantityUnit: null });
+    const geo = jobGeoJson({ ...plain, id: "x", operation: "spreading", startedAt: "", finishedAt: "", operatorEmail: "a@example.com", equipmentName: null, paddockNames: [], summary, track, coverage: rest, product: "Urea", declaredRate: "100", declaredRateUnit: "kg/ha", declaredQuantity: null, declaredQuantityUnit: null });
     expect(geo.tohyee.declared).toEqual({ product: "Urea", rate: "100 kg/ha", quantity: null, note: "Entered by a person, not measured." });
     const worked = (geo.features as Array<{ properties: { layer: string; measured?: boolean } }>).find((feature) => feature.properties.layer === "worked");
     expect(worked?.properties.measured).toBe(false);
