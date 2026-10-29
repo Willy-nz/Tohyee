@@ -10178,3 +10178,43 @@ docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
       stream, a bore and a neighbour's house, and an ORC-template consent
       with made-up figures.
 
+### Farm dairy effluent: the daily log and ponds (#487 part 2; decisions 1080-1089)
+
+1080. **Depth as entered and as worked out, side by side.** A measured depth
+      is the person's; Tohyee works one out from the system's settings
+      (DairyNZ's staff guides: rate × time; flow ÷ width × speed; volume ÷
+      area) when the run is saved and keeps the settings used, so changing
+      them never rewrites an old run. Comparisons use the entered depth when
+      there is one.
+1081. **Times are the person's or phone's; entry times are the database's.**
+      Start, shift and stop times are as given (no more than 15 minutes
+      ahead of Tohyee's clock); each version is still dated by the database.
+1082. **Shift and stop work offline for a run started offline.** They go to
+      `POST /api/farming/effluent/applications/changes` with the run's id
+      taken from the first item's answer (the queue's refs), and the version
+      counted on the device; sending twice adds nothing.
+1083. **A system out of use can still be recorded running, marked.** Refusing
+      it would lose what happened; the run says "recorded while out of
+      use" and the comparison counts it.
+1084. **Pond storage is a guide.** Gauge to volume is taken as a straight
+      line (straight sides); the screen says so. High and low warnings are
+      the pond's own levels.
+1085. **Stopping needs the ponding and runoff check**, and ponding or runoff
+      needs what was seen and done. It prompts an incident and the consent's
+      council contact; Tohyee doesn't tell the council.
+1086. **Comparisons are counts in neutral words**, against the conditions as
+      entered; a limit not entered is "not compared". Buffers are checked
+      from positions placed on the map only (a point zone's distance, or the
+      distance to a drawn outline), so runs without positions aren't
+      checked for buffers. Days between applications use calendar days.
+1087. **Who corrects.** The person who entered a log record, or a bookkeeper
+      or above; Farm staff can't correct someone else's.
+1088. **Effluent goes on the device for offline use** (a new offline pack
+      section: the setup and the last 30 days of the log), and last moved
+      positions show on Farm › Map.
+1089. **The demo farm's last fortnight**: pods shifted twice a day round the
+      shed block, the travelling irrigator twice on one paddock a week apart
+      (counted as sooner than the consent's 10 days), a tanker run, a pond
+      reading each morning, two wet days stored, one run with a little
+      ponding, and the pods running today.
+

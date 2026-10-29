@@ -3032,6 +3032,13 @@ that something happened.
   history (versions, nothing deleted, corrections marked), but not in the
   WorkSafe pack. Tohyee never says a farm complies and never sends anything
   to a council. Not yet reviewed by Jess.
+  The **daily log** (farm staff and above, phone first, offline through the
+  queue): runs started, shifted and stopped with pod or irrigator positions
+  and times, photos with their time and place, the ponding and runoff check,
+  weather and soil; depth as entered beside depth worked out from the
+  system's settings; last moved on the map; pond readings with percent
+  full, storage and days left and high or low warnings; days not applied
+  and why; and counts against the consent's entered limits in neutral words.
 
 ## Not built yet, on purpose
 

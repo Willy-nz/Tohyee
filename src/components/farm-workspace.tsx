@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-log";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
@@ -22,6 +23,7 @@ import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { GrazingRecord, PastureReading } from "@/lib/farming/pasture";
 import { PASTURE_METHOD_LABELS } from "@/lib/farming/pasture-rules";
 import { todayInBrowser } from "@/lib/format";
+import { effluentHref } from "@/lib/effluent/screens";
 import { safetyHref } from "@/lib/safety/screens";
 import { type CurrentRecord, HAZARD_LEVEL_LABELS, type HazardData, hazardState } from "@/lib/safety/shared";
 import styles from "./farm-workspace.module.css";
@@ -296,6 +298,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const activeHazards = (hazards.data?.hazards ?? []).filter((hazard) => hazardState(hazard) === "active");
   // Hazards and no-go zones over the paddocks (#446): a tap opens that hazard in Safety.
   const overlays = hazardOverlays(activeHazards, (id) => router.push(safetyHref({ farmId: farm.id, screen: "hazards", hazard: id })));
+  // Where each effluent system's pods or irrigator were last moved (#487): a tap opens the irrigation log.
+  const effluent = useEffluentLog(organisationId, farm.id);
+  overlays.push(...lastMovedOverlays(effluent.data?.lastMoved ?? []).map((overlay) => ({ ...overlay, onSelect: () => router.push(effluentHref({ farmId: farm.id, screen: "log" })) })));
   return (
     <div className={styles.grid}>
       <Card

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { DateInput } from "@/components/date-input";
+import { LogScreen, PondsScreen, useEffluentLog } from "@/components/farm-effluent-log";
 import { newOperationId, SafetyHistory } from "@/components/farm-safety";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
 import { useApiData } from "@/components/hooks";
@@ -94,7 +95,15 @@ export function FarmEffluent({ organisationId, farm, link }: EffluentContext & {
   if (!link.screen) return <EffluentOverview organisationId={organisationId} farm={farm} />;
   return (
     <EffluentScreenFrame farm={farm} screen={link.screen}>
-      {link.screen === "setup" ? <SetupScreen organisationId={organisationId} farm={farm} /> : <Notice tone="info">This part of Effluent isn&apos;t built yet.</Notice>}
+      {link.screen === "setup" ? (
+        <SetupScreen organisationId={organisationId} farm={farm} />
+      ) : link.screen === "log" ? (
+        <LogScreen organisationId={organisationId} farm={farm} />
+      ) : link.screen === "ponds" ? (
+        <PondsScreen organisationId={organisationId} farm={farm} />
+      ) : (
+        <Notice tone="info">This part of Effluent isn&apos;t built yet.</Notice>
+      )}
     </EffluentScreenFrame>
   );
 }
@@ -120,19 +129,69 @@ export function EffluentScreenFrame({ farm, screen, children }: { farm: Farm; sc
 
 function EffluentOverview({ organisationId, farm }: EffluentContext) {
   const setup = useEffluentSetup(organisationId, farm.id);
+  const log = useEffluentLog(organisationId, farm.id);
   const data = setup.data;
   const systems = (data?.systems ?? []).filter((system) => !system.data.retired);
   const consent = data ? activeConsent(data.consents) : null;
+  const running = (log.data?.applications ?? []).filter((application) => application.running);
+  const ponds = log.data?.ponds ?? [];
   return (
     <div className={styles.overview}>
       <div className={styles.column}>
         {setup.error ? <Notice tone="error">{setup.error}</Notice> : null}
+        {data?.access.canLog && systems.length ? (
+          <nav aria-label="Everyday effluent" className={styles.bigActions}>
+            <Link className={styles.bigAction} href={effluentHref({ farmId: farm.id, screen: "log" })}>
+              <span className={styles.icon} aria-hidden="true">+</span>
+              <span>
+                Irrigation
+                <small>{running.length ? `${running.length} running: shift or stop` : "Start or record a run"}</small>
+              </span>
+            </Link>
+            <Link className={styles.bigAction} href={effluentHref({ farmId: farm.id, screen: "ponds" })}>
+              <span className={styles.icon} aria-hidden="true">≋</span>
+              <span>
+                Pond level
+                <small>{ponds.some((pond) => pond.latest?.state.warning === "high") ? "A pond is high" : ponds.length && ponds.every((pond) => pond.readToday) ? "Read today" : "Read the gauge"}</small>
+              </span>
+            </Link>
+          </nav>
+        ) : null}
+        {ponds.length ? (
+          <Card title="Ponds and sumps">
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {ponds.map((pond) => (
+                <li key={pond.recordId} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
+                  <strong>{pond.data.name}</strong>{" "}
+                  {pond.latest ? (
+                    <>
+                      {pond.latest.data.levelMm} mm{pond.latest.state.percentFull ? `, about ${pond.latest.state.percentFull}% full` : ""}
+                      {pond.latest.state.daysLeft ? `, about ${pond.latest.state.daysLeft} days of storage left` : ""}{" "}
+                      {pond.latest.state.warning === "high" ? <Badge tone="red">High</Badge> : pond.latest.state.warning === "low" ? <Badge tone="amber">Low</Badge> : null}
+                    </>
+                  ) : (
+                    <span className={ui.muted}>no reading yet</span>
+                  )}{" "}
+                  {!pond.readToday ? <Badge tone="amber">Not read today</Badge> : null}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
         <SystemsSummary farm={farm} systems={systems} loading={!data} />
         <ConsentSummary farm={farm} consent={consent} loading={!data} canManage={Boolean(data?.access.canManage)} />
       </div>
       <div className={styles.column}>
         <Card title="Effluent on this farm">
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
+            <li>
+              <Link href={effluentHref({ farmId: farm.id, screen: "log" })}>{EFFLUENT_SCREEN_TITLES.log}</Link>
+              <span className={ui.muted}> · {log.data ? `${log.data.summary.applications} runs in the last 30 days` : "…"}</span>
+            </li>
+            <li>
+              <Link href={effluentHref({ farmId: farm.id, screen: "ponds" })}>{EFFLUENT_SCREEN_TITLES.ponds}</Link>
+              <span className={ui.muted}> · levels, storage left and days not applied</span>
+            </li>
             <li>
               <Link href={effluentHref({ farmId: farm.id, screen: "setup" })}>{EFFLUENT_SCREEN_TITLES.setup}</Link>
               <span className={ui.muted}>

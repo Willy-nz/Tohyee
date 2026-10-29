@@ -58,6 +58,7 @@ Phones only install a web app and keep it offline on an HTTPS address (or
 | Safety: report a hazard, near miss or incident (with photos) | Kept on the device, sent later |
 | Safety: pre-start checks, marking your action done, signing an induction, signing in and out | Kept on the device, sent later |
 | Tractor mode: recording a job, Finish | Kept on the device fix by fix, sent later |
+| Effluent: start, shift and stop a run, pond readings (with photos), not applied today | Kept on the device, sent later |
 | Approvals (releasing equipment, checking or closing actions) | Always need a connection |
 
 ### Farm information kept on the device
@@ -76,6 +77,7 @@ this device** shows each farm's parts, when each was kept and its size.
 | Calendar and jobs | Your farm calendar, 12 months back to 3 months ahead (no email text); safety dates for the next 3 months |
 | Equipment and checklists | Machines, checklists, last known status and recent checks; chemicals; tractor mode's machines and the farm's tractor jobs |
 | Inductions and training | Inductions to read and sign, with the farm's hazards and emergency details; training |
+| Effluent | Systems, ponds, blocks, no-apply zones and consent conditions; the last 30 days of runs, pond readings and days not applied |
 | Fertiliser plans | The farm's plans and their applications; products (not for Farm staff) |
 | Soil tests | Samples, results, the summary and each paddock's soil history |
 | Farm notebook | The notebook (not for Farm staff) |
