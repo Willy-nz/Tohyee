@@ -16,7 +16,7 @@ import { readSafetyLink } from "@/lib/safety/screens";
 function SafetyForLink() {
   const link = readSafetyLink(useSearchParams());
   return (
-    <FarmWorkspace tab="safety" linkedFarmId={link.farmId}>
+    <FarmWorkspace linkedFarmId={link.farmId}>
       {(context) => <FarmSafetyTab {...context} link={link} />}
     </FarmWorkspace>
   );

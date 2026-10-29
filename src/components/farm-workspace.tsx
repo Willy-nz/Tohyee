@@ -39,39 +39,22 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-export type FarmTab = "today" | "map" | "log" | "safety" | "more";
-
-export const FARM_TABS: Array<{ key: FarmTab; label: string; href: string; icon: string }> = [
-  { key: "today", label: "Today", href: "/operations/farm", icon: "◷" },
-  { key: "map", label: "Map", href: "/operations/farm/map", icon: "▦" },
-  { key: "log", label: "Log", href: "/operations/farm/log", icon: "+" },
-  { key: "safety", label: "Safety", href: "/operations/farm/safety", icon: "⚠" },
-  { key: "more", label: "More", href: "/operations/farm/more", icon: "≡" },
-];
+/** The tabs now come from the farm pages' shared layout (decision 1111): src/components/farm-frame.tsx. */
+export { FARM_TABS, type FarmTab } from "@/lib/farming/farm-nav";
 
 export type FarmContext = { organisationId: string; farm: Farm; farms: Farm[] };
 
 /** `linkedFarmId` (a link's `?farm=`) opens that farm, so a link to a record opens it on the right farm (decision 984). */
-export function FarmWorkspace({ tab, linkedFarmId = null, children }: { tab: FarmTab; linkedFarmId?: string | null; children: (context: FarmContext) => ReactNode }) {
-  return <RequireOrganisation>{(organisationId) => <Workspace key={`${organisationId}:${linkedFarmId ?? ""}`} organisationId={organisationId} tab={tab} linkedFarmId={linkedFarmId} render={children} />}</RequireOrganisation>;
+export function FarmWorkspace({ linkedFarmId = null, children }: { linkedFarmId?: string | null; children: (context: FarmContext) => ReactNode }) {
+  return <RequireOrganisation>{(organisationId) => <Workspace key={`${organisationId}:${linkedFarmId ?? ""}`} organisationId={organisationId} linkedFarmId={linkedFarmId} render={children} />}</RequireOrganisation>;
 }
 
-function Workspace({ organisationId, tab, linkedFarmId, render }: { organisationId: string; tab: FarmTab; linkedFarmId: string | null; render: (context: FarmContext) => ReactNode }) {
+function Workspace({ organisationId, linkedFarmId, render }: { organisationId: string; linkedFarmId: string | null; render: (context: FarmContext) => ReactNode }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
   const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], linkedFarmId);
   const active = (farms.data?.farms ?? []).filter((entry) => entry.isActive);
   return (
     <div className={styles.workspace}>
-      <nav className={styles.tabs} aria-label="Farm">
-        {FARM_TABS.map((entry) => (
-          <Link key={entry.key} href={entry.href} className={styles.tab} aria-current={entry.key === tab ? "page" : undefined}>
-            <span className={styles.tabIcon} aria-hidden="true">
-              {entry.icon}
-            </span>
-            {entry.label}
-          </Link>
-        ))}
-      </nav>
       {farms.error ? <Notice tone="error">{farms.error}</Notice> : null}
       {!farms.data ? <p className={ui.muted}>Loading…</p> : null}
       {farms.data && active.length === 0 ? <Empty>No farms yet. {farms.data.farms.length ? "" : "An owner or admin adds them under Farms and paddocks."}</Empty> : null}
@@ -259,9 +242,9 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
       </Card>
       <AppTiles organisationId={organisationId} farmId={farm.id} manage={false} />
       {!farmWorker && can("viewer") ? (
-        <Card title="Money and year-end" description="The books, budgets and benchmarks stay on Home and under More.">
+        <Card title="Money and year-end" description="The books and budgets are in Accounting; benchmarks are under More.">
           <div className={styles.actions}>
-            <Link href="/operations">Home</Link>
+            <Link href="/operations">Accounting</Link>
             <Link href="/operations/farming/benchmarks">Farm benchmarks</Link>
           </div>
         </Card>
@@ -447,13 +430,17 @@ export { FarmSafetyTab };
 
 type MoreLink = { href: string; label: string; note?: string; staff?: boolean; minRole?: "viewer" | "bookkeeper" | "admin" };
 
-const DETAILS: MoreLink[] = [
-  { href: "/operations/farm/effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents and the council pack", staff: true },
-  { href: "/operations/farm/tractor", label: "Tractor mode", note: "Spreading, spraying and mowing coverage from the phone's GPS", staff: true },
-  { href: "/operations/farming/pasture", label: "Pasture and feed", note: "Readings, grazings and feed, with tables", staff: true },
-  { href: "/operations/farming", label: "Farms and paddocks", note: "Areas, boundaries and drawing paddocks", staff: true },
+/** The Farm menu's big buttons (#498 item 3, decision 1111): the farm work that isn't one of the five tabs, Effluent first. */
+const FARM_WORK: MoreLink[] = [
+  { href: "/operations/farm/effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents, council pack", staff: true },
+  { href: "/operations/farm/tractor", label: "Tractor mode", note: "Spreading, spraying and mowing from phone GPS", staff: true },
+  { href: "/operations/farming/pasture", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
+  { href: "/operations/farming/calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
   { href: "/operations/farming/soil", label: "Soil tests", staff: true },
-  { href: "/operations/farming/calendar", label: "Farm calendar", staff: true },
+  { href: "/operations/farming", label: "Farms and paddocks", note: "Areas, boundaries, drawing paddocks", staff: true },
+];
+
+const DETAILS: MoreLink[] = [
   { href: "/operations/farming/fertiliser", label: "Fertiliser plans" },
   { href: "/operations/farming/notebook", label: "Farm notebook" },
   { href: "/operations/livestock", label: "Livestock" },
@@ -471,18 +458,32 @@ export function FarmMore({ organisationId, farm }: FarmContext) {
   const { can, current } = useWorkspace();
   const farmWorker = current?.role === "farm_worker";
   const shown = (links: MoreLink[]) => links.filter((link) => (farmWorker ? link.staff : can(link.minRole ?? "viewer")));
+  const details = shown(DETAILS);
   return (
     <div className={styles.grid}>
-      <Card title="Details" description="Every record as a table, for checking and the accounts.">
-        <LinkList links={shown(DETAILS)} />
+      {/* The full Farm menu (#498 item 3): everything on the farm, so Effluent is found without searching. */}
+      <Card title="Farm menu" description="Today, Map, Log and Safety are the tabs. Everything else on the farm is here.">
+        <nav aria-label="Farm menu" className={styles.bigButtons}>
+          {shown(FARM_WORK).map((link) => (
+            <Link key={link.href} href={link.href} className={styles.bigButton}>
+              {link.label}
+              {link.note ? <small>{link.note}</small> : null}
+            </Link>
+          ))}
+        </nav>
       </Card>
+      {details.length ? (
+        <Card title="Details" description="Every record as a table, for checking and the accounts.">
+          <LinkList links={details} />
+        </Card>
+      ) : null}
       {farmWorker ? null : (
-        <Card title="Year-end and setup">
+        <Card title="Year-end and setup" description="These are linked to the books and open in Accounting where they're kept.">
           <LinkList links={shown(YEAR_END)} />
         </Card>
       )}
       <AppTiles organisationId={organisationId} farmId={farm.id} manage />
-      <Card title="This phone or tablet" description="Put Tohyee on the Home Screen. The farm pages then open without a signal.">
+      <Card title="This phone or tablet" description="Put Tohyee on the Home Screen as a web app. The farm pages then open without a signal.">
         <LinkList
           links={[
             { href: "/get-tohyee", label: "Get Tohyee on this device", staff: true },

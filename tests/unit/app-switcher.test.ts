@@ -52,6 +52,23 @@ describe("app switcher", () => {
     expect(renderToStaticMarkup(createElement(AppSwitcher, { current: "analytics", modules: { crm: true, reporting: true, notForProfit: true, analytics: true, gst: true }, reportViewer: true }))).toBe("");
   });
 
+  it("offers Farm beside Accounting while Farming is on (#498, decision 1110)", () => {
+    expect(availableApps({ crm: false, reporting: false, notForProfit: false, analytics: false, gst: true, farming: true })).toEqual(["accounting", "farm"]);
+    expect(links(renderToStaticMarkup(createElement(AppSwitcher, { current: "farm", modules: { crm: true, reporting: false, notForProfit: false, analytics: false, gst: true, farming: true } })))).toEqual([
+      ["/operations", false, "Accounting"],
+      ["/operations/farm", true, "Farm"],
+      ["/crm", false, "CRM"],
+    ]);
+    // Farming needs Accounting.
+    expect(availableApps({ crm: true, reporting: false, notForProfit: false, analytics: false, gst: false, farming: true, accounting: false })).toEqual(["crm"]);
+  });
+
+  it("gives farm staff Farm only, so there's no switcher (decision 904)", () => {
+    const modules = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, livestock: false, farming: true };
+    expect(availableApps(modules, false, true)).toEqual(["farm"]);
+    expect(renderToStaticMarkup(createElement(AppSwitcher, { current: "farm", modules, farmWorker: true }))).toBe("");
+  });
+
   it("leaves Accounting out while it's off (#181, MOD2)", () => {
     expect(availableApps({ crm: true, reporting: false, notForProfit: false, analytics: false, gst: false, accounting: false })).toEqual(["crm"]);
     expect(availableApps({ crm: true, reporting: false, notForProfit: false, analytics: true, gst: false, accounting: false })).toEqual(["crm", "analytics"]);

@@ -569,3 +569,19 @@
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+/* Tractor mode is limited (#498 item 8, decision 1124): said before Start and beside the controls. */
+.limited {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 4px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.locationHelp {
+  display: grid;
+  gap: 6px;
+}

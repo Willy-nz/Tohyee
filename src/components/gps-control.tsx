@@ -38,9 +38,9 @@ function permissionsApi(): Permissions | null {
   return permissions && typeof permissions.query === "function" ? permissions : null;
 }
 
-/** `onFix` runs with each new position (a map centres on it). */
-export function useGps(onFix?: (fix: GpsFix) => void): Gps {
-  const [state, dispatch] = useReducer(gpsReducer, GPS_START);
+/** `onFix` runs with each new position (a map centres on it). `initial` is what's already known (tractor mode knows it was blocked). */
+export function useGps(onFix?: (fix: GpsFix) => void, initial: GpsState = GPS_START): Gps {
+  const [state, dispatch] = useReducer(gpsReducer, initial);
   const [stillBlocked, setStillBlocked] = useState(false);
   const hydrated = useHydrated();
   const fixHandler = useRef(onFix);

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_SETTINGS_HREF,
+  appForPath,
   CRM_MENUS,
+  FARM_MENUS,
   destinations,
   farmWorkAllowsPath,
   inArea,
@@ -32,14 +34,9 @@ describe("top bar menus", () => {
   });
 
   it("uses the simplified accounting menus", () => {
-    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Farm", "Reports", "Accounting", "Tax", "Settings"]);
+    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Reports", "Accounting", "Tax", "Settings"]);
   });
 
-  it("shows the Farm menu only while Farming is on (#249)", () => {
-    const access = (farming: boolean) => ({ can: () => true, modules: { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, farming } });
-    expect(visibleMenus("accounting", access(false)).map((menu) => menu.label)).not.toContain("Farm");
-    expect(visibleMenus("accounting", access(true)).map((menu) => menu.label)).toContain("Farm");
-  });
 
   it("keeps every menu to at most four labelled groups, none empty", () => {
     for (const menu of MENUS) {
@@ -336,20 +333,70 @@ describe("CRM top bar", () => {
   });
 });
 
+describe("the Farm app (#498 item 1, decisions 1110-1111)", () => {
+  const modules = (farming: boolean, accounting?: boolean) => ({ crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, livestock: true, farming, accounting });
+  const owner = (farming: boolean, accounting?: boolean) => ({ can: () => true, modules: modules(farming, accounting) });
+
+  it("is its own app: farm pages show the Farm top bar, not Accounting's", () => {
+    for (const path of ["/operations/farm", "/operations/farm/map", "/operations/farm/effluent", "/operations/farm/tractor/12", "/operations/farming", "/operations/farming/pasture"]) expect(appForPath("accounting", path)).toBe("farm");
+    for (const path of ["/operations", "/operations/invoices", "/operations/livestock", "/operations/farmers-market"]) expect(appForPath("accounting", path)).toBe("accounting");
+    expect(appForPath("crm", "/crm")).toBe("crm");
+  });
+
+  it("has Today, Map, Log, Safety and Effluent on the top bar, and the rest under More", () => {
+    expect(FARM_MENUS.map((menu) => [menu.label, menu.href ?? null])).toEqual([
+      ["Today", "/operations/farm"],
+      ["Map", "/operations/farm/map"],
+      ["Log", "/operations/farm/log"],
+      ["Safety", "/operations/farm/safety"],
+      ["Effluent", "/operations/farm/effluent"],
+      ["More", null],
+    ]);
+    const more = visibleMenus("farm", owner(true)).find((menu) => menu.label === "More")!;
+    expect(more.groups.map((group) => group.heading)).toEqual(["Paddocks and feed", "Records", "Insights and apps", "This device"]);
+  });
+
+  it("isn't nested in Accounting any more, and needs Farming (and Accounting) on", () => {
+    expect(visibleMenus("accounting", owner(true)).map((menu) => menu.label)).not.toContain("Farm");
+    expect(visibleMenus("farm", owner(false))).toEqual([]);
+    expect(visibleMenus("farm", owner(true, false))).toEqual([]);
+    expect(visibleMenus("farm", owner(true)).length).toBe(6);
+  });
+
+  it("marks the right top-bar item on each farm page", () => {
+    const menu = (label: string) => FARM_MENUS.find((item) => item.label === label)!;
+    expect(inArea("/operations/farm", menu("Today"))).toBe(true);
+    expect(inArea("/operations/farm/map", menu("Today"))).toBe(false);
+    expect(inArea("/operations/farm/tractor", menu("Map"))).toBe(true);
+    expect(inArea("/operations/farm/effluent", menu("Effluent"))).toBe(true);
+    expect(inArea("/operations/farming/soil", menu("More"))).toBe(true);
+    expect(inArea("/operations/farm/offline", menu("More"))).toBe(true);
+  });
+
+  it("puts the farm's pages in Ctrl K, Effluent included", () => {
+    const found = searchDestinations(destinations(visibleMenus("farm", owner(true)), []), "effluent");
+    expect(found[0]).toMatchObject({ href: "/operations/farm/effluent", label: "Effluent" });
+  });
+});
+
 describe("farm staff (decision 904)", () => {
   const modules = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: false, livestock: false, farming: true };
   const access = { can: () => false, modules, farmWorker: true };
   it("have the field-work pages only, nothing to make and no settings", () => {
-    const menus = visibleMenus("accounting", access);
-    expect(menus.map((menu) => menu.label)).toEqual(["Farm"]);
-    expect(menus[0].groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
-      "/operations/farm",
-      "/operations/farming/pasture",
+    const menus = visibleMenus("farm", access);
+    expect(menus.map((menu) => menu.label)).toEqual(["Today", "Map", "Log", "Safety", "Effluent", "More"]);
+    expect(menus.at(-1)!.groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
       "/operations/farming",
+      "/operations/farming/pasture",
       "/operations/farming/soil",
       "/operations/farming/calendar",
+      "/operations/farm/tractor",
       "/operations/farming/apps",
+      "/operations/farm/offline",
+      "/get-tohyee",
     ]);
+    // On their profile page (in Accounting) they see the same farm menus.
+    expect(visibleMenus("accounting", access)).toEqual(menus);
     expect(visibleNewActions(access)).toEqual([]);
     expect(visibleSettings(access)).toEqual([]);
     expect(visibleMenus("crm", access)).toEqual([]);

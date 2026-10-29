@@ -16,17 +16,34 @@ GPS, Wake Lock, and reaching the server through Remote access and Tailscale.
 ## Installing
 
 Open **Get Tohyee on this device** (`/get-tohyee` on your server; also in
-the account menu, the sign-in page and Farm › More). It shows the steps for
-the device you're on:
+the account menu, the sign-in page and Farm › More). It works out the
+browser and device and shows their steps first, then every other
+browser's (decisions 1112-1113, #498):
 
-- **iPhone or iPad:** in Safari, tap **Share** (the square with an arrow),
-  then **Add to Home Screen**, then **Add**. Open Tohyee from the icon and
-  sign in once more: iOS keeps the icon's sign-in separate from Safari's.
-- **Android:** in Chrome, tap **Install** (or ⋮ › **Install app**; some
-  phones say **Add to Home screen**).
-- **Computer:** in Chrome or Edge, click the install icon in the address
-  bar.
+- **iPhone or iPad, Safari:** tap **Share** (the square with an arrow; on
+  iOS 26 it's in the **⋯** menu), then **Add to Home Screen**, then
+  **Add**. Open Tohyee from the icon and sign in once more: iOS keeps the
+  icon's sign-in separate from Safari's.
+- **iPhone or iPad, Chrome, Edge or Firefox** (iOS 16.4 or later): their
+  **Share** › **Add to Home Screen**. If it isn't there, use Safari.
+- **Android, Chrome:** **Install** when offered, or ⋮ › **Add to Home
+  screen** › **Install**.
+- **Android, Firefox:** ⋮ › **Install** (some versions say **Add app to
+  Home screen**), then drag the icon or tap **Add automatically**
+  ([Mozilla's help](https://support.mozilla.org/en-US/kb/use-web-apps-firefox-android)).
+- **Android, Samsung Internet:** the install icon in the address bar, or
+  ☰ › **Add page to** › **Home screen**. **Edge:** ⋯ › **Add to phone**.
+- **Computer, Chrome or Edge:** the install icon in the address bar.
+- **Firefox on Windows:** **Add tab to taskbar** in the address bar, from
+  version 143 where it's there. **Firefox on a Mac or Linux** can't
+  install web apps: that's Firefox, not a fault; use Tohyee in the tab.
+- **Safari on a Mac** (macOS Sonoma or later): File › **Add to Dock**.
+- **A link opened inside Facebook, Messenger, Instagram or an email
+  app:** open it in a browser first.
 
+It's a web app added by the browser: there's no app-store app and no APK
+to download. Chrome and Edge also offer an Install button on the page;
+the written steps are always shown too, because other browsers don't.
 There's no app store. The icon always opens the server it was added from;
 to use another server, add it from that server's address (each keeps its
 own copies).
@@ -44,6 +61,25 @@ Phones only install a web app and keep it offline on an HTTPS address (or
   tailnet; nothing is opened to the internet.
 - **A home-network address** like `http://192.168.1.20:3000` works in the
   browser but can't be installed or used offline.
+
+## Farm on a phone
+
+Farm is its own app (decisions 1110-1111): the app switcher, or the ☰
+menu on a phone, moves between Accounting and Farm. The Farm tabs
+(Today · Map · Log · Safety · More) are on every farm page, including one
+opened from a link, after a reload or with no signal. More has the full
+Farm menu, Effluent first. Safety's first card is **Emergency details**.
+
+## Your location on the maps
+
+Every farm map has **Use my location** (decisions 1115-1118). It shows
+where you are as a blue dot with its accuracy, on this device only:
+nothing is sent or shared. If location was blocked, the button says
+**Location blocked: how to fix** and the steps for your browser are shown
+with **Check again**. Browsers don't ask a second time once it's blocked.
+The maps work without it. Tractor mode has **Check GPS** before Start,
+and says it's limited: keep Tohyee open and the screen unlocked while
+recording.
 
 ## What works without a connection
 

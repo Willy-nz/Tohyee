@@ -7,7 +7,7 @@ export default function FarmTodayPage() {
   return (
     <Page>
       <PageHeader title="Today" />
-      <FarmWorkspace tab="today">{(context) => <FarmToday {...context} />}</FarmWorkspace>
+      <FarmWorkspace>{(context) => <FarmToday {...context} />}</FarmWorkspace>
     </Page>
   );
 }

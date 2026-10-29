@@ -11,7 +11,7 @@ export default function FarmLogPage() {
       <PageHeader title="Log" />
       {/* `?record=cover|in|out|feed|walk&paddock=&grazing=` opens a quick log, e.g. from a paddock card. */}
       <Suspense fallback={null}>
-        <FarmWorkspace tab="log">{(context) => <FarmLog {...context} />}</FarmWorkspace>
+        <FarmWorkspace>{(context) => <FarmLog {...context} />}</FarmWorkspace>
       </Suspense>
     </Page>
   );

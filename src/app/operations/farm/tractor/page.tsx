@@ -9,7 +9,7 @@ import { Page, PageHeader } from "@/components/ui";
 /** Tractor and spreader mode (#472 stage 5): start a job, carry one on, send what's waiting, and the farm's jobs. `?farm=` chooses the farm. */
 function TractorForLink() {
   const farmId = useSearchParams().get("farm");
-  return <FarmWorkspace tab="map" linkedFarmId={farmId && /^\d+$/.test(farmId) ? farmId : null}>{(context) => <TractorHome {...context} />}</FarmWorkspace>;
+  return <FarmWorkspace linkedFarmId={farmId && /^\d+$/.test(farmId) ? farmId : null}>{(context) => <TractorHome {...context} />}</FarmWorkspace>;
 }
 
 export default function TractorPage() {

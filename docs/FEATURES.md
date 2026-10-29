@@ -2903,8 +2903,8 @@ that something happened.
   top bar has the Farm menu's field pages only. Farm app keys work for them,
   on their farms. Removing a record stays with bookkeepers and up.
 
-- **The farmer's workspace** (#447, decisions 907-910): Farm › Today, map and
-  log (`/operations/farm`) has **Today · Map · Log · Safety · More**, as
+- **The farmer's workspace** (#447, decisions 907-910; now the Farm app,
+  decision 1110): Farm › Today (`/operations/farm`) has **Today · Map · Log · Safety · More**, as
   tabs along the bottom of a phone. The farm being worked on stays at the
   top. **Today** has today's and the next few days' jobs from the farm
   calendar, the mobs in now, a compact map that opens to its full height,
@@ -3033,6 +3033,32 @@ that something happened.
   Nothing posts to the books. Not tried in a real paddock or on a real
   phone yet.
 
+
+- **Farm as its own app, from real phone use** (#498 items 1-6 and 8,
+  decisions 1110-1124): **Farm** is an app beside Accounting, CRM and
+  Analytics (the app switcher, the phone menu and Ctrl K). Its top bar is
+  Today, Map, Log, Safety, Effluent and More. Farm staff have Farm only.
+  Permissions are unchanged; farm pages keep their addresses. The **Farm
+  tabs** (Today · Map · Log · Safety · More) come from the farm pages'
+  shared layout, so they're on every farm page: direct links, reloads,
+  pages opened offline, and Farms and paddocks, Pasture, Soil and the
+  calendar too. The page's tab is marked, the chosen farm stays, and pages
+  leave room for the tabs and the phone's own bar. **More** opens with a
+  **Farm menu** of big buttons, Effluent first. **Safety** has a labelled
+  **Emergency details** area (address, entrance, contacts to tap, 111 as a
+  phone link); the large Call 111 button is gone. **Get Tohyee on this
+  device** picks the steps for the browser it's opened in (Safari,
+  Chrome, Edge, Samsung Internet, Firefox, Opera; iPhone, Android,
+  computer), says it's a web app and not an APK, says honestly where a
+  browser can't install, and lists every other browser's steps. **Use my
+  location** is on every map (farm map, paddocks, hazards, effluent,
+  tractor mode's start): not asked, allowed, blocked, unavailable or timed
+  out; accuracy; after a block, that browser's steps and **Check again**.
+  It only moves the map on this device. **Tractor mode** says "Limited —
+  keep Tohyee open and your screen unlocked while recording…" before
+  Start and beside its controls. Not built here: farm members on the map
+  (#498 item 7, separate work). Checked in Chromium only; not on real
+  phones, and not in a real Firefox or Safari.
 - **Farm dairy effluent** (#487, decisions 1070-1099, docs/FARM-EFFLUENT.md;
   tenant migration 0200): Farm › More › **Effluent**. Setup (owners and
   admins): systems (travelling irrigator, pods or K-line, slurry tanker or

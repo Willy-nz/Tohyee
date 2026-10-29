@@ -25,6 +25,7 @@ import { type Modules, useModules } from "@/components/modules";
 import { OfflineSupport, prepareSignOut } from "@/components/offline-support";
 import {
   AI_LINK,
+  appForPath,
   type Destination,
   destinations,
   FARM_WORK_PATHS,
@@ -439,6 +440,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
   const search = useSearchParams();
   const { user, current } = useWorkspace();
   const reportViewer = current?.role === "report_viewer";
+  const farmWorker = current?.role === "farm_worker";
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -510,7 +512,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
       {open ? (
         <div ref={dialog} className={styles.phoneMenu} style={{ top }} role="dialog" aria-modal="true" aria-label="Menu">
           <div className={styles.phoneApps}>
-            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
+            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} farmWorker={farmWorker} />
           </div>
           <nav aria-label="Main">
             {menus.map((menu) => {
@@ -659,10 +661,11 @@ function DemoBadge() {
 }
 
 /** A short fade and rise of the page on each navigation, so moving around doesn't feel abrupt. */
-function usePageEntrance(target: RefObject<HTMLElement | null>, pathname: string) {
+function usePageEntrance(target: RefObject<HTMLElement | null>, pathname: string, still = false) {
   useEffect(() => {
     const element = target.current;
-    if (!element || typeof element.animate !== "function") return;
+    // Farm pages don't slide in: the Farm tabs are fixed to the screen, and a moving page would carry them with it (decision 1111).
+    if (still || !element || typeof element.animate !== "function") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const animation = element.animate(
       [
@@ -672,7 +675,7 @@ function usePageEntrance(target: RefObject<HTMLElement | null>, pathname: string
       { duration: 180, easing: "cubic-bezier(0.2, 0.7, 0.2, 1)" },
     );
     return () => animation.cancel();
-  }, [target, pathname]);
+  }, [target, pathname, still]);
 }
 
 function TopBarActions({
@@ -739,9 +742,11 @@ function AccountingOff() {
   );
 }
 
-function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; warnings: string[] }) {
+function Shell({ app: layoutApp, children, warnings }: { app: AppKey; children: ReactNode; warnings: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
+  // Farm pages live under /operations but are the Farm app, with its own top bar (#498, decision 1110).
+  const app = appForPath(layoutApp, pathname);
   const { can, current, user, organisations } = useWorkspace();
   const confirm = useConfirm();
   const modules = useModules(current?.id ?? null);
@@ -752,7 +757,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   const salesAway = salesRole && app !== "crm" && !pathname.startsWith("/operations/profile");
   // Farm staff have the field-work pages only (decision 904); the server refuses them everything else anyway.
   const farmWorker = current?.role === "farm_worker";
-  const farmAway = farmWorker && !(app === "accounting" && farmWorkAllowsPath(pathname));
+  const farmAway = farmWorker && !(layoutApp === "accounting" && farmWorkAllowsPath(pathname));
   const noticeData = useApiData<{ notices: TopNotice[] }>(
     current?.id && !reportViewer && !salesRole && !farmWorker ? "/api/notices" : null,
     current?.id ? { organisationId: current.id } : {},
@@ -769,6 +774,8 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
     [warnings, noticeData.data],
   );
   const menus = useMemo(() => visibleMenus(app, { can, modules, farmWorker }), [app, can, modules, farmWorker]);
+  // Ctrl K finds the farm's pages from any app (decision 1110).
+  const farmMenus = useMemo(() => (app === "farm" ? [] : visibleMenus("farm", { can, modules, farmWorker })), [app, can, modules, farmWorker]);
   const newActions = useMemo(() => visibleNewActions({ can, modules }), [can, modules]);
   const settings = useMemo(() => (app === "accounting" ? visibleSettings({ can, modules }) : []), [app, can, modules]);
   const items = useMemo<Destination[]>(
@@ -779,11 +786,13 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
         { href: AI_LINK.href, label: "AI assistant", group: "AI" },
         { href: "/operations/profile", label: "Profile and two-step sign-in", group: "You" },
         ...(owner ? [{ href: "/operations/my-mail", label: "My mail", group: "You" }] : []),
-        ...(app !== "accounting" && !reportViewer && modules?.accounting !== false ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
+        ...destinations(farmMenus, []).map((item) => ({ ...item, group: item.group === item.label ? "Farm" : `Farm › ${item.group}` })),
+        ...(app !== "accounting" && !reportViewer && !farmWorker && modules?.accounting !== false ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
+        ...(app !== "farm" && !reportViewer && modules?.farming && modules.accounting !== false ? [{ href: "/operations/farm", label: "Farm", group: "Apps" }] : []),
         ...(app !== "crm" && modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
         ...(app !== "analytics" && modules?.analytics ? [{ href: "/analytics", label: "Analytics", group: "Apps" }] : []),
       ]),
-    [menus, newActions, settings, app, modules, reportViewer, owner],
+    [menus, farmMenus, newActions, settings, app, modules, reportViewer, owner, farmWorker],
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -798,13 +807,13 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
     if (farmAway) router.replace(FARM_WORK_PATHS[0]);
   }, [farmAway, router]);
   // MOD2: with Accounting off, its home goes to the app that's on, and its other pages say it's off.
-  const accountingOff = app === "accounting" && !reportViewer && modules?.accounting === false;
+  const accountingOff = layoutApp === "accounting" && !reportViewer && modules?.accounting === false;
   const accountingPageOff = accountingOff && !ACCOUNTING_OFF_PAGES.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   useEffect(() => {
     if (accountingOff && pathname === "/operations") router.replace(modules?.crm ? "/crm" : "/analytics");
   }, [accountingOff, pathname, modules, router]);
   const page = useRef<HTMLDivElement>(null);
-  usePageEntrance(page, pathname);
+  usePageEntrance(page, pathname, app === "farm");
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -837,12 +846,12 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       </a>
       <header className={styles.topbar} data-print="hide">
         <div className={styles.topRow}>
-          <Link href={app === "crm" ? "/crm" : app === "analytics" ? "/analytics" : "/operations"} className={styles.brand} aria-label="Tohyee home">
+          <Link href={app === "crm" ? "/crm" : app === "analytics" ? "/analytics" : app === "farm" || farmWorker ? "/operations/farm" : "/operations"} className={styles.brand} aria-label="Tohyee home">
             <BrandMark size={26} className={styles.brandMark} />
             <span className={styles.brandText}>Tohyee</span>
           </Link>
           <div className={styles.desktopOnly}>
-            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
+            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} farmWorker={farmWorker} />
           </div>
           <OrganisationPicker />
           <span className={styles.divider} aria-hidden />
