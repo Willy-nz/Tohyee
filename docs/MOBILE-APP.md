@@ -423,7 +423,10 @@ Without the secrets, a release gets the test build instead. The build job
 never sees the secrets: it makes an unsigned APK, and a separate job that
 runs only `scripts/sign-android-apk.sh` (the Android SDK's `zipalign` and
 `apksigner`, no npm or Gradle) signs it. Pull requests and manual runs
-check that script with a throwaway key.
+check that script with a throwaway key, and start the test build on an
+Android emulator on the runner (it opens on "Your Tohyee address", loads
+its plugins and refuses an http:// address; an emulator isn't a real
+phone).
 
 To build a test APK from any branch: GitHub › Actions › **Android app** ›
 **Run workflow** (it's under the run's Artifacts). Pull requests that
