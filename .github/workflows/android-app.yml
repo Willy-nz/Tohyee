@@ -13,7 +13,9 @@ name: Android app
 #
 # The signing key never meets npm or Gradle's third-party code: the build job
 # (npm ci, Gradle) has no secrets and makes an unsigned APK; the sign job only
-# runs the Android SDK's own zipalign and apksigner on it. Secrets (see
+# runs scripts/sign-android-apk.sh (the Android SDK's own zipalign and
+# apksigner) on it. Every other run signs with a throwaway key, to check
+# that signing works before a release needs it. Secrets (see
 # docs/MOBILE-APP.md, "Signing the Android app"):
 #   ANDROID_KEYSTORE_BASE64   the keystore file, base64
 #   ANDROID_KEYSTORE_PASSWORD its password
@@ -31,6 +33,7 @@ on:
       - "android-shell/**"
       - "capacitor.config.json"
       - "scripts/build-android-shell.mjs"
+      - "scripts/sign-android-apk.sh"
       - "src/lib/native/server-address.ts"
       - ".github/workflows/android-app.yml"
   workflow_dispatch:
@@ -108,8 +111,28 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           aapt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/aapt2"
-          "$aapt" dump badging "dist/android/Tohyee-${VERSION}-test.apk" | grep -E "^package|^application-label|uses-permission|sdkVersion|targetSdkVersion"
-          "$aapt" dump badging "dist/android/Tohyee-${VERSION}-unsigned.apk" | grep -E "^package"
+          for apk in "Tohyee-${VERSION}-test.apk" "Tohyee-${VERSION}-unsigned.apk"; do
+            badging="$("$aapt" dump badging "dist/android/${apk}")"
+            echo "${badging}" | grep -E "^package|^application-label:|uses-permission|sdkVersion|targetSdkVersion"
+            summary="$(echo "${badging}" | grep -E "^package|^application-label:|^sdkVersion|^targetSdkVersion" | tr '\n' ' ')"
+            echo "::notice title=${apk}::${summary}"
+          done
+          permissions="$("$aapt" dump badging "dist/android/Tohyee-${VERSION}-unsigned.apk" | grep -oE "uses-permission: name='[^']+'" | sed "s/uses-permission: name='android.permission.//;s/'//" | tr '\n' ' ')"
+          echo "::notice title=Permissions::${permissions}"
+          echo "::notice title=SHA-256::$(cat "dist/android/Tohyee-${VERSION}-test.apk.sha256")"
+          # The bundled first-run page and the app's own plugin are in it.
+          unzip -l "dist/android/Tohyee-${VERSION}-unsigned.apk" | grep -E "assets/public/(index|offline)\.html|assets/public/app\.js|assets/capacitor\.config\.json"
+
+      - name: Check signing works (a throwaway key, not the release key)
+        if: github.ref_type != 'tag'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          export KEYSTORE="${RUNNER_TEMP}/throwaway.keystore" KEYSTORE_PASSWORD="throwaway-$(openssl rand -hex 12)" KEY_ALIAS=throwaway
+          keytool -genkeypair -keystore "${KEYSTORE}" -storetype PKCS12 -storepass "${KEYSTORE_PASSWORD}" -alias "${KEY_ALIAS}" \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Throwaway CI key" -noprompt
+          scripts/sign-android-apk.sh "dist/android/Tohyee-${VERSION}-unsigned.apk" "${RUNNER_TEMP}/signing-check.apk"
+          rm -f "${KEYSTORE}" "${RUNNER_TEMP}/signing-check.apk"*
 
       - name: Keep the test build
         uses: actions/upload-artifact@v4
@@ -134,10 +157,19 @@ jobs:
     if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       signed: ${{ steps.sign.outputs.signed }}
     steps:
+      # Only the signing script: nothing that npm or Gradle would run.
+      - name: Checkout the signing script
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/sign-android-apk.sh
+          sparse-checkout-cone-mode: false
+
       - name: Get the unsigned APK
         uses: actions/download-artifact@v4
         with:
@@ -158,20 +190,11 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A PKCS12 keystore (keytool's default) has one password for the store and the key.
-          export KEY_PASSWORD="${KEY_PASSWORD:-${KEYSTORE_PASSWORD}}"
-          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
-          keystore="${RUNNER_TEMP}/release.keystore"
-          trap 'rm -f "${keystore}"' EXIT
-          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
-          cd dist/android
-          "${tools}/zipalign" -p -f 4 "Tohyee-${VERSION}-unsigned.apk" "Tohyee-${VERSION}-aligned.apk"
-          "${tools}/apksigner" sign --ks "${keystore}" --ks-pass env:KEYSTORE_PASSWORD \
-            --ks-key-alias "${KEY_ALIAS}" --key-pass env:KEY_PASSWORD \
-            --out "Tohyee-${VERSION}.apk" "Tohyee-${VERSION}-aligned.apk"
-          "${tools}/apksigner" verify --print-certs "Tohyee-${VERSION}.apk" | grep -E "Signer #1 certificate (DN|SHA-256)"
-          sha256sum "Tohyee-${VERSION}.apk" > "Tohyee-${VERSION}.apk.sha256"
-          rm -f "Tohyee-${VERSION}-unsigned.apk" "Tohyee-${VERSION}-aligned.apk"
+          export KEYSTORE="${RUNNER_TEMP}/release.keystore"
+          trap 'rm -f "${KEYSTORE}"' EXIT
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE}"
+          scripts/sign-android-apk.sh "dist/android/Tohyee-${VERSION}-unsigned.apk" "dist/android/Tohyee-${VERSION}.apk"
+          rm -f "dist/android/Tohyee-${VERSION}-unsigned.apk"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Keep the signed APK

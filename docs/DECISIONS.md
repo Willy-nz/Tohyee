@@ -10720,16 +10720,19 @@ on a real Android phone**: it's built and checked in CI and by tests.
       matches package.json, like the other release workflows), by hand for
       any branch, and on pull requests that touch the app. The build job
       (npm ci, Gradle) has no secrets and makes an unsigned release APK and
-      a test build. On a tag, a separate job with no repository access
-      signs it with the Android SDK's own zipalign and apksigner, using the
-      keystore from the secrets `ANDROID_KEYSTORE_BASE64`,
+      a test build. On a tag, a separate job that runs only
+      `scripts/sign-android-apk.sh` (the Android SDK's own zipalign and
+      apksigner, never npm or Gradle) signs it, using the keystore from the
+      secrets `ANDROID_KEYSTORE_BASE64`,
       `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
       `ANDROID_KEY_PASSWORD`, then attaches `Tohyee-<version>.apk` and its
       `.sha256` to the release. Without the key, the release gets
       `Tohyee-<version>-test.apk` instead: debug-signed, named "Tohyee
       (test)" and installed beside the real app, so it can never be
       mistaken for or updated into it. The app's version is Tohyee's
-      (0.19.0 is version code 1900).
+      (0.19.0 is version code 1900). Every other run signs the unsigned APK
+      with a throwaway key made in the job, so the signing step is known to
+      work before the first release needs it.
 1151. **Get Tohyee on this device offers the APK beside the web app.** In a
       browser it adds "Android: download the app (optional)": what it adds,
       the link to Tohyee's latest GitHub release, the steps (allow installs
