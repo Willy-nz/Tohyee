@@ -163,6 +163,9 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 30
+    env:
+      # One place for the emulator's device, for avdmanager and the emulator alike.
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
     steps:
       - name: Get the test build
         uses: actions/download-artifact@v4
@@ -183,7 +186,9 @@ jobs:
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           (yes || true) | "$sdkmanager" --licenses > /dev/null 2>&1 || true
           "$sdkmanager" --install emulator platform-tools "$image" > "$RUNNER_TEMP/sdkmanager.log" 2>&1 || { echo "::error title=sdkmanager::$(tail -5 "$RUNNER_TEMP/sdkmanager.log" | tr '\n' ' ')"; exit 1; }
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n ci -k "$image" --device pixel_6 --force > /dev/null
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n ci -k "$image" --device pixel_6 --force
+          echo "::notice title=Emulator devices::$("$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | tr '\n' ' ')"
           echo "::notice title=Emulator acceleration::$("$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | tr '\n' ' ')"
 
       - name: Start the emulator
