@@ -1,5 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
-import { parseIsoDate, todayIsoDate } from "@/lib/dates";
+import { businessTimeZone, parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { requireAllFarms, requireFarmAccess, visibleFarmIds } from "./access";
@@ -23,6 +23,8 @@ export type FarmingSettings = {
   enabled: boolean;
   /** The organisation's LINZ Basemaps API key for aerial imagery, or null. Browsers load the tiles with it, so it isn't secret. */
   imageryKey: string | null;
+  /** The day (YYYY-MM-DD, the business's time zone) the key was saved, for the 80-day reminder (decision 1061); null with no key. */
+  imageryKeySavedOn: string | null;
 };
 
 export type Farm = { id: string; name: string; notes: string | null; isActive: boolean; activePaddocks: number; effectiveHa: string; mappedHa: string };
@@ -88,8 +90,11 @@ function parseName(input: unknown): string {
 // Settings ------------------------------------------------------------------------------
 
 export async function getFarmingSettings(tx: OrgTx): Promise<FarmingSettings> {
-  const row = await tx.query<{ enabled: boolean; linz_basemaps_key: string | null }>("select enabled, linz_basemaps_key from farming_settings where id = true");
-  return { enabled: row.rows[0]?.enabled === true, imageryKey: row.rows[0]?.linz_basemaps_key ?? null };
+  const row = await tx.query<{ enabled: boolean; linz_basemaps_key: string | null; key_saved_on: string | null }>(
+    "select enabled, linz_basemaps_key, (linz_basemaps_key_saved_at at time zone $1)::date::text as key_saved_on from farming_settings where id = true",
+    [businessTimeZone()],
+  );
+  return { enabled: row.rows[0]?.enabled === true, imageryKey: row.rows[0]?.linz_basemaps_key ?? null, imageryKeySavedOn: row.rows[0]?.key_saved_on ?? null };
 }
 
 /**
@@ -105,7 +110,13 @@ export async function setImageryKey(tx: OrgTx, input: { imageryKey: unknown }): 
     key = input.imageryKey.trim();
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(key)) throw new ValidationError("That doesn't look like a LINZ Basemaps API key: it should be letters, numbers, - and _ only.");
   }
-  await tx.query("update farming_settings set linz_basemaps_key = $1, updated_by_email = $2, updated_at = now() where id = true", [key, tx.actor.email]);
+  // Saving the same key again (e.g. after checking it) keeps its date; a new key starts its 90 days today.
+  await tx.query(
+    `update farming_settings set linz_basemaps_key = $1::text,
+       linz_basemaps_key_saved_at = case when $1::text is null then null when linz_basemaps_key is not distinct from $1::text then linz_basemaps_key_saved_at else now() end,
+       updated_by_email = $2, updated_at = now() where id = true`,
+    [key, tx.actor.email],
+  );
   await writeAuditEvent(tx, { eventType: key ? "farming.imagery_key_set" : "farming.imagery_key_removed", entityType: "organisation", entityId: tx.organisationId, details: {} });
   return getFarmingSettings(tx);
 }

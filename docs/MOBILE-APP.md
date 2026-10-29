@@ -97,10 +97,35 @@ If an update fails part way, the previous copy of that part stays. On the
 Offline page you can keep 3 years of history or original photos for a farm,
 update now, or remove a farm's copy (it's kept again at the next update).
 
-Not kept yet: LINZ aerial imagery (whether it may be kept offline is for
-the spike; paddock boundaries show without it), a separate livestock
-register (mobs come from grazings), and farm contacts beyond the emergency
-details.
+Not kept yet: a separate livestock register (mobs come from grazings), and
+farm contacts beyond the emergency details.
+
+### Aerial photos without a signal
+
+When the organisation has a LINZ key (Settings › Aerial photos for farm
+maps), a phone or tablet keeps the aerial photos for each farm's area by
+itself, after the farm information is updated (#485, decisions
+1063-1065). Computers keep them only when you press **Keep aerial photos
+on this device** on the Offline page.
+
+- **What:** the paddocks' outline box plus 300 m, zoom 14 (the whole farm)
+  to 18 (gateways and troughs). At most 1,500 photos a farm and 4,000 and
+  100 MB on the device; a big farm keeps fewer close-up zooms. A 200 ha
+  dairy farm is a few hundred photos, about 5-10 MB.
+- **How:** straight from LINZ to the phone, one photo every 125 ms (well
+  under LINZ's limit for standard keys), only what isn't kept already, at
+  most every 12 hours. Tohyee's server never fetches or keeps photos.
+- **Offline:** the map asks LINZ first and uses the kept copy when LINZ
+  can't be reached (or the key has run out). Closer than zoom 18, or
+  outside the farm's area, there's no photo offline; paddock outlines
+  always show.
+- **Same rules as the farm information:** only for the account signed in,
+  only within the 14 days, deleted when you sign out or someone else signs
+  in, and deleted when the key is removed. The Offline page shows how many
+  are kept, their size, and Remove.
+- Imagery © LINZ CC BY 4.0, shown on the map and the Offline page.
+- **Not yet tried on a real phone or with LINZ itself** (LINZ couldn't be
+  reached from where this was built): the tests use a pretend LINZ.
 
 ### Limits
 
@@ -194,7 +219,11 @@ signal, while Tohyee is on screen.
 
 - `public/sw.js` and `public/sw-rules.js`: the service worker (built files
   kept; farm pages fetched first, saved per server and account; the API is
-  never cached by the worker).
+  never cached by the worker). `public/sw-tiles.js`: LINZ aerial photos
+  answered from the kept copies when LINZ can't be reached (#485).
+- `src/lib/farming/imagery.ts` (the key's age, the farm's area and its
+  tiles) and `src/lib/farming/imagery-device.ts` (checking a key in the
+  browser, keeping and removing photos in Cache Storage).
 - `src/lib/offline/idb.ts`: the `tohyee-offline` IndexedDB database.
 - `src/lib/offline/queue.ts`: the queue. Usage:
 

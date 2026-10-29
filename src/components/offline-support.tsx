@@ -3,8 +3,9 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ConfirmFunction } from "@/components/confirm-dialog";
 import { setOfflineReader } from "@/lib/client/api";
-import { forgetAccount, recordOnlineSignIn, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
+import { forgetAccount, isInstalled, recordOnlineSignIn, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
 import { answerOffline, refreshPacks, type RefreshProgress } from "@/lib/offline/packs";
+import { clearFarmTiles, keepFarmTiles, keepsPhotosByItself } from "@/lib/farming/imagery-device";
 import { importOldSafetyDrafts } from "@/components/offline-queue";
 import { PACK_REFRESH_MINUTES } from "@/lib/offline/pack-inventory";
 import { sessionCheck, type SessionCheck } from "@/lib/offline/account";
@@ -145,6 +146,10 @@ export async function refreshFarmPacks(userId: string, organisationId: string, o
       } catch {
         // fine
       }
+    }
+    // Then the farm's area of aerial photos, on phones and tablets (#485, decision 1063). Another account's go first.
+    if (result.outcome === "done" && keepsPhotosByItself(navigator.userAgent, navigator.maxTouchPoints ?? 0, isInstalled())) {
+      void clearFarmTiles(window.location.origin, userId).then(() => keepFarmTiles({ server: window.location.origin, userId, organisationId })).catch(() => undefined);
     }
     return result;
   } catch {
@@ -340,6 +345,7 @@ export async function prepareSignOut(confirm: ConfirmFunction, userId: string, o
     }
   }
   await forgetAccount(server, userId).catch(() => undefined);
+  await clearFarmTiles(server, null);
   await tellServiceWorker({ type: "signedOut" }, 2000);
   try {
     window.sessionStorage.removeItem(VERIFY_KEY);
