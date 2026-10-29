@@ -364,7 +364,7 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
       return (
         <Step
           {...frame}
-          question={flow.kind === "photo" ? `Photo of ${paddock?.name ?? "the paddock"}` : "A photo of the paddock?"}
+          question={flow.kind === "photo" ? paddock ? `Photo of paddock ${paddock.name}` : "Photo of the paddock" : "A photo of the paddock?"}
           onNext={flow.kind === "photo" ? onClose : next}
           nextLabel={flow.kind === "photo" ? "Done" : "Next"}
           nextDisabled={flow.kind === "photo" && !photos.length}
