@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
+import { FarmPhotosOffline } from "@/components/farm-imagery";
 import { refreshFarmPacks, useOnline, usePackProgress } from "@/components/offline-support";
 import { Badge, Button, Card, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -261,6 +262,8 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
         </div>
         {!online ? <p className={ui.muted}>No connection: updating waits until there is one.</p> : null}
       </Card>
+
+      <FarmPhotosOffline organisationId={organisationId} online={online} />
 
       {rows === null ? <p className={ui.muted}>Loading…</p> : null}
       {rows && rows.length === 0 ? <Notice>Nothing is kept on this device yet. It starts by itself when Tohyee is open with a connection.</Notice> : null}

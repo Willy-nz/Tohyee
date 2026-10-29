@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
+import * as settingsRoute from "@/app/api/farming/settings/route";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { todayIsoDate } from "@/lib/dates";
+import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { areaHectares, hectaresText, parseGeometry } from "@/lib/farming/geometry";
 import {
@@ -19,7 +22,7 @@ import {
   updatePaddock,
 } from "@/lib/farming/paddocks";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
-import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, startTestServer, type TestServer } from "../helpers/test-server";
+import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, params, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
 
 const box = (west: number, south = -46.2, width = 0.0065, height = 0.004) => ({
   type: "Polygon",
@@ -214,12 +217,48 @@ describeWithDatabase("farms and paddocks", () => {
 
   it("keeps the organisation's own LINZ Basemaps key for aerial imagery, checked and removable", async () => {
     const w = await setup();
-    expect(await w.as((tx) => getFarmingSettings(tx))).toEqual({ enabled: true, imageryKey: null });
+    expect(await w.as((tx) => getFarmingSettings(tx))).toEqual({ enabled: true, imageryKey: null, imageryKeySavedOn: null });
     await expect(w.as((tx) => setImageryKey(tx, { imageryKey: "has spaces in it" }))).rejects.toThrow("doesn't look like a LINZ Basemaps API key");
     await expect(w.as((tx) => setImageryKey(tx, { imageryKey: "short" }))).rejects.toThrow("doesn't look like");
-    expect(await w.as((tx) => setImageryKey(tx, { imageryKey: "  c01abcdEFG_123-xyz  " }))).toEqual({ enabled: true, imageryKey: "c01abcdEFG_123-xyz" });
-    expect(await w.as((tx) => setImageryKey(tx, { imageryKey: "" }))).toEqual({ enabled: true, imageryKey: null });
+    expect(await w.as((tx) => setImageryKey(tx, { imageryKey: "  c01abcdEFG_123-xyz  " }))).toEqual({ enabled: true, imageryKey: "c01abcdEFG_123-xyz", imageryKeySavedOn: todayIsoDate() });
+    expect(await w.as((tx) => setImageryKey(tx, { imageryKey: "" }))).toEqual({ enabled: true, imageryKey: null, imageryKeySavedOn: null });
     await w.as((tx) => setFarmingEnabled(tx, { enabled: false }));
     await expect(w.as((tx) => setImageryKey(tx, { imageryKey: "c01abcdEFG_123-xyz" }))).rejects.toThrow("Farming is off");
+  });
+
+  it("remembers when the key was saved, for the 80-day reminder (#485, decision 1061)", async () => {
+    const w = await setup();
+    const savedAt = async () => (await w.as((tx) => tx.query<{ at: string | null; on: string | null }>("select linz_basemaps_key_saved_at::text as at, (linz_basemaps_key_saved_at at time zone 'Pacific/Auckland')::date::text as on from farming_settings"))).rows[0];
+    await w.as((tx) => setImageryKey(tx, { imageryKey: "c01madeupFIRSTkey000" }));
+    // Pretend it was saved 81 days ago.
+    await w.as((tx) => tx.query("update farming_settings set linz_basemaps_key_saved_at = now() - interval '81 days'"));
+    const old = await savedAt();
+    expect((await w.as((tx) => getFarmingSettings(tx))).imageryKeySavedOn).toBe(old.on);
+    expect(old.on).not.toBe(todayIsoDate());
+    // The same key saved again keeps its date; turning Farming off and on doesn't touch it.
+    await w.as((tx) => setImageryKey(tx, { imageryKey: "c01madeupFIRSTkey000" }));
+    await w.as((tx) => setFarmingEnabled(tx, { enabled: false }));
+    await w.as((tx) => setFarmingEnabled(tx, { enabled: true }));
+    expect((await savedAt()).at).toBe(old.at);
+    // A new key starts again today.
+    expect((await w.as((tx) => setImageryKey(tx, { imageryKey: "c01madeupSECONDkey00" }))).imageryKeySavedOn).toBe(todayIsoDate());
+    // The database keeps the key and its date together.
+    await expect(w.as((tx) => tx.query("update farming_settings set linz_basemaps_key_saved_at = null"))).rejects.toThrow();
+  });
+
+  it("lets only owners and admins change the key; farm members can read it to load the photos", async () => {
+    const w = await setup();
+    const bookkeeper = await createTestUser(`farm-bookkeeper-${organisations}@example.com`);
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper')", [w.org, bookkeeper.id]);
+    const patch = async (cookie: string) =>
+      settingsRoute.PATCH(apiRequest("/api/farming/settings", { method: "PATCH", cookie, body: { organisationId: w.org, imageryKey: "c01madeupROUTEkey000" } }), params({}) as never);
+    expect((await patch(await sessionCookieFor(bookkeeper))).status).toBe(403);
+    expect((await w.as((tx) => getFarmingSettings(tx))).imageryKey).toBeNull();
+    const saved = await patch(await sessionCookieFor(owner));
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).settings).toMatchObject({ imageryKey: "c01madeupROUTEkey000", imageryKeySavedOn: todayIsoDate() });
+    const read = await settingsRoute.GET(apiRequest(`/api/farming/settings?organisationId=${w.org}`, { cookie: await sessionCookieFor(bookkeeper) }), params({}) as never);
+    expect(read.status).toBe(200);
+    expect((await read.json()).settings).toMatchObject({ imageryKey: "c01madeupROUTEkey000", imageryKeySavedOn: todayIsoDate() });
   });
 });
