@@ -4,6 +4,7 @@ import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { AerialPhotosSettings } from "@/components/farm-imagery";
 import { ModulesCard } from "@/components/modules";
 import { LogoCard } from "@/components/organisation/logo-card";
 import { useApiData } from "@/components/hooks";
@@ -255,6 +256,7 @@ function Settings({ organisationId }: { organisationId: string }) {
         ) : null}
       </Card>
       <ModulesCard organisationId={organisationId} />
+      <AerialPhotosSettings organisationId={organisationId} />
     </>
   );
 }

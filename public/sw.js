@@ -18,7 +18,7 @@
  * The page tells it who's signed in ("context") and when someone signs
  * out ("signedOut"), which deletes that account's pages.
  */
-importScripts("/sw-rules.js");
+importScripts("/sw-rules.js", "/sw-tiles.js");
 
 var R = self.TohyeeSw;
 var META_DB = "tohyee-sw";
@@ -387,6 +387,8 @@ self.addEventListener("fetch", function (event) {
   var req = event.request;
   if (req.method !== "GET") return;
   var url = new URL(req.url);
+  // LINZ aerial photos: kept copies when LINZ can't be reached (#485, public/sw-tiles.js).
+  if (self.TohyeeTiles && self.TohyeeTiles.handle(event, readContext, R, caches, self.location.origin)) return;
   if (url.origin !== self.location.origin) return;
   var fileMatch = /^\/api\/farming\/safety\/files\/([0-9a-f-]{36})$/i.exec(url.pathname);
   if (fileMatch) {

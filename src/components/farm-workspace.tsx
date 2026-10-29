@@ -121,6 +121,12 @@ function useImageryKey(organisationId: string) {
   return useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId }).data?.settings.imageryKey ?? null;
 }
 
+/** Whether the organisation's settings say there's no key (not just "still loading"), for "Add aerial photos" (#485). */
+function useNoImageryKey(organisationId: string) {
+  const settings = useApiData<{ settings: FarmingSettings }>("/api/farming/settings", { organisationId }).data?.settings;
+  return Boolean(settings && !settings.imageryKey);
+}
+
 /** Each paddock's colour for a colouring. */
 export function bandFills(statuses: PaddockStatus[], colouring: MapColouring, today: string): Record<string, string> {
   return Object.fromEntries(statuses.map((status) => [status.paddockId, paddockBand({ inNow: Boolean(status.inNow), lastGrazedOn: status.lastGrazedOn, coverOn: status.cover?.measuredOn ?? null }, colouring, today).colour]));
@@ -186,6 +192,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
   const statuses = useStatuses(organisationId, farm.id);
   const shapes = useShapes(organisationId, farm.id);
   const imageryKey = useImageryKey(organisationId);
+  const noKey = useNoImageryKey(organisationId);
   const calendar = useApiData<{ items: CalendarItem[] }>("/api/farming/calendar", { organisationId, from: today, to: addDays(today, 6), farmId: farm.id });
   const [mapOpen, setMapOpen] = useState(false);
   const jobs = (calendar.data?.items ?? []).filter((item) => item.state !== "cancelled" && item.state !== "dismissed");
@@ -229,7 +236,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
         {shapes.data && statuses.data ? (
           <>
             <div className={mapOpen ? undefined : styles.compactMap}>
-              <PaddockMap paddocks={shapes.data.paddocks.filter((paddock) => paddock.status === "active")} selected={null} imageryKey={mapOpen ? imageryKey : null} fills={fills} label="Map of the paddocks, coloured by days since grazed" />
+              <PaddockMap paddocks={shapes.data.paddocks.filter((paddock) => paddock.status === "active")} selected={null} imageryKey={mapOpen ? imageryKey : null} offerImagery={mapOpen && noKey} fills={fills} label="Map of the paddocks, coloured by days since grazed" />
             </div>
             {mapOpen ? <Legend colouring="grazed" /> : null}
             <div className={styles.actions}>
@@ -278,6 +285,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const statuses = useStatuses(organisationId, farm.id);
   const shapes = useShapes(organisationId, farm.id);
   const imageryKey = useImageryKey(organisationId);
+  const noKey = useNoImageryKey(organisationId);
   const [colouring, setColouring] = useState<MapColouring>("grazed");
   const [selected, setSelected] = useState<string | null>(null);
   // Paddocks in the order people say them: 1, 2 … 10, not 1, 10, 2.
@@ -307,7 +315,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
         <ColouringSwitch value={colouring} onChange={setColouring} />
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {shapes.data && statuses.data ? (
-          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} fills={fills} overlays={overlays} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${overlays.length} hazards`} />
+          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} offerImagery={noKey} fills={fills} overlays={overlays} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${overlays.length} hazards`} />
         ) : (
           <p className={ui.muted}>Loading…</p>
         )}
