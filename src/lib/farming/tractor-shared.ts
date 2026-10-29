@@ -164,7 +164,7 @@ export const JOB_CHANGES = ["saved", "changed", "corrected", "withdrawn", "befor
 export type JobChangeKind = (typeof JOB_CHANGES)[number];
 export const JOB_CHANGE_LABELS: Record<JobChangeKind, string> = {
   saved: "Saved from the phone",
-  changed: "Added to",
+  changed: "Changed",
   corrected: "Corrected",
   withdrawn: "Withdrawn",
   before_history: "As it stood when version history started",

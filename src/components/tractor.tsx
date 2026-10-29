@@ -1520,7 +1520,7 @@ function NotWorkingCard({ job, onSave }: { job: TractorJob; onSave: (body: Recor
   return (
     <Card title="Working was left ON?" description="If Working stayed ON when nothing was being spread or sprayed (for example driving back to the shed), mark that time here. The track isn't changed; the estimate leaves the time out, and the history keeps the estimate as it was.">
       {job.notWorking.length ? (
-        <ul>
+        <ul style={{ paddingLeft: 18 }}>
           {job.notWorking.map((entry, index) => (
             <li key={`${entry.from}-${index}`}>{notWorkingText(entry)}</li>
           ))}
