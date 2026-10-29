@@ -16,7 +16,7 @@ import { optionalString, requireId, requireString } from "@/lib/validation";
  * drawn zone.
  */
 
-function point(input: unknown): Position | null {
+export function point(input: unknown): Position | null {
   if (input == null) return null;
   if (!Array.isArray(input) || input.length !== 2 || !input.every((value) => typeof value === "number" && Number.isFinite(value))) throw new ValidationError("The place on the map isn't a longitude and latitude.");
   const [lon, lat] = input as [number, number];
@@ -24,7 +24,7 @@ function point(input: unknown): Position | null {
   return [lon, lat];
 }
 
-function zone(input: unknown): ZoneGeometry | null {
+export function zone(input: unknown): ZoneGeometry | null {
   if (input == null) return null;
   try {
     const parsed = parseGeometry(input);
@@ -36,7 +36,7 @@ function zone(input: unknown): ZoneGeometry | null {
   }
 }
 
-async function paddocksOnFarm(tx: OrgTx, farmId: string, input: unknown): Promise<string[]> {
+export async function paddocksOnFarm(tx: OrgTx, farmId: string, input: unknown): Promise<string[]> {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 200) throw new ValidationError("Choose up to 200 paddocks.");
   const ids = [...new Set(input.map((value) => requireId(value, "Paddock")))];

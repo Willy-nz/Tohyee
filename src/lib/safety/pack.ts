@@ -58,7 +58,12 @@ function fileIds(body: string): string[] {
  * under a lock held until they're saved, so once entry N is seen every
  * entry before it is saved too: nothing can land behind the high-water mark.
  */
-export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean; afterSeq?: string | null }): Promise<PackData> {
+/**
+ * `kinds` chooses the records (#487, decision 1072): "safety" (the WorkSafe
+ * pack; effluent records are left out), "effluent" or "all". Effluent
+ * records sit in the same history, so the chain still lists every entry.
+ */
+export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean; afterSeq?: string | null; kinds?: "safety" | "effluent" | "all" }): Promise<PackData> {
   await requireFarming(tx);
   const from = parseIsoDate(input.from, "From");
   const to = parseIsoDate(input.to, "To");
@@ -74,6 +79,7 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
   // The weekly copy goes off the farm by email: never with injury or medical details (decision 958).
   const restricted = input.withholdRestricted ? false : await canSeeRestricted(tx);
   const zone = businessTimeZone();
+  const kinds = input.kinds ?? "safety";
   // One upper bound for everything below, so the pack, its chain and the head it reports agree.
   const top = await tx.query<{ seq: string }>("select coalesce(max(seq), 0)::text as seq from safety_entries");
   const upTo = top.rows[0].seq;
@@ -81,14 +87,16 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
     input.afterSeq !== undefined
       ? await tx.query<{ record_id: string }>(
           `select distinct record_id::text from safety_entries
-            where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[])) and seq > $2::bigint and seq <= $3::bigint`,
-          [farmIds, input.afterSeq ?? "0", upTo],
+            where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[])) and seq > $2::bigint and seq <= $3::bigint
+              and ($4 = 'all' or (kind like 'effluent\\_%') = ($4 = 'effluent'))`,
+          [farmIds, input.afterSeq ?? "0", upTo, kinds],
         )
       : await tx.query<{ record_id: string }>(
           `select distinct record_id::text from safety_entries
             where ($1::bigint[] is null or farm_id is null or farm_id = any($1::bigint[])) and seq <= $6::bigint
-              and (((entered_at at time zone $4)::date between $2 and $3) or (not $5 and happened_on between $2 and $3))`,
-          [farmIds, from, to, zone, input.enteredOnly ?? false, upTo],
+              and (((entered_at at time zone $4)::date between $2 and $3) or (not $5 and happened_on between $2 and $3))
+              and ($7 = 'all' or (kind like 'effluent\\_%') = ($7 = 'effluent'))`,
+          [farmIds, from, to, zone, input.enteredOnly ?? false, upTo, kinds],
         );
   const ids = records.rows.map((row) => row.record_id);
   const rows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e where e.record_id = any($1::uuid[]) and e.seq <= $2::bigint order by e.seq`, [ids, upTo]);

@@ -23,6 +23,17 @@ export const SAFETY_KINDS = [
   "equipment_release",
   "training",
   "chemical",
+  // Farm dairy effluent (#487): kept in the same history (docs/FARM-EFFLUENT.md).
+  "effluent_system",
+  "effluent_pond",
+  "effluent_block",
+  "effluent_zone",
+  "effluent_consent",
+  "effluent_application",
+  "effluent_pond_reading",
+  "effluent_deferral",
+  "effluent_service",
+  "effluent_incident",
 ] as const;
 export type SafetyKind = (typeof SAFETY_KINDS)[number];
 
@@ -41,7 +52,22 @@ export const KIND_LABELS: Record<SafetyKind, string> = {
   equipment_release: "Equipment released",
   training: "Training",
   chemical: "Chemical",
+  effluent_system: "Effluent system",
+  effluent_pond: "Effluent pond or sump",
+  effluent_block: "Effluent block",
+  effluent_zone: "No-apply zone",
+  effluent_consent: "Effluent consent conditions",
+  effluent_application: "Effluent applied",
+  effluent_pond_reading: "Pond level",
+  effluent_deferral: "Effluent not applied",
+  effluent_service: "Effluent servicing",
+  effluent_incident: "Effluent incident",
 };
+
+/** Effluent records (#487): kept in the safety history, but not part of the WorkSafe pack. */
+export function isEffluentKind(kind: string): boolean {
+  return kind.startsWith("effluent_");
+}
 
 export const SAFETY_CHANGES = ["created", "updated", "corrected", "withdrawn"] as const;
 export type SafetyChange = (typeof SAFETY_CHANGES)[number];
@@ -305,6 +331,29 @@ const FIELD_LABELS: Record<string, string> = {
   due: "Due",
   done: "Done",
   verified: "Checked and closed",
+  // Effluent (#487).
+  systemId: "Effluent system",
+  pondId: "Pond or sump",
+  blockId: "Effluent block",
+  consentNumber: "Consent number",
+  council: "Regional council",
+  maxDepthMm: "Most depth (mm)",
+  maxRateMmPerHour: "Most rate (mm/h)",
+  returnPeriodDays: "Days between applications",
+  startedAt: "Started",
+  stoppedAt: "Stopped",
+  depthEnteredMm: "Depth as entered (mm)",
+  depthWorkedOut: "Depth worked out",
+  ponding: "Ponding or runoff",
+  weather: "Weather",
+  soil: "Soil",
+  levelMm: "Level (mm on the gauge)",
+  capacityM3: "Holds (m³)",
+  bufferM: "Buffer (m)",
+  areaHa: "Area (ha)",
+  incidentId: "Effluent incident",
+  effluentIncidentId: "Effluent incident",
+  councilTold: "Council told",
 };
 
 /** A short name for a record, for lists and the pack. */
