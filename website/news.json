@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-10-30",
+      "title": "Tohyee 0.19.0: Farm as its own app",
+      "body": "New: Farm is its own app with tabs on every farm page, Use my location on every map, opt-in farm team locations, and install steps for each browser, including Firefox on Android. The big Call 111 button is replaced by an Emergency details card.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.19.0"
+    },
+    {
       "date": "2026-10-29",
       "title": "Tohyee 0.18.0: effluent, easy aerial photos and the phone app",
       "body": "New: effluent management (daily logs, pond levels, checks, incidents and a council pack you download), aerial photos set up in three steps with your own LINZ key, Tohyee on your phone with farm information offline and tractor mode, farm safety, a Farm staff role, passkeys and invites. Next.js is updated to fix critical security problems, so update soon.",
