@@ -6,6 +6,7 @@ import { DateInput } from "@/components/date-input";
 import { operationId, useFarmDrafts } from "@/components/farm-drafts";
 import { EffluentLogButtons } from "@/components/farm-effluent-log";
 import { LogSafetyReport } from "@/components/farm-safety-reports";
+import { PasturePhotoPicker, type PickedPhoto } from "@/components/pasture-photos";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useApiData } from "@/components/hooks";
@@ -29,7 +30,7 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-type Flow = { kind: "cover" | "in" | "out" | "feed"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" } | { kind: "safety"; type: "hazard" | "near_miss" | "incident" };
+type Flow = { kind: "cover" | "in" | "out" | "feed" | "photo"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" } | { kind: "safety"; type: "hazard" | "near_miss" | "incident" };
 
 const STATUS_TONE: Record<DraftStatus, "neutral" | "green" | "amber"> = { saved: "neutral", synced: "green", attention: "amber" };
 
@@ -61,7 +62,7 @@ export function FarmLog(context: FarmContext) {
   const params = useSearchParams();
   const record = params.get("record");
   const initial: Flow | null =
-    record === "cover" || record === "in" || record === "out" || record === "feed"
+    record === "cover" || record === "in" || record === "out" || record === "feed" || record === "photo"
       ? { kind: record, paddockId: params.get("paddock"), grazingId: params.get("grazing") }
       : record === "walk"
         ? { kind: "walk" }
@@ -107,6 +108,10 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
           <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "feed" })}>
             Feed
             <small>Supplements fed</small>
+          </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "photo" })}>
+            Paddock photo
+            <small>For the photo diary or a cover estimate</small>
           </button>
         </div>
         <h3>Safety</h3>
@@ -257,14 +262,15 @@ function PaddockChoice({ statuses, value, onPick, show }: { statuses: PaddockSta
 type Answers = { paddockId: string | null; grazingId: string | null; cover: string; method: PastureMethod; day: string; mob: string; head: string; feed: string; quantity: string; unit: SupplementUnit; kgDm: string; postCover: string };
 
 /** The steps of a quick log, each one question. */
-function stepsFor(kind: "cover" | "in" | "out" | "feed", given: { paddock: boolean; grazing: boolean }): string[] {
-  if (kind === "cover") return [...(given.paddock ? [] : ["paddock"]), "cover", "method", "day", "review"];
+function stepsFor(kind: "cover" | "in" | "out" | "feed" | "photo", given: { paddock: boolean; grazing: boolean }): string[] {
+  if (kind === "cover") return [...(given.paddock ? [] : ["paddock"]), "cover", "method", "day", "photo", "review"];
+  if (kind === "photo") return [...(given.paddock ? [] : ["paddock"]), "photo"];
   if (kind === "in") return [...(given.paddock ? [] : ["paddock"]), "mob", "head", "day", "preCover", "review"];
   if (kind === "out") return [...(given.grazing ? [] : ["grazing"]), "day", "postCover", "review"];
   return ["feed", "quantity", "unit", "paddockOptional", "day", "review"];
 }
 
-const TITLES = { cover: "Cover reading", in: "Mob in", out: "Mob out", feed: "Feed" } as const;
+const TITLES = { cover: "Cover reading", in: "Mob in", out: "Mob out", feed: "Feed", photo: "Paddock photo" } as const;
 
 function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" }>; onClose: () => void }) {
   const today = todayInBrowser();
@@ -278,6 +284,9 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
   const steps = stepsFor(flow.kind, { paddock: Boolean(givenPaddock), grazing: Boolean(givenGrazing) });
   const [index, setIndex] = useState(0);
   const [saved, setSaved] = useState<string | null>(null);
+  // The reading's operation id, made now so photos taken before it's saved name it (decision 1160).
+  const [readingId] = useState(() => operationId());
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [answers, setAnswers] = useState<Answers>({ paddockId: givenPaddock, grazingId: givenGrazing, cover: "", method: "plate_meter", day: today, mob: "", head: "", feed: "", quantity: "", unit: "kg_dm", kgDm: "", postCover: "" });
   const set = (patch: Partial<Answers>) => setAnswers((current) => ({ ...current, ...patch }));
   const step = steps[index];
@@ -308,7 +317,7 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
   }
 
   const save = () => {
-    const id = operationId();
+    const id = flow.kind === "cover" ? readingId : operationId();
     const base = { operationId: id, farmId: farm.id, farmName: farm.name, createdAt: new Date().toISOString(), walkId: null };
     let kind: DraftKind;
     let payload: Record<string, unknown>;
@@ -349,6 +358,22 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
             }}
             show={(status) => (status.inNow ? `${status.inNow.mob} in` : status.cover ? `${status.cover.cover.toLocaleString("en-NZ")} · ${shortDate(status.cover.measuredOn, today)}` : "")}
           />
+        </Step>
+      );
+    case "photo":
+      return (
+        <Step
+          {...frame}
+          question={flow.kind === "photo" ? `Photo of ${paddock?.name ?? "the paddock"}` : "A photo of the paddock?"}
+          onNext={flow.kind === "photo" ? onClose : next}
+          nextLabel={flow.kind === "photo" ? "Done" : "Next"}
+          nextDisabled={flow.kind === "photo" && !photos.length}
+          onSkip={flow.kind === "photo" ? undefined : () => next()}
+        >
+          {paddock ? <PasturePhotoPicker organisationId={organisationId} farm={farm} paddock={{ id: paddock.paddockId, name: paddock.name }} readingOperationId={flow.kind === "cover" ? readingId : null} photos={photos} onChange={setPhotos} label={photos.length ? "Add another photo" : "Take a photo"} /> : null}
+          <p className={ui.muted}>
+            {flow.kind === "photo" ? "Each photo is saved as soon as it's taken. It goes in the paddock's photo diary, and your own AI, if you've connected one, can estimate its cover for you to check." : "Optional. It goes in the paddock's photo diary beside this reading, and helps compare photo estimates with readings."}
+          </p>
         </Step>
       );
     case "grazing":
@@ -469,7 +494,7 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
       );
     default: {
       const lines: Array<[string, string]> = [["Farm", farm.name]];
-      if (flow.kind === "cover") lines.push(["Paddock", paddock?.name ?? "–"], ["Cover", coverValue === null ? "–" : coverText(coverValue)], ["Measured by", PASTURE_METHOD_LABELS[answers.method]], ["Day", formatDate(answers.day)]);
+      if (flow.kind === "cover") lines.push(["Paddock", paddock?.name ?? "–"], ["Cover", coverValue === null ? "–" : coverText(coverValue)], ["Measured by", PASTURE_METHOD_LABELS[answers.method]], ["Day", formatDate(answers.day)], ["Photos", photos.length ? `${photos.length} (kept already)` : "None"]);
       if (flow.kind === "in") lines.push(["Paddock", paddock?.name ?? "–"], ["Mob", mobText(answers.mob.trim(), Number(answers.head) || null)], ["Day in", formatDate(answers.day)], ["Cover before", answers.cover ? coverText(Number(answers.cover)) : "Not recorded"]);
       if (flow.kind === "out") lines.push(["Mob", grazing ? `${grazing.inNow!.mob} in ${grazing.name}` : "–"], ["Day out", formatDate(answers.day)], ["Cover after", answers.postCover ? coverText(Number(answers.postCover)) : "Not recorded"]);
       if (flow.kind === "feed") lines.push(["Feed", answers.feed], ["How much", `${answers.quantity} ${SUPPLEMENT_UNIT_LABELS[answers.unit]}${answers.unit !== "kg_dm" && answers.kgDm ? ` (${answers.kgDm} kg DM)` : ""}`], ["Paddock", paddocks.find((status) => status.paddockId === answers.paddockId)?.name ?? "None"], ["Day", formatDate(answers.day)]);
@@ -500,6 +525,9 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
   const [method, setMethod] = useState<PastureMethod>("plate_meter");
   const [day, setDay] = useState(today);
   const [typed, setTyped] = useState<{ key: string; value: string } | null>(null);
+  // Photos taken at each paddock on this walk, and the reading id they name until a reading is saved (decision 1160).
+  const [walkPhotos, setWalkPhotos] = useState<Record<string, PickedPhoto[]>>({});
+  const [pending, setPending] = useState<{ key: string; id: string } | null>(null);
 
   if (!walk) {
     return (
@@ -554,6 +582,10 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
   const key = `${walk.walkId}:${paddock.paddockId}`;
   const value = typed?.key === key ? typed.value : draft ? String(draft.payload.cover) : "";
   const cover = parseCover(value);
+  if (pending?.key !== key) setPending({ key, id: operationId() });
+  const nextReadingId = pending?.key === key ? pending.id : null;
+  // A photo names this paddock's reading on the walk, or the one about to be saved.
+  const photoReadingId = draft?.operationId ?? nextReadingId;
   const go = (position: number) => {
     setTyped(null);
     change((current) => moveWalk(current, walk.walkId, position));
@@ -561,7 +593,8 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
   const saveAndNext = () => {
     if (cover === null) return;
     // Saved on the phone straight away (decision 911), then sent when it can be.
-    change((current) => moveWalk(saveWalkReading(current, walk, paddock, cover, operationId, new Date().toISOString()), walk.walkId, walk.position + 1));
+    const nextId = nextReadingId ?? operationId();
+    change((current) => moveWalk(saveWalkReading(current, walk, paddock, cover, () => nextId, new Date().toISOString()), walk.walkId, walk.position + 1));
     setTyped(null);
     void sync();
   };
@@ -587,6 +620,16 @@ function FarmWalk({ organisationId, farm, onClose }: FarmContext & { onClose: ()
         ) : null}
         <BigNumber key={key} value={value} onChange={(text) => setTyped({ key, value: text })} label="Cover" unit="kg DM/ha" />
         {value !== "" && cover === null ? <p role="alert">A whole number from 0 to 20,000.</p> : null}
+        <PasturePhotoPicker
+          key={`photo-${key}`}
+          organisationId={organisationId}
+          farm={farm}
+          paddock={{ id: paddock.paddockId, name: paddock.name }}
+          readingOperationId={photoReadingId}
+          photos={walkPhotos[key] ?? []}
+          onChange={(photos) => setWalkPhotos((current) => ({ ...current, [key]: photos }))}
+          label={(walkPhotos[key] ?? []).length ? "Add another photo" : "Photo (optional)"}
+        />
         {draft ? (
           <p>
             {draft.label} <StatusBadge status={draft.status} stored={stored} />

@@ -3112,6 +3112,38 @@ that something happened.
   backups, exports, Analytics, AI tools or the offline pack. Starting and
   stopping are in the audit trail, positions aren't.
 
+- **Paddock photos and covers from photos** (#503, decisions 1160-1169;
+  tenant migration 0209): a cover reading on the Log, each paddock on a
+  farm walk, and a new **Paddock photo** button (also **Add photo** on a
+  paddock's card) take photos of the paddock. Each is a compressed copy with
+  the phone's time and, if asked, where the phone was, kept through the
+  device's queue like safety photos, so it waits without a signal and is
+  kept once however often it's sent. A photo taken with a reading is linked
+  to it whichever reaches Tohyee first. Every paddock card has a **Photo
+  diary**: its photos by the day taken, beside that day's readings, each
+  marked Measured or Estimate. Photos are seen and added like cover
+  readings (farm staff and bookkeepers add, viewers look, on their own
+  farms); a bookkeeper can remove one (hidden and kept).
+  The person's **own AI** (an AI key or connected app) can list photos
+  waiting for an estimate (`list_pasture_photos_awaiting_estimate`), look
+  at one (`get_pasture_photo`, the image, up to 3.5 MB), and with **Make
+  drafts** propose a cover in kg DM/ha with how sure it is and why
+  (`propose_pasture_cover_estimate`). The AI isn't given where the phone
+  was or any reading. A proposal is shown as **AI estimate from a photo,
+  not measured** on Pasture and feed › **Covers from photos** until a
+  person accepts it as a reading, changes it first, keeps it beside the
+  photo's own reading for comparison, or declines it; each decision is kept
+  with who and when, and is made once. An accepted one is a reading by the
+  method "AI estimate from a photo, not measured", counted as an estimate.
+  Tohyee itself calls no AI and sends photos nowhere; with no AI connected
+  the card says how to connect one, and covers are entered by hand.
+  **Photo estimates beside other readings** shows, per farm and by method
+  (plate meter, satellite, imports...), how far the AI's own figures were
+  from other readings of the same paddock within 0-7 days (2 by default)
+  over the last year: the average, the range and the count, in neutral
+  words. It never adjusts an estimate. There's no Pasture.io connection
+  yet (decision 1169): its readings can come in through the reading import.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

@@ -1,4 +1,4 @@
-import { add, dec, type Decimal, divide, isZero, mul, roundHalfUp, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { abs, add, dec, type Decimal, divide, isZero, mul, roundHalfUp, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 
 /*
  * Pasture and feed figures (examples PF1-PF6, decision 559). Pure and
@@ -6,17 +6,24 @@ import { add, dec, type Decimal, divide, isZero, mul, roundHalfUp, toFixedString
  * feed plan or target is made.
  */
 
+/** The methods a person (or a file) gives a reading. */
 export const PASTURE_METHODS = ["plate_meter", "visual", "measured_other", "satellite", "model"] as const;
-export type PastureMethod = (typeof PASTURE_METHODS)[number];
+/**
+ * A reading made only when a person accepts an AI's estimate from a photo
+ * (#503, decision 1162). Never typed or imported: only accepting makes one.
+ */
+export const PHOTO_ESTIMATE_METHOD = "photo_ai" as const;
+export type PastureMethod = (typeof PASTURE_METHODS)[number] | typeof PHOTO_ESTIMATE_METHOD;
 export const PASTURE_METHOD_LABELS: Record<PastureMethod, string> = {
   plate_meter: "Plate meter",
   visual: "Visual",
   measured_other: "Other measurement",
   satellite: "Satellite (estimate)",
   model: "Model (estimate)",
+  photo_ai: "AI estimate from a photo, not measured",
 };
-/** Satellite and model readings are estimates, labelled so everywhere (PF1). */
-export const isEstimate = (method: PastureMethod) => method === "satellite" || method === "model";
+/** Satellite, model and photo readings are estimates, labelled so everywhere (PF1, decision 1162). */
+export const isEstimate = (method: PastureMethod) => method === "satellite" || method === "model" || method === PHOTO_ESTIMATE_METHOD;
 export const MAX_COVER = 20000;
 
 export const SUPPLEMENT_UNITS = ["kg_dm", "kg_as_fed", "t_as_fed", "bales", "other"] as const;
@@ -149,3 +156,103 @@ export function parseCover(text: string): number | null {
   return value <= MAX_COVER ? value : null;
 }
 
+
+// Photo estimates beside other readings (#503, decision 1166) -------------------------------------------
+
+export const CALIBRATION_WINDOWS = [0, 1, 2, 3, 7] as const;
+export const DEFAULT_CALIBRATION_WINDOW = 2;
+
+export type CalibrationEstimate = { id: string; paddockId: string; takenOn: string; cover: number };
+export type CalibrationReading = { id: string; paddockId: string; measuredOn: string; cover: number; method: PastureMethod };
+export type CalibrationPair = { estimateId: string; readingId: string; paddockId: string; takenOn: string; measuredOn: string; estimate: number; reading: number; difference: number };
+export type CalibrationGroup = {
+  /** The other reading's method: each method is compared on its own. */
+  method: PastureMethod;
+  count: number;
+  /** The average of estimate − reading, to the kg (negative: estimates were lower). */
+  averageDifference: number;
+  /** The average size of the difference, either way, to the kg. */
+  averageGap: number;
+  /** The most below and the most above (estimate − reading). */
+  lowest: number;
+  highest: number;
+  pairs: CalibrationPair[];
+};
+
+/** A whole number of days from 0 to 14, or the default. */
+export function parseCalibrationWindow(input: unknown): number | null {
+  if (input === undefined || input === null || input === "") return DEFAULT_CALIBRATION_WINDOW;
+  const value = Number(input);
+  return Number.isInteger(value) && value >= 0 && value <= 14 ? value : null;
+}
+
+/**
+ * Each photo estimate beside the nearest other reading of the same paddock
+ * within `windowDays` of the photo's day, for each method on its own
+ * (decision 1166): nearest first, then the reading on or before the photo,
+ * then the latest recorded. Readings that are themselves from photos are
+ * never compared. Nothing is adjusted: these are only the differences.
+ */
+export function calibrationPairs(estimates: CalibrationEstimate[], readings: CalibrationReading[], windowDays: number): Map<PastureMethod, CalibrationPair[]> {
+  const groups = new Map<PastureMethod, CalibrationPair[]>();
+  for (const estimate of estimates) {
+    const best = new Map<PastureMethod, { reading: CalibrationReading; rank: [number, number, number] }>();
+    for (const reading of readings) {
+      if (reading.method === PHOTO_ESTIMATE_METHOD || reading.paddockId !== estimate.paddockId) continue;
+      const offset = days(estimate.takenOn, reading.measuredOn);
+      if (Math.abs(offset) > windowDays) continue;
+      // Lower is better: nearest, then on or before the photo, then the latest recorded.
+      const rank: [number, number, number] = [Math.abs(offset), offset > 0 ? 1 : 0, -Number(reading.id)];
+      const current = best.get(reading.method);
+      if (!current || (rank[0] - current.rank[0] || rank[1] - current.rank[1] || rank[2] - current.rank[2]) < 0) best.set(reading.method, { reading, rank });
+    }
+    for (const [method, { reading }] of best) {
+      const pair: CalibrationPair = { estimateId: estimate.id, readingId: reading.id, paddockId: estimate.paddockId, takenOn: estimate.takenOn, measuredOn: reading.measuredOn, estimate: estimate.cover, reading: reading.cover, difference: estimate.cover - reading.cover };
+      groups.set(method, [...(groups.get(method) ?? []), pair]);
+    }
+  }
+  return groups;
+}
+
+/** The average and spread of the differences, by method, most checks first (decision 1166). */
+export function calibrationSummary(estimates: CalibrationEstimate[], readings: CalibrationReading[], windowDays: number): CalibrationGroup[] {
+  const result: CalibrationGroup[] = [];
+  for (const [method, pairs] of calibrationPairs(estimates, readings, windowDays)) {
+    const count = dec(String(pairs.length));
+    let total = ZERO_DECIMAL;
+    let totalGap = ZERO_DECIMAL;
+    for (const pair of pairs) {
+      total = add(total, dec(String(pair.difference)));
+      totalGap = add(totalGap, abs(dec(String(pair.difference))));
+    }
+    const whole = (value: Decimal) => Number(toFixedString(roundHalfUp(divide(value, count, 6), 0), 0));
+    result.push({
+      method,
+      count: pairs.length,
+      averageDifference: whole(total),
+      averageGap: whole(totalGap),
+      lowest: Math.min(...pairs.map((pair) => pair.difference)),
+      highest: Math.max(...pairs.map((pair) => pair.difference)),
+      pairs: [...pairs].sort((a, b) => b.takenOn.localeCompare(a.takenOn) || a.paddockId.localeCompare(b.paddockId)),
+    });
+  }
+  return result.sort((a, b) => b.count - a.count || a.method.localeCompare(b.method));
+}
+
+const kg = (value: number) => `${Math.abs(value).toLocaleString("en-NZ")} kg DM/ha`;
+
+/**
+ * The group in plain, neutral words: "Photo estimates were 180 kg DM/ha
+ * lower than plate meter readings on average, over 12 checks within 2 days.
+ * The differences ran from 420 lower to 90 higher; an estimate was 230
+ * kg DM/ha away on average." Says how many checks, never good or bad.
+ */
+export function calibrationText(group: CalibrationGroup, windowDays: number): string {
+  const what = PASTURE_METHOD_LABELS[group.method].replace(/ \(estimate\)$/, "").toLowerCase();
+  const checks = `${group.count} check${group.count === 1 ? "" : "s"} within ${windowDays === 0 ? "the same day" : `${windowDays} day${windowDays === 1 ? "" : "s"}`}`;
+  const side = (value: number) => (value === 0 ? "the same" : `${kg(value)} ${value < 0 ? "lower" : "higher"}`);
+  const average = group.averageDifference === 0 ? `Photo estimates were the same as ${what} readings on average` : `Photo estimates were ${side(group.averageDifference)} than ${what} readings on average`;
+  if (group.count === 1) return `${average}, over ${checks}.`;
+  const range = group.lowest === group.highest ? `Every difference was ${side(group.lowest)}.` : `The differences ran from ${side(group.lowest)} to ${side(group.highest)}; an estimate was ${kg(group.averageGap)} away on average.`;
+  return `${average}, over ${checks}. ${range}`;
+}

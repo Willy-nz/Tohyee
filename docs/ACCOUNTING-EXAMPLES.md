@@ -18233,6 +18233,40 @@ shown only to someone with payroll access. Nothing here posts to the books.
   satellite: **2,243 kg DM/ha, 78,500 kg DM, 1 estimate**.
 - **AIW14** With Farming off, the tools say so.
 
+### Covers from paddock photos (AIW15-AIW19; #503, by Claude on 30 Oct 2026; not yet reviewed)
+
+Tested in `tests/integration/pasture-photos.test.ts` and
+`tests/unit/pasture-photo-calibration.test.ts`. Nothing here posts to the
+books. The figures are made up.
+
+- **AIW15 Looking.** A Look only key lists the photos with no estimate on
+  its person's farms (an owner's sees every farm, an assigned viewer's only
+  theirs) and gets one as an image. It isn't given where the phone was or
+  any reading. A photo on another farm is "not found".
+- **AIW16 Proposing.** Only a Make drafts key (and a bookkeeper or higher)
+  proposes: paddock 8's photo, **2,100 kg DM/ha, fairly sure, "Even
+  ryegrass about 8 cm, some clover"**. It's a proposal, not a reading:
+  readings don't change. One per photo; the same idempotency key finds the
+  first; over 20,000 is refused.
+- **AIW17 A person decides, once.** Changed to **2,350**: a reading of
+  2,350 dated the photo's day, method "AI estimate from a photo, not
+  measured", counted as an estimate, its source saying the AI proposed
+  2,100. Accepted as proposed: a reading at the AI's figure. Declined (with
+  an optional reason): no reading. Paddock 7's photo was taken with a plate
+  meter reading of 2,450, so its estimate (2,250) can only be **kept for
+  comparison**, not made a second reading. A decision can't be changed.
+- **AIW18 Beside other readings.** Paddock 7: photo estimate 2,250; plate
+  meter 2,450 the same day; satellite 2,000 two days later. Within 2 days:
+  "Photo estimates were **200 kg DM/ha lower** than plate meter readings on
+  average, over 1 check within 2 days", and **250 higher** than satellite.
+  Within the same day, only the plate meter. Declined estimates are left
+  out; nothing is adjusted.
+- **AIW19 The sums.** Three checks within 2 days, differences −400, −101
+  and +150: average **−117** (−351 ÷ 3), average size **217** (651 ÷ 3,
+  half up to the kg), range 400 lower to 150 higher. Each estimate takes the
+  nearest reading of each method; on a tie, the one on or before the photo,
+  then the latest recorded.
+
 ## Income tax (#292) stage 1: taxable income, tax, provisional tax and terminal tax (ITX1-ITX10; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
 
 Tax is law, so these examples are **not** "as Xero does": they were written
