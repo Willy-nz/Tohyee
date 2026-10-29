@@ -390,6 +390,28 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
   if (key === "items" && Array.isArray(value)) return value.map((item: { text?: string; critical?: boolean }) => `${item.text}${item.critical ? " (critical)" : ""}`).join("; ") || null;
   if (key === "sections" && Array.isArray(value)) return value.map((section: { heading?: string }) => section.heading).join("; ") || null;
   if (key === "hazards" && Array.isArray(value)) return `${value.length} shown`;
+  // Effluent records (#487): readable in the pack, not raw JSON.
+  if (key === "buffers" && Array.isArray(value)) return value.map((buffer: { feature?: string; metres?: string }) => `${String(buffer.feature).replace(/_/g, " ")} ${buffer.metres} m`).join("; ") || null;
+  if (key === "notifyCouncil" && value && typeof value === "object") {
+    const notice = value as { who?: string; phone?: string | null; when?: string };
+    return `${notice.who ?? ""}${notice.phone ? `, ${notice.phone}` : ""}: ${notice.when ?? ""}`;
+  }
+  if (key === "ponding" && value && typeof value === "object") {
+    const check = value as { result?: string; note?: string | null; checkedAt?: string };
+    return `${check.result === "none" ? "None seen" : check.result === "ponding" ? "Ponding" : "Runoff"}${check.note ? `: ${check.note}` : ""}${check.checkedAt ? ` (checked ${check.checkedAt})` : ""}`;
+  }
+  if (key === "depthWorkedOut" && value && typeof value === "object") {
+    const worked = value as { mm?: string; how?: string };
+    return `${worked.mm} mm (${worked.how})`;
+  }
+  if (key === "positions" && Array.isArray(value)) {
+    return value.map((position: { label?: string | null; paddockId?: string | null; point?: number[] | null; movedAt?: string }) => [position.label, position.paddockId ? (paddockNames.get(String(position.paddockId)) ?? `paddock ${position.paddockId}`) : null, position.point ? `${Number(position.point[1]).toFixed(6)}, ${Number(position.point[0]).toFixed(6)}` : null, position.movedAt].filter(Boolean).join(", ")).join("; ") || null;
+  }
+  if ((key === "settings" || key === "councilTold") && value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).filter(([, part]) => part !== null && part !== "").map(([name, part]) => `${name.replace(/([A-Z])/g, " $1").toLowerCase()} ${part}`).join("; ") || null;
+  }
+  if (key === "markers" && Array.isArray(value)) return value.map((marker: { label?: string; mm?: string }) => `${marker.label} ${marker.mm} mm`).join(", ") || null;
+  if (key === "sources" && Array.isArray(value)) return value.map((source: { title?: string; url?: string }) => `${source.title} (${source.url})`).join("; ") || null;
   if (Array.isArray(value)) {
     if (!value.length) return null;
     return value

@@ -25,7 +25,7 @@ import { createZip, type ZipEntry } from "@/lib/zip/write";
  * unless the person may see them (decision 936).
  */
 
-export type PackFile = { id: string; recordSeq: string; name: string; contentType: string; sha256: string; photoTaken: string | null; phoneFileTime: string | null; receivedAt: string; path: string | null; content: Buffer | null };
+export type PackFile = { id: string; recordSeq: string; name: string; contentType: string; sha256: string; photoTaken: string | null; phoneFileTime: string | null; receivedAt: string; place?: { latitude: number; longitude: number; accuracyM: number | null; at: string | null } | null; path: string | null; content: Buffer | null };
 
 export type PackData = {
   organisationName: string;
@@ -63,7 +63,7 @@ function fileIds(body: string): string[] {
  * pack; effluent records are left out), "effluent" or "all". Effluent
  * records sit in the same history, so the chain still lists every entry.
  */
-export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean; afterSeq?: string | null; kinds?: "safety" | "effluent" | "all" }): Promise<PackData> {
+export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: unknown; to: unknown; withholdRestricted?: boolean; enteredOnly?: boolean; afterSeq?: string | null; kinds?: "safety" | "effluent" | "all"; extraRecordIds?: (tx: OrgTx, range: { from: string; to: string; farmIds: string[] | null; upTo: string }) => Promise<string[]> }): Promise<PackData> {
   await requireFarming(tx);
   const from = parseIsoDate(input.from, "From");
   const to = parseIsoDate(input.to, "To");
@@ -98,7 +98,9 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
               and ($7 = 'all' or (kind like 'effluent\\_%') = ($7 = 'effluent'))`,
           [farmIds, from, to, zone, input.enteredOnly ?? false, upTo, kinds],
         );
-  const ids = records.rows.map((row) => row.record_id);
+  // Records another pack adds beside its kinds (the council pack: effluent machines' checks and incident actions, #487).
+  const extra = input.extraRecordIds ? await input.extraRecordIds(tx, { from, to, farmIds, upTo }) : [];
+  const ids = [...new Set([...records.rows.map((row) => row.record_id), ...extra])];
   const rows = await tx.query<EntryRow>(`select ${ENTRY_COLUMNS} from safety_entries e where e.record_id = any($1::uuid[]) and e.seq <= $2::bigint order by e.seq`, [ids, upTo]);
   // The first version says who entered a restricted record; they may see their own.
   const authors = new Map<string, string | null>();
@@ -111,8 +113,8 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
   const wantedFiles = new Map<string, string>();
   for (const entry of entries) if (entry.body) for (const id of fileIds(entry.body)) if (!wantedFiles.has(id)) wantedFiles.set(id, entry.seq);
   const fileRows = wantedFiles.size
-    ? await tx.query<{ id: string; file_name: string; content_type: string; sha256: string; content: Buffer; photo_taken: string | null; phone_file_time: string | null; received_at: string; restricted: boolean }>(
-        "select id::text, file_name, content_type, sha256, content, photo_taken, phone_file_time, received_at, restricted from safety_files where id = any($1::uuid[]) order by safety_files.received_at, safety_files.id",
+    ? await tx.query<{ id: string; file_name: string; content_type: string; sha256: string; content: Buffer; photo_taken: string | null; phone_file_time: string | null; received_at: string; restricted: boolean; place: PackFile["place"] }>(
+        "select id::text, file_name, content_type, sha256, content, photo_taken, phone_file_time, received_at, restricted, place from safety_files where id = any($1::uuid[]) order by safety_files.received_at, safety_files.id",
         [[...wantedFiles.keys()]],
       )
     : { rows: [] };
@@ -127,6 +129,7 @@ export async function loadPackData(tx: OrgTx, input: { farmId?: unknown; from: u
       photoTaken: row.photo_taken,
       phoneFileTime: row.phone_file_time ? new Date(row.phone_file_time).toISOString() : null,
       receivedAt: new Date(row.received_at).toISOString(),
+      place: row.place ?? null,
       path,
       content: row.content,
     };
@@ -190,10 +193,23 @@ WorkSafe's guidance, or ask someone who knows health and safety law.
 ${NOTIFIABLE_KEEP_RULE}
 `;
 
+export type PackOptions = {
+  /** The pack's name, e.g. "Farm dairy effluent records" (the council pack, #487). */
+  title?: string;
+  /** The zip's name, before the farm and dates. */
+  fileStem?: string;
+  readme?: (data: PackData) => string;
+  /** Written after the heading, before the records (e.g. the council pack's summary). */
+  before?: (pdf: PdfWriter) => void;
+  /** More files in the zip (e.g. a map). */
+  extraFiles?: ZipEntry[];
+};
+
 /** Writes the pack's PDF and zip (no database work). */
-export async function renderPack(data: PackData): Promise<{ fileName: string; bytes: Buffer; pdf: Uint8Array }> {
-  const pdf = await PdfWriter.create({ title: `Farm safety records ${data.from} to ${data.to}`, author: data.organisationName, footer: `${data.organisationName} · Farm safety records ${data.from} to ${data.to}` });
-  pdf.text("Farm safety records", { bold: true, size: 18, gap: 4 });
+export async function renderPack(data: PackData, options: PackOptions = {}): Promise<{ fileName: string; bytes: Buffer; pdf: Uint8Array }> {
+  const title = options.title ?? "Farm safety records";
+  const pdf = await PdfWriter.create({ title: `${title} ${data.from} to ${data.to}`, author: data.organisationName, footer: `${data.organisationName} · ${title} ${data.from} to ${data.to}` });
+  pdf.text(title, { bold: true, size: 18, gap: 4 });
   pdf.text(data.organisationName, { size: 11, gap: 2 });
   pdf.text(`Farms: ${data.farms.map((farm) => farm.name).join(", ") || "none"}`, { gap: 2 });
   pdf.text(`Entered or dated ${data.from} to ${data.to}, each record with its full history.`, { gap: 2 });
@@ -202,10 +218,11 @@ export async function renderPack(data: PackData): Promise<{ fileName: string; by
   pdf.text(head ? `History: ${data.chain.length} entries; latest is number ${head.seq}, hash ${head.hash}.` : "History: no entries yet.", { muted: true, size: 8, gap: 2 });
   pdf.text(data.chainOk ? "When this pack was made, every entry's hash checked out." : "When this pack was made, the history did NOT check out: see Records and checks in Tohyee.", { bold: !data.chainOk, gap: 12 });
 
+  options.before?.(pdf);
   const byRecord = new Map<string, ChainEntry[]>();
   for (const entry of data.entries) byRecord.set(entry.recordId, [...(byRecord.get(entry.recordId) ?? []), entry]);
   const farmName = new Map(data.farms.map((farm) => [farm.id, farm.name]));
-  if (!byRecord.size) pdf.text("No safety records in this range.");
+  if (!byRecord.size) pdf.text(`No ${title.toLowerCase()} in this range.`);
   for (const versions of byRecord.values()) {
     const latest = versions.at(-1)!;
     const latestData = latest.body ? (JSON.parse(latest.body) as Record<string, unknown>) : {};
@@ -232,7 +249,7 @@ export async function renderPack(data: PackData): Promise<{ fileName: string; by
           pdf.y = Math.max(labelBottom, pdf.y);
         }
         const named = data.files.filter((file) => file.recordSeq === version.seq);
-        for (const file of named) pdf.text(`File: ${file.name} (received ${nzTime(file.receivedAt)}${file.photoTaken ? `; camera date ${file.photoTaken}` : ""}) sha256 ${file.sha256}`, { size: 8, muted: true });
+        for (const file of named) pdf.text(`File: ${file.name} (received ${nzTime(file.receivedAt)}${file.photoTaken ? `; camera date ${file.photoTaken}` : ""}${file.phoneFileTime ? `; phone time ${nzTime(file.phoneFileTime)}` : ""}${file.place ? `; where the phone said ${file.place.latitude}, ${file.place.longitude}${file.place.accuracyM === null ? "" : ` ± ${file.place.accuracyM} m`}` : ""}) sha256 ${file.sha256}`, { size: 8, muted: true });
       }
       pdf.text(`Entry ${version.seq} · hash ${version.hash}`, { size: 7, muted: true, gap: 6 });
     }
@@ -243,14 +260,15 @@ export async function renderPack(data: PackData): Promise<{ fileName: string; by
   }
   const pdfBytes = await pdf.finish();
   const files: ZipEntry[] = [
-    { name: "README.txt", data: README(data) },
+    { name: "README.txt", data: (options.readme ?? README)(data) },
     { name: "pack.pdf", data: pdfBytes },
     { name: "entries.json", data: JSON.stringify(data.entries, null, 2) },
     { name: "chain.json", data: JSON.stringify(data.chain, null, 2) },
     { name: "files.json", data: JSON.stringify(data.files.map((file) => ({ ...file, content: undefined })), null, 2) },
     { name: "verify.mjs", data: PACK_VERIFY_SCRIPT },
     ...data.files.filter((file) => file.path && file.content).map((file) => ({ name: file.path!, data: file.content! })),
+    ...(options.extraFiles ?? []),
   ];
   const farmPart = data.farms.length === 1 ? data.farms[0].name.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase() : "all-farms";
-  return { fileName: `safety-records-${farmPart}-${data.from}-to-${data.to}.zip`, bytes: createZip(files), pdf: pdfBytes };
+  return { fileName: `${options.fileStem ?? "safety-records"}-${farmPart}-${data.from}-to-${data.to}.zip`, bytes: createZip(files), pdf: pdfBytes };
 }

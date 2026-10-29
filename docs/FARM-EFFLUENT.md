@@ -174,6 +174,33 @@ More › Effluent › **Checks, faults and servicing** and **Incidents**.
   actions are under Safety due. No phone notifications yet: Tohyee has no
   notifications to send them with.
 
+## The council pack, the weekly copy and tanker runs (decision 1099)
+
+- **Council pack** (More › Effluent › Council pack; owners, admins,
+  bookkeepers and viewers on their farms, not Farm staff): a zip for a date
+  range, made the same way as the WorkSafe pack. `pack.pdf` starts with a
+  **summary**: the consent as entered (and whether some conditions are still
+  as the template had them), the counts against the entered limits in
+  neutral words, pond readings (range and high readings), days not applied
+  and why, incidents (and whether the council was told), applications by
+  paddock, and how many depths were entered or only worked out. Then every
+  effluent record with each version (who, when as set by the database),
+  plus the systems' machines and checklists, their Safety checks, faults and
+  releases, and the incidents' actions. `applied-areas.svg` shades the
+  paddocks by applications, with no-apply zones and recorded positions.
+  `files.json` and `files/` hold the photos with the camera's time, the
+  phone's time and the phone's place. `chain.json` and `verify.mjs` check it
+  as for the WorkSafe pack. **Tohyee doesn't send it anywhere.**
+- **Weekly copy**: Safety › Records and settings › Weekly copy has
+  **Include the effluent records** (off unless chosen). From the next copy
+  on, the email and PDF are "Farm safety and effluent records". Turned on
+  later, it doesn't go back for effluent entries already past the last copy.
+- **Tanker or spreader runs through tractor mode**: tractor mode has a new
+  operation, **Effluent (tanker or spreader)** (tenant migration 0201).
+  Recording a tanker run, choose the tractor job: its paddocks, times and
+  worked area (a phone GPS estimate) fill the run; loads × tank ÷ area gives
+  the depth worked out.
+
 ## Worked checks (tests)
 
 `tests/integration/farm-effluent-setup.test.ts`:
@@ -233,6 +260,21 @@ More › Effluent › **Checks, faults and servicing** and **Incidents**.
   reporter's or a bookkeeper's.
 - **EF23** the calendar's dates; incident actions come through Safety's.
 
+`tests/integration/farm-effluent-pack.test.ts`:
+
+- **EF24** the pack holds the effluent records, the systems' machines,
+  checklists and checks and the incident actions, not other safety records;
+  the chain checks out; photos keep their phone time and place.
+- **EF25** the summary counts against the entered limits in neutral words;
+  the map shades the applied paddock; the zip has every part.
+- **EF26** Farm staff can't download it; the route serves an owner a zip.
+- **EF27** the weekly copy leaves effluent out unless chosen, keeps the choice
+  when saved again, and says "safety and effluent" when it's in.
+- **EF28** a tanker run from a tractor job takes its paddocks, times and
+  area; only tanker runs; an unknown job is refused.
+
+`tests/unit/effluent-pack-map.test.ts`: shades, escaping, empty map.
+
 `tests/unit/effluent-reminders.test.ts`: months, service and WoF dates,
 reminder order, calendar dates.
 
@@ -259,3 +301,7 @@ checklist, the consent in force, buffer circles, and screen addresses.
    needs the app installed and permission on each phone)?
 5. Should an incident of some types (a spill that reached water) be made
    to record whether the council was told before it can close?
+6. The council pack is for viewers and above, like the WorkSafe pack. Should
+   Farm staff be able to make it too?
+7. The demo farm's tanker run isn't linked to a tractor mode job yet (its
+   tractor jobs are fertiliser spreading). Add one?

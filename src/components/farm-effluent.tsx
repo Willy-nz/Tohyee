@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { DateInput } from "@/components/date-input";
-import { ChecksScreen, IncidentsScreen, ReminderList, useEffluentCare } from "@/components/farm-effluent-care";
+import { ChecksScreen, IncidentsScreen, PackScreen, ReminderList, useEffluentCare } from "@/components/farm-effluent-care";
 import { LogScreen, PondsScreen, useEffluentLog } from "@/components/farm-effluent-log";
 import { newOperationId, SafetyHistory } from "@/components/farm-safety";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
@@ -106,6 +106,8 @@ export function FarmEffluent({ organisationId, farm, link }: EffluentContext & {
         <ChecksScreen organisationId={organisationId} farm={farm} />
       ) : link.screen === "incidents" ? (
         <IncidentsScreen organisationId={organisationId} farm={farm} />
+      ) : link.screen === "pack" ? (
+        <PackScreen organisationId={organisationId} farm={farm} />
       ) : (
         <Notice tone="info">This part of Effluent isn&apos;t built yet.</Notice>
       )}
@@ -219,6 +221,12 @@ function EffluentOverview({ organisationId, farm }: EffluentContext) {
               <Link href={effluentHref({ farmId: farm.id, screen: "incidents" })}>{EFFLUENT_SCREEN_TITLES.incidents}</Link>
               <span className={ui.muted}> · {care.data ? `${openIncidents.length} open` : "…"}</span>
             </li>
+            {data?.access.farmStaff ? null : (
+              <li>
+                <Link href={effluentHref({ farmId: farm.id, screen: "pack" })}>{EFFLUENT_SCREEN_TITLES.pack}</Link>
+                <span className={ui.muted}> · download the records for the council</span>
+              </li>
+            )}
             <li>
               <Link href={effluentHref({ farmId: farm.id, screen: "setup" })}>{EFFLUENT_SCREEN_TITLES.setup}</Link>
               <span className={ui.muted}>

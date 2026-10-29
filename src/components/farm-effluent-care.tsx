@@ -721,3 +721,50 @@ export function FarmEffluentDue({ organisationId }: { organisationId: string }) 
     </Card>
   );
 }
+
+// The council pack -------------------------------------------------------------------------------------
+
+/** The council pack (decision 1099a): a date range to download. Tohyee never sends it. */
+export function PackScreen({ organisationId, farm }: Ctx) {
+  const { current } = useWorkspace();
+  const today = todayInBrowser();
+  const [range, setRange] = useState({ from: `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`, to: today });
+  if (current?.role === "farm_worker") return <Notice tone="info">The council pack is for the people who keep the farm&apos;s records. Ask the farm manager.</Notice>;
+  const href = `/api/farming/effluent/pack?${new URLSearchParams({ organisationId, farmId: farm.id, from: range.from, to: range.to }).toString()}`;
+  return (
+    <div className={styles.overview}>
+      <div className={styles.column}>
+        <Card title="Download the council pack" description={`${farm.name}'s effluent records for the dates you choose, if the council asks for them.`}>
+          <div className={ui.inlineForm}>
+            <Field label="From">
+              <DateInput value={range.from} max={range.to} onChange={(event) => setRange({ ...range, from: event.target.value })} />
+            </Field>
+            <Field label="To">
+              <DateInput value={range.to} max={today} onChange={(event) => setRange({ ...range, to: event.target.value })} />
+            </Field>
+          </div>
+          <p>
+            <a className={ui.linkButton} href={href} download>
+              Download (zip)
+            </a>
+          </p>
+          <p className={ui.muted}>Tohyee doesn&apos;t send this to anyone. You download it and give it to the council yourself.</p>
+        </Card>
+      </div>
+      <div className={styles.column}>
+        <Card title="What's in it">
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            <li>A summary: the runs compared with the consent conditions as entered, in counts (it never says the farm complies), pond levels, days not applied, incidents.</li>
+            <li>A map of the paddocks shaded by applications (applied-areas.svg).</li>
+            <li>Every run, pond reading, day not applied, check, fault, release, service, incident and action, each with its full history: who entered it and when (set by Tohyee).</li>
+            <li>Photos with the camera&apos;s time, the phone&apos;s time and where the phone said it was.</li>
+            <li>The history&apos;s numbers and hashes, and a small program (verify.mjs) that checks nothing was changed.</li>
+          </ul>
+          <p>
+            The weekly copy off the farm can include the effluent records too: <Link href={safetyHref({ farmId: farm.id, screen: "records" })}>Safety › Records and settings</Link>.
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
