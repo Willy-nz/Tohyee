@@ -3068,6 +3068,24 @@ that something happened.
   weekly copy can include effluent records if chosen; tanker or spreader
   runs can come from a tractor mode job (new Effluent operation).
 
+- **Farm members on the map** (#498 item 7, decisions 1125-1134; tenant
+  migration 0207; not yet reviewed by Jess): on Farm › Map, **People on the
+  map** lists who has chosen to share their location with that farm and
+  draws them as initials avatars with an accuracy circle (no profile photos
+  in Tohyee yet). **Share my location…** shows a short privacy notice, then
+  shares for 1-12 hours (4 by default) until a time it states. Only while
+  Tohyee is open on the phone (no background or locked-screen sharing).
+  Every farm page shows a Sharing banner with **Stop sharing**. Markers
+  updated in the last 5 minutes are solid ("Updated 2 min ago"); older ones
+  are grey and dashed ("Last known 12 min ago (not live)"), and everything
+  is "not live" for someone offline; a fix over 100 m out is drawn as an
+  area, and one over 2 km isn't kept. Only members who work on that farm
+  (decision 744) see it, enforced on the server; other farms and
+  organisations are not found. Only the latest position is kept, deleted
+  when sharing stops or ends and never kept beyond 24 hours; it isn't in
+  backups, exports, Analytics, AI tools or the offline pack. Starting and
+  stopping are in the audit trail, positions aren't.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

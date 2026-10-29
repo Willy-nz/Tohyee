@@ -21,6 +21,9 @@ import {
   untilText,
 } from "@/lib/farming/locations-shared";
 import type { Farm } from "@/lib/farming/paddocks";
+import { restoreSteps } from "@/lib/location/gps";
+import { browserInfo } from "@/lib/offline/browser";
+import { isInstalled } from "@/lib/offline/device";
 import styles from "./farm-locations.module.css";
 
 /*
@@ -49,11 +52,24 @@ const GPS_WORDS: Record<string, string | null> = {
   off: null,
   waiting: "Waiting for GPS…",
   ok: null,
-  denied: "This browser has been told not to share your location with Tohyee, so nothing is being sent. Allow location for this site in the browser's settings, then press Send from this phone.",
+  denied: "Location is blocked for Tohyee in this browser, so nothing is being sent.",
   unavailable: "GPS can't find where you are just now. Tohyee will keep trying while this page is open.",
   timeout: "GPS is taking a while to find where you are. Tohyee will keep trying while this page is open.",
   unsupported: "This browser can't share its location, so nothing is being sent.",
 };
+
+/** How to unblock location in this browser: the same steps as the maps' Use my location (#498 item 6, decision 1117). */
+function RestoreSteps() {
+  const steps = typeof navigator === "undefined" ? [] : restoreSteps(browserInfo(navigator.userAgent, navigator.maxTouchPoints), isInstalled());
+  if (!steps.length) return null;
+  return (
+    <ol className={styles.steps}>
+      {steps.map((step) => (
+        <li key={step}>{step}</li>
+      ))}
+    </ol>
+  );
+}
 
 /** On every farm page while you share: who sees it, until when, and Stop sharing (decision 1128). */
 export function LocationSharingBanner({ organisationId }: { organisationId: string }) {
@@ -92,12 +108,13 @@ export function LocationSharingBanner({ organisationId }: { organisationId: stri
             : "Started on another device, or before this page was reloaded elsewhere. This phone isn't sending."}
         </span>
         {gps ? <span className={styles.bannerDetail}>{gps}</span> : null}
+        {sharing.thisDevice && sharing.gps === "denied" ? <RestoreSteps /> : null}
         {sharing.problem ? <span className={styles.bannerDetail}>{sharing.problem}</span> : null}
       </div>
       <div className={styles.bannerActions}>
         {!sharing.thisDevice || sharing.gps === "denied" ? (
           <Button variant="secondary" size="small" onClick={() => sendFromHere()}>
-            Send from this phone
+            {sharing.thisDevice ? "Check again" : "Send from this phone"}
           </Button>
         ) : null}
         <Button
@@ -134,6 +151,7 @@ export function useFarmPeople(organisationId: string, farmId: string) {
   const sharing = useLocationSharing();
   const mineKey = sharing.mine ? `${sharing.mine.shareId}:${sharing.mine.farmId}` : "";
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the first load, then every 30 seconds
     void reload();
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void reload();
@@ -229,7 +247,7 @@ export function FarmPeopleCard({
     <Card title="People on the map" description="Only people who chose to share their location with this farm. Sharing is never on unless the person turns it on.">
       {offline ? (
         <Notice tone="warning">
-          Not live: this device can't reach Tohyee.{people.fetchedAt ? ` What's shown was last checked ${timeAgo(people.fetchedAt, now)}, and people may have moved or stopped sharing.` : ""}
+          Not live: this device can&apos;t reach Tohyee.{people.fetchedAt ? ` What's shown was last checked ${timeAgo(people.fetchedAt, now)}, and people may have moved or stopped sharing.` : ""}
         </Notice>
       ) : null}
       {people.error ? <Notice tone="error">{people.error}</Notice> : null}

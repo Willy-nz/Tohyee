@@ -351,11 +351,13 @@ export function PaddockMap({
             const live = person.state === "recent";
             const fill = live ? person.colour : "#6b7280";
             const selectable = Boolean(person.onSelect) && !drawing;
+            // About 30px across on screen however wide the map is shown, like the paddock numbers.
+            const unit = Math.max(1, MAP_WIDTH / Math.max(shownWidth, 1));
             return (
               <g key={`person-${person.id}`} onClick={selectable ? () => (dragged.current ? undefined : person.onSelect!()) : undefined} style={{ cursor: selectable ? "pointer" : undefined }} opacity={live ? 1 : 0.75}>
                 <title>{person.label}</title>
-                <circle cx={x} cy={y} r={Math.max(radius, 1)} fill={fill} fillOpacity={0.14} stroke={fill} strokeWidth={1.5} strokeDasharray={live && person.precise ? undefined : "6 4"} />
-                <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}>
+                <circle cx={x} cy={y} r={Math.max(radius, 1)} fill={fill} fillOpacity={0.14} stroke={fill} strokeWidth={1.5 * unit} strokeDasharray={live && person.precise ? undefined : `${6 * unit} ${4 * unit}`} />
+                <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${unit.toFixed(3)})`}>
                   <circle r={person.selected ? 17 : 15} fill={fill} stroke="#ffffff" strokeWidth={person.selected ? 3.5 : 2.5} strokeDasharray={live ? undefined : "4 3"} />
                   <text y={5} textAnchor="middle" fontSize={13} fontWeight={700} fill="#ffffff" style={{ pointerEvents: "none" }}>
                     {person.initials}

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 import * as farmLocationsRoute from "@/app/api/farming/farms/[farmId]/locations/route";
 import * as myLocationRoute from "@/app/api/farming/locations/route";
 import type { SessionUser } from "@/lib/auth/sessions";
