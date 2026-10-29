@@ -176,20 +176,36 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Start an Android 14 emulator
+      - name: Get an Android 14 emulator image
+        timeout-minutes: 12
         run: |
           image="system-images;android-34;google_apis;x86_64"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator platform-tools "$image" > /dev/null
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n ci -k "$image" --device pixel_6 --force
-          nohup "$ANDROID_HOME/emulator/emulator" -avd ci -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-back none > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager" --install emulator platform-tools "$image" > "$RUNNER_TEMP/sdkmanager.log" 2>&1 || { echo "::error title=sdkmanager::$(tail -5 "$RUNNER_TEMP/sdkmanager.log" | tr '\n' ' ')"; exit 1; }
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n ci -k "$image" --device pixel_6 --force > /dev/null
+          echo "::notice title=Emulator acceleration::$("$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | tr '\n' ' ')"
+
+      - name: Start the emulator
+        timeout-minutes: 12
+        run: |
           adb="$ANDROID_HOME/platform-tools/adb"
-          "$adb" wait-for-device
-          for i in $(seq 1 90); do [ "$("$adb" shell getprop sys.boot_completed | tr -d '\r')" = "1" ] && break; sleep 5; done
-          "$adb" shell getprop ro.build.version.release
+          nohup "$ANDROID_HOME/emulator/emulator" -avd ci -no-window -no-audio -no-boot-anim -no-snapshot -accel on -gpu swiftshader_indirect -camera-back none -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          booted=""
+          for i in $(seq 1 120); do
+            if [ "$(timeout 10 "$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then booted=yes; break; fi
+            sleep 5
+          done
+          if [ -z "$booted" ]; then
+            echo "::error title=Emulator didn't start::$(tail -15 "$RUNNER_TEMP/emulator.log" | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          echo "::notice title=Emulator::Booted Android $("$adb" shell getprop ro.build.version.release | tr -d '\r') after about $((i * 5)) seconds."
           "$adb" shell settings put global window_animation_scale 0
           "$adb" shell settings put global transition_animation_scale 0
 
       - name: Install, open, and try an http:// address
+        timeout-minutes: 8
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
