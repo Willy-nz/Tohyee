@@ -43,9 +43,9 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 29 October 2026:** the latest release is
-[v0.18.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.18.0)
-([notes](docs/releases/0.18.0.md)). Check the
+**Release availability, checked 30 October 2026:** the latest release is
+[v0.19.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.19.0)
+([notes](docs/releases/0.19.0.md)). Check the
 [latest release](https://github.com/Willy-nz/Tohyee/releases/latest) for what
 each download includes, or [run from source](#run-it-locally).
 
@@ -122,6 +122,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.19.0**](docs/releases/0.19.0.md) | Farm as its own app with tabs on every farm page, Use my location on every map, opt-in farm team locations, install steps for each browser, and no big Call 111 button. |
 | [**0.18.0**](docs/releases/0.18.0.md) | Effluent management, easy LINZ aerial photos, records that say what's known, phone app fixes, and a richer demo farm. Includes 0.15.0–0.17.0 (not published separately): Tohyee on your phone, tractor mode, farm safety, farm screens, Farm staff, passkeys, invites and Next.js security fixes. |
 | [**0.17.0**](docs/releases/0.17.0.md) | Tohyee on your phone: home screen install, offline farm information, work without signal, tractor and spreader mode. Includes 0.15.0 and 0.16.0: farm safety, farmer-friendly farm screens, the Farm staff role, passkeys, invites, and Next.js security fixes. |
 | [**0.14.0**](docs/releases/0.14.0.md) | The demo farm, and sign-in security fixes. |
