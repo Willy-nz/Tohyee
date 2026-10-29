@@ -183,7 +183,7 @@ function RunRow({ organisationId, application, log, names }: { organisationId: s
         {hasFlags(application.flags) ? <Badge tone="amber">{flags.length} to look at</Badge> : null}
       </div>
       <div style={{ overflowWrap: "anywhere" }}>
-        {[data.paddockIds.length ? `Paddock${data.paddockIds.length === 1 ? "" : "s"} ${data.paddockIds.map((id) => names.get(id) ?? id).join(", ")}` : null, data.depthEnteredMm ? `${data.depthEnteredMm} mm as entered` : null, data.depthWorkedOut ? `${data.depthWorkedOut.mm} mm worked out` : null, data.ponding ? PONDING_LABELS[data.ponding.result] : null, data.loads ? `${data.loads} loads` : null].filter(Boolean).join(" · ")}
+        {[data.paddockIds.length ? `Paddock${data.paddockIds.length === 1 ? "" : "s"} ${data.paddockIds.map((id) => names.get(id) ?? id).join(", ")}` : null, data.depthEnteredMm ? `${data.depthEnteredMm} mm as entered` : null, data.depthWorkedOut ? `${data.depthWorkedOut.mm} mm estimated from the settings` : null, data.ponding ? PONDING_LABELS[data.ponding.result] : null, data.loads ? `${data.loads} loads` : null].filter(Boolean).join(" · ")}
       </div>
       {flags.length ? (
         <ul style={{ margin: "4px 0", paddingLeft: 18 }}>
@@ -197,7 +197,7 @@ function RunRow({ organisationId, application, log, names }: { organisationId: s
       </Button>
       {open ? (
         <div>
-          {data.depthWorkedOut ? <p className={ui.muted}>Worked out: {data.depthWorkedOut.how}.</p> : null}
+          {data.depthWorkedOut ? <p className={ui.muted}>Estimate from the system&apos;s settings: {data.depthWorkedOut.how}. The depth as entered is what the person measured or said.</p> : null}
           {data.positions.length ? <p>Positions: {data.positions.map((position) => `${position.label ?? "set"} ${time(position.movedAt)}${position.paddockId ? ` (paddock ${names.get(position.paddockId) ?? position.paddockId})` : ""}`).join("; ")}</p> : null}
           {data.ponding?.note ? <p>Ponding check: {data.ponding.note}</p> : null}
           {data.weather || data.soil ? <p>{[data.weather ? `Weather: ${data.weather}` : null, data.soil ? `Soil: ${data.soil}` : null].filter(Boolean).join(" · ")}</p> : null}

@@ -126,16 +126,28 @@ describeWithDatabase("farm effluent care", () => {
     expect((await as(owner)((tx) => tx.query("select 1 from document_emails"))).rowCount).toBe(0);
   });
 
+  it("EF20a a report is the reporter's account; checking it is a bookkeeper's, in person, kept beside it (#491)", async () => {
+    let care = await as(worker)((tx) => effluentCare(tx, w.home));
+    let view = care.incidents.find((each) => each.recordId === w.incident)!;
+    expect(view.checkedOnSite).toBe(false);
+    await expect(as(worker)((tx) => changeIncident(tx, w.incident, { step: "check", expectedVersion: view.version, note: "Saw it" }))).rejects.toThrow(/bookkeeper/);
+    await expect(as(books, 'AI key "x"')((tx) => changeIncident(tx, w.incident, { step: "check", expectedVersion: view.version, note: "Saw it" }))).rejects.toThrow(/not an AI or app/);
+    await as(books)((tx) => changeIncident(tx, w.incident, { step: "check", expectedVersion: view.version, note: "Sump overflowed onto the race; drain blocked with a bale, nothing past it" }));
+    care = await as(worker)((tx) => effluentCare(tx, w.home));
+    view = care.incidents.find((each) => each.recordId === w.incident)!;
+    expect(view).toMatchObject({ checkedOnSite: true, data: { whatHappened: "Pump float stuck", checked: { note: expect.stringMatching(/^Sump overflowed/) } } });
+  });
+
   it("EF21 an incident closes only once its actions are checked and closed, by a bookkeeper or above in person", async () => {
-    await expect(as(worker)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 2, why: "Done" }))).rejects.toThrow(/bookkeeper/);
-    await expect(as(books)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 2, why: "Done" }))).rejects.toThrow(/Check and close its actions first/);
+    await expect(as(worker)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 3, why: "Done" }))).rejects.toThrow(/bookkeeper/);
+    await expect(as(books)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 3, why: "Done" }))).rejects.toThrow(/Check and close its actions first/);
     const actions = (await as(books)((tx) => effluentCare(tx, w.home))).incidents.find((each) => each.recordId === w.incident)!.actions;
     for (const action of actions) {
       await as(books)((tx) => changeAction(tx, action.recordId, { step: "done", expectedVersion: action.version, note: "Done" }, members));
       await as(owner)((tx) => changeAction(tx, action.recordId, { step: "verify", expectedVersion: action.version + 1, note: "Looked at it" }, members));
     }
-    await expect(as(books, 'AI key "x"')((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 2, why: "Done" }))).rejects.toThrow(/not an AI or app/);
-    const closed = await as(books)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 2, why: "Float switch replaced; drain clean next morning" }));
+    await expect(as(books, 'AI key "x"')((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 3, why: "Done" }))).rejects.toThrow(/not an AI or app/);
+    const closed = await as(books)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 3, why: "Float switch replaced; drain clean next morning" }));
     expect(closed.data.closed).toEqual({ why: "Float switch replaced; drain clean next morning" });
     expect((await as(owner)((tx) => checkSafetyHistory(tx))).problems).toEqual([]);
   });

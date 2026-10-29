@@ -168,7 +168,7 @@ export async function addIncidentAction(tx: OrgTx, incidentId: unknown, input: R
   return addAction(tx, { farmId: incident.farmId, title: input.title, assignedToUserId: input.assignedToUserId || null, assignedToName: input.assignedToUserId ? null : input.assignedToName || null, due: input.due || null, operationId: input.operationId }, members, { effluentIncidentId: incident.recordId });
 }
 
-const INCIDENT_STEPS = ["update", "council_told", "close", "reopen", "correct", "withdraw"] as const;
+const INCIDENT_STEPS = ["update", "check", "council_told", "close", "reopen", "correct", "withdraw"] as const;
 
 /**
  * A new version of an incident: "update" (details, photos), "council_told"
@@ -186,7 +186,12 @@ export async function changeIncident(tx: OrgTx, recordId: unknown, input: Record
   const data: IncidentData = { ...current.data, why: undefined };
   let change: SafetyChange = "updated";
   const manager = !tx.actor.userId || (tx.actor.role !== undefined && roleAtLeast(tx.actor.role, "bookkeeper"));
-  if (step === "council_told") {
+  if (step === "check") {
+    notAutomatic(tx, "Saying an incident was checked");
+    if (!manager) throw new ForbiddenError("Saying what was found when it was checked needs the bookkeeper role or higher.");
+    if (current.data.closed) throw new ValidationError("It's closed. Reopen it first.");
+    data.checked = { note: requireString(input.note, "What was found when it was checked", { maxLength: 2000 }) };
+  } else if (step === "council_told") {
     notAutomatic(tx, "Saying the council was told");
     data.councilTold = councilToldOf(input.councilTold);
   } else if (step === "close" || step === "reopen") {
@@ -228,7 +233,7 @@ export async function changeIncident(tx: OrgTx, recordId: unknown, input: Record
 
 // Reading --------------------------------------------------------------------------------------------
 
-export type IncidentView = CurrentRecord<IncidentData> & { actions: Array<CurrentRecord<ActionData> & { state: string }>; state: "open" | "actions" | "closed" | "withdrawn"; tellCouncil: { who: string; phone: string | null; when: string } | null };
+export type IncidentView = CurrentRecord<IncidentData> & { checkedOnSite: boolean; actions: Array<CurrentRecord<ActionData> & { state: string }>; state: "open" | "actions" | "closed" | "withdrawn"; tellCouncil: { who: string; phone: string | null; when: string } | null };
 export type SystemCare = SystemView & { nextService: string | null; nextWof: string | null; lastService: string | null; lastWof: string | null; services: Array<CurrentRecord<ServiceData>>; faults: Array<CurrentRecord<CheckData>> };
 
 export type EffluentCare = { systems: SystemCare[]; incidents: IncidentView[]; reminders: Reminder[]; canClose: boolean };
@@ -268,7 +273,7 @@ export async function effluentCare(tx: OrgTx, farmIdInput: unknown): Promise<Eff
         const own = actions.filter((action) => action.data.effluentIncidentId === incident.recordId).map((action) => ({ ...action, state: actionState(action, today) }));
         const state: IncidentView["state"] = incident.change === "withdrawn" ? "withdrawn" : incident.data.closed ? "closed" : own.some((action) => action.change !== "withdrawn" && !action.data.verified) ? "actions" : "open";
         const notice = consent?.data.notifyCouncil ?? null;
-        return { ...incident, actions: own, state, tellCouncil: notice && !incident.data.councilTold && incident.change !== "withdrawn" && !incident.data.closed ? notice : null };
+        return { ...incident, checkedOnSite: Boolean(incident.data.checked), actions: own, state, tellCouncil: notice && !incident.data.councilTold && incident.change !== "withdrawn" && !incident.data.closed ? notice : null };
       })
       .sort((a, b) => b.data.occurredAt.localeCompare(a.data.occurredAt)),
     reminders: effluentReminders({ systems, ponds: log.ponds, lastMoved: log.lastMoved, services, consent, usedToday, today, now: new Date().toISOString(), dayOf: (iso) => isoDateAt(new Date(iso)) }),

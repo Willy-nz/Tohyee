@@ -354,6 +354,7 @@ const FIELD_LABELS: Record<string, string> = {
   incidentId: "Effluent incident",
   effluentIncidentId: "Effluent incident",
   councilTold: "Council told",
+  checked: "Checked: what was found",
 };
 
 /** A short name for a record, for lists and the pack. */
@@ -382,7 +383,7 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
     const notice = value as WorkSafeNotice;
     return `${notice.on}, by ${notice.how}${notice.reference ? `, reference ${notice.reference}` : ""}`;
   }
-  if ((key === "closed" || key === "verified") && value && typeof value === "object") return (value as { why?: string; note?: string | null }).why ?? (value as { note?: string | null }).note ?? "Yes";
+  if ((key === "closed" || key === "verified" || key === "checked") && value && typeof value === "object") return (value as { why?: string; note?: string | null }).why ?? (value as { note?: string | null }).note ?? "Yes";
   if (key === "done" && value && typeof value === "object") return (value as { note: string }).note;
   if (key === "answers" && Array.isArray(value)) {
     return value.map((answer: { text?: string; result?: string; note?: string | null }) => `${answer.text}: ${answer.result === "ok" ? "OK" : answer.result === "na" ? "n/a" : `FAULT${answer.note ? ` (${answer.note})` : ""}`}`).join("; ") || null;

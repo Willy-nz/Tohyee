@@ -85,6 +85,10 @@ describeWithDatabase("farm effluent council pack", () => {
     expect(pack.summary.some((line) => line.startsWith("Pond readings: 1, from 1850 to 1850 mm"))).toBe(true);
     expect(pack.summary.join("\n")).toMatch(/Tohyee doesn't send this pack/);
     expect(pack.summary.join("\n")).not.toMatch(/\bcomplies with\b|\bcompliant\b|\bin breach\b/i);
+    // Scope and corrections are said; positions and areas are estimates, never a finding (#491).
+    expect(pack.summary[0]).toMatch(/^Scope: Home farm, effluent records entered or dated 2020-01-01 to 2099-12-31.*Corrections: \d+ corrected versions/);
+    expect(pack.summary.join("\n")).toMatch(/recorded position \(phone GPS, an estimate\)/);
+    expect(pack.summary.join("\n")).toMatch(/Sump overflow|Spill or overflow, reported, not yet checked/);
     expect(pack.svg).toContain("1 (1)");
     expect(pack.svg).toContain("Creek");
     const rendered = await renderCouncilPack(pack);

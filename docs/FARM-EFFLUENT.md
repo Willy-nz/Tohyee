@@ -201,6 +201,35 @@ More › Effluent › **Checks, faults and servicing** and **Incidents**.
   worked area (a phone GPS estimate) fill the run; loads × tank ÷ area gives
   the depth worked out.
 
+## Records that say what's known (#491)
+
+Following #491 (William's review of how records read after an incident):
+
+- **Every effluent record is versioned.** Each change is a new version with
+  its full details (so the old and new values are both there), who made it
+  and the time Tohyee saved it; a correction says what was wrong; a record
+  entered by mistake is withdrawn, kept and marked. Nothing is overwritten.
+- **Reported, checked, done, verified.** An incident is the reporter's
+  account. **Checked it** (a bookkeeper or above, in person) records what was
+  found, beside the report, not instead of it. Its actions are marked done
+  and then checked and closed (Safety's workflow). A reported fault with
+  "don't use it" takes the system out of use straight away; only a release
+  in Safety puts it back.
+- **Entered, estimated, measured.** Depth as entered is what the person
+  measured or said; the depth from the system's settings is labelled an
+  estimate. Positions and tractor areas are phone GPS estimates. A position
+  near a waterway or inside a buffer is shown as that, never as a finding
+  that effluent reached it.
+- **Saved isn't told.** Work on the device shows Saved on this device or
+  Waiting to send until Tohyee has it; an action is assigned in Tohyee, and
+  Tohyee doesn't message anyone or say anyone has read it. "Council told" is
+  only what a person records after telling them.
+- **Exports say their scope.** The council pack's summary starts with its
+  scope (farm, dates, what's included and not), how many versions are
+  corrections and how many records were withdrawn. The hashes show records
+  weren't changed after they were saved; they don't show the contents are
+  true, and the records aren't privileged because of them.
+
 ## Worked checks (tests)
 
 `tests/integration/farm-effluent-setup.test.ts`:
@@ -254,6 +283,8 @@ More › Effluent › **Checks, faults and servicing** and **Incidents**.
 - **EF20** an incident with actions and their people; the council prompt
   comes from the consent; "council told" is a person's, never an app's;
   nothing is emailed.
+- **EF20a** checking an incident is a bookkeeper's, in person, kept beside
+  the reporter's account (#491).
 - **EF21** closing needs its actions checked and closed, by a bookkeeper or
   above in person; the history checks out.
 - **EF22** farm staff report on their farm only; corrections are the

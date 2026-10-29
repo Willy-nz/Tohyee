@@ -10276,4 +10276,11 @@ docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
       (d) Tractor mode has an "Effluent (tanker or spreader)" operation
       (migration 0201). A tanker run can name a tractor job on the farm: its
       paddocks, times and worked area fill the run unless given.
+      (e) Following #491: an incident's **Checked it** (bookkeeper or above,
+      in person) records what was found beside the reporter's account; the
+      depth from settings is labelled an estimate and positions phone GPS
+      estimates, a position in a buffer is "not a finding that effluent
+      reached it"; the council pack's summary starts with its scope and the
+      count of corrected and withdrawn records; and the pack says the hashes
+      don't show the contents are true or make them privileged.
 

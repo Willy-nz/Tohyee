@@ -261,12 +261,12 @@ export function hasFlags(flags: ApplicationFlags): boolean {
 /** The flags in words, neutral (decision 1086). */
 export function flagTexts(flags: ApplicationFlags, consent: ConsentData | null, paddockNames: ReadonlyMap<string, string> = new Map()): string[] {
   const texts: string[] = [];
-  if (flags.overDepth) texts.push(`Deeper than the most depth entered for the consent (${consent?.maxDepthMm} mm)`);
+  if (flags.overDepth) texts.push(`Depth (as entered, else the estimate from the settings) is over the most depth entered for the consent (${consent?.maxDepthMm} mm)`);
   if (flags.overRate) texts.push(`The system's rate is over the most rate entered for the consent (${consent?.maxRateMmPerHour} mm an hour)`);
   for (const each of flags.tooSoon) texts.push(`Paddock ${paddockNames.get(each.paddockId) ?? each.paddockId} again after ${each.days} day${each.days === 1 ? "" : "s"} (the consent entered says at least ${consent?.returnPeriodDays})`);
   if (flags.ponding === "ponding") texts.push("Ponding recorded");
   if (flags.ponding === "runoff") texts.push("Runoff recorded");
-  for (const each of flags.inBuffer) texts.push(`A position ${each.metres} m from ${each.name} (buffer ${each.bufferM} m)`);
+  for (const each of flags.inBuffer) texts.push(`A position recorded from the phone's GPS was about ${each.metres} m from ${each.name}, inside its ${each.bufferM} m buffer on the map. It's a phone estimate, not a finding that effluent reached it`);
   if (flags.usedWhileOutOfUse) texts.push("Recorded while the system was out of use in Safety");
   if (flags.noPondingCheck) texts.push("Stopped with no ponding check recorded");
   return texts;
@@ -302,7 +302,7 @@ export function summaryLines(summary: LimitsSummary, consent: ConsentData | null
   lines.push(consent?.returnPeriodDays ? `Applications to a paddock sooner than ${consent.returnPeriodDays} days after the last: ${summary.tooSoon}` : "Days between applications: not entered for the consent, so not compared");
   lines.push(`Applications with ponding recorded: ${summary.ponding}`);
   lines.push(`Applications with runoff recorded: ${summary.runoff}`);
-  lines.push(`Applications with a position inside a buffer on the map: ${summary.inBuffer}`);
+  lines.push(`Applications with a recorded position (phone GPS, an estimate) inside a buffer on the map: ${summary.inBuffer}`);
   lines.push(`Applications recorded while the system was out of use: ${summary.whileOutOfUse}`);
   lines.push(`Applications stopped with no ponding check: ${summary.noPondingCheck}`);
   lines.push(`Applications with no depth entered or worked out: ${summary.noDepth}`);

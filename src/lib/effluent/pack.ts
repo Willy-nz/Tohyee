@@ -74,13 +74,13 @@ export async function loadCouncilPack(tx: OrgTx, input: { farmId: unknown; from:
   const incidents = care.incidents.filter((incident) => incident.change !== "withdrawn" && inRange(incident.data.occurredAt.slice(0, 10)));
   const deferrals = log.deferrals.filter((deferral) => deferral.change !== "withdrawn");
   const summary = [
-    `Farm: ${farmName}. Records from ${data.from} to ${data.to}.`,
+    `Scope: ${farmName}, effluent records entered or dated ${data.from} to ${data.to}, each with every version, and the effluent systems' Safety checks, faults and releases and the incidents' actions. Other safety records aren't included. Corrections: ${data.entries.filter((entry) => entry.change === "corrected").length} corrected versions (the earlier versions are kept); withdrawn as entered by mistake: ${data.entries.filter((entry) => entry.change === "withdrawn").length} (included, marked).`,
     consent ? `Consent conditions as entered: ${consent.title}${consent.consentNumber ? `, ${consent.consentNumber}` : ""}${consent.expiresOn ? `, expires ${consent.expiresOn}` : ""}.${consent.fromTemplate.length ? ` Some conditions are still as the starting template had them. ${CHECK_YOUR_CONSENT}` : ""}` : "No consent conditions entered, so nothing is compared with limits.",
     ...summaryLines(log.summary, consent),
     COMPARISON_NOTE,
     `Pond readings: ${readings.length}${levels.length ? `, from ${Math.min(...levels)} to ${Math.max(...levels)} mm on the gauge` : ""}; high readings: ${readings.filter((reading) => reading.state?.warning === "high").length}.`,
     `Days effluent wasn't applied: ${deferrals.length}${deferrals.length ? ` (${[...new Set(deferrals.map((deferral) => DEFERRAL_LABELS[deferral.data.reason]))].join(", ")})` : ""}.`,
-    `Incidents: ${incidents.length}${incidents.length ? ` (${incidents.map((incident) => `${INCIDENT_TYPE_LABELS[incident.data.type]}${incident.data.councilTold ? ", council told" : ""}${incident.data.closed ? ", closed" : ""}`).join("; ")})` : ""}.`,
+    `Incidents: ${incidents.length}${incidents.length ? ` (${incidents.map((incident) => `${INCIDENT_TYPE_LABELS[incident.data.type]}${incident.data.checked ? ", checked" : ", reported, not yet checked"}${incident.data.councilTold ? ", council told (as recorded)" : ""}${incident.data.closed ? ", closed" : ""}`).join("; ")})` : ""}.`,
     "Tohyee doesn't send this pack, or anything else, to the council.",
   ];
   // Applied areas: each paddock's applications in the range, and the positions recorded.
@@ -101,7 +101,7 @@ export async function loadCouncilPack(tx: OrgTx, input: { farmId: unknown; from:
   const names = new Map(shapes.rows.map((row) => [row.id, row.name]));
   summary.push(
     `Applications by paddock: ${[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id, count]) => `paddock ${names.get(id) ?? id}: ${count}`).join(", ") || "none"}.`,
-    `Depth: ${applications.filter((application) => application.data.depthEnteredMm).length} with depth as entered, ${applications.filter((application) => !application.data.depthEnteredMm && depthForComparison(application.data)).length} with depth worked out only.`,
+    `Depth: ${applications.filter((application) => application.data.depthEnteredMm).length} with depth as entered by the person (measured or declared), ${applications.filter((application) => !application.data.depthEnteredMm && depthForComparison(application.data)).length} with only an estimate from the system's settings. Tractor mode areas are phone GPS estimates.`,
   );
   return { data, summary, svg, farmName };
 }
@@ -124,7 +124,12 @@ What's here
 
 The summary counts the records against the consent conditions as entered in Tohyee.
 It doesn't say whether the farm complies: the consent and the council decide that.
-Depth is shown as entered by the person and as worked out from the system's settings.
+Depth is shown as entered by the person (measured or declared) and as an estimate from the
+system's settings, labelled. Positions and tractor mode areas are phone GPS estimates: a
+position near a waterway or buffer is not a finding that effluent reached it.
+Corrected records show every version, the earlier ones and why; withdrawn records are
+included and marked. The hashes show records weren't changed after they were saved; they
+don't show that what was entered is true, and don't make the records privileged.
 
 Effluent records are kept in the same history as the farm's safety records, so
 chain.json lists those entries too (numbers and hashes only, no details).
