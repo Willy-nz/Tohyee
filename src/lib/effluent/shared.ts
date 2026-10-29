@@ -408,6 +408,11 @@ export type IncidentData = {
   reachedWater: boolean;
   files: Array<{ id: string; name: string; sha256: string }>;
   councilTold: CouncilTold | null;
+  /**
+   * Someone (a bookkeeper or above, in person) looked at it and says what they found (#491):
+   * the report is the reporter's account; this is the check of it. Absent on older records.
+   */
+  checked?: { note: string } | null;
   closed: { why: string } | null;
   why?: string | null;
 };

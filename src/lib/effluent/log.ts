@@ -30,6 +30,7 @@ import {
   workedOutDepth,
   hoursBetween,
 } from "@/lib/effluent/rules";
+import { dec, divide, isZero, toPlainString } from "@/lib/money/decimal";
 import { optionalString, requireId } from "@/lib/validation";
 
 /*
@@ -128,13 +129,33 @@ async function blockOn(tx: OrgTx, farmId: string, id: unknown): Promise<SafetyVe
  * from the system's settings. A system out of use in Safety can still be
  * recorded, marked so (decision 1083): the record says what happened.
  */
-export async function addApplication(tx: OrgTx, input: Record<string, unknown>) {
+export async function addApplication(tx: OrgTx, inputGiven: Record<string, unknown>) {
+  let input = inputGiven;
   const farmId = await farmOf(tx, input.farmId);
   if (input.operationId) {
     const existing = await tx.query<{ record_id: string }>("select record_id::text from safety_entries where operation_id = $1 and kind = 'effluent_application'", [String(input.operationId)]);
     if (existing.rows[0]) return currentRecord<ApplicationData>(tx, "effluent_application", existing.rows[0].record_id);
   }
   const { system, available } = await systemOn(tx, farmId, input.systemId);
+  // A tanker or spreader run driven in tractor mode (decision 1099d): its paddocks, times and worked area come from the job unless given.
+  if (input.tractorJobId) {
+    if (system.data.type !== "slurry_tanker") throw new ValidationError("Only a tanker or spreader run comes from tractor mode.");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(input.tractorJobId))) throw new ValidationError("That tractor mode job isn't on this farm.");
+    const job = await tx.query<{ id: string; paddock_ids: string[]; started_at: string; finished_at: string; worked_ha: string }>(
+      "select id::text, paddock_ids::text[] as paddock_ids, started_at, finished_at, worked_ha::text from tractor_jobs where id = $1 and farm_id = $2 and status = 'active'",
+      [String(input.tractorJobId), farmId],
+    );
+    const found = job.rows[0];
+    if (!found) throw new ValidationError("That tractor mode job isn't on this farm.");
+    input = {
+      ...input,
+      tractorJobId: found.id,
+      paddockIds: Array.isArray(input.paddockIds) && input.paddockIds.length ? input.paddockIds : found.paddock_ids,
+      startedAt: input.startedAt || new Date(found.started_at).toISOString(),
+      stoppedAt: input.stoppedAt || new Date(found.finished_at).toISOString(),
+      areaHa: input.areaHa || (isZero(dec(found.worked_ha)) ? null : toPlainString(divide(dec(found.worked_ha), dec("1"), 2))),
+    };
+  }
   const paddocks = await farmPaddocks(tx, farmId);
   const block = await blockOn(tx, farmId, input.blockId);
   const startedAt = parseTime(input.startedAt, "Started");

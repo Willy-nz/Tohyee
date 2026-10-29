@@ -3047,6 +3047,11 @@ that something happened.
   recorded by a person; closed once the actions are checked. **Reminders**
   on Today and Effluent due on the farm calendar. Never sends anything to a
   council; no phone notifications yet.
+  **Council pack**: a zip for a date range (summary against the entered
+  limits, a map of applied areas, every record with its history, photos with
+  their times and place, and a verify script), downloaded, never sent; the
+  weekly copy can include effluent records if chosen; tanker or spreader
+  runs can come from a tractor mode job (new Effluent operation).
 
 ## Not built yet, on purpose
 

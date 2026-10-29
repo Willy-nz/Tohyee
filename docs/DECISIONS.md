@@ -10256,3 +10256,31 @@ docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
       an incident closed after its action was checked, and a sump overflow
       still open with an action due and the council not recorded as told.
 
+### Farm dairy effluent: the council pack, the weekly copy and tanker runs (#487 part 4; decision 1099)
+
+1099. **The council pack, the weekly copy and tanker runs.**
+      (a) The council pack is the WorkSafe pack's zip (every version, hashes,
+      the whole chain, files, `verify.mjs`) for a farm's effluent records,
+      plus the systems' machines, checklists, checks and releases and the
+      incidents' actions, with a summary first (the counts in neutral words,
+      pond levels, days not applied, incidents) and `summary.txt`. Viewers
+      and above make it, not Farm staff (as the WorkSafe pack, decision
+      961). Tohyee never sends it.
+      (b) `applied-areas.svg` shades each paddock by the applications in the
+      range, from the farm's own shapes, with zones and positions; a
+      picture, not a survey. Photos in packs now also carry the phone's
+      place (decision 1012) in files.json and the PDF.
+      (c) The weekly copy includes effluent records only if an owner or admin
+      chooses (`include_effluent`, tenant migration 0201), from the next copy
+      on; its subject and PDF then say "safety and effluent".
+      (d) Tractor mode has an "Effluent (tanker or spreader)" operation
+      (migration 0201). A tanker run can name a tractor job on the farm: its
+      paddocks, times and worked area fill the run unless given.
+      (e) Following #491: an incident's **Checked it** (bookkeeper or above,
+      in person) records what was found beside the reporter's account; the
+      depth from settings is labelled an estimate and positions phone GPS
+      estimates, a position in a buffer is "not a finding that effluent
+      reached it"; the council pack's summary starts with its scope and the
+      count of corrected and withdrawn records; and the pack says the hashes
+      don't show the contents are true or make them privileged.
+

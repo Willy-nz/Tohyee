@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buffersBreached, COMPARISON_NOTE, hoursBetween, metresBetween, pondState, positionHours, summaryLines, workedOutDepth } from "@/lib/effluent/rules";
+import { buffersBreached, COMPARISON_NOTE, flagTexts, hoursBetween, metresBetween, pondState, positionHours, summaryLines, workedOutDepth } from "@/lib/effluent/rules";
 import { EMPTY_SETTINGS } from "@/lib/effluent/shared";
 
 /** Effluent's sums and comparisons (#487, decisions 1080-1086). */
@@ -40,6 +40,11 @@ describe("effluent log rules", () => {
     expect(buffersBreached([170.5, -45.8995], zones, null)).toEqual([]);
     expect(buffersBreached([170.6005, -45.9005], zones, null).map((each) => each.metres)).toEqual([0]);
     expect(buffersBreached([170.6012, -45.9005], zones, null).map((each) => each.name)).toEqual(["Creek"]);
+  });
+
+  it("a position near a buffer is a phone estimate, not a finding (#491)", () => {
+    const texts = flagTexts({ overDepth: false, overRate: false, tooSoon: [], ponding: null, inBuffer: [{ zoneId: "z", name: "Creek", bufferM: 20, metres: 12 }], usedWhileOutOfUse: false, noPondingCheck: false }, null);
+    expect(texts[0]).toMatch(/phone's GPS.*not a finding that effluent reached it/);
   });
 
   it("the summary is counts against what was entered, never a verdict", () => {

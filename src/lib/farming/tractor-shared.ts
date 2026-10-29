@@ -10,9 +10,9 @@ import type { PaddockGeometry, Position } from "@/lib/farming/geometry";
 export const TRACTOR_NOTICE =
   "Estimated from phone GPS. Phone GPS is usually within 3 to 10 metres and can be worse under trees, near sheds or in gullies. This is not precision guidance, and it isn't proof that product was applied. Gaps are times the GPS was weak or lost, or recording stopped.";
 
-export const OPERATIONS = ["spreading", "spraying", "mowing", "other"] as const;
+export const OPERATIONS = ["spreading", "spraying", "mowing", "effluent", "other"] as const;
 export type Operation = (typeof OPERATIONS)[number];
-export const OPERATION_LABELS: Record<Operation, string> = { spreading: "Spreading", spraying: "Spraying", mowing: "Mowing", other: "Other tractor work" };
+export const OPERATION_LABELS: Record<Operation, string> = { spreading: "Spreading", spraying: "Spraying", mowing: "Mowing", effluent: "Effluent (tanker or spreader)", other: "Other tractor work" };
 
 export const EQUIPMENT_KINDS = ["spreader", "sprayer", "mower", "other"] as const;
 export type EquipmentKind = (typeof EQUIPMENT_KINDS)[number];

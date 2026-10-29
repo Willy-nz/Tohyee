@@ -764,14 +764,14 @@ function HazardDetail({ organisationId, hazard, access, paddockNames, onSaved }:
 
 // The weekly copy off the farm ----------------------------------------------------------------------
 
-type CopyData = { settings: { on: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null }; copies: Array<{ id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentAt: string }> };
+type CopyData = { settings: { on: boolean; includeEffluent?: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null }; copies: Array<{ id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentAt: string }> };
 
 /** Decision 958: a PDF and the latest entry's number and hash, emailed off the farm each week. */
 function WeeklyCopy({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const data = useApiData<CopyData>("/api/farming/safety/weekly-copy", { organisationId });
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ on: true, toAddresses: "" });
+  const [form, setForm] = useState({ on: true, toAddresses: "", includeEffluent: false });
   const [message, setMessage] = useState<string | null>(null);
   const { busy, error, run } = useRun();
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
@@ -788,7 +788,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
       {message ? <Notice tone="info">{message}</Notice> : null}
       {settings.lastProblem ? <Notice tone="warning">The last copy wasn&apos;t sent ({settings.lastAttemptAt ? formatDateTime(settings.lastAttemptAt) : ""}): {settings.lastProblem}</Notice> : null}
       <p>
-        {settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? `to ${settings.toAddresses.join(", ")}` : "No copy is sent."}
+        {settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? `to ${settings.toAddresses.join(", ")}${settings.includeEffluent ? ", with the effluent records" : ""}` : "No copy is sent."}
       </p>
       {copies.length ? (
         <ul style={{ paddingLeft: 18, marginTop: 0 }}>
@@ -801,7 +801,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
       ) : null}
       {admin && !editing ? (
         <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-          <Button variant="secondary" size="small" onClick={() => { setForm({ on: settings.on || true, toAddresses: settings.toAddresses.join(", ") }); setEditing(true); }}>
+          <Button variant="secondary" size="small" onClick={() => { setForm({ on: settings.on || true, toAddresses: settings.toAddresses.join(", "), includeEffluent: settings.includeEffluent ?? false }); setEditing(true); }}>
             {settings.on ? "Change" : "Set up the weekly copy"}
           </Button>
           {settings.on ? (
@@ -812,9 +812,13 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
         </div>
       ) : null}
       {editing ? (
-        <form onSubmit={(event) => { event.preventDefault(); void run(() => api("/api/farming/safety/weekly-copy", { method: "POST", body: { organisationId, on: form.on, toAddresses: form.toAddresses } }), () => { setEditing(false); data.reload(); }); }}>
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => api("/api/farming/safety/weekly-copy", { method: "POST", body: { organisationId, on: form.on, toAddresses: form.toAddresses, includeEffluent: form.includeEffluent } }), () => { setEditing(false); data.reload(); }); }}>
           <label className={ui.checkbox}>
             <input type="checkbox" checked={form.on} onChange={(event) => setForm({ ...form, on: event.target.checked })} /> Send a copy every week
+          </label>
+          {/* Effluent records (#487, decision 1099c): in the copy only if the farm chooses, from the next copy on. */}
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={form.includeEffluent} onChange={(event) => setForm({ ...form, includeEffluent: event.target.checked })} /> Include the effluent records (from the next copy on)
           </label>
           <Field label="Send it to" hint="Addresses off the farm, separated by commas: your own personal email, your accountant. Up to 10.">
             <input value={form.toAddresses} maxLength={2000} onChange={(event) => setForm({ ...form, toAddresses: event.target.value })} />

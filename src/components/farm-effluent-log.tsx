@@ -15,6 +15,7 @@ import { COMPARISON_NOTE, DEFERRAL_LABELS, DEFERRAL_REASONS, type DeferralReason
 import { effluentHref } from "@/lib/effluent/screens";
 import { activeConsent, SYSTEM_TYPE_LABELS } from "@/lib/effluent/shared";
 import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
+import type { TractorJobListItem } from "@/lib/farming/tractor-shared";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { newOperationId, type QueueItem } from "@/lib/offline/queue";
 import type { Position } from "@/lib/safety/shared";
@@ -182,7 +183,7 @@ function RunRow({ organisationId, application, log, names }: { organisationId: s
         {hasFlags(application.flags) ? <Badge tone="amber">{flags.length} to look at</Badge> : null}
       </div>
       <div style={{ overflowWrap: "anywhere" }}>
-        {[data.paddockIds.length ? `Paddock${data.paddockIds.length === 1 ? "" : "s"} ${data.paddockIds.map((id) => names.get(id) ?? id).join(", ")}` : null, data.depthEnteredMm ? `${data.depthEnteredMm} mm as entered` : null, data.depthWorkedOut ? `${data.depthWorkedOut.mm} mm worked out` : null, data.ponding ? PONDING_LABELS[data.ponding.result] : null, data.loads ? `${data.loads} loads` : null].filter(Boolean).join(" · ")}
+        {[data.paddockIds.length ? `Paddock${data.paddockIds.length === 1 ? "" : "s"} ${data.paddockIds.map((id) => names.get(id) ?? id).join(", ")}` : null, data.depthEnteredMm ? `${data.depthEnteredMm} mm as entered` : null, data.depthWorkedOut ? `${data.depthWorkedOut.mm} mm estimated from the settings` : null, data.ponding ? PONDING_LABELS[data.ponding.result] : null, data.loads ? `${data.loads} loads` : null].filter(Boolean).join(" · ")}
       </div>
       {flags.length ? (
         <ul style={{ margin: "4px 0", paddingLeft: 18 }}>
@@ -196,7 +197,7 @@ function RunRow({ organisationId, application, log, names }: { organisationId: s
       </Button>
       {open ? (
         <div>
-          {data.depthWorkedOut ? <p className={ui.muted}>Worked out: {data.depthWorkedOut.how}.</p> : null}
+          {data.depthWorkedOut ? <p className={ui.muted}>Estimate from the system&apos;s settings: {data.depthWorkedOut.how}. The depth as entered is what the person measured or said.</p> : null}
           {data.positions.length ? <p>Positions: {data.positions.map((position) => `${position.label ?? "set"} ${time(position.movedAt)}${position.paddockId ? ` (paddock ${names.get(position.paddockId) ?? position.paddockId})` : ""}`).join("; ")}</p> : null}
           {data.ponding?.note ? <p>Ponding check: {data.ponding.note}</p> : null}
           {data.weather || data.soil ? <p>{[data.weather ? `Weather: ${data.weather}` : null, data.soil ? `Soil: ${data.soil}` : null].filter(Boolean).join(" · ")}</p> : null}
@@ -222,24 +223,31 @@ function StartForm({ organisationId, farm, log, paddocks, onDone, onCancel }: Ct
   const [error, setError] = useState<string | null>(null);
   const system = systems.find((each) => each.recordId === form.systemId);
   const tanker = system?.data.type === "slurry_tanker";
+  // A tanker or spreader run driven in tractor mode (decision 1099d): its paddocks, times and worked area come from the job.
+  const jobs = useApiData<{ jobs: TractorJobListItem[] }>(tanker ? "/api/farming/tractor/jobs" : null, { organisationId, farmId: farm.id, limit: 20 });
+  const [jobId, setJobId] = useState("");
+  const usedJobs = new Set(log.applications.map((application) => application.data.tractorJobId).filter(Boolean));
+  const effluentJobs = (jobs.data?.jobs ?? []).filter((job) => job.status === "active" && (job.operation === "effluent" || job.operation === "spreading") && !usedJobs.has(job.id));
+  const job = effluentJobs.find((each) => each.id === jobId) ?? null;
   const set = (patch: Partial<typeof form>) => setForm({ ...form, ...patch });
   if (!systems.length) return <Notice tone="info">No effluent systems on {farm.name} yet. An owner or admin adds them under Systems, map and consent.</Notice>;
   const blocks = log.setup.blocks.filter((block) => block.change !== "withdrawn" && !block.data.retired);
   const submit = async () => {
     setBusy(true);
     setError(null);
-    const startedAt = toIso(form.startedAt);
+    const startedAt = job ? job.startedAt : toIso(form.startedAt);
     const body: Record<string, unknown> = {
+      tractorJobId: job?.id ?? null,
       farmId: farm.id,
       systemId: form.systemId,
       blockId: form.blockId || null,
-      paddockIds: form.paddockId ? [form.paddockId] : [],
+      paddockIds: job ? job.paddockIds : form.paddockId ? [form.paddockId] : [],
       startedAt,
-      stoppedAt: form.finished || tanker ? toIso(form.stoppedAt) : null,
+      stoppedAt: job ? job.finishedAt : form.finished || tanker ? toIso(form.stoppedAt) : null,
       positions: tanker ? [] : [{ label: form.label || null, paddockId: form.paddockId || null, point, movedAt: startedAt }],
       depthEnteredMm: form.depthEnteredMm || null,
       loads: tanker ? form.loads || null : null,
-      areaHa: tanker ? form.areaHa || null : null,
+      areaHa: tanker ? form.areaHa || (job ? job.workedHa : null) : null,
       ponding: form.finished || tanker ? { result: form.ponding, note: form.pondingNote || null, checkedAt: new Date().toISOString() } : null,
       weather: form.weather || null,
       soil: form.soil || null,
@@ -319,9 +327,33 @@ function StartForm({ organisationId, farm, log, paddocks, onDone, onCancel }: Ct
             {locating ? <span className={ui.muted}>{locating}</span> : null}
           </div>
         ) : null}
-        <Field label="Started">
-          <input type="datetime-local" value={form.startedAt} max={nowLocal()} required onChange={(event) => set({ startedAt: event.target.value })} />
-        </Field>
+        {tanker ? (
+          <>
+            <Field label="From tractor mode" hint="Drive the run in tractor mode (operation: Effluent) for its coverage on the map; its paddocks, times and worked area then come from the job.">
+              <select value={jobId} onChange={(event) => setJobId(event.target.value)}>
+                <option value="">Not from tractor mode: I&apos;ll enter it</option>
+                {effluentJobs.map((each) => (
+                  <option key={each.id} value={each.id}>
+                    {time(each.startedAt)} · {each.paddockNames.join(", ") || "no paddock"} · {each.workedHa} ha
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <p className={ui.muted} style={{ marginTop: 0 }}>
+              <Link href={`/operations/farm/tractor?farm=${farm.id}`}>Open tractor mode</Link>
+            </p>
+          </>
+        ) : null}
+        {job ? (
+          <p>
+            {time(job.startedAt)} to {time(job.finishedAt)} · {job.paddockNames.join(", ") || "no paddock"} · about {job.workedHa} ha worked (a phone GPS estimate)
+          </p>
+        ) : null}
+        {!job ? (
+          <Field label="Started">
+            <input type="datetime-local" value={form.startedAt} max={nowLocal()} required onChange={(event) => set({ startedAt: event.target.value })} />
+          </Field>
+        ) : null}
         {!tanker ? (
           <label className={ui.checkbox} style={{ minHeight: 44 }}>
             <input type="checkbox" checked={form.finished} onChange={(event) => set({ finished: event.target.checked })} /> It&apos;s already finished
@@ -329,15 +361,17 @@ function StartForm({ organisationId, farm, log, paddocks, onDone, onCancel }: Ct
         ) : null}
         {form.finished || tanker ? (
           <>
-            <Field label="Stopped">
-              <input type="datetime-local" value={form.stoppedAt} max={nowLocal()} required onChange={(event) => set({ stoppedAt: event.target.value })} />
-            </Field>
+            {!job ? (
+              <Field label="Stopped">
+                <input type="datetime-local" value={form.stoppedAt} max={nowLocal()} required onChange={(event) => set({ stoppedAt: event.target.value })} />
+              </Field>
+            ) : null}
             {tanker ? (
               <div className={ui.inlineForm}>
                 <Field label="Loads">
                   <input inputMode="numeric" value={form.loads} onChange={(event) => set({ loads: event.target.value })} />
                 </Field>
-                <Field label="Area they went on (ha)">
+                <Field label="Area they went on (ha)" hint={job ? `Empty: the job's ${job.workedHa} ha.` : undefined}>
                   <input inputMode="decimal" value={form.areaHa} onChange={(event) => set({ areaHa: event.target.value })} />
                 </Field>
               </div>

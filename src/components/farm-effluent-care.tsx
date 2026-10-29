@@ -176,7 +176,7 @@ function FaultForm({ organisationId, farm, system, onDone, onCancel }: Ctx & { s
         setError(null);
         try {
           const outcome = await submitThroughQueue(queue, { operationId, kind: "effluent.fault", label: `Fault: ${system.data.name}`, farmId: farm.id, farmName: farm.name, request: { method: "POST", path: "/api/farming/effluent/faults", body: { farmId: farm.id, systemId: system.recordId, what, outOfUse, files: photos.map((photo) => ({ id: photo.id })) }, refs: waitForFiles(photos, ["files"]) } });
-          onDone(`${outcomeText(outcome.state)}${outOfUse ? ` ${system.data.name} is out of use until it's released in Safety.` : ""}`);
+          onDone(`${outcomeText(outcome.state)}${outOfUse ? ` ${system.data.name} is out of use until it's released in Safety.` : ""} Tohyee doesn't message anyone: the action shows in Tohyee for whoever looks after it.`);
         } catch (caught) {
           setError(`Not saved: ${errorMessage(caught)}`);
         } finally {
@@ -508,7 +508,7 @@ const STATE_TONE: Record<IncidentView["state"], "neutral" | "amber" | "green"> =
 const STATE_LABEL: Record<IncidentView["state"], string> = { open: "Open", actions: "Actions open", closed: "Closed", withdrawn: "Withdrawn" };
 
 function IncidentRow({ organisationId, farm, incident, canClose, people, onSaved }: Ctx & { incident: IncidentView; canClose: boolean; people: Array<{ userId: string; name: string }>; onSaved: (text: string) => void }) {
-  const [open, setOpen] = useState<"more" | "told" | "close" | "action" | null>(null);
+  const [open, setOpen] = useState<"more" | "told" | "close" | "action" | "check" | null>(null);
   const data = incident.data;
   return (
     <li style={{ borderTop: "1px solid var(--border)", padding: "10px 0" }}>
@@ -518,10 +518,12 @@ function IncidentRow({ organisationId, farm, incident, canClose, people, onSaved
         <Badge tone={STATE_TONE[incident.state]}>{STATE_LABEL[incident.state]}</Badge>
         {data.reachedWater ? <Badge tone="red">Reached water or a drain</Badge> : null}
         {incident.tellCouncil ? <Badge tone="amber">Council not recorded as told</Badge> : null}
+        {incident.state !== "withdrawn" ? incident.checkedOnSite ? <Badge tone="blue">Checked</Badge> : <Badge>Reported, not yet checked</Badge> : null}
       </div>
       <div className={ui.muted} style={{ fontSize: "var(--text-sm)" }}>
         Happened {formatDateTime(data.occurredAt)} · reported {formatDateTime(incident.firstEnteredAt)} by {incident.firstEnteredByName || incident.firstEnteredByEmail}
       </div>
+      {data.checked ? <div>Checked: {data.checked.note}</div> : null}
       {data.councilTold ? (
         <div>
           Council told {formatDate(data.councilTold.on)} {COUNCIL_TOLD_HOW[data.councilTold.how]}
@@ -552,6 +554,11 @@ function IncidentRow({ organisationId, farm, incident, canClose, people, onSaved
                 We told the council
               </Button>
             ) : null}
+            {canClose && !data.checked ? (
+              <Button variant="secondary" size="small" onClick={() => setOpen(open === "check" ? null : "check")}>
+                Checked it
+              </Button>
+            ) : null}
             {canClose ? (
               <Button variant="secondary" size="small" onClick={() => setOpen(open === "close" ? null : "close")}>
                 Close
@@ -570,6 +577,7 @@ function IncidentRow({ organisationId, farm, incident, canClose, people, onSaved
         </div>
       ) : null}
       {open === "told" ? <CouncilToldForm organisationId={organisationId} incident={incident} onDone={() => { setOpen(null); onSaved("Recorded that the council was told."); }} /> : null}
+      {open === "check" ? <CheckedForm organisationId={organisationId} incident={incident} onDone={() => { setOpen(null); onSaved("Recorded what was found."); }} /> : null}
       {open === "close" ? <CloseForm organisationId={organisationId} incident={incident} onDone={() => { setOpen(null); onSaved("Closed."); }} /> : null}
       {open === "action" ? <AddActionForm organisationId={organisationId} incident={incident} people={people} onDone={() => { setOpen(null); onSaved("Action added."); }} /> : null}
     </li>
@@ -624,6 +632,23 @@ function CouncilToldForm({ organisationId, incident, onDone }: { organisationId:
         </Field>
       </div>
       <Button type="submit" disabled={busy}>
+        Save
+      </Button>
+    </form>
+  );
+}
+
+/** What was found when someone looked (#491): kept beside the reporter's account, not instead of it. */
+function CheckedForm({ organisationId, incident, onDone }: { organisationId: string; incident: IncidentView; onDone: () => void }) {
+  const [note, setNote] = useState("");
+  const { busy, error, run } = useRun();
+  return (
+    <form style={FORM} onSubmit={(event) => { event.preventDefault(); void run(() => api(`/api/farming/effluent/incidents/${incident.recordId}`, { method: "PATCH", body: { organisationId, step: "check", expectedVersion: incident.version, note } }), onDone); }}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Field label="What you found when you checked" hint="The report stays as the reporter wrote it; this is kept beside it.">
+        <textarea rows={2} value={note} required maxLength={2000} onChange={(event) => setNote(event.target.value)} />
+      </Field>
+      <Button type="submit" disabled={busy || !note.trim()}>
         Save
       </Button>
     </form>
@@ -719,5 +744,53 @@ export function FarmEffluentDue({ organisationId }: { organisationId: string }) 
         ))}
       </ul>
     </Card>
+  );
+}
+
+// The council pack -------------------------------------------------------------------------------------
+
+/** The council pack (decision 1099a): a date range to download. Tohyee never sends it. */
+export function PackScreen({ organisationId, farm }: Ctx) {
+  const { current } = useWorkspace();
+  const today = todayInBrowser();
+  const [range, setRange] = useState({ from: `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`, to: today });
+  if (current?.role === "farm_worker") return <Notice tone="info">The council pack is for the people who keep the farm&apos;s records. Ask the farm manager.</Notice>;
+  const href = `/api/farming/effluent/pack?${new URLSearchParams({ organisationId, farmId: farm.id, from: range.from, to: range.to }).toString()}`;
+  return (
+    <div className={styles.overview}>
+      <div className={styles.column}>
+        <Card title="Download the council pack" description={`${farm.name}'s effluent records for the dates you choose, if the council asks for them.`}>
+          <div className={ui.inlineForm}>
+            <Field label="From">
+              <DateInput value={range.from} max={range.to} onChange={(event) => setRange({ ...range, from: event.target.value })} />
+            </Field>
+            <Field label="To">
+              <DateInput value={range.to} max={today} onChange={(event) => setRange({ ...range, to: event.target.value })} />
+            </Field>
+          </div>
+          <p>
+            <a className={ui.linkButton} href={href} download>
+              Download (zip)
+            </a>
+          </p>
+          <p className={ui.muted}>Tohyee doesn&apos;t send this to anyone. You download it and give it to the council yourself.</p>
+        </Card>
+      </div>
+      <div className={styles.column}>
+        <Card title="What's in it">
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            <li>A summary: the runs compared with the consent conditions as entered, in counts (it never says the farm complies), pond levels, days not applied, incidents.</li>
+            <li>A map of the paddocks shaded by applications (applied-areas.svg).</li>
+            <li>Every run, pond reading, day not applied, check, fault, release, service, incident and action, each with its full history: who entered it and when (set by Tohyee), corrections with the earlier versions and why, withdrawn records marked.</li>
+            <li>Depth as entered (measured or declared) beside the estimate from the settings; positions and tractor areas are phone GPS estimates.</li>
+            <li>Photos with the camera&apos;s time, the phone&apos;s time and where the phone said it was.</li>
+            <li>The history&apos;s numbers and hashes, and a small program (verify.mjs) that checks the records weren&apos;t changed after they were saved. It can&apos;t show that what was entered is true.</li>
+          </ul>
+          <p>
+            The weekly copy off the farm can include the effluent records too: <Link href={safetyHref({ farmId: farm.id, screen: "records" })}>Safety › Records and settings</Link>.
+          </p>
+        </Card>
+      </div>
+    </div>
   );
 }
