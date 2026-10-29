@@ -114,13 +114,12 @@ describeWithDatabase("farm effluent log", () => {
   it("EF13 the comparison counts runs over the depth, too soon, in a buffer and while out of use, in neutral words", async () => {
     // Paddock 1 again 2 days after the tanker, 30 mm entered, a position 20 m from the bore (50 m buffer from ORC's template).
     await as(worker)((tx) => addApplication(tx, { farmId: w.home, systemId: w.irrigator, paddockIds: [w.p1], startedAt: ago(2), stoppedAt: ago(1), depthEnteredMm: "30", ponding: { result: "none" }, positions: [{ point: [170.5, -45.89982], movedAt: ago(2) }] }));
-    // The pods fail a critical check, then a run is recorded anyway: it's kept, marked.
+    // The pods fail a critical check: a run on them is refused until they're released (Jess, 29 October 2026).
     const machine = (await as(worker)((tx) => listEquipment(tx, w.home))).equipment.find((item) => item.data.name === "Pods")!;
     await as(worker)((tx) => recordCheck(tx, { equipmentId: machine.recordId, checklistVersion: machine.checklist!.version, answers: machine.checklist!.data.items.map((item, index) => ({ key: item.key, result: index === 0 ? "fault" : "ok", note: index === 0 ? "Line on the stream bank" : null })) }, members));
-    const marked = await as(worker)((tx) => addApplication(tx, { farmId: w.home, systemId: w.pods, paddockIds: [w.p2], startedAt: ago(1) }));
-    expect(marked.data.usedWhileOutOfUse).toBe(true);
+    await expect(as(worker)((tx) => addApplication(tx, { farmId: w.home, systemId: w.pods, paddockIds: [w.p2], startedAt: ago(1) }))).rejects.toThrow(/Pods is out of use in Safety.*Line on the stream bank/);
     const log = await as(owner)((tx) => effluentLog(tx, w.home));
-    expect(log.summary).toMatchObject({ applications: 5, overDepth: 1, tooSoon: 3, ponding: 1, runoff: 0, inBuffer: 1, whileOutOfUse: 1 });
+    expect(log.summary).toMatchObject({ applications: 4, overDepth: 1, tooSoon: 2, ponding: 1, runoff: 0, inBuffer: 1, whileOutOfUse: 0 });
     const deep = log.applications.find((each) => each.data.depthEnteredMm === "30")!;
     expect(deep.flags).toMatchObject({ overDepth: true, tooSoon: [{ paddockId: w.p1, days: expect.any(Number) }], inBuffer: [{ name: "Bore", bufferM: 50, metres: 20 }] });
   });

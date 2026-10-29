@@ -29,9 +29,9 @@ import { requireId } from "@/lib/validation";
 
 export type CouncilPack = { data: PackData; summary: string[]; svg: string; farmName: string };
 
-/** Viewers and above may make it; farm staff can't (like the WorkSafe pack, decision 961). */
+/** Owners and admins only (Jess, 29 October 2026). */
 function requirePackMaker(tx: OrgTx) {
-  if (tx.actor.role === "farm_worker") throw new ForbiddenError("The council pack is for the people who keep the farm's records. Ask the farm manager.");
+  if (tx.actor.userId && tx.actor.role !== "owner" && tx.actor.role !== "admin") throw new ForbiddenError("Only an owner or an admin can make the council pack.");
 }
 
 export async function loadCouncilPack(tx: OrgTx, input: { farmId: unknown; from: unknown; to: unknown }): Promise<CouncilPack> {

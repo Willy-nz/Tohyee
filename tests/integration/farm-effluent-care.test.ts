@@ -5,6 +5,7 @@ import { coreQuery } from "@/lib/db/transactions";
 import { todayIsoDate } from "@/lib/dates";
 import { addIncident, addIncidentAction, addService, changeIncident, effluentCare, effluentDue, effluentToday, reportFault } from "@/lib/effluent/care";
 import { addApplication, addPondReading } from "@/lib/effluent/log";
+import { loadCouncilPack } from "@/lib/effluent/pack";
 import { addMonths } from "@/lib/effluent/reminders";
 import { addSetup, addSystem, changeSetup } from "@/lib/effluent/setup";
 import { setMemberFarmAccess } from "@/lib/farming/access";
@@ -150,6 +151,16 @@ describeWithDatabase("farm effluent care", () => {
     const closed = await as(books)((tx) => changeIncident(tx, w.incident, { step: "close", expectedVersion: 3, why: "Float switch replaced; drain clean next morning" }));
     expect(closed.data.closed).toEqual({ why: "Float switch replaced; drain clean next morning" });
     expect((await as(owner)((tx) => checkSafetyHistory(tx))).problems).toEqual([]);
+  });
+
+  it("EF21a closing never needs the council told; the consent's condition stays as information; the council pack is owners' and admins' (Jess, 29 October 2026)", async () => {
+    const { incident } = await as(worker)((tx) => addIncident(tx, { farmId: w.home, type: "runoff", title: "Runoff onto the race" }, members));
+    const closed = await as(books)((tx) => changeIncident(tx, incident.recordId, { step: "close", expectedVersion: 1, why: "Looked at it: stopped at the race" }));
+    expect(closed.data).toMatchObject({ councilTold: null, closed: { why: "Looked at it: stopped at the race" } });
+    const view = (await as(books)((tx) => effluentCare(tx, w.home))).incidents.find((each) => each.recordId === incident.recordId)!;
+    expect(view).toMatchObject({ state: "closed", tellCouncil: { who: "Environment Southland" } });
+    await expect(as(books)((tx) => loadCouncilPack(tx, { farmId: w.home, from: "2020-01-01", to: "2099-12-31" }))).rejects.toThrow(/Only an owner or an admin/);
+    await expect(as(owner)((tx) => loadCouncilPack(tx, { farmId: w.home, from: "2020-01-01", to: "2099-12-31" }))).resolves.toMatchObject({ farmName: "Home farm" });
   });
 
   it("EF22 farm staff report on their farm only; corrections are the reporter's or a bookkeeper's", async () => {

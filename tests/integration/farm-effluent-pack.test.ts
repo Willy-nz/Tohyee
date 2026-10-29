@@ -98,7 +98,7 @@ describeWithDatabase("farm effluent council pack", () => {
   });
 
   it("EF26 farm staff can't download the pack; the route serves it to an owner as a zip", async () => {
-    await expect(as(worker)((tx) => loadCouncilPack(tx, { farmId: w.home, from: "2020-01-01", to: "2099-12-31" }))).rejects.toThrow(/council pack is for the people/);
+    await expect(as(worker)((tx) => loadCouncilPack(tx, { farmId: w.home, from: "2020-01-01", to: "2099-12-31" }))).rejects.toThrow(/Only an owner or an admin/);
     const handler = packRoute.GET as (request: Request, context: never) => Promise<Response>;
     const staff = await handler(apiRequest(`/api/farming/effluent/pack?organisationId=${ORG}&farmId=${w.home}&from=2020-01-01&to=2099-12-31`, { cookie: await sessionCookieFor(worker) }), {} as never);
     expect(staff.status).toBe(403);
@@ -107,15 +107,16 @@ describeWithDatabase("farm effluent council pack", () => {
     expect(response.headers.get("content-type")).toBe("application/zip");
   });
 
-  it("EF27 the weekly copy leaves effluent out unless the farm chooses it", async () => {
+  it("EF27 the weekly copy includes effluent by default on a farm with effluent systems, unless an owner or admin says no (Jess, 29 October 2026)", async () => {
     const sent: Array<Omit<OutgoingMessage, "messageId">> = [];
     const accept = async (_organisation: unknown, message: Omit<OutgoingMessage, "messageId">) => {
       sent.push(message);
       return { messageId: `<copy-${sent.length}@example.com>`, response: "250 OK", rejected: [] };
     };
     await as(owner)((tx) => saveCopySettings(tx, { on: true, toAddresses: "accountant@example.com" }));
-    expect((await as(owner)((tx) => copySettings(tx))).settings.includeEffluent).toBe(false);
+    expect((await as(owner)((tx) => copySettings(tx))).settings).toMatchObject({ includeEffluent: true, includeEffluentChosen: false });
     const organisation = (await getOrganisation(ORG))!;
+    await as(owner)((tx) => saveCopySettings(tx, { on: true, toAddresses: "accountant@example.com", includeEffluent: false }));
     const first = await sendSafetyCopy(organisation, { force: true, send: accept });
     expect(sent[0].subject).toMatch(/^Farm safety records/);
     const safetyOnly = first.sent!.entries;

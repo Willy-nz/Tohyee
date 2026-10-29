@@ -433,7 +433,7 @@ describeWithDatabase("the demo farm (#437)", () => {
     const care = await as((tx) => effluentCare(tx, homeId));
     expect(care.incidents.map((incident) => [incident.data.type, incident.state, Boolean(incident.tellCouncil)])).toEqual([
       ["spill", "actions", true],
-      ["ponding", "closed", false],
+      ["ponding", "closed", true],
     ]);
     const irrigator = care.systems.find((system) => system.data.name === "Travelling irrigator")!;
     expect(irrigator).toMatchObject({ available: true, lastService: expect.any(String), nextService: expect.any(String) });
