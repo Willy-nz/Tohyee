@@ -6,6 +6,7 @@ import { useHydrated } from "@/components/hooks";
 import { Button } from "@/components/ui";
 import { accuracyQuality, canAsk, GPS_PRIVATE_NOTE, GPS_START, GPS_TIMEOUT_MS, type GpsFix, gpsMessage, gpsReducer, type GpsState, restoreSteps } from "@/lib/location/gps";
 import { BROWSER_NAMES, browserInfo, type BrowserInfo } from "@/lib/offline/browser";
+import { inNativeApp } from "@/lib/native/bridge";
 import { isInstalled } from "@/lib/offline/device";
 import styles from "./gps-control.module.css";
 
@@ -175,7 +176,7 @@ export function GpsStatus({ gps, id, showWhenIdle = false }: { gps: Gps; id?: st
         <div className={styles.help}>
           <p className={styles.helpTitle}>To let Tohyee use your location{browser ? ` in ${browserLabel(browser)}` : ""}:</p>
           <ol className={styles.steps}>
-            {restoreSteps(browser ?? { os: "other", browser: "other" }, typeof window !== "undefined" && isInstalled()).map((step) => (
+            {restoreSteps(browser ?? { os: "other", browser: "other" }, typeof window !== "undefined" && (isInstalled() || inNativeApp())).map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>

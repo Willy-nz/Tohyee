@@ -1,0 +1,21 @@
+{
+  "appId": "io.github.willy_nz.tohyee",
+  "appName": "Tohyee",
+  "webDir": "android-shell/www",
+  "server": {
+    "androidScheme": "https",
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "useLegacyBridge": true,
+    "allowMixedContent": false,
+    "captureInput": false,
+    "webContentsDebuggingEnabled": false,
+    "appendUserAgent": "TohyeeApp/Android"
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false },
+    "CapacitorCookies": { "enabled": false },
+    "LocalNotifications": { "smallIcon": "ic_stat_tohyee", "iconColor": "#2563EB" }
+  }
+}

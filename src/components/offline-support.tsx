@@ -264,6 +264,8 @@ export function OfflineSupport({ userId, organisationId }: { userId: string; org
       if (!queue || cancelled) return;
       const report = await queue.sync().catch(() => null);
       if (report?.stoppedBecause === "account_changed") markAccountChanged();
+      // Something recorded here reached Tohyee (a pond read, a run shifted): the Android app's reminders are worked out again (#502).
+      if (report && report.sent > 0) window.dispatchEvent(new Event("tohyee:reminders-changed"));
     };
     queuePromise = sharedQueue({ server: window.location.origin, userId, organisationId });
     queuePromise.then(

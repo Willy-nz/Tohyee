@@ -41,10 +41,10 @@ browser's (decisions 1112-1113, #498):
 - **A link opened inside Facebook, Messenger, Instagram or an email
   app:** open it in a browser first.
 
-It's a web app added by the browser: there's no app-store app and no APK
-to download. Chrome and Edge also offer an Install button on the page;
-the written steps are always shown too, because other browsers don't.
-There's no app store. The icon always opens the server it was added from;
+It's a web app added by the browser, not an app-store app. Chrome and
+Edge also offer an Install button on the page; the written steps are
+always shown too, because other browsers don't. On Android there's also
+an app to download (an APK): see [The Android app](#the-android-app). The icon always opens the server it was added from;
 to use another server, add it from that server's address (each keeps its
 own copies).
 
@@ -78,8 +78,9 @@ nothing is sent or shared. If location was blocked, the button says
 **Location blocked: how to fix** and the steps for your browser are shown
 with **Check again**. Browsers don't ask a second time once it's blocked.
 The maps work without it. Tractor mode has **Check GPS** before Start,
-and says it's limited: keep Tohyee open and the screen unlocked while
-recording.
+and says it's limited in a browser: keep Tohyee open and the screen
+unlocked while recording. The Android app keeps recording with the screen
+locked.
 
 ## What works without a connection
 
@@ -310,6 +311,123 @@ The notice shown before sharing (from `src/lib/farming/locations-shared.ts`):
 **Not yet tried on a real phone**, like the rest of this page: checked in
 Chromium with a phone's screen size and a simulated location.
 
+## The Android app
+
+Tohyee for Android (#502, decisions 1140-1152) is one app for everyone: the
+first time, you type your Tohyee address and it opens your own server
+inside the app. It's the same pages as the web app, from your server, so
+it never falls behind the server, and the offline pages, farm information
+and work saved on the phone all carry on inside it. **Not yet tried on a
+real Android phone**: it's built and checked automatically (CI and tests),
+not on a device. Not on the Play Store yet.
+
+What it adds to the web app:
+
+- **Tractor mode with the screen locked.** Recording carries on with the
+  screen off or another app open, while Android shows "Tohyee is recording
+  a tractor job". Location (While using the app) and notifications are
+  asked for when you start a job, after Tohyee says why. Turning location
+  off, a flat battery or swiping Tohyee away from recent apps still stops
+  it, and that time is a gap.
+- **Reminders as notifications**, if you turn them on (Get Tohyee on this
+  device › Turn reminders on): shift the pods or irrigator at the time the
+  run says, read the pond (each morning until it's read), Effluent's weekly
+  checks, servicing and Effluent WoF, your own safety actions on their due
+  day, and for admins the LINZ aerial photos key's reminder and expiry.
+  Days arrive at 7 am. They're worked out by your server and set on the
+  phone each time Tohyee opens, for the next two weeks; there's no push
+  server, so they come without a signal too. Something already due isn't
+  notified (it's on Today). Turning them off or signing out removes them.
+- **The phone's camera and photo picker** where Tohyee takes photos
+  (Safety, Effluent, pre-start faults): **Take a photo** or **Choose a
+  photo**. The photo's time goes with it; where it was taken only when you
+  tick "Add where I am".
+
+Also: Android's back button closes an open dialog or goes back a page;
+links to other websites open in the phone's browser.
+
+### Installing it
+
+Get Tohyee on this device (in a browser on the phone) has the steps under
+**Android: download the app**:
+
+1. Open [Tohyee's latest release](https://github.com/Willy-nz/Tohyee/releases/latest)
+   on the phone and, under **Assets**, tap `Tohyee-<version>.apk`.
+2. Tap **Open** when it's downloaded (or Files › Downloads).
+3. Android says the phone "isn't allowed to install unknown apps from this
+   source": tap **Settings**, turn on **Allow from this source**, go back,
+   tap **Install**. "Unknown apps" means any app not from the Play Store;
+   Android asks you to allow the browser to install it, so a website can't
+   install anything without you.
+4. If **Google Play Protect** warns that it doesn't know the app, that's
+   because it isn't on the Play Store, not because it found something
+   wrong. Tap **More details** › **Install anyway** once you're sure the
+   file came from Tohyee's releases. Each release has a `.sha256` beside
+   the APK to check the download.
+5. Open Tohyee, type your Tohyee address, **Check**, **Open Tohyee**, sign in.
+6. You can turn **Allow from this source** off again afterwards (Settings ›
+   Apps › Special app access › Install unknown apps).
+
+To update, install the newer APK over the old one; the address and what's
+saved stay. `Tohyee-<version>-test.apk` is a test build (no release key):
+it installs separately as "Tohyee (test)" and can't be updated to the real
+app.
+
+### The address
+
+It must be HTTPS, as for the web app: your Remote access address, or a
+Tailscale `https://….ts.net` address with the Tailscale app on and
+connected. The app checks it answers as Tohyee (`GET /api/app/identify`)
+before keeping it, and only ever opens that address. To change it: Get
+Tohyee on this device › **Change Tohyee address** (what's saved on the
+phone for the old address stays, for when you go back). If the server
+can't be reached and nothing is saved yet, the app says so with **Try
+again** and **Change Tohyee address**.
+
+### Not in the app yet
+
+- Downloading files from inside the app (exports, PDFs): use the browser.
+- Connecting farm mail to Google or Microsoft: their sign-in opens in the
+  phone's browser, so connect mail from a browser.
+- The Play Store, iPhone, and push notifications.
+
+### Signing the Android app (for whoever publishes releases)
+
+Releases are signed with one key, kept in the repository's secrets. Make
+it once, on your own computer (Java's `keytool`, which comes with any JDK
+or Android Studio):
+
+```sh
+keytool -genkeypair -v -keystore tohyee-release.keystore -storetype PKCS12 \
+  -alias tohyee -keyalg RSA -keysize 4096 -validity 10000 \
+  -dname "CN=Tohyee, O=Tohyee, C=NZ"
+base64 -w0 tohyee-release.keystore > tohyee-release.keystore.b64   # macOS: base64 -i tohyee-release.keystore
+```
+
+Then in GitHub › the repository › Settings › Secrets and variables ›
+Actions › **New repository secret**, add:
+
+| Secret | What |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the contents of `tohyee-release.keystore.b64` |
+| `ANDROID_KEYSTORE_PASSWORD` | the password keytool asked for |
+| `ANDROID_KEY_ALIAS` | `tohyee` (the `-alias`) |
+| `ANDROID_KEY_PASSWORD` | the same password (a PKCS12 keystore has one); may be left out |
+
+Keep the keystore and its password somewhere safe and backed up, never in
+the repository: every later version must be signed with the same key, or
+phones won't install it as an update. Delete the `.b64` copy once it's in
+the secrets.
+
+Without the secrets, a release gets the test build instead. The build job
+never sees the secrets: it makes an unsigned APK, and a separate job that
+runs none of the repository's code signs it with the Android SDK's
+`zipalign` and `apksigner`.
+
+To build a test APK from any branch: GitHub › Actions › **Android app** ›
+**Run workflow** (it's under the run's Artifacts). Pull requests that
+change the app build one too.
+
 ## For developers
 
 - `public/sw.js` and `public/sw-rules.js`: the service worker (built files
@@ -349,6 +467,20 @@ Chromium with a phone's screen size and a simulated location.
   turns a finished job into one queue item (kind `tractor.job`, operation
   id = the job's id) with the track as a file sent as `trackBase64`
   (decisions 1028-1029), and picks the hazards shown (decision 1030).
+- The Android app (#502): `android/` (Capacitor 8; `MainActivity`,
+  `TohyeeServer` and `TohyeeServerPlugin` keep and open the address),
+  `android-shell/` (the bundled first-run and can't-reach pages;
+  `npm run android:sync` builds its script and copies it and the plugins
+  into `android/`), `capacitor.config.json`, and
+  `.github/workflows/android-app.yml`. Web side: `src/lib/native/bridge.ts`
+  (finding the app and its plugins), `location.ts` (tractor mode's
+  background GPS), `notifications.ts` (planning and scheduling
+  reminders), `camera.ts`, `server-address.ts` (the first-run check),
+  `device-reminders.ts` (the server's reminders),
+  `src/components/native-app.tsx` (back button, tapped reminders,
+  refreshing) and `android-app.tsx` (the install steps and the app's
+  settings). Building it locally needs JDK 21 and the Android SDK:
+  `npm ci && npm run android:sync && cd android && ./gradlew assembleDebug`.
 - `src/lib/offline/device.ts`: platform and address checks, the service
   worker messages, the 14-day rule and one account per device.
 - Farm packs: `src/lib/offline/pack-inventory.ts` (the parts and answering

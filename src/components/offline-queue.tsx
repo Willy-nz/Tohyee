@@ -76,11 +76,17 @@ export type PickedFile = SafetyFile & { pending?: boolean };
  * operation id becomes the file's id on Tohyee, so a record can name it
  * before it's sent. Sent straight away when there's a connection.
  */
-export async function pickSafetyFile(queue: OfflineQueue | null, input: { farm: { id: string; name: string }; file: File; restricted?: boolean; place?: boolean }): Promise<PickedFile> {
+/**
+ * `cameraPlace` is where the Android app's camera or photo picker says the
+ * photo was taken (#502). It's used only when `place` is ticked: first for
+ * a photo chosen from the phone (it's where that photo was), and when the
+ * phone can't find itself now for a photo just taken.
+ */
+export async function pickSafetyFile(queue: OfflineQueue | null, input: { farm: { id: string; name: string }; file: File; restricted?: boolean; place?: boolean; cameraPlace?: PhotoPlace | null; chosen?: boolean }): Promise<PickedFile> {
   const operationId = newOperationId();
   const blob = input.file.type.startsWith("image/") ? await compressPhoto(input.file) : input.file;
   const contentType = blob.type || input.file.type;
-  const place: PhotoPlace | null = input.place ? await photoPlace() : null;
+  const place: PhotoPlace | null = !input.place ? null : input.chosen && input.cameraPlace ? input.cameraPlace : ((await photoPlace()) ?? input.cameraPlace ?? null);
   const phoneFileTime = input.file.lastModified ? new Date(input.file.lastModified).toISOString() : new Date().toISOString();
   const name = contentType === "image/jpeg" && !/\.jpe?g$/i.test(input.file.name) ? `${input.file.name.replace(/\.[^.]+$/, "") || "photo"}.jpg` : input.file.name;
   const outcome = await submitThroughQueue(queue, {

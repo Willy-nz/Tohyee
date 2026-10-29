@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small notification icon (reminders and "Tohyee is recording a tractor job"): the Tohyee dog's outline in white, as Android needs (#502). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M112,236 L142,70 Q150,52 166,64 L250,150 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M400,236 L370,70 Q362,52 346,64 L262,150 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M256,128 C330,128 390,168 408,230 C438,244 452,276 436,300 C458,322 452,356 426,368 C432,400 408,428 376,426 C364,456 330,470 300,456 C286,476 226,476 212,456 C182,470 148,456 136,426 C104,428 80,400 86,368 C60,356 54,322 76,300 C60,276 74,244 104,230 C122,168 182,128 256,128 Z" />
+</vector>

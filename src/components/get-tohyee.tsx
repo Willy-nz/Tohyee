@@ -8,6 +8,8 @@ import { Button, Notice } from "@/components/ui";
 import { OFFLINE_SCREENS, screensMissing } from "@/lib/offline/screens";
 import { ALL_INSTALL_GUIDES, BROWSER_NAMES, browserInfo, INSTALL_GUIDE_NAMES, INSTALL_SUPPORT, type InstallGuide, installGuide } from "@/lib/offline/browser";
 import { addressKind, type AddressKind, isInstalled, OFFLINE_SESSION_DAYS, registerServiceWorker, tellServiceWorker } from "@/lib/offline/device";
+import { AndroidAppSettings, AndroidDownload } from "@/components/android-app";
+import { useNativeFeatures } from "@/components/native-app";
 import styles from "./get-tohyee.module.css";
 
 /*
@@ -30,7 +32,7 @@ const OPEN_IT = <li>Open Tohyee from its new icon and sign in if asked.</li>;
 /**
  * The steps for each browser (#498 item 5, decision 1112). Each one adds
  * Tohyee to the Home Screen (or the computer's app list) as a web app from
- * this server: there's no app-store app and no APK to download.
+ * this server. The Android app (an APK, #502) is offered beside them.
  */
 const GUIDES: Record<InstallGuide, () => ReactNode> = {
   "ios-safari": () => (
@@ -253,6 +255,8 @@ export function GetTohyee() {
   const origin = hydrated ? window.location.origin : "";
   const host = hydrated ? window.location.host : "";
   const support = guide ? INSTALL_SUPPORT[guide] : null;
+  // Inside the Android app (#502): its own settings instead of the install steps.
+  const native = useNativeFeatures();
 
   async function install() {
     if (!prompt) return;
@@ -271,14 +275,16 @@ export function GetTohyee() {
         </div>
         <h1 className={styles.title}>Get Tohyee on this device</h1>
         <p className={styles.text}>
-          Put Tohyee on your phone or tablet&apos;s Home Screen as a <strong>web app</strong>. It opens this Tohyee server, {origin ? <strong>{origin}</strong> : "this server"}, with your usual sign-in and what your role lets you use. It isn&apos;t an app-store app, and there&apos;s no APK file to download: your browser adds it.
+          Put Tohyee on your phone or tablet&apos;s Home Screen as a <strong>web app</strong>. It opens this Tohyee server, {origin ? <strong>{origin}</strong> : "this server"}, with your usual sign-in and what your role lets you use. It isn&apos;t an app-store app: your browser adds it. On Android there&apos;s also an app to download, below.
         </p>
 
         <AddressHelp kind={kind} host={host} />
 
-        {installed ? <Notice tone="success">Tohyee is on this device. Open it from its icon.</Notice> : null}
+        {native.app ? <AndroidAppSettings /> : null}
 
-        {info && guide && !installed && kind === "secure" ? (
+        {installed && !native.app ? <Notice tone="success">Tohyee is on this device. Open it from its icon.</Notice> : null}
+
+        {info && guide && !installed && !native.app && kind === "secure" ? (
           <section className={styles.section} aria-labelledby="this-device" data-guide={guide}>
             <h2 id="this-device" className={styles.heading}>
               {INSTALL_GUIDE_NAMES[guide]}
@@ -310,7 +316,7 @@ export function GetTohyee() {
             </li>
             <li>Signing out removes the saved pages from this device. Anything not sent yet stays until it&apos;s sent, and you&apos;re asked first.</li>
             <li>What&apos;s on the device is a copy for working away from a signal, not a backup of Tohyee.</li>
-            <li>Browsers differ in what a web app can do in the background. None of them records tractor GPS with the screen locked or another app open.</li>
+            <li>Browsers differ in what a web app can do in the background. None of them records tractor GPS with the screen locked or another app open; the Android app does.</li>
           </ul>
           {hydrated && kind === "secure" ? <OfflineStatus status={status} /> : null}
         </section>
@@ -325,7 +331,9 @@ export function GetTohyee() {
           </ul>
         </details>
 
-        <details className={styles.section}>
+        {native.app ? null : <AndroidDownload origin={kind === "secure" ? origin : ""} />}
+
+        <details className={styles.section} hidden={native.app}>
           <summary className={styles.summary}>Steps for other browsers and devices</summary>
           {ALL_INSTALL_GUIDES.filter((entry) => entry !== guide).map((entry) => (
             <div key={entry}>

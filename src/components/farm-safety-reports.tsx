@@ -8,6 +8,8 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { type PickedFile, pickSafetyFile, QueuedWork, submitThroughQueue, useOfflineQueue, waitForFiles } from "@/components/offline-queue";
 import { useOnline } from "@/components/offline-support";
 import { placeText } from "@/lib/offline/photos";
+import { nativePhoto } from "@/lib/native/camera";
+import { useNativeFeatures } from "@/components/native-app";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Farm, Paddock } from "@/lib/farming/paddocks";
@@ -122,8 +124,34 @@ export function PhotoPicker({ organisationId, farmId, farmName = "", restricted 
   const { queue } = useOfflineQueue(organisationId);
   const [withPlace, setWithPlace] = useState(false);
   const pending = files.filter((file) => file.pending).length;
+  const native = useNativeFeatures();
+  const takeNative = (source: "camera" | "gallery") =>
+    void run(
+      async () => {
+        const photo = await nativePhoto(source);
+        if (!photo) return null;
+        return pickSafetyFile(queue, { farm: { id: farmId, name: farmName }, file: photo.file, restricted, place: withPlace, cameraPlace: photo.exifPlace, chosen: source === "gallery" });
+      },
+      (file) => {
+        if (file) onChange([...files, file]);
+      },
+    );
   return (
     <div style={{ margin: "8px 0" }}>
+      {native.camera ? (
+        // The Android app: its own camera and photo picker (#502, decision 1149), into the same path as a browser's file.
+        <div className={ui.fieldLabel} role="group" aria-label={label}>
+          {label}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => takeNative("camera")}>
+              Take a photo
+            </Button>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => takeNative("gallery")}>
+              Choose a photo
+            </Button>
+          </div>
+        </div>
+      ) : (
       <label className={ui.fieldLabel}>
         {label}
         <input
@@ -143,6 +171,7 @@ export function PhotoPicker({ organisationId, farmId, farmName = "", restricted 
           }}
         />
       </label>
+      )}
       <label className={styles.check}>
         <input type="checkbox" checked={withPlace} onChange={(event) => setWithPlace(event.target.checked)} /> Add where I am to the photo
       </label>

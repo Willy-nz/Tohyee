@@ -1,0 +1,65 @@
+apply plugin: 'com.android.application'
+
+// The app's version is Tohyee's (#502): package.json's version, and a version
+// code from it (0.19.0 → 1900; 1.2.3 → 1000203), so each release installs over the last.
+def tohyeeVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version as String
+def tohyeeVersionCode = { String version ->
+    def parts = version.tokenize('-')[0].tokenize('.').collect { it as int }
+    return parts[0] * 1000000 + parts[1] * 100 + parts[2]
+}(tohyeeVersion)
+
+android {
+    namespace = "io.github.willy_nz.tohyee"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.willy_nz.tohyee"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode tohyeeVersionCode
+        versionName tohyeeVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        // Release builds are left unsigned here and signed in their own CI job
+        // (.github/workflows/android-app.yml), so the signing key never meets
+        // the build's third-party code.
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        // Test builds: installed beside the real app as "Tohyee (test)".
+        debug {
+            applicationIdSuffix ".test"
+            versionNameSuffix "-test"
+        }
+    }
+    lint {
+        // The build checks what matters for a release without failing on the template's own warnings.
+        abortOnError false
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'

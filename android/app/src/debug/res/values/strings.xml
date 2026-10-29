@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Test builds (#502): a different name, installed beside the real app. -->
+<resources>
+    <string name="app_name">Tohyee (test)</string>
+    <string name="title_activity_main">Tohyee (test)</string>
+</resources>

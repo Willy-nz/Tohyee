@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The Tohyee address Worker has its own tools and checks (see relay/README.md).
     "relay/**",
+    // The Android app (#502): Gradle's project, and the bundled page's built script.
+    "android/**",
+    "android-shell/www/**",
   ]),
 ]);
 

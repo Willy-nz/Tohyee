@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en-NZ">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Your Tohyee address</title>
+    <link rel="stylesheet" href="shell.css" />
+  </head>
+  <body>
+    <!-- The Android app's first screen (#502, decisions 1140-1142). Bundled in the app; built from android-shell/src/shell.ts. -->
+    <main class="panel">
+      <div class="brand"><img src="icon.svg" alt="" width="36" height="36" /><span>Tohyee</span></div>
+      <h1>Your Tohyee address</h1>
+      <p>Type the address you open Tohyee at in a browser. The app opens your own Tohyee server there, with your usual sign-in.</p>
+      <form id="address-form" novalidate>
+        <label for="address">Tohyee address</label>
+        <input id="address" name="address" type="url" inputmode="url" autocomplete="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="tohyee.example.nz" aria-describedby="address-help status" required />
+        <p id="address-help" class="muted">It starts with https://. You can leave that off.</p>
+        <button id="check" type="submit" class="primary">Check</button>
+      </form>
+      <div id="status" role="status" aria-live="polite"></div>
+      <div id="found" hidden>
+        <button id="open" type="button" class="primary">Open Tohyee</button>
+        <button id="again" type="button" class="secondary">Use another address</button>
+      </div>
+      <details>
+        <summary>Where do I find my Tohyee address?</summary>
+        <ul>
+          <li>It's the address in the browser when you use Tohyee, for example <strong>https://tohyee.example.nz</strong>.</li>
+          <li>Whoever looks after Tohyee can find it in Server settings › Remote access (a Tohyee web address, or your own Cloudflare tunnel).</li>
+          <li>Tailscale: an <strong>https://….ts.net</strong> address, with the Tailscale app on and connected on this phone.</li>
+          <li>A home-network address like http://192.168.1.20:3000 doesn't work in the app: it isn't HTTPS. Use one of the above.</li>
+        </ul>
+      </details>
+      <p class="muted">The app only opens this address. Links to other websites open in the phone's browser.</p>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

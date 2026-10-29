@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launch screen while Tohyee starts: the Tohyee mark on its blue (#502). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/tohyee_blue" />
+    <item android:width="144dp" android:height="144dp" android:gravity="center" android:drawable="@drawable/splash_icon" />
+</layer-list>
