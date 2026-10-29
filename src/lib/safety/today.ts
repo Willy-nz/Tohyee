@@ -33,6 +33,10 @@ export async function safetyToday(tx: OrgTx, farmIdInput: unknown) {
   const hazards = (await currentRecords<HazardData>(tx, "hazard", { farmId })).filter((hazard) => hazard.farmId === farmId && hazardState(hazard) === "active");
   const { equipment } = await listEquipment(tx, farmId);
   const inUse = equipment.filter((item) => item.change !== "withdrawn" && !item.data.retired);
+  // Effluent systems checked each week (#487, decision 1076) aren't "not checked today"; Effluent reminds about them.
+  const weekly = new Set(
+    (await currentRecords<{ equipmentId: string; checkEvery?: string }>(tx, "effluent_system", { farmId })).filter((system) => system.data.checkEvery === "week").map((system) => system.data.equipmentId),
+  );
   const training = (await listTraining(tx, { mine: !manager })).filter((record) => record.state === "expired" || record.state === "expiring");
   const inductions = (await listInductions(tx, farmId)).filter((induction) => induction.change !== "withdrawn" && induction.data.audiences.includes("worker"));
   const signoffs = (await listSignoffs(tx, farmId)).filter((signoff) => signoff.data.person.userId === tx.actor.userId);
@@ -55,7 +59,7 @@ export async function safetyToday(tx: OrgTx, farmIdInput: unknown) {
     importantHazards: hazards.filter((hazard) => hazard.data.noGo || hazard.data.level === "high").map((hazard) => ({ id: hazard.recordId, title: hazard.data.title, noGo: hazard.data.noGo })),
     reviewsDue: manager ? hazards.filter((hazard) => reviewOverdue(hazard.data, today)).map((hazard) => ({ id: hazard.recordId, title: hazard.data.title, reviewDue: hazard.data.reviewDue })) : [],
     outOfUse: inUse.filter((item) => !item.available).map((item) => ({ id: item.recordId, name: item.data.name })),
-    notCheckedToday: inUse.filter((item) => item.available && item.checklist && (!item.lastCheck || isoDateAt(new Date(item.lastCheck.enteredAt)) < today)).map((item) => ({ id: item.recordId, name: item.data.name })),
+    notCheckedToday: inUse.filter((item) => item.available && item.checklist && !weekly.has(item.recordId) && (!item.lastCheck || isoDateAt(new Date(item.lastCheck.enteredAt)) < today)).map((item) => ({ id: item.recordId, name: item.data.name })),
     training: training.map((record) => ({ id: record.recordId, who: record.data.person.name, what: record.data.what, expiresOn: record.data.expiresOn, state: record.state })),
     toSign,
   };

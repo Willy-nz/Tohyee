@@ -262,9 +262,10 @@ async function assignee(tx: OrgTx, input: Record<string, unknown>, members: Read
  * `members` is the organisation's members (id -> name), from the core
  * database, for choosing who's responsible.
  */
-export async function addAction(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>, options: { checkId?: string } = {}) {
-  // A failed pre-start check makes its own action, whoever did the check (decision 955).
-  if (!options.checkId) requireSafetyRecorder(tx);
+export async function addAction(tx: OrgTx, input: Record<string, unknown>, members: ReadonlyMap<string, string>, options: { checkId?: string; effluentIncidentId?: string } = {}) {
+  // A failed pre-start check makes its own action, whoever did the check (decision 955); so does an
+  // effluent incident's reporter, for its actions (#487, decision 1094).
+  if (!options.checkId && !options.effluentIncidentId) requireSafetyRecorder(tx);
   let farmId: string;
   let reportId: string | null = null;
   let hazardId: string | null = null;
@@ -291,6 +292,7 @@ export async function addAction(tx: OrgTx, input: Record<string, unknown>, membe
   };
   // A failed pre-start check's action names the check (decision 955).
   if (options.checkId) data.checkId = options.checkId;
+  if (options.effluentIncidentId) data.effluentIncidentId = options.effluentIncidentId;
   return appendEntry<ActionData>(tx, { kind: "action", change: "created", farmId, data: { ...data }, operationId: input.operationId });
 }
 

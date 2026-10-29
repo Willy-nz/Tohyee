@@ -10,6 +10,6 @@ export const GET = route(async (request) => {
 /** Turns the weekly copy on or off and chooses who gets it (`on`, `toAddresses`). Owners and admins. */
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "admin", (tx) => saveCopySettings(tx, { on: body.on, toAddresses: body.toAddresses }));
+  const result = await withOrganisation(request, body.organisationId, "admin", (tx) => saveCopySettings(tx, { on: body.on, toAddresses: body.toAddresses, includeEffluent: body.includeEffluent }));
   return json(result);
 });

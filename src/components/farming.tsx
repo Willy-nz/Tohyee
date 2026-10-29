@@ -75,9 +75,25 @@ export function LinzAttribution() {
  * point (a warning triangle) or a zone (an outline). "danger" is red (no-go
  * or high), "warning" amber.
  */
-export type MapOverlay = { id: string; label: string; tone: "danger" | "warning"; point?: Position | null; ring?: Position[] | null; onSelect?: () => void };
+export type MapOverlay = {
+  id: string;
+  label: string;
+  /** "effluent" (blue) is an effluent block, "buffer" (light red) a buffer round a no-apply zone (#487). */
+  tone: "danger" | "warning" | "effluent" | "buffer";
+  point?: Position | null;
+  ring?: Position[] | null;
+  /** How a point shows: a warning triangle (the default) or a dot with a short label, e.g. an irrigator's place (#487). */
+  marker?: "warning" | "dot";
+  short?: string;
+  onSelect?: () => void;
+};
 
-const OVERLAY_COLOURS = { danger: { fill: "rgba(200, 30, 30, 0.28)", stroke: "#c81e1e" }, warning: { fill: "rgba(230, 150, 0, 0.25)", stroke: "#b86e00" } } as const;
+const OVERLAY_COLOURS = {
+  danger: { fill: "rgba(200, 30, 30, 0.28)", stroke: "#c81e1e" },
+  warning: { fill: "rgba(230, 150, 0, 0.25)", stroke: "#b86e00" },
+  effluent: { fill: "rgba(30, 95, 174, 0.22)", stroke: "#1d5fae" },
+  buffer: { fill: "rgba(200, 30, 30, 0.10)", stroke: "#c81e1e" },
+} as const;
 
 /** New Zealand, for a farm with no shapes yet. */
 const NZ_VIEW = { centre: [172.6, -41.3] as Position, zoom: 4.6 };
@@ -261,9 +277,23 @@ export function PaddockMap({
               <g key={overlay.id} onClick={selectable ? () => (dragged.current ? undefined : overlay.onSelect!()) : undefined} style={{ cursor: selectable ? "pointer" : undefined }}>
                 <title>{overlay.label}</title>
                 {overlay.ring && overlay.ring.length > 3 ? (
-                  <path d={`M${overlay.ring.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`} fill={colours.fill} stroke={colours.stroke} strokeWidth={2.5} strokeDasharray="8 4" />
+                  <path d={`M${overlay.ring.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`} fill={colours.fill} stroke={colours.stroke} strokeWidth={overlay.tone === "buffer" ? 1.5 : 2.5} strokeDasharray={overlay.tone === "effluent" ? undefined : "8 4"} />
                 ) : null}
-                {overlay.point
+                {overlay.point && overlay.marker === "dot"
+                  ? (() => {
+                      const [x, y] = view.project(overlay.point);
+                      return (
+                        <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}>
+                          <circle r={11} fill={colours.stroke} stroke="#ffffff" strokeWidth={2} />
+                          {overlay.short ? (
+                            <text y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#ffffff" style={{ pointerEvents: "none" }}>
+                              {overlay.short.slice(0, 3)}
+                            </text>
+                          ) : null}
+                        </g>
+                      );
+                    })()
+                  : overlay.point
                   ? (() => {
                       const [x, y] = view.project(overlay.point);
                       return (

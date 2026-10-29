@@ -28,9 +28,8 @@ import {
   type SafetyAccess,
   type SafetyVersion,
   SENT_MEANS,
-  WEEKLY_COPY_INCLUDES,
   WEEKLY_COPY_KEPT,
-  WEEKLY_COPY_LEAVES_OUT,
+  weeklyCopyContents,
   WORKSAFE_NOTIFY_URL,
 } from "@/lib/safety/shared";
 
@@ -769,14 +768,14 @@ function HazardDetail({ organisationId, hazard, access, paddockNames, onSaved }:
 
 // The weekly copy off the farm ----------------------------------------------------------------------
 
-type CopyData = { settings: { on: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null }; copies: Array<{ id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentAt: string }> };
+type CopyData = { settings: { on: boolean; includeEffluent?: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null }; copies: Array<{ id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentAt: string }> };
 
 /** Decision 958: a PDF and the latest entry's number and hash, emailed off the farm each week. */
 function WeeklyCopy({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const data = useApiData<CopyData>("/api/farming/safety/weekly-copy", { organisationId });
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ on: true, toAddresses: "" });
+  const [form, setForm] = useState({ on: true, toAddresses: "", includeEffluent: false });
   const [message, setMessage] = useState<string | null>(null);
   const { busy, error, run } = useRun();
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
@@ -789,11 +788,11 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
       <p className={ui.muted} style={{ marginTop: 0 }}>
         Each week, a PDF of what was entered and the latest entry&apos;s number and hash are emailed to addresses you choose, through this organisation&apos;s email. Kept where Tohyee can&apos;t change it, it shows later whether the history was rewritten.
       </p>
-      <WeeklyCopyContents />
+      <WeeklyCopyContents includeEffluent={settings.includeEffluent ?? false} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="info">{message}</Notice> : null}
       {settings.lastProblem ? <Notice tone="warning">The last copy wasn&apos;t sent ({settings.lastAttemptAt ? formatDateTime(settings.lastAttemptAt) : ""}): {settings.lastProblem}</Notice> : null}
-      <p style={{ marginBottom: 4 }}>{settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? "Goes to:" : "No copy is sent."}</p>
+      <p style={{ marginBottom: 4 }}>{settings.on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>} {settings.on ? `Goes to${settings.includeEffluent ? ", with the effluent records" : ""}:` : "No copy is sent."}</p>
       {settings.on ? (
         <ul style={{ paddingLeft: 18, marginTop: 0, overflowWrap: "anywhere" }} aria-label="Who gets the weekly copy">
           {settings.toAddresses.map((address) => (
@@ -814,7 +813,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
       ) : null}
       {admin && !editing ? (
         <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-          <Button variant="secondary" size="small" onClick={() => { setForm({ on: settings.on || true, toAddresses: settings.toAddresses.join(", ") }); setEditing(true); }}>
+          <Button variant="secondary" size="small" onClick={() => { setForm({ on: settings.on || true, toAddresses: settings.toAddresses.join(", "), includeEffluent: settings.includeEffluent ?? false }); setEditing(true); }}>
             {settings.on ? "Change" : "Set up the weekly copy"}
           </Button>
           {settings.on ? (
@@ -825,9 +824,13 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
         </div>
       ) : null}
       {editing ? (
-        <form onSubmit={(event) => { event.preventDefault(); void run(() => api("/api/farming/safety/weekly-copy", { method: "POST", body: { organisationId, on: form.on, toAddresses: form.toAddresses } }), () => { setEditing(false); data.reload(); }); }}>
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => api("/api/farming/safety/weekly-copy", { method: "POST", body: { organisationId, on: form.on, toAddresses: form.toAddresses, includeEffluent: form.includeEffluent } }), () => { setEditing(false); data.reload(); }); }}>
           <label className={ui.checkbox}>
             <input type="checkbox" checked={form.on} onChange={(event) => setForm({ ...form, on: event.target.checked })} /> Send a copy every week
+          </label>
+          {/* Effluent records (#487, decision 1099c): in the copy only if the farm chooses, from the next copy on. */}
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={form.includeEffluent} onChange={(event) => setForm({ ...form, includeEffluent: event.target.checked })} /> Include the effluent records (from the next copy on)
           </label>
           <Field label="Send it to" hint="Addresses off the farm, separated by commas: your own personal email, your accountant. Up to 10.">
             <input value={form.toAddresses} maxLength={2000} onChange={(event) => setForm({ ...form, toAddresses: event.target.value })} />
@@ -848,18 +851,19 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
 }
 
 /** What the weekly copy has in it and leaves out (decision 1108). */
-function WeeklyCopyContents() {
+function WeeklyCopyContents({ includeEffluent }: { includeEffluent: boolean }) {
+  const { includes, leavesOut } = weeklyCopyContents(includeEffluent);
   return (
     <details style={{ margin: "4px 0 8px" }}>
       <summary>What&apos;s in it</summary>
       <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
-        {WEEKLY_COPY_INCLUDES.map((line) => (
+        {includes.map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>
       <p style={{ margin: "4px 0 0" }}>Left out:</p>
       <ul style={{ paddingLeft: 18, margin: "4px 0" }}>
-        {WEEKLY_COPY_LEAVES_OUT.map((line) => (
+        {leavesOut.map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>

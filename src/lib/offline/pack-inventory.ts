@@ -18,7 +18,7 @@ export const PHOTO_COPY_PIXELS = 800;
 /** Documents (safety data sheets) are kept when no bigger than this; larger ones on request. */
 export const DOCUMENT_LIMIT_BYTES = 2 * 1024 * 1024;
 
-export type SectionKey = "organisation" | "map" | "pasture" | "calendar" | "plans" | "soil" | "notebook" | "safety" | "equipment" | "people" | "photos";
+export type SectionKey = "organisation" | "map" | "pasture" | "calendar" | "plans" | "soil" | "notebook" | "safety" | "equipment" | "people" | "effluent" | "photos";
 
 export type SectionInfo = {
   key: SectionKey;
@@ -38,6 +38,7 @@ export const PACK_SECTIONS: SectionInfo[] = [
   { key: "calendar", label: "Calendar and jobs", includes: "Your farm calendar from 12 months back to 3 months ahead (no email text).", perFarm: true },
   { key: "equipment", label: "Equipment and checklists", includes: "Machines, their checklists, last known status and recent checks; chemicals with safety data sheets.", perFarm: true },
   { key: "people", label: "Inductions and training", includes: "Inductions to read and sign, with the farm's hazards and emergency details, and training.", perFarm: true },
+  { key: "effluent", label: "Effluent", includes: "Effluent systems, ponds, blocks, no-apply zones and consent conditions, the last 30 days of runs, pond readings and days not applied, checks, servicing, incidents and what's due.", perFarm: true },
   { key: "plans", label: "Fertiliser plans", includes: "The farm's fertiliser plans and their applications, and products.", perFarm: true },
   { key: "soil", label: "Soil tests", includes: "Soil samples, test results and the summary.", perFarm: true },
   { key: "notebook", label: "Farm notebook", includes: "The farm notebook.", perFarm: false },

@@ -10123,6 +10123,167 @@ with credit and a link to the licence.
       whenever photos show, including kept copies offline, and on the
       Offline page.
 
+### Farm dairy effluent: setup (#487 part 1; decisions 1070-1079)
+
+Jess, 29 October 2026: "Do we have an effluent module… so we can upload
+timestamped photos as well with reminders and whatever and so we follow the
+rules. Select irrigators and types and maintenance etc." Farms under Otago
+Regional Council and Environment Southland. Details and sources in
+docs/FARM-EFFLUENT.md. Not yet reviewed by Jess.
+
+1070. **Effluent lives under More, with its daily jobs on Today and the
+      Log.** The farm workspace keeps five tabs (a phone's bottom bar has room
+      for five) and effluent is daily work on some farms only. More ›
+      Effluent has its own overview and screens with their own addresses,
+      like Safety; Today and the Log get its due jobs and quick entries.
+1071. **Owners and admins keep the setup and the consent conditions; farm
+      staff log, check and report on their assigned farms** (the issue's
+      access rules). Bookkeepers and above log too, as they report in
+      Safety. Everyone who sees the farm reads the setup. Farm access is
+      Safety's (decision 744).
+1072. **Effluent records are kept in the safety history.** Same append-only,
+      hash-chained versions (decisions 930-934), photos with their camera
+      time and the phone's place (945, 1012), and history check, with new
+      kinds (tenant migration 0200). They're left out of the WorkSafe pack
+      and, for now, the weekly copy; the chain still lists every entry.
+1073. **Templates per council, never the law.** The consent's conditions are
+      the farm's to enter. A starting template (ORC or ES) fills in only
+      what that council's published pages say (buffers, when not to apply,
+      records, who to tell, other conditions), lists the fields still as the
+      template had them, links its pages, and shows "check against your own
+      consent" until every one has been changed. Depth, rate and return
+      period are never filled in by a template.
+1074. **A consent can be replaced, not deleted.** The one in force is the
+      latest neither replaced nor withdrawn.
+1075. **A system is a machine in Safety's equipment register.** Its checks,
+      faults, "out of use" and release (only an owner, an admin or someone
+      named, never an AI or app; decisions 955 and 969) are Safety's,
+      unchanged. Fixed assets link through the machine.
+1076. **Starting checklists from DairyNZ's staff guides.** A new system
+      without a machine gets one with a checklist for its type (travelling
+      irrigator: wire rope, winch, brake and anchor, couplings, fail-safe;
+      pods: cam locks and end valves, hoses, fail-safe; and so on). Each
+      farm changes its own in Safety. Checks are due each day it's used, or
+      each week.
+1077. **Settings for working out depth are the farm's figures.** Flow,
+      wetted width and speed (travelling irrigator), application rate and
+      pulsing (pods, sprinklers), tank volume (tanker), from the farm's
+      bucket tests or designer; none are assumed (DairyNZ's untested 4 mm/h
+      isn't used).
+1078. **Buffers on the map are pictures.** A point's buffer is drawn as a
+      circle of the consent's distance; an outline's buffer is named, not
+      drawn. Neither is a survey.
+1079. **The demo farm has an effluent setup**: a travelling irrigator, pods
+      and a slurry tanker, the main pond and a yard sump, two blocks, a
+      stream, a bore and a neighbour's house, and an ORC-template consent
+      with made-up figures.
+
+### Farm dairy effluent: the daily log and ponds (#487 part 2; decisions 1080-1089)
+
+1080. **Depth as entered and as worked out, side by side.** A measured depth
+      is the person's; Tohyee works one out from the system's settings
+      (DairyNZ's staff guides: rate × time; flow ÷ width × speed; volume ÷
+      area) when the run is saved and keeps the settings used, so changing
+      them never rewrites an old run. Comparisons use the entered depth when
+      there is one.
+1081. **Times are the person's or phone's; entry times are the database's.**
+      Start, shift and stop times are as given (no more than 15 minutes
+      ahead of Tohyee's clock); each version is still dated by the database.
+1082. **Shift and stop work offline for a run started offline.** They go to
+      `POST /api/farming/effluent/applications/changes` with the run's id
+      taken from the first item's answer (the queue's refs), and the version
+      counted on the device; sending twice adds nothing.
+1083. **A system out of use can still be recorded running, marked.** Refusing
+      it would lose what happened; the run says "recorded while out of
+      use" and the comparison counts it.
+1084. **Pond storage is a guide.** Gauge to volume is taken as a straight
+      line (straight sides); the screen says so. High and low warnings are
+      the pond's own levels.
+1085. **Stopping needs the ponding and runoff check**, and ponding or runoff
+      needs what was seen and done. It prompts an incident and the consent's
+      council contact; Tohyee doesn't tell the council.
+1086. **Comparisons are counts in neutral words**, against the conditions as
+      entered; a limit not entered is "not compared". Buffers are checked
+      from positions placed on the map only (a point zone's distance, or the
+      distance to a drawn outline), so runs without positions aren't
+      checked for buffers. Days between applications use calendar days.
+1087. **Who corrects.** The person who entered a log record, or a bookkeeper
+      or above; Farm staff can't correct someone else's.
+1088. **Effluent goes on the device for offline use** (a new offline pack
+      section: the setup and the last 30 days of the log), and last moved
+      positions show on Farm › Map.
+1089. **The demo farm's last fortnight**: pods shifted twice a day round the
+      shed block, the travelling irrigator twice on one paddock a week apart
+      (counted as sooner than the consent's 10 days), a tanker run, a pond
+      reading each morning, two wet days stored, one run with a little
+      ponding, and the pods running today.
+
+### Farm dairy effluent: checks, faults, servicing, incidents and reminders (#487 part 3; decisions 1090-1098)
+
+1090. **A fault reported from Effluent is a Safety check with one fault.**
+      Kept as a `check` on the system's machine (`faultReport: true`), with
+      the fault critical when the person says not to use it, so "out of use"
+      and its release are Safety's rules, unchanged (decisions 955, 969),
+      and an action goes to whoever looks after it as for a failed check. A
+      fault report isn't counted as the machine's last check (in Safety too).
+1091. **Servicing, repairs and the Effluent WoF are records of work done**
+      (who, what, the report), not a status typed in. The next service is
+      the one given, else the system's interval from the last service; the
+      next WoF is what the assessor gave, else the setup's date.
+1092. **Tohyee never contacts a council.** An incident shows the consent's
+      contact and when to tell them; "council told" is recorded by a person
+      in Tohyee (not an AI or app) after they've done it.
+1093. **Incidents close like Safety's reports**: a bookkeeper or above, in
+      person, once every action is checked and closed. Corrections and
+      withdrawals are the reporter's or a bookkeeper's.
+1094. **Incident actions are Safety's actions** (`effluentIncidentId`), so the
+      person responsible sees them on Today and in Safety, and they're
+      marked done and checked there. The reporter may add them, as a failed
+      check makes its own.
+1095. **Reminders are worked out, never stored**: shift (the last move plus
+      the interval), read each pond (not read today), the weekly check, the
+      pre-start check of a system used today, servicing within 14 days, the
+      WoF within 30 days, consent expiry within 90 days. Today shows them
+      only on farms with effluent.
+1096. **A weekly system isn't "not checked today" in Safety**; Effluent
+      reminds about its weekly check instead.
+1097. **The farm calendar shows Effluent due** (servicing, WoF, consent
+      expiry) beside Safety due. Incident actions stay under Safety due, so
+      they aren't listed twice. No phone notifications: Tohyee has none yet.
+1098. **The demo farm's checks, servicing and incidents**: the pods' weekly
+      and irrigator's pre-start checks, a service five months ago, a repair,
+      a worn nozzle noted without taking the pods out of use, the ponding as
+      an incident closed after its action was checked, and a sump overflow
+      still open with an action due and the council not recorded as told.
+
+### Farm dairy effluent: the council pack, the weekly copy and tanker runs (#487 part 4; decision 1099)
+
+1099. **The council pack, the weekly copy and tanker runs.**
+      (a) The council pack is the WorkSafe pack's zip (every version, hashes,
+      the whole chain, files, `verify.mjs`) for a farm's effluent records,
+      plus the systems' machines, checklists, checks and releases and the
+      incidents' actions, with a summary first (the counts in neutral words,
+      pond levels, days not applied, incidents) and `summary.txt`. Viewers
+      and above make it, not Farm staff (as the WorkSafe pack, decision
+      961). Tohyee never sends it.
+      (b) `applied-areas.svg` shades each paddock by the applications in the
+      range, from the farm's own shapes, with zones and positions; a
+      picture, not a survey. Photos in packs now also carry the phone's
+      place (decision 1012) in files.json and the PDF.
+      (c) The weekly copy includes effluent records only if an owner or admin
+      chooses (`include_effluent`, tenant migration 0201), from the next copy
+      on; its subject and PDF then say "safety and effluent".
+      (d) Tractor mode has an "Effluent (tanker or spreader)" operation
+      (migration 0201). A tanker run can name a tractor job on the farm: its
+      paddocks, times and worked area fill the run unless given.
+      (e) Following #491: an incident's **Checked it** (bookkeeper or above,
+      in person) records what was found beside the reporter's account; the
+      depth from settings is labelled an estimate and positions phone GPS
+      estimates, a position in a buffer is "not a finding that effluent
+      reached it"; the council pack's summary starts with its scope and the
+      count of corrected and withdrawn records; and the pack says the hashes
+      don't show the contents are true or make them privileged.
+
 ### Records say what's known: tractor job history and safety wording (#491; decisions 1100-1109)
 
 William asked for #491 after reviewing whether records could add to the

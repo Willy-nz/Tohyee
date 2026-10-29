@@ -23,6 +23,17 @@ export const SAFETY_KINDS = [
   "equipment_release",
   "training",
   "chemical",
+  // Farm dairy effluent (#487): kept in the same history (docs/FARM-EFFLUENT.md).
+  "effluent_system",
+  "effluent_pond",
+  "effluent_block",
+  "effluent_zone",
+  "effluent_consent",
+  "effluent_application",
+  "effluent_pond_reading",
+  "effluent_deferral",
+  "effluent_service",
+  "effluent_incident",
 ] as const;
 export type SafetyKind = (typeof SAFETY_KINDS)[number];
 
@@ -41,7 +52,22 @@ export const KIND_LABELS: Record<SafetyKind, string> = {
   equipment_release: "Equipment released",
   training: "Training",
   chemical: "Chemical",
+  effluent_system: "Effluent system",
+  effluent_pond: "Effluent pond or sump",
+  effluent_block: "Effluent block",
+  effluent_zone: "No-apply zone",
+  effluent_consent: "Effluent consent conditions",
+  effluent_application: "Effluent applied",
+  effluent_pond_reading: "Pond level",
+  effluent_deferral: "Effluent not applied",
+  effluent_service: "Effluent servicing",
+  effluent_incident: "Effluent incident",
 };
+
+/** Effluent records (#487): kept in the safety history, but not part of the WorkSafe pack. */
+export function isEffluentKind(kind: string): boolean {
+  return kind.startsWith("effluent_");
+}
 
 export const SAFETY_CHANGES = ["created", "updated", "corrected", "withdrawn"] as const;
 export type SafetyChange = (typeof SAFETY_CHANGES)[number];
@@ -254,20 +280,20 @@ export function notifiableKeepText(notice: WorkSafeNotice | null, formatDay: (is
 export const HASH_LIMITS =
   "A matching hash shows the history wasn't rewritten after that point. It doesn't show that what a record says is true or complete. Keeping records in Tohyee, on your own server or encrypted, doesn't make them legally privileged.";
 
-/** What the weekly copy has in it (decision 1108). */
-export const WEEKLY_COPY_INCLUDES = [
-  "Every safety record with a new entry since the last copy, on every farm, each with its full history: earlier versions and corrections included.",
-  "Hazards and no-go zones, emergency details, reports, actions, inductions and sign-offs.",
-  "Sign-ins on site, with the names, companies and phone numbers people gave.",
-  "Equipment, checklists, pre-start checks, releases, training and chemicals.",
-  "The latest entry's number and hash.",
-] as const;
-
-/** What it leaves out. */
-export const WEEKLY_COPY_LEAVES_OUT = [
-  "Injury and medical details (restricted): the PDF only says some were withheld.",
-  "The photos and documents themselves: the PDF lists their names and hashes.",
-] as const;
+/** What the weekly copy has in it and leaves out (decision 1108), with or without the effluent records (#487). */
+export function weeklyCopyContents(includeEffluent: boolean): { includes: string[]; leavesOut: string[] } {
+  const includes = [
+    "Every safety record with a new entry since the last copy, on every farm, each with its full history: earlier versions and corrections included.",
+    "Hazards and no-go zones, emergency details, reports, actions, inductions and sign-offs.",
+    "Sign-ins on site, with the names, companies and phone numbers people gave.",
+    "Equipment, checklists, pre-start checks, releases, training and chemicals.",
+  ];
+  if (includeEffluent) includes.push("The effluent records: systems, ponds, blocks, consents, applications, pond readings, deferrals, servicing and incidents.");
+  includes.push("The latest entry's number and hash.");
+  const leavesOut = ["Injury and medical details (restricted): the PDF only says some were withheld.", "The photos and documents themselves: the PDF lists their names and hashes."];
+  if (!includeEffluent) leavesOut.push("The effluent records (not chosen).");
+  return { includes, leavesOut };
+}
 
 export const WEEKLY_COPY_KEPT =
   "Each address keeps its own copy, outside Tohyee. Tohyee can't change or take back a copy once it's sent, even if you remove the address or turn the copy off.";
@@ -367,6 +393,30 @@ const FIELD_LABELS: Record<string, string> = {
   due: "Due",
   done: "Done",
   verified: "Checked and closed",
+  // Effluent (#487).
+  systemId: "Effluent system",
+  pondId: "Pond or sump",
+  blockId: "Effluent block",
+  consentNumber: "Consent number",
+  council: "Regional council",
+  maxDepthMm: "Most depth (mm)",
+  maxRateMmPerHour: "Most rate (mm/h)",
+  returnPeriodDays: "Days between applications",
+  startedAt: "Started",
+  stoppedAt: "Stopped",
+  depthEnteredMm: "Depth as entered (mm)",
+  depthWorkedOut: "Depth worked out",
+  ponding: "Ponding or runoff",
+  weather: "Weather",
+  soil: "Soil",
+  levelMm: "Level (mm on the gauge)",
+  capacityM3: "Holds (m³)",
+  bufferM: "Buffer (m)",
+  areaHa: "Area (ha)",
+  incidentId: "Effluent incident",
+  effluentIncidentId: "Effluent incident",
+  councilTold: "Council told",
+  checked: "Checked: what was found",
   phoneTime: "First saved on a phone (its clock)",
 };
 
@@ -397,7 +447,7 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
     const notice = value as WorkSafeNotice;
     return `${notice.on}, by ${notice.how}${notice.reference ? `, reference ${notice.reference}` : ""}`;
   }
-  if ((key === "closed" || key === "verified") && value && typeof value === "object") return (value as { why?: string; note?: string | null }).why ?? (value as { note?: string | null }).note ?? "Yes";
+  if ((key === "closed" || key === "verified" || key === "checked") && value && typeof value === "object") return (value as { why?: string; note?: string | null }).why ?? (value as { note?: string | null }).note ?? "Yes";
   if (key === "done" && value && typeof value === "object") return (value as { note: string }).note;
   if (key === "answers" && Array.isArray(value)) {
     return value.map((answer: { text?: string; result?: string; note?: string | null }) => `${answer.text}: ${answer.result === "ok" ? "OK" : answer.result === "na" ? "n/a" : `FAULT${answer.note ? ` (${answer.note})` : ""}`}`).join("; ") || null;
@@ -405,6 +455,28 @@ function valueText(key: string, value: unknown, paddockNames: ReadonlyMap<string
   if (key === "items" && Array.isArray(value)) return value.map((item: { text?: string; critical?: boolean }) => `${item.text}${item.critical ? " (critical)" : ""}`).join("; ") || null;
   if (key === "sections" && Array.isArray(value)) return value.map((section: { heading?: string }) => section.heading).join("; ") || null;
   if (key === "hazards" && Array.isArray(value)) return `${value.length} shown`;
+  // Effluent records (#487): readable in the pack, not raw JSON.
+  if (key === "buffers" && Array.isArray(value)) return value.map((buffer: { feature?: string; metres?: string }) => `${String(buffer.feature).replace(/_/g, " ")} ${buffer.metres} m`).join("; ") || null;
+  if (key === "notifyCouncil" && value && typeof value === "object") {
+    const notice = value as { who?: string; phone?: string | null; when?: string };
+    return `${notice.who ?? ""}${notice.phone ? `, ${notice.phone}` : ""}: ${notice.when ?? ""}`;
+  }
+  if (key === "ponding" && value && typeof value === "object") {
+    const check = value as { result?: string; note?: string | null; checkedAt?: string };
+    return `${check.result === "none" ? "None seen" : check.result === "ponding" ? "Ponding" : "Runoff"}${check.note ? `: ${check.note}` : ""}${check.checkedAt ? ` (checked ${check.checkedAt})` : ""}`;
+  }
+  if (key === "depthWorkedOut" && value && typeof value === "object") {
+    const worked = value as { mm?: string; how?: string };
+    return `${worked.mm} mm (${worked.how})`;
+  }
+  if (key === "positions" && Array.isArray(value)) {
+    return value.map((position: { label?: string | null; paddockId?: string | null; point?: number[] | null; movedAt?: string }) => [position.label, position.paddockId ? (paddockNames.get(String(position.paddockId)) ?? `paddock ${position.paddockId}`) : null, position.point ? `${Number(position.point[1]).toFixed(6)}, ${Number(position.point[0]).toFixed(6)}` : null, position.movedAt].filter(Boolean).join(", ")).join("; ") || null;
+  }
+  if ((key === "settings" || key === "councilTold") && value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).filter(([, part]) => part !== null && part !== "").map(([name, part]) => `${name.replace(/([A-Z])/g, " $1").toLowerCase()} ${part}`).join("; ") || null;
+  }
+  if (key === "markers" && Array.isArray(value)) return value.map((marker: { label?: string; mm?: string }) => `${marker.label} ${marker.mm} mm`).join(", ") || null;
+  if (key === "sources" && Array.isArray(value)) return value.map((source: { title?: string; url?: string }) => `${source.title} (${source.url})`).join("; ") || null;
   if (Array.isArray(value)) {
     if (!value.length) return null;
     return value
@@ -509,6 +581,8 @@ export type ActionData = {
   hazardId: string | null;
   /** For an action made by a failed pre-start check. */
   checkId?: string | null;
+  /** For an action on an effluent incident (#487). */
+  effluentIncidentId?: string | null;
   title: string;
   assignedToUserId: string | null;
   /** A name, for someone without a login. */
@@ -675,6 +749,8 @@ export type CheckData = {
   /** A failed critical item: the equipment is out of use until released. */
   criticalFault: boolean;
   files: SafetyFileRef[];
+  /** A fault reported from Effluent rather than a whole check (#487, decision 1090). */
+  faultReport?: boolean;
   why?: string | null;
   /** Saved on a phone and sent later: the phone's time (#491, decision 1105). */
   phoneTime?: string | null;

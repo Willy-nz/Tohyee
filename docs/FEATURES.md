@@ -3033,6 +3033,41 @@ that something happened.
   Nothing posts to the books. Not tried in a real paddock or on a real
   phone yet.
 
+- **Farm dairy effluent** (#487, decisions 1070-1099, docs/FARM-EFFLUENT.md;
+  tenant migration 0200): Farm › More › **Effluent**. Setup (owners and
+  admins): systems (travelling irrigator, pods or K-line, slurry tanker or
+  spreader, fixed sprinklers or rain gun), each a machine in Safety's
+  equipment register with a starting checklist from DairyNZ's staff guides,
+  so checks, faults, out of use and release follow Safety's rules; ponds and
+  sumps with capacity, gauge marks and warning levels; effluent blocks and
+  no-apply zones with buffers on the map; and the consent conditions,
+  optionally started from an Otago Regional Council or Environment
+  Southland template that fills in what the council's pages say, links
+  them, and says "check against your own consent". Kept in the safety
+  history (versions, nothing deleted, corrections marked), but not in the
+  WorkSafe pack. Tohyee never says a farm complies and never sends anything
+  to a council. Not yet reviewed by Jess.
+  The **daily log** (farm staff and above, phone first, offline through the
+  queue): runs started, shifted and stopped with pod or irrigator positions
+  and times, photos with their time and place, the ponding and runoff check,
+  weather and soil; depth as entered beside depth worked out from the
+  system's settings; last moved on the map; pond readings with percent
+  full, storage and days left and high or low warnings; days not applied
+  and why; and counts against the consent's entered limits in neutral words.
+  **Checks, faults and servicing**: Safety's pre-start checks on each
+  system, faults reported with "don't use it" (out of use until released in
+  Safety), servicing, repairs and Effluent WoF with the next ones worked
+  out. **Incidents** with photos and actions for named people (Safety's
+  actions), the consent's council contact as a prompt and "council told"
+  recorded by a person; closed once the actions are checked. **Reminders**
+  on Today and Effluent due on the farm calendar. Never sends anything to a
+  council; no phone notifications yet.
+  **Council pack**: a zip for a date range (summary against the entered
+  limits, a map of applied areas, every record with its history, photos with
+  their times and place, and a verify script), downloaded, never sent; the
+  weekly copy can include effluent records if chosen; tanker or spreader
+  runs can come from a tractor mode job (new Effluent operation).
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

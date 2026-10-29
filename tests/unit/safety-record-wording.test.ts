@@ -9,9 +9,8 @@ import {
   reportStateText,
   SENT_MEANS,
   sentLaterText,
-  WEEKLY_COPY_INCLUDES,
   WEEKLY_COPY_KEPT,
-  WEEKLY_COPY_LEAVES_OUT,
+  weeklyCopyContents,
 } from "@/lib/safety/shared";
 
 /*
@@ -65,9 +64,14 @@ describe("what's said about telling people and about copies", () => {
   });
 
   it("the weekly copy says what's in it, what isn't, and that recipients keep copies", () => {
-    expect(WEEKLY_COPY_INCLUDES.join(" ")).toMatch(/corrections included/);
-    expect(WEEKLY_COPY_INCLUDES.join(" ")).toMatch(/phone numbers/);
-    expect(WEEKLY_COPY_LEAVES_OUT.join(" ")).toMatch(/Injury and medical details/);
+    const plain = weeklyCopyContents(false);
+    expect(plain.includes.join(" ")).toMatch(/corrections included/);
+    expect(plain.includes.join(" ")).toMatch(/phone numbers/);
+    expect(plain.leavesOut.join(" ")).toMatch(/Injury and medical details/);
+    expect(plain.leavesOut.join(" ")).toMatch(/effluent records \(not chosen\)/);
+    const withEffluent = weeklyCopyContents(true);
+    expect(withEffluent.includes.join(" ")).toMatch(/The effluent records/);
+    expect(withEffluent.leavesOut.join(" ")).not.toMatch(/effluent/);
     expect(WEEKLY_COPY_KEPT).toMatch(/keeps its own copy, outside Tohyee/);
   });
 });

@@ -36,7 +36,7 @@ export const COPY_DAYS = 7;
 export const COPY_HOUR = 6;
 const COPY_ACTOR: Actor = { userId: null, email: "safety weekly copy" };
 
-export type CopySettings = { on: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null; updatedByEmail: string | null };
+export type CopySettings = { on: boolean; includeEffluent: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null; updatedByEmail: string | null };
 export type CopySent = { id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentByEmail: string; sentAt: string };
 
 /** Whether the weekly copy is due: on, after 6am, and a week since the last one (or none yet). */
@@ -49,15 +49,15 @@ export function copyDue(now: Date, lastSentAt: string | null, hourNow: number): 
 
 export async function copySettings(tx: OrgTx): Promise<{ settings: CopySettings; copies: CopySent[] }> {
   await requireFarming(tx);
-  const row = await tx.query<{ is_on: boolean; to_addresses: string[]; last_attempt_at: string | null; last_problem: string | null; updated_by_email: string }>(
-    "select is_on, to_addresses, last_attempt_at, last_problem, updated_by_email from safety_copy_settings",
+  const row = await tx.query<{ is_on: boolean; include_effluent: boolean; to_addresses: string[]; last_attempt_at: string | null; last_problem: string | null; updated_by_email: string }>(
+    "select is_on, include_effluent, to_addresses, last_attempt_at, last_problem, updated_by_email from safety_copy_settings",
   );
   const copies = await tx.query<{ id: string; period_from: string; period_to: string; head_seq: string | null; head_hash: string | null; entries: number; to_addresses: string[]; sent_by_email: string; sent_at: string }>(
     "select id::text, period_from, period_to, head_seq::text, head_hash, entries, to_addresses, sent_by_email, sent_at from safety_copies order by safety_copies.sent_at desc limit 10",
   );
   const settings = row.rows[0];
   return {
-    settings: { on: settings?.is_on ?? false, toAddresses: settings?.to_addresses ?? [], lastAttemptAt: settings?.last_attempt_at ?? null, lastProblem: settings?.last_problem ?? null, updatedByEmail: settings?.updated_by_email ?? null },
+    settings: { on: settings?.is_on ?? false, includeEffluent: settings?.include_effluent ?? false, toAddresses: settings?.to_addresses ?? [], lastAttemptAt: settings?.last_attempt_at ?? null, lastProblem: settings?.last_problem ?? null, updatedByEmail: settings?.updated_by_email ?? null },
     copies: copies.rows.map((copy) => ({ id: copy.id, periodFrom: copy.period_from, periodTo: copy.period_to, headSeq: copy.head_seq, headHash: copy.head_hash, entries: copy.entries, toAddresses: copy.to_addresses, sentByEmail: copy.sent_by_email, sentAt: copy.sent_at })),
   };
 }
@@ -67,18 +67,21 @@ function requireOwnerOrAdmin(tx: OrgTx) {
 }
 
 /** Turns the weekly copy on or off and chooses who gets it (owners and admins). */
-export async function saveCopySettings(tx: OrgTx, input: { on?: unknown; toAddresses?: unknown }) {
+export async function saveCopySettings(tx: OrgTx, input: { on?: unknown; toAddresses?: unknown; includeEffluent?: unknown }) {
   requireOwnerOrAdmin(tx);
   await requireFarming(tx);
   const on = input.on === true;
   const addresses = requireAddresses(input.toAddresses, "Send it to", { required: on });
   if (addresses.length > 10) throw new ValidationError("Send it to at most 10 addresses.");
+  // Effluent records (#487, decision 1099c) go in the copy only if the farm chooses; left out, it keeps what it had.
+  const includeEffluent = input.includeEffluent === undefined ? null : input.includeEffluent === true;
   await tx.query(
-    `insert into safety_copy_settings (id, is_on, to_addresses, updated_by_email) values (true, $1, $2, $3)
-     on conflict (id) do update set is_on = excluded.is_on, to_addresses = excluded.to_addresses, updated_by_email = excluded.updated_by_email, updated_at = now()`,
-    [on, addresses, tx.actor.email],
+    `insert into safety_copy_settings (id, is_on, to_addresses, updated_by_email, include_effluent) values (true, $1, $2, $3, coalesce($4, false))
+     on conflict (id) do update set is_on = excluded.is_on, to_addresses = excluded.to_addresses, updated_by_email = excluded.updated_by_email, updated_at = now(),
+       include_effluent = coalesce($4, safety_copy_settings.include_effluent)`,
+    [on, addresses, tx.actor.email, includeEffluent],
   );
-  await writeAuditEvent(tx, { eventType: "safety.weekly_copy_set", entityType: "safety_copy_settings", entityId: "1", details: { on, toAddresses: addresses } });
+  await writeAuditEvent(tx, { eventType: "safety.weekly_copy_set", entityType: "safety_copy_settings", entityId: "1", details: { on, toAddresses: addresses, includeEffluent } });
   return copySettings(tx);
 }
 
@@ -87,26 +90,27 @@ type Prepared = { message: Omit<OutgoingMessage, "messageId">; periodFrom: strin
 /** Gathers and writes this week's copy (database work in one transaction, the PDF after). */
 async function prepareCopy(organisation: OrganisationRecord, now: Date): Promise<Prepared | { problem: string } | null> {
   const gathered = await withOrganisationTransaction(organisation, COPY_ACTOR, async (tx) => {
-    const settings = await tx.query<{ is_on: boolean; to_addresses: string[] }>("select is_on, to_addresses from safety_copy_settings");
+    const settings = await tx.query<{ is_on: boolean; to_addresses: string[]; include_effluent: boolean }>("select is_on, to_addresses, include_effluent from safety_copy_settings");
     if (!settings.rows[0]?.is_on || !settings.rows[0].to_addresses.length) return null;
+    const withEffluent = settings.rows[0].include_effluent;
     // The high-water mark is the last entry number a sent copy included (#461, decision 970).
     // It only moves when the mail server accepts a copy, so a failed or retried send loses nothing.
     const last = await tx.query<{ head_seq: string | null; sent_at: string | null }>("select max(head_seq)::text as head_seq, max(sent_at) as sent_at from safety_copies");
     const afterSeq = last.rows[0]?.head_seq ?? "0";
     const periodTo = isoDateAt(now);
-    const data = await loadPackData(tx, { from: periodTo, to: periodTo, withholdRestricted: true, afterSeq });
+    const data = await loadPackData(tx, { from: periodTo, to: periodTo, withholdRestricted: true, afterSeq, kinds: withEffluent ? "all" : "safety" });
     // The dates are for people reading the email; the entry numbers decide what's in it.
     const firstEntered = data.entries.reduce<string | null>((first, entry) => (!first || entry.enteredAt < first ? entry.enteredAt : first), null);
     let periodFrom = last.rows[0]?.sent_at ? isoDateAt(new Date(last.rows[0].sent_at)) : firstEntered ? isoDateAt(new Date(firstEntered)) : periodTo;
     if (periodFrom > periodTo) periodFrom = periodTo;
-    return { data, toAddresses: settings.rows[0].to_addresses, periodFrom, periodTo, afterSeq };
+    return { data, toAddresses: settings.rows[0].to_addresses, periodFrom, periodTo, afterSeq, withEffluent };
   });
   if (!gathered) return null;
-  const { data, toAddresses, periodFrom, periodTo, afterSeq } = gathered;
-  const rendered = await renderPack(data);
+  const { data, toAddresses, periodFrom, periodTo, afterSeq, withEffluent } = gathered;
+  const rendered = await renderPack(data, withEffluent ? { title: "Farm safety and effluent records" } : {});
   const head = data.chain.at(-1) ?? null;
   const text = [
-    `Farm safety records for ${data.organisationName}, entered ${periodFrom} to ${periodTo}.`,
+    `Farm safety${withEffluent ? " and effluent" : ""} records for ${data.organisationName}, entered ${periodFrom} to ${periodTo}.`,
     "",
     data.entries.length
       ? `Every record with an entry after number ${afterSeq}${head ? ` up to number ${head.seq}` : ""} is in the attached PDF, each with its history (${data.entries.length} entries).`
@@ -124,7 +128,7 @@ async function prepareCopy(organisation: OrganisationRecord, now: Date): Promise
     "Tohyee keeps these records; it doesn't decide what the law needs you to keep.",
   ].join("\n");
   return {
-    message: { to: toAddresses, cc: [], subject: `Farm safety records, ${periodFrom} to ${periodTo}${head ? `: entry ${head.seq}` : ""}`, text, html: null, attachment: { fileName: `farm-safety-${periodFrom}-to-${periodTo}.pdf`, bytes: rendered.pdf }, inline: [] },
+    message: { to: toAddresses, cc: [], subject: `Farm safety${withEffluent ? " and effluent" : ""} records, ${periodFrom} to ${periodTo}${head ? `: entry ${head.seq}` : ""}`, text, html: null, attachment: { fileName: `farm-safety-${periodFrom}-to-${periodTo}.pdf`, bytes: rendered.pdf }, inline: [] },
     periodFrom,
     periodTo,
     headSeq: head?.seq ?? null,

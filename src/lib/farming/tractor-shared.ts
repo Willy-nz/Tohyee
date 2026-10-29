@@ -17,9 +17,9 @@ export const TRACTOR_NOTICE =
 export const TRACTOR_RECORD_NOTE =
   "Working ON and OFF are what the operator switched on the phone, not a sensor on the machine. Product, rate and quantity are what someone entered. A track near water, a boundary or a no-go zone is a phone position, not a finding that anything was spread or discharged there.";
 
-export const OPERATIONS = ["spreading", "spraying", "mowing", "other"] as const;
+export const OPERATIONS = ["spreading", "spraying", "mowing", "effluent", "other"] as const;
 export type Operation = (typeof OPERATIONS)[number];
-export const OPERATION_LABELS: Record<Operation, string> = { spreading: "Spreading", spraying: "Spraying", mowing: "Mowing", other: "Other tractor work" };
+export const OPERATION_LABELS: Record<Operation, string> = { spreading: "Spreading", spraying: "Spraying", mowing: "Mowing", effluent: "Effluent (tanker or spreader)", other: "Other tractor work" };
 
 export const EQUIPMENT_KINDS = ["spreader", "sprayer", "mower", "other"] as const;
 export type EquipmentKind = (typeof EQUIPMENT_KINDS)[number];

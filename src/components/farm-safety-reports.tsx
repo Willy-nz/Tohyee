@@ -117,7 +117,7 @@ export function NotifiablePrompt() {
  * taken. With no connection it's kept on this device and sent before the
  * record that uses it.
  */
-function PhotoPicker({ organisationId, farmId, farmName = "", restricted = false, files, onChange, label = "Photos" }: { organisationId: string; farmId: string; farmName?: string; restricted?: boolean; files: PickedFile[]; onChange: (files: PickedFile[]) => void; label?: string }) {
+export function PhotoPicker({ organisationId, farmId, farmName = "", restricted = false, files, onChange, label = "Photos" }: { organisationId: string; farmId: string; farmName?: string; restricted?: boolean; files: PickedFile[]; onChange: (files: PickedFile[]) => void; label?: string }) {
   const { busy, error, run } = useRun();
   const { queue } = useOfflineQueue(organisationId);
   const [withPlace, setWithPlace] = useState(false);
@@ -157,7 +157,7 @@ function PhotoPicker({ organisationId, farmId, farmName = "", restricted = false
   );
 }
 
-function Thumbnails({ organisationId, files }: { organisationId: string; files: PickedFile[] }) {
+export function Thumbnails({ organisationId, files }: { organisationId: string; files: PickedFile[] }) {
   if (!files.length) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "6px 0" }}>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { FarmEffluentToday } from "@/components/farm-effluent-care";
+import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-log";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
@@ -22,6 +24,7 @@ import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { GrazingRecord, PastureReading } from "@/lib/farming/pasture";
 import { PASTURE_METHOD_LABELS } from "@/lib/farming/pasture-rules";
 import { todayInBrowser } from "@/lib/format";
+import { effluentHref } from "@/lib/effluent/screens";
 import { safetyHref } from "@/lib/safety/screens";
 import { type CurrentRecord, HAZARD_LEVEL_LABELS, type HazardData, hazardState } from "@/lib/safety/shared";
 import styles from "./farm-workspace.module.css";
@@ -216,6 +219,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
         </p>
       </Card>
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
+      <FarmEffluentToday organisationId={organisationId} farm={farm} />
       <Card title="Mobs in now">
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {statuses.data && !inNow.length ? <p>No mobs recorded in a paddock.</p> : null}
@@ -296,6 +300,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   const activeHazards = (hazards.data?.hazards ?? []).filter((hazard) => hazardState(hazard) === "active");
   // Hazards and no-go zones over the paddocks (#446): a tap opens that hazard in Safety.
   const overlays = hazardOverlays(activeHazards, (id) => router.push(safetyHref({ farmId: farm.id, screen: "hazards", hazard: id })));
+  // Where each effluent system's pods or irrigator were last moved (#487): a tap opens the irrigation log.
+  const effluent = useEffluentLog(organisationId, farm.id);
+  overlays.push(...lastMovedOverlays(effluent.data?.lastMoved ?? []).map((overlay) => ({ ...overlay, onSelect: () => router.push(effluentHref({ farmId: farm.id, screen: "log" })) })));
   return (
     <div className={styles.grid}>
       <Card
@@ -428,6 +435,7 @@ export { FarmSafetyTab };
 type MoreLink = { href: string; label: string; note?: string; staff?: boolean; minRole?: "viewer" | "bookkeeper" | "admin" };
 
 const DETAILS: MoreLink[] = [
+  { href: "/operations/farm/effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents and the council pack", staff: true },
   { href: "/operations/farm/tractor", label: "Tractor mode", note: "Spreading, spraying and mowing coverage from the phone's GPS", staff: true },
   { href: "/operations/farming/pasture", label: "Pasture and feed", note: "Readings, grazings and feed, with tables", staff: true },
   { href: "/operations/farming", label: "Farms and paddocks", note: "Areas, boundaries and drawing paddocks", staff: true },

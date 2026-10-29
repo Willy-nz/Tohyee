@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { FarmCalendarHome } from "@/components/farm-calendar";
+import { FarmEffluentDue } from "@/components/farm-effluent-care";
 import { FarmSafetyDue } from "@/components/farm-safety-tab";
 import { Page, PageHeader } from "@/components/ui";
 
@@ -15,6 +16,7 @@ export default function FarmCalendarPage() {
           {(organisationId) => (
             <>
               <FarmSafetyDue key={`safety-${organisationId}`} organisationId={organisationId} />
+              <FarmEffluentDue key={`effluent-${organisationId}`} organisationId={organisationId} />
               <FarmCalendarHome key={organisationId} organisationId={organisationId} />
             </>
           )}
