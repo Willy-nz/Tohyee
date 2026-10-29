@@ -152,7 +152,8 @@ export type EquipmentStatus = { available: boolean; failedCheck: CurrentRecord<C
 export function equipmentStatus(equipmentId: string, checks: Array<CurrentRecord<CheckData>>, releases: Array<CurrentRecord<ReleaseData>>): EquipmentStatus {
   const own = checks.filter((check) => check.data.equipmentId === equipmentId && check.change !== "withdrawn");
   const freed = releases.filter((release) => release.data.equipmentId === equipmentId && release.change !== "withdrawn");
-  const lastCheck = own.at(-1) ?? null;
+  // A fault reported from Effluent (#487, decision 1090) isn't a whole check: "last checked" is the last one that was.
+  const lastCheck = own.filter((check) => !check.data.faultReport).at(-1) ?? null;
   const lastRelease = freed.at(-1) ?? null;
   const failedCheck = [...own].reverse().find((check) => check.data.criticalFault) ?? null;
   const released = failedCheck && freed.some((release) => release.data.checkId === failedCheck.recordId);

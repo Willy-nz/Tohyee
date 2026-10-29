@@ -8,7 +8,7 @@ import { demoContext, type DemoContext } from "@/lib/demo/build/context";
 import { calendarAndNotebook, farmMonth, seasonFigures, setUpCoopShares, setUpFarm } from "@/lib/demo/build/farm";
 import { countHerd, livestockMonth, openingHerdValue, setUpLivestock } from "@/lib/demo/build/livestock";
 import { payrollMonth, setUpPayroll } from "@/lib/demo/build/payroll";
-import { farmEffluentLog, farmEffluentSetup } from "@/lib/demo/build/effluent";
+import { farmEffluentCare, farmEffluentLog, farmEffluentSetup } from "@/lib/demo/build/effluent";
 import { farmSafety } from "@/lib/demo/build/safety";
 import { farmWorkspace, tractorJobs } from "@/lib/demo/build/workspace";
 import { demoMonths, demoStart, lastDayOf, seasonEnd, seedFor } from "@/lib/demo/plan";
@@ -59,6 +59,7 @@ export async function buildDemoFarm(organisation: OrganisationRecord, actor: Act
   await progress("Adding the effluent setup and log", 89);
   await farmEffluentSetup(ctx, farm);
   await farmEffluentLog(ctx, farm);
+  await farmEffluentCare(ctx);
   await progress("Copying the books into Analytics and making the reports", 90);
   await setUpAnalytics(ctx);
   await progress("Done", 100);

@@ -492,6 +492,8 @@ export type ActionData = {
   hazardId: string | null;
   /** For an action made by a failed pre-start check. */
   checkId?: string | null;
+  /** For an action on an effluent incident (#487). */
+  effluentIncidentId?: string | null;
   title: string;
   assignedToUserId: string | null;
   /** A name, for someone without a login. */
@@ -643,6 +645,8 @@ export type CheckData = {
   /** A failed critical item: the equipment is out of use until released. */
   criticalFault: boolean;
   files: SafetyFileRef[];
+  /** A fault reported from Effluent rather than a whole check (#487, decision 1090). */
+  faultReport?: boolean;
   why?: string | null;
 };
 

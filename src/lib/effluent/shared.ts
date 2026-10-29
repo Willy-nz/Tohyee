@@ -373,3 +373,43 @@ export function bufferRing(centre: Position, metres: number, points = 36): Posit
   ring.push(ring[0]);
   return ring;
 }
+
+// Incidents -------------------------------------------------------------------------------------------
+
+export const INCIDENT_TYPES = ["spill", "ponding", "runoff", "buffer_breach", "rate_breach", "power_failure", "pump_failure", "other"] as const;
+export type IncidentType = (typeof INCIDENT_TYPES)[number];
+export const INCIDENT_TYPE_LABELS: Record<IncidentType, string> = {
+  spill: "Spill or overflow",
+  ponding: "Ponding",
+  runoff: "Runoff",
+  buffer_breach: "Inside a buffer or no-apply zone",
+  rate_breach: "Over the depth or rate",
+  power_failure: "Power failure",
+  pump_failure: "Pump or pipe failure",
+  other: "Other",
+};
+
+/** Recorded by a person after they told the council (Tohyee never does, decision 1092). */
+export type CouncilTold = { on: string; how: "phone" | "email" | "online" | "in_person"; who: string | null; reference: string | null };
+export const COUNCIL_TOLD_HOW: Record<CouncilTold["how"], string> = { phone: "by phone", email: "by email", online: "online", in_person: "in person" };
+
+export type IncidentData = {
+  type: IncidentType;
+  title: string;
+  whatHappened: string | null;
+  systemId: string | null;
+  applicationId: string | null;
+  paddockIds: string[];
+  point: Position | null;
+  /** When it happened, as the person says. */
+  occurredAt: string;
+  immediateAction: string | null;
+  /** Reached water, a drain or a neighbour's place, as the person says. */
+  reachedWater: boolean;
+  files: Array<{ id: string; name: string; sha256: string }>;
+  councilTold: CouncilTold | null;
+  closed: { why: string } | null;
+  why?: string | null;
+};
+
+export const NEVER_SENDS = "Tohyee never tells the council for you. If your consent says to, tell them yourself, then record it here.";

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { FarmEffluentToday } from "@/components/farm-effluent-care";
 import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-log";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
@@ -218,6 +219,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
         </p>
       </Card>
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
+      <FarmEffluentToday organisationId={organisationId} farm={farm} />
       <Card title="Mobs in now">
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {statuses.data && !inNow.length ? <p>No mobs recorded in a paddock.</p> : null}

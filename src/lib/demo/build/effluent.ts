@@ -1,7 +1,10 @@
 import type { DemoContext } from "@/lib/demo/build/context";
 import type { Farm } from "@/lib/demo/build/farm";
+import { addIncident, addService, changeIncident, reportFault } from "@/lib/effluent/care";
 import { addApplication, addDeferral, addPondReading, changeApplication } from "@/lib/effluent/log";
-import { addSetup, addSystem, changeSetup } from "@/lib/effluent/setup";
+import { addSetup, addSystem, changeSetup, effluentSetup } from "@/lib/effluent/setup";
+import { listEquipment, recordCheck } from "@/lib/safety/equipment";
+import { changeAction } from "@/lib/safety/reports";
 import { addDays } from "@/lib/financial-year";
 import type { PaddockGeometry } from "@/lib/farming/geometry";
 import { safetyPeopleMap } from "@/lib/safety/people";
@@ -143,4 +146,45 @@ export async function farmEffluentLog(ctx: DemoContext, farm: Farm): Promise<voi
     const b = boxes.get(shed[0])!;
     await addApplication(tx, { farmId: home, systemId: ctx.id("effluent:pods"), blockId: ctx.id("effluent:block:shed"), startedAt: nzTime(ctx.today, 7), positions: [{ label: "Line 1", paddockId: paddock(shed[0]), point: [r6(b.west + (b.east - b.west) * 0.4), r6(b.south + (b.north - b.south) * 0.4)], movedAt: nzTime(ctx.today, 7) }], weather: "Fine" });
   });
+}
+
+/**
+ * Checks, servicing and incidents on the demo farm (decision 1098): the
+ * pods' weekly check three days ago and the irrigator's pre-start check
+ * this morning (Safety's checks on their machines), the irrigator serviced
+ * five months ago (so the next is due soon), a worn nozzle noted on the
+ * pods without taking them out of use, the ponding day as an incident with
+ * its action done, checked and closed, and a sump overflow still open with
+ * an action due, and the council not yet recorded as told (so the prompt
+ * shows). Made up throughout.
+ */
+export async function farmEffluentCare(ctx: DemoContext): Promise<void> {
+  const home = ctx.id("farm:home");
+  const members = await safetyPeopleMap(ctx.organisation.id);
+  await ctx.as(async (tx) => {
+    const { equipment } = await listEquipment(tx, home);
+    const machine = async (systemKey: string) => {
+      const system = (await effluentSetup(tx, home)).systems.find((each) => each.recordId === ctx.id(systemKey))!;
+      return equipment.find((item) => item.recordId === system.data.equipmentId)!;
+    };
+    for (const key of ["effluent:pods", "effluent:irrigator"]) {
+      const item = await machine(key);
+      await recordCheck(tx, { equipmentId: item.recordId, checklistVersion: item.checklist!.version, answers: item.checklist!.data.items.map((each) => ({ key: each.key, result: "ok" })) }, members);
+    }
+    await addService(tx, { farmId: home, systemId: ctx.id("effluent:irrigator"), kind: "service", doneOn: addMonthsDemo(ctx.today, -5), by: "Southern Pumps (made up)", notes: "Pump serviced, nozzles and boom seals replaced, depth test 9 mm at 60 m/h" });
+    await addService(tx, { farmId: home, systemId: ctx.id("effluent:pods"), kind: "repair", doneOn: addDays(ctx.today, -12), by: "Farm team", notes: "Two cam locks replaced on line 2" });
+    await reportFault(tx, { farmId: home, systemId: ctx.id("effluent:pods"), what: "Nozzle on pod 4 worn: spray a bit lopsided", outOfUse: false }, members);
+    const ponded = await addIncident(tx, { farmId: home, type: "ponding", title: "Ponding by the trough on line 2", systemId: ctx.id("effluent:pods"), occurredAt: nzTime(addDays(ctx.today, -6), 18, 30), immediateAction: "Turned the line off 20 minutes early", actions: [{ title: "Move line 2 a pod's width away from the trough", assignedToUserId: ctx.actor.userId, due: addDays(ctx.today, -5) }] }, members);
+    for (const action of ponded.actions) {
+      const done = await changeAction(tx, action.recordId, { step: "done", expectedVersion: action.version, note: "Fence marker moved; line 2 runs 6 m off the trough now" }, members);
+      await changeAction(tx, action.recordId, { step: "verify", expectedVersion: done.version, note: "Looked at it on the walk" }, members);
+    }
+    await changeIncident(tx, ponded.incident.recordId, { step: "close", expectedVersion: ponded.incident.version, why: "Line moved; no ponding since" });
+    await addIncident(tx, { farmId: home, type: "spill", title: "Yard sump overflowed onto the race", whatHappened: "Stone trap blocked with afterbirth; the sump filled during milking.", occurredAt: nzTime(addDays(ctx.today, -1), 16, 40), immediateAction: "Pump off, trap cleared, bale across the race drain", reachedWater: false, actions: [{ title: "Put a grate over the stone trap", assignedToUserId: ctx.actor.userId, due: addDays(ctx.today, 2) }] }, members);
+  });
+}
+
+function addMonthsDemo(day: string, months: number): string {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1 + months, Math.min(date, 28))).toISOString().slice(0, 10);
 }
