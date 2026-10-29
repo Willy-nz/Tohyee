@@ -172,10 +172,18 @@ describeWithDatabase("farm effluent log", () => {
     const { item: photo } = await queue.add({ ...farm, kind: "safety.file", label: "Photo", request: { method: "POST", path: "/api/farming/safety/files", body: { farmId: w.home, fileName: "pod.jpg", contentType: "image/jpeg", place: { latitude: -45.9, longitude: 170.61, accuracyM: 6, at: ago(10) } }, files: [{ blob: "file", field: "contentBase64" }] }, blobs: { file: new Blob([JPEG], { type: "image/jpeg" }) } });
     const { item: run } = await queue.add({ ...farm, kind: "effluent.application", label: "Pods", request: { method: "POST", path: "/api/farming/effluent/applications", body: { farmId: w.home, systemId: w.irrigator, startedAt: ago(10), positions: [{ paddockId: w.p2, movedAt: ago(10) }], files: [{ id: photo.operationId }] }, refs: [{ path: ["files", "0", "id"], from: photo.operationId, field: ["file", "id"] }] } });
     const ref = [{ path: ["recordId"], from: run.operationId, field: ["record", "recordId"] }];
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await queue.add({ ...farm, kind: "effluent.application.change", label: "Shifted", request: { method: "POST", path: "/api/farming/effluent/applications/changes", body: { step: "shift", expectedVersion: 1, position: { paddockId: w.p2, movedAt: ago(8) } }, refs: ref } });
+    // The queue keeps items in the order they were made, to the millisecond; a person can't tap twice in one.
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await queue.add({ ...farm, kind: "effluent.application.change", label: "Stopped", request: { method: "POST", path: "/api/farming/effluent/applications/changes", body: { step: "stop", expectedVersion: 2, stoppedAt: ago(7), ponding: { result: "none" } }, refs: ref } });
     for (let tries = 0; tries < 6 && queue.items().some((item) => item.status !== "synced"); tries += 1) await queue.sync(sender);
-    expect(queue.items().map((item) => item.status)).toEqual(["synced", "synced", "synced", "synced"]);
+    expect(queue.items().map((item) => [item.kind, item.status, item.error])).toEqual([
+      ["safety.file", "synced", null],
+      ["effluent.application", "synced", null],
+      ["effluent.application.change", "synced", null],
+      ["effluent.application.change", "synced", null],
+    ]);
     const rows = await as(owner)((tx) => tx.query<{ version: number; change: string }>("select e.version, e.change from safety_entries e where e.record_id = (select record_id from safety_entries where operation_id = $1) order by e.version", [run.operationId]));
     expect(rows.rows).toEqual([{ version: 1, change: "created" }, { version: 2, change: "updated" }, { version: 3, change: "updated" }]);
     expect(await as(owner)((tx) => tx.query("select 1 from safety_files where id = $1", [photo.operationId]))).toMatchObject({ rowCount: 1 });
