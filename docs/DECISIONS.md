@@ -10707,7 +10707,8 @@ on a real Android phone**: it's built and checked in CI and by tests.
       signing out, or someone else signing in on the phone removes every
       reminder Tohyee scheduled.
 1149. **The phone's own camera and photo picker.** Where the web app takes
-      photos (Safety, Effluent, pre-start faults) the app shows **Take a
+      photos (Safety, Effluent, pre-start faults, and paddock photos in
+      Log from #503) the app shows **Take a
       photo** and **Choose a photo** (@capacitor/camera 8.2.6, MIT), saved
       at 1600 pixels like the web app's copies, into the same upload path
       and queue. The capture time goes as the photo's phone file time (the
@@ -10746,3 +10747,110 @@ on a real Android phone**: it's built and checked in CI and by tests.
       Google or Microsoft for farm mail (it opens in the phone's browser,
       so connect mail from a browser); push notifications. Not yet tried on
       a real Android phone.
+
+### Paddock photos and covers estimated from them (#503; decisions 1160-1169)
+
+Jess (30 October 2026): "could we also get pasture details from photos",
+and "Ok" to the issue's plan: a photo gives a rough estimate, not a
+measurement; it's always labelled that way and a person accepts or changes
+it. The details below weren't answered by Jess. Xero and NetSuite have
+nothing like this, so they follow the issue's text, decision 549 (IRD
+figures read by the connected AI) and the existing photo and reading rules:
+**not yet reviewed**. Examples AIW15-AIW19.
+
+1160. **Photos go with a paddock, through the phone's queue.** A photo is
+      taken on the Log: with a cover reading (an optional step), at each
+      paddock of a farm walk, or on its own (**Paddock photo**, also **Add
+      photo** on the paddock card). It's the same web photo path as safety
+      photos (decision 1012): a compressed copy (1600 pixels), the phone's
+      file time and, only if asked, where the phone was, kept in the
+      device's queue and sent when there's a signal. The phone's operation
+      id is the photo's id, so a photo sent again is found, not kept twice;
+      the same id with a different photo, paddock or reading is refused. A
+      photo taken with a Log reading names that reading's operation id,
+      made on the phone before either is sent, so the two are linked
+      whichever reaches Tohyee first (same paddock only). Kept in
+      `pasture_photos` (tenant migration 0209): the database works out
+      size, hash and arrival time; nothing about a photo changes after,
+      except removing it. Permissions are the cover readings' (decision
+      904): farm staff and bookkeepers and above add, farm staff and
+      viewers and above look, on the farms they can see (decision 744);
+      removing is for bookkeepers and above and hides the photo, keeping it
+      for the history, as a removed reading is kept. A native camera (the
+      Android app, #502) hands its file to the same `pickPasturePhoto`.
+1161. **A photo's day is the phone's, said as such.** The day a photo was
+      taken is the phone's file time in New Zealand when that's sensible
+      (not after it arrived, not more than a year before), otherwise the day
+      it reached Tohyee. The diary's tooltip says "the phone's clock", the
+      camera's own date (when the photo still has it) and when it reached
+      Tohyee, as safety photos do.
+1162. **An AI's estimate is a proposal, labelled "AI estimate from a
+      photo, not measured".** It's kept in `pasture_photo_estimates` with
+      the cover, how sure the AI says it is (low, medium, high: shown as
+      "Not sure", "Fairly sure", "Sure", in the AI's own words), its reason
+      (up to 500 characters), the key or app and the person it acts for. It
+      isn't a reading and doesn't count in the farm's cover until a person
+      accepts it. An accepted one is a reading by a new method, `photo_ai`
+      ("AI estimate from a photo, not measured"), which counts as an
+      estimate everywhere satellite and model readings do; it can't be
+      typed or imported, only made by accepting.
+1163. **The person's own AI looks, through two Look only tools.**
+      `list_pasture_photos_awaiting_estimate` lists photos with no estimate
+      on the farms the key's person can see (paddock, area, day, size), and
+      `get_pasture_photo` sends one as an image (photos over 3.5 MB aren't
+      sent; a phone's copy is far smaller). Like the pasture readings, they
+      need only Look only. Where the phone was and any reading are left
+      out, so the estimate is the AI's own look (and the comparison in 1166
+      means something). Tohyee calls no AI and sends photos nowhere: the
+      person's AI asks for them.
+1164. **Proposing needs "Make drafts", like decision 549.** A proposal is a
+      draft for a person to check, so `propose_pasture_cover_estimate`
+      needs a Make drafts key (and so the bookkeeper role or higher), as
+      `propose_ird_figures` and `suggest_livestock_movements` do; a Look
+      only key can't propose. One estimate per photo; the same idempotency
+      key finds the first; a farm the person can't see is "not found".
+1165. **A person decides once: accept, change, keep for comparison or
+      decline.** On Pasture and feed › **Covers from photos**, anyone who
+      can record a reading (farm staff, bookkeepers and above) decides.
+      **Accept** makes a reading at the AI's cover, **Change it** at the
+      cover they type (the estimate keeps the AI's figure; the reading's
+      source says "AI estimate from a photo (2,100), changed"), both dated
+      the photo's day. A photo taken with a reading of its own can't make a
+      second reading (that would put an estimate over a measurement as the
+      paddock's latest), so its estimate can only be **Kept for comparison**
+      or declined. **Decline** takes an optional reason and makes no
+      reading. Each is decided once, with who and when, and the database
+      refuses any later change; decided ones stay listed (the history), and
+      the audit trail has each step.
+1166. **Calibration compares, never adjusts.** **Photo estimates beside
+      other readings** pairs each estimate (the AI's own figure, before any
+      change; declined ones left out) with the nearest other reading of the
+      same paddock within a window (the same day, 1, 2, 3 or 7 days; 2 by
+      default; the API takes 0-14), for each method on its own (plate
+      meter, other measurement, visual, satellite, model, including
+      imported readings by their method), over the year to today. On a
+      tie, the reading on or before the photo, then the latest recorded.
+      For each method it gives the count, the average difference and the
+      average size of the difference (half up to the kg), and the most
+      below and above, in neutral words ("Photo estimates were 180 kg
+      DM/ha lower than plate meter readings on average, over 12 checks
+      within 2 days"), with the checks themselves. No figure is called
+      good or bad, and no estimate or reading is ever changed by it.
+1167. **With no AI connected, the screen says how.** Covers from photos
+      says whether the person has a working AI key or connected app that
+      can propose (Make drafts or more, capped by their role now); if not,
+      it says covers are entered by hand and how to connect one on the AI
+      page at Make drafts, or that their role can't (farm staff, who have
+      no AI of their own), and that Tohyee sends photos nowhere itself.
+1168. **Each paddock has a photo diary.** The paddock card (Farm › Map)
+      shows the paddock's photos by the day taken, newest first (the latest
+      four days, then Show all), beside that day's readings, each marked
+      Measured or Estimate, with any AI estimate and what was decided.
+1169. **There is no Pasture.io connection yet.** Checked 30 October 2026:
+      the code has no Pasture.io integration; only decision 635 (file
+      imports first, then Pasture.io, then LIC, once there are documented
+      terms, actual access and the farmer's consent) and the handover's
+      list of provider access still needed. It's separate work. Until then,
+      a file exported from Pasture.io (or any app) comes in through
+      Pasture and feed › Import readings with its method chosen, and those
+      readings are compared like any others.

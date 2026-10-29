@@ -14,6 +14,7 @@ import type { GrazingRecord, PastureReading, PastureSummary, ReadingImportPrevie
 import { type Growth, PASTURE_METHOD_LABELS, PASTURE_METHODS, type PastureMethod, SUPPLEMENT_UNIT_LABELS, SUPPLEMENT_UNITS, type SupplementUnit } from "@/lib/farming/pasture-rules";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { coverText, daysAgo, mobText, shortDate } from "@/lib/farming/farm-words";
+import { PhotoCalibrationCard, PhotoEstimates } from "@/components/pasture-photos";
 import { CoverBar, FarmRowList, farmRowStyles, HistoryFilters, type HistoryFilterValues, HistoryFooter, NO_FILTERS, RemoveAction, useHistory } from "@/components/farm-rows";
 
 /**
@@ -94,7 +95,7 @@ function FarmPasture({ organisationId, farm }: { organisationId: string; farm: F
   const maxCover = Math.max(1, ...(data?.cover.wedge.map((row) => row.cover) ?? []));
   return (
     <div className={farmRowStyles.tapTargets}>
-      <Card title={`Pasture cover on ${farm.name}`} description="Each paddock's latest reading, averaged by area. Satellite and model readings are marked as estimates.">
+      <Card title={`Pasture cover on ${farm.name}`} description="Each paddock's latest reading, averaged by area. Satellite, model and photo readings are marked as estimates.">
         <div className={ui.inlineForm}>
           <Field label="On">
             <DateInput value={onDate} onChange={(event) => setOnDate(event.target.value || todayInBrowser())} />
@@ -182,6 +183,8 @@ function FarmPasture({ organisationId, farm }: { organisationId: string; farm: F
           </>
         ) : null}
       </Card>
+      <PhotoEstimates organisationId={organisationId} farm={farm} canDecide={canRecord} onDecided={reload} />
+      <PhotoCalibrationCard organisationId={organisationId} farm={farm} />
       {canRecord ? <AddReading organisationId={organisationId} farmId={farm.id} paddocks={active} onAdded={reload} /> : null}
       {can("bookkeeper") ? <ImportReadings organisationId={organisationId} farm={farm} onImported={reload} /> : null}
       <Grazings organisationId={organisationId} farmId={farm.id} paddocks={active} canEdit={canRecord} canRemove={can("bookkeeper")} version={version} onChanged={reload} />

@@ -137,7 +137,7 @@ export function parseDestination(input: unknown, options: { forRule?: boolean } 
     }
     case "pasture_readings": {
       const method = raw.method === undefined || raw.method === null || raw.method === "" ? null : String(raw.method);
-      if (method !== null && !PASTURE_METHODS.includes(method as PastureMethod)) throw new ValidationError("Choose a method Tohyee knows.");
+      if (method !== null && !(PASTURE_METHODS as readonly string[]).includes(method)) throw new ValidationError("Choose a method Tohyee knows.");
       return { kind, farmId: idOrRefuse(raw.farmId, "Choose the farm."), method };
     }
     case "fertiliser_applications":
