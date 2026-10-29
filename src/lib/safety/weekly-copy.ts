@@ -35,7 +35,7 @@ export const COPY_DAYS = 7;
 export const COPY_HOUR = 6;
 const COPY_ACTOR: Actor = { userId: null, email: "safety weekly copy" };
 
-export type CopySettings = { on: boolean; includeEffluent: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null; updatedByEmail: string | null };
+export type CopySettings = { on: boolean; includeEffluent: boolean; includeEffluentChosen: boolean; toAddresses: string[]; lastAttemptAt: string | null; lastProblem: string | null; updatedByEmail: string | null };
 export type CopySent = { id: string; periodFrom: string; periodTo: string; headSeq: string | null; headHash: string | null; entries: number; toAddresses: string[]; sentByEmail: string; sentAt: string };
 
 /** Whether the weekly copy is due: on, after 6am, and a week since the last one (or none yet). */
@@ -46,9 +46,22 @@ export function copyDue(now: Date, lastSentAt: string | null, hourNow: number): 
   return now.getTime() - new Date(lastSentAt).getTime() >= COPY_DAYS * 86_400_000 - 30 * 60_000;
 }
 
+/**
+ * Effluent records go in the weekly copy by default when the organisation has
+ * an effluent system (Jess, 29 October 2026), unless an owner or admin chose.
+ */
+async function hasEffluentSystems(tx: OrgTx): Promise<boolean> {
+  const row = await tx.query(
+    `select 1 from (select distinct on (record_id) change, body from safety_entries where kind = 'effluent_system' order by record_id, version desc) s
+      where s.change <> 'withdrawn' and coalesce((s.body::jsonb->>'retired')::boolean, false) = false limit 1`,
+  );
+  return (row.rowCount ?? 0) > 0;
+}
+
 export async function copySettings(tx: OrgTx): Promise<{ settings: CopySettings; copies: CopySent[] }> {
   await requireFarming(tx);
-  const row = await tx.query<{ is_on: boolean; include_effluent: boolean; to_addresses: string[]; last_attempt_at: string | null; last_problem: string | null; updated_by_email: string }>(
+  const effluentDefault = await hasEffluentSystems(tx);
+  const row = await tx.query<{ is_on: boolean; include_effluent: boolean | null; to_addresses: string[]; last_attempt_at: string | null; last_problem: string | null; updated_by_email: string }>(
     "select is_on, include_effluent, to_addresses, last_attempt_at, last_problem, updated_by_email from safety_copy_settings",
   );
   const copies = await tx.query<{ id: string; period_from: string; period_to: string; head_seq: string | null; head_hash: string | null; entries: number; to_addresses: string[]; sent_by_email: string; sent_at: string }>(
@@ -56,7 +69,7 @@ export async function copySettings(tx: OrgTx): Promise<{ settings: CopySettings;
   );
   const settings = row.rows[0];
   return {
-    settings: { on: settings?.is_on ?? false, includeEffluent: settings?.include_effluent ?? false, toAddresses: settings?.to_addresses ?? [], lastAttemptAt: settings?.last_attempt_at ?? null, lastProblem: settings?.last_problem ?? null, updatedByEmail: settings?.updated_by_email ?? null },
+    settings: { on: settings?.is_on ?? false, includeEffluent: settings?.include_effluent ?? effluentDefault, includeEffluentChosen: settings?.include_effluent != null, toAddresses: settings?.to_addresses ?? [], lastAttemptAt: settings?.last_attempt_at ?? null, lastProblem: settings?.last_problem ?? null, updatedByEmail: settings?.updated_by_email ?? null },
     copies: copies.rows.map((copy) => ({ id: copy.id, periodFrom: copy.period_from, periodTo: copy.period_to, headSeq: copy.head_seq, headHash: copy.head_hash, entries: copy.entries, toAddresses: copy.to_addresses, sentByEmail: copy.sent_by_email, sentAt: copy.sent_at })),
   };
 }
@@ -75,7 +88,7 @@ export async function saveCopySettings(tx: OrgTx, input: { on?: unknown; toAddre
   // Effluent records (#487, decision 1099c) go in the copy only if the farm chooses; left out, it keeps what it had.
   const includeEffluent = input.includeEffluent === undefined ? null : input.includeEffluent === true;
   await tx.query(
-    `insert into safety_copy_settings (id, is_on, to_addresses, updated_by_email, include_effluent) values (true, $1, $2, $3, coalesce($4, false))
+    `insert into safety_copy_settings (id, is_on, to_addresses, updated_by_email, include_effluent) values (true, $1, $2, $3, $4)
      on conflict (id) do update set is_on = excluded.is_on, to_addresses = excluded.to_addresses, updated_by_email = excluded.updated_by_email, updated_at = now(),
        include_effluent = coalesce($4, safety_copy_settings.include_effluent)`,
     [on, addresses, tx.actor.email, includeEffluent],
@@ -89,9 +102,9 @@ type Prepared = { message: Omit<OutgoingMessage, "messageId">; periodFrom: strin
 /** Gathers and writes this week's copy (database work in one transaction, the PDF after). */
 async function prepareCopy(organisation: OrganisationRecord, now: Date): Promise<Prepared | { problem: string } | null> {
   const gathered = await withOrganisationTransaction(organisation, COPY_ACTOR, async (tx) => {
-    const settings = await tx.query<{ is_on: boolean; to_addresses: string[]; include_effluent: boolean }>("select is_on, to_addresses, include_effluent from safety_copy_settings");
+    const settings = await tx.query<{ is_on: boolean; to_addresses: string[]; include_effluent: boolean | null }>("select is_on, to_addresses, include_effluent from safety_copy_settings");
     if (!settings.rows[0]?.is_on || !settings.rows[0].to_addresses.length) return null;
-    const withEffluent = settings.rows[0].include_effluent;
+    const withEffluent = settings.rows[0].include_effluent ?? (await hasEffluentSystems(tx));
     // The high-water mark is the last entry number a sent copy included (#461, decision 970).
     // It only moves when the mail server accepts a copy, so a failed or retried send loses nothing.
     const last = await tx.query<{ head_seq: string | null; sent_at: string | null }>("select max(head_seq)::text as head_seq, max(sent_at) as sent_at from safety_copies");

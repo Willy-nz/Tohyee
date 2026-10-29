@@ -818,7 +818,7 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
           </label>
           {/* Effluent records (#487, decision 1099c): in the copy only if the farm chooses, from the next copy on. */}
           <label className={ui.checkbox}>
-            <input type="checkbox" checked={form.includeEffluent} onChange={(event) => setForm({ ...form, includeEffluent: event.target.checked })} /> Include the effluent records (from the next copy on)
+            <input type="checkbox" checked={form.includeEffluent} onChange={(event) => setForm({ ...form, includeEffluent: event.target.checked })} /> Include the effluent records (from the next copy on; on by default when the farm has an effluent system)
           </label>
           <Field label="Send it to" hint="Addresses off the farm, separated by commas: your own personal email, your accountant. Up to 10.">
             <input value={form.toAddresses} maxLength={2000} onChange={(event) => setForm({ ...form, toAddresses: event.target.value })} />

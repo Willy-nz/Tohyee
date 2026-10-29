@@ -273,7 +273,7 @@ export async function effluentCare(tx: OrgTx, farmIdInput: unknown): Promise<Eff
         const own = actions.filter((action) => action.data.effluentIncidentId === incident.recordId).map((action) => ({ ...action, state: actionState(action, today) }));
         const state: IncidentView["state"] = incident.change === "withdrawn" ? "withdrawn" : incident.data.closed ? "closed" : own.some((action) => action.change !== "withdrawn" && !action.data.verified) ? "actions" : "open";
         const notice = consent?.data.notifyCouncil ?? null;
-        return { ...incident, checkedOnSite: Boolean(incident.data.checked), actions: own, state, tellCouncil: notice && !incident.data.councilTold && incident.change !== "withdrawn" && !incident.data.closed ? notice : null };
+        return { ...incident, checkedOnSite: Boolean(incident.data.checked), actions: own, state, tellCouncil: notice && !incident.data.councilTold && incident.change !== "withdrawn" ? notice : null };
       })
       .sort((a, b) => b.data.occurredAt.localeCompare(a.data.occurredAt)),
     reminders: effluentReminders({ systems, ponds: log.ponds, lastMoved: log.lastMoved, services, consent, usedToday, today, now: new Date().toISOString(), dayOf: (iso) => isoDateAt(new Date(iso)) }),
