@@ -269,7 +269,11 @@ jobs:
           "$adb" exec-out screencap -p > http-refused.png
           [ -n "$refused" ] || { echo "::error title=Emulator::An http:// address wasn't refused on screen."; exit 1; }
           echo "::notice title=Emulator::An http:// address is refused with the reason on screen."
-          "$adb" logcat -d | grep -iE "AndroidRuntime|FATAL" && { echo "::error title=Emulator::The app crashed."; exit 1; } || true
+          # A crash of the app itself (uiautomator and monkey log "AndroidRuntime" lines of their own, which aren't).
+          crash="$("$adb" logcat -d -b crash 2>/dev/null | grep -A3 "FATAL EXCEPTION" | grep -A3 "willy_nz" | tr '\n' ' ' | cut -c1-900 || true)"
+          [ -z "${crash}" ] || { echo "::error title=The app crashed::${crash}"; exit 1; }
+          [ -n "$("$adb" shell pidof io.github.willy_nz.tohyee.test | tr -d '\r')" ] || { echo "::error title=Emulator::The app isn't running any more."; exit 1; }
+          echo "::notice title=Emulator::No crash; the app is still running."
 
       - name: Keep the screenshots
         if: always()
