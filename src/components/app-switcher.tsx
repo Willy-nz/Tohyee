@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { IllustratedIcon } from "@/components/illustrated-icon";
 import type { Modules } from "@/components/modules";
 import styles from "./app-shell.module.css";
 
@@ -43,7 +44,12 @@ export function AppSwitcher({ current, modules, reportViewer = false, farmWorker
   if (keys.length < 2) return null;
   const apps = APPS.filter((app) => keys.includes(app.key));
   return (
-    <details className={styles.appLauncher}>
+    <details className={styles.appLauncher} onKeyDown={(event) => {
+      if (event.key === "Escape") {
+        event.currentTarget.removeAttribute("open");
+        event.currentTarget.querySelector("summary")?.focus();
+      }
+    }}>
       <summary className={styles.appLauncherButton} aria-label="Apps">
         <span className={styles.appLauncherGrid} aria-hidden>
           <span />
@@ -57,10 +63,12 @@ export function AppSwitcher({ current, modules, reportViewer = false, farmWorker
           <Link
             key={app.key}
             href={app.href}
+            onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}
             className={`${styles.appLauncherLink} ${app.key === current ? styles.appLauncherLinkActive : ""}`}
             aria-current={app.key === current ? "page" : undefined}
           >
-            {app.label}
+            <IllustratedIcon name={app.key} />
+            <span>{app.label}</span>
           </Link>
         ))}
       </nav>

@@ -7,12 +7,12 @@ import { AppSwitcher, availableApps } from "@/components/app-switcher";
 describe("app switcher", () => {
   const render = (current: "accounting" | "crm" | "analytics", modules: { crm: boolean; reporting: boolean; notForProfit: boolean; analytics: boolean; gst: boolean } | null) =>
     renderToStaticMarkup(createElement(AppSwitcher, { current, modules }));
-  /** Each link's address, whether it's marked current, and its text. */
+  /** Each link's address, whether it's marked current, and its visible label (the last span; the picture before it is decorative). */
   const links = (html: string) =>
-    [...html.matchAll(/<a([^>]*)>([^<]*)<\/a>/g)].map(([, attributes, text]) => [
+    [...html.matchAll(/<a([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, text]) => [
       /href="([^"]*)"/.exec(attributes)?.[1],
       /aria-current="page"/.test(attributes),
-      text,
+      /<span>([^<]*)<\/span>$/.exec(text)?.[1],
     ]);
 
   it("is hidden when the CRM is off, or while the modules are loading", () => {

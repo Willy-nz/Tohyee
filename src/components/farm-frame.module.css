@@ -93,7 +93,11 @@
   }
 
   .tabIcon {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     margin-bottom: 2px;
   }
 }
