@@ -9,10 +9,10 @@ describe("app switcher", () => {
     renderToStaticMarkup(createElement(AppSwitcher, { current, modules }));
   /** Each link's address, whether it's marked current, and its text. */
   const links = (html: string) =>
-    [...html.matchAll(/<a([^>]*)>([^<]*)<\/a>/g)].map(([, attributes, text]) => [
+    [...html.matchAll(/<a([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, text]) => [
       /href="([^"]*)"/.exec(attributes)?.[1],
       /aria-current="page"/.test(attributes),
-      text,
+      text.replace(/<[^>]*>/g, ""),
     ]);
 
   it("is hidden when the CRM is off, or while the modules are loading", () => {
