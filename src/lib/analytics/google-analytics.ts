@@ -135,17 +135,22 @@ export async function startGaConnect(tx: OrgTx, origin: string): Promise<{ url: 
   if (!tx.actor.userId) throw new ForbiddenError("Sign in to connect Google Analytics.");
   if (!secretsAvailable()) throw new UnavailableError("The server has no TOHYEE_SECRET_KEY, so it can't store Google's sign-in.");
   const app = await googleApp(tx);
-  const state = `${tx.organisationId}.${randomBytes(24).toString("base64url")}`;
-  await tx.query("delete from analytics_google_states where created_at < now() - interval '1 day'");
-  await tx.query("insert into analytics_google_states (state, user_id) values ($1, $2)", [state, tx.actor.userId]);
+  const state = await newGoogleState(tx, "analytics");
   return { url: authorisationUrl("google", app, redirectUri(origin), state, GA_SCOPES) };
 }
 
-/** Checks the state (unused, under 15 minutes old, the same admin) and marks it used, before the code is exchanged. */
-export async function claimGaState(tx: OrgTx, state: string): Promise<ProviderApp> {
+/** Which connection a Google sign-in is for: Google Analytics, or Google Search Console (decision 1180). They share the return address. */
+export type GoogleProduct = "analytics" | "search_console";
+
+/**
+ * Checks a sign-in's state (unused, under 15 minutes old, the same admin)
+ * and marks it used, before the code is exchanged. Says which connection
+ * it's for, so the one return address can finish either.
+ */
+export async function claimGoogleState(tx: OrgTx, state: string): Promise<{ app: ProviderApp; product: GoogleProduct }> {
   await requireAnalytics(tx);
-  const found = await tx.query<{ user_id: string; fresh: boolean; used_at: string | null }>(
-    `select user_id, created_at > now() - make_interval(mins => $2) as fresh, used_at from analytics_google_states where state = $1 for update`,
+  const found = await tx.query<{ user_id: string; fresh: boolean; used_at: string | null; product: GoogleProduct }>(
+    `select user_id, created_at > now() - make_interval(mins => $2) as fresh, used_at, product from analytics_google_states where state = $1 for update`,
     [state, STATE_MINUTES],
   );
   const row = found.rows[0];
@@ -153,7 +158,28 @@ export async function claimGaState(tx: OrgTx, state: string): Promise<ProviderAp
     throw new ValidationError("That sign-in link has expired or was already used. Start connecting again.");
   }
   await tx.query("update analytics_google_states set used_at = now() where state = $1", [state]);
-  return googleApp(tx);
+  return { app: await googleApp(tx), product: row.product };
+}
+
+/** Which connection a sign-in state was started for (even once used), so an error goes back to the right screen; null when there's no such state. */
+export async function googleStateProduct(tx: OrgTx, state: string): Promise<GoogleProduct | null> {
+  const found = await tx.query<{ product: GoogleProduct }>("select product from analytics_google_states where state = $1", [state]);
+  return found.rows[0]?.product ?? null;
+}
+
+/** Starts a sign-in's one-time state for this admin (shared by Google Analytics and Search Console). */
+export async function newGoogleState(tx: OrgTx, product: GoogleProduct): Promise<string> {
+  const state = `${tx.organisationId}.${randomBytes(24).toString("base64url")}`;
+  await tx.query("delete from analytics_google_states where created_at < now() - interval '1 day'");
+  await tx.query("insert into analytics_google_states (state, user_id, product) values ($1, $2, $3)", [state, tx.actor.userId, product]);
+  return state;
+}
+
+/** Google Analytics' own claim: refuses a Search Console state. */
+export async function claimGaState(tx: OrgTx, state: string): Promise<ProviderApp> {
+  const claimed = await claimGoogleState(tx, state);
+  if (claimed.product !== "analytics") throw new ValidationError("That sign-in link was for another connection. Start connecting again.");
+  return claimed.app;
 }
 
 export type GaSignIn = { tokens: Tokens; email: string };
@@ -528,20 +554,24 @@ export async function disconnectGa(organisation: OrganisationRecord, actor: Acto
       throw new ConflictError(`The shaped table${list.length === 1 ? "" : "s"} ${list.join(", ")} ${list.length === 1 ? "uses" : "use"} Google Analytics data. Change or remove ${list.length === 1 ? "it" : "them"} first.`);
     }
     await tx.query("delete from analytics_google_connections where id = true");
-    await tx.query("delete from analytics_google_states");
+    await tx.query("delete from analytics_google_states where product = 'analytics'");
     await writeAuditEvent(tx, { eventType: "analytics.google_disconnected", entityType: "analytics_google_connection", entityId: "google_analytics", details: { propertyId: row.property_id } });
-    return decryptSecret(row.refresh_token_ciphertext);
+    // Google may withdraw everything the account allowed this Google app, so not while Search Console uses the same account (decision 1188).
+    const shared = await tx.query("select 1 from analytics_search_console_connections where google_email = $1", [row.google_email]);
+    return shared.rows.length ? null : decryptSecret(row.refresh_token_ciphertext);
   });
   // Withdrawing at Google is a courtesy: the token is already deleted here, so a failure doesn't matter.
-  try {
-    await providerFetch("https://oauth2.googleapis.com/revoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ token: refreshToken }).toString(),
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch {
-    // Nothing more to do: the sign-in is gone from Tohyee.
+  if (refreshToken) {
+    try {
+      await providerFetch("https://oauth2.googleapis.com/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: refreshToken }).toString(),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      // Nothing more to do: the sign-in is gone from Tohyee.
+    }
   }
   await dropGaTables(organisation.id);
 }

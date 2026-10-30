@@ -2,6 +2,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import type { Dashboard } from "@/lib/analytics/dashboards";
 import { BOOKS_SOURCE_NAME, BOOKS_TABLE_NAME } from "@/lib/analytics/books";
 import { GA_LOAD_TABLE_NAME, GA_SOURCE_NAME } from "@/lib/analytics/google-analytics-reports";
+import { GSC_LOAD_TABLE_NAME, GSC_SOURCE_NAME, GSC_TABLE_PREFIX } from "@/lib/analytics/search-console-reports";
 import { quoteIdentifier } from "@/lib/analytics/query";
 
 /**
@@ -23,6 +24,8 @@ export type SourceFreshness = {
   running: boolean;
   /** The latest date in the data the tiles go by (their date fields), when they have one. */
   dataThrough: string | null;
+  /** The first day Google may still change (Search Console, decision 1183); left out for other sources. */
+  mayChangeFrom?: string | null;
 };
 
 export type ReportFreshness = {
@@ -35,6 +38,7 @@ export type ReportFreshness = {
 export function loadKeyOf(table: string): { tableName: string; sourceless: boolean } {
   if (table.startsWith("tohyee_")) return { tableName: BOOKS_TABLE_NAME, sourceless: true };
   if (table.startsWith("google_analytics_")) return { tableName: GA_LOAD_TABLE_NAME, sourceless: true };
+  if (table.startsWith(GSC_TABLE_PREFIX)) return { tableName: GSC_LOAD_TABLE_NAME, sourceless: true };
   return { tableName: table, sourceless: false };
 }
 
@@ -62,7 +66,7 @@ export async function reportLoadFacts(tx: OrgTx, dashboard: Dashboard): Promise<
     );
     const latest = runs.rows[0];
     const good = runs.rows.find((run) => run.status === "ok" && run.finished_at);
-    const fallbackName = key === BOOKS_TABLE_NAME ? BOOKS_SOURCE_NAME : key === GA_LOAD_TABLE_NAME ? GA_SOURCE_NAME : key;
+    const fallbackName = key === BOOKS_TABLE_NAME ? BOOKS_SOURCE_NAME : key === GA_LOAD_TABLE_NAME ? GA_SOURCE_NAME : key === GSC_LOAD_TABLE_NAME ? GSC_SOURCE_NAME : key;
     facts.push({
       key,
       name: (good ?? latest)?.source_name ?? fallbackName,
@@ -93,11 +97,20 @@ export function dataThroughSql(table: string, fields: string[]): string | null {
   return `select cast(${latest.length === 1 ? latest[0] : `greatest(${latest.join(", ")})`} as VARCHAR) as through from ${quoteIdentifier(table)}`;
 }
 
+/** The SQL for the first day of a Search Console table that may still change (DuckDB), or null for other tables. */
+export function mayChangeSql(table: string): string | null {
+  if (!table.startsWith(GSC_TABLE_PREFIX)) return null;
+  return `select cast(min(${quoteIdentifier("date")}) as VARCHAR) as changing from ${quoteIdentifier(table)} where ${quoteIdentifier("may_still_change")}`;
+}
+
 /** Puts the load facts and the data-through dates together, and says whether the sources are from different times. */
-export function combineFreshness(facts: Array<Omit<SourceFreshness, "dataThrough">>, through: Map<string, string | null>): ReportFreshness {
+export function combineFreshness(facts: Array<Omit<SourceFreshness, "dataThrough">>, through: Map<string, string | null>, changing: Map<string, string | null> = new Map()): ReportFreshness {
   const sources = facts.map((fact) => {
     const dates = fact.tables.map((table) => through.get(table) ?? null).filter((value): value is string => value !== null);
-    return { name: fact.name, tables: fact.tables, refreshedAt: fact.refreshedAt, failedAt: fact.failedAt, running: fact.running, dataThrough: dates.length ? dates.sort().at(-1)! : null };
+    const source: SourceFreshness = { name: fact.name, tables: fact.tables, refreshedAt: fact.refreshedAt, failedAt: fact.failedAt, running: fact.running, dataThrough: dates.length ? dates.sort().at(-1)! : null };
+    const from = fact.tables.map((table) => changing.get(table) ?? null).filter((value): value is string => value !== null).sort()[0];
+    if (from) source.mayChangeFrom = from;
+    return source;
   });
   const times = sources.flatMap((source) => (source.refreshedAt ? [Date.parse(source.refreshedAt)] : []));
   return { sources, mixed: times.length > 1 && Math.max(...times) - Math.min(...times) > MIXED_MS };

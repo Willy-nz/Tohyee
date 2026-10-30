@@ -1788,7 +1788,8 @@ function TileFigures({
                     </td>
                   ) : (
                     <FormattedCell key={column.key} className={ui.num} format={tile.format} valueIndex={valueIndex} value={row[column.key] ?? null} range={ranges[valueIndex]} field={row.category ?? null}>
-                      {showValue(row[column.key], column)}
+                      {/* The value's own number format on the tile (e.g. a percentage), else its field's. */}
+                      {showValue(row[column.key], { ...column, number: tile.format?.series?.[valueIndex]?.number ?? column.number })}
                     </FormattedCell>
                   );
                 })}

@@ -915,38 +915,8 @@ export function replaceTableSet(organisationId: string, prefix: string, tables: 
   }
   return serialise(organisationId, () =>
     withAnalytics(organisationId, async (connection) => {
-      const staging = (name: string) => quoteIdentifier(`_tohyee_load_${name}`);
-      let copied = 0;
       try {
-        for (const table of tables) {
-          await connection.run(`drop table if exists ${staging(table.name)}`);
-          await connection.run(
-            `create table ${staging(table.name)} (${table.columns.map((column) => `${quoteIdentifier(column.name)} ${column.type}`).join(", ")})`,
-          );
-          const appender = await connection.createAppender(`_tohyee_load_${table.name}`);
-          try {
-            for await (const batch of rowBatches(table.rows)) {
-              for (const row of batch) {
-                for (const value of row) {
-                  if (value === null || value === undefined) appender.appendNull();
-                  else appender.appendVarchar(value);
-                }
-                appender.endRow();
-              }
-              copied += batch.length;
-              // Each batch goes into the staging table before the next is read.
-              appender.flushSync();
-            }
-            appender.closeSync();
-          } catch (error) {
-            try {
-              appender.closeSync();
-            } catch {
-              // The first error is the one worth reporting.
-            }
-            throw error;
-          }
-        }
+        const copied = await stageTables(connection, tables);
         const existing = await connection.runAndReadAll(
           `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, ${quoteString(prefix)})`,
         );
@@ -958,7 +928,7 @@ export function replaceTableSet(organisationId: string, prefix: string, tables: 
           }
           for (const table of tables) {
             await connection.run(`drop table if exists ${quoteIdentifier(table.name)}`);
-            await connection.run(`alter table ${staging(table.name)} rename to ${quoteIdentifier(table.name)}`);
+            await connection.run(`alter table ${stagingName(table.name)} rename to ${quoteIdentifier(table.name)}`);
           }
           await connection.run("commit");
         } catch (error) {
@@ -967,9 +937,118 @@ export function replaceTableSet(organisationId: string, prefix: string, tables: 
         }
         return copied;
       } catch (error) {
-        for (const table of tables) await connection.run(`drop table if exists ${staging(table.name)}`).catch(() => undefined);
+        for (const table of tables) await connection.run(`drop table if exists ${stagingName(table.name)}`).catch(() => undefined);
         throw new ValidationError(`${failure}: ${loadErrorMessage(error)}`);
       }
+    }),
+  );
+}
+
+const stagingName = (name: string) => quoteIdentifier(`_tohyee_load_${name}`);
+
+/** Writes each table to its own staging table (`_tohyee_load_<name>`), values as text for DuckDB to convert. Returns the rows written. */
+async function stageTables(connection: DuckDBConnection, tables: readonly TableCopy[]): Promise<number> {
+  let copied = 0;
+  for (const table of tables) {
+    await connection.run(`drop table if exists ${stagingName(table.name)}`);
+    await connection.run(`create table ${stagingName(table.name)} (${table.columns.map((column) => `${quoteIdentifier(column.name)} ${column.type}`).join(", ")})`);
+    const appender = await connection.createAppender(`_tohyee_load_${table.name}`);
+    try {
+      for await (const batch of rowBatches(table.rows)) {
+        for (const row of batch) {
+          for (const value of row) {
+            if (value === null || value === undefined) appender.appendNull();
+            else appender.appendVarchar(value);
+          }
+          appender.endRow();
+        }
+        copied += batch.length;
+        // Each batch goes into the staging table before the next is read.
+        appender.flushSync();
+      }
+      appender.closeSync();
+    } catch (error) {
+      try {
+        appender.closeSync();
+      } catch {
+        // The first error is the one worth reporting.
+      }
+      throw error;
+    }
+  }
+  return copied;
+}
+
+/**
+ * Replaces some days of a set of dated tables (Google Search Console's
+ * incremental loads, decision 1182): every table's rows with `dateColumn`
+ * from `from` to `through` are deleted and these rows put in their place,
+ * all tables together in one transaction, so a failure leaves every table
+ * as it was. A table not there yet is created from its rows. Returns how
+ * many rows were written.
+ */
+export function mergeTableDays(
+  organisationId: string,
+  prefix: string,
+  tables: readonly TableCopy[],
+  days: { dateColumn: string; from: string; through: string },
+  failure: string,
+): Promise<number> {
+  if (!/^[a-z][a-z0-9_]*_$/.test(prefix) || prefix === TOHYEE_TABLE_PREFIX) throw new ValidationError("That isn't a table prefix.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(days.from) || !/^\d{4}-\d{2}-\d{2}$/.test(days.through)) throw new ValidationError("Those aren't dates.");
+  assertTableName(days.dateColumn);
+  for (const table of tables) {
+    if (!table.name.startsWith(prefix)) throw new ValidationError(`${table.name} doesn't start with ${prefix}.`);
+    assertTableName(table.name);
+    for (const column of table.columns) assertTableName(column.name);
+    if (!table.columns.some((column) => column.name === days.dateColumn)) throw new ValidationError(`${table.name} has no ${days.dateColumn}.`);
+  }
+  return serialise(organisationId, () =>
+    withAnalytics(organisationId, async (connection) => {
+      try {
+        const copied = await stageTables(connection, tables);
+        const existing = await connection.runAndReadAll(
+          `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, ${quoteString(prefix)})`,
+        );
+        const present = new Set((existing.getRows() as Array<[string]>).map(([name]) => name));
+        await connection.run("begin transaction");
+        try {
+          for (const table of tables) {
+            if (!present.has(table.name)) {
+              await connection.run(`alter table ${stagingName(table.name)} rename to ${quoteIdentifier(table.name)}`);
+              continue;
+            }
+            const names = table.columns.map((column) => quoteIdentifier(column.name)).join(", ");
+            await connection.run(
+              `delete from ${quoteIdentifier(table.name)} where ${quoteIdentifier(days.dateColumn)} between cast(${quoteString(days.from)} as DATE) and cast(${quoteString(days.through)} as DATE)`,
+            );
+            await connection.run(`insert into ${quoteIdentifier(table.name)} (${names}) select ${names} from ${stagingName(table.name)}`);
+            await connection.run(`drop table ${stagingName(table.name)}`);
+          }
+          await connection.run("commit");
+        } catch (error) {
+          await connection.run("rollback");
+          throw error;
+        }
+        return copied;
+      } catch (error) {
+        for (const table of tables) await connection.run(`drop table if exists ${stagingName(table.name)}`).catch(() => undefined);
+        throw new ValidationError(`${failure}: ${loadErrorMessage(error)}`);
+      }
+    }),
+  );
+}
+
+/** The tables starting with `prefix` in an organisation's analytics copy (none when it has no copy yet). */
+export function tablesWithPrefix(organisationId: string, prefix: string): Promise<string[]> {
+  if (!/^[a-z][a-z0-9_]*_$/.test(prefix)) throw new ValidationError("That isn't a table prefix.");
+  if (!fs.existsSync(analyticsFilePath(organisationId))) return Promise.resolve([]);
+  return serialise(organisationId, () =>
+    withAnalytics(organisationId, async (connection) => {
+      const existing = await connection.runAndReadAll(
+        `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, ${quoteString(prefix)})`,
+      );
+      return (existing.getRows() as Array<[string]>).map(([name]) => name);
     }),
   );
 }

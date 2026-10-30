@@ -1,5 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { isGaTable } from "@/lib/analytics/google-analytics-reports";
+import { isGscTable } from "@/lib/analytics/search-console-reports";
 import type { Actor, OrgTx } from "@/lib/db/org-transaction";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -172,8 +173,8 @@ async function validateDefinition(
   if (!name || name.length > 100) throw new ValidationError("Give the shaped table a name (up to 100 characters).");
   const tableName = input.tableName === undefined && current ? current.tableName : typeof input.tableName === "string" ? input.tableName : "";
   if (current && tableName !== current.tableName) throw new ValidationError("A shaped table's output name can't change.");
-  if (!/^[a-z][a-z0-9_]{0,62}$/.test(tableName) || tableName.startsWith("tohyee_") || tableName.startsWith("_tohyee") || isGaTable(tableName)) {
-    throw new ValidationError("The output table name must start with a letter, use lower-case letters, digits and _, and not start with tohyee_ or google_analytics_.");
+  if (!/^[a-z][a-z0-9_]{0,62}$/.test(tableName) || tableName.startsWith("tohyee_") || tableName.startsWith("_tohyee") || isGaTable(tableName) || isGscTable(tableName)) {
+    throw new ValidationError("The output table name must start with a letter, use lower-case letters, digits and _, and not start with tohyee_, google_analytics_ or google_search_console_.");
   }
   const baseTable = input.baseTable === undefined && current ? current.baseTable : typeof input.baseTable === "string" ? input.baseTable : "";
   const steps = parseShapeSteps(input.steps === undefined && current ? current.steps : input.steps);
