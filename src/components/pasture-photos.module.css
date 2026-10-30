@@ -170,3 +170,8 @@
     max-height: 240px;
   }
 }
+
+/* The Android app shows buttons instead of a file input (#502). */
+button.pickerButton {
+  font: inherit;
+}

@@ -11,6 +11,7 @@ import { useOnline } from "@/components/offline-support";
 import { GpsControl, GpsStatus, useGps } from "@/components/gps-control";
 import { TractorLegend, TractorMap } from "@/components/tractor-map";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { useNativeFeatures } from "@/components/native-app";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, offlineServedSnapshot } from "@/lib/client/api";
 import { computeCoverage, type CoverageResult, gpsQuality, THRESHOLDS, type TrackPoint } from "@/lib/farming/coverage";
@@ -48,7 +49,7 @@ import {
   paddockLabel,
   QUANTITY_UNITS,
   RATE_UNITS,
-  TRACTOR_LIMITED,
+  tractorLimitedText,
   TRACTOR_NOTICE,
   TRACTOR_RECORD_NOTE,
   type TractorEquipment,
@@ -58,6 +59,7 @@ import {
 import { hazardNote, hazardsForMap, type PackHazards, reviewedJob, SEND_STATE_LABELS, sendState, shownHazards, TRACTOR_QUEUE_KIND, tractorQueueItem } from "@/lib/farming/tractor-queue";
 import { forgetSent, localJobs, localPoints, type LocalJob, removeLocal, saveLocal, tractorStoreAvailable } from "@/lib/farming/tractor-store";
 import { clearGapNote, readGapNote, type TrackWriter, trackWriter, unsavedGap, type WriterStatus } from "@/lib/farming/tractor-writer";
+import { askRecordingPermissions, recordingPermissions, RECORDING_NOTICE, startBackgroundLocation } from "@/lib/native/location";
 import { answerOffline } from "@/lib/offline/packs";
 import type { OfflineQueue, QueueItem } from "@/lib/offline/queue";
 import type { CurrentRecord, HazardData } from "@/lib/safety/shared";
@@ -228,7 +230,9 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
   return (
     <div className={styles.home}>
       <Notice tone="warning">
-        <strong data-testid="tractor-limited">{TRACTOR_LIMITED}</strong>
+        <strong data-testid="tractor-limited">
+          <LimitedNote />
+        </strong>
       </Notice>
       <Notice tone="info">{TRACTOR_NOTICE}</Notice>
       {storageProblem ? <Notice tone="error">{storageProblem}</Notice> : null}
@@ -330,6 +334,12 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
   );
 }
 
+/** "Limited" in a browser; in the Android app, what it does instead (#498 item 8, #502 decision 1145). */
+function LimitedNote() {
+  const native = useNativeFeatures();
+  return <>{tractorLimitedText(native.backgroundLocation)}</>;
+}
+
 // Setting up a job -------------------------------------------------------------------------------------------
 
 function TractorSetup({ organisationId, farm, userId, onStart }: { organisationId: string; farm: FarmContext["farm"]; userId: string; onStart: (job: LocalJob) => void }) {
@@ -350,8 +360,28 @@ function TractorSetup({ organisationId, farm, userId, onStart }: { organisationI
   const machine = selected?.safetyEquipmentId ? machines.data?.equipment.find((entry) => entry.recordId === selected.safetyEquipmentId) : null;
   const unmapped = chosen.filter((id) => !active.find((paddock) => paddock.id === id)?.geometry);
 
+  const native = useNativeFeatures();
+  const [explaining, setExplaining] = useState(false);
+
+  // In the Android app, location and notifications are asked for here, after saying why (#502, decision 1144).
   const start = async () => {
     if (!selected?.current) return setProblem("Choose the equipment and check its width.");
+    if (native.backgroundLocation) {
+      const allowed = await recordingPermissions();
+      if (allowed.location !== "granted" || allowed.notifications === "prompt") return setExplaining(true);
+    }
+    await begin();
+  };
+
+  const allowAndStart = async () => {
+    setExplaining(false);
+    const allowed = await askRecordingPermissions();
+    if (!allowed.location) return setProblem("Location wasn't allowed, so the job can't record. Allow it in the phone's Settings › Apps › Tohyee › Permissions › Location (While using the app), then tap Start again.");
+    await begin();
+  };
+
+  const begin = async () => {
+    if (!selected?.current) return;
     setStarting(true);
     setProblem(null);
     try {
@@ -465,7 +495,32 @@ function TractorSetup({ organisationId, farm, userId, onStart }: { organisationI
       {problem ? <Notice tone="error">{problem}</Notice> : null}
       {/* Before Start (#498 items 6 and 8): whether the GPS can be used, and that recording is limited. */}
       <GpsControl gps={gps} label="Check GPS" idleText="Check the phone can find itself before you start. The job can't record without location." />
-      <p className={styles.limited}>{TRACTOR_LIMITED}</p>
+      <p className={styles.limited}>
+        <LimitedNote />
+      </p>
+      {explaining ? (
+        <div className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="recording-permissions-title">
+          <h2 id="recording-permissions-title">Recording with the screen locked</h2>
+          <p>So the job keeps recording when the screen turns off or you open another app, Android asks two things next:</p>
+          <ul>
+            <li>
+              <strong>Location</strong>, &quot;While using the app&quot;: the tractor&apos;s GPS track. It&apos;s used only while a job is recording, and kept on this phone until the job is sent.
+            </li>
+            <li>
+              <strong>Notifications</strong>: while it records, Android shows &quot;{RECORDING_NOTICE.title}&quot;. Without them the job still records, but the notice may not show.
+            </li>
+          </ul>
+          <p>Tohyee asks only now, when you start a job. You can change either later in the phone&apos;s Settings › Apps › Tohyee.</p>
+          <div className={styles.controlRow}>
+            <button type="button" className={styles.bigControl} onClick={() => setExplaining(false)}>
+              Not now
+            </button>
+            <button type="button" className={`${styles.bigControl} ${styles.finishControl}`} autoFocus onClick={() => void allowAndStart()}>
+              Continue
+            </button>
+          </div>
+        </div>
+      ) : null}
       <Button className={styles.startButton} disabled={!selected?.current || starting} onClick={start}>
         {starting ? "Starting…" : "Start"}
       </Button>
@@ -674,9 +729,38 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
 
   const recording = job.recorder.status !== "finished" && !reviewing;
 
-  // GPS, while the driving screen is open.
+  // In the Android app the GPS carries on with the screen off (#502, decision 1144): set while its watcher runs.
+  const background = useRef(false);
+  const native = useNativeFeatures();
+
+  // GPS, while the driving screen is open (and in the Android app, while the job records with the screen off).
   useEffect(() => {
     if (!recording || !loaded) return;
+    if (native.backgroundLocation) {
+      let stop: (() => Promise<void>) | null = null;
+      let cancelled = false;
+      void startBackgroundLocation({
+        onFix: (fix) => apply(onFix(jobRef.current.recorder, fix, Date.now())),
+        onDenied: () => apply(onPermissionDenied(jobRef.current.recorder, Date.now())),
+      }).then((watcher) => {
+        if (cancelled) {
+          void watcher?.stop();
+          return;
+        }
+        if (!watcher) {
+          // The app couldn't start it: as in a browser, nothing records and the screen says so.
+          apply(onPermissionDenied(jobRef.current.recorder, Date.now()));
+          return;
+        }
+        background.current = true;
+        stop = watcher.stop;
+      });
+      return () => {
+        cancelled = true;
+        background.current = false;
+        void stop?.();
+      };
+    }
     if (!navigator.geolocation) {
       apply(onPermissionDenied(jobRef.current.recorder, Date.now()));
       return;
@@ -703,12 +787,15 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
       navigator.geolocation.clearWatch(watch);
       status?.removeEventListener("change", changed);
     };
-  }, [recording, loaded, apply]);
+  }, [recording, loaded, apply, native.backgroundLocation]);
 
-  // The screen going off or another app: recording stops and says so.
+  // The screen going off or another app: recording stops and says so. Not in the Android app while its GPS runs: it carries on.
   useEffect(() => {
     if (!recording) return;
-    const changed = () => apply(onVisibility(jobRef.current.recorder, document.visibilityState === "visible", Date.now()));
+    const changed = () => {
+      if (background.current) return;
+      apply(onVisibility(jobRef.current.recorder, document.visibilityState === "visible", Date.now()));
+    };
     document.addEventListener("visibilitychange", changed);
     window.addEventListener("pagehide", changed);
     return () => {
@@ -797,7 +884,7 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
   }, [boundaries]);
 
   const state = job.recorder;
-  const banner = statusBanner(state, { now, wakeLock: wake });
+  const banner = statusBanner(state, { now, wakeLock: wake, background: native.backgroundLocation });
   const last = state.lastFix;
   const quality = gpsQuality(last?.acc);
   const settings = job.settings[state.settings];
@@ -916,7 +1003,9 @@ function TractorDrive({ initial, imageryKey, onClose }: { initial: LocalJob; ima
             Finish
           </button>
         </div>
-        <p className={styles.limited}>{TRACTOR_LIMITED}</p>
+        <p className={styles.limited}>
+          <LimitedNote />
+        </p>
         {state.interruption === "gps_denied" ? <DriveLocationHelp /> : null}
         <TractorLegend withPaddocks={job.boundaries.length > 0} />
       </section>

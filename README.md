@@ -94,6 +94,9 @@ or ChatGPT connected by signing in.
   pasture and grazing, jobs, checklists and safety details are kept on the
   phone automatically, and logs, photos, safety reports and checks made
   without signal are sent once when you're back ([guide](docs/MOBILE-APP.md)).
+- **Android app (optional):** an APK from the releases that opens your own
+  server and adds locked-screen tractor recording, reminders as
+  notifications and the phone's camera ([guide](docs/MOBILE-APP.md#the-android-app)).
 - **Farm screens:** Today, Map, Log, Safety and More along the bottom, a
   farm walk that saves each reading as you go, and a **Farm staff** role
   that records field work without seeing the books.

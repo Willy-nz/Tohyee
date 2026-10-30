@@ -10617,6 +10617,137 @@ its own staff privacy statement needs a line about it.
       the maps (#498 item 6) stays separate: it only moves the map on that
       device and never shares anything.
 
+### Tohyee for Android (#502; decisions 1140-1152)
+
+Jess (30 October 2026) chose one app for everyone, where you type your
+Tohyee server's address the first time and it opens your server inside
+the app; an APK from GitHub releases and Get Tohyee on this device first,
+the Play Store later; and in the first version the app wrapper,
+locked-screen tractor GPS, notifications, and the native camera and files.
+The rest below follows the issue's plan; where it gives no detail it
+follows what self-hosted server apps that open your own server do, and is
+**not yet reviewed**. None of it is accounting behaviour. **Not yet tried
+on a real Android phone**: it's built and checked in CI and by tests.
+
+1140. **One Capacitor app that opens your own server.** `android/` is a
+      Capacitor 8.5.3 project (all packages pinned exactly; MIT). It doesn't
+      bundle a copy of the web app: it shows the person's own server, so
+      the app never falls behind the server and the service worker, offline
+      farm information and the queue (#472-#476, #486) carry on inside
+      Android's WebView. Its only bundled page is the first-run "Your
+      Tohyee address" screen (`android-shell/`). Its id is
+      `io.github.willy_nz.tohyee` (from the GitHub address, as there's no
+      Tohyee domain); it can't change once the Play Store has it.
+1141. **`GET /api/app/identify` says "this is Tohyee".** Public, like
+      `/api/health`: `{ app: "tohyee", api: 1, name: "Tohyee", version }`,
+      with `version` only on the server's own network (null through Remote
+      access, as #208 item 8 does for the health check). Any origin may
+      read it, without cookies, because the app's first-run page is its own
+      origin. `api` is the app protocol: the app refuses a server that's
+      newer than it understands and asks for an update.
+1142. **HTTPS only, the server's origin only.** The first-run screen
+      accepts `tohyee.example.nz`, a full link or a port, and keeps only
+      `https://host[:port]`; http://, a name and password, and localhost
+      are refused with the reason. The address is kept in the app's private
+      storage and set only from that screen (a server's page can't move the
+      app to another server); Get Tohyee on this device has **Change Tohyee
+      address**. No other address is allowed in the app, so links to other
+      websites, mailto: and tel: open outside it. With no connection and
+      nothing saved yet, a bundled "Can't reach Tohyee" page offers Try
+      again and Change address. Android backup and device-to-device copy
+      are off: the app holds a sign-in and offline farm records.
+1143. **The web app finds the app, never needs it.** `src/lib/native/`
+      looks for Capacitor's `window.Capacitor` (native Android only) and a
+      plugin only when the app lists it. Nothing imports Capacitor, so in a
+      browser and the home-screen web app nothing changes; every screen
+      keeps the browser's way when the app isn't there or is older.
+      Android's back button closes an open dialog, else goes back, else
+      puts Tohyee in the background (never closes it mid-job).
+1144. **Tractor mode records with the screen locked, in the app.** It uses
+      @capacitor-community/background-geolocation 1.3.1 (MIT, maintained,
+      Capacitor 8 support), not a paid plugin. Android's foreground service
+      shows "Tohyee is recording a tractor job" while it records. Each fix
+      goes through the same recorder and store as a browser's, so gaps
+      (GPS lost, location turned off) are still gaps; the screen going off
+      just isn't one any more. Location and notifications are asked for
+      only when a job starts, after a sheet says why ("While using the
+      app" is enough: the foreground service starts while Tohyee is open,
+      so background location isn't asked for). If location is refused the
+      job doesn't start and says where to allow it. The plugin uses Google
+      Play services' location (Google's licence, on almost every Android
+      phone; it means the app can't go on F-Droid as it is). Capacitor's
+      older message bridge is on, as the plugin's instructions say, so
+      updates don't stop after 5 minutes in the background.
+1145. **"Limited" says what the app does.** In a browser the issue #498
+      words stay, with "That's a browser limit. The Tohyee app for Android
+      keeps recording with the screen locked". In the app it says recording
+      carries on with the screen locked or another app open, and that
+      turning location off, a flat battery or swiping Tohyee away still
+      stops it and leaves a gap.
+1146. **Reminders come from the server, are scheduled on the phone.**
+      `GET /api/app/reminders` works them out each time from the records
+      Today uses, for the signed-in person only (farm records role, farms
+      they work on): shift the pods or irrigator (at the time the run says),
+      read the pond, Effluent's weekly checks, servicing and Effluent WoF,
+      the person's own open safety actions, and for admins the LINZ key's
+      reminder and expiry days (decision 1061). Nothing is stored and there
+      is no push server (the issue: "No push server for now").
+1147. **When they arrive.** A time at that time; a day at 7 am phone time;
+      pond readings each morning for a week until a refresh finds them
+      read. Only the next 14 days, at most 60 (the nearest), and never
+      something already due (it's on Today). Alarms are inexact, so Android
+      12+ never sends people to "Alarms & reminders"; a few minutes late is
+      fine for these. Refreshed when Tohyee opens, comes back to the screen,
+      gets its connection back, sends queued work, and every 30 minutes;
+      without a connection what was scheduled stays. Tapping one opens its
+      page in its organisation.
+1148. **Off until the person turns them on.** Get Tohyee on this device,
+      in the app, has **Turn reminders on**, which says what Android will
+      ask before asking for notifications (Android 13+). Turning them off,
+      signing out, or someone else signing in on the phone removes every
+      reminder Tohyee scheduled.
+1149. **The phone's own camera and photo picker.** Where the web app takes
+      photos (Safety, Effluent, pre-start faults, and paddock photos in
+      Log from #503) the app shows **Take a
+      photo** and **Choose a photo** (@capacitor/camera 8.2.6, MIT), saved
+      at 1600 pixels like the web app's copies, into the same upload path
+      and queue. The capture time goes as the photo's phone file time (the
+      camera's EXIF date is usually lost when the copy is made smaller,
+      as in a browser). Where it
+      was taken is sent only when "Add where I am" is ticked, as in a
+      browser: for a chosen photo, from the photo's own GPS if it has one.
+1150. **CI builds it; the signing key never meets third-party code.**
+      `.github/workflows/android-app.yml` builds on v* tags (checking the tag
+      matches package.json, like the other release workflows), by hand for
+      any branch, and on pull requests that touch the app. The build job
+      (npm ci, Gradle) has no secrets and makes an unsigned release APK and
+      a test build. On a tag, a separate job that runs only
+      `scripts/sign-android-apk.sh` (the Android SDK's own zipalign and
+      apksigner, never npm or Gradle) signs it, using the keystore from the
+      secrets `ANDROID_KEYSTORE_BASE64`,
+      `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
+      `ANDROID_KEY_PASSWORD`, then attaches `Tohyee-<version>.apk` and its
+      `.sha256` to the release. Without the key, the release gets
+      `Tohyee-<version>-test.apk` instead: debug-signed, named "Tohyee
+      (test)" and installed beside the real app, so it can never be
+      mistaken for or updated into it. The app's version is Tohyee's
+      (0.19.0 is version code 1900). Every other run signs the unsigned APK
+      with a throwaway key made in the job, so the signing step is known to
+      work before the first release needs it.
+1151. **Get Tohyee on this device offers the APK beside the web app.** In a
+      browser it adds "Android: download the app (optional)": what it adds,
+      the link to Tohyee's latest GitHub release, the steps (allow installs
+      from this source, Play Protect) and what Android's warnings mean. The
+      home-screen web app stays the first choice and its steps are
+      unchanged. Inside the app the page shows the app's own settings
+      instead. The link is to the latest release page rather than a file,
+      so the page doesn't give out the server's version.
+1152. **Not yet in the app.** The Play Store; iPhone; file downloads from
+      inside the app (exports and PDFs: use the browser); signing in to
+      Google or Microsoft for farm mail (it opens in the phone's browser,
+      so connect mail from a browser); push notifications. Not yet tried on
+      a real Android phone.
+
 ### Paddock photos and covers estimated from them (#503; decisions 1160-1169)
 
 Jess (30 October 2026): "could we also get pasture details from photos",

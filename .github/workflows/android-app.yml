@@ -1,0 +1,380 @@
+name: Android app
+
+# Builds the Tohyee app for Android (#502, decisions 1150-1152).
+#
+# - On a v* tag (matching package.json's version, like the other release
+#   workflows): Tohyee-<version>.apk and its .sha256, signed with the release
+#   key from the repository's secrets, attached to the GitHub release. With
+#   no key set up yet, it attaches Tohyee-<version>-test.apk instead: a test
+#   build, installed as "Tohyee (test)", that can't update to a real one.
+# - Run by hand (workflow_dispatch) on any branch, or on a pull request that
+#   changes the app: a test APK as a workflow artifact. Never signed with
+#   the release key.
+#
+# The signing key never meets npm or Gradle's third-party code: the build job
+# (npm ci, Gradle) has no secrets and makes an unsigned APK; the sign job only
+# runs scripts/sign-android-apk.sh (the Android SDK's own zipalign and
+# apksigner) on it. Every other run signs with a throwaway key, to check
+# that signing works before a release needs it. Secrets (see
+# docs/MOBILE-APP.md, "Signing the Android app"):
+#   ANDROID_KEYSTORE_BASE64   the keystore file, base64
+#   ANDROID_KEYSTORE_PASSWORD its password
+#   ANDROID_KEY_ALIAS         the key's alias in it
+#   ANDROID_KEY_PASSWORD      the key's password
+
+on:
+  push:
+    tags:
+      - "v*"
+  # A pull request that changes the app builds a test APK too.
+  pull_request:
+    paths:
+      - "android/**"
+      - "android-shell/**"
+      - "capacitor.config.json"
+      - "scripts/build-android-shell.mjs"
+      - "scripts/sign-android-apk.sh"
+      - "src/lib/native/server-address.ts"
+      - ".github/workflows/android-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 21 (Capacitor 8 builds with it)
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.4.1
+        with:
+          cache-read-only: ${{ github.ref_type == 'tag' }}
+
+      - name: Version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag matches package version
+        if: github.ref_type == 'tag'
+        run: |
+          expected_tag="v${{ steps.version.outputs.version }}"
+          if [ "${GITHUB_REF_NAME}" != "${expected_tag}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${expected_tag}."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Copy the app's page and plugins into the Android project
+        run: npm run android:sync
+
+      - name: Build (unsigned release, and the test build)
+        working-directory: android
+        run: ./gradlew --no-daemon --stacktrace assembleRelease assembleDebug
+
+      - name: Name the files
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist/android
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "dist/android/Tohyee-${VERSION}-unsigned.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/android/Tohyee-${VERSION}-test.apk"
+          cd dist/android
+          sha256sum "Tohyee-${VERSION}-test.apk" > "Tohyee-${VERSION}-test.apk.sha256"
+          ls -l
+
+      - name: Check what's in the APK
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          aapt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/aapt2"
+          for apk in "Tohyee-${VERSION}-test.apk" "Tohyee-${VERSION}-unsigned.apk"; do
+            badging="$("$aapt" dump badging "dist/android/${apk}")"
+            echo "${badging}" | grep -E "^package|^application-label:|uses-permission|sdkVersion|targetSdkVersion"
+            summary="$(echo "${badging}" | grep -E "^package|^application-label:|^sdkVersion|^targetSdkVersion" | tr '\n' ' ')"
+            echo "::notice title=${apk}::${summary}"
+          done
+          permissions="$("$aapt" dump badging "dist/android/Tohyee-${VERSION}-unsigned.apk" | grep -oE "uses-permission: name='[^']+'" | sed "s/uses-permission: name='android.permission.//;s/'//" | tr '\n' ' ')"
+          echo "::notice title=Permissions::${permissions}"
+          echo "::notice title=SHA-256::$(cat "dist/android/Tohyee-${VERSION}-test.apk.sha256")"
+          # The bundled first-run page and the app's own plugin are in it.
+          unzip -l "dist/android/Tohyee-${VERSION}-unsigned.apk" | grep -E "assets/public/(index|offline)\.html|assets/public/app\.js|assets/capacitor\.config\.json"
+
+      - name: Check signing works (a throwaway key, not the release key)
+        if: github.ref_type != 'tag'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          export KEYSTORE="${RUNNER_TEMP}/throwaway.keystore" KEYSTORE_PASSWORD="throwaway-$(openssl rand -hex 12)" KEY_ALIAS=throwaway
+          keytool -genkeypair -keystore "${KEYSTORE}" -storetype PKCS12 -storepass "${KEYSTORE_PASSWORD}" -alias "${KEY_ALIAS}" \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Throwaway CI key" -noprompt
+          scripts/sign-android-apk.sh "dist/android/Tohyee-${VERSION}-unsigned.apk" "${RUNNER_TEMP}/signing-check.apk"
+          rm -f "${KEYSTORE}" "${RUNNER_TEMP}/signing-check.apk"*
+
+      - name: Keep the test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tohyee-${{ steps.version.outputs.version }}-test-apk
+          if-no-files-found: error
+          path: |
+            dist/android/*-test.apk
+            dist/android/*-test.apk.sha256
+
+      - name: Keep the unsigned release build (for signing)
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-unsigned
+          if-no-files-found: error
+          retention-days: 1
+          path: dist/android/*-unsigned.apk
+
+  # Not a real phone: an Android emulator on the runner, to check the test
+  # build installs, starts on "Your Tohyee address", loads its plugins and
+  # refuses an http:// address. Not run for releases.
+  emulator:
+    name: Start it on an emulator
+    if: github.ref_type != 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    env:
+      # One place for the emulator's device, for avdmanager and the emulator alike.
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
+    steps:
+      - name: Get the test build
+        uses: actions/download-artifact@v4
+        with:
+          name: Tohyee-${{ needs.build.outputs.version }}-test-apk
+          path: dist/android
+
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Get an Android 14 emulator image
+        timeout-minutes: 12
+        run: |
+          image="system-images;android-34;google_apis;x86_64"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager" --install emulator platform-tools "$image" > "$RUNNER_TEMP/sdkmanager.log" 2>&1 || { echo "::error title=sdkmanager::$(tail -5 "$RUNNER_TEMP/sdkmanager.log" | tr '\n' ' ')"; exit 1; }
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n ci -k "$image" --device pixel_6 --force
+          echo "::notice title=Emulator devices::$("$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | tr '\n' ' ')"
+          echo "::notice title=Emulator acceleration::$("$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | tr '\n' ' ')"
+
+      - name: Start the emulator
+        timeout-minutes: 12
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          nohup "$ANDROID_HOME/emulator/emulator" -avd ci -no-window -no-audio -no-boot-anim -no-snapshot -accel on -gpu swiftshader_indirect -camera-back none -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          booted=""
+          for i in $(seq 1 120); do
+            if [ "$(timeout 10 "$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then booted=yes; break; fi
+            sleep 5
+          done
+          if [ -z "$booted" ]; then
+            echo "::error title=Emulator didn't start::$(tail -15 "$RUNNER_TEMP/emulator.log" | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          echo "::notice title=Emulator::Booted Android $("$adb" shell getprop ro.build.version.release | tr -d '\r') after about $((i * 5)) seconds."
+          "$adb" shell settings put global window_animation_scale 0
+          "$adb" shell settings put global transition_animation_scale 0
+
+      - name: Install, open, and try an http:// address
+        timeout-minutes: 8
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" install -r "dist/android/Tohyee-${VERSION}-test.apk"
+          "$adb" logcat -c
+          "$adb" shell monkey -p io.github.willy_nz.tohyee.test -c android.intent.category.LAUNCHER 1 > /dev/null
+          dump() {
+            "$adb" shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
+            "$adb" shell cat /sdcard/ui.xml > "$RUNNER_TEMP/ui.xml" 2>/dev/null || true
+          }
+          found=""
+          for i in $(seq 1 30); do
+            dump
+            if grep -q "Your Tohyee address" "$RUNNER_TEMP/ui.xml"; then found=yes; break; fi
+            sleep 3
+          done
+          "$adb" exec-out screencap -p > first-run.png
+          if [ -z "$found" ]; then
+            echo "::error title=Emulator::The first-run screen didn't show."
+            "$adb" logcat -d | grep -iE "capacitor|tohyee|AndroidRuntime" | tail -60
+            exit 1
+          fi
+          echo "::notice title=Emulator::Installed and opened on Android $("$adb" shell getprop ro.build.version.release | tr -d '\r'): the first-run screen shows \"Your Tohyee address\"."
+          plugins="$("$adb" logcat -d | grep -oE "Registering plugin instance: [A-Za-z]+" | sed 's/Registering plugin instance: //' | sort -u | tr '\n' ' ')"
+          echo "::notice title=Plugins loaded::${plugins}"
+          for plugin in TohyeeServer BackgroundGeolocation LocalNotifications Camera App; do
+            echo "${plugins}" | grep -qw "${plugin}" || { echo "::error title=Plugins::${plugin} wasn't loaded."; exit 1; }
+          done
+          # Tap the address box and the Check button by where uiautomator says they are.
+          centre() {
+            python3 - "$RUNNER_TEMP/ui.xml" "$1" <<'PY'
+          import re, sys
+          xml = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          for node in re.findall(r"<node [^>]*>", xml):
+              if re.search(sys.argv[2], node):
+                  b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
+                  if b:
+                      x1, y1, x2, y2 = map(int, b.groups())
+                      print((x1 + x2) // 2, (y1 + y2) // 2)
+                      break
+          PY
+          }
+          field="$(centre 'class="android.widget.EditText"')"
+          [ -n "$field" ] || { echo "::error title=Emulator::Couldn't find the address box."; exit 1; }
+          "$adb" shell input tap $field
+          sleep 1
+          "$adb" shell input text "http://192.168.1.20:3000"
+          "$adb" shell input keyevent 66
+          refused=""
+          for i in $(seq 1 10); do
+            sleep 2
+            dump
+            if grep -q "isn't secure" "$RUNNER_TEMP/ui.xml"; then refused=yes; break; fi
+          done
+          "$adb" exec-out screencap -p > http-refused.png
+          [ -n "$refused" ] || { echo "::error title=Emulator::An http:// address wasn't refused on screen."; exit 1; }
+          echo "::notice title=Emulator::An http:// address is refused with the reason on screen."
+          # A crash of the app itself (uiautomator and monkey log "AndroidRuntime" lines of their own, which aren't).
+          crash="$("$adb" logcat -d -b crash 2>/dev/null | grep -A3 "FATAL EXCEPTION" | grep -A3 "willy_nz" | tr '\n' ' ' | cut -c1-900 || true)"
+          [ -z "${crash}" ] || { echo "::error title=The app crashed::${crash}"; exit 1; }
+          [ -n "$("$adb" shell pidof io.github.willy_nz.tohyee.test | tr -d '\r')" ] || { echo "::error title=Emulator::The app isn't running any more."; exit 1; }
+          echo "::notice title=Emulator::No crash; the app is still running."
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-screenshots
+          if-no-files-found: ignore
+          path: "*.png"
+
+  sign:
+    name: Sign the release APK
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      signed: ${{ steps.sign.outputs.signed }}
+    steps:
+      # Only the signing script: nothing that npm or Gradle would run.
+      - name: Checkout the signing script
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/sign-android-apk.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Get the unsigned APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-unsigned
+          path: dist/android
+
+      - name: Sign with the release key (when it's set up)
+        id: sign
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${KEYSTORE_PASSWORD}" ] || [ -z "${KEY_ALIAS}" ]; then
+            echo "No release key in the repository's secrets: the release gets the test build instead."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          export KEYSTORE="${RUNNER_TEMP}/release.keystore"
+          trap 'rm -f "${KEYSTORE}"' EXIT
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE}"
+          scripts/sign-android-apk.sh "dist/android/Tohyee-${VERSION}-unsigned.apk" "dist/android/Tohyee-${VERSION}.apk"
+          rm -f "dist/android/Tohyee-${VERSION}-unsigned.apk"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the signed APK
+        if: steps.sign.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-signed
+          if-no-files-found: error
+          path: |
+            dist/android/Tohyee-*.apk
+            dist/android/Tohyee-*.apk.sha256
+
+  # Never replaces a file already on the release (no --clobber), like the
+  # server bundle: to redo one, delete it from the release by hand first.
+  publish:
+    name: Attach to the release
+    if: github.ref_type == 'tag'
+    needs: [build, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get the signed APK
+        if: needs.sign.outputs.signed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: android-signed
+          path: dist/android
+
+      - name: Get the test build (no release key yet)
+        if: needs.sign.outputs.signed != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Tohyee-${{ needs.build.outputs.version }}-test-apk
+          path: dist/android
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes || \
+            { sleep 30; gh release view "${GITHUB_REF_NAME}" >/dev/null; }
+
+      - name: Attach the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l dist/android
+          gh release upload "${GITHUB_REF_NAME}" dist/android/*.apk dist/android/*.apk.sha256

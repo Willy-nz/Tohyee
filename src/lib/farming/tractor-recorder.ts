@@ -139,7 +139,8 @@ export function onTick(state: RecorderState, now: number): Step {
 export type Banner = { tone: "ok" | "warning" | "danger" | "paused"; title: string; detail: string };
 
 /** What the big status strip says. */
-export function statusBanner(state: RecorderState, options: { now: number; wakeLock: "on" | "off" | "unsupported" }): Banner {
+/** `background`: the Android app records with the screen off (#502), so the screen needn't stay on. */
+export function statusBanner(state: RecorderState, options: { now: number; wakeLock: "on" | "off" | "unsupported"; background?: boolean }): Banner {
   if (state.status === "finished") return { tone: "paused", title: "Finished", detail: "Nothing more is being recorded." };
   if (state.interruption === "gps_denied") return { tone: "danger", title: "NOT RECORDING: location is off", detail: "Location permission was removed. Allow location for Tohyee in the phone's settings, then tap Resume." };
   if (state.interruption === "hidden") return { tone: "danger", title: "NOT RECORDING: screen off", detail: "Recording stopped while the screen was off or another app was open. That time is a gap." };
@@ -151,7 +152,7 @@ export function statusBanner(state: RecorderState, options: { now: number; wakeL
   const quality = gpsQuality(state.lastFix?.acc);
   const accuracy = state.lastFix?.acc != null ? `±${Math.round(state.lastFix.acc)} m` : "unknown";
   if (quality === "poor") return { tone: "danger", title: `GPS weak (${accuracy}): not counting`, detail: `Fixes vaguer than ±${THRESHOLDS.maxAccuracyM} m aren't used, so this stretch is a gap.` };
-  const asleep = options.wakeLock !== "on" ? " The screen may turn off by itself: keep it on." : "";
+  const asleep = options.wakeLock !== "on" && !options.background ? " The screen may turn off by itself: keep it on." : "";
   if (quality === "weak") return { tone: "warning", title: `Recording · GPS fair (${accuracy})`, detail: `Counting, but less accurate.${asleep}` };
   return { tone: asleep ? "warning" : "ok", title: `Recording · GPS ${accuracy}`, detail: state.working ? `Working ON: area is being counted.${asleep}` : `Working OFF: travel only, no area counted.${asleep}` };
 }

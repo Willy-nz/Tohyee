@@ -2937,6 +2937,28 @@ that something happened.
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
   deaths.
 
+- **Tohyee for Android** (#502, decisions 1140-1152;
+  [MOBILE-APP.md](MOBILE-APP.md#the-android-app)): an optional Android app
+  (APK, from GitHub releases; not on the Play Store yet) built with
+  Capacitor in `android/`. The first time, **Your Tohyee address** checks
+  the address is HTTPS and a Tohyee server (`GET /api/app/identify`), keeps
+  it and opens that server's own pages, so the offline pages, farm
+  information and queue work as in the web app; Get Tohyee on this device
+  changes it. Links to other sites open in the phone's browser; the back
+  button closes dialogs and goes back. In the app: **tractor mode keeps
+  recording with the screen locked** (Android's foreground service, "Tohyee
+  is recording a tractor job"; permissions asked at Start after saying why;
+  gaps still recorded), **reminders as notifications** when turned on
+  (pods and irrigator shifts, pond readings, effluent checks and servicing,
+  your safety actions, the LINZ key; from `GET /api/app/reminders`,
+  scheduled on the phone for two weeks, no push server), and the phone's
+  **camera and photo picker** into the same photo path. A workflow builds
+  `Tohyee-<version>.apk` and `.sha256` on release tags, signed in its own
+  job from repository secrets, or a clearly labelled test build without
+  them. Get Tohyee on this device has the Android download and install
+  steps beside the home-screen web app. Not yet tried on a real Android
+  phone. Not in the app yet: downloads, connecting farm mail, iPhone, push.
+
 - **Tohyee on phones and tablets: install** (#472, decisions 990-998;
   [MOBILE-APP.md](MOBILE-APP.md)): **Get Tohyee on this device**
   (`/get-tohyee`) gives each device's steps (iPhone and iPad: Safari ›
@@ -3049,14 +3071,16 @@ that something happened.
   phone link); the large Call 111 button is gone. **Get Tohyee on this
   device** picks the steps for the browser it's opened in (Safari,
   Chrome, Edge, Samsung Internet, Firefox, Opera; iPhone, Android,
-  computer), says it's a web app and not an APK, says honestly where a
+  computer), says it's a web app (the Android APK is offered beside it,
+  #502), says honestly where a
   browser can't install, and lists every other browser's steps. **Use my
   location** is on every map (farm map, paddocks, hazards, effluent,
   tractor mode's start): not asked, allowed, blocked, unavailable or timed
   out; accuracy; after a block, that browser's steps and **Check again**.
   It only moves the map on this device. **Tractor mode** says "Limited —
   keep Tohyee open and your screen unlocked while recording…" before
-  Start and beside its controls. Not built here: farm members on the map
+  Start and beside its controls (in a browser; the Android app says what
+  it does instead, #502). Not built here: farm members on the map
   (#498 item 7, separate work). Checked in Chromium only; not on real
   phones, and not in a real Firefox or Safari.
 - **Farm dairy effluent** (#487, decisions 1070-1099, docs/FARM-EFFLUENT.md;

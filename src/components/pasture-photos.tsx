@@ -15,6 +15,8 @@ import { ESTIMATE_CONFIDENCE_LABELS, ESTIMATE_LABEL, ESTIMATE_STATUS_LABELS } fr
 import { CALIBRATION_WINDOWS, DEFAULT_CALIBRATION_WINDOW, PASTURE_METHOD_LABELS, parseCover } from "@/lib/farming/pasture-rules";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
 import { compressPhoto, type PhotoPlace, photoPlace, placeText } from "@/lib/offline/photos";
+import { nativePhoto } from "@/lib/native/camera";
+import { useNativeFeatures } from "@/components/native-app";
 import { newOperationId, type OfflineQueue } from "@/lib/offline/queue";
 import styles from "./pasture-photos.module.css";
 
@@ -34,11 +36,12 @@ export type PickedPhoto = { id: string; name: string; pending: boolean; phoneFil
  * photo's id on Tohyee; `readingOperationId` names the Log reading it was
  * taken with, so they're linked whichever reaches Tohyee first.
  */
-export async function pickPasturePhoto(queue: OfflineQueue | null, input: { farm: { id: string; name: string }; paddock: { id: string; name: string }; file: Blob & { name?: string; lastModified?: number }; place?: boolean; readingOperationId?: string | null }): Promise<PickedPhoto> {
+/** `cameraPlace` and `chosen`: where the Android app's camera or picker says it was taken, used as in pickSafetyFile (#502). */
+export async function pickPasturePhoto(queue: OfflineQueue | null, input: { farm: { id: string; name: string }; paddock: { id: string; name: string }; file: Blob & { name?: string; lastModified?: number }; place?: boolean; readingOperationId?: string | null; cameraPlace?: PhotoPlace | null; chosen?: boolean }): Promise<PickedPhoto> {
   const operationId = newOperationId();
   const blob = input.file.type.startsWith("image/") ? await compressPhoto(input.file) : input.file;
   const contentType = blob.type || input.file.type;
-  const place = input.place ? await photoPlace() : null;
+  const place = !input.place ? null : input.chosen && input.cameraPlace ? input.cameraPlace : ((await photoPlace()) ?? input.cameraPlace ?? null);
   const phoneFileTime = input.file.lastModified ? new Date(input.file.lastModified).toISOString() : new Date().toISOString();
   const original = input.file.name || "paddock";
   const name = contentType === "image/jpeg" && !/\.jpe?g$/i.test(original) ? `${original.replace(/\.[^.]+$/, "") || "paddock"}.jpg` : original;
@@ -70,8 +73,35 @@ export function PasturePhotoPicker({ organisationId, farm, paddock, readingOpera
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = photos.filter((photo) => photo.pending).length;
+  const native = useNativeFeatures();
+  const keep = (work: () => Promise<PickedPhoto | null>) => {
+    setBusy(true);
+    setError(null);
+    work()
+      .then((photo) => {
+        if (photo) onChange([...photos, photo]);
+      })
+      .catch((caught) => setError(errorMessage(caught)))
+      .finally(() => setBusy(false));
+  };
+  const takeNative = (source: "camera" | "gallery") =>
+    keep(async () => {
+      const photo = await nativePhoto(source);
+      return photo ? pickPasturePhoto(queue, { farm, paddock, file: photo.file, place: withPlace, readingOperationId, cameraPlace: photo.exifPlace, chosen: source === "gallery" }) : null;
+    });
   return (
     <div className={styles.picker}>
+      {native.camera ? (
+        // The Android app's own camera and photo picker (#502, decision 1149).
+        <div role="group" aria-label={label} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button type="button" className={styles.pickerButton} disabled={busy} onClick={() => takeNative("camera")}>
+            {busy ? "Keeping the photo…" : label}
+          </button>
+          <button type="button" className={styles.pickerButton} disabled={busy} onClick={() => takeNative("gallery")}>
+            Choose a photo
+          </button>
+        </div>
+      ) : (
       <label className={styles.pickerButton}>
         {busy ? "Keeping the photo…" : label}
         <input
@@ -92,6 +122,7 @@ export function PasturePhotoPicker({ organisationId, farm, paddock, readingOpera
           }}
         />
       </label>
+      )}
       <label className={styles.check}>
         <input type="checkbox" checked={withPlace} onChange={(event) => setWithPlace(event.target.checked)} /> Add where I am to the photo
       </label>

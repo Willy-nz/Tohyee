@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tohyee</string>
+    <string name="title_activity_main">Tohyee</string>
+    <string name="package_name">io.github.willy_nz.tohyee</string>
+    <string name="custom_url_scheme">io.github.willy_nz.tohyee</string>
+    <!-- Tractor mode's recording notice (@capacitor-community/background-geolocation, #502). -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Tractor recording</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_tohyee</string>
+    <string name="capacitor_background_geolocation_notification_color">#2563EB</string>
+</resources>

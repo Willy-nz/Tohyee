@@ -29,3 +29,6 @@ installer/windows/tray/obj/
 
 # Local backups written by a development server
 /backups/
+
+# The Android app's first-run page script, built from android-shell/src (scripts/build-android-shell.mjs).
+/android-shell/www/app.js

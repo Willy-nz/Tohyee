@@ -8,6 +8,8 @@ import { newOperationId } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
 import { type PickedFile, pickSafetyFile, submitThroughQueue, useOfflineQueue, waitForFiles } from "@/components/offline-queue";
 import { useOnline } from "@/components/offline-support";
+import { useNativeFeatures } from "@/components/native-app";
+import { nativePhoto } from "@/lib/native/camera";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Farm } from "@/lib/farming/paddocks";
@@ -210,6 +212,7 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
   const complete = checklist.data.items.every((entry) => answers[entry.key]?.result && (answers[entry.key].result !== "fault" || answers[entry.key].note.trim()));
   const answered = checklist.data.items.filter((entry) => answers[entry.key]?.result).length;
   const anyFault = Object.values(answers).some((answer) => answer.result === "fault");
+  const native = useNativeFeatures();
   return (
     <form
       onSubmit={(event) => {
@@ -272,7 +275,35 @@ function CheckForm({ organisationId, farm, item, checklist, onDone, onCancel }: 
           </fieldset>
         );
       })}
-      {anyFault ? (
+      {anyFault && native.camera ? (
+        // The Android app's own camera and photo picker (#502, decision 1149).
+        <div className={ui.fieldLabel} role="group" aria-label="Photo of the fault (optional)">
+          Photo of the fault (optional)
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            {(["camera", "gallery"] as const).map((source) => (
+              <Button
+                key={source}
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    async () => {
+                      const photo = await nativePhoto(source);
+                      return photo ? pickSafetyFile(queue, { farm, file: photo.file }) : null;
+                    },
+                    (file) => {
+                      if (file) setPhotos([...photos, file]);
+                    },
+                  )
+                }
+              >
+                {source === "camera" ? "Take a photo" : "Choose a photo"}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : anyFault ? (
         <label className={ui.fieldLabel}>
           Photo of the fault (optional)
           <input

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { TRACTOR_LIMITED } from "@/lib/farming/tractor-shared";
+import { TRACTOR_LIMITED, tractorLimitedText } from "@/lib/farming/tractor-shared";
 
 /*
  * From Jess and William's phone use (#498 items 4 and 8, decisions 1119
@@ -28,10 +28,12 @@ describe("tractor mode is labelled limited (#498 item 8)", () => {
   it("shows them before Start and beside the recording controls", () => {
     const tractor = source("tractor.tsx");
     const setup = tractor.slice(tractor.indexOf("function TractorSetup"), tractor.indexOf("function EquipmentSettingsForm"));
-    expect(setup.indexOf("{TRACTOR_LIMITED}")).toBeGreaterThan(-1);
-    expect(setup.indexOf("{TRACTOR_LIMITED}")).toBeLessThan(setup.indexOf("onClick={start}"));
+    // Through <LimitedNote />: the browser's "Limited" words, or the Android app's (#502).
+    expect(setup.indexOf("<LimitedNote />")).toBeGreaterThan(-1);
+    expect(setup.indexOf("<LimitedNote />")).toBeLessThan(setup.indexOf("onClick={start}"));
     const drive = tractor.slice(tractor.indexOf("function TractorDrive"), tractor.indexOf("function DriveLocationHelp"));
-    expect(drive.indexOf("{TRACTOR_LIMITED}")).toBeGreaterThan(drive.indexOf("Finish"));
-    expect(tractor.slice(tractor.indexOf("export function TractorHome"), tractor.indexOf("function TractorSetup"))).toContain("{TRACTOR_LIMITED}");
+    expect(drive.indexOf("<LimitedNote />")).toBeGreaterThan(drive.indexOf("Finish"));
+    expect(tractor.slice(tractor.indexOf("export function TractorHome"), tractor.indexOf("function TractorSetup"))).toContain("<LimitedNote />");
+    expect(tractorLimitedText(false)).toContain(TRACTOR_LIMITED);
   });
 });

@@ -18,6 +18,22 @@ export const TRACTOR_NOTICE =
 export const TRACTOR_LIMITED =
   "Limited — keep Tohyee open and your screen unlocked while recording. Locking your phone or switching apps may interrupt GPS and leave gaps in your track.";
 
+/** Said after the browser's "Limited" note (#502, decision 1145): where locked-screen recording is. */
+export const TRACTOR_BROWSER_APP_HINT = "That's a browser limit. The Tohyee app for Android keeps recording with the screen locked (Get Tohyee on this device).";
+
+/**
+ * In the Android app (#502, decision 1145) recording carries on with the
+ * screen off or another app open, through Android's foreground service and
+ * its notification. What still stops it is said too.
+ */
+export const TRACTOR_APP_NOTE =
+  "In the Tohyee app — recording carries on with the screen locked or another app open, while Android shows \"Tohyee is recording a tractor job\". Turning location off, a flat battery, or swiping Tohyee away from recent apps still stops it and leaves a gap.";
+
+/** The note shown before Start and beside the controls: the app's, or the browser's with where to get the app. */
+export function tractorLimitedText(background: boolean): string {
+  return background ? TRACTOR_APP_NOTE : `${TRACTOR_LIMITED} ${TRACTOR_BROWSER_APP_HINT}`;
+}
+
 /**
  * What the record does and doesn't establish (#491, decision 1104): shown
  * beside the estimate on screens and in every export.

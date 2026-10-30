@@ -18,3 +18,7 @@ backups
 data
 # Coding agents' working copies (.claude/worktrees).
 .claude
+# The Android app (#502) is built by its own workflow, never in the server image.
+android
+android-shell
+capacitor.config.json

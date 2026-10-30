@@ -43,6 +43,8 @@ import { ThemeSwitch } from "@/components/theme";
 import { Page, PageHeader } from "@/components/ui";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { handleFormKeys } from "@/lib/form-keys";
+import { cancelReminders } from "@/lib/native/notifications";
+import { NativeAppSupport } from "@/components/native-app";
 import styles from "./app-shell.module.css";
 import {
   useWorkspace,
@@ -834,6 +836,8 @@ function Shell({ app: layoutApp, children, warnings }: { app: AppKey; children: 
   async function signOut() {
     // Unsent work is offered for sending first, and kept if it can't go (decision 993).
     if (!(await prepareSignOut(confirm, user.id, organisations.map((organisation) => organisation.id)))) return;
+    // The Android app's reminders are this person's: off the phone when they sign out (#502).
+    await cancelReminders().catch(() => undefined);
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     router.replace("/login");
     router.refresh();
@@ -867,6 +871,7 @@ function Shell({ app: layoutApp, children, warnings }: { app: AppKey; children: 
         </div>
       </header>
       <OfflineSupport userId={user.id} organisationId={current?.id ?? null} />
+      <NativeAppSupport />
       <main id="main-content" className={styles.content} tabIndex={-1}>
         <div ref={page} className={styles.page}>
           {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}

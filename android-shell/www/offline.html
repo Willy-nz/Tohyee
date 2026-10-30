@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-NZ">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'" />
+    <title>Can't reach Tohyee</title>
+    <link rel="stylesheet" href="shell.css" />
+  </head>
+  <body>
+    <!--
+      Shown by the app when the Tohyee server can't be reached and nothing is
+      saved on the phone yet (#502, decision 1142). Once Tohyee has opened
+      here with a connection, its service worker shows the saved farm pages
+      instead. The two links are handled by the app (TohyeeServerPlugin).
+    -->
+    <main class="panel">
+      <div class="brand"><img src="icon.svg" alt="" width="36" height="36" /><span>Tohyee</span></div>
+      <h1>Can't reach Tohyee</h1>
+      <p>The app couldn't open your Tohyee server, and nothing is saved on this phone for it yet.</p>
+      <ul>
+        <li>Check the phone has Wi-Fi or mobile data.</li>
+        <li>Check the Tohyee computer is on. A Tailscale address needs the Tailscale app on and connected.</li>
+        <li>Once Tohyee has opened here with a connection, the farm pages open without a signal too.</li>
+      </ul>
+      <p><a class="button primary" href="tohyee-app://retry">Try again</a></p>
+      <p><a class="button secondary" href="tohyee-app://change-address">Change Tohyee address</a></p>
+    </main>
+  </body>
+</html>
