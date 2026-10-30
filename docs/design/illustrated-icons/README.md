@@ -1,6 +1,6 @@
 # Illustrated icons for Tohyee
 
-Actual ready-to-use vector assets for issue #509, following the user's request for simple illustrations instead of realistic AI imagery. These are assets for Claude to integrate, not a deployed UI redesign.
+Actual ready-to-use vector assets for issue #509, following the user's request for simple illustrations instead of realistic AI imagery. The draft PR now integrates selected icons into the app launcher, Farm menu and navigation, and Sales/Purchases overviews. Nothing is deployed until the PR is merged and released.
 
 ![All 20 illustrated icons](preview.svg)
 
@@ -58,4 +58,13 @@ The separate static marketing website does not automatically serve the applicati
 
 Use Accounting, CRM, Analytics and Farm in the module chooser; use the matching Farm illustrations for maps, livestock, safety and effluent. Keep photography capture/profile photos as user data, not decorative generated art. Do not add all 20 illustrations to one operational page. The preview is a review sheet only, not a proposed application layout.
 
-This delivery intentionally changes assets/documentation only. Integrate selectively into the current layouts under #509, with before/after mobile and desktop screenshots, rather than rebuilding the artwork from prose.
+## App integration in this draft
+
+`src/components/illustrated-icon.tsx` provides the matching artwork inline as JSX. This avoids extra image requests for cached/offline pages. Keep its geometry synchronised with these source SVGs when editing either. The decorative component uses a cream backing for contrast in both themes, with a forced-colours override; visible destination labels remain the accessible names.
+
+- App launcher: illustrated destinations, 44px launcher button, larger link targets, current-page indication, closes after choosing a destination and supports Escape.
+- Farm menu: aligned icon/text/chevron tiles, with one clear title and supporting line; existing role filtering is preserved.
+- Farm bottom navigation: illustrations for Today, Map and Safety; familiar + and menu glyphs retained for Log and More. Existing safe-area space and active states remain.
+- Sales/Purchases: responsive destination lists with entire rows clickable, visible hover/focus and descriptive text.
+
+The website is not changed in this draft. Broader visual work remains in #509. Verify these screens in the authenticated app at phone and desktop widths before release.
