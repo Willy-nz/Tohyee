@@ -43,9 +43,9 @@ accepted.
 > Tohyee is free software provided as is, with no warranty (see the
 > [licence](LICENSE)).
 
-**Release availability, checked 30 October 2026:** the latest release is
-[v0.20.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.20.0)
-([notes](docs/releases/0.20.0.md)). Check the
+**Release availability, checked 31 October 2026:** the latest release is
+[v0.21.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.21.0)
+([notes](docs/releases/0.21.0.md)). Check the
 [latest release](https://github.com/Willy-nz/Tohyee/releases/latest) for what
 each download includes, or [run from source](#run-it-locally).
 
@@ -125,6 +125,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.21.0**](docs/releases/0.21.0.md) | Google Search Console in Analytics with a Website search report, and pictures to find your way: illustrated app switcher, Farm menu and tabs, and clearer Sales and Purchases pages. |
 | [**0.20.0**](docs/releases/0.20.0.md) | Tohyee for Android (APK) with locked-screen tractor recording, reminders and the phone's camera; paddock photos with AI cover estimates you accept, and a check against measured readings. |
 | [**0.19.0**](docs/releases/0.19.0.md) | Farm as its own app with tabs on every farm page, Use my location on every map, opt-in farm team locations, install steps for each browser, and no big Call 111 button. |
 | [**0.18.0**](docs/releases/0.18.0.md) | Effluent management, easy LINZ aerial photos, records that say what's known, phone app fixes, and a richer demo farm. Includes 0.15.0–0.17.0 (not published separately): Tohyee on your phone, tractor mode, farm safety, farm screens, Farm staff, passkeys, invites and Next.js security fixes. |
