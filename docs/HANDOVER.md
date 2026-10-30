@@ -173,6 +173,9 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.20.0 ready to publish from main** (30 Oct 2026): #504 (Android app) and
+  #505 (paddock photos). Publish only after the release PR has merged. The APK
+  is a test build until the Android signing secrets are added.
 - **0.19.0 ready to publish from main** (30 Oct 2026): #499 and #500 (#498).
   Jess publishes "Tohyee 0.19.0" on main with tag `v0.19.0` and pastes in
   `docs/releases/0.19.0.md`. Publish only after this release PR has merged,
