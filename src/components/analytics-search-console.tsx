@@ -6,7 +6,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, ui } from "@/components/ui";
 import type { GscSite, GscStatus } from "@/lib/analytics/search-console";
-import { GSC_POSITION_TEXT, GSC_SEARCH_TYPES, type GscSearchType } from "@/lib/analytics/search-console-reports";
+import { GSC_SEARCH_TYPES, type GscSearchType } from "@/lib/analytics/search-console-reports";
 import { tableDescription, tableLabel } from "@/lib/analytics/labels";
 import type { LoadRun } from "@/lib/analytics/sources";
 import { api, errorMessage } from "@/lib/client/api";
@@ -18,7 +18,7 @@ function rows(value: string | null): string {
   return value === null ? "" : Number(value).toLocaleString("en-NZ");
 }
 
-const PERMISSION: Record<string, string> = { siteOwner: "owner", siteFullUser: "full user", siteRestrictedUser: "restricted user" };
+const PERMISSION: Record<string, string> = { siteOwner: "an owner", siteFullUser: "a full user", siteRestrictedUser: "a restricted user" };
 
 /** What an admin sets up in Google Cloud first (decision 1180): the same app and return address as Google Analytics. */
 function CloudHelp({ callbackPath }: { callbackPath: string }) {
@@ -167,7 +167,7 @@ export function SearchConsoleCard({
             {connection.siteUrl ? (
               <>
                 <strong>{connection.siteLabel}</strong>
-                {connection.permissionLevel && PERMISSION[connection.permissionLevel] ? ` (you're a ${PERMISSION[connection.permissionLevel]})` : ""}
+                {connection.permissionLevel && PERMISSION[connection.permissionLevel] ? ` (you're ${PERMISSION[connection.permissionLevel]})` : ""}
                 {` · ${searchLabel}`}
               </>
             ) : (
@@ -198,8 +198,7 @@ export function SearchConsoleCard({
             <details style={{ overflowWrap: "anywhere" }}>
               <summary>View the {data.tables.length} tables and what the figures mean</summary>
               <p>Google keeps about 16 months of search data, and the newest days arrive 2 to 3 days late. The first load goes back as far as Google allows; after that each load fetches only the new days and the ones that may still change. Days Google has deleted stay in Tohyee until you disconnect.</p>
-              <p>{GSC_POSITION_TEXT}</p>
-              <dl>
+                            <dl>
                 {data.tables.map((table) => (
                   <div key={table}>
                     <dt>

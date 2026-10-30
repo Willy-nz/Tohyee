@@ -11,6 +11,7 @@ import {
   gscHistoryStart,
   gscLoadWindow,
   gscNumber,
+  gscPagePath,
   gscReadAllPages,
   gscRequestBody,
   gscRows,
@@ -143,6 +144,13 @@ describe("asking Google and reading its answers (decision 1181)", () => {
     expect(gscCountryName("aus")).toBe("Australia");
     expect(gscCountryName("USA")).toBe("United States");
     expect(gscCountryName("zzz")).toBe("Unknown region");
+    const pages = table("google_search_console_pages");
+    expect(gscRows(pages, [{ keys: ["2026-10-27", "https://www.example.co.nz/products/ring?colour=gold"], clicks: 1, impressions: 9, ctr: 0.1111, position: 2 }], "2026-10-28")[0].slice(1, 3)).toEqual([
+      "https://www.example.co.nz/products/ring?colour=gold",
+      "/products/ring?colour=gold",
+    ]);
+    expect(gscPagePath("https://www.example.co.nz")).toBe("/");
+    expect(gscPagePath("not an address")).toBe("not an address");
     expect(gscDeviceName("MOBILE")).toBe("Mobile");
     expect(gscDeviceName("DESKTOP")).toBe("Computer");
     expect(gscDeviceName("TABLET")).toBe("Tablet");

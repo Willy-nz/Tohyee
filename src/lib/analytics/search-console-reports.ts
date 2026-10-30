@@ -54,7 +54,7 @@ export type GscColumn = {
   name: string;
   type: GscColumnType;
   /** Where the value comes from: a dimension's key (by position), a metric, or worked out. */
-  from: "date" | "key" | "country" | "country_code" | "device" | "clicks" | "impressions" | "ctr" | "position" | "changing";
+  from: "date" | "key" | "page_path" | "country" | "country_code" | "device" | "clicks" | "impressions" | "ctr" | "position" | "changing";
 };
 export type GscTable = {
   table: string;
@@ -81,6 +81,7 @@ const metrics: GscColumn[] = [
 export const GSC_POSITION_TEXT =
   "Average position is where the site's highest link sat in Google's results, averaged over every time it was shown: 1 is the top result, 10 is usually the bottom of the first page. Lower is better.";
 const COMMON = `Google's days (Pacific time). Impressions: times a link to the site was shown in Google's results; clicks: times someone clicked it; click rate: clicks divided by impressions. ${GSC_POSITION_TEXT} The newest days may still change.`;
+const SAME = "Clicks, impressions, click rate and average position as in Website search by day.";
 
 /** The tables loaded, one row per day and value. */
 export const GSC_TABLES: GscTable[] = [
@@ -97,7 +98,7 @@ export const GSC_TABLES: GscTable[] = [
     table: "google_search_console_queries",
     label: "Website search queries",
     noun: "query rows",
-    description: `What people searched for when the site was shown, each day. Google leaves out searches made by very few people, to protect their privacy, so these add up to less than the daily totals. ${COMMON}`,
+    description: `What people searched for when the site was shown, each day. Google leaves out searches made by very few people, to protect their privacy, so these add up to less than the daily totals. ${SAME}`,
     dimensions: ["date", "query"],
     perDay: true,
     columns: [date, { name: "query", type: "VARCHAR", from: "key" }, ...metrics],
@@ -106,16 +107,16 @@ export const GSC_TABLES: GscTable[] = [
     table: "google_search_console_pages",
     label: "Website search pages",
     noun: "page rows",
-    description: `Which pages of the site were shown and clicked, each day. Counted per page, so a search that showed two pages counts for both, and these can add up to more than the daily totals. ${COMMON}`,
+    description: `Which pages of the site were shown and clicked, each day (the full address, and its path for charts). Counted per page, so a search that showed two pages counts for both, and these can add up to more than the daily totals. ${SAME}`,
     dimensions: ["date", "page"],
     perDay: true,
-    columns: [date, { name: "page", type: "VARCHAR", from: "key" }, ...metrics],
+    columns: [date, { name: "page", type: "VARCHAR", from: "key" }, { name: "page_path", type: "VARCHAR", from: "page_path" }, ...metrics],
   },
   {
     table: "google_search_console_countries",
     label: "Website search countries",
     noun: "country rows",
-    description: `Where the people searching were, each day. ${COMMON}`,
+    description: `Where the people searching were, each day. ${SAME}`,
     dimensions: ["date", "country"],
     perDay: true,
     columns: [date, { name: "country", type: "VARCHAR", from: "country" }, { name: "country_code", type: "VARCHAR", from: "country_code" }, ...metrics],
@@ -124,7 +125,7 @@ export const GSC_TABLES: GscTable[] = [
     table: "google_search_console_devices",
     label: "Website search devices",
     noun: "device rows",
-    description: `Whether people searched on a computer, phone or tablet, each day. ${COMMON}`,
+    description: `Whether people searched on a computer, phone or tablet, each day. ${SAME}`,
     dimensions: ["date", "device"],
     perDay: true,
     columns: [date, { name: "device", type: "VARCHAR", from: "device" }, ...metrics],
@@ -282,6 +283,16 @@ export function gscCountryName(code: string): string {
   return regionNames?.of(alpha2) ?? alpha2;
 }
 
+/** A page's path ("/kitchens") from its full address, for short chart labels; anything that isn't an address as it came. */
+export function gscPagePath(page: string): string {
+  try {
+    const url = new URL(page);
+    return `${url.pathname}${url.search}` || "/";
+  } catch {
+    return page;
+  }
+}
+
 /** Google's device ("MOBILE") in plain words ("Mobile"). */
 export function gscDeviceName(device: string): string {
   const known: Record<string, string> = { DESKTOP: "Computer", MOBILE: "Mobile", TABLET: "Tablet" };
@@ -314,6 +325,8 @@ export function gscRows(table: GscTable, rows: NonNullable<GscResponse["rows"]>,
           return day;
         case "key":
           return keys[1].slice(0, 2000);
+        case "page_path":
+          return gscPagePath(keys[1]).slice(0, 2000);
         case "country":
           return gscCountryName(keys[1]);
         case "country_code":

@@ -10893,7 +10893,8 @@ property**.
       pages (`_pages`), countries (`_countries`) and devices (`_devices`).
       Columns have plain names: clicks, impressions, click rate (clicks
       over impressions), average position and "may still change"; queries
-      as searched, pages as full addresses, countries by name with Google's
+      as searched, pages as full addresses with their path beside (for
+      short chart labels), countries by name with Google's
       three-letter code beside (`nzl`, New Zealand; Google's `zzz` is
       "Unknown region"), devices as Computer, Mobile and Tablet. The tables
       and the help say what average position means: where the site's
@@ -10969,7 +10970,10 @@ property**.
       as Google works it out, never an average of daily figures. Offered
       once the Search Console tables are loaded. A text tile says the data
       is 2-3 days late, what may still change, what position means and
-      that rare searches are left out.
+      that rare searches are left out. So the table shows click rate as a
+      percentage, a table tile's cells now use the tile's own number format
+      for each value when it has one (as its key figures and charts
+      already did), else the field's.
 1187. **Setup help.** Data sources links to a help page (Analytics › Data
       sources › How to add your website): adding a Domain property
       (verified by a DNS TXT record) or a URL-prefix property (verified by

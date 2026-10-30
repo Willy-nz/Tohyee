@@ -276,7 +276,7 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
       }),
     );
     tiles.push(tile("Top searches", "bar", "half", question("google_search_console_queries", [clicks], { groupBy: { field: "query" }, ...byValue, limit: 10 }), { format: whole() }));
-    tiles.push(tile("Top pages", "bar", "half", question("google_search_console_pages", [clicks], { groupBy: { field: "page" }, ...byValue, limit: 10 }), { format: whole() }));
+    tiles.push(tile("Top pages", "bar", "half", question("google_search_console_pages", [clicks], { groupBy: { field: "page_path" }, ...byValue, limit: 10 }), { format: whole() }));
     tiles.push(
       tile("Shown a lot, rarely clicked", "table", "full", question("google_search_console_queries", [impressions, clicks, clickRate, position], { groupBy: { field: "query" }, ...byValue, limit: 20 }), {
         format: {
