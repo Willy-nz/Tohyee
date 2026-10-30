@@ -11,6 +11,7 @@ import { parseTunnelToken } from "@/lib/remote/settings";
 import { addressServiceUrl, DEFAULT_ADDRESS_SERVICE } from "@/lib/remote/address-service";
 import { setTunnelCommandForTests, stopTunnel } from "@/lib/remote/tunnel";
 import { coreQuery } from "@/lib/db/transactions";
+import { decryptSecret } from "@/lib/secrets";
 import { apiRequest, createTestUser, describeWithDatabase, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
 
 const noContext = undefined as unknown;
@@ -85,7 +86,12 @@ describeWithDatabase("remote access: a Tohyee address, your own domain (Cloudfla
     // cloudflared is told where Tohyee is, for tunnels without routes of their own (Connect to Cloudflare's).
     expect(state.tunnel.log.some((line) => /url=http:\/\/127\.0\.0\.1:\d+$/.test(line))).toBe(true);
     const stored = await coreQuery<{ secret_ciphertext: string }>("select secret_ciphertext from server_settings where key = 'remote_access'");
-    expect(stored.rows[0].secret_ciphertext).not.toContain("eyJ");
+    // Stored encrypted: neither the token nor any long piece of it appears, and decrypting gives it back.
+    // (Checking for a short prefix such as "eyJ" failed now and then, since base64 ciphertext can contain it by chance.)
+    const ciphertext = stored.rows[0].secret_ciphertext;
+    expect(ciphertext).not.toContain(token("c2VjcmV0"));
+    expect(ciphertext).not.toContain(token("c2VjcmV0").slice(0, 24));
+    expect(JSON.parse(decryptSecret(ciphertext))).toMatchObject({ tunnelToken: token("c2VjcmV0") });
     // Emailed links use the public address, not whatever Host a request claims.
     expect(await publicOrigin(apiRequest("/x", { origin: "https://evil.example" }))).toBe("https://books.example.nz");
 
