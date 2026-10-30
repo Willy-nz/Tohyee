@@ -3,8 +3,8 @@
   "items": [
     {
       "date": "2026-10-31",
-      "title": "Tohyee 0.21.0: pictures to find your way",
-      "body": "New: drawn icons in the app switcher, the Farm menu and the phone's Farm tabs, and clearer Sales and Purchases pages.",
+      "title": "Tohyee 0.21.0: Google Search Console and pictures to find your way",
+      "body": "New: Google Search Console in Analytics with a Website search report, and drawn icons in the app switcher, the Farm menu and the phone's Farm tabs.",
       "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.21.0"
     },
     {
