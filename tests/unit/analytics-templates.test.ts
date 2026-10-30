@@ -3,6 +3,7 @@ import { buildTemplate, lastTwelveMonths, TEMPLATES } from "@/lib/analytics/temp
 import { parseTileQuery, type ColumnInfo } from "@/lib/analytics/query";
 import { parseChartFormat } from "@/lib/analytics/chart-format";
 import { GA_REPORTS } from "@/lib/analytics/google-analytics-reports";
+import { GSC_TABLES, gscTableColumns } from "@/lib/analytics/search-console-reports";
 
 const cols = (spec: string): ColumnInfo[] => spec.split(" ").map((entry) => {
   const [name, type] = entry.split(":");
@@ -19,6 +20,8 @@ const BOOKS = [
   { name: "tohyee_farm_fertiliser_applications", columns: cols("application_id:BIGINT paddock:VARCHAR product:VARCHAR applied_on:DATE tonnes:DECIMAL(18,3)") },
   // Google Analytics' tables, for the Website template (decision 609).
   ...GA_REPORTS.map((report) => ({ name: report.table, columns: report.columns.map((column) => ({ name: column.name, type: column.type })) })),
+  // Google Search Console's, for the Website search template (decision 1186).
+  ...GSC_TABLES.map((table) => ({ name: table.table, columns: gscTableColumns(table) })),
 ];
 
 describe("report templates (#337)", () => {

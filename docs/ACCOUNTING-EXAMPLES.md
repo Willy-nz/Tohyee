@@ -19573,6 +19573,82 @@ Tests: `tests/integration/analytics-google-analytics.test.ts` (GA1-GA8)
 and `tests/unit/analytics-google-analytics.test.ts` (GA3-GA5, the Website
 template).
 
+## Analytics: a website's Google Search Console data (GSC1-GSC9; built by Claude 31 Oct 2026 for #512, as Looker Studio's Search Console connector and Google's Search Console API pages describe, not yet reviewed)
+
+Not accounting: a data source for Analytics, so a website's Google search
+figures can be charted. Decisions 1180-1189. Made-up figures for a small
+shop's website, Paw Prints (`sc-domain:pawprints.example`), 26-31 October
+2026. Google is a canned fake in the tests; nothing here has been tried
+against a real Search Console property.
+
+- **GSC1 Signing in.** An admin chooses Google Search Console in Data
+  sources › Add data source and signs in through the organisation's Google
+  app. Google is asked for `openid
+  https://www.googleapis.com/auth/userinfo.email
+  https://www.googleapis.com/auth/webmasters.readonly`, offline, returning
+  to `/api/analytics/google/callback` (Google Analytics' address). The
+  browser comes back to `/analytics/sources?googleSearchConsole=connected`;
+  using the link again says it expired, on the Search Console card. A
+  Search Console link can't finish a Google Analytics sign-in. Tokens are
+  stored encrypted; Google Analytics stays unconnected. A viewer can't
+  start it; with the Search Console box unticked nothing is stored.
+- **GSC2 Choosing the property.** Google lists `https://www.pawprints.example/`
+  (full user), `sc-domain:pawprints.example` (owner) and
+  `https://old.pawprints.example/` (unverified). Offered: "pawprints.example
+  (whole domain)" first, then the URL-prefix one; the unverified one can't
+  be saved, nor a search type of "discover". Viewers and report viewers
+  can't list them.
+- **GSC3 The first load.** On 31 October 2026 (1pm in California, 9am 1
+  November in New Zealand: Google's day is 31 October), the first load asks
+  for daily totals from 30 June 2025 to 31 October 2026 in one question
+  (`dimensions ["date"]`, `type "web"`, `dataState "all"`, `rowLimit
+  25000`), then each of the 489 days on its own for queries, pages,
+  countries and devices: 1,957 questions, to
+  `.../sites/sc-domain%3Apawprints.example/searchAnalytics/query`.
+- **GSC4 The next day.** On 1 November only 28 October to 1 November are
+  asked for (28 October was the first day that might change), 1 + 5 x 4
+  questions. Google has finished 29 October: its clicks go from 9 to 15 in
+  the daily table and the queries; 26-28 October are kept as they were;
+  no day is in a table twice. Now 29 October onwards may still change (1
+  November less three days).
+- **GSC5 What's loaded.** 26 October: 10 clicks, 300 impressions, click
+  rate 0.033333, average position 6.50. "nose print ring": 400 impressions,
+  no clicks, position 9.50. Google's `nzl` and `aus` become New Zealand and
+  Australia (codes kept beside); `MOBILE` and `DESKTOP` become Mobile and
+  Computer. On 31 October, days from 28 October (31 October less three;
+  Google's first incomplete day, 30 October, is later) are marked "may
+  still change". A ctr of 0.03529411764705882 is stored as 0.035294 and a
+  position of 4.538235294117647 as 4.54.
+- **GSC6 Google's limits.** A 429 then a 503: waited out and retried, and
+  the load works. On the URL-prefix property's first load, every try at 30
+  June 2026's queries gets "load quota exceeded" (403, `quotaExceeded`):
+  four tries, then the load fails saying the limit is used up and "Days up
+  to 29 Jun 2026 are loaded; the next load carries on from 30 Jun 2026".
+  The next load asks from 30 June 2026 and fills in to 31 October. An
+  account that can't read the property, and the API turned off, each say
+  so and change nothing.
+- **GSC7 The sign-in runs out.** `invalid_grant` on refreshing: the load
+  fails saying an admin needs to connect again, and the nightly load skips
+  it. Connecting again keeps the property and the days loaded; the next
+  nightly load runs.
+- **GSC8 Disconnecting.** Deletes the sign-in and drops every
+  `google_search_console_*` table; the load history stays. While Google
+  Analytics is connected with the same Google account
+  (jess@pawprints.example), Google isn't asked to withdraw the sign-in;
+  without it, it is. Viewers can't disconnect.
+- **GSC9 The Website search report.** Over 1-31 October with the
+  URL-prefix property loaded: clicks 44, impressions 1,320, click rate
+  44 / 1,320 = 3.3%; average position (6.50 x 1,320) / 1,320 = 6.5. "Shown
+  a lot, rarely clicked" lists "nose print ring" first (2,400
+  impressions, no clicks), then "paw print necklace", then "pet keepsake
+  jewellery nz". A viewer can read the tiles; a report viewer it isn't
+  shared with gets "not found". The freshness line says data up to 31
+  October and from which day Google may still change it.
+
+Tests: `tests/integration/analytics-search-console.test.ts` (GSC1-GSC9)
+and `tests/unit/analytics-search-console.test.ts` (GSC3-GSC5, the
+freshness line and the Website search template).
+
 ## My mail: an Owner's private copy of their own mail (PM1-PM29; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
 
 Not accounting: a private store of an Owner's own email, for them and
