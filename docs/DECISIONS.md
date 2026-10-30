@@ -10854,3 +10854,143 @@ figures read by the connected AI) and the existing photo and reading rules:
       a file exported from Pasture.io (or any app) comes in through
       Pasture and feed › Import readings with its method chosen, and those
       readings are compared like any others.
+
+### Google Search Console as an Analytics source (#512; decisions 1180-1189)
+
+Jess (31 October 2026): "Yes" to building Google Search Console in Tohyee
+for her shop's website, as issue #512 describes. The details below weren't
+answered by Jess. They follow the issue, Google Analytics' rules
+(decisions 606-609), Google's Search Console API pages (read 31 October
+2026) and Looker Studio's Search Console connector, so they're **not yet
+reviewed**. Examples GSC1-GSC9, tenant migration 0210. Tested only against
+a fake Google: it **hasn't been tried with a real Search Console
+property**.
+
+1180. **Signing in: Google Analytics' app and return address, its own
+      connection.** An admin or owner signs in through the organisation's
+      Google app (Settings › Email), returning to the same address as
+      Google Analytics (`/api/analytics/google/callback`), so nothing new
+      has to be added to the app's redirect URIs. Tohyee asks only for
+      `webmasters.readonly` (read Search Console, never change it), plus
+      `openid` and `userinfo.email` to show who connected; a sign-in with
+      the Search Console box unticked is refused. Each one-time state says
+      which connection it's for, so one return address finishes either
+      sign-in and a Search Console state can't finish a Google Analytics
+      one. It's a separate connection from Google Analytics (its own row,
+      tokens and disconnect), and can use a different Google account; one
+      sign-in for both was turned down because disconnecting one would end
+      the other. Who can do what is as Google Analytics: admins and owners
+      connect, choose, refresh and disconnect; everyone in the organisation
+      sees that it's connected, the property and the last load; only
+      admins see the Google address; report viewers see none of it, and
+      only shared reports' tiles (the access contract, decision 697). After
+      signing in, the admin chooses one property from Google's list of the
+      account's sites; unverified ones (`siteUnverifiedUser`) aren't
+      offered, domain properties (`sc-domain:`) come first, and only a
+      listed property can be saved.
+1181. **What's loaded.** Five tables, every one by day: website search by
+      day (`google_search_console_daily`), search queries (`_queries`),
+      pages (`_pages`), countries (`_countries`) and devices (`_devices`).
+      Columns have plain names: clicks, impressions, click rate (clicks
+      over impressions), average position and "may still change"; queries
+      as searched, pages as full addresses, countries by name with Google's
+      three-letter code beside (`nzl`, New Zealand; Google's `zzz` is
+      "Unknown region"), devices as Computer, Mobile and Tablet. The tables
+      and the help say what average position means: where the site's
+      highest link sat, averaged over every time it was shown, 1 the top
+      and lower better (Google's Performance report help). Google's numbers
+      come as JSON numbers; each is turned into an exact decimal from its
+      shortest text, without arithmetic on it: counts as whole numbers,
+      click rate to 6 places, position to 2. Search type is web by default;
+      images, videos and the News tab can be chosen instead (one at a
+      time); Discover and Google News aren't offered, as they don't report
+      by search query. Google leaves out rare searches for privacy, so the
+      query table adds up to less than the daily totals, and pages are
+      counted per page; the descriptions say so. The
+      `google_search_console_` prefix is kept for these tables.
+1182. **History and incremental loads.** Google keeps 16 months, so the
+      first load asks from the same day 16 months ago (31 Oct 2026 gives 30
+      Jun 2025) to today. Days are Google's own, in Pacific time. After
+      that each load asks only from the first day that may still change
+      (decision 1183) or the day after the last one loaded, whichever is
+      earlier, to today, never before what Google still has. Those days are
+      replaced in every table together (one DuckDB transaction); days
+      before them are kept, including days Google has since deleted, until
+      disconnecting. Daily totals are one question over the whole span (a
+      row a day); queries, pages, countries and devices are asked one day
+      at a time, as Google's "Getting all your data" guide advises (they're
+      the costly questions, and Google gives at most 50,000 rows a day),
+      four days at once, oldest first. Each question asks for 25,000 rows
+      (Google's most) and moves `startRow` on by what came; a page with
+      fewer rows than asked for is taken as the last. Google's guide asks
+      again until a page is empty; Tohyee doesn't make that extra request
+      for every day, and that's a judgement, not something Google says. The
+      first load is about 2,000 requests and can take a few minutes; the
+      screen says so. Loaded nightly after 4am (switchable off) and by
+      Refresh now, in the load history as "Google Search Console".
+1183. **The newest days are marked "may still change" and fetched again.**
+      Google's data is usually 2-3 days late, and with `dataState: "all"`
+      it includes days it's still counting and says from which day
+      (`firstIncompleteDate`). A day may still change if it's today or one
+      of the three days before it, or on or after Google's first incomplete
+      day if that's earlier. Those rows have `may_still_change` true, every
+      load fetches them again, and the report's freshness line says
+      "Google may still change the days from 28 Oct 2026".
+1184. **Google's limits: waits, then keep what's whole.** Google allows
+      1,200 questions a minute per site and user, and a load budget per 10
+      minutes and per day (its Usage limits page). A quota or rate answer
+      (429, or 403 with a quota or rate reason) and 500 or 503 are tried
+      again after 5, 15 and 45 seconds. If it still fails, no new days are
+      started; the whole days before the first failed one are saved in
+      every table, the load is marked failed with "Days up to 29 Jun 2026
+      are loaded; the next load carries on from 30 Jun 2026", and the
+      nightly load tries again an hour later. Google's advice to wait 15
+      minutes for the 10-minute budget isn't done inside a load (a person
+      may be waiting on Refresh now). An account that can't read the
+      property, and the Search Console API not enabled in the Google Cloud
+      project, each get their own message and change nothing.
+1185. **Sign-in ending and disconnecting: as Google Analytics.** When
+      Google refuses the stored sign-in (expired, withdrawn, or seven days
+      old while the app is in Testing), the connection is marked to connect
+      again and the nightly load leaves it alone; connecting again keeps
+      the property and what's loaded. Disconnecting deletes the tokens and
+      the connection, asks Google to withdraw the sign-in (decision 1188),
+      and drops every `google_search_console_*` table; the load history
+      stays, and it's refused while a shaped table is built from the data
+      or a load is running.
+1186. **A Website search report template.** Clicks and impressions (against
+      the previous period), click rate and average position as key
+      figures; clicks and impressions by week; top searches and top pages
+      by clicks; "Shown a lot, rarely clicked", the 20 searches shown most
+      with their clicks, click rate and position, a click rate under 2% in
+      red; clicks by country and by device. Click rate over any period is
+      total clicks over total impressions, and average position is weighted
+      by impressions (position × impressions, added up, over impressions),
+      as Google works it out, never an average of daily figures. Offered
+      once the Search Console tables are loaded. A text tile says the data
+      is 2-3 days late, what may still change, what position means and
+      that rare searches are left out.
+1187. **Setup help.** Data sources links to a help page (Analytics › Data
+      sources › How to add your website): adding a Domain property
+      (verified by a DNS TXT record) or a URL-prefix property (verified by
+      the HTML meta tag), the Shopify routes (the meta tag in
+      `theme.liquid` through Online Store › Themes › Edit code, kept there
+      and in any new theme; or a TXT record in Settings › Domains for a
+      domain bought through Shopify), that Shopify makes `/sitemap.xml`
+      itself, submitting it under Sitemaps, and that a new property has no
+      figures for a few days. The connector's own help says what an admin
+      turns on in Google Cloud: the Google Search Console API and the
+      `webmasters.readonly` scope on the consent screen. The Shopify menu
+      names were written from Shopify's admin as it's commonly described,
+      not checked in a live Shopify admin.
+1188. **Not withdrawn at Google while the other connection uses the same
+      account.** Withdrawing a sign-in at Google can end everything that
+      Google account allowed the organisation's Google app, so
+      disconnecting Search Console doesn't ask Google to withdraw it while
+      Google Analytics is connected with the same Google account, and the
+      other way round. Tohyee's own copy of the tokens is deleted either
+      way.
+1189. **A new property or search type starts again.** Choosing another
+      property or search type forgets what was loaded and drops the tables
+      (the old figures would mix with the new), then loads from 16 months
+      back. The screen warns before saving.

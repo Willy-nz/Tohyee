@@ -11,6 +11,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useWorkspace } from "@/components/workspace";
 import { ReportEmailsCard } from "@/components/analytics-report-emails";
 import { GoogleAnalyticsCard } from "@/components/analytics-google-analytics";
+import { SearchConsoleCard } from "@/components/analytics-search-console";
 import { useSearchParams } from "next/navigation";
 import type { ColumnKind, InspectedColumn, SourceFile } from "@/lib/analytics/engine";
 import { tableLabel } from "@/lib/analytics/labels";
@@ -72,8 +73,13 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
   const params = useSearchParams();
   const googleReturn = params.get("googleAnalytics");
   const returned = googleReturn ? { ok: googleReturn === "connected", message: googleReturn === "connected" ? "Signed in with Google. Choose the property to load." : (params.get("message") ?? "Connecting didn't work.") } : null;
-  const [tab, setTab] = useState<"sources" | "connect" | "history">(googleReturn ? "connect" : "sources");
-  const [connector, setConnector] = useState<Connector | null>(googleReturn ? "google-analytics" : null);
+  // Back from signing in to Search Console (decision 1180): the same, for its connector.
+  const searchReturn = params.get("googleSearchConsole");
+  const searchReturned = searchReturn
+    ? { ok: searchReturn === "connected", message: searchReturn === "connected" ? "Signed in with Google. Choose the Search Console property to load." : (params.get("message") ?? "Connecting didn't work.") }
+    : null;
+  const [tab, setTab] = useState<"sources" | "connect" | "history">(googleReturn || searchReturn ? "connect" : "sources");
+  const [connector, setConnector] = useState<Connector | null>(googleReturn ? "google-analytics" : searchReturn ? "google-search-console" : null);
   const [search, setSearch] = useState("");
   const [setUp, setSetUp] = useState<{ file: string; source?: AnalyticsSource } | null>(null);
   const [databaseEdit, setDatabaseEdit] = useState<AnalyticsSource | null>(null);
@@ -113,7 +119,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
           This organisation doesn&apos;t have an analytics folder yet. A server admin chooses it on the server computer, in the
           server settings under Analytics folders. Tohyee only reads files in that folder.
         </Notice>
-      ) : tab === "connect" && connector && connector !== "books" && connector !== "google-analytics" && !isDatabaseConnector(connector) && !data.folder.readable ? (
+      ) : tab === "connect" && connector && connector !== "books" && connector !== "google-analytics" && connector !== "google-search-console" && !isDatabaseConnector(connector) && !data.folder.readable ? (
         <Notice tone="error">Tohyee can&apos;t open this organisation&apos;s analytics folder. A server admin needs to check it still exists.</Notice>
       ) : null}
 
@@ -180,6 +186,8 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
 
       {tab === "connect" && connector === "google-analytics" ? <GoogleAnalyticsCard key={`ga-${organisationId}`} organisationId={organisationId} canManage={data.canManage} returned={returned} onChanged={overview.reload} /> : null}
       {tab === "sources" ? <GoogleAnalyticsCard key={`ga-list-${organisationId}`} organisationId={organisationId} canManage={data.canManage} onlyIfConnected onChanged={overview.reload} /> : null}
+      {tab === "connect" && connector === "google-search-console" ? <SearchConsoleCard key={`gsc-${organisationId}`} organisationId={organisationId} canManage={data.canManage} returned={searchReturned} onChanged={overview.reload} /> : null}
+      {tab === "sources" ? <SearchConsoleCard key={`gsc-list-${organisationId}`} organisationId={organisationId} canManage={data.canManage} onlyIfConnected onChanged={overview.reload} /> : null}
 
       {tab === "connect" && connector === "email" && data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
 

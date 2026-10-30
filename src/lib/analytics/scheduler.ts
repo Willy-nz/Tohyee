@@ -7,6 +7,8 @@ import { BOOKS_TABLE_NAME, refreshBooks } from "@/lib/analytics/books";
 import { type LoadRun, runLoad } from "@/lib/analytics/sources";
 import { gaLoadsNightly, refreshGa } from "@/lib/analytics/google-analytics";
 import { GA_LOAD_TABLE_NAME } from "@/lib/analytics/google-analytics-reports";
+import { gscLoadsNightly, refreshGsc } from "@/lib/analytics/search-console";
+import { GSC_LOAD_TABLE_NAME } from "@/lib/analytics/search-console-reports";
 import { getOrganisation } from "@/lib/organisations/registry";
 
 /**
@@ -37,6 +39,7 @@ export function loadDue(now: Date, runs: Recent[], loadTime = LOAD_TIME): boolea
 }
 
 const GA_DUE = "google-analytics";
+const GSC_DUE = "google-search-console";
 let running = false;
 
 /** Loads whatever is due across every organisation with analytics on. Returns what it did. */
@@ -88,6 +91,15 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
               );
               if (loadDue(now, ga.rows.map((run) => ({ status: run.status, trigger: run.trigger, startedAt: new Date(run.started_at) })))) due.push(GA_DUE);
             }
+            // Google Search Console (decision 1182): nightly too, only the new and changing days.
+            if (await gscLoadsNightly(tx)) {
+              const gsc = await tx.query<{ status: string; trigger: string; started_at: Date }>(
+                `select status, trigger, started_at from analytics_load_runs
+                  where source_id is null and table_name = $1 and started_at > now() - interval '2 days'`,
+                [GSC_LOAD_TABLE_NAME],
+              );
+              if (loadDue(now, gsc.rows.map((run) => ({ status: run.status, trigger: run.trigger, startedAt: new Date(run.started_at) })))) due.push(GSC_DUE);
+            }
             return due.concat(sources.rows
               .map((source) => source.id)
               .filter((sourceId) =>
@@ -108,7 +120,9 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
                 ? await refreshBooks(organisation, SCHEDULE_ACTOR, "schedule")
                 : sourceId === GA_DUE
                   ? await refreshGa(organisation, SCHEDULE_ACTOR, "schedule")
-                  : await runLoad(organisation, SCHEDULE_ACTOR, sourceId, "schedule");
+                  : sourceId === GSC_DUE
+                    ? await refreshGsc(organisation, SCHEDULE_ACTOR, "schedule")
+                    : await runLoad(organisation, SCHEDULE_ACTOR, sourceId, "schedule");
             made.push(run);
             if (run.status === "failed") console.warn(`[tohyee] Analytics load of ${run.sourceName} (${id}) failed: ${run.error}`);
           } catch (error) {

@@ -6,12 +6,13 @@ import type { ColumnInfo, Filter, Measure, TileQuery } from "@/lib/analytics/que
 /**
  * Ready-made reports (#337, decision 597): Business overview, Sales and
  * customers, Profit and loss, CRM pipeline and Farm; and Website, over the
- * Google Analytics tables (decision 609). Each is a dashboard of
+ * Google Analytics tables (decision 609); and Website search, over the
+ * Google Search Console tables (decision 1186). Each is a dashboard of
  * ordinary tiles over the books copy, so everything can be changed after.
  * A template is offered only when the tables it needs are loaded.
  */
 
-export type TemplateId = "overview" | "sales" | "profit" | "crm" | "farm" | "website";
+export type TemplateId = "overview" | "sales" | "profit" | "crm" | "farm" | "website" | "search";
 export type TableInfo = { name: string; columns: ColumnInfo[] };
 
 export const TEMPLATES: Array<{ id: TemplateId; name: string; description: string; needs: string[] }> = [
@@ -25,6 +26,12 @@ export const TEMPLATES: Array<{ id: TemplateId; name: string; description: strin
     name: "Website",
     description: "Visitors, sessions and page views from Google Analytics by month, where they came from, top pages and devices, beside invoiced sales.",
     needs: ["google_analytics_daily", "google_analytics_traffic", "google_analytics_pages", "google_analytics_devices"],
+  },
+  {
+    id: "search",
+    name: "Website search",
+    description: "How the website does in Google search, from Search Console: clicks and impressions over time, top searches and pages, searches shown a lot but rarely clicked, countries and devices.",
+    needs: ["google_search_console_daily", "google_search_console_queries", "google_search_console_pages", "google_search_console_countries", "google_search_console_devices"],
   },
 ];
 
@@ -237,6 +244,53 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
         format: { donutTotal: true, series: [{ number: { style: "plain", decimals: 0 } }] },
       }),
     );
+  }
+
+  if (id === "search") {
+    // Google Search Console (decision 1186). Click rate and average position over many rows are
+    // worked out from the sums (impressions-weighted, as Google does), never by averaging daily rates.
+    const daily = "google_search_console_daily";
+    const clicks: Measure = { label: "Clicks", aggregate: "sum", field: "clicks" };
+    const impressions: Measure = { label: "Impressions", aggregate: "sum", field: "impressions" };
+    const clickRate: Measure = { label: "Click rate", aggregate: "formula", formula: "[Clicks] / [Impressions]", inputs: [{ name: "Clicks", aggregate: "sum", field: "clicks" }, { name: "Impressions", aggregate: "sum", field: "impressions" }] };
+    const position: Measure = {
+      label: "Average position",
+      aggregate: "formula",
+      formula: "[Position x impressions] / [Impressions]",
+      inputs: [{ name: "Position x impressions", aggregate: "sum", field: "average_position", times: "impressions" }, { name: "Impressions", aggregate: "sum", field: "impressions" }],
+    };
+    const whole = (suffix?: string): ChartFormat => ({ series: [{ number: { style: "plain", decimals: 0, ...(suffix ? { suffix } : {}) } }] });
+    const byValue = { sort: { by: "value" as const, direction: "desc" as const }, dateField: "date" };
+    tiles.push(tile("Website search", "text", "full", null, {
+      text: "From Google Search Console, loaded nightly. Google's days are Pacific time, its data arrives 2 to 3 days late, and the newest days may still change until Google has finished counting them; Tohyee fetches them again each load. Impressions are the times a link to the site was shown in Google's results; click rate is clicks divided by impressions. Average position is where the site's highest link sat, averaged over every time it was shown: 1 is the top, 10 is usually the bottom of the first page, and lower is better. Google leaves out searches made by very few people, so the searches below add up to less than the totals.",
+    }));
+    tiles.push(tile("Clicks", "kpi", "quarter", question(daily, [{ ...clicks, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole("clicks") }));
+    tiles.push(tile("Impressions", "kpi", "quarter", question(daily, [{ ...impressions, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole("impressions") }));
+    tiles.push(tile("Click rate", "kpi", "quarter", question(daily, [clickRate], { dateField: "date" }), { format: { series: [{ number: { style: "percent", decimals: 1 } }] } }));
+    tiles.push(tile("Average position", "kpi", "quarter", question(daily, [position], { dateField: "date" }), {
+      format: { series: [{ number: { style: "plain", decimals: 1 } }], kpi: { downIsGood: true } },
+    }));
+    tiles.push(
+      tile("Clicks and impressions by week", "combo", "full", question(daily, [clicks, impressions], { groupBy: { field: "date", grain: "week" }, dateField: "date" }), {
+        format: { series: [{ as: "bar", number: { style: "plain", decimals: 0 } }, { as: "line", axis: "right", number: { style: "plain", decimals: 0 } }], rightAxis: { title: "Impressions" } },
+      }),
+    );
+    tiles.push(tile("Top searches", "bar", "half", question("google_search_console_queries", [clicks], { groupBy: { field: "query" }, ...byValue, limit: 10 }), { format: whole() }));
+    tiles.push(tile("Top pages", "bar", "half", question("google_search_console_pages", [clicks], { groupBy: { field: "page" }, ...byValue, limit: 10 }), { format: whole() }));
+    tiles.push(
+      tile("Shown a lot, rarely clicked", "table", "full", question("google_search_console_queries", [impressions, clicks, clickRate, position], { groupBy: { field: "query" }, ...byValue, limit: 20 }), {
+        format: {
+          series: [{ number: { style: "plain", decimals: 0 } }, { number: { style: "plain", decimals: 0 } }, { number: { style: "percent", decimals: 1 } }, { number: { style: "plain", decimals: 1 } }],
+          // A click rate under 2% stands out: these searches show the site often but people choose other results.
+          conditional: [{ value: 2, apply: "font", by: "rules", rules: [{ op: "<", value: "0.02", color: "#c0392b" }] }],
+          card: { subtitle: "The searches the site was shown for most. Red: under 2% clicked, so a clearer page title or description in Google's results may help." },
+        },
+      }),
+    );
+    tiles.push(tile("Clicks by country", "bar", "two-thirds", question("google_search_console_countries", [clicks], { groupBy: { field: "country" }, ...byValue, limit: 10 }), { format: whole() }));
+    tiles.push(tile("Clicks by device", "donut", "third", question("google_search_console_devices", [clicks], { groupBy: { field: "device" }, ...byValue }), {
+      format: { donutTotal: true, series: [{ number: { style: "plain", decimals: 0 } }] },
+    }));
   }
 
   return { name: template.name, description: template.description, settings, tiles };

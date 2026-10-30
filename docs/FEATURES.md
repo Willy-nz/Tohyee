@@ -2365,6 +2365,30 @@ that something happened.
   the consent screen and `/api/analytics/google/callback` to the redirect
   URIs; while the app is in Testing, Google ends sign-ins after 7 days.
   Tested with canned Google responses only, not a real GA4 property.
+- **Analytics: Google Search Console for websites** (#512, decisions
+  1180-1189, examples GSC1-GSC9, tenant migration 0210). In Data sources ›
+  Add data source › Google Search Console, an admin signs in with Google
+  (the same Google app and return address as Google Analytics, asking only
+  to read Search Console), chooses one verified property (a whole domain
+  or a URL prefix) and a search type (web by default), and Tohyee loads
+  five daily tables: website search by day, search queries, pages,
+  countries and devices, each with clicks, impressions, click rate and
+  average position (explained in plain words). The first load goes back
+  16 months, as far as Google keeps; after that each load (nightly, or
+  Refresh now) fetches only new days and the newest days again, which are
+  marked "may still change" because Google is 2-3 days behind and still
+  counting them; a report's freshness line says from which day. Google's
+  limits are waited out and retried; if they last, the whole days already
+  read are kept and the next load carries on. Disconnecting deletes the
+  sign-in and the tables. A **Website search** report template shows
+  clicks and impressions over time, top searches and pages, searches shown
+  a lot but rarely clicked, countries and devices. A help page explains
+  adding and verifying a site in Search Console (DNS for a domain, or the
+  meta tag in a Shopify theme's `theme.liquid`), submitting Shopify's
+  `/sitemap.xml`, and why a new property has no data for a few days. In
+  Google Cloud, enable the Google Search Console API and add the
+  `webmasters.readonly` scope. Tested with a fake Google only; it hasn't
+  been tried with a real Search Console property.
 - **Analytics: safe report editing** (#387, decisions 690-691, tenant
   migration 0178). While a report is being edited, every change (adding,
   changing, moving, duplicating or removing tiles, pasting a format, the

@@ -16,7 +16,7 @@ import {
 import { runBuiltQuery } from "@/lib/analytics/engine";
 import { hiddenFarmTables, requireAnalyticsTable } from "@/lib/analytics/farm-access";
 import { FILTER_OPS } from "@/lib/analytics/filters";
-import { combineFreshness, dataThroughSql, reportLoadFacts, tileDateFields } from "@/lib/analytics/freshness";
+import { combineFreshness, dataThroughSql, mayChangeSql, reportLoadFacts, tileDateFields } from "@/lib/analytics/freshness";
 import { readDashboardImage } from "@/lib/analytics/images";
 import { loadModel } from "@/lib/analytics/model";
 import { reportPages, tilePage } from "@/lib/analytics/pages";
@@ -74,8 +74,18 @@ export function freshnessRead(run: OrganisationRunner) {
     });
     // The latest dates are read from the analytics file, outside the transaction.
     const through = new Map<string, string | null>();
+    const changing = new Map<string, string | null>();
     for (const table of facts.flatMap((fact) => fact.tables)) {
       if (hidden.has(table)) continue;
+      // Search Console's newest days may still change (decision 1183).
+      const changingSql = mayChangeSql(table);
+      if (changingSql) {
+        try {
+          changing.set(table, (await runBuiltQuery(organisationId, changingSql, []))[0]?.changing ?? null);
+        } catch {
+          changing.set(table, null);
+        }
+      }
       const sql = dataThroughSql(table, tileDateFields(dashboard, table));
       if (!sql) continue;
       try {
@@ -85,7 +95,7 @@ export function freshnessRead(run: OrganisationRunner) {
         through.set(table, null);
       }
     }
-    return json(combineFreshness(facts, through));
+    return json(combineFreshness(facts, through, changing));
   };
 }
 
