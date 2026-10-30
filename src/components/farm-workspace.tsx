@@ -440,7 +440,7 @@ type MoreLink = { icon?: IllustratedIconName; href: string; label: string; note?
 /** The Farm menu's big buttons (#498 item 3, decision 1111): the farm work that isn't one of the five tabs, Effluent first. */
 const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/effluent", icon: "effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents, council pack", staff: true },
-  { href: "/operations/farm/tractor", icon: "location", label: "Tractor mode", note: "Limited GPS recording — keep the screen unlocked", staff: true },
+  { href: "/operations/farm/tractor", icon: "location", label: "Tractor mode", note: "Spreading, spraying and mowing from phone GPS", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
   { href: "/operations/farming/soil", icon: "documents", label: "Soil tests", staff: true },
