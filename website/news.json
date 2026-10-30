@@ -3,6 +3,12 @@
   "items": [
     {
       "date": "2026-10-30",
+      "title": "Tohyee 0.20.0: Tohyee for Android",
+      "body": "New: an Android app (APK) that opens your own Tohyee server, with tractor recording while the screen is locked, reminders and the phone's camera. Also paddock photos with AI cover estimates you accept or change. The first APK is a test build until the app is signed.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.20.0"
+    },
+    {
+      "date": "2026-10-30",
       "title": "Tohyee 0.19.0: Farm as its own app",
       "body": "New: Farm is its own app with tabs on every farm page, Use my location on every map, opt-in farm team locations, and install steps for each browser, including Firefox on Android. The big Call 111 button is replaced by an Emergency details card.",
       "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.19.0"
