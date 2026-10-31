@@ -173,7 +173,9 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
-- **0.21.0 ready to publish from main** (31 Oct 2026): #506, #510, #511.
+- **0.22.0 ready to publish from main** (31 Oct 2026): Meta (#517) plus 0.21.0's
+  contents (not published). Publish only after the release PR has merged.
+- **0.21.0 (not published) ready to publish from main** (31 Oct 2026): #506, #510, #511.
   Publish only after the release PR has merged.
 - **0.20.0 ready to publish from main** (30 Oct 2026): #504 (Android app) and
   #505 (paddock photos). Publish only after the release PR has merged. The APK
