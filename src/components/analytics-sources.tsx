@@ -12,6 +12,7 @@ import { useWorkspace } from "@/components/workspace";
 import { ReportEmailsCard } from "@/components/analytics-report-emails";
 import { GoogleAnalyticsCard } from "@/components/analytics-google-analytics";
 import { SearchConsoleCard } from "@/components/analytics-search-console";
+import { MetaCard } from "@/components/analytics-meta";
 import { useSearchParams } from "next/navigation";
 import type { ColumnKind, InspectedColumn, SourceFile } from "@/lib/analytics/engine";
 import { tableLabel } from "@/lib/analytics/labels";
@@ -78,8 +79,13 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
   const searchReturned = searchReturn
     ? { ok: searchReturn === "connected", message: searchReturn === "connected" ? "Signed in with Google. Choose the Search Console property to load." : (params.get("message") ?? "Connecting didn't work.") }
     : null;
-  const [tab, setTab] = useState<"sources" | "connect" | "history">(googleReturn || searchReturn ? "connect" : "sources");
-  const [connector, setConnector] = useState<Connector | null>(googleReturn ? "google-analytics" : searchReturn ? "google-search-console" : null);
+  // Back from signing in to Meta (decision 1192).
+  const metaReturn = params.get("meta");
+  const metaReturned = metaReturn
+    ? { ok: metaReturn === "connected", message: metaReturn === "connected" ? "Signed in with Facebook. Choose the Page to load." : (params.get("message") ?? "Connecting didn't work.") }
+    : null;
+  const [tab, setTab] = useState<"sources" | "connect" | "history">(googleReturn || searchReturn || metaReturn ? "connect" : "sources");
+  const [connector, setConnector] = useState<Connector | null>(googleReturn ? "google-analytics" : searchReturn ? "google-search-console" : metaReturn ? "meta" : null);
   const [search, setSearch] = useState("");
   const [setUp, setSetUp] = useState<{ file: string; source?: AnalyticsSource } | null>(null);
   const [databaseEdit, setDatabaseEdit] = useState<AnalyticsSource | null>(null);
@@ -119,7 +125,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
           This organisation doesn&apos;t have an analytics folder yet. A server admin chooses it on the server computer, in the
           server settings under Analytics folders. Tohyee only reads files in that folder.
         </Notice>
-      ) : tab === "connect" && connector && connector !== "books" && connector !== "google-analytics" && connector !== "google-search-console" && !isDatabaseConnector(connector) && !data.folder.readable ? (
+      ) : tab === "connect" && connector && connector !== "books" && connector !== "google-analytics" && connector !== "google-search-console" && connector !== "meta" && !isDatabaseConnector(connector) && !data.folder.readable ? (
         <Notice tone="error">Tohyee can&apos;t open this organisation&apos;s analytics folder. A server admin needs to check it still exists.</Notice>
       ) : null}
 
@@ -188,6 +194,8 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
       {tab === "sources" ? <GoogleAnalyticsCard key={`ga-list-${organisationId}`} organisationId={organisationId} canManage={data.canManage} onlyIfConnected onChanged={overview.reload} /> : null}
       {tab === "connect" && connector === "google-search-console" ? <SearchConsoleCard key={`gsc-${organisationId}`} organisationId={organisationId} canManage={data.canManage} returned={searchReturned} onChanged={overview.reload} /> : null}
       {tab === "sources" ? <SearchConsoleCard key={`gsc-list-${organisationId}`} organisationId={organisationId} canManage={data.canManage} onlyIfConnected onChanged={overview.reload} /> : null}
+      {tab === "connect" && connector === "meta" ? <MetaCard key={`meta-${organisationId}`} organisationId={organisationId} canManage={data.canManage} returned={metaReturned} onChanged={overview.reload} /> : null}
+      {tab === "sources" ? <MetaCard key={`meta-list-${organisationId}`} organisationId={organisationId} canManage={data.canManage} onlyIfConnected onChanged={overview.reload} /> : null}
 
       {tab === "connect" && connector === "email" && data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
 

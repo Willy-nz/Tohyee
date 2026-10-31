@@ -4,6 +4,7 @@ import { parseTileQuery, type ColumnInfo } from "@/lib/analytics/query";
 import { parseChartFormat } from "@/lib/analytics/chart-format";
 import { GA_REPORTS } from "@/lib/analytics/google-analytics-reports";
 import { GSC_TABLES, gscTableColumns } from "@/lib/analytics/search-console-reports";
+import { META_TABLES, metaTableColumns } from "@/lib/analytics/meta-reports";
 
 const cols = (spec: string): ColumnInfo[] => spec.split(" ").map((entry) => {
   const [name, type] = entry.split(":");
@@ -22,6 +23,8 @@ const BOOKS = [
   ...GA_REPORTS.map((report) => ({ name: report.table, columns: report.columns.map((column) => ({ name: column.name, type: column.type })) })),
   // Google Search Console's, for the Website search template (decision 1186).
   ...GSC_TABLES.map((table) => ({ name: table.table, columns: gscTableColumns(table) })),
+  // Meta's, for the Social media template (decision 1203).
+  ...META_TABLES.map((table) => ({ name: table.table, columns: metaTableColumns(table) })),
 ];
 
 describe("report templates (#337)", () => {

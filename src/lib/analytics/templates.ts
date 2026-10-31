@@ -7,12 +7,13 @@ import type { ColumnInfo, Filter, Measure, TileQuery } from "@/lib/analytics/que
  * Ready-made reports (#337, decision 597): Business overview, Sales and
  * customers, Profit and loss, CRM pipeline and Farm; and Website, over the
  * Google Analytics tables (decision 609); and Website search, over the
- * Google Search Console tables (decision 1186). Each is a dashboard of
+ * Google Search Console tables (decision 1186); and Social media, over
+ * Meta's tables (decision 1203). Each is a dashboard of
  * ordinary tiles over the books copy, so everything can be changed after.
  * A template is offered only when the tables it needs are loaded.
  */
 
-export type TemplateId = "overview" | "sales" | "profit" | "crm" | "farm" | "website" | "search";
+export type TemplateId = "overview" | "sales" | "profit" | "crm" | "farm" | "website" | "search" | "social";
 export type TableInfo = { name: string; columns: ColumnInfo[] };
 
 export const TEMPLATES: Array<{ id: TemplateId; name: string; description: string; needs: string[] }> = [
@@ -32,6 +33,12 @@ export const TEMPLATES: Array<{ id: TemplateId; name: string; description: strin
     name: "Website search",
     description: "How the website does in Google search, from Search Console: clicks and impressions over time, top searches and pages, searches shown a lot but rarely clicked, countries and devices.",
     needs: ["google_search_console_daily", "google_search_console_queries", "google_search_console_pages", "google_search_console_countries", "google_search_console_devices"],
+  },
+  {
+    id: "social",
+    name: "Social media",
+    description: "The Facebook Page and its Instagram account, from Meta: followers over time, reach and engagement by week, top posts, and (with an ad account) spend against clicks.",
+    needs: ["meta_facebook_daily", "meta_facebook_posts"],
   },
 ];
 
@@ -291,6 +298,68 @@ export function buildTemplate(id: TemplateId, tables: TableInfo[], today: string
     tiles.push(tile("Clicks by device", "donut", "third", question("google_search_console_devices", [clicks], { groupBy: { field: "device" }, ...byValue }), {
       format: { donutTotal: true, series: [{ number: { style: "plain", decimals: 0 } }] },
     }));
+  }
+
+  if (id === "social") {
+    // Meta (decision 1203). Instagram and ads tiles only when those tables are loaded.
+    const whole = (suffix?: string): ChartFormat => ({ series: [{ number: { style: "plain", decimals: 0, ...(suffix ? { suffix } : {}) } }] });
+    const sum = (label: string, field: string): Measure => ({ label, aggregate: "sum", field });
+    // Followers are a total on each day: the latest day with a figure, not the days added up.
+    const followers = (field = "followers"): Measure => ({ label: "Followers", aggregate: "sum", field, snapshot: {}, where: [{ field, op: "not_blank", value: "" }] });
+    const byWeek = { groupBy: { field: "date", grain: "week" as const }, dateField: "date" };
+    const top = { sort: { by: "value" as const, direction: "desc" as const }, dateField: "date", limit: 10 };
+    const instagram = byName.has("meta_instagram_daily") && byName.has("meta_instagram_posts") && byName.has("meta_instagram_followers");
+    const ads = byName.has("meta_ads_daily");
+    tiles.push(tile("Social media", "text", "full", null, {
+      text: `From Meta, loaded nightly. Meta's days are Pacific time and its figures can be two days late, so the newest days may still change. Reach is people who saw the posts (Meta now counts this as viewers on Facebook); added up over days it counts someone who saw posts on two days twice. Post figures are each post's totals so far, by the day it was posted.${instagram ? " Instagram follower totals start on the first load, as Meta doesn't give past ones." : ""}${ads ? " Ad spend is in the ad account's currency." : ""}`,
+    }));
+    const fb = "meta_facebook_daily";
+    tiles.push(tile("Facebook followers", "kpi", instagram ? "quarter" : "half", question(fb, [followers()], { dateField: "date" }), { format: whole() }));
+    tiles.push(tile("Facebook reach", "kpi", instagram ? "quarter" : "half", question(fb, [{ ...sum("Reach", "reach"), compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole() }));
+    if (instagram) {
+      tiles.push(tile("Instagram followers", "kpi", "quarter", question("meta_instagram_followers", [followers()], { dateField: "date" }), { format: whole() }));
+      tiles.push(tile("Instagram reach", "kpi", "quarter", question("meta_instagram_daily", [{ ...sum("Reach", "reach"), compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole() }));
+    }
+    tiles.push(tile("Facebook followers over time", "line", instagram ? "half" : "full", question(fb, [followers()], byWeek), { format: whole() }));
+    if (instagram) tiles.push(tile("Instagram followers over time", "line", "half", question("meta_instagram_followers", [followers()], byWeek), { format: whole() }));
+    const combo = (title: string, table: string, bar: Measure, line: Measure, width: Tile["width"]) =>
+      tile(title, "combo", width, question(table, [bar, line], byWeek), {
+        format: { series: [{ as: "bar", number: { style: "plain", decimals: 0 } }, { as: "line", axis: "right", number: { style: "plain", decimals: 0 } }], rightAxis: { title: line.label } },
+      });
+    tiles.push(combo("Facebook reach and engagement by week", fb, sum("Reach", "reach"), sum("Engagements", "engagements"), instagram ? "half" : "full"));
+    if (instagram) tiles.push(combo("Instagram reach and interactions by week", "meta_instagram_daily", sum("Reach", "reach"), sum("Interactions", "interactions"), "half"));
+    const postFormat: ChartFormat = { series: [{ number: { style: "plain", decimals: 0 } }, { number: { style: "plain", decimals: 0 } }, { number: { style: "plain", decimals: 0 } }, { number: { style: "plain", decimals: 0 } }] };
+    tiles.push(
+      tile("Top Facebook posts", "table", instagram ? "half" : "full", question("meta_facebook_posts", [sum("Reach", "reach"), sum("Reactions", "reactions"), sum("Comments", "comments"), sum("Shares", "shares")], { groupBy: { field: "message" }, ...top }), {
+        format: { ...postFormat, card: { subtitle: "The 10 posts made in these dates that reached the most people." } },
+      }),
+    );
+    if (instagram) {
+      tiles.push(
+        tile("Top Instagram posts", "table", "half", question("meta_instagram_posts", [sum("Reach", "reach"), sum("Likes", "likes"), sum("Comments", "comments"), sum("Saves", "saves")], { groupBy: { field: "caption" }, ...top }), {
+          format: { ...postFormat, card: { subtitle: "The 10 posts and reels made in these dates that reached the most accounts." } },
+        }),
+      );
+    }
+    if (ads) {
+      const spend: Measure = { label: "Spend", aggregate: "sum", field: "spend", currencyField: "currency" };
+      const money: ChartFormat = { series: [{ number: { style: "currency", decimals: 2 } }] };
+      tiles.push(tile("Ad spend", "kpi", "third", question("meta_ads_daily", [{ ...spend, compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: { ...money, kpi: { downIsGood: true } } }));
+      tiles.push(tile("Ad clicks", "kpi", "third", question("meta_ads_daily", [{ ...sum("Clicks", "clicks"), compare: "previous_period" }], { dateField: "date", sparkline: true }), { format: whole() }));
+      tiles.push(
+        tile("Cost per click", "kpi", "third", question("meta_ads_daily", [{ label: "Cost per click", aggregate: "formula", formula: "[Spend] / [Clicks]", inputs: [{ name: "Spend", aggregate: "sum", field: "spend" }, { name: "Clicks", aggregate: "sum", field: "clicks" }] }], { dateField: "date" }), {
+          format: { ...money, kpi: { downIsGood: true } },
+        }),
+      );
+      tiles.push(
+        tile("Ad spend against clicks by week", "combo", "two-thirds", question("meta_ads_daily", [spend, sum("Clicks", "clicks")], byWeek), {
+          format: { series: [{ as: "bar", number: { style: "currency", decimals: 0 } }, { as: "line", axis: "right", number: { style: "plain", decimals: 0 } }], rightAxis: { title: "Clicks" } },
+        }),
+      );
+      tiles.push(
+        tile("Spend by campaign", "bar", "third", question("meta_ads_daily", [spend], { groupBy: { field: "campaign" }, sort: { by: "value", direction: "desc" }, dateField: "date", limit: 10 }), { format: money }),
+      );
+    }
   }
 
   return { name: template.name, description: template.description, settings, tiles };

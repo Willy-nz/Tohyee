@@ -19649,6 +19649,94 @@ Tests: `tests/integration/analytics-search-console.test.ts` (GSC1-GSC9)
 and `tests/unit/analytics-search-console.test.ts` (GSC3-GSC5, the
 freshness line and the Website search template).
 
+## Analytics: a Facebook Page, its Instagram account and Meta ads (META1-META10; built by Claude 31 Oct 2026 for #516, as Looker Studio's and Power BI's Meta connectors and Meta's developer pages describe, not yet reviewed)
+
+Not accounting: a data source for Analytics, so a small business's social
+media figures can be charted. Decisions 1190-1207. Made-up figures for a
+small shop, Paw Prints NZ (Page 1111, Instagram @pawprints.nz with 812
+followers, ad account "Paw Prints ads" in NZD, Auckland time), 26 October
+to 2 November 2026. Meta is a canned fake in the tests; nothing here has
+been tried against a real Meta app or account.
+
+- **META1 Setting up and signing in.** Before an app is saved, Connect
+  Meta says Meta isn't set up yet. An admin saves App ID 1234567890123 and
+  a 32-character secret (stored encrypted; a viewer can't; "not-a-secret"
+  and a non-numeric App ID are refused). Connect Meta with "Also load ads"
+  sends the browser to `https://www.facebook.com/v26.0/dialog/oauth` with
+  `response_type=code`, the return address
+  `/api/analytics/meta/callback` and `scope=pages_show_list,
+  pages_read_engagement,read_insights,instagram_basic,
+  instagram_manage_insights,ads_read`; with a configuration ID saved,
+  `config_id` instead of `scope`. Coming back exchanges the code, then
+  makes the token long-lived; the browser lands on
+  `/analytics/sources?meta=connected`, and using the link again says it
+  expired. The sign-in ends 60 days later (30 Dec 2026). With "read your
+  Page's insights" unticked at Meta, nothing is stored.
+- **META2 Choosing.** Meta lists Paw Prints NZ (with @pawprints.nz) and
+  Another Page (role without the Analyse task) over two pages. Another
+  Page, an unlisted Page and an unlisted ad account can't be saved; no
+  token is sent to the browser. Paw Prints NZ and Paw Prints ads are
+  saved; the Instagram account comes with the Page.
+- **META3 The first load.** On 31 October 2026 (1pm in California; 9am 1
+  November in Auckland), the Page's insights are asked for 2 Nov 2024 to
+  31 Oct 2026 in nine 90-day questions with Pacific midnights as `since`
+  and `until`; Instagram 3 Aug to 31 Oct 2026, two questions a day (180);
+  ads 1 Oct 2025 to 1 Nov 2026 (Auckland's today) a month a question,
+  `level=campaign`, `time_increment=1`, paged.
+- **META4 The next day.** On 1 November only 29 October (the first day
+  marked "may still change") to 1 November are asked for: one Page
+  question, eight Instagram ones, and ads from 25 October. 30 October's
+  Page reach goes from 200 to 260; 29 October is no longer marked; no day
+  is in a table twice. Posts from the last 28 days are read again ("Nose
+  print rings are back" reach 900 to 950), and the follower count gains a
+  row for 1 November.
+- **META5 What's loaded.** Page followers on 27-31 October: 603, 604, 605,
+  606, 607; 29-31 October marked "may still change". Two Page posts (the
+  2024 one is older than two years and isn't read): reactions 30 + 5 =
+  35, comments 4. Instagram on 20 October has no reach (Meta sent
+  nothing: empty, not 0) and 5 follows; 30 October reach 430. Instagram
+  posts: the reel isn't asked for profile visits; the January 2025 photo
+  has no insights (posted before the account was professional) and is
+  kept with its 7 likes. Ads 26 October to 1 November: 14 rows, spend
+  12.34 and 5.50 NZD a day, 124.88 in all; "Spring nose prints" has 30.00
+  results of type "Link click"; "Christmas gift guide" has none (empty).
+  Spend of "12.345" would be refused, not rounded.
+- **META6 The password changes.** Meta answers code 190, subcode 460: the
+  load fails with "Meta no longer accepts this sign-in (the Facebook
+  password was changed)", the card asks to connect again and the nightly
+  load skips it. Connecting again keeps the Page, Instagram, ad account
+  and days loaded, and the next nightly load runs.
+- **META7 Meta's limits.** A code 4 answer is waited out and the load
+  works. On 2 November Instagram answers 80002 with
+  `estimated_time_to_regain_access` 30: Tohyee doesn't call again, the
+  ads aren't started, the Page (already read) is saved, and the load
+  fails with "…Meta says to wait about 30 minutes… Facebook Page loaded to
+  2 Nov 2026." Instagram and ads carry on next load. A code 10 answer says
+  the sign-in isn't allowed to read the Page's insights and to use Check
+  setup.
+- **META8 Check setup.** All seven checks OK (server key, app "Tohyee
+  reports", sign-in, permissions, Page, Instagram, ads). With no Instagram
+  linked to the Page: a warning with how to switch to a professional
+  account and link it. With a wrong secret saved: "Meta didn't accept the
+  App ID and App secret together". Viewers can't run it.
+- **META9 The Social media report.** Over 1-31 October: Facebook followers
+  607 (the latest day, not the days added up); Instagram followers 812;
+  ad spend 26-31 October 6 x (12.34 + 5.50) = 107.04 NZD; cost per click
+  107.04 / 300; top Facebook posts "Nose print rings are back" then
+  "Behind the scenes". A report viewer it isn't shared with gets "not
+  found"; the freshness line says from which day Meta may still change
+  the figures. Viewers see the connection without the Facebook name;
+  report viewers can't.
+- **META10 Disconnecting.** Viewers can't. It deletes the sign-in, asks
+  Meta to remove the app's permissions, drops every `meta_*` table, and
+  keeps the saved app and the load history; Refresh now afterwards says
+  it isn't connected.
+
+Tests: `tests/integration/analytics-meta.test.ts` (META1-META10) and
+`tests/unit/analytics-meta.test.ts` (sign-in address, days and windows,
+paging, figures, errors, the freshness line and the Social media
+template).
+
 ## My mail: an Owner's private copy of their own mail (PM1-PM29; built by Claude 20 Oct 2026 from issues #250 and #340, Claude's rules, not yet reviewed)
 
 Not accounting: a private store of an Owner's own email, for them and
