@@ -16,6 +16,7 @@ import {
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { isGaTable } from "@/lib/analytics/google-analytics-reports";
 import { isGscTable } from "@/lib/analytics/search-console-reports";
+import { isMetaTable } from "@/lib/analytics/meta-reports";
 import { type DatabaseEngine, parseRowLimit } from "@/lib/analytics/databases/config";
 import { connectionSecret, getConnection, parseQuerySpec, readSourceRows, settingsOf, sourceLabel } from "@/lib/analytics/databases/connections";
 import { rebuildShapedTablesForTable, shapesUsing } from "@/lib/analytics/shaped-tables";
@@ -239,6 +240,7 @@ function parseSourceInput(input: Record<string, unknown>, current?: AnalyticsSou
   }
   if (!current && isGaTable(tableName)) throw new ValidationError("Table names starting with google_analytics_ are kept for Google Analytics.");
   if (!current && isGscTable(tableName)) throw new ValidationError("Table names starting with google_search_console_ are kept for Google Search Console.");
+  if (!current && isMetaTable(tableName)) throw new ValidationError("Table names starting with meta_ are kept for Meta (Facebook and Instagram).");
   const fileName = input.fileName === undefined && current ? current.fileName : typeof input.fileName === "string" ? input.fileName.trim() : "";
   if (!fileName || fileName.length > 500) throw new ValidationError("Choose the file.");
   const sheetInput = input.sheetName === undefined ? (current && current.fileName === fileName ? current.sheetName : null) : input.sheetName;
@@ -271,6 +273,7 @@ async function parseDatabaseSourceInput(tx: OrgTx, input: Record<string, unknown
   }
   if (!current && isGaTable(tableName)) throw new ValidationError("Table names starting with google_analytics_ are kept for Google Analytics.");
   if (!current && isGscTable(tableName)) throw new ValidationError("Table names starting with google_search_console_ are kept for Google Search Console.");
+  if (!current && isMetaTable(tableName)) throw new ValidationError("Table names starting with meta_ are kept for Meta (Facebook and Instagram).");
   if (current && input.connectionId !== undefined && String(input.connectionId) !== current.database?.connectionId) {
     throw new ValidationError("A source's database connection can't change. Set up a new source instead.");
   }

@@ -282,7 +282,7 @@ export function tableNameFor(table: string, taken: readonly string[]): string {
       .replace(/^_+|_+$/g, "")
       .slice(0, 50) || "data";
   let start = /^[a-z]/.test(base) ? base : `t_${base}`;
-  if (start.startsWith("tohyee_") || start.startsWith("google_analytics_") || start.startsWith("google_search_console_")) start = `x_${start}`;
+  if (start.startsWith("tohyee_") || start.startsWith("google_analytics_") || start.startsWith("google_search_console_") || start.startsWith("meta_")) start = `x_${start}`;
   let name = start;
   for (let n = 2; taken.includes(name); n += 1) name = `${start}_${n}`;
   return name;

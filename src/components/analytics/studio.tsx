@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Field } from "@/components/ui";
 import styles from "./studio.module.css";
 
-export type Connector = "books" | "csv" | "excel" | "email" | "sqlserver" | "postgres" | "mysql" | "google-analytics" | "google-search-console";
+export type Connector = "books" | "csv" | "excel" | "email" | "sqlserver" | "postgres" | "mysql" | "google-analytics" | "google-search-console" | "meta";
 
 /** The connectors that read an external database (decision 602). */
 export function isDatabaseConnector(connector: Connector | null): connector is "sqlserver" | "postgres" | "mysql" {
@@ -21,6 +21,7 @@ const connectors: { id: Connector; icon: string; title: string; description: str
   { id: "mysql", icon: "My", title: "MySQL", description: "Read a table, view or SELECT query from a MySQL database. Read only; reloaded nightly or on demand." },
   { id: "google-analytics", icon: "GA", title: "Google Analytics", description: "A website's visitors, sessions, pages and traffic sources from a GA4 property. Loaded nightly or on demand." },
   { id: "google-search-console", icon: "SC", title: "Google Search Console", description: "How a website does in Google search: searches, clicks, impressions, position, pages, countries and devices. Loaded nightly or on demand." },
+  { id: "meta", icon: "M", title: "Meta (Facebook and Instagram)", description: "A Facebook Page and its Instagram account: followers, reach, views and engagement by day, each post's figures, and optionally ad spend and results by campaign. Read only; loaded nightly or on demand." },
 ];
 
 export function ConnectorPicker({ selected, onSelect }: { selected: Connector | null; onSelect: (connector: Connector) => void }) {

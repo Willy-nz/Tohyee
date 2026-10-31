@@ -3,6 +3,7 @@ import type { Dashboard } from "@/lib/analytics/dashboards";
 import { BOOKS_SOURCE_NAME, BOOKS_TABLE_NAME } from "@/lib/analytics/books";
 import { GA_LOAD_TABLE_NAME, GA_SOURCE_NAME } from "@/lib/analytics/google-analytics-reports";
 import { GSC_LOAD_TABLE_NAME, GSC_SOURCE_NAME, GSC_TABLE_PREFIX } from "@/lib/analytics/search-console-reports";
+import { META_LOAD_TABLE_NAME, META_SOURCE_NAME, META_TABLE_PREFIX, metaTableChanges } from "@/lib/analytics/meta-reports";
 import { quoteIdentifier } from "@/lib/analytics/query";
 
 /**
@@ -24,7 +25,7 @@ export type SourceFreshness = {
   running: boolean;
   /** The latest date in the data the tiles go by (their date fields), when they have one. */
   dataThrough: string | null;
-  /** The first day Google may still change (Search Console, decision 1183); left out for other sources. */
+  /** The first day Google or Meta may still change (Search Console, decision 1183; Meta, decision 1196); left out for other sources. */
   mayChangeFrom?: string | null;
 };
 
@@ -39,6 +40,7 @@ export function loadKeyOf(table: string): { tableName: string; sourceless: boole
   if (table.startsWith("tohyee_")) return { tableName: BOOKS_TABLE_NAME, sourceless: true };
   if (table.startsWith("google_analytics_")) return { tableName: GA_LOAD_TABLE_NAME, sourceless: true };
   if (table.startsWith(GSC_TABLE_PREFIX)) return { tableName: GSC_LOAD_TABLE_NAME, sourceless: true };
+  if (table.startsWith(META_TABLE_PREFIX)) return { tableName: META_LOAD_TABLE_NAME, sourceless: true };
   return { tableName: table, sourceless: false };
 }
 
@@ -66,7 +68,7 @@ export async function reportLoadFacts(tx: OrgTx, dashboard: Dashboard): Promise<
     );
     const latest = runs.rows[0];
     const good = runs.rows.find((run) => run.status === "ok" && run.finished_at);
-    const fallbackName = key === BOOKS_TABLE_NAME ? BOOKS_SOURCE_NAME : key === GA_LOAD_TABLE_NAME ? GA_SOURCE_NAME : key === GSC_LOAD_TABLE_NAME ? GSC_SOURCE_NAME : key;
+    const fallbackName = key === BOOKS_TABLE_NAME ? BOOKS_SOURCE_NAME : key === GA_LOAD_TABLE_NAME ? GA_SOURCE_NAME : key === GSC_LOAD_TABLE_NAME ? GSC_SOURCE_NAME : key === META_LOAD_TABLE_NAME ? META_SOURCE_NAME : key;
     facts.push({
       key,
       name: (good ?? latest)?.source_name ?? fallbackName,
@@ -97,9 +99,9 @@ export function dataThroughSql(table: string, fields: string[]): string | null {
   return `select cast(${latest.length === 1 ? latest[0] : `greatest(${latest.join(", ")})`} as VARCHAR) as through from ${quoteIdentifier(table)}`;
 }
 
-/** The SQL for the first day of a Search Console table that may still change (DuckDB), or null for other tables. */
+/** The SQL for the first day of a Search Console or Meta table that may still change (DuckDB), or null for other tables. */
 export function mayChangeSql(table: string): string | null {
-  if (!table.startsWith(GSC_TABLE_PREFIX)) return null;
+  if (!table.startsWith(GSC_TABLE_PREFIX) && !metaTableChanges(table)) return null;
   return `select cast(min(${quoteIdentifier("date")}) as VARCHAR) as changing from ${quoteIdentifier(table)} where ${quoteIdentifier("may_still_change")}`;
 }
 

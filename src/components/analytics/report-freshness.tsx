@@ -8,7 +8,8 @@ import styles from "./report-freshness.module.css";
 
 /** One source's line: when its data was last loaded and how far it goes (decision 698). */
 export function freshnessText(source: SourceFreshness): string {
-  const changing = source.mayChangeFrom ? ` Google may still change the days from ${formatDate(source.mayChangeFrom)}.` : "";
+  const who = source.name.startsWith("Meta") ? "Meta" : "Google";
+  const changing = source.mayChangeFrom ? ` ${who} may still change the days from ${formatDate(source.mayChangeFrom)}.` : "";
   return `${sourceText(source)}${changing}`;
 }
 

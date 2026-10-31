@@ -2389,6 +2389,36 @@ that something happened.
   Google Cloud, enable the Google Search Console API and add the
   `webmasters.readonly` scope. Tested with a fake Google only; it hasn't
   been tried with a real Search Console property.
+- **Analytics: Meta (Facebook and Instagram)** (#516, decisions
+  1190-1207, examples META1-META10, tenant migration 0211). In Data
+  sources › Add data source › Meta, an admin first follows **Set up Meta**,
+  a guided page: make a free Meta app (type Business), add Facebook Login
+  for Business and Instagram (API setup with Facebook login), paste the
+  exact return address it shows, and save the App ID and secret (stored
+  encrypted). Development mode is fine for your own Page and Instagram:
+  no Meta review. **Check setup** asks Meta about each part and says what
+  to fix, including making Instagram a professional account linked to the
+  Page. Then **Connect Meta** asks only for read permissions (ads only if
+  ticked), the admin picks the Page (its Instagram comes with it) and
+  optionally an ad account, and Tohyee loads six tables: Page by day
+  (followers, new and lost, views, reach, engagements), Page posts,
+  Instagram by day (reach, views, accounts engaged, interactions, likes,
+  comments, saves, shares, profile link taps, follows, unfollows),
+  Instagram follower totals (from the first load), Instagram posts and
+  reels, and ads by campaign and day in the ad account's currency (spend
+  exact to the cent, impressions, reach, clicks, link clicks, results).
+  Only metrics Meta lists now are used: Instagram impressions became
+  views. The first load goes back as far as Meta keeps (2 years for the
+  Page and posts, 90 days for Instagram, 13 months of ads); after that
+  only new days and the last two again (marked "may still change"), posts
+  from the last 28 days, and ads from the last 7. Meta's limits are waited
+  out, and when Meta says to wait longer Tohyee stops and carries on next
+  time. When Meta ends the sign-in (a password change, about 60 days, the
+  app removed) loading stops with a plain warning and one Connect again
+  button that keeps everything. A **Social media** report template shows
+  followers over time, reach and engagement by week, top posts and, with
+  ads, spend against clicks. Read-only; tested with a fake Meta only, not
+  yet tried with a real Meta account.
 - **Analytics: safe report editing** (#387, decisions 690-691, tenant
   migration 0178). While a report is being edited, every change (adding,
   changing, moving, duplicating or removing tiles, pasting a format, the

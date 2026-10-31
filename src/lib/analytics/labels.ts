@@ -1,5 +1,6 @@
 import { GA_REPORTS } from "@/lib/analytics/google-analytics-reports";
 import { GSC_TABLES } from "@/lib/analytics/search-console-reports";
+import { META_TABLES } from "@/lib/analytics/meta-reports";
 import type { Measure } from "@/lib/analytics/query";
 
 /**
@@ -47,6 +48,8 @@ const TABLES: Record<string, TableText> = {
   ...Object.fromEntries(GA_REPORTS.map((report) => [report.table, { label: report.label, noun: report.noun, description: report.description }])),
   // Google Search Console (decision 1181).
   ...Object.fromEntries(GSC_TABLES.map((table) => [table.table, { label: table.label, noun: table.noun, description: table.description }])),
+  // Meta (decision 1193).
+  ...Object.fromEntries(META_TABLES.map((table) => [table.table, { label: table.label, noun: table.noun, description: table.description }])),
 };
 
 /** Words written differently from lower case. */

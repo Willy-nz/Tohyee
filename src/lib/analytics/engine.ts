@@ -994,10 +994,23 @@ export function mergeTableDays(
   days: { dateColumn: string; from: string; through: string },
   failure: string,
 ): Promise<number> {
+  return mergeTableWindows(organisationId, prefix, tables.map((table) => ({ ...table, days })), failure);
+}
+
+/** A dated table and the days of it being replaced. */
+export type DatedTableCopy = TableCopy & { days: { dateColumn: string; from: string; through: string } };
+
+/**
+ * As `mergeTableDays`, with each table's own days (Meta's incremental
+ * loads, decision 1196: Instagram, the Page, posts and ads each go back a
+ * different way). Every table changes in one transaction, or none does.
+ */
+export function mergeTableWindows(organisationId: string, prefix: string, tables: readonly DatedTableCopy[], failure: string): Promise<number> {
   if (!/^[a-z][a-z0-9_]*_$/.test(prefix) || prefix === TOHYEE_TABLE_PREFIX) throw new ValidationError("That isn't a table prefix.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(days.from) || !/^\d{4}-\d{2}-\d{2}$/.test(days.through)) throw new ValidationError("Those aren't dates.");
-  assertTableName(days.dateColumn);
   for (const table of tables) {
+    const days = table.days;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(days.from) || !/^\d{4}-\d{2}-\d{2}$/.test(days.through)) throw new ValidationError("Those aren't dates.");
+    assertTableName(days.dateColumn);
     if (!table.name.startsWith(prefix)) throw new ValidationError(`${table.name} doesn't start with ${prefix}.`);
     assertTableName(table.name);
     for (const column of table.columns) assertTableName(column.name);
@@ -1020,7 +1033,7 @@ export function mergeTableDays(
             }
             const names = table.columns.map((column) => quoteIdentifier(column.name)).join(", ");
             await connection.run(
-              `delete from ${quoteIdentifier(table.name)} where ${quoteIdentifier(days.dateColumn)} between cast(${quoteString(days.from)} as DATE) and cast(${quoteString(days.through)} as DATE)`,
+              `delete from ${quoteIdentifier(table.name)} where ${quoteIdentifier(table.days.dateColumn)} between cast(${quoteString(table.days.from)} as DATE) and cast(${quoteString(table.days.through)} as DATE)`,
             );
             await connection.run(`insert into ${quoteIdentifier(table.name)} (${names}) select ${names} from ${stagingName(table.name)}`);
             await connection.run(`drop table ${stagingName(table.name)}`);

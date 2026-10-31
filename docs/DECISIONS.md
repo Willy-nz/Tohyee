@@ -10998,3 +10998,199 @@ property**.
       property or search type forgets what was loaded and drops the tables
       (the old figures would mix with the new), then loads from 16 months
       back. The screen warns before saving.
+
+### Meta (Facebook and Instagram) as an Analytics source (#516; decisions 1190-1207)
+
+Jess (31 October 2026): "What about Meta analytics, can we get that in?" …
+"make that import and easy for people to do. Bring that data into
+Analytics." The details below weren't answered by Jess. They follow issue
+#516, Google Search Console's and Google Analytics' rules (decisions
+606-609, 1180-1189), Meta's developer pages (read 31 October 2026), and
+Looker Studio's and Power BI's Meta connectors, so they're **not yet
+reviewed**. Examples META1-META10, tenant migration 0211. Tested only
+against a fake Meta: it **hasn't been tried with a real Meta app, Page,
+Instagram account or ad account**.
+
+1190. **Built like Search Console, under the same access contract.** One
+      Meta connection per organisation: a Facebook Page, the Instagram
+      professional account linked to it (if any), and optionally one ad
+      account. Admins and owners save the app, connect, choose, refresh,
+      check the setup and disconnect; everyone in the organisation sees
+      that it's connected, what's chosen and the last load; only admins see
+      the Facebook name that signed in; report viewers see none of it
+      (403), only tiles of reports shared with them (decision 697). The
+      load history calls it "Meta (Facebook and Instagram)"; a report's
+      freshness line works as for Google (decision 698), saying "Meta may
+      still change the days from …".
+1191. **The organisation's own Meta app, saved on a guided setup page.**
+      Like the Google app (Settings › Email), each organisation uses its own
+      app from Meta for Developers: Tohyee has no central Meta app. An
+      admin saves its App ID, App secret (encrypted with
+      TOHYEE_SECRET_KEY, never shown again, kept when left blank) and,
+      optionally, a Facebook Login for Business configuration ID. The setup
+      page (Analytics › Data sources › Set up Meta,
+      `/analytics/sources/meta-setup`) walks through: making the app (type
+      Business), adding Facebook Login for Business, Instagram (API setup
+      with Facebook login) and, for ads, Marketing API; pasting the exact
+      return address shown; the configuration and its permissions; copying
+      the App ID and secret; and that **development mode is fine** for your
+      own Page, Instagram and ad account: Meta's Facebook Login for Business
+      page says Advanced Access through App Review is needed only to serve
+      businesses you don't own or manage, and people with a role on the app
+      (its admin, developers, testers) can use it meanwhile. The menu names
+      are as Meta's developer pages describe them; they weren't checked in
+      a live Meta dashboard and Meta changes them often.
+1192. **Signing in: its own return address and one-time state.** The
+      manual Facebook Login flow (`response_type=code`) to
+      `https://www.facebook.com/v26.0/dialog/oauth`, returning to
+      `/api/analytics/meta/callback`. Each one-time state (15 minutes, once,
+      the same admin) is stored in `analytics_meta_states` with whether ads
+      were asked for. With a configuration ID it's sent as `config_id` (as
+      Meta recommends for Facebook Login for Business) and Meta asks for
+      the configuration's permissions; without one Tohyee sends `scope`
+      itself. The browser comes back to `/analytics/sources?meta=connected`
+      or with the error in plain words.
+1193. **What's loaded.** Six tables with plain column names:
+      `meta_facebook_daily` (followers, new and lost followers, views,
+      reach, engagements), `meta_facebook_posts` (reactions, comments,
+      shares, clicks, views, reach), `meta_instagram_daily` (reach, views,
+      accounts engaged, interactions, likes, comments, saves, shares,
+      profile link taps, follows, unfollows), `meta_instagram_followers`
+      (the follower count on each day it was loaded),
+      `meta_instagram_posts` (likes, comments, saves, shares, reach, views,
+      interactions, profile visits, follows) and `meta_ads_daily` (by
+      campaign and day: spend, impressions, reach, clicks, link clicks,
+      results, result type, currency). Only metrics Meta lists now are
+      asked for: Instagram `impressions` ended 21 Apr 2025 and
+      `profile_views`, `website_clicks` and `follower_count` aren't listed
+      any more, so the issue's "impressions" is **views** and "profile
+      visits" is per post only (`profile_visits` on media), and "website
+      taps" is **profile link taps** (`profile_links_taps`, which counts
+      every link button). On Facebook, `page_fans` and `page_impressions`
+      ended in Nov 2025 and `page_impressions_unique` and its kin were
+      removed for every version when v26.0 came out; the replacements are
+      `page_follows`, `page_media_view` (views) and
+      `page_total_media_view_unique` (which Tohyee calls reach). Missing
+      values stay empty, never 0 (Meta sends nothing rather than 0). The
+      `meta_` prefix is kept for these tables.
+1194. **Read-only permissions only.** `pages_show_list`,
+      `pages_read_engagement`, `read_insights`, `instagram_basic`,
+      `instagram_manage_insights`, and `ads_read` only when "Also load ads"
+      is ticked. Nothing that posts, replies, manages Pages or manages ads.
+      A sign-in without the three Page permissions is refused with which
+      ones were unticked; Instagram's being unticked only leaves Instagram
+      out (Check setup says so).
+1195. **Tokens.** The code is exchanged for a short-lived user token, then
+      straight away for a long-lived one (`fb_exchange_token`, about 60
+      days). The Pages are listed with it, which gives each Page its own
+      token with no fixed end (Meta's long-lived tokens page); the Page and
+      Instagram are read with the Page's token, ads and the lists of Pages
+      and ad accounts with the user token. Meta has no way for a server to
+      renew a user token (its page says to sign in again), so "refreshed
+      where possible" means: each Connect again takes a new user token and
+      a new Page token, keeping the choices and what's loaded. The card
+      warns from 14 days before the user token (or Meta's 90-day data
+      access) ends, with one Connect again button. If the person
+      connecting again can't see the chosen Page, the Page has to be chosen
+      again.
+1196. **History and incremental loads.** Meta's insight days end at
+      midnight Pacific time, so dates are Pacific days (ads use the ad
+      account's own time zone, as Meta reports them). The first load reads
+      the Page's last 729 days (Meta keeps 2 years; 90 days a question),
+      its posts from those 2 years, Instagram's last 90 days (Meta keeps
+      account figures 90 days; one day a question, as `total_value` adds up
+      the whole range), Instagram posts from 2 years, and 13 months of ads
+      (Meta allows 37; a month a question, paged). Each later load reads
+      from the first day the last load marked "may still change" (the last
+      day loaded less two days: Meta says figures can be 48 hours late) to
+      today, so those days settle; posts from the last 28 days again (their
+      totals still grow; older posts keep their last totals); and ads from
+      7 days back (Meta's default attribution counts results up to 7 days
+      after a click). Each table's days are replaced in one DuckDB
+      transaction (`mergeTableWindows`); days Meta has since deleted stay
+      until disconnecting. Up to 1,000 posts per platform a load. Loaded
+      nightly after 4am (switchable off) and by Refresh now.
+1197. **When Meta ends the sign-in.** Error 190 (or 102) marks the
+      connection to connect again, with the reason in words from its
+      subcode: the password was changed (460), it ran out (463), the app
+      was removed (458), Facebook needs a login first (459). The load fails
+      saying so, the nightly load leaves it alone, and the card shows a
+      one-tap Connect again; connecting again keeps the Page, ad account,
+      settings and data.
+1198. **Choosing the Page.** The admin chooses one Page from Meta's list
+      (paged); its linked Instagram account comes with it, shown beside the
+      Page's name, and a Page without one says how to link it. A Page
+      whose role lacks the Analyse task can't be chosen. Ad accounts are
+      offered only with `ads_read`, with their currency and whether they're
+      active; "No ads" is a choice. Choosing another Page (or ad account)
+      drops that part's tables and loads it from the start; the screen
+      warns first.
+1199. **Meta's limits: wait, then stop calling.** Rate-limit answers
+      (codes 4, 17, 32, 613 and the business use case codes 80000-80014)
+      and passing troubles (codes 1 and 2, 5xx) are tried again after 10,
+      30 and 90 seconds, unless Meta's `X-Business-Use-Case-Usage` header
+      says the wait is over two minutes: then Tohyee stops at once, as
+      Meta's rate limits page asks (more calls make the wait longer), and
+      the load says "Meta says to wait about 30 minutes". The parts (Page,
+      Instagram, ads) are read in turn; a part that reads fully is saved,
+      one that fails changes nothing and carries on next load, and after a
+      limit the parts left aren't started. The message lists what was
+      saved ("Facebook Page loaded to 2 Nov 2026").
+1200. **Posts.** Instagram posts are asked only for the metrics their kind
+      has (reels have no profile visits or follows). A post Meta has no
+      insights for (code 100, subcode 2108006: posted before it was a
+      professional account) is kept with its likes and comments and empty
+      figures. Stories aren't loaded (Meta keeps their figures 24 hours
+      only); a carousel's own items have no insights, so a carousel is one
+      post. Facebook post comments and shares come from
+      `post_activity_by_action_type`, reactions from
+      `post_reactions_by_type_total` added up, so no permission to read
+      people's comments is needed.
+1201. **Check setup.** On the setup page (and linked from the card), a
+      button asks Meta about each part and says plainly what to fix: the
+      server's key; the app (Meta accepts the App ID and secret together);
+      the sign-in (still valid, when it ends); the permissions (each one
+      missing, in words); the Page (listed, chosen, the Analyse task);
+      Instagram (a professional account linked to the Page, with the steps
+      to switch and link it; fewer than 100 followers leaves out follows);
+      and ads (`ads_read`, the account visible and active). It changes
+      nothing.
+1202. **Disconnecting.** Deletes the tokens, the connection and the states,
+      asks Meta to remove the app's permissions (`DELETE /me/permissions`,
+      a courtesy: Tohyee's copy is already gone), and drops every `meta_*`
+      table. The saved app and the load history stay. Refused while a
+      shaped table is built from the data or a load is running.
+1203. **A Social media report template.** Offered once the Page's tables
+      are loaded: Facebook followers (the latest day with a figure, not
+      days added up) and reach against the previous period; followers over
+      time by week; reach and engagements by week; top Facebook posts by
+      reach. With Instagram: the same for it (interactions for
+      engagements; top posts with likes, comments and saves). With ads:
+      spend, clicks and cost per click (total spend over total clicks, in
+      the account's currency), spend against clicks by week and spend by
+      campaign. A text tile says reach added over days counts a person
+      twice, that the newest days may change, and that Instagram follower
+      totals start at the first load.
+1204. **Ads money is exact.** Meta sends spend as text in the ad account's
+      currency; it's stored to 2 places without arithmetic, and a value
+      with more places is refused rather than rounded away (Meta's ad
+      currencies use at most 2). Each row carries its currency, and the
+      template's spend uses it. "Results" is the first result Meta gives
+      (what the campaign was set to get), its values added up, with its
+      kind in plain words ("Link click", "Purchase").
+1205. **Instagram follower totals start at the first load.** Meta gives
+      today's follower count, not past ones, so Tohyee notes it on each day
+      it loads; daily follows and unfollows (by `follow_type`) come from 90
+      days back, and need 100 followers or more.
+1206. **One Graph API version.** v26.0 (the newest, 29 Jul 2026) everywhere,
+      in one constant (`META_GRAPH_VERSION`). Meta keeps a version about two
+      years; moving to a newer one means reading its changelog for these
+      metrics first.
+1207. **What's uncertain.** Not tried with a real account. Unsure, from the
+      documents alone: whether Meta still answers the nested
+      `insights.metric(...)` field on `published_posts` for every post
+      type; the exact shape of the Ads Insights `results` field; whether
+      `follow_type`'s values are still FOLLOWER and NON_FOLLOWER; whether
+      the 90-day data access expiry applies to Page tokens; and the current
+      app-creation screens. Each would show as a plain error on the load
+      or as empty figures, not as wrong ones.
