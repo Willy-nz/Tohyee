@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useEffect, useMemo, useState } from "react";
 import { readFileAsBase64 } from "@/components/bank/common";
 import { Money } from "@/components/books";
@@ -838,7 +839,7 @@ export function IrdImports({ organisationId, incomeYear, years, onChanged }: { o
   return (
     <Card
       title="Import IRD account files"
-      description="Bring in a CSV or Excel file of an IRD account's transactions: payments, assessments, credits, interest and penalties. You match its columns, check every row, and accept or decline each one. Nothing counts until you accept it, and nothing is sent to IRD."
+      description={<>Bring in a CSV or Excel file of an IRD account&apos;s transactions. Nothing counts until you accept it, and nothing is sent to IRD.{" "}<InfoTip label="IRD files">You match its columns, check every row, and accept or decline each one. Nothing counts until you accept it, and nothing is sent to IRD.</InfoTip></>}
     >
       {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
       {data?.figures ? <YearFiguresFromImports figures={data.figures} /> : null}

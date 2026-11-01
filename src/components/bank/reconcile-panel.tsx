@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -1250,9 +1251,11 @@ export function ReconcilePanel({
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <p className={ui.muted}>
-        {total} {total === 1 ? "line" : "lines"} to reconcile, oldest first. Reconciling says what each line is: something already
-        posted, a payment of invoices or bills, a new bank transaction, or a transfer. A highlighted suggestion is the only match with
-        the exact amount; <strong>OK</strong> reconciles it as shown, in one click. <strong>Review</strong> opens a line to match or code it yourself. Tick several lines to code them to an account all at once.
+        {total} {total === 1 ? "line" : "lines"} to reconcile, oldest first. <strong>OK</strong> accepts a suggestion; <strong>Review</strong> lets you match or code a line yourself.{" "}
+        <InfoTip label="Reconciling">
+          <InfoPara>Reconciling says what each line is: something already posted, a payment of invoices or bills, a new bank transaction, or a transfer.</InfoPara>
+          <InfoPara>A highlighted suggestion is the only match with the exact amount; <strong>OK</strong> reconciles it as shown, in one click. <strong>Review</strong> opens a line to match or code it yourself. Tick several lines to code them to an account all at once.</InfoPara>
+        </InfoTip>
       </p>
       {confident.error ? <Notice tone="error">{confident.error}</Notice> : null}
       {can("bookkeeper") && confident.data ? (

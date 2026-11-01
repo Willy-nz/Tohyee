@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
@@ -252,7 +253,7 @@ function AccountAverages({ organisationId, canEdit, onChanged }: { organisationI
   return (
     <Card
       title="Account averages"
-      description="Accounts forecast from their average over the last 3 or 6 whole months, e.g. wages. Each period gets the average daily amount times its days. Don't average an account whose bills are already in the forecast, or they're counted twice."
+      description={<>Accounts forecast from their average over the last 3 or 6 whole months, e.g. wages.{" "}<InfoTip label="Account averages">Each period gets the average daily amount times its days. Don&apos;t average an account whose bills are already in the forecast, or they&apos;re counted twice.</InfoTip></>}
     >
       {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}

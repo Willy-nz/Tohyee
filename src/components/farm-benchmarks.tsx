@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -60,7 +61,7 @@ export function FarmBenchmarksView({ organisationId }: { organisationId: string 
     <>
       <Card
         title="Farm benchmarks"
-        description="Gross farm revenue and farm working expenses for the year, in total and per kg of milk solids, effective hectare, peak cow milked and stock unit. Only expense accounts put in a group below are working expenses."
+        description={<>Gross farm revenue and farm working expenses for the year, in total and per kg of milk solids, effective hectare, peak cow milked and stock unit.{" "}<InfoTip label="Farm benchmarks">Only expense accounts put in a group below are working expenses.</InfoTip></>}
         actions={
           data ? (
             <Field label="Year ending">

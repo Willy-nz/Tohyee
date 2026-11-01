@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -69,7 +70,7 @@ function Balances({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Leave balances"
-      description="Annual holidays in weeks with their hours (decision 8), sick and family violence leave in days, alternative holidays, and the running 8% since the last anniversary (HL42). Counted from approved pay runs."
+      description={<>Each person&apos;s leave, counted from approved pay runs.{" "}<InfoTip label="Leave balances">Annual holidays in weeks with their hours (decision 8), sick and family violence leave in days, alternative holidays, and the running 8% since the last anniversary (HL42). Counted from approved pay runs.</InfoTip></>}
       actions={
         <Field label="As at">
           <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
@@ -389,7 +390,7 @@ function CashUps({ organisationId }: { organisationId: string }) {
     <>
       <Card
         title="Cash up annual holidays"
-        description="Only when the employee asks in writing and you agree in writing: at most 1 week an entitlement year, never holidays taken in advance (s 28A-s 28E). Paid at the annual holiday rate in the next pay run, as an extra pay; it isn't gross earnings for holiday pay (s 14(c)(iv))."
+        description={<>Only when the employee asks in writing and you agree in writing: at most 1 week an entitlement year, never holidays taken in advance (s 28A-s 28E).{" "}<InfoTip label="Cashing up">Paid at the annual holiday rate in the next pay run, as an extra pay; it isn&apos;t gross earnings for holiday pay (s 14(c)(iv)).</InfoTip></>}
       >
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
         <form className={styles.stack} onSubmit={save}>
@@ -471,7 +472,7 @@ function Liability({ organisationId }: { organisationId: string }) {
     <>
     <Card
       title="Leave liability"
-      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays; and, for anyone who has finished but whose final pay isn't paid yet, the holiday pay on finishing on it. Employer KiwiSaver on it is shown for enrolled employees (gross, before ESCT). Sick leave carried over is in only where you've assessed how many days people are expected to take beyond their new entitlements (below; decision 564); bereavement and family violence leave aren't in it. Post it to the ledger below (decisions 177, 189, 190)."
+      description={<>What the leave owed to staff is worth. Post it to the ledger below.{" "}<InfoTip label="What the liability includes">Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays; and, for anyone who has finished but whose final pay isn&apos;t paid yet, the holiday pay on finishing on it. Employer KiwiSaver on it is shown for enrolled employees (gross, before ESCT). Sick leave carried over is in only where you&apos;ve assessed how many days people are expected to take beyond their new entitlements (below; decision 564); bereavement and family violence leave aren&apos;t in it. Post it to the ledger below (decisions 177, 189, 190).</InfoTip></>}
       actions={
         <div className={ui.actions}>
           <Field label="As at"><DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>
@@ -577,7 +578,7 @@ function ExpectedSickLeave({ organisationId, asAt, rows, onChanged }: { organisa
   return (
     <Card
       title="Expected sick leave"
-      description="Accounting standards (NZ IAS 19, PBE IPSAS 39) count sick leave carried over only for the extra days people are expected to take because of it, beyond their new entitlements: not every unused day. If that's material for you, record each person's expected days from a date and why; they're valued at a usual day's pay and posted with the rest. Record 0 to take it out. Tohyee doesn't estimate it for you."
+      description={<>Only if it&apos;s material: record the extra sick days people are expected to take. Tohyee doesn&apos;t estimate it for you.{" "}<InfoTip label="Sick leave carried over">Accounting standards (NZ IAS 19, PBE IPSAS 39) count sick leave carried over only for the extra days people are expected to take because of it, beyond their new entitlements: not every unused day. If that&apos;s material for you, record each person&apos;s expected days from a date and why; they&apos;re valued at a usual day&apos;s pay and posted with the rest. Record 0 to take it out. Tohyee doesn&apos;t estimate it for you.</InfoTip></>}
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <form className={styles.stack} onSubmit={save}>
@@ -644,7 +645,7 @@ function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organis
   return (
     <Card
       title="Post to the ledger"
-      description="One journal at the date for the change since the last posting not voided: Dr the leave expense account, Cr the employee entitlements account (the other way when it falls), by Department, never naming anyone, with the employer KiwiSaver on it as its own pair of lines. Leave paid in pay runs still goes to wages; the next posting takes the fall. The accounts are under Payroll › Pay items. The home page reminds you after each month end with pay runs."
+      description={<>One journal for the change since the last posting, never naming anyone.{" "}<InfoTip label="The journal">It&apos;s dated at the date of the change since the last posting not voided: Dr the leave expense account, Cr the employee entitlements account (the other way when it falls), by Department, never naming anyone, with the employer KiwiSaver on it as its own pair of lines. Leave paid in pay runs still goes to wages; the next posting takes the fall. The accounts are under Payroll › Pay items. The home page reminds you after each month end with pay runs.</InfoTip></>}
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {postings.error ? <Notice tone="error">{postings.error}</Notice> : null}
@@ -1014,9 +1015,9 @@ function OpeningBalancesForm({ organisationId, employeeId, onSaved }: { organisa
     <>
       <h3>Opening balances</h3>
       <p className={ui.muted}>
-        For someone employed before Tohyee&apos;s first pay run for them: their leave and earlier earnings from the previous payroll, as at the end of the
-        day before Tohyee&apos;s first pay period for them (decision 168). Enter the earnings one row per pay period of the previous payroll for at least the
-        last 12 months (or since they started), without gaps, as Xero asks for them.
+        For someone employed before Tohyee&apos;s first pay run for them: their leave and earlier earnings from the previous payroll.{" "}
+        <InfoTip label="Opening balances">They&apos;re as at the end of the day before Tohyee&apos;s first pay period for them (decision 168). Enter the earnings one row per pay period of the previous payroll for at least the
+        last 12 months (or since they started), without gaps, as Xero asks for them.</InfoTip>
       </p>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {current.error ? <Notice tone="error">{current.error}</Notice> : null}

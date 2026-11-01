@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { StageBadge, useBusy, useStages } from "@/components/crm";
 import { Button, Card, Field, Notice, ui } from "@/components/ui";
@@ -235,7 +236,7 @@ export function StagesManager({ organisationId }: { organisationId: string }) {
     <>
       <Card
         title="Stages"
-        description="In pipeline order. A Closed won stage is 100% and Closed (it can make the invoice); a Closed lost stage is 0% and Omitted. At least one active stage of each type must stay. Archived stages keep their opportunities. A new default probability doesn't change opportunities already in the stage."
+        description={<>In pipeline order.{" "}<InfoTip label="Stages">A Closed won stage is 100% and Closed (it can make the invoice); a Closed lost stage is 0% and Omitted. At least one active stage of each type must stay. Archived stages keep their opportunities. A new default probability doesn&apos;t change opportunities already in the stage.</InfoTip></>}
       >
         <div className={ui.tableWrap}>
           <table className={ui.table}>

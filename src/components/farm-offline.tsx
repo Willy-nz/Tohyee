@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -200,7 +201,8 @@ export function FarmOfflinePage({ organisationId }: { organisationId: string }) 
   return (
     <div className={styles.page}>
       <p className={ui.muted}>
-        Tohyee keeps every farm you can see on this device, with the last {PACK_MONTHS} months of records and small copies of photos, so the farm pages work without a signal. It updates by itself whenever Tohyee is open with a connection. It&apos;s a copy for working away from a signal, not a backup.
+        Tohyee keeps the farms you can see on this device, so the farm pages work without a signal. It&apos;s a copy, not a backup.{" "}
+        <InfoTip label="What's kept">It keeps every farm you can see, with the last {PACK_MONTHS} months of records and small copies of photos. It updates by itself whenever Tohyee is open with a connection. It&apos;s a copy for working away from a signal.</InfoTip>
       </p>
       {message ? <Notice>{message}</Notice> : null}
       {running?.running && running.total ? (

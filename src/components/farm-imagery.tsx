@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useApiData } from "@/components/hooks";
@@ -183,7 +184,8 @@ export function AerialPhotosCard({ organisationId, settings, onSaved }: { organi
           </div>
         ) : null}
         <p className={ui.muted}>
-          Photos load in each person&apos;s browser straight from LINZ, so anyone who can see the map can see the key. Tohyee&apos;s server doesn&apos;t fetch or keep them. Phones keep the farm&apos;s area for use without a signal. LINZ&apos;s{" "}
+          Photos load in each person&apos;s browser straight from LINZ, so anyone who can see the map can see the key.{" "}
+          <InfoTip label="Aerial photos">Tohyee&apos;s server doesn&apos;t fetch or keep them. Phones keep the farm&apos;s area for use without a signal.</InfoTip> LINZ&apos;s{" "}
           <a href="https://www.linz.govt.nz/guidance/data-service/linz-basemaps-guide/linz-basemaps-terms-use" target="_blank" rel="noreferrer">
             terms of use
           </a>{" "}
@@ -305,7 +307,8 @@ export function FarmPhotosOffline({ organisationId, online }: { organisationId: 
       ) : (
         <>
           <p className={ui.muted}>
-            Phones and tablets keep LINZ&apos;s aerial photos for each farm&apos;s area (the paddocks plus 300 m around them), zoom {OFFLINE_MIN_ZOOM} to {OFFLINE_MAX_ZOOM}, by themselves. At most {OFFLINE_MAX_TILES.toLocaleString("en-NZ")} photos and {OFFLINE_MAX_BYTES / 1024 / 1024} MB on a device; a big farm keeps fewer close-up zooms. Imagery © LINZ CC BY 4.0.
+            Phones and tablets keep each farm&apos;s aerial photos by themselves, for use without a signal.{" "}
+            <InfoTip label="Photos kept on devices">They keep LINZ&apos;s aerial photos for each farm&apos;s area (the paddocks plus 300 m around them), zoom {OFFLINE_MIN_ZOOM} to {OFFLINE_MAX_ZOOM}. At most {OFFLINE_MAX_TILES.toLocaleString("en-NZ")} photos and {OFFLINE_MAX_BYTES / 1024 / 1024} MB on a device; a big farm keeps fewer close-up zooms.</InfoTip> Imagery © LINZ CC BY 4.0.
           </p>
           {message ? <Notice>{message}</Notice> : null}
           {progress ? <Notice>Keeping aerial photos: {progress.done.toLocaleString("en-NZ")} of {progress.total.toLocaleString("en-NZ")}…</Notice> : null}

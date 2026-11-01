@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, ui } from "@/components/ui";
@@ -56,7 +57,7 @@ function ReportFormatEditor({ organisationId, loaded, onChanged }: { organisatio
   return (
     <Card
       title="Report format"
-      description="Businesses use special purpose financial statements. Not-for-profits, such as clubs, societies and registered charities, use XRB's Tier 3 (accrual) or Tier 4 (cash) performance report. Which tier applies is set by XRB's rules, not by Tohyee."
+      description={<>Not-for-profits use XRB&apos;s Tier 3 or Tier 4 performance report. Which tier applies is set by XRB&apos;s rules, not by Tohyee.{" "}<InfoTip label="Which statements">Businesses use special purpose financial statements. Not-for-profits, such as clubs, societies and registered charities, use XRB&apos;s Tier 3 (accrual) or Tier 4 (cash) performance report. Which tier applies is set by XRB&apos;s rules, not by Tohyee.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
@@ -254,7 +255,7 @@ export function CategoriesCard({ organisationId, tier }: { organisationId: strin
   return (
     <Card
       title="Categories"
-      description="Each account is printed in one of XRB's minimum categories. Tohyee suggests one from the account type until you choose. A balance sheet account can also say which operating category its cash belongs to (subscriptions received in advance, say)."
+      description={<>Each account is printed in one of XRB&apos;s minimum categories.{" "}<InfoTip label="Categories">Tohyee suggests one from the account type until you choose. A balance sheet account can also say which operating category its cash belongs to (subscriptions received in advance, say).</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       <label className={ui.checkbox}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { type FormEvent, Fragment, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -1050,7 +1051,8 @@ function TaxAssets({ organisationId, assets, incomeYear, onSaved }: { organisati
         </div>
       )}
       <p className={ui.muted}>
-        Depreciation and Investment Boost shown are the business-use share that&apos;s deducted. No depreciation is claimed in the year an asset is sold. Where IRD&apos;s pages don&apos;t say (rounding to the cent, the ATV of an asset used partly privately), Tohyee&apos;s reading is in decision 546.
+        Depreciation and Investment Boost shown are the business-use share that&apos;s deducted.{" "}
+        <InfoTip label="Depreciation">No depreciation is claimed in the year an asset is sold. Where IRD&apos;s pages don&apos;t say (rounding to the cent, the ATV of an asset used partly privately), Tohyee&apos;s reading is in decision 546.</InfoTip>
       </p>
     </Card>
   );
@@ -1527,7 +1529,7 @@ function IrdDocuments({ organisationId, incomeYear, years, endMonth, onChanged }
   return (
     <Card
       title="IRD documents"
-      description="Upload IRD's assessments, statements of account and letters (downloaded from myIR). Your connected AI can read them and propose the figures; nothing changes until you check and accept them. Tohyee never asks for your myIR password."
+      description={<>Upload IRD&apos;s assessments, statements and letters from myIR. Nothing changes until you accept it. Tohyee never asks for your myIR password.{" "}<InfoTip label="Reading IRD's letters">Your connected AI can read them and propose the figures; nothing changes until you check and accept them. Tohyee never asks for your myIR password.</InfoTip></>}
     >
       {data && data.proposals.length > 0 ? (
         <>
@@ -1731,7 +1733,7 @@ function InterestCard({ report }: { report: Supported }) {
           ))}
         </ul>
       ) : null}
-      <p className={ui.muted}>Simple daily interest (rate × days ÷ 365), from the day after each amount was due to the day it&apos;s paid; nothing while $100 or less is unpaid. Interest IRD pays on overpayments isn&apos;t worked out.</p>
+      <p className={ui.muted}>Simple daily interest, from the day after each amount was due to the day it&apos;s paid.{" "}<InfoTip label="Use-of-money interest">Rate × days ÷ 365. Nothing while $100 or less is unpaid. Interest IRD pays on overpayments isn&apos;t worked out.</InfoTip></p>
     </Card>
   );
 }

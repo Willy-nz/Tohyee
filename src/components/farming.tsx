@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
@@ -984,7 +985,7 @@ export function ImportPaddocks({ organisationId, farmId: initialFarm }: { organi
     <>
       <Card
         title="Import paddock shapes"
-        description="A file of paddock polygons, one per paddock, with a property holding its name: GeoJSON, KML or KMZ (from Google Earth and most farm mapping apps), or a shapefile zipped with its .dbf and .prj files. Shapes in NZTM2000 are converted. Paddocks are matched by name: new names add paddocks, and a changed shape adds a new boundary version. Nothing is saved until you import."
+        description={<>A file of paddock shapes, such as GeoJSON, KML or KMZ from Google Earth. Nothing is saved until you import.{" "}<InfoTip label="Paddock files">One polygon per paddock, with a property holding its name: GeoJSON, KML or KMZ (from Google Earth and most farm mapping apps), or a shapefile zipped with its .dbf and .prj files. Shapes in NZTM2000 are converted. Paddocks are matched by name: new names add paddocks, and a changed shape adds a new boundary version. Nothing is saved until you import.</InfoTip></>}
       >
         {error ? <Notice tone="error">{error}</Notice> : null}
         {done ? <Notice tone="success">{done}</Notice> : null}

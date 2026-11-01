@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { CampaignSelect } from "@/components/crm-campaigns";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -129,9 +130,12 @@ function AddMailbox({ organisationId, onAdded, onCancel }: { organisationId: str
     <div style={{ display: "grid", gap: 12 }}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className={ui.muted}>
-        Set a rule in the mailbox to file enquiries (for example to sales@) into one folder or label. Each email there becomes a lead to review, from
-        its sender, with its subject and the start of its text; an email from someone who&apos;s already an open lead adds a note to their lead. Tohyee
-        reads each email once and never moves, marks or deletes it. It reads as you.
+        Each email in the folder or label you choose becomes a lead to review. Tohyee never moves, marks or deletes emails.{" "}
+        <InfoTip label="Leads from a mailbox">
+          Set a rule in the mailbox to file enquiries (for example to sales@) into one folder or label. Each lead is from the email&apos;s sender, with
+          its subject and the start of its text; an email from someone who&apos;s already an open lead adds a note to their lead. Tohyee reads each email
+          once. It reads as you.
+        </InfoTip>
       </p>
       <div className={ui.grid3}>
         <Field label="Mailbox">

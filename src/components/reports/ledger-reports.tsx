@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
@@ -80,7 +81,7 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
   return (
     <Card
       title="Aged payables"
-      description="What you owe each supplier, by days past the bill's due date, less supplier credit not yet used, in the base currency (foreign-currency bills at their own rates, with their own currency beside them). The total matches accounts payable on the balance sheet, with any FX revaluation on the date."
+      description={<>What you owe each supplier, by days past the due date.{" "}<InfoTip label="Aged payables">Less supplier credit not yet used, in the base currency (foreign-currency bills at their own rates, with their own currency beside them). The total matches accounts payable on the balance sheet, with any FX revaluation on the date.</InfoTip></>}
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">

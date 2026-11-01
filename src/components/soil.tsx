@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { FarmSelector, useSelectedFarm } from "@/components/farm-selector";
@@ -411,7 +412,7 @@ function ImportSoil({
   return (
     <Card
       title="Import a lab's results"
-      description="A CSV or Excel (.xlsx) file with one row per sample. Columns are matched by their headings, and units in brackets after a heading are kept. Check the matching before importing; nothing is saved until you do."
+      description={<>A CSV or Excel (.xlsx) file with one row per sample. Nothing is saved until you import.{" "}<InfoTip label="Lab files">Columns are matched by their headings, and units in brackets after a heading are kept. Check the matching before importing; nothing is saved until you do.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {done ? <Notice tone="success">{done}</Notice> : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Card, Notice, ui } from "@/components/ui";
@@ -33,7 +34,7 @@ export function MemberFarms({ organisationId, members }: { organisationId: strin
   return (
     <Card
       title="Farms each person works on"
-      description="Owners and admins see every farm. With two or more farms, viewers, bookkeepers and report viewers see and record only for the farms chosen here: maps, paddocks, soil, pasture, fertiliser, the farm calendar's shared items, Home's farm cards, farm apps and AI tools. The farm notebook and Analytics' farm tables cover every farm, so they need All farms."
+      description={<>Owners and admins see every farm. With two or more farms, everyone else sees only the farms chosen here.{" "}<InfoTip label="Which farms people see">Owners and admins see every farm. With two or more farms, viewers, bookkeepers and report viewers see and record only for the farms chosen here: maps, paddocks, soil, pasture, fertiliser, the farm calendar&apos;s shared items, Home&apos;s farm cards, farm apps and AI tools. The farm notebook and Analytics&apos; farm tables cover every farm, so they need All farms.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {!data.keptApart ? <p className={ui.muted}>There&apos;s only one farm, so everyone sees it. These choices apply once there are two or more.</p> : null}

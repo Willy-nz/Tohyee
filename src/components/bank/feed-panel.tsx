@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -100,7 +101,7 @@ function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: s
         </Field>
         <Field
           label="Bring in transactions from"
-          hint="The first sync goes back to this date, as far as Akahu and the bank allow. Akahu's default is up to 2 years, but some banks give less (Akahu lists ASB at 12 months, Kiwibank credit cards at 180 days, SBS at about 6 months). Lines already imported from files are skipped or flagged as possible duplicates."
+          hint={<>The first sync goes back to this date, as far as Akahu and the bank allow.{" "}<InfoTip label="How far back">Akahu&apos;s default is up to 2 years, but some banks give less (Akahu lists ASB at 12 months, Kiwibank credit cards at 180 days, SBS at about 6 months). Lines already imported from files are skipped or flagged as possible duplicates.</InfoTip></>}
         >
           <DateInput value={startDate} max={today} onChange={(event) => setStartDate(event.target.value)} required />
         </Field>
@@ -172,9 +173,9 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
     if (foreign && !feed.active) {
     return (
       <Notice tone="info">
-        Akahu bank feeds can&apos;t be used for {account.currencyCode} accounts yet: Akahu&apos;s transactions don&apos;t say their
-        currency, so Tohyee can&apos;t tell {account.currencyCode} from NZD. Import statement files from your bank instead (the Import a
-        statement tab).
+        Akahu bank feeds can&apos;t be used for {account.currencyCode} accounts yet. Import statement files from your bank instead (the Import a
+        statement tab).{" "}
+        <InfoTip label="Why not">Akahu&apos;s transactions don&apos;t say their currency, so Tohyee can&apos;t tell {account.currencyCode} from NZD.</InfoTip>
       </Notice>
     );
   }

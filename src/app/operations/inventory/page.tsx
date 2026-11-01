@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
@@ -374,10 +375,13 @@ function Inventory({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Stock is costed at weighted average per item and location and always matches the inventory account to the cent. Stock
-        items on bills, invoices and credit notes move stock on their own; record other movements (stocktakes, landed cost)
+        Record stocktakes, landed cost and transfers between locations here. Bills, invoices and credit notes move stock on their own.{" "}
+        <InfoTip label="How stock is costed">
+        <InfoPara>Stock is costed at weighted average per item and location and always matches the inventory account to the cent.</InfoPara>
+        <InfoPara>Stock items on bills, invoices and credit notes move stock on their own; record other movements (stocktakes, landed cost)
         and transfers between locations here. Movements dated before an item&apos;s latest movement aren&apos;t accepted yet, because every later sale would need
-        re-costing.
+        re-costing.</InfoPara>
+        </InfoTip>
       </Notice>
       {message ? <Notice tone="success">{message}</Notice> : null}
       {can("bookkeeper") ? (

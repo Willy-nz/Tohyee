@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { Fragment, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -221,9 +222,8 @@ function AddFeedForm({
       ) : (
         <>
           <p className={ui.muted}>
-            Set a rule in the mailbox to file your bank&apos;s statement emails into one folder or label. Tohyee reads their CSV, Excel, OFX, QIF and
-            other statement attachments, and never moves, marks or deletes emails. It reads as you: your own mailbox connected in the CRM, or IMAP
-            with an app password.
+            File your bank&apos;s statement emails into one folder or label. Tohyee never moves, marks or deletes emails.{" "}
+            <InfoTip label="Statements from a mailbox">Set a rule in the mailbox to file them there. Tohyee reads their CSV, Excel, OFX, QIF and other statement attachments. It reads as you: your own mailbox connected in the CRM, or IMAP with an app password.</InfoTip>
           </p>
           <div className={ui.grid3}>
             <Field label="Mailbox">
@@ -393,9 +393,9 @@ export function FileFeedsPanel({ organisationId, account, onChanged }: { organis
         Automatic statement files
       </h3>
       <p className={ui.muted}>
-        For banks without a feed: Tohyee reads new statement files from a folder or a mailbox by itself and imports them, as if you had imported them
-        by hand. Duplicates are skipped or flagged in the same way. CSV and Excel files use the columns of the last file of that kind you imported by
-        hand; a file whose columns differ waits for you.
+        For banks without a feed: Tohyee imports new statement files from a folder or a mailbox by itself.{" "}
+        <InfoTip label="Statement files by themselves">It imports them as if you had imported them by hand. Duplicates are skipped or flagged in the same way. CSV and Excel files use the columns of the last file of that kind you imported by
+        hand; a file whose columns differ waits for you.</InfoTip>
       </p>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {data.error ? <Notice tone="error">{data.error}</Notice> : null}

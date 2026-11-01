@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -53,7 +54,7 @@ function AppSettings({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Your organisation's Google and Microsoft app"
-      description="Like bank feeds, each organisation uses its own app. Create one in the Google Cloud console (OAuth client, web application, with the Gmail and Google Calendar APIs turned on) and/or in Microsoft Entra (app registration, with Mail.Read, Calendars.Read, User.Read and offline_access), then enter its client ID and secret here. Tohyee only ever reads."
+      description={<>Each organisation uses its own Google or Microsoft app. Tohyee only ever reads.{" "}<InfoTip label="Setting up the app">Like bank feeds, each organisation uses its own app. Create one in the Google Cloud console (OAuth client, web application, with the Gmail and Google Calendar APIs turned on) and/or in Microsoft Entra (app registration, with Mail.Read, Calendars.Read, User.Read and offline_access), then enter its client ID and secret here. Tohyee only ever reads.</InfoTip></>}
     >
       {!settings.secretsAvailable ? (
         <Notice tone="warning">The server has no TOHYEE_SECRET_KEY, so it can&apos;t store secrets. A server admin needs to set it first.</Notice>
@@ -227,7 +228,7 @@ export function MailPage({ organisationId }: { organisationId: string }) {
       {params.get("error") ? <Notice tone="error">{params.get("error")}</Notice> : null}
       <Card
         title="Connected mailboxes"
-        description="Connect your own mailbox and calendar. Only emails and meetings with people and companies in the CRM are kept, with their subject and a short preview; never full emails or attachments. Syncs every 15 minutes. Allow sending to email leads, people and deals from your own mailbox: nothing goes until you press Send."
+        description={<>Connect your own mailbox and calendar. Only emails and meetings with people and companies in the CRM are kept, with their subject and a short preview; never full emails or attachments.{" "}<InfoTip label="Mailbox sync">Syncs every 15 minutes. Allow sending to email leads, people and deals from your own mailbox: nothing goes until you press Send.</InfoTip></>}
         actions={
           canCrm("write") ? (
             <span className={ui.actions}>

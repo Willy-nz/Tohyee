@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -200,9 +201,11 @@ export function BillsInbox({ organisationId }: { organisationId: string }) {
       >
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
         <Notice tone="info">
-          Tohyee doesn&apos;t read bills by itself: there&apos;s no built-in scanning. If this organisation has an AI connected (the{" "}
-          <Link href="/operations/ai">AI</Link> page), it can read these files and make draft bills; without one, open each file and
-          type the bill in. Check what the AI read against the file before approving.
+          Tohyee doesn&apos;t read bills by itself. Check what an AI read against the file before approving.{" "}
+          <InfoTip label="Reading bills">
+            There&apos;s no built-in scanning. If this organisation has an AI connected (the <Link href="/operations/ai">AI</Link> page), it can read these
+            files and make draft bills; without one, open each file and type the bill in.
+          </InfoTip>
         </Notice>
         {can("bookkeeper") ? <Upload organisationId={organisationId} onDone={done} /> : null}
         <div className={ui.tabs} role="tablist" aria-label="Bills inbox">
@@ -315,9 +318,11 @@ function AddMailbox({ organisationId, onAdded, onCancel }: { organisationId: str
     <div style={{ display: "grid", gap: 12 }}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className={ui.muted}>
-        Set a rule in the mailbox to file supplier bills into one folder or label. Tohyee takes their PDF and picture attachments, ignores other
-        files, reads each email once, and never moves, marks or deletes emails. It reads as you: your own mailbox connected in the CRM, or IMAP with
-        an app password.
+        File supplier bills into one folder or label. Tohyee never moves, marks or deletes emails.{" "}
+        <InfoTip label="Bills from a mailbox">
+          Set a rule in the mailbox to file them there. Tohyee takes their PDF and picture attachments, ignores other files and reads each email once. It
+          reads as you: your own mailbox connected in the CRM, or IMAP with an app password.
+        </InfoTip>
       </p>
       <div className={ui.grid3}>
         <Field label="Mailbox">

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState, type ReactNode } from "react";
 import { ColourInput } from "@/components/analytics/colour-input";
 import { SettingSection } from "@/components/analytics/setting-source";
@@ -63,7 +64,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   if (smallMultiples && (visual === "column" || visual === "bar" || visual === "line")) {
     return (
       <Section title="Small multiples" paths={["smallMultiples"]}>
-        <p className={styles.note}>One small chart for each value of the second grouping, all with the same groups and the same scale. Past the most charts, the smaller ones are added together as &quot;Other&quot; (totals and counts only; other values are left out).</p>
+        <p className={styles.note}>One small chart for each value of the second grouping, all with the same scale.{" "}<InfoTip label="Small multiples">All the charts have the same groups and the same scale. Past the most charts, the smaller ones are added together as &quot;Other&quot; (totals and counts only; other values are left out).</InfoTip></p>
         <Field label="Most small charts" hint="2 to 12">
           <select value={format.smallMultiples?.max ?? 6} onChange={(event) => set({ smallMultiples: Number(event.target.value) === 6 ? undefined : { max: Number(event.target.value) } })}>
             {Array.from({ length: 11 }, (_unused, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
@@ -142,7 +143,8 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
     return (
       <Section title="Filled map" paths={["map"]}>
         <p className={styles.note}>
-          Group by a region or a district or city name, e.g. Waikato or Hamilton City; each is coloured by its {values[0] || "value"} on one blue scale (orange below zero and blue above when there are both). Spelling, macrons and words like &quot;Region&quot; or &quot;District&quot; don&apos;t matter. Names that aren&apos;t on the map are listed under it.
+          Group by a region or a district or city name, e.g. Waikato or Hamilton City.{" "}
+          <InfoTip label="Filled maps">Each area is coloured by its {values[0] || "value"} on one blue scale (orange below zero and blue above when there are both). Spelling, macrons and words like &quot;Region&quot; or &quot;District&quot; don&apos;t matter. Names that aren&apos;t on the map are listed under it.</InfoTip>
         </p>
         <Field label="Areas">
           <select value={format.map?.areas ?? ""} onChange={(event) => set({ map: event.target.value ? { areas: event.target.value as "regions" | "districts" } : undefined })}>
@@ -159,7 +161,8 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
       <Section title="Map with points">
         <p className={styles.note}>
           Each group is a dot at its {values[0] || "first value"} (latitude) and {values[1] || "second value"} (longitude), e.g. the average of each farm&apos;s
-          {values.length > 2 ? `; ${values[2] || "the third value"} sizes the dots (their area)` : ". Add a third value to size the dots"}. Places outside New Zealand are left out and counted under the map. The Chatham Islands are drawn closer to the mainland.
+          {values.length > 2 ? `; ${values[2] || "the third value"} sizes the dots (their area)` : ". Add a third value to size the dots"}.{" "}
+          <InfoTip label="Map with points">Places outside New Zealand are left out and counted under the map. The Chatham Islands are drawn closer to the mainland.</InfoTip>
         </p>
       </Section>
     );
@@ -209,7 +212,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
           {visual === "heatmap"
             ? "Each cell is the total for a group (across) and a value of the second grouping (down)."
             : "Each day is coloured by its total. Up to the three latest years with data are shown, newest first."}{" "}
-          Cells are coloured on one blue scale from light (small) to dark (large); with amounts both below and above zero, orange below and blue above with grey at zero. The scale is under the chart.
+          <InfoTip label="Colours">Cells are coloured on one blue scale from light (small) to dark (large); with amounts both below and above zero, orange below and blue above with grey at zero. The scale is under the chart.</InfoTip>
         </p>
       </Section>
     );
@@ -221,7 +224,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
           {visual === "treemap"
             ? "Each box's area is its total, largest first. Only amounts above zero have an area, so others are left out."
             : "Each group flows to the values of the second grouping; a flow's width is its total. Only amounts above zero can flow."}{" "}
-          Groups take the theme&apos;s colours in order; after the last colour they&apos;re grey. Colour a group yourself under Colours.
+          <InfoTip label="Colours">Groups take the theme&apos;s colours in order; after the last colour they&apos;re grey. Colour a group yourself under Colours.</InfoTip>
         </p>
       </Section>
     );
@@ -229,7 +232,7 @@ export function VisualSettings({ visual, values, format, set, smallMultiples = f
   if (visual === "boxplot") {
     return (
       <Section title="Box plot" paths={["boxplot"]}>
-        <p className={styles.note}>Each box runs from the lower to the upper quartile with the median across it (quartiles as a spreadsheet&apos;s QUARTILE.INC); the whiskers reach the furthest values within 1.5 times the box&apos;s height, and values beyond are dots.</p>
+        <p className={styles.note}>Each box runs from the lower to the upper quartile with the median across it.{" "}<InfoTip label="Box plots">Quartiles are worked out as a spreadsheet&apos;s QUARTILE.INC. The whiskers reach the furthest values within 1.5 times the box&apos;s height, and values beyond are dots.</InfoTip></p>
         <Check label="Dots for values beyond the whiskers" checked={format.boxplot?.outliers !== false} onChange={(checked) => set({ boxplot: { outliers: checked ? undefined : false } })} />
       </Section>
     );

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -302,7 +303,7 @@ export default function PeriodClosePage() {
     <Page>
       <PageHeader
         title="Period close"
-        description="Close each month once its checks pass, like NetSuite's period close checklist. There are no closing journals: a year's profit moves into retained earnings on the balance sheet on the first day of the next year."
+        description={<>Close each month once its checks pass.{" "}<InfoTip label="Period close">It works like NetSuite&apos;s period close checklist. There are no closing journals: a year&apos;s profit moves into retained earnings on the balance sheet on the first day of the next year.</InfoTip></>}
       />
       <RequireOrganisation>{(organisationId) => <PeriodClose key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>

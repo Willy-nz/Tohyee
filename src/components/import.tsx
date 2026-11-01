@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { useMemo, useState } from "react";
 import { readFileAsBase64 } from "@/components/bank/common";
@@ -273,7 +274,7 @@ function MasterStep({ organisationId, kind }: { organisationId: string; kind: "a
       title={IMPORT_KIND_LABELS[kind]}
       description={
         kind === "accounts"
-          ? "Matched by code: existing accounts are updated, new ones added, nothing deleted. Tohyee's own accounts (accounts receivable, GST…) keep their type; one named like them in the file takes its code."
+          ? <>Matched by code: existing accounts are updated, new ones added, nothing deleted.{" "}<InfoTip label="Tohyee's own accounts">Tohyee&apos;s own accounts (accounts receivable, GST…) keep their type; one named like them in the file takes its code.</InfoTip></>
           : kind === "contacts"
             ? "Matched by name (ignoring case): existing contacts are updated from the columns that have something in them, new ones added."
             : "Matched by code. Items with an inventory account become stock items; their quantities come with the opening balances."
@@ -456,7 +457,7 @@ function ConversionStep({
         <>
           <Card
             title="Conversion date and trial balance"
-            description="The trial balance from the old system as at the conversion date (usually the end of a GST period or financial year). Accounts receivable, accounts payable and inventory are made up by the open invoices, bills and stock, so those must add up to them exactly."
+            description={<>The trial balance from the old system as at the conversion date.{" "}<InfoTip label="Trial balance">The conversion date is usually the end of a GST period or financial year. Accounts receivable, accounts payable and inventory are made up by the open invoices, bills and stock, so those must add up to them exactly.</InfoTip></>}
           >
             <div style={{ display: "grid", gap: 14 }}>
               <div className={ui.grid2}>
@@ -483,7 +484,7 @@ function ConversionStep({
         <>
           <Card
             title="Open invoices"
-            description="One row per invoice still owed at the conversion date: number, customer, date, due date, the amount still owed including GST, and the GST in it (a GST column, or a GST code). On the payments basis the GST is needed: it's returned when the invoice is paid."
+            description={<>One row per invoice still owed at the conversion date.{" "}<InfoTip label="Open invoices">Number, customer, date, due date, the amount still owed including GST, and the GST in it (a GST column, or a GST code). On the payments basis the GST is needed: it&apos;s returned when the invoice is paid.</InfoTip></>}
           >
             <FilePicker organisationId={organisationId} kind="open_invoices" loaded={files.open_invoices} onLoaded={set("open_invoices")} optional />
           </Card>
@@ -653,8 +654,9 @@ function GstSplit({ gst }: { gst: ConversionGst }) {
         </tbody>
       </table>
       <p className={ui.muted}>
-        This should be what your last GST returns left to pay (negative: a refund due). If it isn&apos;t, the old system probably kept GST on unpaid invoices or bills
-        in another account: add it to the GST line of the trial balance.
+        This should be what your last GST returns left to pay (negative: a refund due).{" "}
+        <InfoTip label="If it doesn't match">If it isn&apos;t, the old system probably kept GST on unpaid invoices or bills
+        in another account: add it to the GST line of the trial balance.</InfoTip>
       </p>
     </div>
   );
@@ -684,7 +686,7 @@ function FinalCheck({ organisationId, status, reload }: { organisationId: string
   return (
     <Card
       title={`Trial balance at ${formatDate(conversion.conversionDate)}`}
-      description="Tohyee's trial balance at the conversion date beside the one imported, account by account (debits positive, credits negative). Historical adjustment (the account opening balances clear through) should be 0.00."
+      description={<>Tohyee&apos;s trial balance at the conversion date beside the one imported. Historical adjustment should be 0.00.{" "}<InfoTip label="The check">Account by account, debits positive and credits negative. Historical adjustment is the account the opening balances clear through.</InfoTip></>}
     >
       <div style={{ display: "grid", gap: 12 }}>
         {status.matches ? <Notice tone="success">Every account matches the imported trial balance.</Notice> : <Notice tone="error">Some accounts don&apos;t match: see the differences below.</Notice>}
@@ -828,7 +830,7 @@ function HistoryStep({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="History: a general ledger"
-      description="Every transaction line from the old system after the opening balances, such as a year's general ledger from MYOB, so this year's reports can be checked against its accounts. Rows with the same date and ID# become one journal. Account headings with the lines under them (MYOB's layout) work, and rows without a date (beginning balances, totals) are skipped. Imported journals stay out of the journal list unless you choose Imported history there; reports include them. There are no GST codes on them, so GST returns don't count them."
+      description={<>Every transaction line from the old system after the opening balances, so this year&apos;s reports can be checked.{" "}<InfoTip label="Imported history">For example a year&apos;s general ledger from MYOB, so this year&apos;s reports can be checked against its accounts. Rows with the same date and ID# become one journal. Account headings with the lines under them (MYOB&apos;s layout) work, and rows without a date (beginning balances, totals) are skipped. Imported journals stay out of the journal list unless you choose Imported history there; reports include them. There are no GST codes on them, so GST returns don&apos;t count them.</InfoTip></>}
     >
       <div style={{ display: "grid", gap: 14 }}>
         <FilePicker
