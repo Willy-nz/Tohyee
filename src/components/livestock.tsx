@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -480,7 +481,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
       {message ? <Notice tone="success">{message}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {can("bookkeeper") ? (
-        <Card title="Record a movement" description="Births go into the rising one-year classes. Classes are what each animal will be at balance date. Nothing posts: values come from the year-end valuation, and homekill from the accountant's yearly adjustment below.">
+        <Card title="Record a movement" description={<>Births go into the rising one-year classes. Nothing posts.{" "}<InfoTip label="Movements">Classes are what each animal will be at balance date. Nothing posts: values come from the year-end valuation, and homekill from the accountant&apos;s yearly adjustment below.</InfoTip></>}>
           <div className={ui.grid}>
             <Field label="What happened">
               <select value={form.movementType} onChange={(event) => setForm({ ...form, movementType: event.target.value as MovementType })}>
@@ -1168,7 +1169,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
         <>
           <Card
             title="Reporting basis"
-            description="The basis of the farm's financial statements (LV28). Special purpose (tax basis) statements follow the farm's own stated policy. General purpose statements (NZ IFRS or PBE Standards) put changes in livestock values through profit or loss, and measure livestock at fair value less costs to sell, which Tohyee doesn't work out: the tax values need your accountant's adjustment."
+            description={<>The basis of the farm&apos;s financial statements (LV28).{" "}<InfoTip label="Reporting basis">Special purpose (tax basis) statements follow the farm&apos;s own stated policy. General purpose statements (NZ IFRS or PBE Standards) put changes in livestock values through profit or loss, and measure livestock at fair value less costs to sell, which Tohyee doesn&apos;t work out: the tax values need your accountant&apos;s adjustment.</InfoTip></>}
           >
             <div className={ui.choiceList} role="radiogroup" aria-label="Reporting basis">
               {(["special_purpose", "general_purpose"] as const).map((basis) => (
@@ -1184,7 +1185,7 @@ export function LivestockSettingsPanel({ organisationId }: { organisationId: str
               ))}
             </div>
           </Card>
-          <Card title="Herd scheme revaluation" description="Where the non-taxable revaluation of opening stock goes (LV12). The draft financial statements' livestock note states the choice as the farm's policy. Under general purpose reporting it's always profit and loss. A change applies to the next valuation approved; approved years aren't re-posted.">
+          <Card title="Herd scheme revaluation" description={<>Where the non-taxable revaluation of opening stock goes (LV12).{" "}<InfoTip label="Herd scheme revaluation">The draft financial statements&apos; livestock note states the choice as the farm&apos;s policy. Under general purpose reporting it&apos;s always profit and loss. A change applies to the next valuation approved; approved years aren&apos;t re-posted.</InfoTip></>}>
             <div className={ui.choiceList} role="radiogroup" aria-label="Herd scheme revaluation">
               {(["profit_and_loss", "reserve"] as const).map((target) => (
                 <label key={target}>
@@ -1248,7 +1249,7 @@ function ClassReportingCard({ organisationId, settings, canEdit, onSaved }: { or
   return (
     <Card
       title="Current or non-current"
-      description="Stock held for sale in the normal operating cycle is a current asset; a breeding or milking herd kept is non-current (NZ IAS 1 para 66). Choose for each class. The next valuation approved moves the current classes' closing value to the current account; approved years aren't re-posted."
+      description={<>Choose for each class whether it&apos;s current or non-current.{" "}<InfoTip label="Current or non-current">Stock held for sale in the normal operating cycle is a current asset; a breeding or milking herd kept is non-current (NZ IAS 1 para 66). The next valuation approved moves the current classes&apos; closing value to the current account; approved years aren&apos;t re-posted.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Field label="Kind">
@@ -1703,7 +1704,7 @@ export function LivestockAccountSales({ organisationId }: { organisationId: stri
       {can("bookkeeper") ? (
         <Card
           title="Enter an account sale"
-          description="The agent's account sale is your tax invoice. Its stock lines become an invoice to the agent and sale movements; its deductions a bill from the agent, settled against the invoice. The agent then owes the net. Amounts exclude GST."
+          description={<>The agent&apos;s account sale is your tax invoice.{" "}<InfoTip label="Account sales">Its stock lines become an invoice to the agent and sale movements; its deductions a bill from the agent, settled against the invoice. The agent then owes the net. Amounts exclude GST.</InfoTip></>}
         >
           <div className={ui.grid}>
             <Field label="Agent">
@@ -2019,7 +2020,7 @@ function HighPricedCard({ organisationId, canEdit }: { organisationId: string; c
   return (
     <Card
       title="High-priced livestock"
-      description="An animal that cost at least 500.00 and five times its class's NAMV is valued on its own: at cost in the year bought, then less IRD's depreciation rate each year, until it's at or below its class's NAMV. Record its purchase as a movement too."
+      description={<>An animal that cost at least 500.00 and five times its class&apos;s NAMV is valued on its own.{" "}<InfoTip label="High-priced livestock">It&apos;s valued at cost in the year bought, then less IRD&apos;s depreciation rate each year, until it&apos;s at or below its class&apos;s NAMV. Record its purchase as a movement too.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {animals.data && animals.data.animals.length === 0 ? <Empty>None recorded.</Empty> : null}

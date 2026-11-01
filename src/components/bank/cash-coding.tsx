@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { type FormEvent, useState } from "react";
 import { takesBankTransactionLines } from "@/components/bank/common";
 import { AccountSelect } from "@/components/books";
@@ -120,8 +121,8 @@ export function CashCodingForm({
       <p className={ui.muted}>
         Each ticked line becomes its own{" "}
         {moneyIn === 0 ? "spend money" : moneyIn === lines.length ? "receive money" : "spend money (money out) or receive money (money in)"} for
-        the line&apos;s full amount, on the line&apos;s date, reconciled to it. Amounts include GST. A line&apos;s own values below win
-        over the values for all.
+        the line&apos;s full amount, reconciled to it.{" "}
+        <InfoTip label="Coding several lines">Each one is dated on the line&apos;s date. Amounts include GST. A line&apos;s own values below win over the values for all.</InfoTip>
       </p>
       {lines.length > 0 ? (
         <>

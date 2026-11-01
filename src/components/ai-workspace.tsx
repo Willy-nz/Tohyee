@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { Chart } from "@/components/analytics/chart";
 import { useApiData } from "@/components/hooks";
@@ -91,7 +92,7 @@ function Files({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Files for the AI"
-      description="Drop in spreadsheets, exports and notes however they come (CSV, text, JSON or Excel, up to 10 MB). Your AI reads them and organises what it finds into its own tables. Livestock it finds comes to you as suggestions to accept."
+      description={<>Drop in spreadsheets, exports and notes for your AI to organise.{" "}<InfoTip label="Files for your AI">However they come: CSV, text, JSON or Excel, up to 10 MB. Your AI reads them and organises what it finds into its own tables. Livestock it finds comes to you as suggestions to accept.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, Fragment, type ReactNode, useState } from "react";
@@ -726,7 +727,7 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
   return (
     <Card
       title="Aged receivables"
-      description="What each customer owes, by days past the due date, less credit not yet used, in the base currency (foreign-currency invoices at their own rates, with their own currency beside them). The total matches accounts receivable on the balance sheet, with any FX revaluation on the date."
+      description={<>What each customer owes, by days past the due date.{" "}<InfoTip label="Aged receivables">Less credit not yet used, in the base currency (foreign-currency invoices at their own rates, with their own currency beside them). The total matches accounts receivable on the balance sheet, with any FX revaluation on the date.</InfoTip></>}
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">

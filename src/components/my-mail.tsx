@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
@@ -172,7 +173,7 @@ function Mailboxes({
   return (
     <Card
       title="Your mailboxes"
-      description="Keep a private copy of your own Gmail or Microsoft mail for you and your AI, from the folders or labels you tick: only those, and nothing until you tick one. Tohyee only reads: nothing is sent, marked, moved or deleted."
+      description={<>Keep a private copy of your own Gmail or Microsoft mail for you and your AI. Tohyee only reads: nothing is sent, marked, moved or deleted.{" "}<InfoTip label="What&apos;s copied">It copies from the folders or labels you tick: only those, and nothing until you tick one.</InfoTip></>}
     >
       <p className={styles.privacy}>
         Only you can see these mailboxes, their folders and anything copied: nobody else in the organisation, admins and other Owners included. It&apos;s encrypted in the database with this
@@ -311,8 +312,8 @@ function Mailboxes({
         </Button>
       </form>
       <p className={ui.muted}>
-        Your copy is an archive: an email you delete in Gmail or Outlook stays here, marked &quot;deleted in the mailbox&quot;. Untick a folder, or move an email out of the ticked
-        folders, and it&apos;s taken out of your copy. Disconnecting stops copying and keeps the history; deleting it is a separate step.
+        Your copy is an archive: an email you delete in Gmail or Outlook stays here, marked &quot;deleted in the mailbox&quot;.{" "}
+        <InfoTip label="Your copy">Untick a folder, or move an email out of the ticked folders, and it&apos;s taken out of your copy. Disconnecting stops copying and keeps the history; deleting it is a separate step.</InfoTip>
       </p>
       <p className={ui.muted}>
         It&apos;s the same connection as the farm calendar&apos;s (one per mailbox, with one choice of folders), using the Google or Microsoft app an admin set up under Settings › Email.
@@ -376,8 +377,8 @@ function FolderPicker({ organisationId, mailbox, onClose, onSaved }: { organisat
     <form className={styles.folderPicker} onSubmit={save} aria-labelledby={`pick-${mailbox.id}`}>
       <h4 id={`pick-${mailbox.id}`} className={styles.folderHeading}>Which {kind} to read in {mailbox.email}</h4>
       <p className={ui.muted}>
-        Tohyee reads only the {kind} you tick{mailbox.farmCalendar ? ", for your copy and your farm calendar alike" : ""}. Moving an email out of them takes it out of your copy at the next sync; moving one
-        in copies it, if it&apos;s no older than {nzDate(mailbox.historyFrom)}. Only you see these names.
+        Tohyee reads only the {kind} you tick{mailbox.farmCalendar ? ", for your copy and your farm calendar alike" : ""}. Only you see these names.{" "}
+        <InfoTip label="Moving emails">Moving an email out of them takes it out of your copy at the next sync; moving one in copies it, if it&apos;s no older than {nzDate(mailbox.historyFrom)}.</InfoTip>
       </p>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {list.error ? (

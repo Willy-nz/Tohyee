@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { useApiData } from "@/components/hooks";
 import { Card, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -24,8 +25,8 @@ export default function PowerPointAddinPage() {
       {status.error ? <Notice tone="error">{status.error}</Notice> : null}
       {data && !data.available ? (
         <Notice tone="warning">
-          The add-in only works through Remote access, and {data.remoteAddress ? "this server's Remote access address isn't https" : "Remote access is off"}. A server admin can turn it on in the Tohyee server app (Remote
-          access). Then this page offers the add-in.
+          The add-in only works through Remote access, and {data.remoteAddress ? "this server's Remote access address isn't https" : "Remote access is off"}.{" "}
+          <InfoTip label="Turning on Remote access">A server admin can turn it on in the Tohyee server app (Remote access). Then this page offers the add-in.</InfoTip>
         </Notice>
       ) : null}
       {data?.available && data.manifestUrl ? (
@@ -55,8 +56,11 @@ export default function PowerPointAddinPage() {
               </li>
             </ol>
             <p className={ui.muted}>
-              On the web an uploaded add-in stays in that browser only. If Upload My Add-in isn&apos;t there, your Microsoft 365 admin has turned it off: use 2b. On some versions
-              of PowerPoint for Windows, an add-in from a file has to come from a shared folder catalogue instead (File › Options › Trust Center › Trusted Add-in Catalogs).
+              On the web an uploaded add-in stays in that browser only.{" "}
+              <InfoTip label="If uploading doesn't work">
+              <InfoPara>If Upload My Add-in isn&apos;t there, your Microsoft 365 admin has turned it off: use 2b.</InfoPara>
+              <InfoPara>On some versions of PowerPoint for Windows, an add-in from a file has to come from a shared folder catalogue instead (File › Options › Trust Center › Trusted Add-in Catalogs).</InfoPara>
+              </InfoTip>
             </p>
           </Card>
           <Card title="2b. Everyone in your organisation: deploy it in Microsoft 365">

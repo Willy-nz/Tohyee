@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -92,7 +93,7 @@ export function DemoFarmsCard({ me, onChanged }: { me: { id: string; email: stri
   return (
     <Card
       title="Demo farm"
-      description="Kōwhai Dairies Ltd: a made-up Otago dairy farm with about 18 months of books, payroll, GST, farm records and Analytics, to try Tohyee on. Each login can have one. It shows in that person's organisation list with a DEMO badge, and Tohyee never emails, imports or connects anything for it."
+      description={<>Kōwhai Dairies Ltd: a made-up Otago dairy farm with about 18 months of books, payroll, GST, farm records and Analytics, to try Tohyee on.{" "}<InfoTip label="The demo farm">Each login can have one. It shows in that person&apos;s organisation list with a DEMO badge, and Tohyee never emails, imports or connects anything for it.</InfoTip></>}
     >
       <div className={styles.stack}>
         {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}

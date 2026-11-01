@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -240,8 +241,8 @@ export function FixedAssetForm({
     return (
       <div style={{ display: "grid", gap: 12 }}>
         <Notice tone="warning">
-          Add an asset type first. Every asset belongs to a type (for example &ldquo;Computer equipment&rdquo;), which says which accounts it uses and how it&apos;s
-          depreciated. This organisation doesn&apos;t have any yet.
+          Add an asset type first. This organisation doesn&apos;t have any yet.{" "}
+          <InfoTip label="Asset types">Every asset belongs to a type (for example &ldquo;Computer equipment&rdquo;), which says which accounts it uses and how it&apos;s depreciated.</InfoTip>
           {can("admin") ? null : " An admin of this organisation needs to add them."}
         </Notice>
         <div className={ui.rowButtons}>
@@ -1212,8 +1213,9 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
           <h3>Ties to the ledger</h3>
           {data.ties ? null : (
             <Notice tone="warning">
-              The ledger doesn&apos;t match the register on some accounts. Usually either an asset was typed in (not from a bill) without its cost
-              being posted to the asset account, or a journal was posted straight to the account. Account transactions shows what&apos;s there.
+              The ledger doesn&apos;t match the register on some accounts.{" "}
+              <InfoTip label="Why they don't match">Usually either an asset was typed in (not from a bill) without its cost
+              being posted to the asset account, or a journal was posted straight to the account. Account transactions shows what&apos;s there.</InfoTip>
             </Notice>
           )}
           <div className={ui.tableWrap}>

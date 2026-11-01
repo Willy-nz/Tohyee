@@ -3221,6 +3221,14 @@ that something happened.
   over the last year: the average, the range and the count, in neutral
   words. It never adjusts an estimate. There's no Pasture.io connection
   yet (decision 1169): its readings can come in through the reading import.
+- **Shorter help text with an (i) for more** (#521, decisions 1210-1215).
+  Long help paragraphs on about 70 screens and panels (settings and email
+  setup, banking, invoices and bills, inventory, tax and payroll, farm,
+  analytics, CRM, my mail and the AI page) now show a short line, with a
+  small (i) button beside it that opens the rest. It opens by tap, click,
+  Enter or Space, closes with Escape or a tap elsewhere, stays on screen on
+  a phone, and printing shows the full text. Warnings, things that can't be
+  undone and who-can-see-this notices still show in full.
 
 ## Not built yet, on purpose
 

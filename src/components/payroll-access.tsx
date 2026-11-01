@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -76,9 +77,11 @@ export function PayrollAccessSettings({ organisationId }: { organisationId: stri
   return (
     <Card title="Who can see payroll">
       <p>
-        Payroll access lets someone see and change employees&apos; pay, cost allocations, pay rates, IRD numbers and bank accounts.
-        It&apos;s separate from their role: admins need it too, and it can only be given to bookkeepers or higher. At least one
-        person must keep it. Every change goes in the audit log.
+        Payroll access lets someone see and change employees&apos; pay, cost allocations, pay rates, IRD numbers and bank accounts. It&apos;s separate
+        from their role: admins need it too.{" "}
+        <InfoTip label="Payroll access">
+          It can only be given to bookkeepers or higher. At least one person must keep it. Every change goes in the audit log.
+        </InfoTip>
       </p>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}

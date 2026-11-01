@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
@@ -744,7 +745,8 @@ function CalendarLink({ organisationId, onClose }: { organisationId: string; onC
         <p className={ui.muted} role="status">Loading…</p>
       )}
       <p className={ui.muted}>
-        It carries what this calendar shows you from 60 days ago on: titles, kinds, farms and times, never anything from the email or your notes. Calendar apps check it when they choose; Google Calendar can take several hours, sometimes a day, to show a change.
+        It carries titles, kinds, farms and times from 60 days ago on, never anything from the email or your notes.{" "}
+        <InfoTip label="Calendar apps">It carries what this calendar shows you. Calendar apps check it when they choose; Google Calendar can take several hours, sometimes a day, to show a change.</InfoTip>
       </p>
       <div className={ui.rowButtons}>
         <Button size="small" disabled={busy || !status.data} onClick={() => void make()}>{on ? "Make a new link" : "Make a link"}</Button>
@@ -805,8 +807,8 @@ function FolderPicker({ organisationId, mailbox, onClose, onSaved }: { organisat
     <form className={styles.folderPicker} onSubmit={save} aria-labelledby={`folders-${mailbox.id}`}>
       <h3 id={`folders-${mailbox.id}`} className={styles.folderHeading}>Which {kind} to read in {mailbox.email}</h3>
       <p className={ui.muted}>
-        Tohyee reads only the {kind} you tick, and nothing until you tick one. Moving an email out of them takes it off your calendar at the next check;
-        moving one in adds it, if it&apos;s no older than {mailbox.historyDays} days before you connected. Only you see these names.
+        Tohyee reads only the {kind} you tick, and nothing until you tick one. Only you see these names.{" "}
+        <InfoTip label="Moving emails">Moving an email out of them takes it off your calendar at the next check; moving one in adds it, if it&apos;s no older than {mailbox.historyDays} days before you connected.</InfoTip>
       </p>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {list.error ? (
@@ -907,7 +909,7 @@ function Mailboxes({
   return (
     <Card
       title="Your mailboxes"
-      description="Connect your own Gmail or Microsoft mailbox, then choose the folders or labels Tohyee reads: only those, nothing else. Tohyee only reads (nothing is sent, changed or deleted) and keeps only each arrangement's sentence, subject, sender and a link. Your mailboxes, their folders and this calendar are only yours: nobody else in the organisation sees them, admins included."
+      description={<>Connect your own Gmail or Microsoft mailbox and choose which folders Tohyee reads. Your mailboxes, their folders and this calendar are only yours: nobody else in the organisation sees them, admins included.{" "}<InfoTip label="What Tohyee reads">It reads only those folders, nothing else. Tohyee only reads (nothing is sent, changed or deleted) and keeps only each arrangement&apos;s sentence, subject, sender and a link.</InfoTip></>}
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}

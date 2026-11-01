@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -143,8 +144,8 @@ export function SearchConsoleCard({
       {!connection ? (
         <>
           <p className={ui.muted}>
-            Not connected. An admin signs in with a Google account that can see the website in Search Console; Tohyee only asks to read it. New to Search
-            Console? <Link href={SEARCH_CONSOLE_HELP_PATH}>How to add your website and sitemap</Link> (including Shopify).
+            Not connected. An admin signs in with a Google account that can see the website in Search Console.{" "}
+            <InfoTip label="Connecting">Tohyee only asks to read it.</InfoTip> New to Search Console? <Link href={SEARCH_CONSOLE_HELP_PATH}>How to add your website and sitemap</Link> (including Shopify).
           </p>
           {canManage ? (
             <>

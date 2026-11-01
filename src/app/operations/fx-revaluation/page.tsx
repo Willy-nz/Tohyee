@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { type FormEvent, Fragment, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
@@ -316,8 +317,8 @@ function RevaluationForm({
           {busy ? "Posting…" : "Post revaluation"}
         </Button>
         <span className={ui.muted}>
-          The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).
-          Closing rates start as the exchange rates list&apos;s rate in effect on the revaluation date, if there is one.
+          You give the closing rate; the carrying amount comes from the ledger.{" "}
+          <InfoTip label="Closing rates">You give the foreign balance only when the ledger doesn&apos;t have it. Closing rates start as the exchange rates list&apos;s rate in effect on the revaluation date, if there is one.</InfoTip>
         </span>
       </div>
     </form>
@@ -373,9 +374,9 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
       {message ? <Notice tone="success">{message}</Notice> : null}
       <Card title="Revalue foreign-currency balances">
         <p className={ui.muted}>
-          Tohyee keeps the foreign amount of everything posted to a foreign-currency account, so leave the balance blank to use the
-          ledger&apos;s. Type it only for an account with postings from before Tohyee kept foreign amounts and no opening foreign
-          balance yet; if you type it for another account, it must agree with the ledger.
+          Leave the foreign balance blank to use the ledger&apos;s.{" "}
+          <InfoTip label="The foreign balance">Tohyee keeps the foreign amount of everything posted to a foreign-currency account. Type the balance only for an account with postings from before Tohyee kept foreign amounts and no opening foreign
+          balance yet; if you type it for another account, it must agree with the ledger.</InfoTip>
         </p>
         {accounts.data ? (
           <RevaluationForm

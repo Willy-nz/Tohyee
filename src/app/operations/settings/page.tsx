@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -149,7 +150,7 @@ function SettingsForm({
           <Field label="Registration ended" hint="Blank while still registered. Documents dated after it can't have GST; the last GST return covers up to it.">
             <DateInput value={gstRegisteredUntil} onChange={(event) => setGstRegisteredUntil(event.target.value)} />
           </Field>
-          <Field label="GST basis" hint="How GST returns are worked out. The payments basis is for sales of $2 million or less in the last 12 months (Tohyee doesn't check this). After a change, the next GST return suggests the adjustment IRD asks for.">
+          <Field label="GST basis" hint={<>How GST returns are worked out. <InfoTip label="GST basis">The payments basis is for sales of $2 million or less in the last 12 months (Tohyee doesn&apos;t check this). After a change, the next GST return suggests the adjustment IRD asks for.</InfoTip></>}>
             <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>
               {GST_BASES.map((basis) => (
                 <option key={basis} value={basis}>
@@ -160,7 +161,7 @@ function SettingsForm({
           </Field>
           <Field
             label="GST filing frequency"
-            hint="How often you file GST with IRD, and which months periods end in (IRD lines two-monthly and six-monthly periods up with your balance date unless you asked otherwise). The GST return, Home and the period close use it."
+            hint={<>How often you file GST, and which months periods end in. <InfoTip label="GST filing frequency">IRD lines two-monthly and six-monthly periods up with your balance date unless you asked otherwise. The GST return, Home and the period close use it.</InfoTip></>}
           >
             <select value={gstPeriod} onChange={(event) => setGstPeriod(event.target.value)}>
               {GST_PERIOD_CHOICES.map((choice) => (

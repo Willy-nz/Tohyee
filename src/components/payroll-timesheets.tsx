@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { useApiData, useHydrated } from "@/components/hooks";
@@ -469,7 +470,7 @@ function TimesheetPeople({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Who fills in and approves"
-      description="Link an employee to their login so they can fill in their own timesheets (viewers can). Their approver needs the bookkeeper role or higher; with none, the login linked to their reports-to manager approves. People with payroll access can always enter and approve."
+      description={<>Link an employee to their login so they can fill in their own timesheets (viewers can).{" "}<InfoTip label="Who approves">Their approver needs the bookkeeper role or higher; with none, the login linked to their reports-to manager approves. People with payroll access can always enter and approve.</InfoTip></>}
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}

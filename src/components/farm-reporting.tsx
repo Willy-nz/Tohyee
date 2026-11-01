@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useState } from "react";
 import { Money } from "@/components/books";
@@ -29,7 +30,7 @@ export function FarmSplitCard({ organisationId, yearEnd, version }: { organisati
   return (
     <Card
       title="By farm"
-      description="Each farm's lines are the ones tagged with its value in the tracking category below, as Xero tracking does. Lines with no farm are Not allocated: shown, never spread. The farms and Not allocated add up to the total, which is the figures above. A farm's per-unit amounts use only that farm's own figures."
+      description={<>Each farm&apos;s lines are the ones tagged with its value in the tracking category below.{" "}<InfoTip label="How farms are split">This works as Xero tracking does. Lines with no farm are Not allocated: shown, never spread. The farms and Not allocated add up to the total, which is the figures above. A farm&apos;s per-unit amounts use only that farm&apos;s own figures.</InfoTip></>}
       actions={
         report && report.category ? (
           <Field label="Show">

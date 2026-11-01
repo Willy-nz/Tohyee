@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -122,8 +123,9 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
       <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
         <Notice tone="info">
           <strong>Before you start:</strong> in your store&apos;s WordPress admin, go to WooCommerce › Settings › Advanced › REST API and add a key for
-          Tohyee. A <strong>Read</strong> key is enough to bring orders in; webhooks (orders arriving as they happen) need <strong>Read/Write</strong>, and
-          without them the catch-up sync brings orders in every 15 minutes. Tohyee only reads orders. The store must use an https:// address.
+          Tohyee.{" "}
+          <InfoTip label="The WooCommerce key">A <strong>Read</strong> key is enough to bring orders in; webhooks (orders arriving as they happen) need <strong>Read/Write</strong>, and
+          without them the catch-up sync brings orders in every 15 minutes. Tohyee only reads orders. The store must use an https:// address.</InfoTip>
         </Notice>
         {error ? <Notice tone="error">{error}</Notice> : null}
         <div className={ui.grid2}>
@@ -151,12 +153,15 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
     <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
       {platformField}
       <Notice tone="info">
-        <strong>Before you start:</strong> Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access. In the
-        Shopify Dev Dashboard (dev.shopify.com), create an app, give it only the Admin API access scopes <code>read_customers</code> and{" "}
+        <strong>Before you start:</strong> create an app in your own Shopify account, then copy its client ID and secret here. Tohyee only reads your store.{" "}
+        <InfoTip label="Creating the Shopify app">
+        <InfoPara>Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access.</InfoPara>
+        <InfoPara>In the Shopify Dev Dashboard (dev.shopify.com), create an app, give it only the Admin API access scopes <code>read_customers</code> and{" "}
         <code>read_products</code>, turn on access to protected customer data (name, email, phone and address), release it and install it on your store, then copy its client ID
-        and secret from the app&apos;s Settings. If your
-        store already has a custom app made in the store admin before 2026, you can use its Admin API access token and API secret key instead. Tohyee
-        refuses access that can change your store: it only reads.
+        and secret from the app&apos;s Settings.</InfoPara>
+        <InfoPara>If your store already has a custom app made in the store admin before 2026, you can use its Admin API access token and API secret key instead. Tohyee
+        refuses access that can change your store: it only reads.</InfoPara>
+        </InfoTip>
       </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid2}>
@@ -614,9 +619,10 @@ function PostingSettings({
             <div style={{ display: "grid", gap: 8 }}>
               <strong>Payment methods</strong>
               <p className={ui.muted} style={{ margin: 0 }}>
-                Where each payment method&apos;s money goes. A card gateway with a bank feed (e.g. Stripe) goes into that account, so the feed&apos;s line
+                Where each payment method&apos;s money goes.{" "}
+                <InfoTip label="Payment methods">A card gateway with a bank feed (e.g. Stripe) goes into that account, so the feed&apos;s line
                 matches the payment. Bank transfers are left owing for the bank feed to match. Methods appear here once an order uses them; orders wait
-                until their method is chosen.
+                until their method is chosen.</InfoTip>
               </p>
               {form.paymentMethods.length === 0 ? <p className={ui.muted}>No orders yet.</p> : null}
               {form.paymentMethods.map((entry, index) => (

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { type FormEvent, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -299,8 +300,8 @@ function WorkforceBudgetEditor({ organisationId, workforceBudgetId }: { organisa
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
         <h3>Budgets it feeds</h3>
         <p className={ui.muted}>
-          In each, the workforce budget writes the wages and KiwiSaver accounts for all its months; those amounts can&apos;t be typed there. A budget for a
-          Department gets only that Department&apos;s share. Taking a budget off leaves its amounts as typed amounts.
+          In each, the workforce budget writes the wages and KiwiSaver accounts for all its months.{" "}
+          <InfoTip label="Budgets it feeds">Those amounts can&apos;t be typed there. A budget for a Department gets only that Department&apos;s share. Taking a budget off leaves its amounts as typed amounts.</InfoTip>
         </p>
         <div className={ui.inlineForm}>
           {(budgets.data?.budgets ?? []).map((budget) => (

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -71,9 +72,8 @@ export function PayRunPaydayFilingCard({ organisationId, payRunId }: { organisat
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <p>
-        <strong>Due {withWeekday(filing.dueDate)}</strong>: within 2 working days after the pay date ({formatDate(filing.payDate)}) (Tax
-        Administration Act s 23E). Working days leave out weekends, the national public holidays (not anniversary days) and 25 December to 15
-        January.
+        <strong>Due {withWeekday(filing.dueDate)}</strong>: within 2 working days after the pay date ({formatDate(filing.payDate)}) .{" "}
+        <InfoTip label="Working days">Tax Administration Act s 23E. Working days leave out weekends, the national public holidays (not anniversary days) and 25 December to 15 January.</InfoTip>
       </p>
       {filing.settingsComplete ? null : (
         <Notice tone="warning">
@@ -83,9 +83,8 @@ export function PayRunPaydayFilingCard({ organisationId, payRunId }: { organisat
       )}
       {filing.starting.length > 0 ? (
         <Notice tone="info">
-          Starting in this pay period: {filing.starting.map((person) => `${person.name} (${formatDate(person.startDate)})`).join(", ")}. IRD wants a new
-          employee&apos;s details (their address, and date of birth if they gave it) by their first payday. Tohyee doesn&apos;t make the employee
-          details file yet, so enter them in myIR.
+          Starting in this pay period: {filing.starting.map((person) => `${person.name} (${formatDate(person.startDate)})`).join(", ")}. Enter their details in myIR by their first payday.{" "}
+          <InfoTip label="New employees">IRD wants a new employee&apos;s details (their address, and date of birth if they gave it) by their first payday. Tohyee doesn&apos;t make the employee details file yet, so enter them in myIR.</InfoTip>
         </Notice>
       ) : null}
       <div className={ui.actions}>

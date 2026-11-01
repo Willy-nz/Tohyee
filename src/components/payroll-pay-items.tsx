@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -173,8 +174,8 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
 
       <Card title="Pay items">
         <p>
-          Earnings, after-tax deductions and the employer&apos;s KiwiSaver contribution. Each goes to its own account. Taxable items are
-          subject to PAYE, the ACC earners&apos; levy and student loan together (IRD&apos;s payroll specification 5.7 and 5.11).
+          Earnings, after-tax deductions and the employer&apos;s KiwiSaver contribution. Each goes to its own account.{" "}
+          <InfoTip label="Pay items">Taxable items are subject to PAYE, the ACC earners&apos; levy and student loan together (IRD&apos;s payroll specification 5.7 and 5.11).</InfoTip>
         </p>
         <label className={ui.checkbox}>
           <input checked={includeArchived} type="checkbox" onChange={(event) => setIncludeArchived(event.target.checked)} />
@@ -302,9 +303,9 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
             {kind === "overtime" ? <p className={ui.muted}>Taxable, and counts for KiwiSaver.</p> : null}
             {kind === "holiday_pay" ? (
               <p className={ui.muted}>
-                Taxable, and counts for KiwiSaver. Only for leave taken in this pay period, which IRD treats as salary or wages; holiday pay
-                paid in advance or on top of the regular pay is an extra pay. For employees whose leave Tohyee keeps, book leave under
-                Payroll › Leave instead.
+                Taxable, and counts for KiwiSaver. Only for leave taken in this pay period.{" "}
+                <InfoTip label="Holiday pay">IRD treats leave taken in the pay period as salary or wages; holiday pay paid in advance or on top of the regular pay is an extra pay. For employees whose leave Tohyee keeps, book leave under
+                Payroll › Leave instead.</InfoTip>
               </p>
             ) : null}
             {kind === "after_tax_deduction" ? <p className={ui.muted}>Taken from net pay after tax, for example union fees.</p> : null}
@@ -316,8 +317,8 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
             ) : null}
             {kind === "termination_holiday_pay" ? (
               <p className={ui.muted}>
-                Only on a final pay, for employees whose leave Tohyee doesn&apos;t keep: type the amount you worked out. Where Tohyee keeps
-                the leave it works holiday pay on finishing out itself. Taxed under IRD&apos;s rule for extra pays when employment ends.
+                Only on a final pay, for employees whose leave Tohyee doesn&apos;t keep: type the amount you worked out.{" "}
+                <InfoTip label="Holiday pay on finishing">Where Tohyee keeps the leave it works holiday pay on finishing out itself. Taxed under IRD&apos;s rule for extra pays when employment ends.</InfoTip>
               </p>
             ) : null}
             {kind === "redundancy" ? (
@@ -350,7 +351,7 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
         {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
           <Field
             label="How often you pay IRD"
-            hint="IRD: monthly by the 20th of the following month if your gross annual PAYE and ESCT is less than $500,000; otherwise twice a month (wages paid 1st-15th by the 20th, 16th-end by the 5th of the next month, 16-31 December by 15 January)."
+            hint={<>IRD: monthly by the 20th, or twice a month for larger employers.{" "}<InfoTip label="When to pay IRD">Monthly by the 20th of the following month if your gross annual PAYE and ESCT is less than $500,000; otherwise twice a month (wages paid 1st-15th by the 20th, 16th-end by the 5th of the next month, 16-31 December by 15 January).</InfoTip></>}
           >
             <select
               disabled={!isAdmin || busy}
@@ -367,7 +368,7 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
 
       <Card
         title="Weeks"
-        description="The day timesheet weeks start on (NetSuite's first day of the week; it can only change before the first timesheet), and the standard week the headcount and FTE report measures against (decisions 192, 199)."
+        description={<>The day timesheet weeks start on, and the standard week for headcount and FTE.{" "}<InfoTip label="Timesheet weeks">The day timesheet weeks start on (NetSuite&apos;s first day of the week; it can only change before the first timesheet), and the standard week the headcount and FTE report measures against (decisions 192, 199).</InfoTip></>}
       >
         {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
           <div className={ui.grid2}>
@@ -400,7 +401,7 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
 
       <Card
         title="Leave liability accounts"
-        description="Where Payroll › Leave › Liability posts the leave liability (decision 177): annual holidays, the running 8%, alternative holidays and holiday pay on finishing owed, with employer KiwiSaver on it; not sick, bereavement or family violence leave. The employee entitlements account can't change while a posting has left a liability in it."
+        description={<>Where Payroll › Leave › Liability posts the leave liability.{" "}<InfoTip label="Leave liability accounts">Decision 177. It covers annual holidays, the running 8%, alternative holidays and holiday pay on finishing owed, with employer KiwiSaver on it; not sick, bereavement or family violence leave. The employee entitlements account can&apos;t change while a posting has left a liability in it.</InfoTip></>}
       >
         {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
           <div className={ui.grid2}>

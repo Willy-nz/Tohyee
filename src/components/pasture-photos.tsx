@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useState } from "react";
 import { submitThroughQueue, useOfflineQueue } from "@/components/offline-queue";
@@ -232,7 +233,7 @@ export function PaddockPhotoDiary({ organisationId, paddockId, readings, addHref
 /** What to say when no AI can propose estimates for this person (decision 1167). */
 function AiStatus({ ai }: { ai: AiConnection }) {
   if (ai.canPropose) {
-    return <p className={ui.muted}>Your AI is connected. Ask it to estimate the cover in the paddock photos waiting here; its estimates show below for you to accept, change or decline. Tohyee sends photos only to the AI you connected, when it asks.</p>;
+    return <p className={ui.muted}>Your AI is connected. Ask it to estimate the cover in the photos waiting here. Tohyee sends photos only to the AI you connected, when it asks.{" "}<InfoTip label="AI estimates">Its estimates show below for you to accept, change or decline.</InfoTip></p>;
   }
   if (!ai.roleCanConnect) {
     return <Notice tone="info">No AI is connected for you. Your role can&apos;t connect one, so enter covers by hand. Someone with the bookkeeper role or higher can connect their own AI to estimate covers from these photos.</Notice>;
@@ -242,7 +243,8 @@ function AiStatus({ ai }: { ai: AiConnection }) {
   }
   return (
     <Notice tone="info">
-      {ai.connected ? "Your AI is connected at Look only, so it can't propose covers." : "No AI is connected, so photos wait here and covers are entered by hand."} To have your own AI estimate covers from photos, connect it (or make a key) at <strong>Make drafts</strong> on the <Link href="/operations/ai">AI page</Link>. Tohyee doesn&apos;t send photos anywhere itself.
+      {ai.connected ? "Your AI is connected at Look only, so it can't propose covers." : "No AI is connected, so photos wait here and covers are entered by hand."} Tohyee doesn&apos;t send photos anywhere itself.{" "}
+      <InfoTip label="AI estimates">To have your own AI estimate covers from photos, connect it (or make a key) at <strong>Make drafts</strong> on the <Link href="/operations/ai">AI page</Link>.</InfoTip>
     </Notice>
   );
 }

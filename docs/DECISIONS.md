@@ -11194,3 +11194,51 @@ Instagram account or ad account**.
       the 90-day data access expiry applies to Page tokens; and the current
       app-creation screens. Each would show as a plain error on the load
       or as empty figures, not as wrong ones.
+
+### Short help with an (i) for more (#521; decisions 1210-1215)
+
+Jess (1 November 2026): "look for long paragraphs and make them more user
+friendly like have a icon with more information". She doesn't read long
+text. The details below weren't answered by Jess; they follow common
+practice for info buttons (Xero's and GOV.UK's "help" and "details"
+patterns, and the WAI-ARIA disclosure pattern), so they're **not yet
+reviewed**.
+
+1210. **One shared info button.** `InfoTip` (`src/components/info-tip.tsx`)
+      is a small round (i) button beside a short visible line. It's a
+      disclosure, not a hover tooltip: a real button with `aria-expanded`
+      and `aria-controls`, opened by click, tap, Enter or Space (phones have
+      no hover). Escape closes it and puts focus back on the button; a tap
+      or focus anywhere else closes it. Its text follows the button in the
+      page, so a screen reader reads it next. The panel opens below the
+      button, or above when there's more room there, at most 360px wide and
+      always 8px inside the window (`placeInfoTip`, unit-tested), so it
+      stays on a 390px phone. Colours are the theme's CSS variables.
+1211. **Nothing is lost, and print shows it all.** The full text stays in the
+      page (hidden until opened), so search, tests and printing still have
+      it. On paper the button is hidden and the text prints in place after
+      the short line.
+1212. **What moves behind the (i).** Intro and help text longer than about two
+      sentences or 200 characters: a one-line summary in plain words stays
+      visible and the rest (how it works, examples, references to IRD
+      rules, decisions and setup steps) moves into the panel.
+1213. **What stays visible.** Warnings and cautions (for example "Check what
+      the AI read before approving", the Shopify "not tried with a real
+      store" warning, the PayPal and Wise "this secret can move money"
+      notices, GST return warnings, the WorkSafe notice), confirmations of
+      things that can't be undone (copy-this-key-now, the foreign balance
+      lock, voiding), and every notice about who can see data (my mail,
+      the farm calendar, which farms people see, photos sent to your own
+      AI). Some were shortened, with their reasons moved behind the (i);
+      the warning itself always stays in sight.
+1214. **Help already behind a "more" control stays as it is.** Text inside
+      an existing collapsed section (the AI page's "More" sections, the
+      Analytics "View the tables" details, the income tax "Estimates"
+      details) and the dedicated help pages (Meta and Search Console setup,
+      the PowerPoint help page, the public website) were left alone: they
+      are already the "more information".
+1215. **Page headings and menus aren't changed here.** The page heading and
+      navigation components (`ui.tsx` `PageHeader`, the app shell, the
+      modules list) are being changed for icons in #520, so this change
+      only passes a shorter description to them and doesn't edit them.
+

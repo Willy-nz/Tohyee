@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -42,32 +43,37 @@ function PresetHelp({ preset }: { preset: Preset }) {
   if (preset === "gmail") {
     return (
       <Notice tone="info">
-        <strong>Gmail and Google Workspace with an app password:</strong> <strong>Google / Gmail (sign in)</strong> above avoids passwords, if you
-        set up a Google app for it. Otherwise: Google doesn&apos;t let other apps use your normal password. Turn on 2-Step Verification for the
+        <strong>Gmail and Google Workspace with an app password:</strong> signing in with <strong>Google / Gmail (sign in)</strong> above is easier.{" "}
+        <InfoTip label="Gmail with an app password">
+        <InfoPara><strong>Google / Gmail (sign in)</strong> above avoids passwords, if you set up a Google app for it.</InfoPara>
+        <InfoPara>Otherwise: Google doesn&apos;t let other apps use your normal password. Turn on 2-Step Verification for the
         Google account, then make an <strong>app password</strong> at{" "}
         <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
           myaccount.google.com/apppasswords
         </a>{" "}
         (call it &ldquo;Tohyee&rdquo;) and paste its 16 letters below. The username is the full Gmail address. Gmail sends from that address; to send
         from another address (like accounts@yourbusiness.co.nz), add it in Gmail first under Settings › Accounts › &ldquo;Send mail as&rdquo;. A Google
-        Workspace admin may need to allow app passwords. Gmail sends up to about 500 emails a day from a personal account.
+        Workspace admin may need to allow app passwords. Gmail sends up to about 500 emails a day from a personal account.</InfoPara>
+        </InfoTip>
       </Notice>
     );
   }
   if (preset === "microsoft") {
     return (
       <Notice tone="info">
-        <strong>Microsoft 365 with a password:</strong> Microsoft is retiring passwords for this kind of sending, and personal Outlook.com and Hotmail
-        accounts already refuse them, so choose <strong>Microsoft 365 / Outlook (sign in)</strong> above instead where you can. If you still use a
-        password: the mailbox&apos;s email address and password (or an app password), and a Microsoft 365 admin must turn on{" "}
-        <strong>Authenticated SMTP</strong> for this mailbox (Microsoft 365 admin centre › Users › the user › Mail › Manage email apps).
+        <strong>Microsoft 365 with a password:</strong> choose <strong>Microsoft 365 / Outlook (sign in)</strong> above instead where you can.{" "}
+        <InfoTip label="Microsoft 365 with a password">
+        <InfoPara>Microsoft is retiring passwords for this kind of sending, and personal Outlook.com and Hotmail accounts already refuse them.</InfoPara>
+        <InfoPara>If you still use a password: the mailbox&apos;s email address and password (or an app password), and a Microsoft 365 admin must turn on{" "}
+        <strong>Authenticated SMTP</strong> for this mailbox (Microsoft 365 admin centre › Users › the user › Mail › Manage email apps).</InfoPara>
+        </InfoTip>
       </Notice>
     );
   }
   return (
     <Notice tone="info">
-      <strong>Any other email provider:</strong> use the outgoing (SMTP) server details from your provider or website host, usually port 465 with SSL/TLS
-      or port 587 with STARTTLS. Many providers offer app passwords; use one if they do.
+      <strong>Any other email provider:</strong> use the outgoing (SMTP) server details from your provider or website host.{" "}
+      <InfoTip label="Other email providers">Usually port 465 with SSL/TLS or port 587 with STARTTLS. Many providers offer app passwords; use one if they do.</InfoTip>
     </Notice>
   );
 }
@@ -229,12 +235,15 @@ function MicrosoftAppForm({ organisationId, settings, onSaved }: { organisationI
   return (
     <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
       <Notice tone="info">
-        <strong>1. The organisation&apos;s Microsoft app.</strong> Tohyee signs in through an app you register once, so no one else&apos;s app ever has access. In
-        the Microsoft Entra admin centre (entra.microsoft.com) › App registrations › New registration: any name (&ldquo;Tohyee&rdquo;); for a business
+        <strong>1. The organisation&apos;s Microsoft app.</strong> Register an app once in Microsoft Entra, then paste its details below.{" "}
+        <InfoTip label="Registering the Microsoft app">
+        <InfoPara>Tohyee signs in through an app you register once, so no one else&apos;s app ever has access.</InfoPara>
+        <InfoPara>In the Microsoft Entra admin centre (entra.microsoft.com) › App registrations › New registration: any name (&ldquo;Tohyee&rdquo;); for a business
         mailbox choose &ldquo;Accounts in this organizational directory only&rdquo; and put your domain as the tenant below, or for Outlook.com choose
         &ldquo;Accounts in any organizational directory and personal Microsoft accounts&rdquo; and leave the tenant as common. Add a <strong>Web</strong> redirect
         URI of <code>{redirect}</code>. Under API permissions add Microsoft Graph delegated permissions <strong>Mail.Send</strong>, User.Read and
-        offline_access. For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{redirect.replace("/api/email/microsoft/callback", "/api/farming/mail/callback")}</code> and the delegated <strong>Mail.Read</strong> permission. Under Certificates &amp; secrets make a client secret and paste its value below. The CRM&apos;s email sync uses the same app.
+        offline_access. For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{redirect.replace("/api/email/microsoft/callback", "/api/farming/mail/callback")}</code> and the delegated <strong>Mail.Read</strong> permission. Under Certificates &amp; secrets make a client secret and paste its value below. The CRM&apos;s email sync uses the same app.</InfoPara>
+        </InfoTip>
       </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>
@@ -276,21 +285,28 @@ function GoogleAppForm({ organisationId, settings, onSaved }: { organisationId: 
   return (
     <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
       <Notice tone="info">
-        <strong>1. The organisation&apos;s Google app.</strong> Tohyee signs in through an app you set up once in your own Google Cloud project, so no
-        one else&apos;s app ever has access. In the Google Cloud console (console.cloud.google.com): pick or create a project; under APIs &amp; Services ›
+        <strong>1. The organisation&apos;s Google app.</strong> Set up an app once in your own Google Cloud project, then paste its client ID and secret below.{" "}
+        <InfoTip label="Setting up the Google app">
+        <InfoPara>Tohyee signs in through an app you set up once in your own Google Cloud project, so no one else&apos;s app ever has access.</InfoPara>
+        <InfoPara>In the Google Cloud console (console.cloud.google.com): pick or create a project; under APIs &amp; Services ›
         Library turn on the <strong>Gmail API</strong>; set up the OAuth consent screen with the permission{" "}
         <code>https://www.googleapis.com/auth/gmail.send</code>; then create an OAuth client of type <strong>Web application</strong> with the authorised
         redirect URI <code>{origin}/api/email/google/callback</code>, and paste its client ID and secret below. The CRM&apos;s email sync uses the same app
-        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it). For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{origin}/api/farming/mail/callback</code> and the permission <code>https://www.googleapis.com/auth/gmail.readonly</code>. The same app can let invited people sign in to Tohyee with Google: add <code>{origin}/api/auth/google/callback</code> too, and a server admin turns it on in Server settings › Sign in with Google.
+        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it). For the farm calendar&apos;s mailboxes, also add the redirect URI <code>{origin}/api/farming/mail/callback</code> and the permission <code>https://www.googleapis.com/auth/gmail.readonly</code>. The same app can let invited people sign in to Tohyee with Google: add <code>{origin}/api/auth/google/callback</code> too, and a server admin turns it on in Server settings › Sign in with Google.</InfoPara>
+        </InfoTip>
       </Notice>
       <Notice tone="warning">
-        <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> sending email (gmail.send) is one of Google&apos;s &ldquo;sensitive&rdquo;
+        <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> expected for your own app. Set its audience to Internal (Workspace) or publish it In production (Gmail).{" "}
+        <InfoTip label="Google hasn't verified this app">
+        <InfoPara>Sending email (gmail.send) is one of Google&apos;s &ldquo;sensitive&rdquo;
         permissions (not a &ldquo;restricted&rdquo; one, so no security assessment is needed), and your organisation&apos;s own app isn&apos;t
         verified by Google. For a Google Workspace account, set the app&apos;s audience to <strong>Internal</strong>: only your organisation&apos;s
-        accounts can use it and Google doesn&apos;t need to verify it. For a personal Gmail account (audience <strong>External</strong>), publish the
+        accounts can use it and Google doesn&apos;t need to verify it.</InfoPara>
+        <InfoPara>For a personal Gmail account (audience <strong>External</strong>), publish the
         app <strong>In production</strong> and continue past the warning when you sign in; an unverified app can be used by up to 100 people. Leaving it
         in <strong>Testing</strong> also works for test users you add, but then Google ends the connection after 7 days and you&apos;d have to connect
-        again each week.
+        again each week.</InfoPara>
+        </InfoTip>
       </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid2}>

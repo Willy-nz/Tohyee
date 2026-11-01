@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { type FormEvent, useState } from "react";
 import { useBusy } from "@/components/crm";
 import { useApiData } from "@/components/hooks";
@@ -170,7 +171,7 @@ export function SequencesPage({ organisationId }: { organisationId: string }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Card
         title="Sequences"
-        description="Steps on set days after someone's added: on each step's day it becomes a task for the lead's or deal's owner (or whoever added a person). Email steps are a task to send that template; nothing is sent by itself. It stops when they reply, a lead is unqualified or converted, or a deal is won or lost."
+        description={<>Steps on set days after someone&apos;s added. Nothing is sent by itself.{" "}<InfoTip label="Sequences">On each step&apos;s day it becomes a task for the lead&apos;s or deal&apos;s owner (or whoever added a person). Email steps are a task to send that template; nothing is sent by itself. It stops when they reply, a lead is unqualified or converted, or a deal is won or lost.</InfoTip></>}
         actions={
           editing === null ? (
             <Button size="small" onClick={() => setEditing("new")}>

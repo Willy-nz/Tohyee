@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
@@ -62,7 +63,7 @@ export function RelationshipsPanel({ organisationId, table, tables, canEdit, onC
   return (
     <details className={styles.meaning} style={{ gridColumn: "1 / -1" }}>
       <summary>Related tables ({relationships.length})</summary>
-      <p className={ui.muted}>Use another table&apos;s fields here when each row of this table matches one of its rows, e.g. invoice lines and their invoice. A table with two rows for one match can&apos;t be related (it would count amounts twice).</p>
+      <p className={ui.muted}>Use another table&apos;s fields here when each row of this table matches one of its rows, e.g. invoice lines and their invoice.{" "}<InfoTip label="Related tables">A table with two rows for one match can&apos;t be related (it would count amounts twice).</InfoTip></p>
       {listed.error ? <Notice tone="error">{listed.error}</Notice> : null}
       {message ? <p role="status" className={ui.muted}>{message}</p> : null}
       {relationships.length ? (
