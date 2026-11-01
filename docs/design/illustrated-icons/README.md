@@ -2,7 +2,7 @@
 
 Actual ready-to-use vector assets for issue #509, following the user's request for simple illustrations instead of realistic AI imagery. The draft PR now integrates selected icons into the app launcher, Farm menu and navigation, and Sales/Purchases overviews. Nothing is deployed until the PR is merged and released.
 
-![All 20 illustrated icons](preview.svg)
+![All 28 illustrated icons](preview.svg)
 
 ## Files and use
 
@@ -68,3 +68,13 @@ Use Accounting, CRM, Analytics and Farm in the module chooser; use the matching 
 - Sales/Purchases: responsive destination lists with entire rows clickable, visible hover/focus and descriptive text.
 
 The website is not changed in this draft. Broader visual work remains in #509. Verify these screens in the authenticated app at phone and desktop widths before release.
+
+## All-module extension
+
+The approved illustrated style now runs through shared page headings and desktop dropdown/phone menus. This covers Accounting (Sales, Purchases, Banking, Payroll, Tax, Jobs, Inventory and Reports), CRM, Analytics, Farm and Settings. The module settings table and Analytics report heading also use it. Desktop top-level labels stay compact to avoid crowding. Server page headings inherit the treatment; server top-bar links stay compact.
+
+Eight additional original assets: `banking.svg`, `sales.svg`, `purchases.svg`, `inventory.svg`, `settings.svg`, `reports.svg`, `mail.svg`, `ai.svg`.
+
+`navigation-art.ts` maps existing routes to illustrations; specific subroutes take precedence over module defaults. It does not grant access, add destinations or change permissions. Unknown/external paths receive no image. Headers hide decorative art when printing; embedded Analytics reports keep their existing header-free layout.
+
+Checked in a production build on 1 November 2026 (PR #520 review): desktop dropdowns at 1280px, the phone menu at 390px and 320px, light and dark, and print (art hidden). Not checked: browser zoom, screen readers and keyboard-only use beyond the unchanged link markup. This is an app-wide navigation/heading treatment, not a redesign of every table or report. The public marketing website is unchanged.

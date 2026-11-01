@@ -424,3 +424,7 @@
 
 /* Field folders in the field list (decision 775). */
 .fieldFolder { font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 8px 0 2px; }
+
+.reportIdentity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.reportIdentity h1 { min-width: 0; overflow-wrap: anywhere; }
+@media print { .reportIdentity > [aria-hidden="true"] { display: none; } }

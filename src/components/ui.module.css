@@ -1149,3 +1149,18 @@
 .toolbar:has(> .field) {
   align-items: flex-start;
 }
+
+.pageHeading { display: flex; align-items: flex-start; gap: 12px; }
+.pageHeadingCopy { min-width: 0; }
+@media print { .pageHeading > [aria-hidden="true"] { display: none; } }
+
+.moduleIdentity { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+
+/* Phones: the art sits beside the title only; the description uses the full width. */
+@media (max-width: 600px) {
+  .pageHeading { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; }
+  .pageHeadingCopy { display: contents; }
+  .pageHeading > .pageHeadingCopy > .pageDescription { grid-column: 1 / -1; }
+  .pageHeading > [aria-hidden="true"] { width: 32px !important; height: 32px !important; }
+  .pageHeading > [aria-hidden="true"] svg { width: 32px; height: 32px; }
+}

@@ -2,6 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
+import { IllustratedIcon } from "@/components/illustrated-icon";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
@@ -690,7 +691,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             </div>
           ) : (
             <>
-              <h1 className={styles.title}>{dashboard.name}</h1>
+              <div className={styles.reportIdentity}><IllustratedIcon name="analytics" /><h1 className={styles.title}>{dashboard.name}</h1></div>
               {dashboard.description ? <p className={ui.muted}>{dashboard.description}</p> : null}
             </>
           )}
