@@ -528,7 +528,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
                     aria-current={inArea(pathname, menu) ? "page" : undefined}
                     onClick={close}
                   >
-                    <span className={styles.sectionIdentity}><DestinationArt href={menu.href} section={menu.label} size={32} /><span>{menu.label}</span></span>
+                    <span className={styles.sectionIdentity}><DestinationArt menu={menu} size={32} /><span>{menu.label}</span></span>
                   </Link>
                 );
               }
@@ -541,7 +541,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
                     aria-expanded={isExpanded}
                     onClick={() => setExpanded(isExpanded ? "" : menu.label)}
                   >
-                    <span className={styles.sectionIdentity}><DestinationArt href={menu.href} section={menu.label} size={32} /><span>{menu.label}</span></span>
+                    <span className={styles.sectionIdentity}><DestinationArt menu={menu} size={32} /><span>{menu.label}</span></span>
                     <span aria-hidden className={isExpanded ? styles.phoneCaretOpen : styles.phoneCaret}>
                       <Caret />
                     </span>

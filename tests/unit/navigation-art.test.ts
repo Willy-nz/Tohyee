@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { iconForDestination } from "@/components/navigation-art";
+import { iconForDestination, iconForMenu } from "@/components/navigation-art";
 import { MENUS, CRM_MENUS, ANALYTICS_MENUS, FARM_MENUS } from "@/components/navigation";
 import { PageHeader } from "@/components/ui";
 
@@ -26,6 +26,17 @@ describe("illustrated module navigation", () => {
     expect(iconForDestination("https://example.com/crm")).toBeUndefined();
     expect(iconForDestination("//example.com/crm")).toBeUndefined();
     expect(iconForDestination(null)).toBeUndefined();
+  });
+  it("chooses a menu's artwork from where it leads, not its label", () => {
+    const art = (menus: typeof MENUS, label: string) => iconForMenu(menus.find((menu) => menu.label === label)!);
+    expect(art(MENUS, "Sales")).toBe("sales");
+    expect(art(CRM_MENUS, "Sales")).toBe("crm");
+    expect(art(CRM_MENUS, "More")).toBe("crm");
+    expect(art(FARM_MENUS, "More")).toBe("farm");
+    expect(art(MENUS, "Tax")).toBe("tax");
+    expect(art(ANALYTICS_MENUS, "Data sources")).toBe("documents");
+    expect(iconForDestination("/operations/income-tax")).toBe("tax");
+    expect(iconForDestination("/operations/project-reports/time")).toBe("reports");
   });
   it("provides artwork for every existing in-app menu destination", () => {
     const links = [...MENUS, ...CRM_MENUS, ...ANALYTICS_MENUS, ...FARM_MENUS].flatMap(menu => [
