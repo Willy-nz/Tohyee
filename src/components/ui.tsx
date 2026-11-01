@@ -2,6 +2,7 @@
 
 import { type ButtonHTMLAttributes, Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useId } from "react";
 import styles from "./ui.module.css";
+import { PageHeadingArt } from "./destination-art";
 
 export { styles as ui };
 
@@ -20,9 +21,12 @@ export function PageHeader({
 }) {
   return (
     <header className={styles.pageHeader}>
-      <div>
-        <h1 className={styles.pageTitle}>{title}</h1>
-        {description ? <p className={styles.pageDescription}>{description}</p> : null}
+      <div className={styles.pageHeading}>
+        <PageHeadingArt />
+        <div className={styles.pageHeadingCopy}>
+          <h1 className={styles.pageTitle}>{title}</h1>
+          {description ? <p className={styles.pageDescription}>{description}</p> : null}
+        </div>
       </div>
       {actions ? <div className={styles.actions}>{actions}</div> : null}
     </header>
