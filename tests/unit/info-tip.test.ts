@@ -33,6 +33,34 @@ describe("placeInfoTip (decision 1210)", () => {
     expect(p.maxHeight).toBe(760 - 6 - INFO_TIP_MARGIN);
   });
 
+  it("is never taller than the room below on a very short window (issue #523)", () => {
+    const p = placeInfoTip({ left: 100, top: 60, right: 122, bottom: 82 }, { width: 320, height: 150 });
+    expect(p.side).toBe("below");
+    expect(p.top).toBe(88);
+    expect(p.maxHeight).toBe(150 - 82 - 6 - INFO_TIP_MARGIN);
+    expect(p.top + p.maxHeight).toBeLessThanOrEqual(150 - INFO_TIP_MARGIN);
+  });
+
+  it("is never taller than the room above when it opens above (issue #523)", () => {
+    const p = placeInfoTip({ left: 100, top: 100, right: 122, bottom: 122 }, { width: 320, height: 140 });
+    expect(p.side).toBe("above");
+    expect(p.maxHeight).toBe(100 - 6 - INFO_TIP_MARGIN);
+    expect(p.top - p.maxHeight).toBeGreaterThanOrEqual(INFO_TIP_MARGIN);
+  });
+
+  it("never gives a negative height when there's no room at all", () => {
+    const p = placeInfoTip({ left: 10, top: 2, right: 32, bottom: 24 }, { width: 320, height: 26 });
+    expect(p.maxHeight).toBeGreaterThanOrEqual(0);
+  });
+
+  it("keeps the panel inside the visible part of a pinch-zoomed page", () => {
+    // Visible area is 200x300, scrolled 400 across and 1000 down the layout viewport.
+    const p = placeInfoTip({ left: 560, top: 1100, right: 582, bottom: 1122 }, { width: 200, height: 300, left: 400, top: 1000 });
+    expect(p.left).toBeGreaterThanOrEqual(400 + INFO_TIP_MARGIN);
+    expect(p.left + p.width).toBeLessThanOrEqual(600 - INFO_TIP_MARGIN);
+    expect(p.top + p.maxHeight).toBeLessThanOrEqual(1300 - INFO_TIP_MARGIN);
+  });
+
   it("stays below when there's enough room there", () => {
     expect(placeInfoTip(box(100, 500), { width: 1280, height: 800 }).side).toBe("below");
   });

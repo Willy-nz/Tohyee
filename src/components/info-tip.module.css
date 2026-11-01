@@ -37,9 +37,22 @@
   border-color: var(--link);
 }
 
+/* --focus-ring is a box-shadow list, not a colour, so the outline uses --accent (issue #523). */
 .button:focus-visible {
-  outline: 2px solid var(--focus-ring, var(--link));
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .button:focus-visible,
+  .open:focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 .panel {

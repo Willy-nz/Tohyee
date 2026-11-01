@@ -23,15 +23,25 @@ const GAP = 6;
 /** Below this, the panel goes above the button when there's more room there. */
 const MIN_ROOM = 160;
 
-export function placeInfoTip(button: Box, viewport: { width: number; height: number }): InfoTipPlacement {
+/**
+ * The part of the page that can be seen. `left` and `top` are the visible
+ * area's offset inside the layout viewport (non-zero when a phone is pinch
+ * zoomed or the on-screen keyboard has scrolled the page); they default to 0.
+ */
+export type Viewport = { width: number; height: number; left?: number; top?: number };
+
+export function placeInfoTip(button: Box, viewport: Viewport): InfoTipPlacement {
+  const vLeft = viewport.left ?? 0;
+  const vTop = viewport.top ?? 0;
   const width = Math.max(0, Math.min(INFO_TIP_MAX_WIDTH, viewport.width - INFO_TIP_MARGIN * 2));
-  // Start the panel's left edge near the button, then slide it back inside the window.
+  // Start the panel's left edge near the button, then slide it back inside the visible area.
   const wanted = button.left - 12;
-  const left = Math.max(INFO_TIP_MARGIN, Math.min(wanted, viewport.width - INFO_TIP_MARGIN - width));
-  const roomBelow = viewport.height - button.bottom - GAP - INFO_TIP_MARGIN;
-  const roomAbove = button.top - GAP - INFO_TIP_MARGIN;
+  const left = Math.max(vLeft + INFO_TIP_MARGIN, Math.min(wanted, vLeft + viewport.width - INFO_TIP_MARGIN - width));
+  const roomBelow = Math.max(0, vTop + viewport.height - button.bottom - GAP - INFO_TIP_MARGIN);
+  const roomAbove = Math.max(0, button.top - vTop - GAP - INFO_TIP_MARGIN);
+  // Never taller than the room actually there (issue #523): the panel scrolls instead.
   if (roomBelow >= MIN_ROOM || roomBelow >= roomAbove) {
-    return { left, top: button.bottom + GAP, width, maxHeight: Math.max(MIN_ROOM / 2, roomBelow), side: "below" };
+    return { left, top: button.bottom + GAP, width, maxHeight: roomBelow, side: "below" };
   }
   // Above: the panel's bottom sits just over the button; its top is worked out from its height in CSS (translateY(-100%)).
   return { left, top: button.top - GAP, width, maxHeight: roomAbove, side: "above" };
