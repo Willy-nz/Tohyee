@@ -30,7 +30,13 @@ export function InfoTip({ label, children }: { label: string; children?: ReactNo
   const place = useCallback(() => {
     if (!button.current) return;
     const box = button.current.getBoundingClientRect();
-    setPlacement(placeInfoTip(box, { width: window.innerWidth, height: window.innerHeight }));
+    // Prefer the visual viewport: it's the part actually on screen when a phone is
+    // pinch zoomed or the on-screen keyboard is up (issue #523).
+    const vv = window.visualViewport;
+    const viewport = vv
+      ? { width: vv.width, height: vv.height, left: vv.offsetLeft, top: vv.offsetTop }
+      : { width: window.innerWidth, height: window.innerHeight };
+    setPlacement(placeInfoTip(box, viewport));
   }, []);
 
   useLayoutEffect(() => {
@@ -57,7 +63,12 @@ export function InfoTip({ label, children }: { label: string; children?: ReactNo
     document.addEventListener("focusin", onFocus);
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", place);
+    vv?.addEventListener("scroll", place);
     return () => {
+      vv?.removeEventListener("resize", place);
+      vv?.removeEventListener("scroll", place);
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("focusin", onFocus);
@@ -89,6 +100,11 @@ export function InfoTip({ label, children }: { label: string; children?: ReactNo
         id={panelId}
         className={[styles.panel, open ? styles.open : "", open && placement?.side === "above" ? styles.above : ""].filter(Boolean).join(" ")}
         style={style}
+        // Focusable so long text can be scrolled with the keyboard; it's inside
+        // the wrapper, so moving focus here doesn't close it.
+        tabIndex={open ? 0 : undefined}
+        role={open ? "group" : undefined}
+        aria-label={open ? label : undefined}
       >
         <span className={styles.label}>{label}</span>
         {children}
