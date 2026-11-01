@@ -17,6 +17,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { type AppKey, AppSwitcher } from "@/components/app-switcher";
+import { DestinationArt } from "@/components/destination-art";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette } from "@/components/command-palette";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -182,7 +183,7 @@ function MenuPanel({
                     aria-current={current ? "page" : undefined}
                     onClick={onNavigate}
                   >
-                    {link.label}
+                    <DestinationArt href={link.href} /><span>{link.label}</span>
                   </Link>
                 );
               });
@@ -527,7 +528,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
                     aria-current={inArea(pathname, menu) ? "page" : undefined}
                     onClick={close}
                   >
-                    {menu.label}
+                    <span className={styles.sectionIdentity}><DestinationArt href={menu.href} section={menu.label} size={32} /><span>{menu.label}</span></span>
                   </Link>
                 );
               }
@@ -540,7 +541,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
                     aria-expanded={isExpanded}
                     onClick={() => setExpanded(isExpanded ? "" : menu.label)}
                   >
-                    {menu.label}
+                    <span className={styles.sectionIdentity}><DestinationArt href={menu.href} section={menu.label} size={32} /><span>{menu.label}</span></span>
                     <span aria-hidden className={isExpanded ? styles.phoneCaretOpen : styles.phoneCaret}>
                       <Caret />
                     </span>
@@ -561,7 +562,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
                                   aria-current={isCurrent(pathname, search, link.href) ? "page" : undefined}
                                   onClick={close}
                                 >
-                                  {link.label}
+                                  <DestinationArt href={link.href} /><span>{link.label}</span>
                                 </Link>
                               ))}
                             </div>
