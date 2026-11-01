@@ -580,7 +580,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
               aria-current={pathname === AI_LINK.href ? "page" : undefined}
               onClick={close}
             >
-              {AI_LINK.label}
+              <span className={styles.sectionIdentity}><DestinationArt href={AI_LINK.href} size={32} /><span>{AI_LINK.label}</span></span>
             </Link>
           </nav>
           <div className={styles.phoneFooter}>

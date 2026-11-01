@@ -11194,3 +11194,20 @@ Instagram account or ad account**.
       the 90-day data access expiry applies to Page tokens; and the current
       app-creation screens. Each would show as a plain error on the load
       or as empty figures, not as wrong ones.
+
+### Illustrated navigation across all modules (#509, PR #520; decisions 1208-1209)
+
+Review of the draft PR (1 November 2026). Not answered by Jess, so **not
+yet reviewed**.
+
+1208. **A menu's picture comes from where it leads, not its name.** "Sales",
+      "Settings" and "More" mean different things in Accounting, CRM and
+      Farm, so a top-level phone-menu section takes the art of its own link
+      or its first destination (`iconForMenu`). CRM's "More" had shown the
+      farm picture before this.
+1209. **Pictures stay decorative and line up.** Every illustration is
+      `aria-hidden`; link text and accessible names are unchanged. A menu
+      link with no picture (Get Tohyee) keeps an empty space the same size so
+      the labels line up. On phones (600px and narrower) the heading picture
+      is 32px and sits beside the title only; the page description uses the
+      full width. Pictures are hidden when printing.

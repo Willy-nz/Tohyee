@@ -77,4 +77,4 @@ Eight additional original assets: `banking.svg`, `sales.svg`, `purchases.svg`, `
 
 `navigation-art.ts` maps existing routes to illustrations; specific subroutes take precedence over module defaults. It does not grant access, add destinations or change permissions. Unknown/external paths receive no image. Headers hide decorative art when printing; embedded Analytics reports keep their existing header-free layout.
 
-Review mobile/desktop menus, long titles, zoom, dark mode and keyboard focus before release. This is an app-wide navigation/heading treatment, not a redesign of every table or report. The public marketing website is unchanged.
+Checked in a production build on 1 November 2026 (PR #520 review): desktop dropdowns at 1280px, the phone menu at 390px and 320px, light and dark, and print (art hidden). Not checked: browser zoom, screen readers and keyboard-only use beyond the unchanged link markup. This is an app-wide navigation/heading treatment, not a redesign of every table or report. The public marketing website is unchanged.

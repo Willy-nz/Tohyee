@@ -33,6 +33,7 @@ describe("illustrated module navigation", () => {
     expect(art(CRM_MENUS, "Sales")).toBe("crm");
     expect(art(CRM_MENUS, "More")).toBe("crm");
     expect(art(FARM_MENUS, "More")).toBe("farm");
+    expect(art(CRM_MENUS, "Settings")).toBe("settings");
     expect(art(MENUS, "Tax")).toBe("tax");
     expect(art(ANALYTICS_MENUS, "Data sources")).toBe("documents");
     expect(iconForDestination("/operations/income-tax")).toBe("tax");
