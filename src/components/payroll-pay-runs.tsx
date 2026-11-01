@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -497,11 +498,13 @@ function PublicHolidayDecision({
     <form className={styles.stack} onSubmit={save}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className={ui.muted}>
-        Whether a public holiday would otherwise have been a working day for {employee.name} (s 12), and any hours worked on it (s 50: time and a
-        half, and an alternative holiday if it would otherwise have been a working day). The decision is recorded with who made it.
-        {suggestion ? ` Tohyee suggests ${suggestion[1]}: ${suggestion[2]}.` : ""} That suggestion only looks at recent weeks: also weigh the
-        employment agreement, rosters, whether they work only when work is available, what you both reasonably expected, and whether they&apos;d have
-        worked but for the holiday (s 12(3)). Employment NZ: you can&apos;t rely on one factor alone (decision 173).
+        Whether a public holiday would otherwise have been a working day for {employee.name}, and any hours worked on it. The decision is recorded with who made it.
+        {suggestion ? ` Tohyee suggests ${suggestion[1]}: ${suggestion[2]}.` : ""} That suggestion only looks at recent weeks: weigh the other factors too.{" "}
+        <InfoTip label="Public holidays">
+          <InfoPara>Otherwise a working day: s 12. Hours worked on it: s 50 (time and a half, and an alternative holiday if it would otherwise have been a working day).</InfoPara>
+          <InfoPara>Also weigh the employment agreement, rosters, whether they work only when work is available, what you both reasonably expected, and whether they&apos;d have
+        worked but for the holiday (s 12(3)). Employment NZ: you can&apos;t rely on one factor alone (decision 173).</InfoPara>
+        </InfoTip>
       </p>
       <div className={ui.grid4}>
         <Field label="Public holiday">

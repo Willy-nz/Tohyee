@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -85,8 +86,8 @@ function OverpaymentView({ organisationId, paymentId }: { organisationId: string
         <p className={ui.muted}>
           The whole payment was posted as{" "}
           <Link href={journalHref(payment.journalId)}>journal #{payment.journalId}</Link>: debit the bank account,
-          credit accounts receivable. The overpayment sits in accounts receivable as credit for {payment.contactName}. No
-          GST is posted on it, because the invoice already carried the GST.
+          credit accounts receivable.{" "}
+          <InfoTip label="How it's posted">The overpayment sits in accounts receivable as credit for {payment.contactName}. No GST is posted on it, because the invoice already carried the GST.</InfoTip>
           {payment.voidJournalId ? (
             <>
               {" "}

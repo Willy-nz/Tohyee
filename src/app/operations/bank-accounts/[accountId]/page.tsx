@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -91,9 +92,10 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
       {account.isForeign ? (
         <p className={ui.muted}>
           Statement lines, matching and the reconciliation report are in {account.statementCurrency}, with{" "}
-          {current?.baseCurrency ?? "NZD"} beside them. Spend and receive money use an exchange rate (filled in with the last one used);
+          {current?.baseCurrency ?? "NZD"} beside them.{" "}
+          <InfoTip label="Foreign currency accounts">Spend and receive money use an exchange rate (filled in with the last one used);
           transfers to and from {current?.baseCurrency ?? "NZD"} accounts take both amounts. Invoices and bills can&apos;t be paid from
-          these lines yet.
+          these lines yet.</InfoTip>
         </p>
       ) : null}
       {account.accountType === "credit_card" ? (
@@ -101,8 +103,9 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
       ) : null}
       {difference ? (
         <Notice tone="warning">
-          Every line is reconciled, but the bank&apos;s balance and Tohyee&apos;s differ. Usually that&apos;s something posted to this account
-          that isn&apos;t on the statement yet, a statement from before the first import, or a balance from a different time of day.
+          Every line is reconciled, but the bank&apos;s balance and Tohyee&apos;s differ.{" "}
+          <InfoTip label="Why the balances differ">Usually that&apos;s something posted to this account
+          that isn&apos;t on the statement yet, a statement from before the first import, or a balance from a different time of day.</InfoTip>
         </Notice>
       ) : null}
       <Card>

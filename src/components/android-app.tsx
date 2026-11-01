@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { useEffect, useState } from "react";
 import { useNativeFeatures } from "@/components/native-app";
 import { Button, Notice, ui } from "@/components/ui";
@@ -25,7 +26,11 @@ export function AndroidDownload({ origin }: { origin: string }) {
         Android: download the app (optional)
       </h2>
       <p className={styles.text}>
-        The Tohyee app for Android opens your own Tohyee server, like the home-screen web app, and adds three things a browser can&apos;t: <strong>tractor mode keeps recording with the screen locked</strong>, <strong>reminders as notifications</strong> on the phone (shift the pods, read the pond, safety actions due, the aerial photos key), and the phone&apos;s own <strong>camera and photo picker</strong>. It isn&apos;t on the Play Store yet: it&apos;s a file (an APK) you download from Tohyee&apos;s releases on GitHub.
+        The Tohyee app for Android adds tractor recording with the screen locked, reminders as notifications, and the phone&apos;s camera. It&apos;s a download from GitHub, not the Play Store yet.{" "}
+        <InfoTip label="The Android app">
+          <InfoPara>It opens your own Tohyee server, like the home-screen web app, and adds three things a browser can&apos;t: <strong>tractor mode keeps recording with the screen locked</strong>, <strong>reminders as notifications</strong> on the phone (shift the pods, read the pond, safety actions due, the aerial photos key), and the phone&apos;s own <strong>camera and photo picker</strong>.</InfoPara>
+          <InfoPara>It isn&apos;t on the Play Store yet: it&apos;s a file (an APK) you download from Tohyee&apos;s releases on GitHub.</InfoPara>
+        </InfoTip>
       </p>
       <p className={styles.text}>
         <a className={`${ui.button} ${ui.primary} ${styles.big}`} href={ANDROID_RELEASES_URL} target="_blank" rel="noreferrer">

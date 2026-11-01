@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { daysBefore } from "@/components/bank/common";
@@ -149,8 +150,8 @@ export function PayPalSettingsCard({ organisationId }: { organisationId: string 
             ) : null}
           </div>
           <p className={ui.muted}>
-            Each completed transaction comes in at its full amount, with PayPal&apos;s fee as its own line. Pending ones wait until PayPal completes
-            them. Reconcile withdrawals as transfers to the bank account they landed in, and currency conversions between your PayPal accounts.
+            Each completed transaction comes in at its full amount, with PayPal&apos;s fee as its own line.{" "}
+            <InfoTip label="PayPal lines">Pending ones wait until PayPal completes them. Reconcile withdrawals as transfers to the bank account they landed in, and currency conversions between your PayPal accounts.</InfoTip>
           </p>
         </div>
       ))}

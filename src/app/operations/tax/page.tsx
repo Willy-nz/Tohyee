@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip, InfoPara } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -87,11 +88,14 @@ function Tax({ organisationId }: { organisationId: string }) {
     <>
       <Notice tone="info">
         Tax codes set the GST on <Link href="/operations/invoices">sales invoices</Link> and{" "}
-        <Link href="/operations/bills">bills</Link>. They aren&apos;t applied to journals you enter by hand. The{" "}
-        <Link href="/operations/reports">GST return</Link> puts each line into its boxes by the tax code&apos;s category.
-        &ldquo;Available on&rdquo; says whether a code can be chosen on sales (invoices, credit notes, quotes, receive money),
+        <Link href="/operations/bills">bills</Link>. They aren&apos;t applied to journals you enter by hand.{" "}
+        <InfoTip label="Tax codes">
+        <InfoPara>The{" "}
+        <Link href="/operations/reports">GST return</Link> puts each line into its boxes by the tax code&apos;s category.</InfoPara>
+        <InfoPara>&ldquo;Available on&rdquo; says whether a code can be chosen on sales (invoices, credit notes, quotes, receive money),
         purchases (bills, supplier credit notes, purchase orders, spend money, expense claims) or both. Changing it never
-        changes saved documents.
+        changes saved documents.</InfoPara>
+        </InfoTip>
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {can("admin") ? (

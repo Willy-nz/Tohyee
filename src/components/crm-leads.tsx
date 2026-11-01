@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -100,8 +101,8 @@ function ImportLeads({ organisationId, onDone }: { organisationId: string; onDon
     <div style={{ display: "grid", gap: 10 }}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className={ui.muted}>
-        A CSV or Excel file whose first row is headings: First name, Last name (or Name), Company, Email, Phone, Job title, Source and Notes. Each row
-        becomes a lead you own. Rows whose email is already an open lead are skipped.
+        A CSV or Excel file with headings in the first row. Each row becomes a lead you own.{" "}
+        <InfoTip label="The file">The headings are First name, Last name (or Name), Company, Email, Phone, Job title, Source and Notes. Rows whose email is already an open lead are skipped.</InfoTip>
       </p>
       <input type="file" accept=".csv,.txt,.xlsx" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
       <CampaignSelect organisationId={organisationId} label="From campaign (optional)" value={campaignId} onChange={setCampaignId} disabled={busy || result !== null} />

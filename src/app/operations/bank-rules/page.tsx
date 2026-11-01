@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { type FormEvent, useState } from "react";
 import { takesBankTransactionLines } from "@/components/bank/common";
@@ -501,7 +502,7 @@ function BankRules({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Bank rules"
-      description="A rule fills in spend or receive money for statement lines that meet its conditions, such as a power bill or bank fees, split across lines if you like. You still check and OK each one when reconciling. The first rule that matches and fits (lowest priority number) is used."
+      description={<>A rule fills in spend or receive money for matching statement lines. You still check each one.{" "}<InfoTip label="Bank rules">For example a power bill or bank fees, split across lines if you like. You still check and OK each one when reconciling. The first rule that matches and fits (lowest priority number) is used.</InfoTip></>}
       actions={
         can("bookkeeper") && editing === null ? <Button onClick={() => setEditing("new")}>Add rule</Button> : null
       }

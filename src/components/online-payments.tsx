@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -63,7 +64,7 @@ export function OnlinePaymentsSettings({ organisationId }: { organisationId: str
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Card
         title="Pay now with Stripe"
-        description="Approved invoices with something due get a Stripe payment link in their email and PDF. Customers pay by card on Stripe's page, and Tohyee records the payment into your Stripe bank account. Card fees come in through the Stripe feed; they're never added to what the customer pays."
+        description={<>Approved invoices with something due get a Stripe payment link in their email and PDF.{" "}<InfoTip label="Paying with Stripe">Customers pay by card on Stripe&apos;s page, and Tohyee records the payment into your Stripe bank account. Card fees come in through the Stripe feed; they&apos;re never added to what the customer pays.</InfoTip></>}
         actions={<Badge tone={current.enabled ? "green" : "neutral"}>{current.enabled ? "On" : "Off"}</Badge>}
       >
         {!current.stripeConnected ? (
@@ -114,7 +115,7 @@ export function OnlinePaymentsSettings({ organisationId }: { organisationId: str
       </Card>
       <Card
         title="Pay with PayPal"
-        description="Tohyee makes a copy of the invoice in your own PayPal account (one line for the amount due; PayPal doesn't email the customer) and links to PayPal's page to pay it. Payments are recorded into the PayPal bank account for the invoice's currency. Only invoices in a currency whose PayPal balance is linked offer it."
+        description={<>Customers can pay invoices on PayPal&apos;s page.{" "}<InfoTip label="Paying with PayPal">Tohyee makes a copy of the invoice in your own PayPal account (one line for the amount due; PayPal doesn&apos;t email the customer) and links to PayPal&apos;s page to pay it. Payments are recorded into the PayPal bank account for the invoice&apos;s currency. Only invoices in a currency whose PayPal balance is linked offer it.</InfoTip></>}
         actions={<Badge tone={paypal.enabled ? "green" : "neutral"}>{paypal.enabled ? "On" : "Off"}</Badge>}
       >
         {!paypal.payPalConnected ? (

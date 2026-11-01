@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { ConnectorPicker, type Connector, isDatabaseConnector } from "@/components/analytics/studio";
 import { DatabaseConnector, DatabaseSourceSetup } from "@/components/analytics-databases";
@@ -309,7 +310,7 @@ function BooksCard({ organisationId, data, onChanged }: { organisationId: string
   return (
     <Card
       title="Books and CRM"
-      description="A copy of this organisation's ledger, invoices, bills, contacts, items and (with the CRM on) its leads, deals, deal products, activities, tasks, campaigns, sequences and sales emails, made every night after 4am. Amounts are as in the ledger (debit less credit); a dashboard value can be shown the other way round. Pay runs are copied without names."
+      description={<>A copy of this organisation&apos;s books, made every night after 4am. Pay runs are copied without names.{" "}<InfoTip label="The Tohyee copy">A copy of this organisation&apos;s ledger, invoices, bills, contacts, items and (with the CRM on) its leads, deals, deal products, activities, tasks, campaigns, sequences and sales emails. Amounts are as in the ledger (debit less credit); a dashboard value can be shown the other way round.</InfoTip></>}
       actions={
         data.canManage ? (
           <Button size="small" onClick={() => void refresh()} disabled={busy}>

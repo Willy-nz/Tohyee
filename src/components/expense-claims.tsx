@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
@@ -342,8 +343,9 @@ export function ExpenseClaimEditor({
       </div>
       {mileage.length > 0 ? (
         <p className={ui.muted}>
-          Plus mileage, worked out when you save: kilometres times IRD&apos;s kilometre rate for the vehicle (tier 2 after 14,000 km of your mileage
-          in the income year), with no GST. See the <Link href="/operations/settings/kilometre-rates">kilometre rates</Link>.
+          Plus mileage, worked out when you save.{" "}
+          <InfoTip label="Mileage">Kilometres times IRD&apos;s kilometre rate for the vehicle (tier 2 after 14,000 km of your mileage in the income year), with no GST.</InfoTip>{" "}
+          See the <Link href="/operations/settings/kilometre-rates">kilometre rates</Link>.
         </p>
       ) : null}
       <p className={ui.muted}>Choose &quot;No GST&quot; when the receipt isn&apos;t a valid GST receipt or the supplier isn&apos;t GST registered. Attach photos of the receipts after saving.</p>

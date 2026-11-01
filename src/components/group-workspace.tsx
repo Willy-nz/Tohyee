@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { Money } from "@/components/books";
 import { DateInput } from "@/components/date-input";
@@ -141,7 +142,8 @@ export function GroupWorkspaceTab({ group }: { group: ConsolidationGroup }) {
               </table>
             </div>
             <p className={ui.muted}>
-              Revenue and net profit are the consolidated profit and loss from the group&apos;s year start, the same as the Profit and loss tab. Pipeline amounts are open opportunities as they stand now, excluding GST, in each company&apos;s currency.
+              Revenue and net profit are from the group&apos;s year start.{" "}
+              <InfoTip label="These figures">They&apos;re the consolidated profit and loss, the same as the Profit and loss tab. Pipeline amounts are open opportunities as they stand now, excluding GST, in each company&apos;s currency.</InfoTip>
               {workspace.fromCopy ? " Shown from a copy made in the last minute." : ""} Worked out {formatDateTime(workspace.computedAt)}.
             </p>
           </>

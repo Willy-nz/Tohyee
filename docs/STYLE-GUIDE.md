@@ -23,6 +23,11 @@
 - Charts: every chart takes its colours and styling from
   `src/lib/charts/theme.ts` (ECharts) or the `--chart-*` CSS variables
   (hand-drawn SVG). Don't hard-code chart colours; see decisions 599-601.
+- Help text: keep a short line visible (one or two short sentences) and
+  put the rest in `<InfoTip>` from `src/components/info-tip.tsx`, the (i)
+  button (decisions 1210-1215). Warnings, irreversible-action confirmations
+  and who-can-see-this notices stay visible.
+- Browser-safe value modules also include `ui/info-tip`.
 
 ## Organisation data
 

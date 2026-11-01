@@ -303,7 +303,7 @@ describeWithDatabase("analytics: Google Search Console website search data", () 
   });
 
   it("GSC7 Google refusing the sign-in stops loading until an admin connects again", async () => {
-    await as(owner, (tx) => tx.query("update analytics_search_console_connections set access_token_expires_at = $1", [new Date(NOW.getTime() - 60_000).toISOString()]));
+    await as(owner, (tx) => tx.query("update analytics_search_console_connections set access_token_expires_at = $1::timestamptz - interval '1 minute'", [NOW.toISOString()]));
     tokenReply = () => reply({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, 400);
     const run = await refreshGsc(organisation, actor(), "manual", NOW);
     expect(run.error).toContain("Google ends sign-ins after 7 days");

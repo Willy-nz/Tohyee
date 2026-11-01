@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { daysBefore } from "@/components/bank/common";
@@ -146,8 +147,8 @@ export function WiseSettingsCard({ organisationId }: { organisationId: string })
             ) : null}
           </div>
           <p className={ui.muted}>
-            Each statement line comes in with Wise&apos;s fee as its own line when Wise&apos;s running balance confirms it. Reconcile conversions as
-            transfers between your Wise accounts, and payments to suppliers against their bills.
+            Each statement line comes in with Wise&apos;s fee as its own line.{" "}
+            <InfoTip label="Wise lines">The fee is a separate line when Wise&apos;s running balance confirms it. Reconcile conversions as transfers between your Wise accounts, and payments to suppliers against their bills.</InfoTip>
           </p>
         </div>
       ))}

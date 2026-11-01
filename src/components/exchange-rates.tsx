@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { EcbRatesCard } from "@/components/consolidation";
 import { RateSetsCard, RateSourceCard } from "@/components/exchange-rate-sources";
@@ -287,7 +288,7 @@ function PasteRates({ organisationId, onAdded }: { organisationId: string; onAdd
   return (
     <Card
       title="Paste several rates"
-      description="One per line: currency, effective date, rate, and an optional note, separated by commas or tabs (rows copied from a spreadsheet work). Dates as 2026-08-31 or 31/08/2026. All are added, or none if a line is wrong."
+      description={<>One per line: currency, effective date, rate, and an optional note.{" "}<InfoTip label="Pasting rates">Separated by commas or tabs (rows copied from a spreadsheet work). Dates as 2026-08-31 or 31/08/2026. All are added, or none if a line is wrong.</InfoTip></>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>

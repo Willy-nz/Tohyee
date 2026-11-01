@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -61,7 +62,7 @@ export function GoCardlessSettingsCard({ organisationId }: { organisationId: str
   return (
     <Card
       title="Direct debit with GoCardless"
-      description="Customers sign a direct debit authority on GoCardless's page. Then every approved NZD invoice of theirs is collected on its due date, unless you tick “Don't collect this one” on the invoice. Collected money is recorded into a clearing bank account; GoCardless's payouts move it, less its fees, to your bank account. A failed collection isn't retried by itself: it shows on the invoice and in the top bar with “Try again”."
+      description={<>Customers sign a direct debit authority once; their invoices are then collected on the due date.{" "}<InfoTip label="Direct debit">They sign it on GoCardless&apos;s page. Every approved NZD invoice of theirs is collected on its due date, unless you tick “Don&apos;t collect this one” on the invoice. Collected money is recorded into a clearing bank account; GoCardless&apos;s payouts move it, less its fees, to your bank account. A failed collection isn&apos;t retried by itself: it shows on the invoice and in the top bar with “Try again”.</InfoTip></>}
       actions={<Badge tone={current.enabled ? "green" : "neutral"}>{current.enabled ? "On" : current.connected ? "Connected, off" : "Not connected"}</Badge>}
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}

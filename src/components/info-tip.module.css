@@ -1,0 +1,137 @@
+/* The (i) button and its popover (decision 1210). Colours come from globals.css, so both themes work. */
+.wrap {
+  display: inline;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--link);
+  vertical-align: -5px;
+  cursor: pointer;
+  flex: none;
+}
+
+/* A bigger target for fingers than it looks. */
+.button::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
+
+.button {
+  position: relative;
+}
+
+.button:hover,
+.button[aria-expanded="true"] {
+  background: var(--accent-soft);
+  border-color: var(--link);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--link));
+  outline-offset: 2px;
+}
+
+.panel {
+  display: none;
+}
+
+.open {
+  display: block;
+  position: fixed;
+  z-index: 60;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius, 8px);
+  background: var(--surface-raised, var(--surface));
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 14px;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.above {
+  transform: translateY(-100%);
+}
+
+/* Paragraphs inside the panel are spans (it can sit inside a <p>). */
+.panel :global(.info-para) {
+  display: block;
+}
+
+.panel :global(.info-para) + :global(.info-para) {
+  margin-top: 8px;
+}
+
+.label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* On paper there's nothing to click: print the whole explanation in place. */
+@media print {
+  .button {
+    display: none;
+  }
+
+  .panel,
+  .open {
+    display: inline;
+    position: static;
+    transform: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    max-height: none !important;
+    width: auto !important;
+    overflow: visible;
+  }
+
+  .panel::before {
+    content: " ";
+  }
+
+  .label {
+    display: none;
+  }
+
+  .panel :global(.info-para) {
+    display: inline;
+  }
+
+  .panel :global(.info-para) + :global(.info-para) {
+    margin-top: 0;
+  }
+
+  .panel :global(.info-para)::before {
+    content: " ";
+  }
+}

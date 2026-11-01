@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
@@ -810,7 +811,7 @@ function InvoiceCard({
     </tr>
   );
   return (
-    <Card title="Invoice" description="Makes a draft invoice for the ticked items: time grouped per task at its rate, fixed prices, chargeable expenses with their markup, and a job's materials (their stock goes out when the invoice is approved).">
+    <Card title="Invoice" description={<>Makes a draft invoice for the ticked items.{" "}<InfoTip label="What's invoiced">Time grouped per task at its rate, fixed prices, chargeable expenses with their markup, and a job&apos;s materials (their stock goes out when the invoice is approved).</InfoTip></>}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>

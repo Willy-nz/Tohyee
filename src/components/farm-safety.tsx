@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
@@ -786,7 +787,8 @@ function WeeklyCopy({ organisationId }: { organisationId: string }) {
     <>
       <h3 style={{ fontSize: "var(--text-md, 16px)", margin: "16px 0 4px" }}>Weekly copy off the farm</h3>
       <p className={ui.muted} style={{ marginTop: 0 }}>
-        Each week, a PDF of what was entered and the latest entry&apos;s number and hash are emailed to addresses you choose, through this organisation&apos;s email. Kept where Tohyee can&apos;t change it, it shows later whether the history was rewritten.
+        Each week, a PDF of what was entered is emailed to addresses you choose.{" "}
+        <InfoTip label="Weekly copy">The PDF and the latest entry&apos;s number and hash go through this organisation&apos;s email. Kept where Tohyee can&apos;t change it, it shows later whether the history was rewritten.</InfoTip>
       </p>
       <WeeklyCopyContents includeEffluent={settings.includeEffluent ?? false} />
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -886,7 +888,7 @@ export function RecordsCard({ organisationId, farm }: { organisationId: string; 
     );
   const packUrl = `/api/farming/safety/pack?${new URLSearchParams({ organisationId, from: range.from, to: range.to, ...(range.scope === "farm" ? { farmId: farm.id } : {}) }).toString()}`;
   return (
-    <Card title="Records and their history" description="Every safety record is dated by Tohyee when it's entered, never changed or deleted (a change or correction is a new version that keeps the earlier one), and chained by hash, so a change made behind Tohyee's back shows up here.">
+    <Card title="Records and their history" description={<>Every safety record is dated by Tohyee when it&apos;s entered, and never changed or deleted.{" "}<InfoTip label="Record history">A change or correction is a new version that keeps the earlier one. Records are chained by hash, so a change made behind Tohyee&apos;s back shows up here.</InfoTip></>}>
       <p className={ui.muted} style={{ marginTop: 0 }}>
         {HASH_LIMITS}
       </p>

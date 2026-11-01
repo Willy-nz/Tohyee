@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
@@ -936,7 +937,7 @@ export function EcbRatesCard({
   return (
     <Card
       title="Rates from the European Central Bank"
-      description="Each working day, the ECB's euro reference rates are added to this list for the currencies you use, worked out through the euro (rounded to 6 decimal places). A rate already in the list for a date is never replaced. Free, no account; the ECB says its rates are for information. Source: European Central Bank."
+      description={<>Each working day, the European Central Bank&apos;s rates are added for the currencies you use.{" "}<InfoTip label="ECB rates">They are the ECB&apos;s euro reference rates, worked out through the euro (rounded to 6 decimal places). A rate already in the list for a date is never replaced. Free, no account; the ECB says its rates are for information. Source: European Central Bank.</InfoTip></>}
     >
       {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}

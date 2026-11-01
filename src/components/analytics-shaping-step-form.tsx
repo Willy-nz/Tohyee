@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { useState } from "react";
 import { Button, Field, ui } from "@/components/ui";
 import {
@@ -336,7 +337,7 @@ export function StepForm({ step, columns, disabled, onChange, valuesOf }: Props)
               );
             })}
           </fieldset>
-          <p className={styles.muted}>The financial year uses this organisation&apos;s balance date, and is named by the year it ends in (the year to 31 March 2026 is 2026). If the balance date changes, the next rebuild uses the new one.</p>
+          <p className={styles.muted}>The financial year uses this organisation&apos;s balance date.{" "}<InfoTip label="Financial years">It&apos;s named by the year it ends in (the year to 31 March 2026 is 2026). If the balance date changes, the next rebuild uses the new one.</InfoTip></p>
         </div>
       );
     }

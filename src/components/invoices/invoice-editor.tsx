@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
@@ -387,9 +388,11 @@ function InvoiceForm({
       </div>
       {foreign ? (
         <Notice tone="info">
-          This invoice is in {currencyCode}, and its GST is worked out in {currencyCode} as usual. The currency doesn&apos;t decide
-          the tax code: where the customer is does (exports are zero-rated). Approving posts its {baseCurrency} value, each line and
-          its GST converted at the rate.
+          This invoice is in {currencyCode}. Approving posts its {baseCurrency} value at the rate.{" "}
+          <InfoTip label="Foreign currency invoices">
+            Its GST is worked out in {currencyCode} as usual. The currency doesn&apos;t decide the tax code: where the customer is does (exports are
+            zero-rated). Each line and its GST is converted at the rate.
+          </InfoTip>
         </Notice>
       ) : null}
       <CustomFieldInputs setup={customSetup} record="document" uses={["invoice"]} value={customFields} onChange={setCustomFields} />

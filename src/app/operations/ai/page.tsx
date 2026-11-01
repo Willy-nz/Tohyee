@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -268,8 +269,8 @@ function AiConnect({ organisationId }: { organisationId: string }) {
           </>
         ) : keys.data ? (
           <Notice tone="info">
-            Remote access is off, so AI in the cloud (Claude.ai, ChatGPT) can&apos;t reach Tohyee. A server admin can turn it on in the Tohyee server app;
-            this page then shows the address to paste. Until then, apps on this computer or network can use a key (below).
+            Remote access is off, so AI in the cloud (Claude.ai, ChatGPT) can&apos;t reach Tohyee.{" "}
+            <InfoTip label="Remote access">A server admin can turn it on in the Tohyee server app; this page then shows the address to paste. Until then, apps on this computer or network can use a key (below).</InfoTip>
           </Notice>
         ) : null}
       </Card>

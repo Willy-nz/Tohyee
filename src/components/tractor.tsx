@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -1630,7 +1631,7 @@ function NotWorkingCard({ job, onSave }: { job: TractorJob; onSave: (body: Recor
   const [removeWhy, setRemoveWhy] = useState("");
   const list = job.notWorking.map((entry) => ({ from: entry.from, to: entry.to, why: entry.why }));
   return (
-    <Card title="Working was left ON?" description="If Working stayed ON when nothing was being spread or sprayed (for example driving back to the shed), mark that time here. The track isn't changed; the estimate leaves the time out, and the history keeps the estimate as it was.">
+    <Card title="Working was left ON?" description={<>If Working stayed ON when nothing was being spread or sprayed (for example driving back to the shed), mark that time here.{" "}<InfoTip label="Leaving out time">The track isn&apos;t changed; the estimate leaves the time out, and the history keeps the estimate as it was.</InfoTip></>}>
       {job.notWorking.length ? (
         <ul style={{ paddingLeft: 18 }}>
           {job.notWorking.map((entry, index) => (

@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { useState } from "react";
@@ -236,7 +237,7 @@ export function ForecastsPage({ organisationId }: { organisationId: string }) {
     <>
       <Card
         title="Forecast"
-        description="Opportunities by expected close date, amounts excluding GST. Totals are cumulative, as in Salesforce: Commit includes Closed, Best case includes Commit and Closed, and Open pipeline is open opportunities in Pipeline, Best case or Commit. Weighted is amount × probability. Omitted and lost opportunities count in none. Currencies are never added together."
+        description={<>Opportunities by expected close date, amounts excluding GST.{" "}<InfoTip label="How forecasts add up">Totals are cumulative, as in Salesforce: Commit includes Closed, Best case includes Commit and Closed, and Open pipeline is open opportunities in Pipeline, Best case or Commit. Weighted is amount × probability. Omitted and lost opportunities count in none. Currencies are never added together.</InfoTip></>}
       >
         <div className={ui.grid3}>
           <Field label="By">
