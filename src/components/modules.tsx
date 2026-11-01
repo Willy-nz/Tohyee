@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { IllustratedIcon, type IllustratedIconName } from "@/components/illustrated-icon";
 import { type ReactNode, useEffect, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Notice, ui } from "@/components/ui";
@@ -66,6 +67,7 @@ export function useModules(organisationId: string | null): Modules | null {
 }
 
 type ModuleRow = {
+  icon: IllustratedIconName;
   key: keyof Modules;
   setting: "crmEnabled" | "advancedFeatures" | "notForProfitEnabled" | "analyticsEnabled";
   title: string;
@@ -75,6 +77,7 @@ type ModuleRow = {
 
 const OPTIONAL: ModuleRow[] = [
   {
+    icon: "crm",
     key: "crm",
     setting: "crmEnabled",
     title: "CRM",
@@ -86,6 +89,7 @@ const OPTIONAL: ModuleRow[] = [
     ],
   },
   {
+    icon: "analytics",
     key: "analytics",
     setting: "analyticsEnabled",
     title: "Analytics",
@@ -98,6 +102,7 @@ const OPTIONAL: ModuleRow[] = [
     ],
   },
   {
+    icon: "reports",
     key: "reporting",
     setting: "advancedFeatures",
     title: "Advanced reporting",
@@ -111,6 +116,7 @@ const OPTIONAL: ModuleRow[] = [
     ],
   },
   {
+    icon: "accounting",
     key: "notForProfit",
     setting: "notForProfitEnabled",
     title: "Not-for-profit",
@@ -201,7 +207,7 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
           <tbody>
             <tr>
               <td>
-                <strong>Accounting</strong>
+                <span className={ui.moduleIdentity}><IllustratedIcon name="accounting" size={32} /><strong>Accounting</strong></span>
                 <div className={ui.muted}>
                   Invoices, bills, banking and bank feeds, payroll, reports and the GST return. Shopify and WooCommerce orders post here.
                 </div>
@@ -215,7 +221,7 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
             </tr>
             <tr>
               <td>
-                <strong>Tax</strong>
+                <span className={ui.moduleIdentity}><IllustratedIcon name="tax" size={32} /><strong>Tax</strong></span>
                 <div className={ui.muted}>
                   GST registration, set under Settings › GST{current?.gstNumber ? "" : " (with the GST number)"}. The GST return and GST audit show while registered.
                 </div>
@@ -230,7 +236,7 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
             </tr>
             <tr>
               <td>
-                <strong>Livestock</strong>
+                <span className={ui.moduleIdentity}><IllustratedIcon name="livestock" size={32} /><strong>Livestock</strong></span>
                 <div className={ui.muted}>
                   Part of Accounting, for farms: dairy and beef cattle, sheep, deer and goats by IRD&apos;s classes, head counts, and the year-end valuation under the herd
                   scheme or national standard cost, with its journal.
@@ -253,7 +259,7 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
             </tr>
             <tr>
               <td>
-                <strong>Farming</strong>
+                <span className={ui.moduleIdentity}><IllustratedIcon name="farm" size={32} /><strong>Farming</strong></span>
                 <div className={ui.muted}>
                   Part of Accounting, for farms: farms and paddocks with their boundaries and effective areas, imported from GeoJSON, on a map. Splits and merges keep
                   each paddock&apos;s history.
@@ -277,7 +283,7 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
               return (
                 <tr key={row.key}>
                   <td>
-                    <strong>{row.title}</strong>
+                    <span className={ui.moduleIdentity}><IllustratedIcon name={row.icon} size={32} /><strong>{row.title}</strong></span>
                     <div className={ui.muted}>{row.description}</div>
                     {on && !needsAccounting ? (
                       <div className={ui.actions}>
