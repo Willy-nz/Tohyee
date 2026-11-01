@@ -32,3 +32,6 @@ installer/windows/tray/obj/
 
 # The Android app's first-run page script, built from android-shell/src (scripts/build-android-shell.mjs).
 /android-shell/www/app.js
+
+# Farm security camera media written by a development server (#508).
+/camera-media/

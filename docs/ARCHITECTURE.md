@@ -1788,6 +1788,17 @@ a time, asking only for what changed since the last sync. A failure is kept
 on the connection; after three in a row it's paused until someone chooses
 Sync now. No network calls inside a database transaction.
 
+The farm security cameras (#508, decisions 1216-1225; docs/FARM-SECURITY.md)
+add two: the camera media clean-up (`src/lib/security-cameras/cleanup.ts`,
+hourly, `TOHYEE_CAMERA_CLEANUP=off` stops it), which removes events past
+their farm's retention (rows first, committed, then files), and the camera
+upload receiver (`src/lib/security-cameras/receiver.ts`), an upload-only
+FTPS server inside the Tohyee process, started only when
+`TOHYEE_CAMERA_FTP_PORT` is set. Uploads land in `TOHYEE_CAMERA_MEDIA_DIR`
+(files, not database rows; not in the database backups). FTP can't go
+through remote access (HTTP only), so cameras on the internet need a public
+address and port forwarding.
+
 Still to come for other jobs: a general transactional outbox.
 
 ## Backups and restore

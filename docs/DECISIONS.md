@@ -11258,3 +11258,108 @@ reviewed**.
       navigation components (`ui.tsx` `PageHeader`, the app shell, the
       modules list) are being changed for icons in #520, so this change
       only passes a shorter description to them and doesn't edit them.
+
+### Farm security cameras (#508; decisions 1216-1225)
+
+Jess (2 November 2026): "Can you build the security module assuming we use
+those cameras", meaning Reolink, the Go PT Plus in #508 (battery, solar,
+4G, SD card, FTP upload, no RTSP/ONVIF/CGI). No camera was available, so
+everything about the camera is from Reolink's help pages and users'
+reports (docs/FARM-SECURITY.md has the sources) and **not verified**. Xero
+and NetSuite have nothing like this; the choices below follow the issue's
+text and how camera recorders that take FTP uploads usually work: **not
+yet reviewed by Jess**.
+
+1216. **Cameras and their upload logins, in the organisation's own
+      database.** The issue suggests a separate security database; Tohyee
+      keeps one database per organisation (non-negotiable), so cameras and
+      events are tables in it (`security_*`, tenant migration 0212), and
+      the photos and clips are files (decision 1219). Each camera has its
+      own login, made by Tohyee: `<organisation id>.<10 random letters and
+      digits>` (the receiver finds the organisation from it without a
+      core-database table) and a 20-character random password without
+      look-alike characters, shown once and stored as a scrypt hash like
+      people's passwords. Replacing it stops the old one at once; archiving
+      a camera removes it. No Reolink or cloud password is asked for or
+      stored. Only owners and admins set cameras up.
+1217. **What the file name says, and nothing more.** Reolink doesn't
+      document its upload file names; users report
+      `<device>_<channel>_<YYYYMMDDHHMMSS>.<jpg|mp4>`. Tohyee reads the date
+      and time from that (from the right, so a name with underscores
+      works), or from any 14-digit date and time, or none. Folders are
+      ignored. The kind comes from the file's first bytes (JPEG or MP4),
+      never the name. Nothing in the name says person, vehicle or animal,
+      so every event is "Motion or unknown"; the column allows the others
+      for a camera that does say, later.
+1218. **Two times, both kept.** The camera's local time (as written) and its
+      time zone (per camera, New Zealand by default), the instant that
+      makes, and when Tohyee got the file. Events are sorted and filtered
+      by the camera's time, unless it's more than 10 minutes in the future
+      (a wrong clock: Tohyee's time is used and the event says "Check
+      time"). More than 6 hours late keeps the camera's time and says the
+      camera may have been offline or its clock is behind. Retention goes
+      by when Tohyee got the file, so a wrong clock can't make media go
+      early.
+1219. **Tohyee runs its own upload-only FTPS receiver, off by default.**
+      In the Tohyee process (like the server settings address), so it's the
+      same in Docker, on Windows and on Linux; started only when
+      `TOHYEE_CAMERA_FTP_PORT` is set, and only with a certificate unless
+      plain FTP is explicitly allowed (a camera on the same network).
+      Written for Tohyee on Node's `net` and `tls` because the Node FTP
+      server libraries were unmaintained (ftp-srv, last release 2023, old
+      dependencies) or very new single-maintainer forks, and a camera needs
+      only a dozen commands. Passive mode only; data connections only from
+      the control connection's address; uploads only (listing is empty;
+      read, delete, rename, append, SITE and PORT refused); size limit;
+      content checked; same file from the same camera kept once (SHA-256);
+      login lock-out after 10 failures in 15 minutes; connection limits.
+      Media is stored on disk in `TOHYEE_CAMERA_MEDIA_DIR`, by organisation,
+      camera, month and hash, with a small copy of each photo; **not in the
+      nightly database backups**. Remote access (the Tohyee address,
+      Cloudflare tunnels, Tailscale Funnel) only carries web traffic and
+      can't carry FTP, so a 4G camera needs a public address and port
+      forwarding; Tohyee doesn't open the router or change remote access.
+1220. **Camera access is separate, and given.** Owners and admins see,
+      download, delete and set up. Anyone else sees nothing until an owner
+      or admin gives them "See events", "See and download" or "See,
+      download and delete" (People and roles › Security cameras), like
+      payroll access. Only farm staff, viewers and bookkeepers can be
+      given it. Which farms (decision 744) always applies. Checked in the
+      services every route and media address uses; a farm or event the
+      person can't see is "not found". Leaving the organisation removes it.
+1221. **A photo is only a photo.** Each event says **Photo only** or **Clip
+      saved**; nothing suggests a photo means a clip was recorded. Camera
+      health is the time of its last upload: "No uploads from Camera 2
+      since Tuesday" after the camera's own quiet time (24 hours by
+      default), because a sleeping 4G camera can't be asked, and quiet may
+      only mean nothing moved.
+1222. **Keep, retention and delete.** Anyone who can see an event may keep
+      it, with a note; kept events are never cleaned up. Each farm's
+      retention is 1-3650 days (30 until chosen). The clean-up runs hourly
+      for every organisation (not the demo farm, whose jobs are paused),
+      in batches: rows first in a committed transaction, then the files, so
+      no event points at a missing file. Deleting asks first, can't be
+      undone, needs delete access, and a kept event must be un-kept (also
+      delete access) first.
+1223. **What's audited.** Access given and removed; cameras added, changed,
+      archived and restored; upload logins made, replaced and removed (the
+      user name, never the password); retention changes; keeping,
+      un-keeping, every download and every delete (what it was, not the
+      media); each clip's first request (where it starts playing, not each
+      seek); and each clean-up's count per farm. Looking at photos and
+      thumbnails isn't audited: each tile would be an entry.
+1224. **Not built: fetching from the SD card, and AI tags.** No library is
+      proven to list or download SD recordings from a battery 4G Reolink
+      over a mobile connection (Neolink, PyNeolink are experimental), so
+      there's no button and no "fetch queued" state; the seam is
+      `src/lib/security-cameras/camera-fetch.ts`. AI tags would need new AI
+      tools that follow camera access and are audited (Tohyee itself calls
+      no AI), so they're left for later.
+1225. **People are told, and nothing tracks staff.** Every Security page
+      shows that cameras record staff, contractors and visitors, to put up
+      signs and tell staff, with general Privacy Act 2020 information
+      behind an (i) (not legal advice). No face recognition, people
+      tracking or staff following. The demo farm has three made-up cameras
+      (one quiet for four days), made-up photos drawn by Tohyee, a
+      three-second made-up clip and one kept event, taken in through the
+      upload code; it makes no upload logins and takes no uploads.

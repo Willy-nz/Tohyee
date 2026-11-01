@@ -10,6 +10,7 @@ import { countHerd, livestockMonth, openingHerdValue, setUpLivestock } from "@/l
 import { payrollMonth, setUpPayroll } from "@/lib/demo/build/payroll";
 import { farmEffluentCare, farmEffluentLog, farmEffluentSetup } from "@/lib/demo/build/effluent";
 import { farmSafety } from "@/lib/demo/build/safety";
+import { farmSecurity } from "@/lib/demo/build/security";
 import { farmWorkspace, tractorJobs } from "@/lib/demo/build/workspace";
 import { demoMonths, demoStart, lastDayOf, seasonEnd, seedFor } from "@/lib/demo/plan";
 
@@ -60,6 +61,8 @@ export async function buildDemoFarm(organisation: OrganisationRecord, actor: Act
   await farmEffluentSetup(ctx, farm);
   await farmEffluentLog(ctx, farm);
   await farmEffluentCare(ctx);
+  await progress("Adding the security cameras", 89);
+  await farmSecurity(ctx);
   await progress("Copying the books into Analytics and making the reports", 90);
   await setUpAnalytics(ctx);
   await progress("Done", 100);
