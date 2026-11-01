@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { writeAdminAuditEvent } from "@/lib/audit";
 import { closeAnalytics } from "@/lib/analytics/engine";
 import { analyticsFilePath, analyticsWorkFolder } from "@/lib/analytics/paths";
+import { removeOrganisationMedia } from "@/lib/security-cameras/storage";
 import { todayIsoDate } from "@/lib/dates";
 import { closeOrganisationPool, getAdminPool } from "@/lib/db/pools";
 import { quoteSqlIdentifier } from "@/lib/db/sql";
@@ -183,7 +184,7 @@ async function dropDatabase(databaseName: string): Promise<void> {
   await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(databaseName)} with (force)`);
 }
 
-/** Deletes the person's demo farm: its database, its Analytics file and the registry row. Nothing in it is real, so nothing is kept. */
+/** Deletes the person's demo farm: its database, its Analytics file, its camera media and the registry row. Nothing in it is real, so nothing is kept. */
 export async function deleteDemoFarm(person: DemoPerson, options: DemoOptions = {}): Promise<void> {
   const them = who(person, options.actor);
   const missing = them.self ? "You don't have the demo farm." : `${person.email} doesn't have the demo farm.`;
@@ -196,6 +197,7 @@ export async function deleteDemoFarm(person: DemoPerson, options: DemoOptions = 
   await rm(analyticsFilePath(organisation.id), { force: true });
   await rm(`${analyticsFilePath(organisation.id)}.wal`, { force: true });
   await rm(analyticsWorkFolder(organisation.id), { recursive: true, force: true });
+  await removeOrganisationMedia(organisation.id);
   await dropDatabase(organisation.databaseName);
   await withCoreTransaction(async (client) => {
     await client.query("delete from organisations where id = $1 and demo_for_user_id = $2", [organisation.id, person.id]);

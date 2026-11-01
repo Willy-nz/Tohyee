@@ -27,6 +27,8 @@ const REFUSED: RegExp[] = [
   /^\/api\/farming\/mail(\/|$)/,
   // The safety weekly copy's "Send a copy now" (its settings can still be saved: nothing sends them, decision 1042).
   /^\/api\/farming\/safety\/weekly-copy\/send$/,
+  // Camera upload logins (#508): the demo farm takes no uploads, so it makes no logins for them.
+  /^\/api\/farming\/security\/cameras\/[^/]+\/upload-login$/,
   /^\/api\/sales-platforms\//,
   /^\/api\/organisations\/[^/]+\/analytics\/report-emails(\/|$)/,
   /^\/api\/organisations\/[^/]+\/(members|handover)(\/|$)/,

@@ -22,6 +22,10 @@
  * And the farm calendar's mailbox checks every 15 minutes (#319; off with
  * TOHYEE_FARM_MAIL_SCHEDULER=off).
  *
+ * And the farm security cameras (#508): the hourly media clean-up (off with
+ * TOHYEE_CAMERA_CLEANUP=off) and, when TOHYEE_CAMERA_FTP_PORT is set, the
+ * camera upload receiver.
+ *
  * And the sales platform sync, which catches up connected Shopify stores'
  * customers and products every 15 minutes
  * (off with TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off).
@@ -149,6 +153,18 @@ export async function register() {
   {
     const { startLocationSweep } = await import("@/lib/farming/locations-sweep");
     startLocationSweep();
+  }
+
+  // Farm security camera media past its farm's retention goes every hour (#508, decision 1222); it keeps the retention promise.
+  if (process.env.TOHYEE_CAMERA_CLEANUP !== "off") {
+    const { startCameraCleanup } = await import("@/lib/security-cameras/cleanup");
+    startCameraCleanup();
+  }
+
+  // The camera upload receiver (#508, decision 1219): off unless TOHYEE_CAMERA_FTP_PORT is set.
+  if (process.env.TOHYEE_CAMERA_FTP_PORT && process.env.TOHYEE_CAMERA_FTP_PORT !== "off") {
+    const { startCameraUploads } = await import("@/lib/security-cameras/receiver");
+    void startCameraUploads();
   }
 
   if (process.env.TOHYEE_FARM_MAIL_SCHEDULER !== "off") {

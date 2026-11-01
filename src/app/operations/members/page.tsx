@@ -12,6 +12,7 @@ import { invitationMessage, type InvitationOutcome } from "@/lib/organisations/i
 import type { Handover } from "@/lib/organisations/handover";
 import type { Member } from "@/lib/organisations/members";
 import { useConfirm } from "@/components/confirm-dialog";
+import { MemberCameraAccess } from "@/components/farm-security";
 import { MemberFarms } from "@/components/member-farms";
 
 const ROLE_HELP: Record<Role, string> = {
@@ -244,6 +245,7 @@ function Members({ organisationId }: { organisationId: string }) {
         </div>
       </Card>
       {members.data ? <MemberFarms organisationId={organisationId} members={members.data.members} /> : null}
+      {members.data ? <MemberCameraAccess organisationId={organisationId} members={members.data.members} /> : null}
     </>
   );
 }

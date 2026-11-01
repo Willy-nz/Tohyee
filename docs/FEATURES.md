@@ -3190,6 +3190,29 @@ that something happened.
   backups, exports, Analytics, AI tools or the offline pack. Starting and
   stopping are in the audit trail, positions aren't.
 
+- **Farm security cameras** (#508, decisions 1216-1225; tenant migration
+  0212; built for the Reolink Go PT Plus but **not tried with a camera**;
+  not yet reviewed by Jess; docs/FARM-SECURITY.md): Farm › More ›
+  **Security**. Owners and admins add cameras to a farm (name, model,
+  place on the farm map, the camera clock's time zone, notes) and make each
+  one an upload login (shown once, kept as a hash). Cameras upload photos
+  and clips by FTPS to Tohyee's own upload-only receiver, off until the
+  server sets `TOHYEE_CAMERA_FTP_PORT` and a certificate; files are type
+  checked, size limited, kept once per camera and stored on disk (not in
+  the database or its backups). Each file is an event with the camera's
+  time and when Tohyee got it. Events show as photo and clip tiles per farm
+  or all farms, filtered by camera, kind, dates and kept, each marked
+  **Photo only** or **Clip saved**; clips play in the page. Each camera's
+  last upload is shown, with "No uploads from … since Tuesday" when quiet.
+  Keep (incident, with a note), download and delete (asks first, audited),
+  and per-farm retention with an hourly clean-up that skips kept events.
+  Who sees cameras is chosen on People and roles (see, download, delete);
+  owners and admins have all of it; farm assignments apply; every route
+  and media address checks. The page always says cameras record staff and
+  visitors. Not built: fetching clips from the camera's SD card, AI tags,
+  live view, backing up the media folder. 4G cameras can't upload through
+  remote access; the server needs a public address and port forwarding.
+
 - **Paddock photos and covers from photos** (#503, decisions 1160-1169;
   tenant migration 0209): a cover reading on the Log, each paddock on a
   farm walk, and a new **Paddock photo** button (also **Add photo** on a

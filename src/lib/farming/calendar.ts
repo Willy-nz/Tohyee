@@ -319,6 +319,8 @@ export async function disconnectMemberFarmMail(organisation: OrganisationRecord,
     await forgetMemberFarmAccess(tx, userId);
     // And whether they saw restricted incident details (#446, decision 936).
     await tx.query("delete from safety_restricted_members where user_id = $1", [userId]);
+    // And their security camera access (#508, decision 1220).
+    await tx.query("delete from security_camera_access where user_id = $1", [userId]);
     return ids.rows.length;
   });
 }

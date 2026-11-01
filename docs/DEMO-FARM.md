@@ -49,6 +49,13 @@ one switch.
   are refused for it. Safety records are dated by the database, so they all
   show as entered on the day the demo farm was made, with the day each
   happened beside it.
+- **Security cameras** (#508, decision 1225): three made-up cameras (Front
+  gate and Calf shed on the home farm, Runoff gate, quiet for four days so
+  the gap shows), seven events from the last few days with photos Tohyee
+  draws (coloured panels saying "Made-up demo photo") and a three-second
+  made-up clip, one kept as an incident. Taken in through the same code as
+  a camera's upload, into the camera media folder; deleted with the demo
+  farm. No upload logins: the demo farm takes no uploads.
 - **This week's farm work** (#447, decisions 1043-1044): the R1 heifers
   moving round the runoff a week a paddock (in one now), a quick cover look
   at four runoff paddocks yesterday, and farm calendar jobs for this week,

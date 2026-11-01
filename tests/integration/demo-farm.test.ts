@@ -29,7 +29,12 @@ import { isoDateAt } from "@/lib/dates";
 import { paddockBand } from "@/lib/farming/map-colours";
 import { paddockStatuses } from "@/lib/farming/paddock-status";
 import { getTractorJob, listTractorEquipment, listTractorJobs } from "@/lib/farming/tractor";
+import { existsSync } from "node:fs";
 import { effluentCare } from "@/lib/effluent/care";
+import { listCameras } from "@/lib/security-cameras/cameras";
+import { listEvents, mediaFor } from "@/lib/security-cameras/events";
+import { cameraHealth } from "@/lib/security-cameras/shared";
+import { resolveStored } from "@/lib/security-cameras/storage";
 import { effluentLog } from "@/lib/effluent/log";
 import { effluentSetup } from "@/lib/effluent/setup";
 import { listEquipment } from "@/lib/safety/equipment";
@@ -83,6 +88,7 @@ describeWithDatabase("the demo farm (#437)", () => {
     process.env.TOHYEE_SECRET_KEY = "demo-farm-integration-test-secret-key-32chars";
     process.env.TOHYEE_DEMO_FARM_TODAY = TODAY;
     process.env.TOHYEE_ANALYTICS_DIR = `/tmp/tohyee-demo-analytics-${process.pid}`;
+    process.env.TOHYEE_CAMERA_MEDIA_DIR = `/tmp/tohyee-demo-camera-media-${process.pid}`;
     server = await startTestServer();
     jess = await createTestUser("demo-jess@example.com");
     mere = await createTestUser("demo-mere@example.com");
@@ -443,6 +449,23 @@ describeWithDatabase("the demo farm (#437)", () => {
     expect(pods.faults.map((check) => check.data.faultReport)).toEqual([true]);
   });
 
+  it("has security cameras with made-up photos and a clip, one kept and one camera quiet (#508, decision 1225)", async () => {
+    const answer = await as(async (tx) => ({ cameras: await listCameras(tx), events: await listEvents(tx, {}, "Pacific/Auckland") }));
+    expect(answer.cameras.map((camera) => [camera.farmName, camera.name, camera.eventCount, camera.uploadUsername])).toEqual([
+      ["Home farm", "Calf shed", 2, null],
+      ["Home farm", "Front gate", 4, null],
+      ["Runoff", "Runoff gate", 1, null],
+    ]);
+    expect(answer.events.events.map((event) => event.kind).sort()).toEqual(["clip", "snapshot", "snapshot", "snapshot", "snapshot", "snapshot", "snapshot"]);
+    expect(answer.events.events.filter((event) => event.kept).map((event) => event.cameraName)).toEqual(["Front gate"]);
+    const runoff = answer.cameras.find((camera) => camera.name === "Runoff gate")!;
+    expect(cameraHealth(runoff, new Date()).state).toBe("quiet");
+    for (const event of answer.events.events) {
+      const media = await as((tx) => mediaFor(tx, event.id, "view"));
+      expect(existsSync(resolveStored(org, media.storagePath))).toBe(true);
+    }
+  }, 900_000);
+
   it("has Analytics reports that all run", async () => {
     const dashboards = await as((tx) => listDashboards(tx));
     expect(dashboards.map((dashboard) => dashboard.name).sort()).toEqual(["Accounts: profit, cash and GST", "Business overview", "Farm", "Farm performance"]);
@@ -526,6 +549,7 @@ describeWithDatabase("the demo farm (#437)", () => {
     expect(await getDemoFarm(jess.id)).toBeNull();
     expect(await getOrganisation(org)).toBeNull();
     expect((await getAdminPool().query("select 1 from pg_database where datname = $1", [organisation.databaseName])).rowCount).toBe(0);
+    expect(existsSync(`${process.env.TOHYEE_CAMERA_MEDIA_DIR}/${org}`)).toBe(false);
     await expect(deleteDemoFarm(jess)).rejects.toThrow(/don't have the demo farm/);
   });
 });
