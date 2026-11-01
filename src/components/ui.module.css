@@ -1149,3 +1149,9 @@
 .toolbar:has(> .field) {
   align-items: flex-start;
 }
+
+.pageHeading { display: flex; align-items: flex-start; gap: 12px; }
+.pageHeadingCopy { min-width: 0; }
+@media print { .pageHeading > [aria-hidden="true"] { display: none; } }
+
+.moduleIdentity { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 6px; }
