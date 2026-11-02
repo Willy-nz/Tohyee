@@ -14,7 +14,15 @@ const ROUTES: Array<[string, IllustratedIconName]> = [
   ["/operations/jobs/calendar", "calendar"], ["/operations/jobs", "jobs"], ["/operations/projects", "jobs"],
   ["/operations/tax", "tax"], ["/operations/gst-return", "tax"], ["/operations/gst-audit", "tax"],
   ["/operations/rd", "tax"], ["/operations/income-tax", "tax"],
-  ["/operations/settings", "settings"], ["/operations/members", "settings"], ["/operations/modules", "settings"],
+  // Settings sub-pages get a picture of what they're about; the cog is kept for
+  // the Settings hub and genuinely general settings (modules, custom fields, tracking).
+  ["/operations/settings/sales-platforms", "shop"], ["/operations/settings/online-payments", "card"],
+  ["/operations/settings/email", "mail"], ["/operations/settings/bank-files", "banking"],
+  ["/operations/settings/import", "documents"], ["/operations/settings/powerpoint", "reports"],
+  ["/operations/settings/payroll-access", "payroll"], ["/operations/settings/customers", "crm"],
+  ["/operations/settings/salespeople", "team"], ["/operations/settings/approval-rules", "purchases"],
+  ["/operations/settings/kilometre-rates", "maps"],
+  ["/operations/settings", "settings"], ["/operations/members", "team"], ["/operations/modules", "settings"],
   ["/operations/reports", "reports"], ["/operations/project-reports", "reports"], ["/operations/budgets", "analytics"],
   ["/operations/items", "inventory"], ["/operations/inventory", "inventory"],
   ["/operations/stock", "inventory"], ["/operations/fixed-assets", "inventory"],
@@ -30,11 +38,12 @@ const ROUTES: Array<[string, IllustratedIconName]> = [
   ["/operations/invoices", "sales"], ["/operations/customer-statements", "sales"], ["/operations/quotes", "sales"], ["/operations/credit-notes", "sales"],
   ["/crm/mail", "mail"], ["/crm/email-templates", "mail"], ["/crm/tasks", "calendar"],
   ["/crm/forecasts", "analytics"],
-  ["/crm/teams", "settings"], ["/crm/reassign", "settings"], ["/crm/duplicates", "settings"],
-  ["/crm/record-types", "settings"], ["/crm/stages", "settings"], ["/crm/dashboard", "analytics"], ["/crm", "crm"],
-  ["/analytics/sources", "documents"], ["/analytics/shaping", "settings"], ["/analytics", "analytics"],
+  ["/crm/teams", "team"], ["/crm/reassign", "reassign"], ["/crm/duplicates", "duplicates"],
+  ["/crm/record-types", "form"], ["/crm/stages", "pipeline"], ["/crm/dashboard", "analytics"], ["/crm", "crm"],
+  ["/analytics/sources", "documents"], ["/analytics/shaping", "funnel"], ["/analytics", "analytics"],
   ["/server/analytics", "analytics"], ["/server/bank-files", "banking"],
-  ["/server/users", "crm"], ["/server/organisations", "accounting"],
+  ["/server/users", "team"], ["/server/sign-ins", "key"], ["/server/google-sign-in", "key"],
+  ["/server/remote-access", "key"], ["/server/organisations", "accounting"],
   ["/server/email", "mail"], ["/server/backups", "documents"], ["/server", "settings"],
   ["/operations", "accounting"],
 ];
@@ -48,8 +57,10 @@ export function iconForDestination(href: string | null): IllustratedIconName | u
 /**
  * A top-level menu's artwork comes from where it leads (its own link, or its
  * first destination), never from its label: "Sales", "Settings" and "More"
- * mean different things in Accounting, CRM and Farm.
+ * mean different things in Accounting, CRM and Farm. A menu may name its own
+ * `art` when its first link would mislead (CRM Settings opens on Teams).
  */
-export function iconForMenu(menu: { href?: string; groups?: Array<{ links: Array<{ href: string }> }> }): IllustratedIconName | undefined {
+export function iconForMenu(menu: { href?: string; art?: IllustratedIconName; groups?: Array<{ links: Array<{ href: string }> }> }): IllustratedIconName | undefined {
+  if (menu.art) return menu.art;
   return iconForDestination(menu.href ?? menu.groups?.flatMap((group) => group.links)[0]?.href ?? null);
 }
