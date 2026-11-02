@@ -2244,6 +2244,22 @@ that something happened.
   covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
   turned off. Not yet tried against each AI app.
+- **AI: lossless line edits and paged lists** (#537, #538, decisions
+  1263-1268). Reading a document over MCP (get_invoice, get_bill, get_quote,
+  get_sales_order, get_purchase_order, the credit notes and repeating
+  templates) gives each line a lineId and its item, unit, tracking, custom
+  fields and any order link. The edit tools keep a saved line by its lineId
+  and change only the fields sent (null clears one; for tracking and custom
+  fields, one category or field at a time). A line without a lineId is new;
+  a saved line comes off only when named in removeLineIds. An edit that
+  leaves out a saved line is refused with nothing changed, saying what the
+  line carries. Header-only edits keep the lines as before. Lists
+  (invoices, bills, quotes, sales and purchase orders, credit notes,
+  overpayments, items, fixed assets, expense claims, contacts, accounts,
+  draft journals and the bills inbox) take a cursor and return nextCursor,
+  null on the last page; `more` is true only when there is a next page.
+  Quotes, sales and purchase orders now give up to 200 a page, as the tools
+  said. Tested with made-up documents only.
 - **AI: sales platform diagnostics and the connection's access** (#531,
   #532 part 3, decisions 1246-1249). get_organisation now says what the
   key or app connection may do now (Look only, Make drafts, Make and post or

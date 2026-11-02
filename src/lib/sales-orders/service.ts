@@ -354,15 +354,16 @@ async function lockOrder(tx: OrgTx, id: string): Promise<SalesOrder> {
   return getSalesOrder(tx, id);
 }
 
-/** Newest first, 50 at a time. `status` is one of SALES_ORDER_STATUSES (SO12). */
+/** Newest first, 50 at a time (`limit` up to 200). `status` is one of SALES_ORDER_STATUSES (SO12). */
 export async function listSalesOrders(
   tx: OrgTx,
-  filters: { status?: unknown; contactId?: unknown; beforeId?: unknown } = {},
+  filters: { status?: unknown; contactId?: unknown; beforeId?: unknown; limit?: unknown } = {},
 ): Promise<{ salesOrders: SalesOrderSummary[]; nextBeforeId: string | null }> {
   const status = filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", SALES_ORDER_STATUSES);
   const contactId = optionalId(filters.contactId, "contactId");
   const beforeId = optionalId(filters.beforeId, "beforeId");
-  const limit = 50;
+  const limitRaw = Number(filters.limit ?? 50);
+  const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
   const result = await tx.query<Row>(
     `select * from (${SUMMARY_SQL}) s
       where ($1::text is null or s.status = $1)

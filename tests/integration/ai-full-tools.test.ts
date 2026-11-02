@@ -192,7 +192,7 @@ describeWithDatabase("Full access AI keys outside banking (decision 489, AIF1-AI
     for (const tool of FULL_WRITE_TOOLS) expect(listed, tool.name).not.toContain(tool.name);
     await expect(call(tokens.post, "create_quote", { contactId: kobe.id })).rejects.toThrow(/Full access/);
     await expect(call(tokens.post, "list_expense_claims")).rejects.toThrow(/Full access/);
-    expect(await call(tokens.full, "list_expense_claims")).toEqual({ claims: [], more: false });
+    expect(await call(tokens.full, "list_expense_claims")).toEqual({ claims: [], more: false, nextCursor: null });
   });
 
   it("AIF6: a refund paid for a credit note posts Dr 1100 / Cr 1000 (as CN8)", async () => {

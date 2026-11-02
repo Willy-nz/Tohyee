@@ -1,3 +1,4 @@
+import { ValidationError } from "@/lib/errors";
 /**
  * Limits for the MCP endpoint (decision 343): a light per-key request limit
  * and a cap on how much text one tool answer can be.
@@ -72,4 +73,32 @@ export function historyRows<T>(page: { rows: T[]; next: string | null }): { rows
 export function boundedJson(value: unknown, max = MAX_TOOL_TEXT): string | null {
   const text = JSON.stringify(value);
   return text.length > max ? null : text;
+}
+
+/** The `cursor` input of a paged AI list (#538, decision 1267): the `nextCursor` from the page before. */
+export const CURSOR = { type: "string", description: "nextCursor from the last page, for the next one. Keep the same filters." } as const;
+
+/**
+ * One page of a list a service returns whole (#538, decision 1267): up to
+ * `limit` rows after the row whose id is `cursor`, in the list's own order.
+ * `nextCursor` is null on the last page. A cursor that's no longer in the
+ * list (the row went, or the filters changed) is refused rather than
+ * silently starting again.
+ */
+export function pageAfter<T>(
+  rows: readonly T[],
+  idOf: (row: T) => string,
+  cursor: unknown,
+  limit: number,
+): { rows: T[]; more: boolean; nextCursor: string | null } {
+  let start = 0;
+  if (cursor !== undefined && cursor !== null && cursor !== "") {
+    const text = String(cursor);
+    const index = rows.findIndex((row) => idOf(row) === text);
+    if (index < 0) throw new ValidationError("That cursor isn't in this list any more (it changed, or the filters differ). Start again without a cursor.");
+    start = index + 1;
+  }
+  const page = rows.slice(start, start + limit);
+  const more = start + limit < rows.length;
+  return { rows: page, more, nextCursor: more && page.length > 0 ? idOf(page[page.length - 1]) : null };
 }

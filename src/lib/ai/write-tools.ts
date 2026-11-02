@@ -4,6 +4,7 @@ import { submitForApproval } from "@/lib/approvals/service";
 import { configuredOrigin } from "@/lib/auth/origin";
 import { kickEmailOutbox } from "@/lib/email/outbox";
 import { randomBytes } from "node:crypto";
+import { linesForEdit, withLineIds } from "@/lib/ai/document-lines";
 import { type AiTool, billSummary, DATE, documentLines, inboxItemSummary, invoiceSummary, type JsonSchema, schema } from "@/lib/ai/tools";
 import { billDuplicateWarnings } from "@/lib/bills/duplicates";
 import { addInboxItem, createBillFromInboxItem } from "@/lib/bills/inbox";
@@ -40,34 +41,56 @@ export const AMOUNTS_MODE: JsonSchema = {
   enum: ["exclusive", "inclusive", "no_tax"],
   description: "Whether unit prices exclude GST, include GST, or have no GST.",
 };
-export const DOCUMENT_LINES: JsonSchema = {
-  type: "array",
-  minItems: 1,
-  maxItems: 200,
-  description: "The lines. On an edit, these replace every line.",
-  items: {
-    type: "object",
-    properties: {
-      description: { type: "string" },
-      quantity: { type: "string", description: "A decimal, e.g. \"2\"." },
-      unitPrice: { type: "string", description: "A decimal, e.g. \"50.00\"." },
-      accountCode: { type: "string", description: "From list_accounts." },
-      taxCode: { type: ["string", "null"], description: "A GST code, e.g. GST, ZERO, EXEMPT, or null for none." },
-    },
-    required: ["description", "quantity", "unitPrice", "accountCode"],
-  },
+const LINE_PROPERTIES: Record<string, JsonSchema> = {
+  description: { type: "string" },
+  quantity: { type: "string", description: "A decimal, e.g. \"2\"." },
+  unitPrice: { type: "string", description: "A decimal, e.g. \"50.00\"." },
+  accountCode: { type: "string", description: "From list_accounts." },
+  taxCode: { type: ["string", "null"], description: "A GST code, e.g. GST, ZERO, EXEMPT, or null for none." },
+  itemId: { type: ["string", "null"], description: "An item from list_items. On a new line, a blank description, price, account or GST code comes from it." },
+  unitId: { type: ["string", "null"], description: "One of the item's units (get_item); null for its base unit." },
+  tracking: { type: ["object", "null"], description: "Tracking category id -> option id (list_tracking). On a saved line only the categories sent change; null clears one." },
+  customFields: { type: ["object", "null"], description: "Line custom field id -> value. On a saved line only the fields sent change; null clears one." },
 };
-/** Sales document lines (invoices, quotes, sales orders, credit notes) also take a discount (DS1-DS6). */
-export const SALES_DOCUMENT_LINES: JsonSchema = {
-  ...DOCUMENT_LINES,
-  items: {
-    ...(DOCUMENT_LINES.items as Record<string, unknown>),
-    properties: {
-      ...((DOCUMENT_LINES.items as { properties: Record<string, JsonSchema> }).properties),
-      discountPercent: { type: ["string", "null"], description: "Percent off the line, 0 to 100, e.g. \"10\". Left out for none." },
+const DISCOUNT: JsonSchema = { type: ["string", "null"], description: "Percent off the line, 0 to 100, e.g. \"10\". Left out for none." };
+
+function linesSchema(sales: boolean, edit: boolean): JsonSchema {
+  return {
+    type: "array",
+    minItems: 1,
+    maxItems: 200,
+    description: edit
+      ? "The lines in order. A saved line: its lineId and only the fields to change (null clears). A new line: no lineId. Every saved line must be here or in removeLineIds."
+      : "The lines.",
+    items: {
+      type: "object",
+      properties: {
+        ...(edit ? { lineId: { type: "string", description: "A saved line's lineId from the latest read." } } : {}),
+        ...LINE_PROPERTIES,
+        ...(sales ? { discountPercent: DISCOUNT } : {}),
+      },
+      ...(edit ? {} : { required: ["quantity"] }),
     },
-  },
-} as JsonSchema;
+  };
+}
+
+export const DOCUMENT_LINES: JsonSchema = linesSchema(false, false);
+/** Sales document lines (invoices, quotes, sales orders, credit notes, repeating invoices) also take a discount (DS1-DS6). */
+export const SALES_DOCUMENT_LINES: JsonSchema = linesSchema(true, false);
+const EDIT_LINES = linesSchema(false, true);
+const SALES_EDIT_LINES = linesSchema(true, true);
+const REMOVE_LINE_IDS: JsonSchema = {
+  type: "array",
+  maxItems: 200,
+  items: { type: "string" },
+  description: "lineIds of saved lines to take off.",
+};
+
+/** A document's fields for an edit tool: lines by lineId (#537, decision 1263), and removeLineIds. */
+export function editFields(fields: Record<string, JsonSchema>): Record<string, JsonSchema> {
+  if (!fields.lines) return fields;
+  return { ...fields, lines: fields.lines === SALES_DOCUMENT_LINES ? SALES_EDIT_LINES : EDIT_LINES, removeLineIds: REMOVE_LINE_IDS };
+}
 const JOURNAL_LINES: JsonSchema = {
   type: "array",
   minItems: 2,
@@ -135,11 +158,11 @@ function journalInput(args: Record<string, unknown>) {
 
 const invoiceDetail = async (tx: Parameters<AiTool["run"]>[0], id: string) => {
   const invoice = await getInvoice(tx, id);
-  return { ...invoiceSummary(invoice), amountsMode: invoice.amountsMode, ...documentLines(invoice.lines) };
+  return { ...invoiceSummary(invoice), amountsMode: invoice.amountsMode, ...documentLines(await withLineIds(tx, "invoice", invoice.id, invoice.lines)) };
 };
 const billDetail = async (tx: Parameters<AiTool["run"]>[0], id: string) => {
   const bill = await getBill(tx, id);
-  return { ...billSummary(bill), amountsMode: bill.amountsMode, ...documentLines(bill.lines) };
+  return { ...billSummary(bill), amountsMode: bill.amountsMode, ...documentLines(await withLineIds(tx, "bill", bill.id, bill.lines)) };
 };
 
 export const PAYMENT_FIELDS: Record<string, JsonSchema> = {
@@ -198,10 +221,12 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     name: "update_draft_invoice",
     title: "Edit a draft invoice",
     level: "draft",
-    description: "Changes a draft sales invoice. Fields left out stay as they are; lines, if given, replace every line. Approved invoices can't be edited.",
-    inputSchema: schema({ invoiceId: ID("invoice"), ...INVOICE_FIELDS }, ["invoiceId"]),
+    description:
+      "Changes a draft sales invoice. Fields left out stay as they are. Lines are kept by lineId (from get_invoice); only the line fields sent change. Approved invoices can't be edited.",
+    inputSchema: schema({ invoiceId: ID("invoice"), ...editFields(INVOICE_FIELDS) }, ["invoiceId"]),
     async run(tx, args) {
-      const { contactId, invoiceDate, dueDate, reference, amountsMode, lines } = args;
+      const { contactId, invoiceDate, dueDate, reference, amountsMode } = args;
+      const lines = await linesForEdit(tx, "invoice", args.invoiceId, "invoiceId", getInvoice, args);
       const invoice = await updateInvoice(tx, args.invoiceId, { contactId, invoiceDate, dueDate, reference, amountsMode, lines });
       return { invoice: await invoiceDetail(tx, invoice.id) };
     },
@@ -285,10 +310,12 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     name: "update_draft_bill",
     title: "Edit a draft bill",
     level: "draft",
-    description: "Changes a draft bill. Fields left out stay as they are; lines, if given, replace every line. Approved bills can't be edited.",
-    inputSchema: schema({ billId: ID("bill"), ...BILL_FIELDS }, ["billId"]),
+    description:
+      "Changes a draft bill. Fields left out stay as they are. Lines are kept by lineId (from get_bill); only the line fields sent change. Approved bills can't be edited.",
+    inputSchema: schema({ billId: ID("bill"), ...editFields(BILL_FIELDS) }, ["billId"]),
     async run(tx, args) {
-      const { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines } = args;
+      const { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode } = args;
+      const lines = await linesForEdit(tx, "bill", args.billId, "billId", getBill, args);
       const bill = await updateBill(tx, args.billId, { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines });
       return { bill: await billDetail(tx, bill.id) };
     },

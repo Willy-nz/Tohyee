@@ -3,10 +3,11 @@ import { consolidatedBalanceSheet, consolidatedBudgetVsActual, consolidatedProfi
 import { cashFlowForecast } from "@/lib/cash-flow/forecast";
 import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
-import { boundedLimit, firstRows } from "@/lib/ai/limits";
+import { withLineIds } from "@/lib/ai/document-lines";
+import { boundedLimit, CURSOR, firstRows, pageAfter } from "@/lib/ai/limits";
 import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, type AiAccessLevel } from "@/lib/ai/access-levels";
 import type { Role } from "@/lib/auth/roles";
-import { getInboxItem, getInboxItemContent, type InboxItem, listInbox } from "@/lib/bills/inbox";
+import { getInboxItem, getInboxItemContent, type InboxItem, listInboxPage } from "@/lib/bills/inbox";
 import { getBill, listBills, type BillSummary } from "@/lib/bills/service";
 import { listContacts } from "@/lib/contacts/service";
 import { todayIsoDate } from "@/lib/dates";
@@ -15,7 +16,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { MONTH_NAMES } from "@/lib/financial-year";
 import { formatGstNumber } from "@/lib/format";
 import { getInvoice, listInvoices, type InvoiceSummary } from "@/lib/invoices/service";
-import { getJournalDraft, listJournalDrafts } from "@/lib/ledger/journal-drafts";
+import { getJournalDraft, listJournalDraftsPage } from "@/lib/ledger/journal-drafts";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { accountTransactions } from "@/lib/reports/account-transactions";
 import { agedPayables } from "@/lib/reports/aged-payables";
@@ -148,6 +149,7 @@ export function billSummary(bill: BillSummary) {
 }
 
 type DocumentLine = {
+  lineId: string;
   lineOrder: number;
   description: string;
   quantity: string;
@@ -159,6 +161,14 @@ type DocumentLine = {
   lineAmount: string;
   netAmount: string;
   taxAmount: string;
+  itemId: string | null;
+  itemCode: string | null;
+  unitId: string | null;
+  unitName: string | null;
+  tracking: Record<string, string>;
+  customFields: Record<string, unknown>;
+  salesOrderLineId?: string | null;
+  purchaseOrderLineId?: string | null;
 };
 
 /** A bills inbox item for the AI: no file, just what it is and where it came from. */
@@ -180,10 +190,16 @@ export function inboxItemSummary(item: InboxItem) {
   };
 }
 
+/**
+ * A document's lines for the AI, with everything an edit must keep (#537):
+ * the lineId to send back, the item and unit, tracking, custom fields and
+ * any order link.
+ */
 export function documentLines(lines: readonly DocumentLine[]) {
   const kept = firstRows(lines, MAX_DOCUMENT_LINES);
   return {
     lines: kept.rows.map((line) => ({
+      lineId: line.lineId,
       line: line.lineOrder,
       description: line.description,
       quantity: line.quantity,
@@ -194,6 +210,14 @@ export function documentLines(lines: readonly DocumentLine[]) {
       amount: line.lineAmount,
       net: line.netAmount,
       gst: line.taxAmount,
+      itemId: line.itemId,
+      ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+      unitId: line.unitId,
+      ...(line.unitName ? { unitName: line.unitName } : {}),
+      tracking: line.tracking,
+      customFields: line.customFields,
+      ...(line.salesOrderLineId ? { salesOrderLineId: line.salesOrderLineId } : {}),
+      ...(line.purchaseOrderLineId ? { purchaseOrderLineId: line.purchaseOrderLineId } : {}),
     })),
     ...(kept.truncated ? { linesNote: `Showing the first ${MAX_DOCUMENT_LINES} of ${kept.total} lines.` } : {}),
   };
@@ -213,6 +237,11 @@ function capRows<T, R>(rows: readonly T[], max: number, map: (row: T) => R, what
     rows: kept.rows.map(map),
     ...(kept.truncated ? { note: `Showing the first ${max} of ${kept.total} ${what}. Ask a narrower question to see the rest.` } : {}),
   };
+}
+
+/** A page of rows for the AI (#538): `rows`, and `nextCursor` (null on the last page) to pass back as `cursor`. */
+function pagedRows<T, R>(page: { rows: T[]; more: boolean; nextCursor: string | null }, map: (row: T) => R) {
+  return { rows: page.rows.map(map), more: page.more, nextCursor: page.nextCursor };
 }
 
 const LAST_DAY = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -260,13 +289,12 @@ export const READ_TOOLS: readonly AiTool[] = (
   {
     name: "list_accounts",
     title: "Chart of accounts",
-    description: "The chart of accounts: code, name, type, class (asset, liability, equity, revenue, expense), currency and whether it's archived.",
-    inputSchema: schema({ includeArchived: { type: "boolean", description: "Also list archived accounts. Default false." } }),
+    description: `The chart of accounts: code, name, type, class (asset, liability, equity, revenue, expense), currency and whether it's archived. Up to ${MAX_LINES} a page; pass nextCursor back as cursor for more.`,
+    inputSchema: schema({ includeArchived: { type: "boolean", description: "Also list archived accounts. Default false." }, cursor: CURSOR }),
     async run(tx, args) {
       const accounts = await listAccounts(tx, { includeArchived: args.includeArchived === true });
-      return capRows(
-        accounts,
-        MAX_LINES,
+      return pagedRows(
+        pageAfter(accounts, (account) => account.code, args.cursor, MAX_LINES),
         (account) => ({
           code: account.code,
           name: account.name,
@@ -276,7 +304,6 @@ export const READ_TOOLS: readonly AiTool[] = (
           defaultTaxCode: account.defaultTaxCode,
           archived: !account.isActive,
         }),
-        "accounts",
       );
     },
   },
@@ -343,21 +370,23 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "list_invoices",
     title: "Sales invoices",
     description:
-      "Sales invoices, newest first. Filter by status (draft, approved, voided), by customer (contactId from list_contacts), or awaitingPayment to see only approved invoices with something still due.",
+      "Sales invoices, newest first. Filter by status (draft, approved, voided), by customer (contactId from list_contacts), or awaitingPayment to see only approved invoices with something still due. Pages: pass nextCursor back as cursor, with the same filters.",
     inputSchema: schema({
       status: { type: "string", enum: ["draft", "approved", "voided"] },
       contactId: { type: "string", description: "A contact id from list_contacts." },
       awaitingPayment: { type: "boolean" },
       limit: { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` },
+      cursor: CURSOR,
     }),
     async run(tx, args) {
       const result = await listInvoices(tx, {
         status: args.status,
         contactId: args.contactId,
         awaitingPayment: args.awaitingPayment,
+        beforeId: args.cursor,
         limit: boundedLimit(args.limit, 50, MAX_LIST),
       });
-      return { invoices: result.invoices.map(invoiceSummary), more: result.nextBeforeId !== null };
+      return { invoices: result.invoices.map(invoiceSummary), more: result.nextBeforeId !== null, nextCursor: result.nextBeforeId };
     },
   },
   {
@@ -379,28 +408,30 @@ export const READ_TOOLS: readonly AiTool[] = (
         id = found.rows[0].id;
       }
       const invoice = await getInvoice(tx, id);
-      return { ...invoiceSummary(invoice), amountsMode: invoice.amountsMode, exchangeRate: invoice.exchangeRate, ...documentLines(invoice.lines) };
+      return { ...invoiceSummary(invoice), amountsMode: invoice.amountsMode, exchangeRate: invoice.exchangeRate, ...documentLines(await withLineIds(tx, "invoice", invoice.id, invoice.lines)) };
     },
   },
   {
     name: "list_bills",
     title: "Bills",
     description:
-      "Bills from suppliers, newest first. Filter by status (draft, approved, voided), by supplier (contactId from list_contacts), or awaitingPayment to see only approved bills with something still due.",
+      "Bills from suppliers, newest first. Filter by status (draft, approved, voided), by supplier (contactId from list_contacts), or awaitingPayment to see only approved bills with something still due. Pages: pass nextCursor back as cursor, with the same filters.",
     inputSchema: schema({
       status: { type: "string", enum: ["draft", "approved", "voided"] },
       contactId: { type: "string", description: "A contact id from list_contacts." },
       awaitingPayment: { type: "boolean" },
       limit: { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` },
+      cursor: CURSOR,
     }),
     async run(tx, args) {
       const result = await listBills(tx, {
         status: args.status,
         contactId: args.contactId,
         awaitingPayment: args.awaitingPayment,
+        beforeId: args.cursor,
         limit: boundedLimit(args.limit, 50, MAX_LIST),
       });
-      return { bills: result.bills.map(billSummary), more: result.nextBeforeId !== null };
+      return { bills: result.bills.map(billSummary), more: result.nextBeforeId !== null, nextCursor: result.nextBeforeId };
     },
   },
   {
@@ -430,18 +461,19 @@ export const READ_TOOLS: readonly AiTool[] = (
         id = found.rows[0].id;
       }
       const bill = await getBill(tx, id);
-      return { ...billSummary(bill), amountsMode: bill.amountsMode, exchangeRate: bill.exchangeRate, ...documentLines(bill.lines) };
+      return { ...billSummary(bill), amountsMode: bill.amountsMode, exchangeRate: bill.exchangeRate, ...documentLines(await withLineIds(tx, "bill", bill.id, bill.lines)) };
     },
   },
   {
     name: "list_contacts",
     title: "Contacts",
-    description: "Customers and suppliers, in name order. Search by name or email; type narrows to customers or suppliers.",
+    description: "Customers and suppliers, in name order. Search by name or email; type narrows to customers or suppliers. Pages: pass nextCursor back as cursor, with the same filters.",
     inputSchema: schema({
       search: { type: "string", description: "Part of a name or email." },
       type: { type: "string", enum: ["customer", "supplier", "all"], description: "Default all." },
       includeArchived: { type: "boolean" },
       limit: { type: "integer", minimum: 1, maximum: MAX_CONTACTS, description: `Default 100, at most ${MAX_CONTACTS}.` },
+      cursor: CURSOR,
     }),
     async run(tx, args) {
       const type = args.type ?? "all";
@@ -451,9 +483,8 @@ export const READ_TOOLS: readonly AiTool[] = (
       const contacts = (await listContacts(tx, { search: args.search, includeArchived: args.includeArchived === true })).filter(
         (contact) => type === "all" || (type === "customer" ? contact.isCustomer : contact.isSupplier),
       );
-      return capRows(
-        contacts,
-        boundedLimit(args.limit, 100, MAX_CONTACTS),
+      return pagedRows(
+        pageAfter(contacts, (contact) => contact.id, args.cursor, boundedLimit(args.limit, 100, MAX_CONTACTS)),
         (contact) => ({
           id: contact.id,
           name: contact.name,
@@ -465,7 +496,6 @@ export const READ_TOOLS: readonly AiTool[] = (
           currencyCode: contact.currencyCode,
           archived: contact.isArchived,
         }),
-        "contacts",
       );
     },
   },
@@ -530,13 +560,16 @@ export const READ_TOOLS: readonly AiTool[] = (
   {
     name: "list_draft_journals",
     title: "Draft journals",
-    description: "Draft manual journals, newest first: ones still to post (status draft) or already posted (status posted, with the journal's id).",
+    description:
+      "Draft manual journals, newest first: ones still to post (status draft) or already posted (status posted, with the journal's id). Pages: pass nextCursor back as cursor, with the same filters.",
     inputSchema: schema({
       status: { type: "string", enum: ["draft", "posted"] },
       limit: { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` },
+      cursor: CURSOR,
     }),
     async run(tx, args) {
-      return { drafts: await listJournalDrafts(tx, { status: args.status, limit: boundedLimit(args.limit, 50, MAX_LIST) }) };
+      const page = await listJournalDraftsPage(tx, { status: args.status, beforeId: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      return { drafts: page.drafts, more: page.nextBeforeId !== null, nextCursor: page.nextBeforeId };
     },
   },
   {
@@ -550,14 +583,15 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "list_bill_inbox",
     title: "Bills inbox",
     description:
-      "Supplier bills and receipts that arrived but aren't bills yet (the bills inbox): file name, where it came from (uploaded, or an email's sender and subject), and whether the same file arrived before. Waiting items by default.",
+      "Supplier bills and receipts that arrived but aren't bills yet (the bills inbox): file name, where it came from (uploaded, or an email's sender and subject), and whether the same file arrived before. Waiting items by default. Pages: pass nextCursor back as cursor, with the same status.",
     inputSchema: schema({
       status: { type: "string", enum: ["waiting", "made", "removed", "all"], description: "Default waiting." },
       limit: { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` },
+      cursor: CURSOR,
     }),
     async run(tx, args) {
-      const items = await listInbox(tx, { status: args.status, limit: boundedLimit(args.limit, 50, MAX_LIST) });
-      return { items: items.map(inboxItemSummary) };
+      const page = await listInboxPage(tx, { status: args.status, cursor: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      return { items: page.items.map(inboxItemSummary), more: page.nextCursor !== null, nextCursor: page.nextCursor };
     },
   },
   {

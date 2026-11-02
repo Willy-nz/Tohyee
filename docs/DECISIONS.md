@@ -11569,6 +11569,64 @@ SPD1-SPD11.
       connection) and the store's record ID.
 
 
+### Lossless AI line edits and paged AI lists (#537, #538; decisions 1263-1268)
+
+1263. **AI line edits go by lineId and never drop what they can't see**
+      (#537). Each line an AI reads has a `lineId` (the line's row id) and
+      its item, unit, tracking, custom fields and sales or purchase order
+      link. On an edit, `lines` is the new list in order: a line with a
+      `lineId` starts from everything saved on it and changes only the
+      fields sent; a line without one is new; a saved line is taken off only
+      when its lineId is in `removeLineIds` (or `removeLineIds` alone, which
+      keeps the rest). Any saved line that's in neither is refused, with
+      nothing changed and a message naming the line and what it carries.
+      This is stricter than before for plain lines too: the AI may not have
+      seen them, so silently replacing them was the same risk. The merge is
+      done in the AI layer (`src/lib/ai/document-lines.ts`) with the
+      document locked, and the result goes through the same service checks
+      as the screen. The screens and REST API are unchanged.
+1264. **Omitted keeps, null clears.** On a saved line a field left out
+      keeps its value and a field sent as null clears it (a tax code,
+      discount, item). Tracking and custom fields patch key by key: a
+      category or field sent as null comes off, the others stay. Taking the
+      item off (or changing it) without naming a unit uses no unit, as a
+      unit belongs to its item. Order links aren't settable here; they're
+      kept. Posting, inventory and approval are unchanged, so no new worked
+      example: the item kept on the line is what drives stock on approval
+      (tested with a box of 10 sold after an AI description edit).
+1265. **Line ids change after each edit.** The services still save a
+      draft's lines again on each edit, so ids are new afterwards; every
+      edit answer returns the new lineIds. An old id is refused ("read it
+      again"), which also catches someone else editing the draft in
+      between. Keeping ids stable across edits would mean changing every
+      document service; not done here.
+1266. **The same contract on every AI edit tool that shares the line
+      schema**: draft invoices and bills, quotes, sales and purchase orders,
+      sales and supplier credit notes, and repeating invoice and bill
+      templates. Repeating invoice lines now take a discount, as the
+      template screen does. The line schema also advertises itemId, unitId,
+      tracking and customFields, so an AI can set them on purpose; a new
+      line only needs a quantity when it names an item.
+1267. **AI lists page by cursor** (#538). Paged lists take `cursor` and
+      return `nextCursor` (null on the last page, including an empty list)
+      and `more` (true exactly when there's a next page), with the same
+      filters on every page. Where the service pages by id (invoices,
+      bills, quotes, sales and purchase orders, credit notes, draft
+      journals, the bills inbox) the cursor is the service's own, read one
+      row past the page so `more` is never claimed falsely. Where the
+      service returns the whole list (items, overpayments, fixed assets,
+      expense claims, contacts, accounts) the cursor is the last row's id
+      (an account's code), and a cursor no longer in the list is refused
+      rather than starting again silently. Each organisation's own database
+      is queried, so a cursor can't reach another organisation's rows.
+1268. **Advertised limits match the services.** Quote, sales order and
+      purchase order lists were fixed at 50 while the tools said up to 200;
+      their services now take a `limit` of 1-200 (default 50, as the screens
+      use). Draft journals and the bills inbox have paged versions
+      (`listJournalDraftsPage`, `listInboxPage`) behind the existing
+      functions. Bank statement lines keep their offset and total, which
+      were already honest.
+
 ### Menu pictures (decisions 1260-1262)
 
 1260. **Every page in a menu gets a picture of what it is.** Jess said the

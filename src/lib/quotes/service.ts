@@ -286,16 +286,17 @@ export async function quoteForInvoice(tx: OrgTx, invoiceId: string): Promise<{ i
 
 export const QUOTE_FILTERS = ["draft", "finalised", "expired", "accepted", "declined"] as const;
 
-/** Newest first, 50 at a time. `status` is one of QUOTE_FILTERS ("expired" is finalised quotes past their expiry date). */
+/** Newest first, 50 at a time (`limit` up to 200). `status` is one of QUOTE_FILTERS ("expired" is finalised quotes past their expiry date). */
 export async function listQuotes(
   tx: OrgTx,
-  filters: { status?: unknown; contactId?: unknown; beforeId?: unknown } = {},
+  filters: { status?: unknown; contactId?: unknown; beforeId?: unknown; limit?: unknown } = {},
 ): Promise<{ quotes: QuoteSummary[]; nextBeforeId: string | null }> {
   const status = filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", QUOTE_FILTERS);
   const contactId = optionalId(filters.contactId, "contactId");
   const beforeId = optionalId(filters.beforeId, "beforeId");
   const today = todayIsoDate();
-  const limit = 50;
+  const limitRaw = Number(filters.limit ?? 50);
+  const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
   const result = await tx.query<QuoteRow>(
     `${SUMMARY_SQL}
       where ($1::text is null
