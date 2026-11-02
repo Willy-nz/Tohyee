@@ -273,6 +273,8 @@ export const MENUS: Menu[] = [
   },
   {
     label: "Tax",
+    // The calculator is the Tax menu's own picture; its pages each have their own (decision 1260).
+    art: "tax",
     groups: [
       {
         heading: "Tax",
@@ -413,6 +415,8 @@ export const CRM_MENUS: Menu[] = (
     },
     {
       label: "Sales",
+      // Not the CRM card: Home and Contacts have that (decision 1260).
+      art: "pipeline",
       area: ["/crm/leads", "/crm/pipeline", "/crm/opportunities", "/crm/forecasts"],
       groups: [
         {
@@ -429,6 +433,8 @@ export const CRM_MENUS: Menu[] = (
     { label: "Dashboard", href: "/crm/dashboard", area: ["/crm/dashboard"], groups: [] },
     {
       label: "More",
+      // Marketing and email: the mail picture, so the CRM card isn't on four menus (decision 1260).
+      art: "mail",
       area: ["/crm/campaigns", "/crm/mail", "/crm/follow-ups", "/crm/email-templates", "/crm/sequences"],
       groups: [
         {
@@ -562,6 +568,8 @@ export const FARM_MENUS: Menu[] = [
   {
     label: "More",
     module: "farming",
+    // Its first link (Farms and paddocks) is drawn as a map; the menu is the whole farm.
+    art: "farm",
     area: ["/operations/farm/more", "/operations/farm/offline", "/operations/farming"],
     groups: [
       {

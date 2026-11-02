@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { iconForDestination, iconForMenu } from "@/components/navigation-art";
-import { MENUS, CRM_MENUS, ANALYTICS_MENUS, FARM_MENUS } from "@/components/navigation";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { MENUS, CRM_MENUS, ANALYTICS_MENUS, FARM_MENUS, type Menu } from "@/components/navigation";
+import { IllustratedIcon, type IllustratedIconName } from "@/components/illustrated-icon";
+import { SERVER_LINKS } from "@/components/server-shell";
 import { PageHeader } from "@/components/ui";
 
 const state = vi.hoisted(() => ({ path: "/crm" as string | null }));
@@ -12,7 +16,7 @@ describe("illustrated module navigation", () => {
   it("covers the four apps and accounting work areas", () => {
     for (const [path, icon] of Object.entries({
       "/operations": "accounting", "/crm": "crm", "/analytics": "analytics", "/operations/farm": "farm",
-      "/operations/payroll/employees": "payroll", "/operations/tax": "tax", "/operations/jobs": "jobs",
+      "/operations/payroll/pay-runs": "payroll", "/operations/gst-return": "tax-return", "/operations/jobs": "jobs",
       "/operations/bank-accounts": "banking", "/operations/reports": "reports", "/operations/settings": "settings",
       "/operations/items": "inventory", "/operations/sales": "sales", "/operations/purchases": "purchases",
       "/server/users": "team",
@@ -37,7 +41,7 @@ describe("illustrated module navigation", () => {
       "/operations/settings/bank-files": "banking", "/operations/settings/import": "documents",
       "/operations/settings/powerpoint": "reports", "/operations/settings/payroll-access": "payroll",
       "/operations/settings/customers": "crm", "/operations/settings/salespeople": "team",
-      "/operations/settings/approval-rules": "purchases", "/operations/settings/kilometre-rates": "maps",
+      "/operations/settings/approval-rules": "approval", "/operations/settings/kilometre-rates": "vehicle",
       "/operations/members": "team",
       "/crm/teams": "team", "/crm/reassign": "reassign", "/crm/duplicates": "duplicates",
       "/crm/record-types": "form", "/crm/stages": "pipeline", "/analytics/shaping": "funnel",
@@ -58,14 +62,16 @@ describe("illustrated module navigation", () => {
   it("chooses a menu's artwork from where it leads, not its label", () => {
     const art = (menus: typeof MENUS, label: string) => iconForMenu(menus.find((menu) => menu.label === label)!);
     expect(art(MENUS, "Sales")).toBe("sales");
-    expect(art(CRM_MENUS, "Sales")).toBe("crm");
-    expect(art(CRM_MENUS, "More")).toBe("crm");
+    expect(art(CRM_MENUS, "Sales")).toBe("pipeline");
+    expect(art(CRM_MENUS, "More")).toBe("mail");
+    expect(art(CRM_MENUS, "Contacts")).toBe("crm");
     expect(art(FARM_MENUS, "More")).toBe("farm");
     expect(art(CRM_MENUS, "Settings")).toBe("settings");
     expect(art(MENUS, "Tax")).toBe("tax");
     expect(art(ANALYTICS_MENUS, "Data sources")).toBe("documents");
-    expect(iconForDestination("/operations/income-tax")).toBe("tax");
-    expect(iconForDestination("/operations/project-reports/time")).toBe("reports");
+    expect(iconForDestination("/operations/income-tax")).toBe("coins");
+    expect(iconForDestination("/operations/project-reports/time")).toBe("clock");
+    expect(iconForDestination("/operations/project-reports/other")).toBe("reports");
   });
   it("provides artwork for every existing in-app menu destination", () => {
     const links = [...MENUS, ...CRM_MENUS, ...ANALYTICS_MENUS, ...FARM_MENUS].flatMap(menu => [
@@ -83,5 +89,73 @@ describe("illustrated module navigation", () => {
     expect(html).toContain('focusable="false"');
     state.path = null;
     expect(renderToStaticMarkup(createElement(PageHeader, { title: "Sign in" }))).not.toContain("<svg");
+  });
+
+  it("gives every Tax page its own picture and keeps the calculator for the Tax menu", () => {
+    const tax = MENUS.find((menu) => menu.label === "Tax")!;
+    expect(iconForMenu(tax)).toBe("tax");
+    expect(Object.fromEntries(tax.groups.flatMap((group) => group.links).map((link) => [link.label, iconForDestination(link.href)]))).toEqual({
+      "GST return": "tax-return", "GST audit report": "inspect", "Tax codes": "tax-code", "Income tax": "coins",
+      "R&D activities": "flask", "Tagged R&D costs": "tagged-receipt", "R&D claim report": "rd-claim",
+    });
+  });
+  it("matches a route that names a query on that page and query only", () => {
+    expect(iconForDestination("/operations/reports?report=bs")).toBe("scales");
+    expect(iconForDestination("/operations/reports/?report=bs#notes")).toBe("scales");
+    expect(iconForDestination("/operations/reports?from=2026-04-01&report=aged")).toBe("awaiting");
+    expect(iconForDestination("/operations/reports?report=pnl")).toBe("reports");
+    expect(iconForDestination("/operations/reports?report=unknown")).toBe("reports");
+    expect(iconForDestination("/operations/reports")).toBe("reports");
+    expect(iconForDestination("/operations/invoices?show=awaiting")).toBe("awaiting");
+    expect(iconForDestination("/operations/invoices?show=drafts")).toBe("sales");
+    expect(iconForDestination("/operations/invoices/123?show=awaiting")).toBe("sales");
+  });
+
+  /**
+   * Three or more different pages in one menu with the same picture looks
+   * like a placeholder (Jess, 2 November 2026: the Tax menu). Two may share
+   * when they're the same kind of thing. Links to the same page count once
+   * (Not-for-profit's Fund activity is the Profit and loss page).
+   */
+  const SHARED_ALLOWED: Record<string, { icon: IllustratedIconName; why: string }[]> = {
+    // Sign-ins, Sign in with Google and Remote access are all about getting in (decision 1234).
+    // The server bar shows no pictures; this is their page headings only.
+    "Server": [{ icon: "key", why: "ways in to the server" }],
+  };
+  function crowded(name: string, hrefs: string[]): string[] {
+    const by = new Map<string, Set<string>>();
+    for (const href of hrefs) {
+      const icon = iconForDestination(href) ?? "(none)";
+      by.set(icon, (by.get(icon) ?? new Set()).add(href.split("#")[0]));
+    }
+    const allowed = new Set((SHARED_ALLOWED[name] ?? []).map((entry) => entry.icon));
+    return [...by].filter(([icon, pages]) => pages.size >= 3 && !allowed.has(icon as IllustratedIconName)).map(([icon, pages]) => `${name}: ${icon} × ${pages.size} (${[...pages].join(", ")})`);
+  }
+  it("never shows one picture on three or more pages of the same menu", () => {
+    const apps: Array<[string, Menu[]]> = [["Accounting", MENUS], ["CRM", CRM_MENUS], ["Analytics", ANALYTICS_MENUS], ["Farm", FARM_MENUS]];
+    const problems: string[] = [];
+    for (const [app, menus] of apps) {
+      for (const menu of menus) problems.push(...crowded(`${app} › ${menu.label}`, menu.groups.flatMap((group) => group.links.map((link) => link.href))));
+      // The phone menu lists each app's menus with their pictures too.
+      const art = new Map<string, string[]>();
+      for (const menu of menus) art.set(iconForMenu(menu) ?? "(none)", [...(art.get(iconForMenu(menu) ?? "(none)") ?? []), menu.label]);
+      for (const [icon, labels] of art) if (labels.length >= 3) problems.push(`${app} top bar: ${icon} × ${labels.length} (${labels.join(", ")})`);
+    }
+    problems.push(...crowded("Server", SERVER_LINKS.map((link) => link.href)));
+    expect(problems).toEqual([]);
+    // The check itself catches a crowded menu, and the allowlist stays small.
+    expect(crowded("Example", ["/operations/invoices", "/operations/sales", "/operations/sales/x"])).toHaveLength(1);
+    expect(Object.values(SHARED_ALLOWED).flat().length).toBeLessThanOrEqual(3);
+  });
+  it("keeps the inline artwork and the SVG files in step", () => {
+    const folder = join(process.cwd(), "public/illustrations/icons");
+    const files = readdirSync(folder).filter((file) => file.endsWith(".svg")).map((file) => file.replace(/\.svg$/, "")).sort();
+    const routeIcons = new Set([...MENUS, ...CRM_MENUS, ...ANALYTICS_MENUS, ...FARM_MENUS].flatMap((menu) => menu.groups.flatMap((group) => group.links.map((link) => iconForDestination(link.href)))));
+    for (const name of routeIcons) if (name) expect(files, name).toContain(name);
+    const normalise = (svg: string) => svg.replace(/<title>.*?<\/title>/, "").replace(/^[\s\S]*?<g /, "<g ").replace(/<\/svg>[\s\S]*$/, "").replace(/><\/(path|circle|rect|ellipse)>/g, "/>").replace(/\s+/g, " ").trim();
+    for (const name of files) {
+      const inline = renderToStaticMarkup(createElement(IllustratedIcon, { name: name as IllustratedIconName }));
+      expect(normalise(inline), name).toBe(normalise(readFileSync(join(folder, `${name}.svg`), "utf8")));
+    }
   });
 });
