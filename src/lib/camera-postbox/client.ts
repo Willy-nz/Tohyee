@@ -39,7 +39,8 @@ export class BoxError extends Error {
 const TIMEOUT_MS = 15_000;
 const DOWNLOAD_IDLE_MS = 60_000;
 
-function connector(target: BoxTarget) {
+/** A connection to the post box that checks its certificate (pinned or by name) before anything is written. For `http.request`'s createConnection. */
+export function connector(target: BoxTarget) {
   return (_options: unknown, done: (error: Error | null, socket?: Duplex) => void) => {
     const socket = tls.connect({
       host: target.address,

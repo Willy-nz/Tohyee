@@ -8,10 +8,13 @@
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json ./
-# Only esbuild is needed to bundle it, at the version the lock file says.
-RUN npm install --no-save --no-audit --no-fund --no-package-lock \
-      "esbuild@$(node -p "require('./package-lock.json').packages['node_modules/esbuild'].version")"
+# Only esbuild is needed to bundle it, at the version the lock file says
+# (installed on its own, not with the whole project's packages).
+COPY package-lock.json /tmp/package-lock.json
+RUN echo '{"private":true}' > package.json \
+ && npm install --no-audit --no-fund \
+      "esbuild@$(node -p "require('/tmp/package-lock.json').packages['node_modules/esbuild'].version")"
+COPY package.json tsconfig.json ./
 COPY src ./src
 COPY postbox ./postbox
 COPY scripts/build-postbox.mjs ./scripts/build-postbox.mjs

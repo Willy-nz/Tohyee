@@ -1,8 +1,10 @@
-import https from "node:https";
+import { X509Certificate } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { postboxConfig } from "@/lib/camera-postbox/box/config";
 import { POSTBOX_VERSION, startPostbox } from "@/lib/camera-postbox/box/server";
-import { newPairingCode } from "@/lib/camera-postbox/box/state";
-import { displayFingerprint, decodePairingCode } from "@/lib/camera-postbox/protocol";
+import { newPairingCode, paths } from "@/lib/camera-postbox/box/state";
+import { callBox } from "@/lib/camera-postbox/client";
+import { decodePairingCode, displayFingerprint, normaliseFingerprint } from "@/lib/camera-postbox/protocol";
 
 /*
  * The camera post box program (decisions 1226-1233). Bundled into one file
@@ -15,20 +17,16 @@ import { displayFingerprint, decodePairingCode } from "@/lib/camera-postbox/prot
  */
 
 async function main(command: string | undefined) {
+  const config = postboxConfig(process.env);
   if (command === "health") {
-    const port = Number(process.env.POSTBOX_API_PORT || 8443);
-    // Its own certificate on its own machine: only "is it answering" is checked here.
-    const ok = await new Promise<boolean>((resolve) => {
-      const request = https.get({ host: "127.0.0.1", port, path: "/v1/health", rejectUnauthorized: false, timeout: 4000 }, (response) => {
-        response.resume();
-        resolve(response.statusCode === 200);
-      });
-      request.on("error", () => resolve(false));
-      request.on("timeout", () => request.destroy());
-    });
+    // Checked as Tohyee checks it: pinned to the post box's own certificate.
+    const fingerprint = normaliseFingerprint(new X509Certificate(await readFile(config.certPath ?? paths(config.dataDir).cert)).raw);
+    const ok = await callBox({ address: "127.0.0.1", port: config.apiPort, tlsMode: "pinned", fingerprint, token: null }, { method: "GET", path: "/v1/health", auth: false }).then(
+      (answer) => answer.ok === true,
+      () => false,
+    );
     process.exit(ok ? 0 : 1);
   }
-  const config = postboxConfig(process.env);
   if (command === "pairing-code") {
     const code = await newPairingCode(config);
     const parsed = decodePairingCode(code)!;

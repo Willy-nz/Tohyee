@@ -1,5 +1,5 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import https from "node:https";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -9,7 +9,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { postboxConfig, type PostboxConfig } from "@/lib/camera-postbox/box/config";
 import { type Postbox, startPostbox } from "@/lib/camera-postbox/box/server";
 import { newPairingCode } from "@/lib/camera-postbox/box/state";
-import { BoxError, type BoxTarget, callBox, CertificateChangedError, downloadFromBox } from "@/lib/camera-postbox/client";
+import { BoxError, type BoxTarget, callBox, CertificateChangedError, connector, downloadFromBox } from "@/lib/camera-postbox/client";
 import { decodePairingCode, hashToken, newKeyPair, openSealedFile, type QueuedFile, randomToken } from "@/lib/camera-postbox/protocol";
 
 /*
@@ -127,7 +127,7 @@ describe("the camera post box", () => {
     // Tohyee won't send one, and the post box won't read one.
     await expect(callBox(target, { method: "PUT", path: "/v1/logins", body: { logins: [], padding: "x".repeat(1024 * 1024) } })).rejects.toBeInstanceOf(BoxError);
     const status = await new Promise<number>((resolve, reject) => {
-      const request = https.request({ host: "127.0.0.1", port: API_PORT, method: "PUT", path: "/v1/logins", rejectUnauthorized: false, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "content-length": String(2 * 1024 * 1024) } }, (response) => {
+      const request = http.request({ host: "127.0.0.1", port: API_PORT, method: "PUT", path: "/v1/logins", createConnection: connector(target) as never, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "content-length": String(2 * 1024 * 1024) } }, (response) => {
         response.resume();
         resolve(response.statusCode ?? 0);
       });
