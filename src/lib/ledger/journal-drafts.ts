@@ -8,7 +8,7 @@ import { getJournal, type JournalBody, type JournalWithLines, parseJournalBody, 
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { dec, toFixedString, toPlainString } from "@/lib/money/decimal";
 import type { TrackingTags } from "@/lib/tracking/service";
-import { optionalSource, requireId, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
+import { optionalId, optionalSource, requireId, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
 
 /**
  * Draft manual journals (examples MJD1-MJD9, decisions 349-352), like Xero's
@@ -232,17 +232,30 @@ export async function getJournalDraft(tx: OrgTx, draftIdInput: unknown): Promise
 
 /** Drafts, newest first; `status` filters (draft or posted). At most `limit` (default 50, max 200). */
 export async function listJournalDrafts(tx: OrgTx, filters: { status?: unknown; limit?: unknown } = {}): Promise<JournalDraft[]> {
+  return (await listJournalDraftsPage(tx, filters)).drafts;
+}
+
+/** The same list a page at a time: `beforeId` is the last page's `nextBeforeId`, null after the last page (#538). */
+export async function listJournalDraftsPage(
+  tx: OrgTx,
+  filters: { status?: unknown; limit?: unknown; beforeId?: unknown } = {},
+): Promise<{ drafts: JournalDraft[]; nextBeforeId: string | null }> {
   const status = filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", DRAFT_STATUSES);
+  const beforeId = optionalId(filters.beforeId, "beforeId");
   const limitRaw = Number(filters.limit ?? 50);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
   const result = await tx.query<DraftRow>(
     `select ${DRAFT_COLUMNS} from ledger_journal_drafts
-      where ($1::text is null or status = $1)
-      order by id desc limit ${limit}`,
-    [status],
+      where ($1::text is null or status = $1) and ($2::bigint is null or ledger_journal_drafts.id < $2)
+      order by ledger_journal_drafts.id desc limit ${limit + 1}`,
+    [status, beforeId],
   );
   const scale = currencyMinorUnits(tx.baseCurrency);
-  return result.rows.map((row) => ({ ...toDraft(row), total: toFixedString(dec(row.total), scale) }));
+  const rows = result.rows.slice(0, limit);
+  return {
+    drafts: rows.map((row) => ({ ...toDraft(row), total: toFixedString(dec(row.total), scale) })),
+    nextBeforeId: result.rows.length > limit ? rows[rows.length - 1].id : null,
+  };
 }
 
 /** Saves a new draft. Posts nothing (MJD1). Retrying with the same key returns the same draft. */

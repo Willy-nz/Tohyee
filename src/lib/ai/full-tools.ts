@@ -1,7 +1,9 @@
 import { createAccount, updateAccount } from "@/lib/accounts/service";
-import { boundedLimit } from "@/lib/ai/limits";
+import { documentWithLineIds, type LineDocument, linesForEdit, type SavedLine } from "@/lib/ai/document-lines";
+import { boundedLimit, CURSOR, pageAfter } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema } from "@/lib/ai/tools";
-import { AMOUNTS_MODE, DOCUMENT_LINES, ID, IDEMPOTENCY, idempotencyKey, SALES_DOCUMENT_LINES } from "@/lib/ai/write-tools";
+import { AMOUNTS_MODE, DOCUMENT_LINES, editFields, ID, IDEMPOTENCY, idempotencyKey, SALES_DOCUMENT_LINES } from "@/lib/ai/write-tools";
+import type { OrgTx } from "@/lib/db/org-transaction";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
 import { createBudget, getBudget, listBudgets, setBudgetAmounts } from "@/lib/budgets/service";
 import { applyCreditNote } from "@/lib/credit-notes/applications";
@@ -47,14 +49,35 @@ import { requireId } from "@/lib/validation";
  */
 
 const MAX_LIST = 200;
-const LIMIT: JsonSchema = { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` };
+const LIMIT: JsonSchema = { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}. Pass nextCursor back as cursor for the next page.` };
 const MONEY = (what: string): JsonSchema => ({ type: "string", description: `${what}, a decimal, e.g. "115.00".` });
 const BANK_CODE: JsonSchema = { type: "string", description: "A bank or credit card account's code from list_accounts." };
 const EXCHANGE_RATE: JsonSchema = { type: "string", description: "Only for another currency: base currency per 1 unit. Left out, the last rate used." };
 
-function first<T>(rows: readonly T[], limit: unknown): { rows: T[]; more: boolean } {
-  const max = boundedLimit(limit, 50, MAX_LIST);
-  return { rows: rows.slice(0, max), more: rows.length > max };
+/** One page of a list the service returns whole, by id (#538). */
+function page<T extends { id: string }>(rows: readonly T[], args: Record<string, unknown>) {
+  return pageAfter(rows, (row) => row.id, args.cursor, boundedLimit(args.limit, 50, MAX_LIST));
+}
+
+/** A page from a service that pages by id (#538): its rows, and nextCursor to pass back as cursor. */
+function cursorPage<T>(rows: T[], nextBeforeId: string | null) {
+  return { rows, more: nextBeforeId !== null, nextCursor: nextBeforeId };
+}
+
+/** An edit tool's run (#537): lines kept by lineId, and the answer with the new lineIds. */
+function editDocument<D extends { id: string; lines: readonly SavedLine[] }>(
+  document: LineDocument,
+  idName: string,
+  fields: Record<string, JsonSchema>,
+  load: (tx: OrgTx, id: string) => Promise<D>,
+  update: (tx: OrgTx, id: unknown, input: Record<string, unknown>) => Promise<D>,
+) {
+  return async (tx: OrgTx, args: Record<string, unknown>) => {
+    const input = pick(args, Object.keys(fields));
+    const lines = await linesForEdit(tx, document, args[idName], idName, load, args);
+    if (lines !== undefined) input.lines = lines;
+    return documentWithLineIds(tx, document, await update(tx, args[idName], input));
+  };
 }
 
 /** Just the named fields, so nothing else (such as isActive) reaches the service. */
@@ -143,7 +166,7 @@ const REPEATING_INVOICE_FIELDS: Record<string, JsonSchema> = {
   contactId: ID("customer"),
   reference: { type: "string" },
   amountsMode: AMOUNTS_MODE,
-  lines: DOCUMENT_LINES,
+  lines: SALES_DOCUMENT_LINES,
   ...SCHEDULE_FIELDS,
   dueRule: { type: "string", enum: [...DUE_RULES], description: "The customer's payment terms, or dueDays after each invoice's date." },
 };
@@ -196,10 +219,11 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Credit notes",
     level: "read",
     description: "Sales credit notes, newest first, with what's left to apply or refund. Filter by status (draft, approved, voided) or customer.",
-    inputSchema: schema({ status: { type: "string", enum: ["draft", "approved", "voided"] }, contactId: ID("customer"), hasRemainingCredit: { type: "boolean" }, limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: ["draft", "approved", "voided"] }, contactId: ID("customer"), hasRemainingCredit: { type: "boolean" }, limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const result = await listCreditNotes(tx, { status: args.status, contactId: args.contactId, hasRemainingCredit: args.hasRemainingCredit, limit: boundedLimit(args.limit, 50, MAX_LIST) });
-      return { creditNotes: result.creditNotes, more: result.nextBeforeId !== null };
+      const result = await listCreditNotes(tx, { status: args.status, contactId: args.contactId, hasRemainingCredit: args.hasRemainingCredit, beforeId: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      const { rows, ...rest } = cursorPage(result.creditNotes, result.nextBeforeId);
+      return { creditNotes: rows, ...rest };
     },
   },
   {
@@ -208,17 +232,18 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One sales credit note with its lines.",
     inputSchema: schema({ creditNoteId: ID("credit note") }, ["creditNoteId"]),
-    run: (tx, args) => getCreditNote(tx, args.creditNoteId),
+    run: async (tx, args) => documentWithLineIds(tx, "credit_note", await getCreditNote(tx, args.creditNoteId)),
   },
   {
     name: "list_supplier_credit_notes",
     title: "Supplier credit notes",
     level: "read",
     description: "Credit notes from suppliers, newest first. Filter by status or supplier.",
-    inputSchema: schema({ status: { type: "string", enum: ["draft", "approved", "voided"] }, contactId: ID("supplier"), hasRemainingCredit: { type: "boolean" }, limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: ["draft", "approved", "voided"] }, contactId: ID("supplier"), hasRemainingCredit: { type: "boolean" }, limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const result = await listSupplierCreditNotes(tx, { status: args.status, contactId: args.contactId, hasRemainingCredit: args.hasRemainingCredit, limit: boundedLimit(args.limit, 50, MAX_LIST) });
-      return { creditNotes: result.creditNotes, more: result.nextBeforeId !== null };
+      const result = await listSupplierCreditNotes(tx, { status: args.status, contactId: args.contactId, hasRemainingCredit: args.hasRemainingCredit, beforeId: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      const { rows, ...rest } = cursorPage(result.creditNotes, result.nextBeforeId);
+      return { creditNotes: rows, ...rest };
     },
   },
   {
@@ -227,17 +252,17 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One supplier credit note with its lines.",
     inputSchema: schema({ creditNoteId: ID("supplier credit note") }, ["creditNoteId"]),
-    run: (tx, args) => getSupplierCreditNote(tx, args.creditNoteId),
+    run: async (tx, args) => documentWithLineIds(tx, "supplier_credit_note", await getSupplierCreditNote(tx, args.creditNoteId)),
   },
   {
     name: "list_overpayments",
     title: "Customer overpayments",
     level: "read",
     description: "Customer payments that paid more than was due, with what's left to apply or refund.",
-    inputSchema: schema({ contactId: ID("customer"), hasRemainingCredit: { type: "boolean" }, limit: LIMIT }),
+    inputSchema: schema({ contactId: ID("customer"), hasRemainingCredit: { type: "boolean" }, limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const { rows, more } = first(await listOverpayments(tx, { contactId: args.contactId, hasRemainingCredit: args.hasRemainingCredit }), args.limit);
-      return { overpayments: rows, more };
+      const { rows, ...rest } = page(await listOverpayments(tx, { contactId: args.contactId, hasRemainingCredit: args.hasRemainingCredit }), args);
+      return { overpayments: rows, ...rest };
     },
   },
   {
@@ -245,10 +270,11 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Quotes",
     level: "read",
     description: "Quotes, newest first. Filter by status or customer.",
-    inputSchema: schema({ status: { type: "string", enum: [...QUOTE_FILTERS] }, contactId: ID("customer"), limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: [...QUOTE_FILTERS] }, contactId: ID("customer"), limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const { rows, more } = first((await listQuotes(tx, { status: args.status, contactId: args.contactId })).quotes, args.limit);
-      return { quotes: rows, more };
+      const result = await listQuotes(tx, { status: args.status, contactId: args.contactId, beforeId: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      const { rows, ...rest } = cursorPage(result.quotes, result.nextBeforeId);
+      return { quotes: rows, ...rest };
     },
   },
   {
@@ -257,17 +283,18 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One quote with its lines.",
     inputSchema: schema({ quoteId: ID("quote") }, ["quoteId"]),
-    run: (tx, args) => getQuote(tx, args.quoteId),
+    run: async (tx, args) => documentWithLineIds(tx, "quote", await getQuote(tx, args.quoteId)),
   },
   {
     name: "list_sales_orders",
     title: "Sales orders",
     level: "read",
     description: "Sales orders, newest first. Filter by status or customer.",
-    inputSchema: schema({ status: { type: "string", enum: [...SALES_ORDER_STATUSES] }, contactId: ID("customer"), limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: [...SALES_ORDER_STATUSES] }, contactId: ID("customer"), limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const { rows, more } = first((await listSalesOrders(tx, { status: args.status, contactId: args.contactId })).salesOrders, args.limit);
-      return { salesOrders: rows, more };
+      const result = await listSalesOrders(tx, { status: args.status, contactId: args.contactId, beforeId: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      const { rows, ...rest } = cursorPage(result.salesOrders, result.nextBeforeId);
+      return { salesOrders: rows, ...rest };
     },
   },
   {
@@ -276,17 +303,18 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One sales order with its lines.",
     inputSchema: schema({ salesOrderId: ID("sales order") }, ["salesOrderId"]),
-    run: (tx, args) => getSalesOrder(tx, args.salesOrderId),
+    run: async (tx, args) => documentWithLineIds(tx, "sales_order", await getSalesOrder(tx, args.salesOrderId)),
   },
   {
     name: "list_purchase_orders",
     title: "Purchase orders",
     level: "read",
     description: "Purchase orders, newest first. Filter by status or supplier.",
-    inputSchema: schema({ status: { type: "string", enum: [...PURCHASE_ORDER_STATUSES] }, contactId: ID("supplier"), limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: [...PURCHASE_ORDER_STATUSES] }, contactId: ID("supplier"), limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const { rows, more } = first((await listPurchaseOrders(tx, { status: args.status, contactId: args.contactId })).purchaseOrders, args.limit);
-      return { purchaseOrders: rows, more };
+      const result = await listPurchaseOrders(tx, { status: args.status, contactId: args.contactId, beforeId: args.cursor, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      const { rows, ...rest } = cursorPage(result.purchaseOrders, result.nextBeforeId);
+      return { purchaseOrders: rows, ...rest };
     },
   },
   {
@@ -295,7 +323,7 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One purchase order with its lines.",
     inputSchema: schema({ purchaseOrderId: ID("purchase order") }, ["purchaseOrderId"]),
-    run: (tx, args) => getPurchaseOrder(tx, args.purchaseOrderId),
+    run: async (tx, args) => documentWithLineIds(tx, "purchase_order", await getPurchaseOrder(tx, args.purchaseOrderId)),
   },
   {
     name: "list_repeating_invoices",
@@ -311,7 +339,7 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One repeating invoice template with its lines and schedule.",
     inputSchema: schema({ repeatingInvoiceId: ID("repeating invoice") }, ["repeatingInvoiceId"]),
-    run: (tx, args) => getRepeatingInvoice(tx, args.repeatingInvoiceId),
+    run: async (tx, args) => documentWithLineIds(tx, "repeating_invoice", await getRepeatingInvoice(tx, args.repeatingInvoiceId)),
   },
   {
     name: "list_repeating_bills",
@@ -327,18 +355,18 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description: "One repeating bill template with its lines and schedule.",
     inputSchema: schema({ repeatingBillId: ID("repeating bill") }, ["repeatingBillId"]),
-    run: (tx, args) => getRepeatingBill(tx, args.repeatingBillId),
+    run: async (tx, args) => documentWithLineIds(tx, "repeating_bill", await getRepeatingBill(tx, args.repeatingBillId)),
   },
   {
     name: "list_items",
     title: "Items",
     level: "read",
     description: "Products and services with their prices, accounts and GST codes.",
-    inputSchema: schema({ search: { type: "string" }, includeArchived: { type: "boolean" }, limit: LIMIT }),
+    inputSchema: schema({ search: { type: "string" }, includeArchived: { type: "boolean" }, limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
       const list = await listItems(tx, { search: args.search, includeArchived: args.includeArchived === true });
-      const { rows, more } = first(list.items, args.limit);
-      return { items: rows, more };
+      const { rows, ...rest } = page(list.items, args);
+      return { items: rows, ...rest };
     },
   },
   {
@@ -362,10 +390,10 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Fixed assets",
     level: "read",
     description: "The fixed asset register: each asset's cost, depreciation so far and book value.",
-    inputSchema: schema({ status: { type: "string", enum: ["registered", "disposed", "archived", "all"], description: "Default registered." }, limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: ["registered", "disposed", "archived", "all"], description: "Default registered." }, limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const { rows, more } = first(await listFixedAssets(tx, { status: args.status }), args.limit);
-      return { assets: rows, more };
+      const { rows, ...rest } = page(await listFixedAssets(tx, { status: args.status }), args);
+      return { assets: rows, ...rest };
     },
   },
   {
@@ -418,10 +446,10 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     level: "full",
     readOnly: true,
     description: "Expense claims, filtered by status.",
-    inputSchema: schema({ status: { type: "string", enum: [...EXPENSE_CLAIM_STATUSES] }, limit: LIMIT }),
+    inputSchema: schema({ status: { type: "string", enum: [...EXPENSE_CLAIM_STATUSES] }, limit: LIMIT, cursor: CURSOR }),
     async run(tx, args) {
-      const { rows, more } = first(await listExpenseClaims(tx, { status: args.status }), args.limit);
-      return { claims: rows, more };
+      const { rows, ...rest } = page(await listExpenseClaims(tx, { status: args.status }), args);
+      return { claims: rows, ...rest };
     },
   },
   {
@@ -449,9 +477,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_quote",
     title: "Edit a quote",
     level: "full",
-    description: "Edits a draft quote. The lines given replace every line.",
-    inputSchema: schema({ quoteId: ID("quote"), ...QUOTE_FIELDS }, ["quoteId"]),
-    run: (tx, args) => updateQuote(tx, args.quoteId, pick(args, Object.keys(QUOTE_FIELDS))),
+    description: "Edits a draft quote. Lines are kept by lineId (from get_quote); only the line fields sent change.",
+    inputSchema: schema({ quoteId: ID("quote"), ...editFields(QUOTE_FIELDS) }, ["quoteId"]),
+    run: editDocument("quote", "quoteId", QUOTE_FIELDS, getQuote, updateQuote),
   },
   {
     name: "finalise_quote",
@@ -473,9 +501,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_sales_order",
     title: "Edit a sales order",
     level: "full",
-    description: "Edits a draft sales order. The lines given replace every line.",
-    inputSchema: schema({ salesOrderId: ID("sales order"), ...SALES_ORDER_FIELDS }, ["salesOrderId"]),
-    run: (tx, args) => updateSalesOrder(tx, args.salesOrderId, pick(args, Object.keys(SALES_ORDER_FIELDS))),
+    description: "Edits a draft sales order. Lines are kept by lineId (from get_sales_order); only the line fields sent change.",
+    inputSchema: schema({ salesOrderId: ID("sales order"), ...editFields(SALES_ORDER_FIELDS) }, ["salesOrderId"]),
+    run: editDocument("sales_order", "salesOrderId", SALES_ORDER_FIELDS, getSalesOrder, updateSalesOrder),
   },
   {
     name: "approve_sales_order",
@@ -497,9 +525,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_credit_note",
     title: "Edit a credit note",
     level: "full",
-    description: "Edits a draft sales credit note. The lines given replace every line.",
-    inputSchema: schema({ creditNoteId: ID("credit note"), ...CREDIT_NOTE_FIELDS }, ["creditNoteId"]),
-    run: (tx, args) => updateCreditNote(tx, args.creditNoteId, pick(args, Object.keys(CREDIT_NOTE_FIELDS))),
+    description: "Edits a draft sales credit note. Lines are kept by lineId (from get_credit_note); only the line fields sent change.",
+    inputSchema: schema({ creditNoteId: ID("credit note"), ...editFields(CREDIT_NOTE_FIELDS) }, ["creditNoteId"]),
+    run: editDocument("credit_note", "creditNoteId", CREDIT_NOTE_FIELDS, getCreditNote, updateCreditNote),
   },
   {
     name: "approve_credit_note",
@@ -558,9 +586,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_repeating_invoice",
     title: "Edit a repeating invoice",
     level: "full",
-    description: "Edits a repeating invoice template (not pause or stop it; that's for people).",
-    inputSchema: schema({ repeatingInvoiceId: ID("repeating invoice"), ...REPEATING_INVOICE_FIELDS }, ["repeatingInvoiceId"]),
-    run: (tx, args) => updateRepeatingInvoice(tx, args.repeatingInvoiceId, pick(args, Object.keys(REPEATING_INVOICE_FIELDS))),
+    description: "Edits a repeating invoice template (not pause or stop it; that's for people). Lines are kept by lineId (from get_repeating_invoice).",
+    inputSchema: schema({ repeatingInvoiceId: ID("repeating invoice"), ...editFields(REPEATING_INVOICE_FIELDS) }, ["repeatingInvoiceId"]),
+    run: editDocument("repeating_invoice", "repeatingInvoiceId", REPEATING_INVOICE_FIELDS, getRepeatingInvoice, updateRepeatingInvoice),
   },
 
   // Purchases.
@@ -577,9 +605,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_purchase_order",
     title: "Edit a purchase order",
     level: "full",
-    description: "Edits a draft purchase order. The lines given replace every line.",
-    inputSchema: schema({ purchaseOrderId: ID("purchase order"), ...PURCHASE_ORDER_FIELDS }, ["purchaseOrderId"]),
-    run: (tx, args) => updatePurchaseOrder(tx, args.purchaseOrderId, pick(args, Object.keys(PURCHASE_ORDER_FIELDS))),
+    description: "Edits a draft purchase order. Lines are kept by lineId (from get_purchase_order); only the line fields sent change.",
+    inputSchema: schema({ purchaseOrderId: ID("purchase order"), ...editFields(PURCHASE_ORDER_FIELDS) }, ["purchaseOrderId"]),
+    run: editDocument("purchase_order", "purchaseOrderId", PURCHASE_ORDER_FIELDS, getPurchaseOrder, updatePurchaseOrder),
   },
   {
     name: "approve_purchase_order",
@@ -606,9 +634,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_supplier_credit_note",
     title: "Edit a supplier credit note",
     level: "full",
-    description: "Edits a draft supplier credit note. The lines given replace every line.",
-    inputSchema: schema({ creditNoteId: ID("supplier credit note"), ...SUPPLIER_CREDIT_NOTE_FIELDS }, ["creditNoteId"]),
-    run: (tx, args) => updateSupplierCreditNote(tx, args.creditNoteId, pick(args, Object.keys(SUPPLIER_CREDIT_NOTE_FIELDS))),
+    description: "Edits a draft supplier credit note. Lines are kept by lineId (from get_supplier_credit_note); only the line fields sent change.",
+    inputSchema: schema({ creditNoteId: ID("supplier credit note"), ...editFields(SUPPLIER_CREDIT_NOTE_FIELDS) }, ["creditNoteId"]),
+    run: editDocument("supplier_credit_note", "creditNoteId", SUPPLIER_CREDIT_NOTE_FIELDS, getSupplierCreditNote, updateSupplierCreditNote),
   },
   {
     name: "approve_supplier_credit_note",
@@ -649,9 +677,9 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     name: "update_repeating_bill",
     title: "Edit a repeating bill",
     level: "full",
-    description: "Edits a repeating bill template (not pause or stop it; that's for people).",
-    inputSchema: schema({ repeatingBillId: ID("repeating bill"), ...REPEATING_BILL_FIELDS }, ["repeatingBillId"]),
-    run: (tx, args) => updateRepeatingBill(tx, args.repeatingBillId, pick(args, Object.keys(REPEATING_BILL_FIELDS))),
+    description: "Edits a repeating bill template (not pause or stop it; that's for people). Lines are kept by lineId (from get_repeating_bill).",
+    inputSchema: schema({ repeatingBillId: ID("repeating bill"), ...editFields(REPEATING_BILL_FIELDS) }, ["repeatingBillId"]),
+    run: editDocument("repeating_bill", "repeatingBillId", REPEATING_BILL_FIELDS, getRepeatingBill, updateRepeatingBill),
   },
   {
     name: "approve_expense_claim",

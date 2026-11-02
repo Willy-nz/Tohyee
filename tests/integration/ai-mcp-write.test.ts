@@ -167,9 +167,11 @@ describeWithDatabase("AI keys that make drafts and post (decisions 346-348)", ()
       idempotencyKey: "ai-test-invoice-1",
     });
     expect(invoice.invoice).toMatchObject({ status: "draft", number: null, total: "115.00" });
+    // Saved lines are kept by lineId, changing only what's sent (#537).
+    const savedLine = ((invoice.invoice as Json).lines as Json[])[0];
     const edited = await call(tokens.draft, "update_draft_invoice", {
       invoiceId: (invoice.invoice as Json).id,
-      lines: [{ description: "Paw print pendant", quantity: "3", unitPrice: "50.00", accountCode: "4000", taxCode: "GST" }],
+      lines: [{ lineId: savedLine.lineId, quantity: "3" }],
     });
     expect(edited.invoice).toMatchObject({ status: "draft", total: "172.50" });
 

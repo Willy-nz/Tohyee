@@ -8,7 +8,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { addAttachment } from "@/lib/records/extras";
 import { checkAttachment } from "@/lib/records/file-types";
-import { optionalSource, requireId, requireIdempotencyKey, requireString } from "@/lib/validation";
+import { optionalId, optionalSource, requireId, requireIdempotencyKey, requireString } from "@/lib/validation";
 
 /**
  * The bills inbox (BI1-BI7, decisions 404-406): supplier bills and receipts
@@ -190,9 +190,23 @@ async function withSameFiles(tx: OrgTx, rows: ItemRow[]): Promise<InboxItem[]> {
 
 /** The inbox: waiting items oldest first, or made / removed / all newest first (BI1, BI7). */
 export async function listInbox(tx: OrgTx, filters: { status?: unknown; limit?: unknown } = {}): Promise<InboxItem[]> {
+  return (await listInboxPage(tx, filters)).items;
+}
+
+/**
+ * The same list a page at a time (#538): `cursor` is the last page's
+ * `nextCursor` (the last item's id, in the list's order), null after the
+ * last page. Waiting items are oldest first, the others newest first.
+ */
+export async function listInboxPage(
+  tx: OrgTx,
+  filters: { status?: unknown; limit?: unknown; cursor?: unknown } = {},
+): Promise<{ items: InboxItem[]; nextCursor: string | null }> {
   const status = filters.status == null || filters.status === "" ? "waiting" : String(filters.status);
   if (!["waiting", "made", "removed", "all"].includes(status)) throw new ValidationError("status must be waiting, made, removed or all.");
   const limit = Math.min(Math.max(Number(filters.limit) || 200, 1), 500);
+  const cursor = optionalId(filters.cursor, "cursor");
+  const oldestFirst = status === "waiting";
   const where =
     status === "waiting"
       ? "i.bill_id is null and i.removed_at is null"
@@ -201,8 +215,12 @@ export async function listInbox(tx: OrgTx, filters: { status?: unknown; limit?: 
         : status === "removed"
           ? "i.removed_at is not null"
           : "true";
-  const found = await tx.query<ItemRow>(`${SELECT} where ${where} order by i.id ${status === "waiting" ? "" : "desc"} limit $1`, [limit]);
-  return withSameFiles(tx, found.rows);
+  const found = await tx.query<ItemRow>(
+    `${SELECT} where ${where} and ($2::bigint is null or i.id ${oldestFirst ? ">" : "<"} $2) order by i.id ${oldestFirst ? "" : "desc"} limit $1`,
+    [limit + 1, cursor],
+  );
+  const rows = found.rows.slice(0, limit);
+  return { items: await withSameFiles(tx, rows), nextCursor: found.rows.length > limit ? String(rows[rows.length - 1].id) : null };
 }
 
 export async function getInboxItem(tx: OrgTx, idInput: unknown): Promise<InboxItem> {
