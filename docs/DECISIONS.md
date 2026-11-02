@@ -11567,3 +11567,32 @@ SPD1-SPD11.
       The log reader pages 1-200 lines (default 50) with `beforeId` and
       filters by connection, action, record kind, outcome (problem, done,
       connection) and the store's record ID.
+
+
+### Menu pictures (decisions 1260-1262)
+
+1260. **Every page in a menu gets a picture of what it is.** Jess said the
+      Tax menu "looks dumb": all seven pages showed the calculator. The
+      calculator stays on the Tax menu itself. Its pages now show a return
+      with a tick (GST return), a magnifying glass over a list (GST audit
+      report), a tag with % (Tax codes), coins (Income tax), a flask (R&D
+      activities), a tagged receipt (Tagged R&D costs) and a report with a
+      flask (R&D claim report). The same fix runs through Sales, Purchases,
+      Banking, Payroll, Reports, Accounting, CRM More and Farm More. Nineteen
+      new original pictures, most used in several menus (coins, clock,
+      checklist, price tag, awaiting payment, credit note, receipt). No
+      brand marks. Sales and Purchases overview pages lose the calculator
+      on New invoice and New bill too.
+1261. **Three pages in one menu may not share a picture.** A unit test
+      fails when any dropdown, or any app's row of menus in the phone menu,
+      has three or more different pages with the same picture. Two may
+      share when they're the same kind of thing (Leave requests and Leave).
+      Links to the same page count once. Exceptions go in a small, commented
+      allowlist in the test; today only the server's three sign-in pages
+      share the key (decision 1234), and the server bar shows no pictures.
+1262. **A picture can depend on the page's query.** Reports are one page
+      chosen by `?report=`, so a route like `/operations/reports?report=bs`
+      matches that report only (not pages under it); anything else on the
+      page falls back to the report chart. Awaiting payment
+      (`?show=awaiting`) works the same way. Pictures stay decorative: they
+      don't change what anyone can open.

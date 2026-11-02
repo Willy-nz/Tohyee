@@ -444,7 +444,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
-  { href: "/operations/farming/soil", icon: "documents", label: "Soil tests", staff: true },
+  { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
   { href: "/operations/farming", icon: "maps", label: "Farms and paddocks", note: "Areas, boundaries, drawing paddocks", staff: true },
 ];
 
@@ -457,8 +457,8 @@ const DETAILS: MoreLink[] = [
 
 const YEAR_END: MoreLink[] = [
   { href: "/operations/farming/benchmarks", icon: "analytics", label: "Benchmarks" },
-  { href: "/operations/farming/co-op-shares", icon: "accounting", label: "Co-op shares" },
-  { href: "/operations/livestock/valuation", icon: "livestock", label: "Livestock valuation" },
+  { href: "/operations/farming/co-op-shares", icon: "coins", label: "Co-op shares" },
+  { href: "/operations/livestock/valuation", icon: "price", label: "Livestock valuation" },
   { href: "/operations/farming/import", icon: "maps", label: "Import paddock shapes", minRole: "bookkeeper" },
 ];
 
