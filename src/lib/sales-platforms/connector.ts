@@ -147,6 +147,123 @@ export type PlatformOrder = {
   refunds: PlatformRefund[];
   /** More lines, shipping lines, transactions or refunds than were asked for. */
   incomplete: string | null;
+  /** Read-only extras (decisions 1237-1245), when their parts were asked for. Never posted. */
+  extras?: PlatformOrderExtras;
+};
+
+/** One discount used on an order (SPD6): what Shopify allocated from it to the lines and shipping. */
+export type PlatformDiscountApplication = {
+  index: number;
+  kind: "code" | "automatic" | "manual" | "script" | "other";
+  code: string | null;
+  title: string | null;
+  valueType: "percentage" | "amount" | null;
+  value: string | null;
+  amount: string;
+};
+
+export type PlatformFulfilment = {
+  externalId: string;
+  status: string | null;
+  createdAt: string | null;
+  deliveredAt: string | null;
+  carrier: string | null;
+  trackingNumber: string | null;
+};
+
+/** Each field is null when its part wasn't asked for. */
+export type PlatformOrderExtras = {
+  discountApplications: PlatformDiscountApplication[] | null;
+  discountsTotal: string | null;
+  fulfilments: PlatformFulfilment[] | null;
+  fulfilmentStatus: string | null;
+  shippingCharged: string | null;
+  fulfilmentOrderStatuses: string[] | null;
+};
+
+export type PlatformLocation = { externalId: string; name: string; active: boolean };
+
+/** A variant's stock at one location (SPD1). Quantities are whole numbers as decimal strings. */
+export type PlatformStockLevel = {
+  variantId: string;
+  inventoryItemId: string;
+  locationId: string;
+  sku: string | null;
+  productTitle: string | null;
+  variantTitle: string | null;
+  available: string;
+  onHand: string;
+};
+
+export type PlatformDailyStats = {
+  day: string;
+  sessions: string | null;
+  /** As Shopify sent it (a percentage). */
+  conversionRate: string | null;
+  orders: string | null;
+  grossSales: string | null;
+  netSales: string | null;
+};
+
+export type PlatformSalesBreakdown = {
+  day: string;
+  dimension: "product" | "channel";
+  value: string;
+  orders: string | null;
+  grossSales: string | null;
+  netSales: string | null;
+};
+
+export type PlatformDiscount = {
+  externalId: string;
+  method: "code" | "automatic";
+  title: string;
+  discountType: string;
+  valueType: "percentage" | "amount" | null;
+  /** "10" for 10%, or an amount. */
+  value: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: string | null;
+  timesUsed: number | null;
+};
+
+export type PlatformGiftCardTransaction = {
+  externalId: string;
+  kind: "credit" | "debit" | "cash_out" | "other";
+  /** Credits positive, debits and cash outs negative. */
+  amount: string;
+  processedAt: string;
+};
+
+/** A gift card: only the last characters of its code, never the code. */
+export type PlatformGiftCard = {
+  externalId: string;
+  lastCharacters: string;
+  initialValue: string;
+  balance: string;
+  currency: string | null;
+  expiresOn: string | null;
+  enabled: boolean;
+  createdAt: string | null;
+  deactivatedAt: string | null;
+  transactions: PlatformGiftCardTransaction[];
+  moreTransactions: boolean;
+};
+
+/** Which read-only parts to fetch this sync; statsDays null leaves stats out. */
+export type ExtrasRequest = { stock: boolean; statsDays: number | null; discounts: boolean; giftCards: boolean };
+
+/** Null: not fetched (what's stored stays). */
+export type ExtrasResult = {
+  locations: PlatformLocation[] | null;
+  stock: PlatformStockLevel[] | null;
+  /** False when there were more stock items than are read in one sync. */
+  stockComplete: boolean;
+  stats: { daily: PlatformDailyStats[]; breakdown: PlatformSalesBreakdown[]; days: number } | null;
+  discounts: PlatformDiscount[] | null;
+  giftCards: PlatformGiftCard[] | null;
+  notes: string[];
 };
 
 export type PlatformBalanceTransaction = {
@@ -183,6 +300,8 @@ export type OrdersRequest = {
   processedFrom: string;
   /** Orders to fetch again whatever their change time (ones that stopped part way). */
   retryIds: string[];
+  /** Read-only extras to ask for with each order (Shopify; decisions 1240-1243). */
+  parts?: { discounts: boolean; fulfilments: boolean; fulfilmentOrders: boolean };
 };
 
 export type OrdersResult = { orders: PlatformOrder[]; until: string | null; notes: string[] };
@@ -224,7 +343,9 @@ export interface SalesPlatformConnector {
   /** Orders changed since the last sync, with their lines, transactions and refunds (SPC11-SPC23). Network. */
   fetchOrders(context: ConnectorContext, token: AccessToken, request: OrdersRequest): Promise<OrdersResult>;
   /** One order, or null when the platform doesn't have it. Network. */
-  fetchOrder(context: ConnectorContext, token: AccessToken, orderId: string): Promise<PlatformOrder | null>;
+  fetchOrder(context: ConnectorContext, token: AccessToken, orderId: string, parts?: OrdersRequest["parts"]): Promise<PlatformOrder | null>;
+  /** Read-only extras: stock, shop stats, discounts, gift cards (Shopify only; decisions 1237-1245). Network. */
+  fetchExtras?(context: ConnectorContext, token: AccessToken, request: ExtrasRequest): Promise<ExtrasResult>;
   /** Payouts issued since `issuedFrom` with their balance transactions (SPC15). Network. */
   fetchPayouts(context: ConnectorContext, token: AccessToken, request: PayoutsRequest): Promise<PayoutsResult>;
   /** Subscribes the platform's webhooks to `callbackUrl` (order topics too when `orders`); returns their IDs. Network. */

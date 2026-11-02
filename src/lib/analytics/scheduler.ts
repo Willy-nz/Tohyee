@@ -11,6 +11,8 @@ import { gscLoadsNightly, refreshGsc } from "@/lib/analytics/search-console";
 import { GSC_LOAD_TABLE_NAME } from "@/lib/analytics/search-console-reports";
 import { metaLoadsNightly, refreshMeta } from "@/lib/analytics/meta";
 import { META_LOAD_TABLE_NAME } from "@/lib/analytics/meta-reports";
+import { refreshShopify, shopifyLoadsNightly } from "@/lib/analytics/shopify";
+import { SHOPIFY_LOAD_TABLE_NAME } from "@/lib/analytics/shopify-tables";
 import { getOrganisation } from "@/lib/organisations/registry";
 
 /**
@@ -43,6 +45,7 @@ export function loadDue(now: Date, runs: Recent[], loadTime = LOAD_TIME): boolea
 const GA_DUE = "google-analytics";
 const GSC_DUE = "google-search-console";
 const META_DUE = "meta";
+const SHOPIFY_DUE = "shopify";
 let running = false;
 
 /** Loads whatever is due across every organisation with analytics on. Returns what it did. */
@@ -112,6 +115,15 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
               );
               if (loadDue(now, meta.rows.map((run) => ({ status: run.status, trigger: run.trigger, startedAt: new Date(run.started_at) })))) due.push(META_DUE);
             }
+            // Shopify (decision 1244): Tohyee's own copy, nightly once a store is connected.
+            if (await shopifyLoadsNightly(tx)) {
+              const shopify = await tx.query<{ status: string; trigger: string; started_at: Date }>(
+                `select status, trigger, started_at from analytics_load_runs
+                  where source_id is null and table_name = $1 and started_at > now() - interval '2 days'`,
+                [SHOPIFY_LOAD_TABLE_NAME],
+              );
+              if (loadDue(now, shopify.rows.map((run) => ({ status: run.status, trigger: run.trigger, startedAt: new Date(run.started_at) })))) due.push(SHOPIFY_DUE);
+            }
             return due.concat(sources.rows
               .map((source) => source.id)
               .filter((sourceId) =>
@@ -136,7 +148,9 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
                     ? await refreshGsc(organisation, SCHEDULE_ACTOR, "schedule")
                     : sourceId === META_DUE
                       ? await refreshMeta(organisation, SCHEDULE_ACTOR, "schedule")
-                      : await runLoad(organisation, SCHEDULE_ACTOR, sourceId, "schedule");
+                      : sourceId === SHOPIFY_DUE
+                        ? await refreshShopify(organisation, SCHEDULE_ACTOR, "schedule")
+                        : await runLoad(organisation, SCHEDULE_ACTOR, sourceId, "schedule");
             made.push(run);
             if (run.status === "failed") console.warn(`[tohyee] Analytics load of ${run.sourceName} (${id}) failed: ${run.error}`);
           } catch (error) {

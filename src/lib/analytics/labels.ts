@@ -1,6 +1,7 @@
 import { GA_REPORTS } from "@/lib/analytics/google-analytics-reports";
 import { GSC_TABLES } from "@/lib/analytics/search-console-reports";
 import { META_TABLES } from "@/lib/analytics/meta-reports";
+import { SHOPIFY_TABLES } from "@/lib/analytics/shopify-tables";
 import type { Measure } from "@/lib/analytics/query";
 
 /**
@@ -50,6 +51,8 @@ const TABLES: Record<string, TableText> = {
   ...Object.fromEntries(GSC_TABLES.map((table) => [table.table, { label: table.label, noun: table.noun, description: table.description }])),
   // Meta (decision 1193).
   ...Object.fromEntries(META_TABLES.map((table) => [table.table, { label: table.label, noun: table.noun, description: table.description }])),
+  // Shopify (decision 1244).
+  ...Object.fromEntries(SHOPIFY_TABLES.map((table) => [table.table, { label: table.label, noun: table.noun, description: table.description }])),
 };
 
 /** Words written differently from lower case. */

@@ -5,6 +5,7 @@ import { GA_LOAD_TABLE_NAME, GA_SOURCE_NAME } from "@/lib/analytics/google-analy
 import { GSC_LOAD_TABLE_NAME, GSC_SOURCE_NAME, GSC_TABLE_PREFIX } from "@/lib/analytics/search-console-reports";
 import { META_LOAD_TABLE_NAME, META_SOURCE_NAME, META_TABLE_PREFIX, metaTableChanges } from "@/lib/analytics/meta-reports";
 import { quoteIdentifier } from "@/lib/analytics/query";
+import { SHOPIFY_LOAD_TABLE_NAME, SHOPIFY_SOURCE_NAME, SHOPIFY_TABLE_PREFIX } from "@/lib/analytics/shopify-tables";
 
 /**
  * How fresh a report's data is (#387, decision 698): for each source its
@@ -41,6 +42,7 @@ export function loadKeyOf(table: string): { tableName: string; sourceless: boole
   if (table.startsWith("google_analytics_")) return { tableName: GA_LOAD_TABLE_NAME, sourceless: true };
   if (table.startsWith(GSC_TABLE_PREFIX)) return { tableName: GSC_LOAD_TABLE_NAME, sourceless: true };
   if (table.startsWith(META_TABLE_PREFIX)) return { tableName: META_LOAD_TABLE_NAME, sourceless: true };
+  if (table.startsWith(SHOPIFY_TABLE_PREFIX)) return { tableName: SHOPIFY_LOAD_TABLE_NAME, sourceless: true };
   return { tableName: table, sourceless: false };
 }
 
@@ -68,7 +70,7 @@ export async function reportLoadFacts(tx: OrgTx, dashboard: Dashboard): Promise<
     );
     const latest = runs.rows[0];
     const good = runs.rows.find((run) => run.status === "ok" && run.finished_at);
-    const fallbackName = key === BOOKS_TABLE_NAME ? BOOKS_SOURCE_NAME : key === GA_LOAD_TABLE_NAME ? GA_SOURCE_NAME : key === GSC_LOAD_TABLE_NAME ? GSC_SOURCE_NAME : key === META_LOAD_TABLE_NAME ? META_SOURCE_NAME : key;
+    const fallbackName = key === BOOKS_TABLE_NAME ? BOOKS_SOURCE_NAME : key === GA_LOAD_TABLE_NAME ? GA_SOURCE_NAME : key === GSC_LOAD_TABLE_NAME ? GSC_SOURCE_NAME : key === META_LOAD_TABLE_NAME ? META_SOURCE_NAME : key === SHOPIFY_LOAD_TABLE_NAME ? SHOPIFY_SOURCE_NAME : key;
     facts.push({
       key,
       name: (good ?? latest)?.source_name ?? fallbackName,

@@ -11446,3 +11446,82 @@ real rented server or camera (docs/FARM-SECURITY.md says what was tested).
       pages a key, and CRM's Teams, Reassign, Duplicates, Record types
       and Stages each their own. Pictures are decorative and original: no Shopify,
       WooCommerce or card-scheme marks.
+### Shopify's read-only extras (#530; decisions 1237-1245)
+
+Jess (2 November 2026) asked for more Shopify data, "mainly so it can be
+reported on in Analytics": stock levels, shop stats, discounts, gift cards
+and fulfilments, all read-only, nothing new posted. Where Jess didn't say,
+we followed what Xero's and NetSuite's Shopify connectors do (as Xero
+does, not yet reviewed). Shopify's 2026-10 reference was read on 2
+November 2026; nothing was tried against a real store. Examples
+SPD1-SPD11.
+
+1237. **Read only, nothing posted, a part per scope.** Each part (stock,
+      shop stats, discounts, gift cards, fulfilment and shipping) is on
+      for a store when the store gave every scope it needs
+      (`src/lib/sales-platforms/parts.ts`); there's no switch to type in.
+      A part that's off is skipped and the sync log says which scope is
+      missing, once a day, as payouts do. Tohyee never asks for a write_
+      scope and still refuses an app that has one. Nothing here makes a
+      journal: the ledger is the same with or without the extras (SPD5).
+1238. **Tohyee's stock is the book of record.** Shopify's stock is read
+      (available and on hand per variant per location) and shown beside
+      Tohyee's on hand for the matched item (the product sync's link, else
+      SKU = item code), on Settings › Sales platforms and in Analytics.
+      Nothing changes either side: Jess said "never change Tohyee stock
+      from Shopify", and NetSuite's Shopify connectors likewise treat the
+      accounts as the source of stock (as we understand them; not
+      checked). On hand is compared, totals across locations,
+      since Shopify's locations needn't match Tohyee's Location values. A
+      disconnected store's stock picture is deleted.
+1239. **Shop stats from ShopifyQL, and a refusal isn't a failure.**
+      `shopifyqlQuery` needs `read_reports` and Shopify's level 2
+      protected customer data approval, even for totals. Tohyee asks four
+      questions (sessions and conversion rate by day; orders, gross and
+      net sales by day; the same by product and by sales channel), the
+      last 90 days the first time and 30 after, at most every 6 hours.
+      When Shopify refuses, the log says "Shopify hasn't approved shop
+      reports for this app yet" and the sync carries on. Figures are
+      Shopify's own (its days, its currency); conversion rate is kept as
+      Shopify sends it.
+1240. **Discounts and their use on orders.** Discount codes and automatic
+      discounts (title, type, value, dates, status, times used) are
+      replaced each read. On each order brought in, each discount used
+      is kept with the amount Shopify allocated from it to the lines and
+      shipping. Discounts part: `read_discounts` (as the brief asked; the
+      order fields themselves come with `read_orders`).
+1241. **Gift cards: never the code.** Only `lastCharacters` is asked for
+      (never `code` or `maskedCode`); the table refuses anything longer
+      than 4 letters or digits. Initial value, balance, expiry, enabled,
+      and each credit, debit and cash out (debits and cash outs stored
+      negative). Transaction notes aren't kept (they can hold personal
+      text). No customer or recipient is read.
+1242. **Fulfilments and shipping come with `read_orders`; `read_shipping`
+      isn't asked for.** Shopify's Fulfillment (status, dates, tracking
+      company and number), `totalShippingPriceSet` and
+      `displayFulfillmentStatus` need only `read_orders`, so this part is
+      on whenever orders are. `read_shipping` only gives
+      DeliveryCarrierService, which nothing here uses, so it's left out
+      of the scope list (the brief named it; Jess to confirm).
+1243. **Fulfilment orders are optional and may be refused.**
+      `read_merchant_managed_fulfillment_orders` (Shopify may need to
+      approve it) adds each order's fulfilment order status. If Shopify
+      refuses, the order is asked again without it, the rest of that sync
+      doesn't ask, and the log says so; nothing fails.
+1244. **Shopify in Analytics is Tohyee's own copy.** A "Shopify" source
+      (`shopify_*` tables, loaded nightly after 4am or with Refresh now)
+      reads only the organisation's database, never Shopify: orders,
+      lines, refunds and payouts as the documents they became (so they
+      agree with the books), plus stock, stats, discounts, order
+      discounts, fulfilments, gift cards and their transactions.
+      Customers are by contact ID only; no names, emails, phones or
+      addresses are copied. The books copy (`tohyee_*`) is unchanged, so
+      a Shopify order is still counted once there (MD5).
+1245. **How often, and the scope list.** Stock, discounts and gift cards
+      are read at most hourly by the 15-minute sync; "Sync now" reads
+      them whenever. Each part is asked on its own, so one that fails is
+      logged and the rest carry on; refused credentials still fail the
+      sync. Query costs stay under Shopify's 1,000 points (an order with
+      every extra about 870). Settings › Sales platforms lists every scope
+      in one comma-separated line to copy into the Dev Dashboard, what
+      each part needs, and which parts each store has on.
