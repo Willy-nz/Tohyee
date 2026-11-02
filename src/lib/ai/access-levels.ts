@@ -33,6 +33,20 @@ export const AI_ACCESS_LEVEL_HELP: Record<AiAccessLevel, string> = {
     "It can also reconcile bank statement lines (up to 100 at a time) and make and edit bank rules; make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills; apply credit and record refunds; approve and pay expense claims; add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. Anything an approval rule covers still waits for a person. It can undo only its own bank reconciliations, within 24 hours. Only Owners can make one.",
 };
 
+/**
+ * What each level means, said to the AI: in the MCP server's instructions
+ * and in get_organisation's answer, so the two always agree (#531).
+ */
+export const AI_ACCESS_LEVEL_AI_WORDS: Record<AiAccessLevel, string> = {
+  read: "You can look things up but not change anything.",
+  draft:
+    "You can look things up, add and edit contacts, and make and edit draft invoices, bills and journals (drafts post nothing). You can't approve, post, delete, void or archive anything.",
+  post:
+    "You can look things up, add and edit contacts, make and edit drafts, approve invoices and bills, post draft journals and record payments. You can't delete, void, archive, roll back or refund anything.",
+  full:
+    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines, make and edit bank rules, make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills, apply credit, record refunds, approve and pay expense claims, add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. You can't delete, void, archive, pause, roll back or dispose of anything, exclude lines or switch anything off, and anything an approval rule covers is for a person to approve. The only undo you have is unmatch_bank_line, for your own reconciliations in the last 24 hours. Work in small batches and check the results.",
+};
+
 /** Shown before a Full access key is made; the person must tick it (decision 488). */
 export const FULL_ACCESS_WARNING =
   "A Full access key can post spend money, receive money, payments, transfers, credit notes, refunds and depreciation into your books without anyone checking each one first. Anyone who gets the key can do the same, as you. Make one only for an AI you trust, keep the key secret, and revoke it when you stop using it.";

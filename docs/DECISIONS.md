@@ -11525,3 +11525,45 @@ SPD1-SPD11.
       every extra about 870). Settings › Sales platforms lists every scope
       in one comma-separated line to copy into the Dev Dashboard, what
       each part needs, and which parts each store has on.
+
+
+### AI access level and sales platform diagnostics (#531, #532 part 3; decisions 1246-1249)
+
+1246. **get_organisation says what the connection may do now.** It used to
+      say `access: "read-only"` for every key, which made a Full access
+      owner think they hadn't given access (#531). It now gives the level the
+      key or app connection works at now (`read`, `draft`, `post` or
+      `full`: its level capped by the person's role now, decision 346), its
+      label and meaning in the same words as the MCP server's instructions,
+      the level it was given, and a note when the role caps it. It describes
+      the connection, not the tool: get_organisation itself still only reads.
+      Enforcement is unchanged.
+1247. **Two Look only tools for sales platform diagnostics.**
+      get_sales_platform_status and list_sales_platform_log let an AI
+      answer "why didn't my products or orders come in?" from what Tohyee
+      already knows. Any key can use them, as any member (viewers too) can
+      see the connection and its log on screen. They only read, in a
+      read-only transaction: they don't call the store, sync, reconnect,
+      change settings or post. They're in their own file
+      (`src/lib/sales-platforms/diagnostics.ts`), using `listConnections` and
+      the stored log, mappings and documents.
+1248. **What the status shows.** Per store: customers and products on or
+      off; orders, refunds and payouts as off (posting off: "says nothing
+      about whether the store has sales"), setup needed (a setting or scope
+      missing) or on; posting's start date and missing settings, checked as
+      the settings screen checks them; Shopify scopes given against those
+      needed, as the store last said; counts of links made and documents
+      posted; records whose latest log line is a skip, failure or wait,
+      counted by a reason code (`missing_sku`, `invalid_sku`,
+      `missing_scope`, `not_paid_yet` and others, `other` otherwise) with
+      up to three examples; and the last sync, its age (behind after an hour
+      while active, as the sync runs every 15 minutes), last error and
+      failures. Reason codes come from Tohyee's own messages; the message is
+      always given too. No counts are made up for data not fetched.
+1249. **No secrets in answers.** Neither tool returns credentials, access
+      tokens, the webhook key or address, or who connected the store. Log
+      messages, the last error and the webhook note have web addresses cut
+      to their host and token-like text removed before they're returned.
+      The log reader pages 1-200 lines (default 50) with `beforeId` and
+      filters by connection, action, record kind, outcome (problem, done,
+      connection) and the store's record ID.

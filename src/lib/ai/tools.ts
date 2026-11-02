@@ -4,7 +4,7 @@ import { cashFlowForecast } from "@/lib/cash-flow/forecast";
 import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
 import { boundedLimit, firstRows } from "@/lib/ai/limits";
-import type { AiAccessLevel } from "@/lib/ai/access-levels";
+import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, type AiAccessLevel } from "@/lib/ai/access-levels";
 import type { Role } from "@/lib/auth/roles";
 import { getInboxItem, getInboxItemContent, type InboxItem, listInbox } from "@/lib/bills/inbox";
 import { getBill, listBills, type BillSummary } from "@/lib/bills/service";
@@ -38,7 +38,33 @@ export type ToolContext = {
   organisationId: string;
   /** The command source for idempotency keys, one per AI key (e.g. "ai-12"). */
   source: string;
+  /** What this key or connection may do now: its level capped by the person's role now (decision 346). */
+  accessLevel: AiAccessLevel;
+  /** The level it was given when made, before the role cap. */
+  grantedAccessLevel: AiAccessLevel;
 };
+
+/**
+ * The connection's access for get_organisation (#531, decision 1246): what
+ * it may do now, the same level the MCP server's instructions name and its
+ * tool list follows. It describes the connection, not the tool answering:
+ * get_organisation itself only reads, whatever the level.
+ */
+export function connectionAccess(context: Pick<ToolContext, "accessLevel" | "grantedAccessLevel" | "role">) {
+  const level = context.accessLevel;
+  const capped = context.grantedAccessLevel !== level;
+  return {
+    access: level,
+    accessLabel: AI_ACCESS_LEVEL_LABELS[level],
+    accessMeans: AI_ACCESS_LEVEL_AI_WORDS[level],
+    accessGranted: context.grantedAccessLevel,
+    ...(capped
+      ? {
+          accessNote: `This connection was given "${AI_ACCESS_LEVEL_LABELS[context.grantedAccessLevel]}", but your role is now ${context.role}, so it works as "${AI_ACCESS_LEVEL_LABELS[level]}".`,
+        }
+      : {}),
+  };
+}
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -203,7 +229,7 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "get_organisation",
     title: "Organisation",
     description:
-      "The organisation these books are for: name, base currency, financial year end, GST basis, GST filing period and GST number (registered when Tohyee has one), your role, and today's date. Call this first.",
+      "The organisation these books are for: name, base currency, financial year end, GST basis, GST filing period and GST number (registered when Tohyee has one), your role, what this connection may do now (access: read, draft, post or full, capped by your role now), and today's date. Call this first.",
     inputSchema: schema(),
     async run(tx, _args, context) {
       const settings = await getOrganisationSettings(tx);
@@ -225,7 +251,7 @@ export const READ_TOOLS: readonly AiTool[] = (
           notForProfit: settings.notForProfitEnabled,
         },
         yourRole: context.role,
-        access: "read-only",
+        ...connectionAccess(context),
         today: todayIsoDate(),
         amounts: "Amounts are decimal strings in the base currency unless a currencyCode says otherwise.",
       };

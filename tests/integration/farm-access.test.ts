@@ -168,7 +168,7 @@ describeWithDatabase("farms each member works on", () => {
     const apps = await as(staff)((tx) => farmsWithPaddocks(tx));
     expect(apps.farms.map((farm) => farm.name)).toEqual(["Home farm"]);
     const tool = FARM_READ_TOOLS.find((entry) => entry.name === "list_farms_and_paddocks")!;
-    const listed = (await as(staff)((tx) => tool.run(tx, {}, { role: "bookkeeper", organisationId: ORG, source: "test" }))) as { farms: Array<{ name: string }> };
+    const listed = (await as(staff)((tx) => tool.run(tx, {}, { role: "bookkeeper", organisationId: ORG, source: "test", accessLevel: "read", grantedAccessLevel: "read" }))) as { farms: Array<{ name: string }> };
     expect(listed.farms.map((farm) => farm.name)).toEqual(["Home farm"]);
   });
 
