@@ -38,9 +38,9 @@ const ROUTES: Array<[string, IllustratedIconName]> = [
   ["/operations/invoices", "sales"], ["/operations/customer-statements", "sales"], ["/operations/quotes", "sales"], ["/operations/credit-notes", "sales"],
   ["/crm/mail", "mail"], ["/crm/email-templates", "mail"], ["/crm/tasks", "calendar"],
   ["/crm/forecasts", "analytics"],
-  ["/crm/teams", "settings"], ["/crm/reassign", "settings"], ["/crm/duplicates", "crm"],
-  ["/crm/record-types", "settings"], ["/crm/stages", "settings"], ["/crm/dashboard", "analytics"], ["/crm", "crm"],
-  ["/analytics/sources", "documents"], ["/analytics/shaping", "settings"], ["/analytics", "analytics"],
+  ["/crm/teams", "team"], ["/crm/reassign", "reassign"], ["/crm/duplicates", "duplicates"],
+  ["/crm/record-types", "form"], ["/crm/stages", "pipeline"], ["/crm/dashboard", "analytics"], ["/crm", "crm"],
+  ["/analytics/sources", "documents"], ["/analytics/shaping", "funnel"], ["/analytics", "analytics"],
   ["/server/analytics", "analytics"], ["/server/bank-files", "banking"],
   ["/server/users", "team"], ["/server/sign-ins", "key"], ["/server/google-sign-in", "key"],
   ["/server/remote-access", "key"], ["/server/organisations", "accounting"],
@@ -57,8 +57,10 @@ export function iconForDestination(href: string | null): IllustratedIconName | u
 /**
  * A top-level menu's artwork comes from where it leads (its own link, or its
  * first destination), never from its label: "Sales", "Settings" and "More"
- * mean different things in Accounting, CRM and Farm.
+ * mean different things in Accounting, CRM and Farm. A menu may name its own
+ * `art` when its first link would mislead (CRM Settings opens on Teams).
  */
-export function iconForMenu(menu: { href?: string; groups?: Array<{ links: Array<{ href: string }> }> }): IllustratedIconName | undefined {
+export function iconForMenu(menu: { href?: string; art?: IllustratedIconName; groups?: Array<{ links: Array<{ href: string }> }> }): IllustratedIconName | undefined {
+  if (menu.art) return menu.art;
   return iconForDestination(menu.href ?? menu.groups?.flatMap((group) => group.links)[0]?.href ?? null);
 }

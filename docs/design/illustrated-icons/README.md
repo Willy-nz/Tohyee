@@ -2,7 +2,7 @@
 
 Actual ready-to-use vector assets for issue #509, following the user's request for simple illustrations instead of realistic AI imagery. The draft PR now integrates selected icons into the app launcher, Farm menu and navigation, and Sales/Purchases overviews. Nothing is deployed until the PR is merged and released.
 
-![All 32 illustrated icons](preview.svg)
+![All 37 illustrated icons](preview.svg)
 
 ## Files and use
 
@@ -84,8 +84,8 @@ Checked in a production build on 1 November 2026 (PR #520 review): desktop dropd
 Jess said the old Settings cog looked like a soft flower, and that a cog on Sales platforms says nothing about selling (2 November 2026). Changes:
 
 - `settings.svg` is redrawn as a geometric 8-tooth gear with evenly spaced, square-ended teeth and a centre hole. It reads as a gear at 20px.
-- Four new original icons: `shop.svg` (shop front with striped awning), `team.svg` (two people), `card.svg` (a plain payment card, no brand marks) and `key.svg`.
-- The cog stays on the Settings hubs (Organisation settings, All settings, Server settings) and general settings (Modules, Custom fields, Tracking categories, Updates, CRM teams, record types and stages, Analytics shaping). The CRM Settings menu keeps the cog because its first link is Teams.
+- Nine new original icons: `shop.svg` (shop front with striped awning), `team.svg` (two people), `card.svg` (a plain payment card, no brand marks), `key.svg`, `reassign.svg` (two arrows passing each other), `duplicates.svg` (two overlapping record cards), `form.svg` (a form with fields), `pipeline.svg` (three steps) and `funnel.svg` (data being filtered).
+- The cog stays on the Settings hubs (Organisation settings, All settings, Server settings) and general settings (Modules, Custom fields, Tracking categories, Updates). The Accounting and CRM Settings menus themselves keep the cog. CRM's Settings menu opens on Teams, so it names its picture with the menu's `art` field instead of taking it from its first link.
 
 | Page | Icon |
 |---|---|
@@ -101,7 +101,13 @@ Jess said the old Settings cog looked like a soft flower, and that a cog on Sale
 | Settings › Approval rules | Purchases (it covers bills, purchase orders and expense claims) |
 | Settings › Kilometre rates | Maps |
 | People and roles | Team |
-| CRM › Duplicates | CRM |
+| CRM › Teams | Team |
+| CRM › Reassign records | Reassign |
+| CRM › Duplicates | Duplicates |
+| CRM › Record types | Form |
+| CRM › Stages | Pipeline |
+| CRM › Sales platforms (Shopify) | Shop |
+| Analytics › Prepare data | Funnel |
 | Server › Users | Team (was CRM) |
 | Server › Sign-ins, Sign in with Google, Remote access | Key |
 

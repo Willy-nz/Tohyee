@@ -11439,9 +11439,10 @@ real rented server or camera (docs/FARM-SECURITY.md says what was tested).
       said the Settings cog looked poor ("anything that uses that cog fix
       it"). The cog is redrawn as an even 8-tooth gear. It stays on the
       Settings hubs and general settings (modules, custom fields,
-      tracking, updates, CRM record setup). Settings pages about one
+      tracking, updates) and on the Settings menus themselves. Pages about one
       thing get that thing's picture: Sales platforms a shop front,
       Online payments a card, Email the mail icon, People and roles,
       Salespeople and server Users two people, sign-in and remote access
-      pages a key. Pictures are decorative and original: no Shopify,
+      pages a key, and CRM's Teams, Reassign, Duplicates, Record types
+      and Stages each their own. Pictures are decorative and original: no Shopify,
       WooCommerce or card-scheme marks.
