@@ -6500,6 +6500,78 @@ was asked:
    no product or customer sync from WooCommerce like Shopify's stage 1
    (proposed for now). Is that enough?
 
+### Shopify's read-only extras (#530; as Xero/NetSuite does, not yet reviewed)
+
+Jess, 2 Nov 2026: bring in stock levels, shop stats, discounts, gift cards
+and fulfilments, read-only, for Analytics; never change Tohyee's stock from
+Shopify; post nothing new. The rest is our choice (decisions 1237-1245),
+following Xero and NetSuite where they have something, **not yet reviewed
+by Jess**. **None of this has been tried against a real store**; the tests
+use made-up responses in the shapes of shopify.dev's 2026-10 reference.
+
+Setup: Glimmers Ltd as SPC11 (posting on from 1 Oct 2026), store
+glimmers.myshopify.com. Shopify locations **61 Dunedin workshop** and **62
+Otago Farmers Market**. Items GIFTBOX (a stock item, SPC17) and CANDLE-L
+(non-stock) linked by the product sync.
+
+- **SPD1** Stock levels (`read_inventory`, `read_locations`): Shopify
+  says GIFTBOX has on hand 7 (available 5) at 61 and 2 (available 2) at
+  62; CANDLE-L 12 at 61; an untracked sticker isn't kept; a bundle with no
+  SKU is kept but unmatched. Tohyee keeps these as Shopify said them,
+  replaced at each read (hourly, or Sync now). **No journal, no stock
+  movement.**
+- **SPD2** The difference view: Tohyee bought 10 gift boxes (bill B-1, 10
+  × 12.00, Dr 1400 120.00). The view shows **GIFTBOX: Shopify on hand 9
+  (7 + 2), available 7, Tohyee on hand 10, "Shopify has 1 fewer"**;
+  CANDLE-L "Tohyee doesn't count its stock"; the bundle "No matching
+  item". Reading Shopify again leaves Tohyee's stock (10 at 120.00) and
+  the ledger exactly as they were.
+- **SPD3** Shop stats (`read_reports`): the first read asks ShopifyQL for
+  the last 90 days (then 30, at most every 6 hours): 1 Oct **120
+  sessions, conversion 2.5, 3 orders, gross 120.00, net 110.00**; 2 Oct 80
+  sessions, 1.25, 1 order, 40.00, 40.00; by product (Large candle net
+  75.00, Wax melts 35.00) and by channel (Online Store 70.00, Point of
+  Sale 40.00). When Shopify later says 2 Oct had 2 orders and 63.00, that
+  day is replaced.
+- **SPD4** Shopify refuses shop reports (no level 2 protected customer
+  data approval; `ACCESS_DENIED`): the log says "Shopify hasn't approved
+  shop reports for this app yet…", the connection stays Connected with no
+  error, and the order, stock, discounts and gift cards still come in. It
+  isn't asked again for 6 hours.
+- **SPD5** Discounts (`read_discounts`): code **MELT5** (amount off 5.00,
+  active, used 14 times), automatic **Spring 10% off** (10, expired 30
+  Sep, used 31), code **FREESHIP** (free shipping, scheduled). Order
+  #1002 (SPC12) brings in **MELT5, 5.00 off**. The ledger after #1002 is
+  the same with or without the discount scopes: SPC12's invoice and
+  payment only.
+- **SPD6** A discount's amount on an order is what Shopify allocated from
+  it: 2.50 + 2.50 on two lines = 5.00 for code MELT5; 1.00 on a line +
+  1.50 on shipping = 2.50 for an automatic 10%.
+- **SPD7** Gift cards (`read_gift_cards`, `read_gift_card_transactions`):
+  card ending **7XQ2**, 50.00 issued 1 Oct, balance 30.00, expires 1 Oct
+  2027, a debit of **−20.00** on 5 Oct; card ending **K9MD**, 25.00,
+  disabled 4 Oct. Only the last 4 characters are kept; the full codes
+  aren't asked for and aren't anywhere in Tohyee. Nothing is posted (gift
+  cards sold are still refused by order posting, SPC23).
+- **SPD8** Credits are positive, debits and cash outs negative, whatever
+  sign Shopify sends.
+- **SPD9** Fulfilment and shipping (comes with `read_orders`): #1002
+  shipped by **NZ Post, tracking NZ123456789**, delivered 5 Oct, order
+  FULFILLED, **shipping charged 6.90**. With
+  `read_merchant_managed_fulfillment_orders` its fulfilment order status
+  (CLOSED) comes too.
+- **SPD10** Shopify refuses fulfilment orders (approval required): the
+  first order is asked again without them, later orders aren't asked,
+  the log says so, and #1001 and #1002 are posted as usual with their
+  shipments and shipping charged.
+- **SPD11** Analytics › Shopify: Refresh now copies Tohyee's own data
+  (no call to Shopify) into 14 `shopify_*` tables. `shopify_orders` shows
+  #1002 as **INV-0001, total 28.90, discounts 5.00, shipping 6.90,
+  FULFILLED**, with the customer as a contact ID only;
+  `shopify_gift_cards` shows ends_with 7XQ2 and K9MD; `shopify_stock` puts
+  Tohyee's on hand on one row per variant, so a sum doesn't double it.
+  With no store ever connected, Refresh now says so.
+
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
 The owner asked (1 Oct 2026) for the CRM's records to carry many fields of

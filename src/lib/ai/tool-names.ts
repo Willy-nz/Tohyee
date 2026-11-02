@@ -6,7 +6,7 @@ import type { AiAccessLevel } from "@/lib/ai/access-levels";
  * level it needs. Browser-safe.
  */
 export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel; words: string }[] = [
-  { name: "get_organisation", level: "read", words: "The organisation's name, base currency, financial year end and GST settings" },
+  { name: "get_organisation", level: "read", words: "The organisation's name, base currency, financial year end and GST settings, and what this connection may do" },
   { name: "list_accounts", level: "read", words: "The chart of accounts" },
   { name: "profit_and_loss", level: "read", words: "Profit and loss for any dates" },
   { name: "balance_sheet", level: "read", words: "The balance sheet at any date" },
@@ -75,6 +75,8 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "get_repeating_bill", level: "read", words: "One repeating bill" },
   { name: "list_items", level: "read", words: "Products and services" },
   { name: "get_item", level: "read", words: "One product or service" },
+  { name: "get_sales_platform_status", level: "read", words: "Connected Shopify and WooCommerce stores: what syncs, posting, scopes, what wasn't brought in and why (it can't sync or change settings)" },
+  { name: "list_sales_platform_log", level: "read", words: "The sales platform sync log, filtered by action, record or problem" },
   { name: "list_tracking", level: "read", words: "Tracking categories and options" },
   { name: "list_fixed_assets", level: "read", words: "The fixed asset register" },
   { name: "get_fixed_asset", level: "read", words: "One fixed asset with its depreciation" },

@@ -30,6 +30,7 @@ type Overview = {
   files: SourceFile[];
   sources: AnalyticsSource[];
   books: Run | null;
+  shopify: { connected: boolean; lastLoad: Run | null };
   loads: Run[];
 };
 
@@ -126,7 +127,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
           This organisation doesn&apos;t have an analytics folder yet. A server admin chooses it on the server computer, in the
           server settings under Analytics folders. Tohyee only reads files in that folder.
         </Notice>
-      ) : tab === "connect" && connector && connector !== "books" && connector !== "google-analytics" && connector !== "google-search-console" && connector !== "meta" && !isDatabaseConnector(connector) && !data.folder.readable ? (
+      ) : tab === "connect" && connector && connector !== "books" && connector !== "google-analytics" && connector !== "google-search-console" && connector !== "meta" && connector !== "shopify" && !isDatabaseConnector(connector) && !data.folder.readable ? (
         <Notice tone="error">Tohyee can&apos;t open this organisation&apos;s analytics folder. A server admin needs to check it still exists.</Notice>
       ) : null}
 
@@ -176,6 +177,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
       ) : null}
 
       {tab === "sources" || (tab === "connect" && connector === "books") ? <BooksCard organisationId={organisationId} data={data} onChanged={overview.reload} /> : null}
+      {(tab === "sources" && (data.shopify.connected || data.shopify.lastLoad)) || (tab === "connect" && connector === "shopify") ? <ShopifyCard organisationId={organisationId} data={data} onChanged={overview.reload} /> : null}
 
       {tab === "sources" ? <>
       <Field label="Search data sources"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, file or table…" /></Field>
@@ -331,6 +333,78 @@ function BooksCard({ organisationId, data, onChanged }: { organisationId: string
           "Not copied yet. It's copied tonight, or now with Refresh now."
         )}
       </p>
+      {copied.length ? (
+        <p className={ui.muted}>
+          Tables:{" "}
+          {copied.map((table, index) => (
+            <span key={table.name}>
+              {index ? ", " : ""}
+              <span title={table.name}>{tableLabel(table.name)}</span>
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Shopify (decision 1244): Tohyee's own copy of its connected stores' data; never calls Shopify. */
+function ShopifyCard({ organisationId, data, onChanged }: { organisationId: string; data: Overview; onChanged: () => void }) {
+  const tables = useApiData<{ tables: Array<{ name: string; columns: unknown[] }> }>("/api/analytics/tables", { organisationId });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const copied = (tables.data?.tables ?? []).filter((table) => table.name.startsWith("shopify_"));
+  const run = data.shopify.lastLoad;
+
+  async function refresh() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const { run: done } = await api<{ run: LoadRun }>("/api/analytics/shopify", { method: "POST", body: { organisationId } });
+      setMessage(
+        done.status === "ok"
+          ? { tone: "success", text: `Copied ${rows(done.rowsLoaded)} rows in ${duration(done.milliseconds)}.` }
+          : { tone: "error", text: `The Shopify data wasn't copied: ${done.error}. The last copy is still there.` },
+      );
+      tables.reload();
+    } catch (caught) {
+      setMessage({ tone: "error", text: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  }
+
+  return (
+    <Card
+      title="Shopify"
+      description={<>Your Shopify stores&apos; data, copied from Tohyee every night after 4am.{" "}<InfoTip label="Where the Shopify data comes from">Tohyee&apos;s sales platform sync reads Shopify; this copies what it already holds. Analytics never calls Shopify. Orders, lines, refunds and payouts are the invoices, credit notes and transfers they became. Stock, shop stats, discounts, gift cards and shipments are what Shopify last said. Customers appear by contact ID only. Gift cards show only their last 4 characters.</InfoTip></>}
+      actions={
+        data.canManage && data.shopify.connected ? (
+          <Button size="small" onClick={() => void refresh()} disabled={busy}>
+            {busy ? "Copying…" : "Refresh now"}
+          </Button>
+        ) : null
+      }
+    >
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      {!data.shopify.connected ? (
+        <p className={ui.muted}>
+          No Shopify store is connected. {data.canManage ? <>Connect one in <Link href="/operations/settings/sales-platforms">Settings › Sales platforms</Link>.</> : "An admin can connect one in Settings › Sales platforms."}
+        </p>
+      ) : (
+        <p className={ui.muted}>
+          {run ? (
+            <>
+              <LoadBadge run={run} /> Last copied {formatDateTime(run.startedAt)}
+              {run.rowsLoaded ? ` · ${rows(run.rowsLoaded)} rows` : ""}
+              {run.error ? ` · ${run.error}` : ""}
+            </>
+          ) : (
+            "Not copied yet. It's copied tonight, or now with Refresh now."
+          )}
+        </p>
+      )}
       {copied.length ? (
         <p className={ui.muted}>
           Tables:{" "}

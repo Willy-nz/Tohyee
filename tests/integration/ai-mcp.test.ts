@@ -307,6 +307,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_pasture_photos_awaiting_estimate",
         "get_pasture_photo",
         "list_staff",
+        "get_sales_platform_status",
+        "list_sales_platform_log",
       ].sort(),
     );
     for (const tool of tools) {
@@ -328,7 +330,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
 
   it("tools/call answers from the organisation's books (example I1's invoice)", async () => {
     const organisation = await callTool(viewerToken, "get_organisation");
-    expect(organisation.data).toMatchObject({ organisationId: ORG, name: `Test ${ORG}`, baseCurrency: "NZD", financialYearEnd: "31 March", yourRole: "viewer", access: "read-only" });
+    expect(organisation.data).toMatchObject({ organisationId: ORG, name: `Test ${ORG}`, baseCurrency: "NZD", financialYearEnd: "31 March", yourRole: "viewer", access: "read", accessLabel: "Look only", accessGranted: "read" });
 
     const accounts = await callTool(viewerToken, "list_accounts");
     expect((accounts.data!.rows as Json[]).find((account) => account.code === "4000")).toMatchObject({ class: "revenue", archived: false });

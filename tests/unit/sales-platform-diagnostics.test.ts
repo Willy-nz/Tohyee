@@ -1,0 +1,30 @@
+import { describe, expect, it } from "vitest";
+import { connectionAccess } from "@/lib/ai/tools";
+import { problemReason, redactSecrets } from "@/lib/sales-platforms/diagnostics";
+
+describe("sales platform diagnostics (#532, decisions 1248-1249)", () => {
+  it("keeps only the host of web addresses and removes token-like text", () => {
+    expect(redactSecrets("Set up at https://books.example.nz/api/sales-platforms/webhooks/org/abc?x=1 now")).toBe("Set up at https://books.example.nz/[removed] now");
+    expect(redactSecrets("token shpat_abcdef123456 and ck_1234567890abcdef")).toBe("token [removed] and [removed]");
+    expect(redactSecrets(`key ${"a".repeat(43)}.`)).toBe("key [removed].");
+    expect(redactSecrets("Linked Shopify variant Gift box (SKU BOX-1) to item BOX-1.")).toBe("Linked Shopify variant Gift box (SKU BOX-1) to item BOX-1.");
+  });
+
+  it("gives problem lines a reason code, and none to the rest", () => {
+    expect(problemReason("skipped", "Shopify variant X has no SKU, so it wasn't matched to an item or added.")).toBe("missing_sku");
+    expect(problemReason("skipped", 'Shopify variant X wasn\'t matched or added: its SKU "A B" can\'t be an item code.')).toBe("invalid_sku");
+    expect(problemReason("skipped", "Payouts aren't brought in: the app hasn't been given read_shopify_payments_payouts. Add them to the app's access scopes.")).toBe("missing_scope");
+    expect(problemReason("waiting", "#1001 isn't paid yet (Shopify says PENDING), so it isn't invoiced.")).toBe("not_paid_yet");
+    expect(problemReason("failed", "Something new.")).toBe("other");
+    expect(problemReason("linked", "Linked it.")).toBeNull();
+  });
+});
+
+describe("get_organisation's access (#531, decision 1246)", () => {
+  it("names the level the connection works at now, and says when the role caps it", () => {
+    expect(connectionAccess({ accessLevel: "full", grantedAccessLevel: "full", role: "owner" })).toMatchObject({ access: "full", accessLabel: "Full access" });
+    const capped = connectionAccess({ accessLevel: "post", grantedAccessLevel: "full", role: "bookkeeper" });
+    expect(capped).toMatchObject({ access: "post", accessGranted: "full" });
+    expect(capped.accessNote).toBe('This connection was given "Full access", but your role is now bookkeeper, so it works as "Make and post".');
+  });
+});

@@ -2,6 +2,7 @@ import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { listSourceFiles } from "@/lib/analytics/engine";
 import { organisationSourceFolder, sourceFolderStatus } from "@/lib/analytics/folders";
+import { lastShopifyRun, shopifyLoadsNightly } from "@/lib/analytics/shopify";
 import { lastBooksRun, listSources, recentLoads, sourcesForViewer } from "@/lib/analytics/sources";
 
 /**
@@ -21,6 +22,7 @@ export const GET = route(async (request) => {
       canManage,
       sources: canManage ? sources : sourcesForViewer(sources),
       books: await lastBooksRun(tx),
+      shopify: { connected: await shopifyLoadsNightly(tx), lastLoad: await lastShopifyRun(tx) },
       loads: await recentLoads(tx, 50),
     };
   });

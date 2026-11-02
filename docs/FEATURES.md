@@ -1595,6 +1595,18 @@ that something happened.
   and money Shopify holds back moves to a reserve bank account until it's
   released. Chargeback holds and anything Shopify doesn't explain are
   still refused. No summary mode (Jess): each order keeps its invoice.
+- **Shopify's read-only extras** (#530, SPD1-SPD11, decisions 1237-1245,
+  tenant migration 0214): stock levels by location (with a Shopify vs
+  Tohyee difference view on Settings › Sales platforms; Tohyee's stock is
+  never changed), shop stats from ShopifyQL (logged, not failed, while
+  Shopify hasn't approved shop reports), discounts and the discounts used
+  on each order, gift cards (last 4 characters only, never the code) and
+  their transactions, and shipments and shipping charged on orders. Each
+  part is on when the store gave its scopes; the page lists every scope in
+  one line to copy. Nothing is posted. Analytics has a **Shopify** source
+  (`shopify_*` tables) copied from Tohyee's own data, never from Shopify.
+  Not tried against a real store; `read_shipping` isn't asked for (only
+  carrier services need it).
 - **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
@@ -2212,6 +2224,18 @@ that something happened.
   covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
   turned off. Not yet tried against each AI app.
+- **AI: sales platform diagnostics and the connection's access** (#531,
+  #532 part 3, decisions 1246-1249). get_organisation now says what the
+  key or app connection may do now (Look only, Make drafts, Make and post or
+  Full access, capped by the person's role), matching the server's
+  instructions. Two Look only tools: get_sales_platform_status (per store:
+  what syncs, posting and its start date, missing settings, Shopify scopes
+  given against needed, links made, records not brought in by reason such
+  as a missing SKU, and how fresh the last sync is) and
+  list_sales_platform_log (the sync log, paged and filtered by action,
+  record kind, outcome or record, with a reason on each skip or failure).
+  They only read and never show credentials, tokens or webhook addresses.
+  Tested on made-up stores and log lines, not a real Shopify store.
 - **AI apps connect by signing in** (#427, decisions 810-829, core
   migration 0018). Claude.ai, ChatGPT and other cloud AI connect by pasting
   one address (the MCP address on the remote access address) and signing in
