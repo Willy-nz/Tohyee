@@ -3,6 +3,8 @@ import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import * as connectionRoute from "@/app/api/sales-platforms/connections/[connectionId]/route";
 import * as logRoute from "@/app/api/sales-platforms/connections/[connectionId]/log/route";
 import * as coverageRoute from "@/app/api/sales-platforms/connections/[connectionId]/parts/route";
+import * as matchesRoute from "@/app/api/sales-platforms/connections/[connectionId]/customer-matches/route";
+import { listCustomerMatches } from "@/lib/sales-platforms/customer-matches";
 import { writeLog } from "@/lib/sales-platforms/log";
 import * as syncRoute from "@/app/api/sales-platforms/connections/[connectionId]/sync/route";
 import * as testRoute from "@/app/api/sales-platforms/connections/[connectionId]/test/route";
@@ -794,5 +796,132 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(parts[2].summary).toBe("Posting not set up: nothing is brought in");
     expect((await coverageRoute.GET(apiRequest(`/x?organisationId=${w.org}`), params(id))).status).toBe(401);
     expect(await journals(w)).toBe(0);
+  });
+
+  // #539 (SPC35-SPC37): a customer with the same name as a contact but no matching email is never merged, and nobody is told to change an email.
+  const alexB: FakeCustomer = { id: 1101, first: "Alex", last: "Example", email: "alex-b@example.test", phone: null, updatedAt: "2026-09-30T04:00:00Z" };
+  const alexNoEmail: FakeCustomer = { id: 1102, first: "Alex", last: "Example", email: null, phone: null, updatedAt: "2026-09-30T05:00:00Z" };
+
+  async function resolve(w: World, connectionId: string, body: Record<string, unknown>, user: SessionUser = owner) {
+    const response = await matchesRoute.POST(
+      apiRequest("/x", { method: "POST", cookie: await sessionCookieFor(user), body: { organisationId: w.org, ...body } }),
+      params({ connectionId }),
+    );
+    return { status: response.status, body: (await response.json()) as { result?: { contactId: string; contactName: string }; error?: string } };
+  }
+
+  it("SPC35-SPC36: same-name customers wait for an admin to say same person or different person", async () => {
+    const w = await setup();
+    const alexA = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Alex Example", email: "alex-a@example.test", isCustomer: false, isSupplier: true }))).contact;
+    const state = shop({ customers: [alexB, alexNoEmail] });
+    const connection = await connect(w, { syncProducts: false });
+    expect(await syncConnection(w.record, connection.id)).toMatchObject({ created: 0, linked: 0, skipped: 2 });
+
+    // Nothing merged, no email changed, and the message suggests neither.
+    expect(await contactsNamed(w, "Alex Example")).toHaveLength(1);
+    expect(await w.as((tx) => getContact(tx, alexA.id))).toMatchObject({ email: "alex-a@example.test", isCustomer: false });
+    const skips = (await log(w, connection.id)).filter((entry) => entry.action === "skipped" && entry.recordKind === "customer");
+    expect(skips).toHaveLength(2);
+    for (const entry of skips) {
+      expect(entry.message).not.toMatch(/same email|Give the contact|change the email/i);
+      expect(entry.message).toContain("Check who they are");
+    }
+    expect(skips.find((entry) => entry.externalId === "1101")!.message).toContain("may be different people");
+    expect(skips.find((entry) => entry.externalId === "1102")!.message).toContain("no email");
+
+    const viewerCookie = await sessionCookieFor(viewer);
+    const read = await matchesRoute.GET(apiRequest(`/x?organisationId=${w.org}`, { cookie: viewerCookie }), params({ connectionId: connection.id }));
+    expect(read.status).toBe(200);
+    const listed = (await read.json()) as { matches: Array<{ externalId: string; contactId: string; suggestedName: string; contactLinkedTo: string | null }>; total: number };
+    expect(listed.total).toBe(2);
+    expect(listed.matches.map((match) => [match.externalId, match.contactId, match.suggestedName, match.contactLinkedTo])).toEqual([
+      ["1101", alexA.id, "Alex Example (Shopify)", null],
+      ["1102", alexA.id, "Alex Example (Shopify)", null],
+    ]);
+    const coverage = await coverageRoute.GET(apiRequest(`/x?organisationId=${w.org}`, { cookie: viewerCookie }), params({ connectionId: connection.id }));
+    const { parts } = (await coverage.json()) as { parts: Array<{ kind: string; reasons: Array<{ text: string; count: number }> }> };
+    expect(parts[0].reasons).toEqual([{ text: "same name as a contact: check who they are", count: 2, outcome: "skipped" }]);
+
+    // Syncing again (all customers re-read) raises nothing new.
+    const before = (await log(w, connection.id)).length;
+    await w.as((tx) => tx.query("update sales_platform_connections set customers_synced_until = null where id = $1", [connection.id]));
+    expect(await syncConnection(w.record, connection.id)).toMatchObject({ created: 0, linked: 0, skipped: 2 });
+    expect(await log(w, connection.id)).toHaveLength(before);
+    expect((await w.as((tx) => listCustomerMatches(tx, connection.id))).total).toBe(2);
+
+    // Only admins resolve, and "same person" must name the contact shown.
+    expect((await resolve(w, connection.id, { externalId: "1101", resolution: "different" }, viewer)).status).toBe(403);
+    expect((await resolve(w, connection.id, { externalId: "1101", resolution: "same", contactId: w.aroha.id })).status).toBe(409);
+
+    // 1101 is someone else: a new contact with their own email, under a name that tells them apart.
+    const separate = await resolve(w, connection.id, { externalId: "1101", resolution: "different" });
+    expect(separate.status).toBe(200);
+    expect(separate.body.result!.contactName).toBe("Alex Example (Shopify)");
+    expect(await w.as((tx) => getContact(tx, separate.body.result!.contactId))).toMatchObject({ email: "alex-b@example.test", isCustomer: true });
+
+    // 1102 (no email) is the same Alex: linked, the contact's email untouched.
+    const same = await resolve(w, connection.id, { externalId: "1102", resolution: "same", contactId: alexA.id });
+    expect(same.status).toBe(200);
+    expect(await w.as((tx) => getContact(tx, alexA.id))).toMatchObject({ name: "Alex Example", email: "alex-a@example.test", isCustomer: true });
+    const decided = (await log(w, connection.id)).filter((entry) => entry.source === "connection" && entry.recordKind === "customer");
+    expect(decided.map((entry) => [entry.action, entry.externalId, entry.actorEmail])).toEqual(
+      expect.arrayContaining([
+        ["created", "1101", "jess@glimmers.nz"],
+        ["linked", "1102", "jess@glimmers.nz"],
+      ]),
+    );
+    const audit = await w.as(async (tx) => (await tx.query<{ event_type: string }>("select event_type from audit_events where event_type like 'sales_platform.customer_%' order by id")).rows);
+    expect(audit.map((row) => row.event_type)).toEqual(["sales_platform.customer_added_separately", "sales_platform.customer_linked"]);
+    expect((await w.as((tx) => listCustomerMatches(tx, connection.id))).total).toBe(0);
+    // Already sorted out: a second click changes nothing.
+    expect((await resolve(w, connection.id, { externalId: "1102", resolution: "different" })).status).toBe(404);
+
+    // Later syncs treat both as linked: no skips, no renames, and the store's email never replaces the contact's.
+    state.customers = [
+      { ...alexB, phone: "+64 21 555 0199", updatedAt: "2026-10-02T01:00:00Z" },
+      { ...alexNoEmail, email: "alex-new@example.test", updatedAt: "2026-10-02T02:00:00Z" },
+    ];
+    await w.as((tx) => tx.query("update sales_platform_connections set customers_synced_until = null where id = $1", [connection.id]));
+    const again = await syncConnection(w.record, connection.id);
+    expect(again).toMatchObject({ created: 0, skipped: 0, failed: 0 });
+    expect(await w.as((tx) => getContact(tx, separate.body.result!.contactId))).toMatchObject({ name: "Alex Example (Shopify)", phone: "+64 21 555 0199" });
+    expect(await w.as((tx) => getContact(tx, alexA.id))).toMatchObject({ email: "alex-a@example.test" });
+    expect((await log(w, connection.id)).find((entry) => entry.externalId === "1102" && entry.action === "kept")!.message).toContain("alex-a@example.test");
+    expect((await w.as((tx) => listCustomerMatches(tx, connection.id))).total).toBe(0);
+    expect(await contactsNamed(w, "Alex Example")).toHaveLength(1);
+  });
+
+  it("SPC37: linking a same-name customer keeps one contact to one store customer", async () => {
+    const w = await setup();
+    const alexA = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Alex Example", email: "alex-a@example.test", isCustomer: true }))).contact;
+    const linkedAlex: FakeCustomer = { id: 1100, first: "Alex", last: "Example", email: "ALEX-A@example.test", phone: null, updatedAt: "2026-09-30T03:00:00Z" };
+    shop({ customers: [linkedAlex, alexB, alexNoEmail] });
+    const connection = await connect(w, { syncProducts: false });
+    expect(await syncConnection(w.record, connection.id)).toMatchObject({ linked: 1, skipped: 2 });
+
+    const { matches } = await w.as((tx) => listCustomerMatches(tx, connection.id));
+    expect(matches.map((match) => match.contactLinkedTo)).toEqual(["1100", "1100"]);
+    const refused = await resolve(w, connection.id, { externalId: "1101", resolution: "same", contactId: alexA.id });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toContain("already linked to Shopify customer 1100");
+    // The unique link is the last word, even if the check above were skipped.
+    await expect(
+      w.as((tx) =>
+        tx.query("insert into sales_platform_mappings (connection_id, record_kind, external_id, contact_id) values ($1, 'customer', '1101', $2)", [connection.id, alexA.id]),
+      ),
+    ).rejects.toThrow(/duplicate key/);
+
+    // A typed name that's taken is refused; the suggestions skip taken names.
+    expect((await resolve(w, connection.id, { externalId: "1101", resolution: "different", name: "alex example" })).status).toBe(400);
+    expect((await resolve(w, connection.id, { externalId: "1101", resolution: "different" })).body.result!.contactName).toBe("Alex Example (Shopify)");
+    const noEmail = await resolve(w, connection.id, { externalId: "1102", resolution: "different" });
+    expect(noEmail.body.result!.contactName).toBe("Alex Example (Shopify 1102)");
+    expect(await w.as((tx) => getContact(tx, noEmail.body.result!.contactId))).toMatchObject({ email: null, isCustomer: true });
+    expect(await w.as((tx) => getContact(tx, alexA.id))).toMatchObject({ email: "alex-a@example.test" });
+
+    // Disconnecting forgets anything still to check.
+    await w.as((tx) => tx.query("insert into sales_platform_customer_matches (connection_id, external_id, name, contact_id) values ($1, '1199', 'Alex Example', $2)", [connection.id, alexA.id]));
+    await disconnectStore(w.record, w.actor, connection.id);
+    expect(await w.as(async (tx) => (await tx.query("select 1 from sales_platform_customer_matches where connection_id = $1", [connection.id])).rowCount)).toBe(0);
   });
 });

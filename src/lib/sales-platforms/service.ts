@@ -27,6 +27,7 @@ import {
   type SalesPlatformConnector,
 } from "@/lib/sales-platforms/connector";
 import { type StockView, saveExtras, saveOrderExtras, stockDifferences } from "@/lib/sales-platforms/extras-store";
+import { forgetCustomerMatch, rememberCustomerMatch, sameNameMessage } from "@/lib/sales-platforms/customer-matches";
 import { writeLog } from "@/lib/sales-platforms/log";
 import type { CoverageFacts } from "@/lib/sales-platforms/coverage-status";
 import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
@@ -909,6 +910,7 @@ export async function disconnectStore(organisation: OrganisationRecord, actor: A
     const current = await readConnection(tx, row.id, { lock: true });
     assertConnected(current);
     const removed = await tx.query("delete from sales_platform_mappings where connection_id = $1", [row.id]);
+    await tx.query("delete from sales_platform_customer_matches where connection_id = $1", [row.id]);
     // Shopify's stock was a picture of a store that's no longer connected (decision 1238); the rest is history and stays.
     await tx.query("delete from sales_platform_stock_levels where connection_id = $1", [row.id]);
     await tx.query("delete from sales_platform_locations where connection_id = $1", [row.id]);
@@ -993,6 +995,7 @@ async function saveMapping(
             updated_at = now()`,
     [connectionId, kind, externalId, target.contactId ?? null, target.itemId ?? null, JSON.stringify(values), updatedAt],
   );
+  if (kind === "customer") await forgetCustomerMatch(tx, connectionId, externalId);
 }
 
 /** Runs one record's changes in a savepoint, so one bad record is logged and the rest carry on. */
@@ -1146,6 +1149,8 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
     await merge(contact, mapping.synced_values);
     return;
   }
+  // Worked out afresh from what the store says now; remembered again below if the name still clashes.
+  await forgetCustomerMatch(tx, connectionId, customer.externalId);
 
   if (customer.email) {
     const matches = await tx.query<ContactNow>(
@@ -1204,17 +1209,21 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
     await skip(tx, context, "customer", customer.externalId, `${platform} customer ${customer.externalId} has no name, so no contact was added.`);
     return;
   }
-  const clash = await tx.query<{ name: string }>("select name from contacts where not is_archived and lower(name) = lower($1) limit 1", [customer.name]);
+  const clash = await tx.query<{ id: string; name: string }>("select id::text as id, name from contacts where not is_archived and lower(name) = lower($1) limit 1", [
+    customer.name,
+  ]);
   if (clash.rows[0]) {
-    await skip(
-      tx,
-      context,
-      "customer",
-      customer.externalId,
-      customer.email
-        ? `${platform} customer ${customer.name} (${customer.email}) wasn't added: there's already a contact called ${clash.rows[0].name} with a different email. Give the contact the same email to link them.`
-        : `${platform} customer ${customer.name} wasn't added: there's already a contact called ${clash.rows[0].name}, and ${platform} has no email to tell whether they're the same.`,
-    );
+    // Two people can share a name: nothing is linked or changed until an admin checks who they are (#539, decision 1269).
+    await rememberCustomerMatch(tx, connectionId, {
+      externalId: customer.externalId,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      country,
+      updatedAt: customer.updatedAt,
+      contactId: clash.rows[0].id,
+    });
+    await skip(tx, context, "customer", customer.externalId, sameNameMessage(platform, { name: customer.name, email: customer.email }, clash.rows[0].name));
     return;
   }
   const { contact } = await createContact(tx, {

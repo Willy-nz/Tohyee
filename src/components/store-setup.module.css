@@ -461,6 +461,41 @@
   }
 }
 
+/* Customers to check (#539): the customer and the same-name contact, then the two choices. */
+.match {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.match:last-child {
+  border-bottom: 0;
+}
+
+.matchForm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 12px;
+}
+
+.matchForm > :first-child {
+  flex: 1 1 16em;
+}
+
+@media (max-width: 560px) {
+  .match {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .match > :nth-child(2) {
+    justify-content: start !important;
+  }
+}
+
 .logFilters {
   display: flex;
   flex-wrap: wrap;
