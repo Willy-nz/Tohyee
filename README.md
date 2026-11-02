@@ -44,8 +44,8 @@ accepted.
 > [licence](LICENSE)).
 
 **Release availability, checked 31 October 2026:** the latest release is
-[v0.22.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.22.0)
-([notes](docs/releases/0.22.0.md)). Check the
+[v0.23.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.23.0)
+([notes](docs/releases/0.23.0.md)). Check the
 [latest release](https://github.com/Willy-nz/Tohyee/releases/latest) for what
 each download includes, or [run from source](#run-it-locally).
 
@@ -125,6 +125,7 @@ real phone or in a paddock yet.
 | Release | What's new |
 | --- | --- |
 | **Next** (on `main`) | Effluent management; aerial photos on farm maps with your own LINZ key. |
+| [**0.23.0**](docs/releases/0.23.0.md) | Farm security cameras (Reolink) with a cloud post box for 4G cameras, short help behind (i) buttons, and pictures across the whole app. |
 | [**0.22.0**](docs/releases/0.22.0.md) | Meta in Analytics (Instagram, Facebook Page and ads) with a Social media report, plus everything prepared as 0.21.0: Google Search Console and pictures to find your way. |
 | [**0.21.0**](docs/releases/0.21.0.md) | Google Search Console in Analytics with a Website search report, and pictures to find your way: illustrated app switcher, Farm menu and tabs, and clearer Sales and Purchases pages. |
 | [**0.20.0**](docs/releases/0.20.0.md) | Tohyee for Android (APK) with locked-screen tractor recording, reminders and the phone's camera; paddock photos with AI cover estimates you accept, and a check against measured readings. |
