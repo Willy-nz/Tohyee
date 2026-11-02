@@ -104,6 +104,35 @@ jobs:
       - name: Tests
         run: npm test
 
+  postbox:
+    name: Camera post box image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Check the install script
+        run: |
+          bash -n postbox/install.sh
+          shellcheck postbox/install.sh
+
+      - name: Build the post box image (not pushed)
+        run: docker build --file postbox/Dockerfile --tag tohyee-postbox:ci .
+
+      - name: Start it, check it answers and makes a pairing code
+        run: |
+          docker run -d --name ci-postbox -p 8443:8443 -e POSTBOX_PUBLIC_ADDRESS=127.0.0.1 tohyee-postbox:ci
+          for i in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' ci-postbox)" = healthy ]; then break; fi
+            sleep 2
+          done
+          curl -sfk https://127.0.0.1:8443/v1/health
+          echo
+          docker exec ci-postbox node /app/postbox.cjs pairing-code | grep -q '^TPB1-'
+          # Without the token, nothing but health answers.
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:8443/v1/files)" = 401
+          docker logs ci-postbox
+
   docker:
     name: Docker image and Windows installer
     runs-on: ubuntu-latest

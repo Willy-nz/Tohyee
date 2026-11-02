@@ -11363,3 +11363,72 @@ yet reviewed by Jess**.
       (one quiet for four days), made-up photos drawn by Tohyee, a
       three-second made-up clip and one kept event, taken in through the
       upload code; it makes no upload logins and takes no uploads.
+
+### The camera post box (#508 follow-up; decisions 1226-1233)
+
+Jess (2 November 2026) chose a "cloud post box" for 4G cameras, which
+can't reach a home server: she rents a small online server, cameras upload
+to it by FTPS, and Tohyee at home reaches out every minute over HTTPS,
+downloads new files, and the post box deletes them once Tohyee confirms.
+"Make it explained from Tohyee's side what you need to do and why and make
+it work with Tohyee." Xero and NetSuite have nothing like this; the
+details below are **not yet reviewed by Jess**, and nothing was tried on a
+real rented server or camera (docs/FARM-SECURITY.md says what was tested).
+
+1226. **Post box first, direct uploads stay.** Farm › Security › Post box
+      (owners and admins) sets one up in five steps, each with why. Direct
+      uploads (TOHYEE_CAMERA_FTP_PORT) stay for servers with a public
+      address. One post box per organisation; when one is paired, the
+      Cameras screen gives its address for the Reolink app.
+1227. **The post box program is in this repository and reuses the
+      receiver.** `postbox/main.ts` bundles (esbuild, no runtime
+      dependencies) Tohyee's own upload-only FTPS receiver, with its type,
+      size, lockout and connection checks, and a small HTTPS API. It ships
+      as `ghcr.io/willy-nz/tohyee-postbox` (amd64 and arm64) from the
+      release workflow, with a one-command install script for Ubuntu that
+      uses Ubuntu's own Docker packages and shows a pairing code. The
+      install command Tohyee shows is pinned to Tohyee's own version.
+1228. **Pairing with a one-time code; only a hash of the token on the
+      box.** The code (`TPB1-…`) holds the address, port, certificate
+      fingerprint and a one-time secret that works for 24 hours. Tohyee
+      makes a 256-bit token, sends the post box its SHA-256 with the
+      secret, and keeps the token encrypted with TOHYEE_SECRET_KEY like
+      other secrets. A new code (a command on the post box) replaces the
+      pairing. Disconnecting tells the post box to forget Tohyee and its
+      logins when it can be reached.
+1229. **A pinned certificate, so no domain is needed.** The post box makes
+      its own certificate (RSA 2048, for older camera TLS) and Tohyee pins
+      its SHA-256, checked on every connection before anything is sent. A
+      different certificate stops collection with a red message until it's
+      paired again; it's never accepted quietly. With a domain and a proper
+      certificate, the code says so and Tohyee checks it the normal way
+      (so renewals work). That option isn't tried.
+1230. **Camera logins come only from Tohyee.** The post box has no user
+      list of its own. Tohyee pushes every active camera's user name,
+      scrypt hash and camera number whenever the post box's set differs
+      (compared by a hash of the set each minute), so adding, replacing,
+      removing a login or archiving a camera reaches it within a minute.
+1231. **Delete only after Tohyee has it.** Each minute Tohyee lists
+      waiting files, downloads one, checks size, SHA-256 and type, ingests
+      it as a direct upload would be (one event per camera and SHA-256),
+      then confirms with the SHA-256; only then is it deleted. A stop
+      between ingest and confirm means a re-download, "already have it",
+      and a confirm: no loss, no double event. The time Tohyee "got" it is
+      when the post box got it (never later than now). A file that fails
+      three times stays on the post box and is reported. A file from a
+      camera archived since is dropped, as a direct upload would be.
+1232. **Files are sealed to Tohyee's key on arrival.** X25519 with a new
+      key per file, HKDF-SHA256 and AES-256-GCM; Tohyee's private key is
+      kept encrypted in the organisation's database and kept across
+      re-pairing so waiting files still open. A stolen post box can't
+      open waiting files. Not sealed: user name, file name, times, size
+      and SHA-256; and the plain file is on disk for a moment while it's
+      checked.
+1233. **Limits, permissions and what's shown.** The post box rate limits
+      each address (600 requests a minute), locks out ten wrong tokens or
+      secrets in 15 minutes, reads JSON up to 1 MB, holds at most 500
+      logins, refuses uploads under 1 GB free and deletes files not
+      collected in 30 days. Only owners and admins see or change it;
+      pairing and unpairing are audited. The status (files waiting, disk,
+      last collected, errors) is only what the post box said when Tohyee
+      called; nothing is typed in.
