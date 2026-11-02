@@ -1595,6 +1595,18 @@ that something happened.
   and money Shopify holds back moves to a reserve bank account until it's
   released. Chargeback holds and anything Shopify doesn't explain are
   still refused. No summary mode (Jess): each order keeps its invoice.
+- **Shopify's read-only extras** (#530, SPD1-SPD11, decisions 1237-1245,
+  tenant migration 0214): stock levels by location (with a Shopify vs
+  Tohyee difference view on Settings › Sales platforms; Tohyee's stock is
+  never changed), shop stats from ShopifyQL (logged, not failed, while
+  Shopify hasn't approved shop reports), discounts and the discounts used
+  on each order, gift cards (last 4 characters only, never the code) and
+  their transactions, and shipments and shipping charged on orders. Each
+  part is on when the store gave its scopes; the page lists every scope in
+  one line to copy. Nothing is posted. Analytics has a **Shopify** source
+  (`shopify_*` tables) copied from Tohyee's own data, never from Shopify.
+  Not tried against a real store; `read_shipping` isn't asked for (only
+  carrier services need it).
 - **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
