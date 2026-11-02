@@ -16,6 +16,9 @@ import { type OrganisationRecord, getOrganisation, parseOrganisationId } from "@
 import {
   type AccessToken,
   type ConnectorContext,
+  type ExtrasRequest,
+  type ExtrasResult,
+  type OrdersRequest,
   type OrdersResult,
   type PayoutsResult,
   type PlatformCustomer,
@@ -23,7 +26,9 @@ import {
   PlatformError,
   type SalesPlatformConnector,
 } from "@/lib/sales-platforms/connector";
+import { type StockView, saveExtras, saveOrderExtras, stockDifferences } from "@/lib/sales-platforms/extras-store";
 import { writeLog } from "@/lib/sales-platforms/log";
+import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
 import { startOfLocalDate } from "@/lib/sales-platforms/orders";
 import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
@@ -105,6 +110,8 @@ type ConnectionRow = {
   granted_scopes: string[];
   orders_synced_until: string | null;
   payouts_synced_until: string | null;
+  extras_synced_at: string | null;
+  stats_synced_at: string | null;
   clearing_account_code: string | null;
   payout_account_code: string | null;
   fees_account_code: string | null;
@@ -127,7 +134,7 @@ const COLUMNS =
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_error, failures, connected_by_email, " +
   "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
   "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, untaxed_tax_code_id, granted_scopes, " +
-  "orders_synced_until, payouts_synced_until, " +
+  "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, " +
   ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id"].map(accountCode).join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
   ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
@@ -822,6 +829,9 @@ export async function disconnectStore(organisation: OrganisationRecord, actor: A
     const current = await readConnection(tx, row.id, { lock: true });
     assertConnected(current);
     const removed = await tx.query("delete from sales_platform_mappings where connection_id = $1", [row.id]);
+    // Shopify's stock was a picture of a store that's no longer connected (decision 1238); the rest is history and stays.
+    await tx.query("delete from sales_platform_stock_levels where connection_id = $1", [row.id]);
+    await tx.query("delete from sales_platform_locations where connection_id = $1", [row.id]);
     const updated = await tx.query<ConnectionRow>(
       `update sales_platform_connections
           set status = 'disconnected', credentials_ciphertext = null, access_token_ciphertext = null, access_token_expires_at = null,
@@ -1345,6 +1355,69 @@ const readsPayouts = (row: ConnectionRow) => connectorFor(row.platform).hasPayou
 
 const NO_PAYOUT_SCOPES = `Payouts aren't brought in: the app hasn't been given ${PAYOUT_SCOPES.join(" and ")}. Add them to the app's access scopes and test the connection, or record payouts by hand.`;
 
+/** Stock, discounts and gift cards are read at most this often by the catch-up sync ("Sync now" reads them whenever). */
+const EXTRAS_EVERY_MS = 60 * 60 * 1000;
+/** Shop stats at most this often (ShopifyQL); each read asks for the last 30 days, the first for 90. */
+const STATS_EVERY_MS = 6 * 60 * 60 * 1000;
+export const STATS_FIRST_DAYS = 90;
+export const STATS_DAYS = 30;
+const EXTRA_PARTS: ShopifyPartKey[] = ["stock", "stats", "discounts", "giftCards"];
+
+const due = (last: string | null, every: number, now: Date, force: boolean) => force || last === null || now.getTime() - Date.parse(last) >= every;
+
+/** The order extras to ask for with each order, from the scopes the store gave (decisions 1240-1243). */
+function orderParts(row: ConnectionRow): NonNullable<OrdersRequest["parts"]> {
+  if (!connectorFor(row.platform).fetchExtras) return { discounts: false, fulfilments: false, fulfilmentOrders: false };
+  return {
+    discounts: partOn(row.granted_scopes, "discounts"),
+    fulfilments: partOn(row.granted_scopes, "fulfilments"),
+    fulfilmentOrders: partOn(row.granted_scopes, "fulfilments") && row.granted_scopes.includes("read_merchant_managed_fulfillment_orders"),
+  };
+}
+
+type ExtrasRun = { result: ExtrasResult; extrasRead: boolean; statsRead: boolean };
+
+/**
+ * The read-only extras (decisions 1237-1245), each part asked for on its
+ * own so one that fails (or that Shopify won't answer yet) is logged and
+ * the rest, and the sync, carry on. Network; nothing open.
+ */
+async function fetchExtras(
+  connector: SalesPlatformConnector,
+  context: ConnectorContext,
+  token: AccessToken,
+  row: ConnectionRow,
+  now: Date,
+  force: boolean,
+  hasStats: boolean,
+): Promise<ExtrasRun | null> {
+  if (!connector.fetchExtras) return null;
+  const scopes = row.granted_scopes;
+  const extrasDue = due(row.extras_synced_at, EXTRAS_EVERY_MS, now, force);
+  const statsDue = partOn(scopes, "stats") && due(row.stats_synced_at, STATS_EVERY_MS, now, force);
+  const result: ExtrasResult = { locations: null, stock: null, stockComplete: true, stats: null, discounts: null, giftCards: null, notes: [] };
+  const none: ExtrasRequest = { stock: false, statsDays: null, discounts: false, giftCards: false };
+  const asks: Array<[string, ExtrasRequest]> = [];
+  if (extrasDue && partOn(scopes, "stock")) asks.push(["stock levels", { ...none, stock: true }]);
+  if (statsDue) asks.push(["shop stats", { ...none, statsDays: hasStats ? STATS_DAYS : STATS_FIRST_DAYS }]);
+  if (extrasDue && partOn(scopes, "discounts")) asks.push(["discounts", { ...none, discounts: true }]);
+  if (extrasDue && partOn(scopes, "giftCards")) asks.push(["gift cards", { ...none, giftCards: true }]);
+  for (const [what, request] of asks) {
+    try {
+      const part = await connector.fetchExtras(context, token, request);
+      result.notes.push(...part.notes);
+      if (request.stock) Object.assign(result, { locations: part.locations, stock: part.stock, stockComplete: part.stockComplete });
+      if (request.statsDays !== null) result.stats = part.stats;
+      if (request.discounts) result.discounts = part.discounts;
+      if (request.giftCards) result.giftCards = part.giftCards;
+    } catch (error) {
+      // A store that refuses the credentials fails the whole sync, as before.
+      if (error instanceof PlatformError && error.refused && !(error as { accessDenied?: boolean }).accessDenied) throw error;
+      result.notes.push(`Couldn't bring in ${what} this time: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1000));
+    }
+  }
+  return { result, extrasRead: extrasDue, statsRead: statsDue };
+}
 /**
  * Copies what changed in the store since the last sync and, with posting
  * on, posts orders, refunds and payouts (SPC11-SPC21). Reads the
@@ -1358,16 +1431,20 @@ export async function syncConnection(
   now: Date = new Date(),
 ): Promise<SyncResult> {
   requireSecrets();
-  const { row, retryIds, postedPayouts } = await withOrganisationTransaction(organisation, actor, async (tx) => {
+  const { row, retryIds, postedPayouts, hasStats } = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const found = await readConnection(tx, connectionIdInput);
     assertConnected(found);
+    const stats = await tx.query("select 1 from sales_platform_shop_stats where connection_id = $1 limit 1", [found.id]);
     return {
       row: found,
+      hasStats: (stats.rowCount ?? 0) > 0,
       retryIds: posts(found) ? await ordersToRetry(tx, found.id) : [],
       postedPayouts: posts(found) && readsPayouts(found) ? await postedPayoutIds(tx, found.platform, found.store_domain) : new Set<string>(),
     };
   });
   const connector = connectorFor(row.platform);
+  // "Sync now" reads the extras whatever their last time; the 15-minute sync keeps to their own times.
+  const force = actor.email !== SALES_PLATFORM_ACTOR.email;
   try {
     const context = contextFor(row, now);
     const { token } = await connector.accessToken(context);
@@ -1381,13 +1458,14 @@ export async function syncConnection(
     let payouts: PayoutsResult | null = null;
     if (posts(row)) {
       const startInstant = startOfLocalDate(row.start_date!);
-      orders = await connector.fetchOrders(context, token, { updatedSince: iso(row.orders_synced_until), processedFrom: startInstant, retryIds });
+      orders = await connector.fetchOrders(context, token, { updatedSince: iso(row.orders_synced_until), processedFrom: startInstant, retryIds, parts: orderParts(row) });
       if (readsPayouts(row)) {
         const cursor = iso(row.payouts_synced_until);
         const issuedFrom = cursor && Date.parse(cursor) > Date.parse(startInstant) ? cursor : startInstant;
         payouts = await connector.fetchPayouts(context, token, { issuedFrom, alreadyPosted: (id) => postedPayouts.has(id) });
       }
     }
+    const extras = await fetchExtras(connector, context, token, row, now, force, hasStats);
     return await withOrganisationTransaction(organisation, actor, async (tx) => {
       const current = await readConnection(tx, row.id, { lock: true });
       assertConnected(current);
@@ -1421,6 +1499,25 @@ export async function syncConnection(
         } else if (connectorFor(current.platform).hasPayouts) {
           await writeNote(tx, row.id, "sync", NO_PAYOUT_SCOPES);
         }
+      }
+      // The read-only extras (decisions 1237-1245): saved as Shopify said them, never posted.
+      if (orders) {
+        for (const order of orders.orders) await saveOrderExtras(tx, current.id, order);
+      }
+      if (extras) {
+        await saveExtras(tx, current.id, extras.result);
+        for (const note of extras.result.notes) await writeNote(tx, row.id, "sync", note);
+        for (const part of [...EXTRA_PARTS, "fulfilments" as const]) {
+          if (!partOn(current.granted_scopes, part)) await writeNote(tx, row.id, "sync", partOffMessage(part, current.granted_scopes));
+        }
+        await tx.query(
+          `update sales_platform_connections
+              set extras_synced_at = case when $2 then $4::timestamptz else extras_synced_at end,
+                  stats_synced_at = case when $3 then $4::timestamptz else stats_synced_at end
+            where id = $1`,
+          // A refusal counts as a read too, so Shopify is asked again in 6 hours, not every 15 minutes.
+          [row.id, extras.extrasRead, extras.statsRead, now.toISOString()],
+        );
       }
       const [tokenCiphertext, tokenExpiresAt] = tokenColumns(token);
       await tx.query(
@@ -1662,7 +1759,7 @@ async function receiveOrderWebhook(
   // 2. The order, with nothing open.
   const context = contextFor(row, new Date());
   const { token, renewed } = await connector.accessToken(context);
-  const order = await connector.fetchOrder(context, token, orderId);
+  const order = await connector.fetchOrder(context, token, orderId, orderParts(row));
 
   // 3. Post it, once.
   return withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, async (tx) => {
@@ -1682,6 +1779,17 @@ async function receiveOrderWebhook(
     if (!posting) return POSTING_OFF;
     const apply: ApplyContext = { connection: current, source: "webhook", counts: emptyCounts() };
     await postOrder(tx, postingContext(tx, apply, posting), order);
+    await saveOrderExtras(tx, current.id, order);
     return { status: 200, message: "Done." };
   });
+}
+
+/**
+ * Shopify's stock beside Tohyee's for a connection (SPD2, decision 1238).
+ * Read only: it changes neither. Everyone who can see the connection can
+ * read it.
+ */
+export async function connectionStock(tx: OrgTx, connectionIdInput: unknown): Promise<StockView & { stockPartOn: boolean }> {
+  const row = await readConnection(tx, connectionIdInput);
+  return { ...(await stockDifferences(tx, row.id)), stockPartOn: row.platform === "shopify" && partOn(row.granted_scopes, "stock") };
 }

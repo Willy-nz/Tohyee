@@ -24,6 +24,8 @@ import {
   type WebhookRecords,
 } from "@/lib/sales-platforms/connector";
 import { platformFetch } from "@/lib/sales-platforms/http";
+import { FULFILMENT_ORDERS_NOT_APPROVED, SHOPIFY_ALL_SCOPES } from "@/lib/sales-platforms/parts";
+import { type OrderParts, fetchShopifyExtras, isAccessDenied, orderExtraFields, shopifyOrderExtrasFromGraphql } from "@/lib/sales-platforms/shopify-data";
 import { SHOPIFY_AUTH_METHODS } from "@/lib/sales-platforms/types";
 import { requireOneOf, requireString } from "@/lib/validation";
 
@@ -58,6 +60,9 @@ import { requireOneOf, requireString } from "@/lib/validation";
  * - Customers' names, emails, phones and addresses are protected customer
  *   data: an app without access gets them redacted, with an error, in an
  *   otherwise good answer (https://shopify.dev/docs/apps/launch/protected-customer-data).
+ * - Read-only extras (decisions 1237-1245): stock levels, shop stats,
+ *   discounts, gift cards, and discounts, shipments and shipping on orders;
+ *   see shopify-data.ts and parts.ts for what each needs.
  */
 export const SHOPIFY_API_VERSION = "2026-10";
 export const SHOPIFY_SCOPES = ["read_customers", "read_products"] as const;
@@ -500,8 +505,10 @@ async function graphql(storeDomain: string, token: AccessToken, query: string, v
     }
     if (Array.isArray(body.errors) && body.errors.length > 0) {
       const messages = body.errors.map((e) => text(record(e).message) ?? "unknown error").join("; ");
-      if (/not approved to access/i.test(messages)) throw new PlatformError(200, protectedDataMessage(storeDomain, messages));
-      throw new PlatformError(200, `${storeDomain} said: ${messages}`);
+      // Shopify's ACCESS_DENIED (a scope or an approval it hasn't given): the extras log it and carry on.
+      const accessDenied = body.errors.some((e) => record(record(e).extensions).code === "ACCESS_DENIED") || /access denied/i.test(messages);
+      if (/not approved to access/i.test(messages)) throw Object.assign(new PlatformError(200, protectedDataMessage(storeDomain, messages)), { accessDenied: true });
+      throw Object.assign(new PlatformError(200, `${storeDomain} said: ${messages}`), { accessDenied });
     }
     return record(body.data);
   }
@@ -561,7 +568,16 @@ const MONEY = "shopMoney { amount currencyCode }";
 const TAX_LINES = `taxLines { title rate priceSet { ${MONEY} } }`;
 const TRANSACTION_FIELDS = `id kind status gateway test processedAt amountSet { ${MONEY} }`;
 
-const ORDER_QUERY = `query TohyeeOrder($id: ID!) {
+const NO_PARTS: OrderParts = { discounts: false, fulfilments: false, fulfilmentOrders: false };
+
+/**
+ * The order query, with the read-only extras whose parts are on (decisions
+ * 1240-1243). With them all on it asks for about 870 points (discounts 10 x
+ * 2, fulfilments 10 x 2, fulfilment orders 5), still under Shopify's 1,000.
+ */
+function orderQuery(parts: OrderParts): string {
+  const extra = orderExtraFields(parts);
+  return `query TohyeeOrder($id: ID!) {
   order(id: $id) {
     id name createdAt processedAt updatedAt cancelledAt test taxesIncluded currencyCode presentmentCurrencyCode displayFinancialStatus
     totalPriceSet { ${MONEY} }
@@ -572,19 +588,21 @@ const ORDER_QUERY = `query TohyeeOrder($id: ID!) {
         id name sku quantity isGiftCard
         variant { id }
         originalTotalSet { ${MONEY} }
-        discountAllocations { allocatedAmountSet { ${MONEY} } }
+        discountAllocations { allocatedAmountSet { ${MONEY} } ${extra.allocation} }
         ${TAX_LINES}
       }
       pageInfo { hasNextPage }
     }
     shippingLines(first: ${SHIPPING_LINES_PER_ORDER}, includeRemovals: true) {
-      nodes { id title isRemoved discountedPriceSet { ${MONEY} } ${TAX_LINES} }
+      nodes { id title isRemoved discountedPriceSet { ${MONEY} } ${TAX_LINES} ${extra.shippingAllocations} }
       pageInfo { hasNextPage }
     }
     transactions(first: ${TRANSACTIONS_PER_ORDER}) { ${TRANSACTION_FIELDS} }
     refunds(first: ${REFUNDS_PER_ORDER}) { id }
+    ${extra.order}
   }
 }`;
+}
 
 const REFUND_QUERY = `query TohyeeRefund($id: ID!) {
   refund(id: $id) {
@@ -648,9 +666,23 @@ function changedSince(since: string | null): string | null {
   return since ? `updated_at:>='${searchTime(since)}'` : null;
 }
 
-/** An order by its ID with each of its refunds (asked for one at a time, to keep each query's cost down), or null if Shopify doesn't have it. */
-async function fetchOneOrder(storeDomain: string, token: AccessToken, orderId: string): Promise<PlatformOrder | null> {
-  const data = await graphql(storeDomain, token, ORDER_QUERY, { id: `gid://shopify/Order/${orderId}` });
+/**
+ * An order by its ID with each of its refunds (asked for one at a time, to
+ * keep each query's cost down), or null if Shopify doesn't have it. When
+ * Shopify refuses fulfilment orders (an approval-required scope), the order
+ * is asked for again without them, `parts` is changed so later orders don't
+ * ask, and the note says so (decision 1243).
+ */
+async function fetchOneOrder(storeDomain: string, token: AccessToken, orderId: string, parts: OrderParts = NO_PARTS, notes?: string[]): Promise<PlatformOrder | null> {
+  let data: Record<string, unknown>;
+  try {
+    data = await graphql(storeDomain, token, orderQuery(parts), { id: `gid://shopify/Order/${orderId}` });
+  } catch (error) {
+    if (!parts.fulfilmentOrders || !isAccessDenied(error)) throw error;
+    parts.fulfilmentOrders = false;
+    notes?.push(FULFILMENT_ORDERS_NOT_APPROVED);
+    data = await graphql(storeDomain, token, orderQuery(parts), { id: `gid://shopify/Order/${orderId}` });
+  }
   if (!data.order || typeof data.order !== "object") return null;
   const order = record(data.order);
   const refunds: unknown[] = [];
@@ -658,7 +690,9 @@ async function fetchOneOrder(storeDomain: string, token: AccessToken, orderId: s
     const found = await graphql(storeDomain, token, REFUND_QUERY, { id: summary.id });
     refunds.push(found.refund && typeof found.refund === "object" ? found.refund : summary);
   }
-  return shopifyOrderFromGraphql({ ...order, refunds });
+  const parsed = shopifyOrderFromGraphql({ ...order, refunds });
+  if (parts.discounts || parts.fulfilments) parsed.extras = shopifyOrderExtrasFromGraphql(order, parts);
+  return parsed;
 }
 
 /**
@@ -779,7 +813,7 @@ export const shopifyConnector: SalesPlatformConnector = {
     const writes = scopes.filter((scope) => scope.startsWith("write_"));
     if (writes.length > 0) {
       throw new ValidationError(
-        `This app can change the store (${writes.join(", ")}). Tohyee only reads, so give the app only read access: ${[...SHOPIFY_SCOPES, ...SHOPIFY_ORDER_SCOPES, ...SHOPIFY_PAYOUT_SCOPES].join(", ")}.`,
+        `This app can change the store (${writes.join(", ")}). Tohyee only reads, so give the app only read access: ${SHOPIFY_ALL_SCOPES.join(", ")}.`,
       );
     }
     const missing = SHOPIFY_SCOPES.filter((scope) => !scopes.includes(scope));
@@ -836,15 +870,20 @@ export const shopifyConnector: SalesPlatformConnector = {
       after = text(info.endCursor);
       if (page === MAX_ORDER_PAGES - 1) result.notes.push(`More than ${ORDERS_PER_PAGE * MAX_ORDER_PAGES} orders changed; the rest come with the next sync.`);
     }
+    const parts: OrderParts = { ...NO_PARTS, ...request.parts };
     for (const id of [...new Set([...ids, ...request.retryIds])]) {
-      const order = await fetchOneOrder(context.storeDomain, token, id);
+      const order = await fetchOneOrder(context.storeDomain, token, id, parts, result.notes);
       if (order) result.orders.push(order);
     }
     return result;
   },
 
-  fetchOrder(context, token, orderId) {
-    return fetchOneOrder(context.storeDomain, token, orderId);
+  fetchOrder(context, token, orderId, parts) {
+    return fetchOneOrder(context.storeDomain, token, orderId, { ...NO_PARTS, ...parts });
+  },
+
+  fetchExtras(context, token, request) {
+    return fetchShopifyExtras((query, variables) => graphql(context.storeDomain, token, query, variables), request);
   },
 
   async fetchPayouts(context, token, request: PayoutsRequest): Promise<PayoutsResult> {

@@ -27,6 +27,7 @@ import {
 import { integrationsSummary } from "@/lib/sales-platforms/summary";
 import type { TaxCode } from "@/lib/tax/codes";
 import { useConfirm } from "@/components/confirm-dialog";
+import { ShopifyPartsList, ShopifyScopesCard, StockSection } from "@/components/sales-platform-extras";
 
 /**
  * Settings › Sales platforms (examples SPC1-SPC10): connecting a Shopify
@@ -156,9 +157,9 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
         <strong>Before you start:</strong> create an app in your own Shopify account, then copy its client ID and secret here. Tohyee only reads your store.{" "}
         <InfoTip label="Creating the Shopify app">
         <InfoPara>Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access.</InfoPara>
-        <InfoPara>In the Shopify Dev Dashboard (dev.shopify.com), create an app, give it only the Admin API access scopes <code>read_customers</code> and{" "}
-        <code>read_products</code>, turn on access to protected customer data (name, email, phone and address), release it and install it on your store, then copy its client ID
-        and secret from the app&apos;s Settings.</InfoPara>
+        <InfoPara>In the Shopify Dev Dashboard (dev.shopify.com), create an app and give it the read-only access scopes in &quot;Shopify access scopes&quot; on this page
+        (at least <code>read_customers</code> and <code>read_products</code>). Turn on access to protected customer data (name, email, phone and address), release it and
+        install it on your store, then copy its client ID and secret from the app&apos;s Settings.</InfoPara>
         <InfoPara>If your store already has a custom app made in the store admin before 2026, you can use its Admin API access token and API secret key instead. Tohyee
         refuses access that can change your store: it only reads.</InfoPara>
         </InfoTip>
@@ -369,7 +370,9 @@ export function ConnectionCard({
             </label>
           </div>
         ) : null}
+        {connected && connection.platform === "shopify" ? <ShopifyPartsList grantedScopes={connection.grantedScopes} /> : null}
         {connected ? <PostingSettings organisationId={organisationId} connection={connection} isAdmin={isAdmin} busy={busy} run={run} path={path} /> : null}
+        {connected && connection.platform === "shopify" ? <StockSection organisationId={organisationId} connectionId={connection.id} /> : null}
         {connected && isAdmin ? (
           <div className={ui.actions}>
             <Button onClick={() => void sync()} disabled={busy}>
@@ -466,6 +469,7 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
       {current.map((connection) => (
         <ConnectionCard key={connection.id} organisationId={organisationId} connection={connection} isAdmin={isAdmin} onChanged={reload} />
       ))}
+      <ShopifyScopesCard />
       {isAdmin ? (
         <Card
           title={current.length === 0 ? "Connect a Shopify store" : "Connect another Shopify store"}
