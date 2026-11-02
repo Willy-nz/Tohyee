@@ -8,7 +8,8 @@ import styles from "./server-shell.module.css";
 import { ThemeSwitch } from "./theme";
 import { WorkspaceProvider, type WorkspaceUser } from "./workspace";
 
-const LINKS = [
+/** The server bar's links (exported for the menu picture test). */
+export const SERVER_LINKS = [
   { href: "/server/organisations", label: "Organisations" },
   { href: "/server/users", label: "Users" },
   { href: "/server/sign-ins", label: "Sign-ins" },
@@ -42,7 +43,7 @@ export function ServerShell({ user, warnings, children }: { user: WorkspaceUser;
             <span className={styles.serverTag}>Server</span>
           </div>
           <nav aria-label="Server settings" className={styles.nav}>
-            {LINKS.map((link) => {
+            {SERVER_LINKS.map((link) => {
               const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link key={link.href} href={link.href} className={`${styles.link} ${active ? styles.active : ""}`} aria-current={active ? "page" : undefined}>

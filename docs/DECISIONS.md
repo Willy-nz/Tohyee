@@ -11526,6 +11526,77 @@ SPD1-SPD11.
       in one comma-separated line to copy into the Dev Dashboard, what
       each part needs, and which parts each store has on.
 
+
+### AI access level and sales platform diagnostics (#531, #532 part 3; decisions 1246-1249)
+
+1246. **get_organisation says what the connection may do now.** It used to
+      say `access: "read-only"` for every key, which made a Full access
+      owner think they hadn't given access (#531). It now gives the level the
+      key or app connection works at now (`read`, `draft`, `post` or
+      `full`: its level capped by the person's role now, decision 346), its
+      label and meaning in the same words as the MCP server's instructions,
+      the level it was given, and a note when the role caps it. It describes
+      the connection, not the tool: get_organisation itself still only reads.
+      Enforcement is unchanged.
+1247. **Two Look only tools for sales platform diagnostics.**
+      get_sales_platform_status and list_sales_platform_log let an AI
+      answer "why didn't my products or orders come in?" from what Tohyee
+      already knows. Any key can use them, as any member (viewers too) can
+      see the connection and its log on screen. They only read, in a
+      read-only transaction: they don't call the store, sync, reconnect,
+      change settings or post. They're in their own file
+      (`src/lib/sales-platforms/diagnostics.ts`), using `listConnections` and
+      the stored log, mappings and documents.
+1248. **What the status shows.** Per store: customers and products on or
+      off; orders, refunds and payouts as off (posting off: "says nothing
+      about whether the store has sales"), setup needed (a setting or scope
+      missing) or on; posting's start date and missing settings, checked as
+      the settings screen checks them; Shopify scopes given against those
+      needed, as the store last said; counts of links made and documents
+      posted; records whose latest log line is a skip, failure or wait,
+      counted by a reason code (`missing_sku`, `invalid_sku`,
+      `missing_scope`, `not_paid_yet` and others, `other` otherwise) with
+      up to three examples; and the last sync, its age (behind after an hour
+      while active, as the sync runs every 15 minutes), last error and
+      failures. Reason codes come from Tohyee's own messages; the message is
+      always given too. No counts are made up for data not fetched.
+1249. **No secrets in answers.** Neither tool returns credentials, access
+      tokens, the webhook key or address, or who connected the store. Log
+      messages, the last error and the webhook note have web addresses cut
+      to their host and token-like text removed before they're returned.
+      The log reader pages 1-200 lines (default 50) with `beforeId` and
+      filters by connection, action, record kind, outcome (problem, done,
+      connection) and the store's record ID.
+
+
+### Menu pictures (decisions 1260-1262)
+
+1260. **Every page in a menu gets a picture of what it is.** Jess said the
+      Tax menu "looks dumb": all seven pages showed the calculator. The
+      calculator stays on the Tax menu itself. Its pages now show a return
+      with a tick (GST return), a magnifying glass over a list (GST audit
+      report), a tag with % (Tax codes), coins (Income tax), a flask (R&D
+      activities), a tagged receipt (Tagged R&D costs) and a report with a
+      flask (R&D claim report). The same fix runs through Sales, Purchases,
+      Banking, Payroll, Reports, Accounting, CRM More and Farm More. Nineteen
+      new original pictures, most used in several menus (coins, clock,
+      checklist, price tag, awaiting payment, credit note, receipt). No
+      brand marks. Sales and Purchases overview pages lose the calculator
+      on New invoice and New bill too.
+1261. **Three pages in one menu may not share a picture.** A unit test
+      fails when any dropdown, or any app's row of menus in the phone menu,
+      has three or more different pages with the same picture. Two may
+      share when they're the same kind of thing (Leave requests and Leave).
+      Links to the same page count once. Exceptions go in a small, commented
+      allowlist in the test; today only the server's three sign-in pages
+      share the key (decision 1234), and the server bar shows no pictures.
+1262. **A picture can depend on the page's query.** Reports are one page
+      chosen by `?report=`, so a route like `/operations/reports?report=bs`
+      matches that report only (not pages under it); anything else on the
+      page falls back to the report chart. Awaiting payment
+      (`?show=awaiting`) works the same way. Pictures stay decorative: they
+      don't change what anyone can open.
+
 ### Guided shop setup and what each part brought in (#532 parts 1-2 and Jess's 2 Nov 2026 request; decisions 1250-1259)
 
 Jess (2 November 2026), after her Shopify store brought in customers but no

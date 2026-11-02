@@ -2,7 +2,7 @@
 
 Actual ready-to-use vector assets for issue #509, following the user's request for simple illustrations instead of realistic AI imagery. The draft PR now integrates selected icons into the app launcher, Farm menu and navigation, and Sales/Purchases overviews. Nothing is deployed until the PR is merged and released.
 
-![All 37 illustrated icons](preview.svg)
+![All 56 illustrated icons](preview.svg)
 
 ## Files and use
 
@@ -98,8 +98,8 @@ Jess said the old Settings cog looked like a soft flower, and that a cog on Sale
 | Settings › Payroll access | Payroll |
 | Settings › Customer settings | CRM |
 | Settings › Salespeople | Team |
-| Settings › Approval rules | Purchases (it covers bills, purchase orders and expense claims) |
-| Settings › Kilometre rates | Maps |
+| Settings › Approval rules | Approval (was Purchases until decision 1260) |
+| Settings › Kilometre rates | Vehicle (was Maps until decision 1260) |
 | People and roles | Team |
 | CRM › Teams | Team |
 | CRM › Reassign records | Reassign |
@@ -112,3 +112,39 @@ Jess said the old Settings cog looked like a soft flower, and that a cog on Sale
 | Server › Sign-ins, Sign in with Google, Remote access | Key |
 
 No brand logos: the shop and card are generic drawings, not any platform's or card scheme's mark.
+
+## Every menu page its own picture (decisions 1260-1262)
+
+Jess said the Tax menu "looks dumb": all seven pages showed the calculator (2 November 2026). The rule now: **no menu shows the same picture on three or more different pages.** Two may share when they are the same kind of thing. `tests/unit/navigation-art.test.ts` checks every dropdown and each app's row of menus (the phone menu); exceptions go in its small `SHARED_ALLOWED` list with a reason.
+
+Nineteen new original icons (green border in the preview). Most are reused across menus, so prefer them over drawing new ones:
+
+| Icon | Used for |
+|---|---|
+| `tax-return` (form with a tick) | GST return |
+| `inspect` (magnifier over a list) | GST audit report, Trial balance, Account transactions |
+| `tax-code` (tag with %) | Tax codes |
+| `coins` | Income tax, IRD payments, payments for several invoices or bills, Overpayments, Cash flows, Cash flow forecast, Co-op shares |
+| `flask` | R&D activities, Soil tests |
+| `tagged-receipt` | Tagged R&D costs |
+| `rd-claim` (report with a flask) | R&D claim report |
+| `receipt` | Bills, Expense claims, New bill |
+| `awaiting` (document with a clock) | Awaiting payment (sales and purchases), Aged receivables, Aged payables |
+| `credit-note` (document with a minus) | Credit notes, Supplier credit notes |
+| `checklist` (clipboard) | Sales orders, Purchase orders, Chart of accounts |
+| `price` (price tag) | Quotes, Staff cost rates, Pay items, Livestock valuation |
+| `clock` | Clock-ins, Timesheets, Time report, CRM Follow-ups |
+| `leave` (umbrella) | Leave requests, Leave |
+| `currency` (two coins swapping) | Exchange rates, FX revaluation |
+| `scales` | Balance sheet, Changes in equity |
+| `approval` (stamp) | Purchases › Approvals, Settings › Approval rules |
+| `vehicle` | Fixed assets, Depreciation, Fixed asset register, Kilometre rates |
+| `apps` (four tiles) | Farm apps |
+
+Existing icons were reused where they fit: Bank rules use the funnel, Bills inbox the mail, Rosters and My shifts the calendar, Employees and Pay groups the team, My visits the map, Journal report and Consolidation the ledger book, CRM Sequences the pipeline, Farms and paddocks the map.
+
+Menus whose first page would mislead name their own picture with `art`: Tax keeps the calculator, CRM Sales shows the pipeline and CRM More the mail (so the CRM card isn't on four menus), Farm More keeps the farm.
+
+A route may name a query (`/operations/reports?report=bs`). It then matches that page and query only, not pages under it; other reports keep the chart.
+
+Checked on 2 November 2026: a test sheet of every new icon at 20, 24 and 40px on light and dark, and the changed dropdowns at 1280px and phone menus at 390px, light and dark, in a production build.

@@ -1,5 +1,5 @@
 import packageJson from "../../../package.json";
-import { AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeededFor } from "@/lib/ai/access-levels";
+import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeededFor } from "@/lib/ai/access-levels";
 import { findAiTool, toolsForLevel } from "@/lib/ai/catalogue";
 import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
 import { privateMailTools } from "@/lib/ai/private-mail-tools";
@@ -25,15 +25,6 @@ function fileContent(file: ToolFileAnswer["file"]): ToolContent {
 
 export { aiKeyVia } from "@/lib/ai/tokens";
 
-const LEVEL_WORDS = {
-  read: "You can look things up but not change anything.",
-  draft:
-    "You can look things up, add and edit contacts, and make and edit draft invoices, bills and journals (drafts post nothing). You can't approve, post, delete, void or archive anything.",
-  post:
-    "You can look things up, add and edit contacts, make and edit drafts, approve invoices and bills, post draft journals and record payments. You can't delete, void, archive, roll back or refund anything.",
-  full:
-    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines, make and edit bank rules, make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills, apply credit, record refunds, approve and pay expense claims, add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. You can't delete, void, archive, pause, roll back or dispose of anything, exclude lines or switch anything off, and anything an approval rule covers is for a person to approve. The only undo you have is unmatch_bank_line, for your own reconciliations in the last 24 hours. Work in small batches and check the results.",
-} as const;
 
 /**
  * The MCP server for one AI key: its owner's organisation, as its owner, one
@@ -54,7 +45,7 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
     serverInfo: { name: "tohyee", title: "Tohyee", version: packageJson.version },
     instructions:
       `Access to ${organisation.displayName}'s books in Tohyee, a New Zealand accounting app, ` +
-      `as ${identity.user.displayName} (${identity.membership.role}), at the level "${AI_ACCESS_LEVEL_LABELS[level]}". ${LEVEL_WORDS[level]} ` +
+      `as ${identity.user.displayName} (${identity.membership.role}), at the level "${AI_ACCESS_LEVEL_LABELS[level]}". ${AI_ACCESS_LEVEL_AI_WORDS[level]} ` +
       "Call get_organisation first for the base currency, financial year and today's date. " +
       "Amounts are decimal strings; dates are YYYY-MM-DD. Before changing anything, say what you'll do and check with the person." +
       (mailTools.length
@@ -78,7 +69,14 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
         const result = await withOrganisationTransaction(
           organisation,
           { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role },
-          (tx) => tool.run(tx, args, { role: identity.membership.role, organisationId: organisation.id, source: `ai-${identity.tokenId}` }),
+          (tx) =>
+            tool.run(tx, args, {
+              role: identity.membership.role,
+              organisationId: organisation.id,
+              source: `ai-${identity.tokenId}`,
+              accessLevel: level,
+              grantedAccessLevel: identity.accessLevel,
+            }),
           { people, readOnly: tool.readOnly ?? tool.level === "read" },
         );
         const answer = result instanceof ToolFileAnswer ? result.answer : result;
