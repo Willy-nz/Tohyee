@@ -11433,6 +11433,19 @@ real rented server or camera (docs/FARM-SECURITY.md says what was tested).
       last collected, errors) is only what the post box said when Tohyee
       called; nothing is typed in.
 
+### Settings icons (decision 1234)
+
+1234. **A clear cog, and settings pages show what they're about.** Jess
+      said the Settings cog looked poor ("anything that uses that cog fix
+      it"). The cog is redrawn as an even 8-tooth gear. It stays on the
+      Settings hubs and general settings (modules, custom fields,
+      tracking, updates) and on the Settings menus themselves. Pages about one
+      thing get that thing's picture: Sales platforms a shop front,
+      Online payments a card, Email the mail icon, People and roles,
+      Salespeople and server Users two people, sign-in and remote access
+      pages a key, and CRM's Teams, Reassign, Duplicates, Record types
+      and Stages each their own. Pictures are decorative and original: no Shopify,
+      WooCommerce or card-scheme marks.
 ### Shopify's read-only extras (#530; decisions 1237-1245)
 
 Jess (2 November 2026) asked for more Shopify data, "mainly so it can be

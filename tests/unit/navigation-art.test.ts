@@ -15,7 +15,7 @@ describe("illustrated module navigation", () => {
       "/operations/payroll/employees": "payroll", "/operations/tax": "tax", "/operations/jobs": "jobs",
       "/operations/bank-accounts": "banking", "/operations/reports": "reports", "/operations/settings": "settings",
       "/operations/items": "inventory", "/operations/sales": "sales", "/operations/purchases": "purchases",
-      "/server/users": "crm",
+      "/server/users": "team",
     })) expect(iconForDestination(path)).toBe(icon);
   });
   it("keeps child artwork specific and ignores query strings, fragments and trailing slashes", () => {
@@ -26,6 +26,34 @@ describe("illustrated module navigation", () => {
     expect(iconForDestination("https://example.com/crm")).toBeUndefined();
     expect(iconForDestination("//example.com/crm")).toBeUndefined();
     expect(iconForDestination(null)).toBeUndefined();
+  });
+  it("gives settings pages a picture of what they're about, keeping the cog for general settings", () => {
+    for (const [path, icon] of Object.entries({
+      "/operations/settings": "settings", "/operations/settings/all": "settings", "/operations/modules": "settings",
+      "/operations/settings/custom-fields": "settings", "/operations/settings/tracking": "settings", "/server": "settings",
+      "/server/updates": "settings",
+      "/operations/settings/sales-platforms": "shop", "/operations/settings/sales-platforms?platform=woocommerce": "shop",
+      "/operations/settings/online-payments": "card", "/operations/settings/email": "mail",
+      "/operations/settings/bank-files": "banking", "/operations/settings/import": "documents",
+      "/operations/settings/powerpoint": "reports", "/operations/settings/payroll-access": "payroll",
+      "/operations/settings/customers": "crm", "/operations/settings/salespeople": "team",
+      "/operations/settings/approval-rules": "purchases", "/operations/settings/kilometre-rates": "maps",
+      "/operations/members": "team",
+      "/crm/teams": "team", "/crm/reassign": "reassign", "/crm/duplicates": "duplicates",
+      "/crm/record-types": "form", "/crm/stages": "pipeline", "/analytics/shaping": "funnel",
+      "/server/sign-ins": "key", "/server/google-sign-in": "key", "/server/remote-access": "key",
+    })) expect(iconForDestination(path), path).toBe(icon);
+    expect(iconForMenu(MENUS.find((menu) => menu.label === "Settings")!)).toBe("settings");
+  });
+  it("shows the cog only on the Settings hubs and general settings in every app's menus", () => {
+    const allowed = new Set(["/operations/settings", "/operations/settings/all", "/operations/modules", "/operations/settings/tracking", "/operations/settings/custom-fields"]);
+    const cogs = [...MENUS, ...CRM_MENUS, ...ANALYTICS_MENUS, ...FARM_MENUS]
+      .flatMap((menu) => [...(menu.href ? [menu.href] : []), ...menu.groups.flatMap((group) => group.links.map((link) => link.href))])
+      .filter((href) => iconForDestination(href) === "settings" && !allowed.has(href.split(/[?#]/)[0]));
+    expect(cogs).toEqual([]);
+    // CRM Settings opens on Teams, but the menu itself still shows the cog.
+    expect(iconForMenu(CRM_MENUS.find((menu) => menu.label === "Settings")!)).toBe("settings");
+    expect(iconForMenu({ art: "shop", href: "/crm" })).toBe("shop");
   });
   it("chooses a menu's artwork from where it leads, not its label", () => {
     const art = (menus: typeof MENUS, label: string) => iconForMenu(menus.find((menu) => menu.label === label)!);
