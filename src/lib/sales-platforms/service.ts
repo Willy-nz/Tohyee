@@ -28,6 +28,7 @@ import {
 } from "@/lib/sales-platforms/connector";
 import { type StockView, saveExtras, saveOrderExtras, stockDifferences } from "@/lib/sales-platforms/extras-store";
 import { writeLog } from "@/lib/sales-platforms/log";
+import type { CoverageFacts } from "@/lib/sales-platforms/coverage-status";
 import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
 import { startOfLocalDate } from "@/lib/sales-platforms/orders";
@@ -43,6 +44,7 @@ import {
   type SalesPlatformConnection,
   type SyncLogAction,
   type SyncLogEntry,
+  type SyncRecordKind,
   type SyncResult,
 } from "@/lib/sales-platforms/types";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
@@ -216,14 +218,44 @@ function assertConnected(row: ConnectionRow): void {
   }
 }
 
-/** The sync log, newest first (viewers can read it). */
+/** The sync log's filters (#532 part 1): which part, and what happened. */
+export const SYNC_LOG_KIND_FILTERS = ["customers", "products", "orders", "payouts", "connection"] as const;
+export const SYNC_LOG_OUTCOME_FILTERS = ["problems", "skipped", "failed", "waiting", "posted", "brought_in"] as const;
+
+const KIND_FILTER_SQL: Record<(typeof SYNC_LOG_KIND_FILTERS)[number], string> = {
+  customers: "record_kind = 'customer'",
+  products: "record_kind = 'product_variant'",
+  orders: "record_kind in ('order', 'refund')",
+  payouts: "record_kind = 'payout'",
+  connection: "record_kind is null",
+};
+const OUTCOME_FILTER_SQL: Record<(typeof SYNC_LOG_OUTCOME_FILTERS)[number], string> = {
+  problems: "action in ('skipped', 'failed', 'waiting')",
+  skipped: "action = 'skipped'",
+  failed: "action = 'failed'",
+  waiting: "action = 'waiting'",
+  posted: "action in ('posted', 'cancelled')",
+  brought_in: "action in ('created', 'linked', 'updated', 'kept')",
+};
+
+/**
+ * The sync log, newest first (viewers can read it), a page at a time
+ * (#532 part 1): `beforeId` is the oldest line already shown, so lines
+ * added since don't shift the pages. `kind` and `outcome` filter it.
+ * `hasMore` says whether older lines match.
+ */
 export async function listSyncLog(
   tx: OrgTx,
   connectionIdInput: unknown,
-  options: { beforeId?: unknown } = {},
-): Promise<{ connection: SalesPlatformConnection; entries: SyncLogEntry[] }> {
+  options: { beforeId?: unknown; kind?: unknown; outcome?: unknown; limit?: number } = {},
+): Promise<{ connection: SalesPlatformConnection; entries: SyncLogEntry[]; hasMore: boolean }> {
   const connection = await readConnection(tx, connectionIdInput);
-  const beforeId = options.beforeId === undefined || options.beforeId === null || options.beforeId === "" ? null : requireId(options.beforeId, "beforeId");
+  const blank = (value: unknown) => value === undefined || value === null || value === "";
+  const beforeId = blank(options.beforeId) ? null : requireId(options.beforeId, "beforeId");
+  const kind = blank(options.kind) ? null : requireOneOf(options.kind, "kind", SYNC_LOG_KIND_FILTERS);
+  const outcome = blank(options.outcome) ? null : requireOneOf(options.outcome, "outcome", SYNC_LOG_OUTCOME_FILTERS);
+  const limit = Math.min(Math.max(options.limit ?? LOG_PAGE, 1), LOG_PAGE);
+  const filters = [kind ? KIND_FILTER_SQL[kind] : null, outcome ? OUTCOME_FILTER_SQL[outcome] : null].filter(Boolean).map((sql) => ` and ${sql}`).join("");
   const result = await tx.query<{
     id: string;
     logged_at: string;
@@ -240,13 +272,15 @@ export async function listSyncLog(
   }>(
     `select id, logged_at, source, action, record_kind, external_id, contact_id, item_id, document_type, document_id, message, actor_email
        from sales_platform_sync_log
-      where connection_id = $1 and ($2::bigint is null or id < $2::bigint)
-      order by id desc limit ${LOG_PAGE}`,
+      where connection_id = $1 and ($2::bigint is null or id < $2::bigint)${filters}
+      order by id desc limit ${limit + 1}`,
     [connection.id, beforeId],
   );
+  const rows = result.rows.slice(0, limit);
   return {
     connection: toConnection(connection),
-    entries: result.rows.map((row) => ({
+    hasMore: result.rows.length > limit,
+    entries: rows.map((row) => ({
       id: row.id,
       loggedAt: iso(row.logged_at)!,
       source: row.source,
@@ -260,6 +294,52 @@ export async function listSyncLog(
       message: row.message,
       actorEmail: row.actor_email,
     })),
+  };
+}
+
+/** How many still-outstanding records the coverage reads at most. */
+const COVERAGE_OUTSTANDING_LIMIT = 5000;
+
+/**
+ * What each part has brought in (#532 part 2, decision 1256): counts from
+ * the mappings, the documents posted and, for records not brought in, the
+ * newest log line about each one. Read only; nothing is fetched from the
+ * store.
+ */
+export async function connectionCoverage(tx: OrgTx, connectionIdInput: unknown): Promise<{ connection: SalesPlatformConnection; facts: CoverageFacts }> {
+  const row = await readConnection(tx, connectionIdInput);
+  const counts = await tx.query<{ customers: string; variants: string; orders: string; refunds: string; payouts: string }>(
+    `select
+       (select count(*) from sales_platform_mappings where connection_id = $1 and record_kind = 'customer')::text as customers,
+       (select count(*) from sales_platform_mappings where connection_id = $1 and record_kind = 'product_variant')::text as variants,
+       (select count(*) from sales_platform_documents where connection_id = $1 and record_kind = 'order' and state = 'done')::text as orders,
+       (select count(*) from sales_platform_documents where connection_id = $1 and record_kind = 'refund' and credit_note_id is not null)::text as refunds,
+       (select count(*) from sales_platform_documents where connection_id = $1 and record_kind = 'payout' and state = 'done')::text as payouts`,
+    [row.id],
+  );
+  const outstanding = await tx.query<{ record_kind: SyncRecordKind; action: SyncLogAction; message: string }>(
+    `select record_kind, action, message from (
+       select distinct on (record_kind, external_id) record_kind, external_id, action, message
+         from sales_platform_sync_log
+        where connection_id = $1 and record_kind is not null and external_id is not null
+        order by record_kind, external_id, id desc
+     ) newest
+     where action in ('skipped', 'failed', 'waiting')
+     limit ${COVERAGE_OUTSTANDING_LIMIT + 1}`,
+    [row.id],
+  );
+  const c = counts.rows[0];
+  return {
+    connection: toConnection(row),
+    facts: {
+      linkedCustomers: Number(c.customers),
+      linkedVariants: Number(c.variants),
+      postedOrders: Number(c.orders),
+      postedRefunds: Number(c.refunds),
+      postedPayouts: Number(c.payouts),
+      outstanding: outstanding.rows.slice(0, COVERAGE_OUTSTANDING_LIMIT).map((r) => ({ recordKind: r.record_kind, action: r.action, message: r.message })),
+      outstandingCapped: outstanding.rows.length > COVERAGE_OUTSTANDING_LIMIT,
+    },
   };
 }
 

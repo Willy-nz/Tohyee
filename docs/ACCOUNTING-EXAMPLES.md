@@ -6204,7 +6204,9 @@ of app. Still open:
   does (like the order's prices) and refuses a refund that doesn't add up
   to the money refunded. Please check one real refund.
 - **Shipping**: shipping goes to the shipping account chosen in settings
-  (4000 Sales to start with). Should it be its own account?
+  (4000 Sales to start with). Should it be its own account? Answered by
+  Jess, 2 Nov 2026: shipping goes to sales; a separate account is an
+  option (SPC32).
 
 ### Shopify chargebacks and reserves (item 7 part 1, approved by Jess, 5 Oct 2026)
 
@@ -6333,6 +6335,56 @@ later; chargeback holds stay refused. What was asked:
    reserve in Shopify's payout export and confirm the types and signs?
 3. **Chargeback holds** (`CHARGEBACK_HOLD`, `CHARGEBACK_HOLD_RELEASE`):
    Shopify doesn't say what they are, so they stay refused (proposed)?
+
+### Guided shop setup: suggested accounts and the worked example (#532 follow-up; as Xero does, not yet reviewed)
+
+Jess, 2 Nov 2026: the Sales platforms screen dumped the whole setup at
+once, and the posting box that looked ticked hadn't been saved. She asked
+for it step by step, with "add account" where an account is chosen, and
+said shipping should go to sales. Where she hasn't decided, the setup
+suggests what Xero-connected Shopify apps do (decision 537): these
+examples are **as Xero does, not yet reviewed**. Nothing posts differently
+from SPC11-SPC31; this is what the setup fills in and shows.
+
+- **SPC32** Suggested accounts on the default chart (decision 1252).
+  Sales **4000 Sales**; shipping **4000 Sales** too (Jess, 2 Nov 2026), or
+  a separate **4010 Shipping income** (revenue) under "Use a separate
+  account"; payouts into **1000 Business bank account**; Shopify's fees
+  **6020 Bank fees**. Not in the default chart, so offered with "Create it
+  for me": money held by Shopify **1010 Shopify clearing** (a **bank**
+  account, decision 1251), chargebacks **6025 Shopify chargebacks**
+  (expense, SPC25), reserve **1015 Shopify reserve** (bank). A code
+  already taken moves to the next free one (1010 taken → 1011). An
+  account already in the chart is used instead when its name fits
+  (e.g. "Shopify clearing", "Chargebacks", "Merchant fees"). Tax: untaxed
+  sales **ZERO**; Shopify's 15% is **GST**. Guest checkouts: not chosen
+  (logged, not brought in, SPC24) until the person picks a contact.
+- **SPC33** The check page's worked example: a $100 Shopify sale with a $3
+  fee, GST registered. Invoice **Dr 1100 100.00 / Cr 4000 86.96 / Cr
+  2100 13.04** (100 × 3/23 = 13.04, as Shopify's tax line on a
+  taxes-included price); payment **Dr 1010 100.00 / Cr 1100 100.00**;
+  payout **Dr 6020 3.00 / Dr 1000 97.00 / Cr 1010 100.00**; 1010 is back
+  to **0.00**. Not GST registered: the invoice is **Dr 1100 100.00 / Cr
+  4000 100.00**, the rest the same. WooCommerce: the payment goes **Dr**
+  the payment method's account (e.g. 1020 Stripe) **100.00 / Cr 1100
+  100.00** and there's no payout step (WC2). Each step balances. (The
+  payout is shown as one entry; Tohyee posts it as SPC15 does, a transfer
+  of 97.00 and a spend money of 3.00, with the same totals.)
+- **SPC34** Nothing is saved or posted until the last step. The start
+  date, accounts and tax choices are a draft; the page says "Not saved
+  yet" while they differ from what's saved. The last step offers "Turn on
+  posting" or "Save, leave posting off"; only the first sends
+  `postToAccounts: true`. An account added with "Create it for me" or "Add
+  a new account" is added to the chart straight away (admins only, the
+  chart's own rules: a unique code, the type gives the class; a bank
+  account gets its bank settings) and chosen, and the rest of the draft is
+  kept. Shipping goes to the sales account unless a separate one is
+  chosen. Each step says what it still needs ("Choose or create the
+  account for money held by Shopify.") before Next.
+
+Built (decisions 1250-1259). Tests: `tests/unit/sales-platform-setup.test.ts`
+(SPC32-SPC34) and `tests/unit/sales-platform-coverage.test.ts` and
+`tests/integration/sales-platforms.test.ts` (#532).
 
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 

@@ -1607,6 +1607,26 @@ that something happened.
   (`shopify_*` tables) copied from Tohyee's own data, never from Shopify.
   Not tried against a real store; `read_shipping` isn't asked for (only
   carrier services need it).
+- **Guided shop setup** (#532 follow-up, decisions 1250-1259, SPC32-SPC34;
+  the defaults are "as Xero does, not yet reviewed"): Settings › Sales
+  platforms walks through connecting a shop one step at a time: "Which
+  shop do you use?" (Shopify or WooCommerce, as big tiles), the store's
+  key or app, what to bring in (Shopify), then posting: the start date,
+  the accounts (filled in from the chart, with "Create it for me" and
+  "Add a new account" at every account), a check page with a worked $100
+  example, and turning posting on. Nothing posting-related is saved until
+  the last step, a "Not saved yet" bar says so, and posting is only ever
+  turned on by the person. Chargebacks, reserves and guest checkouts sit
+  under More options. Settings › Email now asks how documents are sent with
+  the same tiles, and hides the SMTP server details Gmail and Microsoft 365
+  fill in.
+- **What each part brought in** (#532 parts 1 and 2, decisions 1256-1257):
+  each store shows Customers, Products, Orders and Payouts as off, needs
+  setting up, not synced yet, up to date, partly brought in or failed,
+  with counts from Tohyee's own records and grouped reasons ("12 skipped:
+  no SKU") and a button to set up or see why. The sync log loads 200
+  lines at a time with "Load older", and filters by part and by what
+  happened.
 - **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):

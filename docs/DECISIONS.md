@@ -11596,3 +11596,101 @@ SPD1-SPD11.
       page falls back to the report chart. Awaiting payment
       (`?show=awaiting`) works the same way. Pictures stay decorative: they
       don't change what anyone can open.
+
+### Guided shop setup and what each part brought in (#532 parts 1-2 and Jess's 2 Nov 2026 request; decisions 1250-1259)
+
+Jess (2 November 2026), after her Shopify store brought in customers but no
+items or sales: the Sales platforms screen "is a lot of slop", dumping the
+whole setup at once; the "Post to the accounts" box looked ticked but was
+an unsaved change. She wants setup "step by step, not just a dump of
+info", with account codes added on the spot, WooCommerce easy to find, and
+shipping in sales. Where she hasn't decided we follow what Xero-connected
+Shopify apps do (decision 537); those choices are **as Xero does, not yet
+reviewed**. Sources read on 2 November 2026: A2X's help on clearing
+accounts and Shopify transactions, Amaka's Shopify–Xero reconciliation
+guide, and Link My Books' Shopify chargebacks article.
+
+1250. **Setup is a guided set of steps, and posting is only turned on by
+      the person.** Which shop → connect → what to bring in (Shopify) →
+      start date → accounts → check → turn on. Connecting saves the
+      connection (it only reads the store). The posting steps are a draft
+      until the last step, which offers "Turn on posting" or "Save, leave
+      posting off"; a "Not saved yet" bar shows while the draft differs from
+      what's saved, and leaving asks first. The old form, with its posting
+      checkbox among a dozen fields, is gone. Each step's heading takes
+      focus; Back stops at the start date once the store is connected.
+1251. **Money held by Shopify stays a bank-type account.** It's shown as
+      "Money held by Shopify" ("Shopify clearing"): money customers have
+      paid that Shopify hasn't paid into your bank yet. Not accounts
+      receivable, which is what customers still owe. A2X says its clearing
+      accounts should be current assets, but A2X posts one invoice per
+      payout and says Shopify Payments generally needs no clearing account.
+      Tohyee posts each order (Jess, 5 Oct 2026: no summary mode) with its
+      payment into this account and moves each payout to the bank by
+      transfer, which in Tohyee (as in Xero) needs bank accounts; Amaka,
+      which also posts per order to Xero, creates its "Shopify Payment
+      Balance" as a bank account for the same reason. So: kept as is.
+1252. **Suggested accounts** (SPC32): sales 4000 Sales; shipping the same
+      sales account; payouts the main bank account (system key bank);
+      Shopify's fees an expense named Shopify or merchant fees, else 6020
+      Bank fees; money held by Shopify, chargebacks and reserve are matched
+      by name or offered with "Create it for me" as 1010 Shopify clearing
+      (bank), 6025 Shopify chargebacks (expense) and 1015 Shopify reserve
+      (bank), moving to the next free code if taken. Untaxed sales ZERO,
+      Shopify's 15% GST. Guest checkouts aren't chosen for you.
+1253. **Shipping charged to customers goes to sales** (Jess, 2 Nov 2026),
+      with "Record shipping in the sales account" ticked; unticking it
+      offers a separate shipping income account. The server still keeps a
+      shipping account, set to the sales account.
+1254. **"Add a new account" at every account choice.** It adds the account
+      through the chart's own rules (admins only; unique code; the type
+      gives the class; a bank account through the bank accounts route so it
+      can take payments and transfers), chooses it, and keeps the rest of
+      the setup's answers. The form starts with the suggested code, name and
+      type, limited to the types the choice accepts.
+1255. **Chargebacks stay in their own account, under More options.** Jess
+      asked whether chargebacks should go to sales. She approved a separate
+      chargebacks account (with the fee to fees) on 5 Oct 2026 (decisions
+      447-450, SPC25), and Xero has no practice of its own here. A2X lists
+      disputes under "Other" without a default; Link My Books has recorded
+      a lost chargeback as a refund since March 2024 (which would reduce
+      sales and GST). As GST on a lost chargeback is still with IRD (Jess,
+      5 Oct), the approved account is kept: visible, not hidden in sales.
+      **For Jess:** say if you'd rather follow Link My Books' refund way.
+1256. **What each part brought in is shown apart from whether the
+      connection works** (#532 part 2). Customers, Products, Orders and
+      Payouts are each off, needs setting up, not synced yet, up to date,
+      partly brought in or failed. Counts come only from Tohyee's records:
+      contacts and items linked, orders, refunds and payouts posted, and
+      records whose newest log line says skipped, failed or waiting
+      (orders before the start date and payouts Shopify cancelled are
+      skipped on purpose and not counted as problems). Reasons are grouped
+      in plain words ("12 skipped: no SKU"); anything not recognised is
+      "other reasons". Posting never set up says "Posting not set up:
+      nothing is brought in" with Set up, never that there were no sales.
+      At most 5,000 outstanding records are read; beyond that it says "(at
+      least)". A part with nothing outstanding shows "failed" rather than
+      "up to date" while the connection's last sync failed. WooCommerce shows Orders only (customers and products are
+      matched, not imported).
+1257. **The sync log pages and filters** (#532 part 1). 200 lines a page,
+      newest first, with "Load older" continuing from the oldest line
+      shown (so new lines don't shift the pages) and "That's everything"
+      at the end. Filters: which part (customers, products, orders and
+      refunds, payouts, connection and syncs) and what happened (not
+      brought in, skipped, failed, waiting, posted, added/linked/updated).
+      "See why" on a part opens the log filtered to its problems. The log
+      is hidden until asked for, to keep the page short.
+1258. **The first question is big tiles, not a dropdown.** "Which shop do
+      you use?" shows Shopify and WooCommerce side by side with original
+      drawings (a shopfront; a website with a cart), no brand logos;
+      one column on a phone. The same tiles now ask "How documents are
+      sent" on Settings › Email, which also hides the SMTP server details
+      Gmail and Microsoft 365 fill in.
+1259. **Other setup screens looked at; the rest wait.** Checked for the
+      same problems (whole setup at once, toggles that don't say whether
+      they're saved, unclear required steps). Changed now: Sales platforms
+      (Shopify and WooCommerce) and Settings › Email. Listed for later in
+      PR notes: bank feeds (Stripe, PayPal, Wise: connect on one page, link
+      a balance on another), bank files by folder or mailbox, Meta and
+      Search Console connections, online payments, payroll settings; the
+      camera post box is already step by step.
