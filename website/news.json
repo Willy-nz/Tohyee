@@ -2,6 +2,12 @@
   "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
   "items": [
     {
+      "date": "2026-11-03",
+      "title": "Tohyee 0.24.0: guided shop setup",
+      "body": "Connecting Shopify or WooCommerce is now one step at a time, with suggested accounts you can add on the spot. Plus stock, shop stats and discounts from Shopify in Analytics, and a picture for every menu item.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.24.0"
+    },
+    {
       "date": "2026-11-02",
       "title": "Tohyee 0.23.0: farm security cameras",
       "body": "Reolink cameras for the farm: photos and clips by camera, a warning when one goes quiet, and keeping incidents. 4G cameras send to a small post box server that Tohyee collects from. Plus shorter help with (i) buttons and pictures across the whole app.",
