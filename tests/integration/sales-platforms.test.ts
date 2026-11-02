@@ -2,6 +2,8 @@ import { createHmac } from "node:crypto";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import * as connectionRoute from "@/app/api/sales-platforms/connections/[connectionId]/route";
 import * as logRoute from "@/app/api/sales-platforms/connections/[connectionId]/log/route";
+import * as coverageRoute from "@/app/api/sales-platforms/connections/[connectionId]/parts/route";
+import { writeLog } from "@/lib/sales-platforms/log";
 import * as syncRoute from "@/app/api/sales-platforms/connections/[connectionId]/sync/route";
 import * as testRoute from "@/app/api/sales-platforms/connections/[connectionId]/test/route";
 import * as connectionsRoute from "@/app/api/sales-platforms/connections/route";
@@ -740,6 +742,57 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     const removed = await connectionRoute.DELETE(apiRequest(`/x?organisationId=${w.org}`, { method: "DELETE", cookie: ownerCookie }), params(id));
     expect(removed.status).toBe(200);
     expect(((await removed.json()) as { connection: { status: string } }).connection.status).toBe("disconnected");
+    expect(await journals(w)).toBe(0);
+  });
+
+  it("#532: the log pages back past 200 lines with filters, and each part shows what it brought in", async () => {
+    const w = await setup();
+    shop();
+    const connection = await connect(w);
+    await syncConnection(w.record, connection.id);
+    // An old product skip, then 250 newer customer lines on top of it.
+    await w.as(async (tx) => {
+      await writeLog(tx, connection.id, { source: "sync", action: "skipped", recordKind: "product_variant", externalId: "9001", message: "Shopify variant Old mug has no SKU, so it wasn't matched to an item or added." });
+      for (let n = 0; n < 250; n += 1) {
+        await writeLog(tx, connection.id, { source: "sync", action: "updated", recordKind: "customer", externalId: String(5000 + n), message: `Updated contact ${n}.` });
+      }
+    });
+    const first = await w.as((tx) => listSyncLog(tx, connection.id));
+    expect(first.entries).toHaveLength(200);
+    expect(first.hasMore).toBe(true);
+    expect(first.entries.some((entry) => entry.externalId === "9001")).toBe(false);
+    // A line added after the first page doesn't shift the next one.
+    await w.as((tx) => writeLog(tx, connection.id, { source: "sync", action: "updated", recordKind: "customer", externalId: "6000", message: "Updated contact new." }));
+    const second = await w.as((tx) => listSyncLog(tx, connection.id, { beforeId: first.entries[199].id }));
+    expect(second.entries.some((entry) => entry.externalId === "9001")).toBe(true);
+    expect(second.hasMore).toBe(false);
+    expect(new Set([...first.entries, ...second.entries].map((entry) => entry.id)).size).toBe(first.entries.length + second.entries.length);
+    // Filters find product skips among the customer lines.
+    const skips = await w.as((tx) => listSyncLog(tx, connection.id, { kind: "products", outcome: "problems" }));
+    expect(skips.entries.map((entry) => entry.externalId).sort()).toEqual(["3003", "9001"]);
+    expect(skips.hasMore).toBe(false);
+    await expect(w.as((tx) => listSyncLog(tx, connection.id, { kind: "everything" }))).rejects.toThrow(/kind/);
+
+    const viewerCookie = await sessionCookieFor(viewer);
+    const id = { connectionId: connection.id };
+    const page = await logRoute.GET(apiRequest(`/x?organisationId=${w.org}&kind=products&outcome=skipped`, { cookie: viewerCookie }), params(id));
+    expect(page.status).toBe(200);
+    expect(((await page.json()) as { entries: unknown[]; hasMore: boolean })).toMatchObject({ hasMore: false });
+    const read = await coverageRoute.GET(apiRequest(`/x?organisationId=${w.org}`, { cookie: viewerCookie }), params(id));
+    expect(read.status).toBe(200);
+    const { parts } = (await read.json()) as { parts: Array<{ kind: string; state: string; summary: string; reasons: Array<{ text: string; count: number }> }> };
+    // Customers: Kiri (no email, and a contact of that name already) is skipped as SPC2 says. Lavender (no SKU) and the old mug are skipped. Posting was never set up.
+    expect(parts.map((part) => [part.kind, part.state])).toEqual([
+      ["customers", "partly"],
+      ["products", "partly"],
+      ["orders", "needs_setup"],
+      ["payouts", "needs_setup"],
+    ]);
+    expect(parts[0].summary).toMatch(/^\d+ contacts? linked, 1 record not brought in$/);
+    expect(parts[1].summary).toBe("2 items linked, 2 records not brought in");
+    expect(parts[1].reasons).toEqual([{ text: "no SKU", count: 2, outcome: "skipped" }]);
+    expect(parts[2].summary).toBe("Posting not set up: nothing is brought in");
+    expect((await coverageRoute.GET(apiRequest(`/x?organisationId=${w.org}`), params(id))).status).toBe(401);
     expect(await journals(w)).toBe(0);
   });
 });

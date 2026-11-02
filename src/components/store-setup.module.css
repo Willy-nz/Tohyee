@@ -1,0 +1,478 @@
+/* The guided store setup (decisions 1250-1259). Colours come from globals.css. */
+
+.wizard {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.progressStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+  white-space: nowrap;
+}
+
+.progressNumber {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.progressStep[data-state="done"] .progressNumber {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-text);
+}
+
+.progressStep[data-state="current"] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  font-weight: 600;
+}
+
+.progressStep[data-state="current"] .progressNumber {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.progressPhone {
+  display: none;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.progressBar {
+  display: none;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.progressBar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .progress {
+    display: none;
+  }
+  .progressPhone,
+  .progressBar {
+    display: block;
+  }
+}
+
+.stepTitle {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.stepTitle:focus {
+  outline: none;
+}
+
+.lead {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.saveState {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.saveState[data-state="unsaved"] {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.saveState[data-state="saved"] {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.shops {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 520px) {
+  .shops {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.shop {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 108px;
+  padding: 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.shop[data-icon="no"] {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.shops[data-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .shops[data-count="3"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.shop:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.shop:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shop[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
+.shopName {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.shopText {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.shop[aria-checked="true"] .shopText {
+  color: var(--accent-soft-text);
+}
+
+.shopIcon {
+  width: 64px;
+  height: 64px;
+}
+
+.group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.role {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.roleLabel {
+  font-weight: 600;
+}
+
+.roleHint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.picker select,
+.role > select {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.rateRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rateRow select {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 16rem;
+}
+
+.pickerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.addAccount {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.addAccountFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.smallField {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 110px;
+  min-width: 0;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+}
+
+.smallField input,
+.smallField select {
+  width: 100%;
+  font-weight: 400;
+}
+
+.quickDates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gaps {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: minmax(0, 14em) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.summary dt {
+  color: var(--text-muted);
+}
+
+.summary dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .summary dd {
+    margin-bottom: 8px;
+  }
+}
+
+.example {
+  display: grid;
+  gap: 12px;
+}
+
+.exampleStep {
+  display: grid;
+  gap: 6px;
+}
+
+.exampleStep h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.exampleStep p {
+  margin: 0;
+}
+
+.exampleTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.exampleTable th,
+.exampleTable td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.exampleTable td.amount,
+.exampleTable th.amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  width: 6.5em;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.footerRight {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 520px) {
+  .footer,
+  .footerRight {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    width: 100%;
+    margin-left: 0;
+  }
+  .footer button {
+    width: 100%;
+  }
+}
+
+.more summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.more[open] summary {
+  margin-bottom: 10px;
+}
+
+.parts {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.part {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.part:last-child {
+  border-bottom: 0;
+}
+
+.partName {
+  font-weight: 600;
+}
+
+.partText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.partReasons {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+@media (max-width: 560px) {
+  .part {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .partText {
+    grid-column: 1 / -1;
+  }
+}
+
+.logFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

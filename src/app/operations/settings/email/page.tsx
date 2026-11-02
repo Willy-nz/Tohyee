@@ -12,6 +12,7 @@ import type { OrganisationEmailSettings, SendingMethod, SmtpSecurity } from "@/l
 import { EMAIL_KIND_LABELS, type EmailTemplate, PLACEHOLDERS } from "@/lib/email/templates";
 import { formatDateTime, personName } from "@/lib/format";
 import { useConfirm } from "@/components/confirm-dialog";
+import { ChoiceTiles } from "@/components/choice-tiles";
 
 /**
  * Settings › Email (admins): the organisation's own email account, which
@@ -43,9 +44,9 @@ function PresetHelp({ preset }: { preset: Preset }) {
   if (preset === "gmail") {
     return (
       <Notice tone="info">
-        <strong>Gmail and Google Workspace with an app password:</strong> signing in with <strong>Google / Gmail (sign in)</strong> above is easier.{" "}
+        <strong>Gmail and Google Workspace with an app password:</strong> signing in with <strong>Google / Gmail</strong> above is easier.{" "}
         <InfoTip label="Gmail with an app password">
-        <InfoPara><strong>Google / Gmail (sign in)</strong> above avoids passwords, if you set up a Google app for it.</InfoPara>
+        <InfoPara><strong>Google / Gmail</strong> above avoids passwords, if you set up a Google app for it.</InfoPara>
         <InfoPara>Otherwise: Google doesn&apos;t let other apps use your normal password. Turn on 2-Step Verification for the
         Google account, then make an <strong>app password</strong> at{" "}
         <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
@@ -61,7 +62,7 @@ function PresetHelp({ preset }: { preset: Preset }) {
   if (preset === "microsoft") {
     return (
       <Notice tone="info">
-        <strong>Microsoft 365 with a password:</strong> choose <strong>Microsoft 365 / Outlook (sign in)</strong> above instead where you can.{" "}
+        <strong>Microsoft 365 with a password:</strong> choose <strong>Microsoft 365 / Outlook</strong> above instead where you can.{" "}
         <InfoTip label="Microsoft 365 with a password">
         <InfoPara>Microsoft is retiring passwords for this kind of sending, and personal Outlook.com and Hotmail accounts already refuse them.</InfoPara>
         <InfoPara>If you still use a password: the mailbox&apos;s email address and password (or an app password), and a Microsoft 365 admin must turn on{" "}
@@ -165,23 +166,29 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
           <input type="email" value={replyTo} onChange={(event) => setReplyTo(event.target.value)} maxLength={254} />
         </Field>
       </div>
-      <div className={ui.grid3}>
-        <Field label="SMTP server">
-          <input value={host} onChange={(event) => setHost(event.target.value)} disabled={preset !== "other"} required />
-        </Field>
-        <Field label="Port" hint="465, 587, 25 or 2525.">
-          <input inputMode="numeric" value={port} onChange={(event) => setPort(event.target.value)} disabled={preset !== "other"} required />
-        </Field>
-        <Field label="Security">
-          <select value={security} onChange={(event) => setSecurity(event.target.value as SmtpSecurity)} disabled={preset !== "other"}>
-            {(Object.keys(SECURITY_LABELS) as SmtpSecurity[]).map((value) => (
-              <option key={value} value={value}>
-                {SECURITY_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
+      {preset === "other" ? (
+        <div className={ui.grid3}>
+          <Field label="SMTP server">
+            <input value={host} onChange={(event) => setHost(event.target.value)} required />
+          </Field>
+          <Field label="Port" hint="465, 587, 25 or 2525.">
+            <input inputMode="numeric" value={port} onChange={(event) => setPort(event.target.value)} required />
+          </Field>
+          <Field label="Security">
+            <select value={security} onChange={(event) => setSecurity(event.target.value as SmtpSecurity)}>
+              {(Object.keys(SECURITY_LABELS) as SmtpSecurity[]).map((value) => (
+                <option key={value} value={value}>
+                  {SECURITY_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      ) : (
+        <p className={ui.muted} style={{ margin: 0 }}>
+          Server: {host}, port {port}, {SECURITY_LABELS[security]}. Filled in for {preset === "gmail" ? "Gmail" : "Microsoft 365"}.
+        </p>
+      )}
       <div className={ui.grid2}>
         <Field label="Username" hint="Usually the full email address.">
           <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" maxLength={254} required />
@@ -208,10 +215,12 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
 }
 
 const METHOD_LABELS: Record<SendingMethod, string> = {
-  microsoft: "Microsoft 365 / Outlook (sign in)",
-  google: "Google / Gmail (sign in)",
-  smtp: "SMTP: Gmail, or any email provider, with a password",
+  microsoft: "Sign in to your Microsoft 365 or Outlook mailbox.",
+  google: "Sign in to your Gmail or Google Workspace mailbox.",
+  smtp: "Gmail, or any email provider, with a password (SMTP).",
 };
+
+const METHOD_TITLES: Record<SendingMethod, string> = { microsoft: "Microsoft 365 / Outlook", google: "Google / Gmail", smtp: "Any provider, with a password" };
 
 const METHOD_BADGES: Record<SendingMethod, string> = { microsoft: "Microsoft", google: "Google", smtp: "SMTP" };
 
@@ -551,15 +560,17 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
             Saved by {personName(settings, "updatedBy")} on {formatDateTime(settings.updatedAt)}.
           </p>
         ) : null}
-        <Field label="How documents are sent">
-          <select value={method} onChange={(event) => setChoice(event.target.value as SendingMethod)}>
-            {(Object.keys(METHOD_LABELS) as SendingMethod[]).map((value) => (
-              <option key={value} value={value}>
-                {METHOD_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <ChoiceTiles
+          label="How documents are sent"
+          value={method}
+          onChange={setChoice}
+          options={(Object.keys(METHOD_LABELS) as SendingMethod[]).map((value) => ({ value, title: METHOD_TITLES[value], text: METHOD_LABELS[value] }))}
+        />
+        {choice && choice !== settings.sendingMethod && settings.configured ? (
+          <Notice tone="warning">
+            Not changed yet: documents are still sent with {METHOD_BADGES[settings.sendingMethod]} until you finish setting up {METHOD_BADGES[choice]} below.
+          </Notice>
+        ) : null}
         {method === "microsoft" ? (
           <div style={{ display: "grid", gap: 16 }}>
             <MicrosoftAppForm key={`app:${settings.microsoftApp.clientId ?? ""}:${settings.microsoftApp.tenant}`} organisationId={organisationId} settings={settings} onSaved={saved} />

@@ -1,44 +1,36 @@
 "use client";
 
-import { InfoTip, InfoPara } from "@/components/info-tip";
-import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
-import { AccountSelect, useAccounts } from "@/components/books";
+import { useEffect, useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { SALES_PLATFORMS_HREF } from "@/components/navigation";
-import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import type { Contact } from "@/lib/contacts/service";
 import { formatDateTime } from "@/lib/format";
+import type { CoverageKind, CoverageState, KindCoverage } from "@/lib/sales-platforms/coverage-status";
 import {
   AUTH_METHOD_LABELS,
   SALES_PLATFORM_LABELS,
-  SALES_PLATFORMS,
-  type SalesPlatform,
   type SalesPlatformConnection,
-  SHOPIFY_AUTH_METHODS,
-  type ShopifyAuthMethod,
   SYNC_LOG_ACTION_LABELS,
   type SyncLogEntry,
   type SyncResult,
 } from "@/lib/sales-platforms/types";
 import { integrationsSummary } from "@/lib/sales-platforms/summary";
-import type { TaxCode } from "@/lib/tax/codes";
 import { useConfirm } from "@/components/confirm-dialog";
 import { ShopifyPartsList, ShopifyScopesCard, StockSection } from "@/components/sales-platform-extras";
+import { type SetupStep, StoreSetup } from "@/components/store-setup";
+import styles from "./store-setup.module.css";
 
 /**
- * Settings › Sales platforms (examples SPC1-SPC10): connecting a Shopify
- * store, what to sync, "Sync now", the sync log and disconnecting; and
- * posting orders, refunds and payouts to the accounts (SPC11-SPC24).
+ * Settings › Sales platforms (examples SPC1-SPC34): connecting a store step
+ * by step, what each part has brought in, "Sync now", the sync log and
+ * disconnecting; and posting orders, refunds and payouts to the accounts
+ * (SPC11-SPC31), set up with the guided steps in store-setup.tsx.
  * Everyone can read the connections and the log; only admins change
  * anything.
  */
-
-/** The payment method choice "left owing" (WC4), as opposed to an account code. */
-const OWING = "__owing__";
 
 const STATUS_BADGES: Record<SalesPlatformConnection["status"], { tone: "green" | "amber" | "neutral"; text: string }> = {
   active: { tone: "green", text: "Connected" },
@@ -63,156 +55,10 @@ export function describeSyncResult(result: SyncResult): string {
     ...(result.kept ? [`${result.kept} kept Tohyee's value`] : []),
     ...(result.skipped ? [`${result.skipped} skipped`] : []),
     ...(result.failed ? [`${result.failed} failed`] : []),
+    ...(result.posted ? [`${result.posted} posted to the accounts`] : []),
+    ...(result.waiting ? [`${result.waiting} waiting`] : []),
   ];
   return `Synced: ${parts.join(", ")}. The log below has the details.`;
-}
-
-function ConnectForm({ organisationId, onConnected }: { organisationId: string; onConnected: (message: string) => void }) {
-  const [platform, setPlatform] = useState<SalesPlatform>("shopify");
-  const [consumerKey, setConsumerKey] = useState("");
-  const [consumerSecret, setConsumerSecret] = useState("");
-  const [storeDomain, setStoreDomain] = useState("");
-  const [authMethod, setAuthMethod] = useState<ShopifyAuthMethod>("client_credentials");
-  const [accessToken, setAccessToken] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [syncCustomers, setSyncCustomers] = useState(true);
-  const [syncProducts, setSyncProducts] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const body =
-        platform === "woocommerce"
-          ? { organisationId, platform, storeDomain, consumerKey, consumerSecret }
-          : { organisationId, platform, storeDomain, authMethod, ...(authMethod === "access_token" ? { accessToken, apiSecret } : { clientId, clientSecret }), syncCustomers, syncProducts };
-      const { connection } = await api<{ connection: SalesPlatformConnection }>("/api/sales-platforms/connections", { method: "POST", body });
-      setAccessToken("");
-      setApiSecret("");
-      setClientSecret("");
-      setConsumerSecret("");
-      onConnected(
-        platform === "woocommerce"
-          ? `Connected ${connection.storeName ?? connection.storeDomain}. Set up posting to the accounts below to bring its orders in.`
-          : `Connected ${connection.storeName ?? connection.storeDomain}. Choose "Sync now" to bring its customers and products in.`,
-      );
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const platformField = (
-    <Field label="Platform">
-      <select value={platform} onChange={(event) => setPlatform(event.target.value as SalesPlatform)}>
-        {SALES_PLATFORMS.map((value) => (
-          <option key={value} value={value}>
-            {SALES_PLATFORM_LABELS[value]}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-  if (platform === "woocommerce") {
-    return (
-      <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
-        <Notice tone="info">
-          <strong>Before you start:</strong> in your store&apos;s WordPress admin, go to WooCommerce › Settings › Advanced › REST API and add a key for
-          Tohyee.{" "}
-          <InfoTip label="The WooCommerce key">A <strong>Read</strong> key is enough to bring orders in; webhooks (orders arriving as they happen) need <strong>Read/Write</strong>, and
-          without them the catch-up sync brings orders in every 15 minutes. Tohyee only reads orders. The store must use an https:// address.</InfoTip>
-        </Notice>
-        {error ? <Notice tone="error">{error}</Notice> : null}
-        <div className={ui.grid2}>
-          {platformField}
-          <Field label="Store address" hint="Like https://shop.example.nz">
-            <input value={storeDomain} onChange={(event) => setStoreDomain(event.target.value)} maxLength={255} autoComplete="off" required />
-          </Field>
-          <Field label="Consumer key" hint="Starts with ck_.">
-            <input value={consumerKey} onChange={(event) => setConsumerKey(event.target.value)} maxLength={200} autoComplete="off" required />
-          </Field>
-          <Field label="Consumer secret" hint="Starts with cs_. Stored encrypted on this server; never shown again.">
-            <input type="password" value={consumerSecret} onChange={(event) => setConsumerSecret(event.target.value)} maxLength={200} autoComplete="new-password" required />
-          </Field>
-        </div>
-        <div className={ui.actions}>
-          <Button type="submit" disabled={busy}>
-            {busy ? "Checking with WooCommerce…" : "Connect store"}
-          </Button>
-        </div>
-      </form>
-    );
-  }
-
-  return (
-    <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
-      {platformField}
-      <Notice tone="info">
-        <strong>Before you start:</strong> create an app in your own Shopify account, then copy its client ID and secret here. Tohyee only reads your store.{" "}
-        <InfoTip label="Creating the Shopify app">
-        <InfoPara>Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access.</InfoPara>
-        <InfoPara>In the Shopify Dev Dashboard (dev.shopify.com), create an app and give it the read-only access scopes in &quot;Shopify access scopes&quot; on this page
-        (at least <code>read_customers</code> and <code>read_products</code>). Turn on access to protected customer data (name, email, phone and address), release it and
-        install it on your store, then copy its client ID and secret from the app&apos;s Settings.</InfoPara>
-        <InfoPara>If your store already has a custom app made in the store admin before 2026, you can use its Admin API access token and API secret key instead. Tohyee
-        refuses access that can change your store: it only reads.</InfoPara>
-        </InfoTip>
-      </Notice>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      <div className={ui.grid2}>
-        <Field label="Store address" hint="Like glimmers.myshopify.com, or just glimmers.">
-          <input value={storeDomain} onChange={(event) => setStoreDomain(event.target.value)} maxLength={255} autoComplete="off" required />
-        </Field>
-        <Field label="How the app signs in">
-          <select value={authMethod} onChange={(event) => setAuthMethod(event.target.value as ShopifyAuthMethod)}>
-            {SHOPIFY_AUTH_METHODS.map((method) => (
-              <option key={method} value={method}>
-                {method === "client_credentials" ? "Client ID and secret (Dev Dashboard app)" : "Admin API access token (older custom app)"}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-      {authMethod === "client_credentials" ? (
-        <div className={ui.grid2}>
-          <Field label="Client ID">
-            <input value={clientId} onChange={(event) => setClientId(event.target.value)} maxLength={200} autoComplete="off" required />
-          </Field>
-          <Field label="Client secret" hint="Stored encrypted on this server; never shown again. Shopify signs webhooks with it too.">
-            <input type="password" value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} maxLength={500} autoComplete="new-password" required />
-          </Field>
-        </div>
-      ) : (
-        <div className={ui.grid2}>
-          <Field label="Admin API access token" hint="Starts with shpat_. Stored encrypted; never shown again.">
-            <input type="password" value={accessToken} onChange={(event) => setAccessToken(event.target.value)} maxLength={500} autoComplete="new-password" required />
-          </Field>
-          <Field label="API secret key" hint="Shopify signs webhooks with it. Stored encrypted.">
-            <input type="password" value={apiSecret} onChange={(event) => setApiSecret(event.target.value)} maxLength={500} autoComplete="new-password" required />
-          </Field>
-        </div>
-      )}
-      <div className={ui.actions}>
-        <label className={ui.checkbox}>
-          <input type="checkbox" checked={syncCustomers} onChange={(event) => setSyncCustomers(event.target.checked)} /> Customers into contacts
-        </label>
-        <label className={ui.checkbox}>
-          <input type="checkbox" checked={syncProducts} onChange={(event) => setSyncProducts(event.target.checked)} /> Products into items
-        </label>
-      </div>
-      <div className={ui.actions}>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Checking with Shopify…" : "Connect store"}
-        </Button>
-      </div>
-    </form>
-  );
 }
 
 export function SyncLog({ entries }: { entries: SyncLogEntry[] }) {
@@ -246,14 +92,187 @@ export function SyncLog({ entries }: { entries: SyncLogEntry[] }) {
   );
 }
 
-function ConnectionLog({ organisationId, connectionId, version }: { organisationId: string; connectionId: string; version: number }) {
-  const { data, error, loading } = useApiData<{ entries: SyncLogEntry[] }>(`/api/sales-platforms/connections/${connectionId}/log`, {
-    organisationId,
-    v: version,
-  });
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (loading || !data) return <p className={ui.muted}>Loading the log…</p>;
-  return <SyncLog entries={data.entries} />;
+const KIND_OPTIONS: Array<{ value: string; text: string }> = [
+  { value: "", text: "Everything" },
+  { value: "customers", text: "Customers" },
+  { value: "products", text: "Products" },
+  { value: "orders", text: "Orders and refunds" },
+  { value: "payouts", text: "Payouts" },
+  { value: "connection", text: "Connection and syncs" },
+];
+
+const OUTCOME_OPTIONS: Array<{ value: string; text: string }> = [
+  { value: "", text: "Any" },
+  { value: "problems", text: "Not brought in (skipped, failed, waiting)" },
+  { value: "skipped", text: "Skipped" },
+  { value: "failed", text: "Failed" },
+  { value: "waiting", text: "Waiting" },
+  { value: "posted", text: "Posted" },
+  { value: "brought_in", text: "Added, linked or updated" },
+];
+
+export type LogFilter = { kind: string; outcome: string };
+
+/**
+ * The sync log, 200 lines at a time with "Load older" (#532 part 1). Pages
+ * continue from the oldest line shown, so lines added meanwhile don't shift
+ * them; changing a filter or a new sync starts again from the newest.
+ */
+function ConnectionLog({
+  organisationId,
+  connectionId,
+  version,
+  filter,
+  onFilter,
+}: {
+  organisationId: string;
+  connectionId: string;
+  version: number;
+  filter: LogFilter;
+  onFilter: (filter: LogFilter) => void;
+}) {
+  const path = `/api/sales-platforms/connections/${connectionId}/log`;
+  const query = { organisationId, kind: filter.kind || null, outcome: filter.outcome || null };
+  const key = JSON.stringify({ path, query, version });
+  // The newest page for this filter, then older pages added by "Load older"; kept with the request they answer.
+  const [pages, setPages] = useState<{ key: string; entries: SyncLogEntry[]; hasMore: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const asked = JSON.parse(key) as { path: string; query: Record<string, string | null> };
+    api<{ entries: SyncLogEntry[]; hasMore: boolean }>(asked.path, { query: asked.query }).then(
+      (page) => {
+        if (!cancelled) {
+          setError(null);
+          setPages({ key, entries: page.entries, hasMore: page.hasMore });
+        }
+      },
+      (caught) => {
+        if (!cancelled) setError(errorMessage(caught));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+
+  const current = pages?.key === key ? pages : null;
+  const entries = current?.entries ?? null;
+  const hasMore = current?.hasMore ?? false;
+
+  async function loadOlder() {
+    if (!current || current.entries.length === 0) return;
+    setLoading(true);
+    try {
+      const page = await api<{ entries: SyncLogEntry[]; hasMore: boolean }>(path, { query: { ...query, beforeId: current.entries[current.entries.length - 1].id } });
+      setPages((latest) => (latest?.key === key ? { key, entries: [...latest.entries, ...page.entries], hasMore: page.hasMore } : latest));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div className={styles.logFilters}>
+        <label className={styles.smallField} style={{ flex: "0 1 220px" }}>
+          <span>Show</span>
+          <select value={filter.kind} onChange={(event) => onFilter({ ...filter, kind: event.target.value })}>
+            {KIND_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.text}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.smallField} style={{ flex: "0 1 300px" }}>
+          <span>What happened</span>
+          <select value={filter.outcome} onChange={(event) => onFilter({ ...filter, outcome: event.target.value })}>
+            {OUTCOME_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.text}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {entries === null ? (
+        <p className={ui.muted}>Loading the log…</p>
+      ) : entries.length === 0 && (filter.kind || filter.outcome) ? (
+        <Empty>Nothing in the log matches.</Empty>
+      ) : (
+        <SyncLog entries={entries} />
+      )}
+      {entries && entries.length > 0 ? (
+        hasMore ? (
+          <div>
+            <Button variant="secondary" size="small" disabled={loading} onClick={() => void loadOlder()}>
+              {loading ? "Loading…" : "Load older"}
+            </Button>
+          </div>
+        ) : (
+          <p className={ui.muted} style={{ margin: 0 }}>
+            That&apos;s everything{filter.kind || filter.outcome ? " that matches" : ""}: {entries.length.toLocaleString("en-NZ")} {entries.length === 1 ? "line" : "lines"}.
+          </p>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+const STATE_BADGES: Record<CoverageState, { tone: "green" | "amber" | "neutral" | "red" | "blue"; text: string }> = {
+  off: { tone: "neutral", text: "Off" },
+  needs_setup: { tone: "amber", text: "Needs setting up" },
+  not_synced: { tone: "neutral", text: "Not synced yet" },
+  up_to_date: { tone: "green", text: "Up to date" },
+  partly: { tone: "amber", text: "Partly brought in" },
+  failed: { tone: "red", text: "Failed" },
+};
+
+const PROBLEM_OUTCOME = "problems";
+
+/**
+ * What each part has brought in (#532 part 2): Customers, Products, Orders
+ * and Payouts, each with its state, real counts and what to do next. Shown
+ * apart from whether the connection itself works.
+ */
+export function CoverageList({ parts, onAction }: { parts: KindCoverage[]; onAction: (part: KindCoverage) => void }) {
+  return (
+    <ul className={styles.parts} aria-label="What's been brought in">
+      {parts.map((part) => {
+        const badge = STATE_BADGES[part.state];
+        return (
+          <li key={part.kind} className={styles.part}>
+            <span className={styles.partName}>{part.label}</span>
+            <span className={styles.partText}>
+              {part.summary}
+              {part.reasons.length > 0 ? (
+                <span className={styles.partReasons}>
+                  {part.reasons
+                    .slice(0, 3)
+                    .map((reason) => `${reason.count.toLocaleString("en-NZ")} ${reason.outcome}: ${reason.text}`)
+                    .join(" · ")}
+                  {part.reasons.length > 3 ? " · and more" : ""}
+                </span>
+              ) : null}
+            </span>
+            <span className={ui.actions} style={{ justifyContent: "end" }}>
+              <Badge tone={badge.tone}>{badge.text}</Badge>
+              {part.action ? (
+                <Button size="small" variant={part.action.kind === "log" ? "secondary" : "primary"} onClick={() => onAction(part)} aria-label={`${part.action.text}: ${part.label}`}>
+                  {part.action.text}
+                </Button>
+              ) : null}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function ConnectionCard({
@@ -271,9 +290,17 @@ export function ConnectionCard({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [logVersion, setLogVersion] = useState(0);
-  const [showLog, setShowLog] = useState(connection.status !== "disconnected");
+  const [showLog, setShowLog] = useState(false);
+  const [logFilter, setLogFilter] = useState<LogFilter>({ kind: "", outcome: "" });
+  const [setup, setSetup] = useState<SetupStep | null>(null);
   const status = STATUS_BADGES[connection.status];
   const connected = connection.status !== "disconnected";
+  const shop = SALES_PLATFORM_LABELS[connection.platform];
+  const coverage = useApiData<{ parts: KindCoverage[] }>(connected ? `/api/sales-platforms/connections/${connection.id}/parts` : null, {
+    organisationId,
+    v: logVersion,
+  });
+  const logRef = useRef<HTMLDivElement>(null);
 
   async function run(work: () => Promise<string>) {
     setBusy(true);
@@ -301,12 +328,19 @@ export function ConnectionCard({
   const choose = (change: { syncCustomers?: boolean; syncProducts?: boolean }) =>
     run(async () => {
       await api(path, { method: "PATCH", body: { organisationId, ...change } });
-      return "Saved.";
+      return `Saved: ${change.syncCustomers !== undefined ? `customers ${change.syncCustomers ? "will" : "won't"} come in` : `products ${change.syncProducts ? "will" : "won't"} come in`} from the next sync.`;
     });
+  const turnOff = async () => {
+    if (!(await confirm(`Turn posting off for ${connection.storeName ?? connection.storeDomain}? What's already posted stays. New ${shop} sales won't come into the accounts until it's on again.`))) return;
+    void run(async () => {
+      await api(path, { method: "PATCH", body: { organisationId, postToAccounts: false } });
+      return "Posting is off. What was posted stays.";
+    });
+  };
   const disconnect = async () => {
     if (
       !(await confirm(
-        `Disconnect ${connection.storeName ?? connection.storeDomain}? The contacts and items already brought in stay, and so does this log. Tohyee forgets the store's credentials and which ${SALES_PLATFORM_LABELS[connection.platform]} record each contact and item came from.`,
+        `Disconnect ${connection.storeName ?? connection.storeDomain}? The contacts and items already brought in stay, and so does this log. Tohyee forgets the store's credentials and which ${shop} record each contact and item came from.`,
       ))
     ) {
       return;
@@ -316,10 +350,43 @@ export function ConnectionCard({
       return "Disconnected. The contacts and items brought in are kept.";
     });
   };
+  const act = (part: KindCoverage) => {
+    if (!part.action) return;
+    if (part.action.kind === "setup") setSetup("start");
+    else if (part.action.kind === "turn_on") setSetup("review");
+    else if (part.action.kind === "scopes") {
+      const scopes = document.getElementById("shopify-scopes");
+      if (scopes instanceof HTMLDetailsElement) scopes.open = true;
+      scopes?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    else {
+      setLogFilter({ kind: part.kind as CoverageKind, outcome: PROBLEM_OUTCOME });
+      setShowLog(true);
+      requestAnimationFrame(() => logRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  };
+
+  if (setup && isAdmin && connected) {
+    return (
+      <Card title={`${shop}: ${connection.storeName ?? connection.storeDomain}`} description="Set up posting to the accounts, one step at a time.">
+        <StoreSetup
+          organisationId={organisationId}
+          connection={connection}
+          firstStep={setup}
+          onClose={(text) => {
+            setSetup(null);
+            if (text) setMessage({ tone: "success", text });
+            setLogVersion((value) => value + 1);
+            onChanged();
+          }}
+        />
+      </Card>
+    );
+  }
 
   return (
     <Card
-      title={`${SALES_PLATFORM_LABELS[connection.platform]}: ${connection.storeName ?? connection.storeDomain}`}
+      title={`${shop}: ${connection.storeName ?? connection.storeDomain}`}
       description={
         <>
           {connection.storeDomain} · {AUTH_METHOD_LABELS[connection.authMethod] ?? connection.authMethod}
@@ -331,10 +398,10 @@ export function ConnectionCard({
       <div style={{ display: "grid", gap: 12 }}>
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
         {connected ? (
-          <p className={ui.muted}>
+          <p className={ui.muted} style={{ margin: 0 }}>
             Connected by {connection.connectedByEmail} on {formatDateTime(connection.connectedAt)}.{" "}
             {connection.lastSyncAt ? `Last synced ${formatDateTime(connection.lastSyncAt)}.` : "Not synced yet."}{" "}
-            {connection.webhooksActive ? `${SALES_PLATFORM_LABELS[connection.platform]} also sends changes as they happen.` : null}
+            {connection.webhooksActive ? `${shop} also sends changes as they happen.` : null}
           </p>
         ) : (
           <p className={ui.muted}>
@@ -343,61 +410,85 @@ export function ConnectionCard({
         )}
         {connected && connection.lastError ? <Notice tone="error">The last sync failed: {connection.lastError}</Notice> : null}
         {connected && connection.webhooksNote ? <Notice tone="warning">{connection.webhooksNote}</Notice> : null}
-        {connected && connection.platform === "shopify" && connection.pricesIncludeTax ? (
-          <Notice tone="info">
-            This store&apos;s prices include tax, so they aren&apos;t copied to items (Tohyee&apos;s item prices exclude GST). Items keep their own sale price.
-          </Notice>
+        {connected ? (
+          coverage.data ? (
+            <CoverageList parts={coverage.data.parts} onAction={act} />
+          ) : coverage.error ? (
+            <Notice tone="error">{coverage.error}</Notice>
+          ) : (
+            <p className={ui.muted}>Working out what&apos;s been brought in…</p>
+          )
         ) : null}
-        {connected && connection.platform === "shopify" ? (
-          <div className={ui.actions}>
-            <label className={ui.checkbox}>
-              <input
-                type="checkbox"
-                checked={connection.syncCustomers}
-                disabled={!isAdmin || busy}
-                onChange={(event) => void choose({ syncCustomers: event.target.checked })}
-              />{" "}
-              Customers into contacts
-            </label>
-            <label className={ui.checkbox}>
-              <input
-                type="checkbox"
-                checked={connection.syncProducts}
-                disabled={!isAdmin || busy}
-                onChange={(event) => void choose({ syncProducts: event.target.checked })}
-              />{" "}
-              Products into items
-            </label>
-          </div>
-        ) : null}
-        {connected && connection.platform === "shopify" ? <ShopifyPartsList grantedScopes={connection.grantedScopes} /> : null}
-        {connected ? <PostingSettings organisationId={organisationId} connection={connection} isAdmin={isAdmin} busy={busy} run={run} path={path} /> : null}
-        {connected && connection.platform === "shopify" ? <StockSection organisationId={organisationId} connectionId={connection.id} /> : null}
         {connected && isAdmin ? (
           <div className={ui.actions}>
             <Button onClick={() => void sync()} disabled={busy}>
-              Sync now
+              {busy ? "Working…" : "Sync now"}
             </Button>
-            <Button variant="secondary" onClick={() => void test()} disabled={busy}>
-              Test connection
+            <Button variant="secondary" onClick={() => setSetup("start")} disabled={busy}>
+              {connection.postToAccounts ? "Change posting settings" : "Set up posting"}
             </Button>
-            <Button variant="danger" onClick={disconnect} disabled={busy}>
-              Disconnect
-            </Button>
+            {connection.postToAccounts ? (
+              <Button variant="secondary" onClick={() => void turnOff()} disabled={busy}>
+                Turn posting off
+              </Button>
+            ) : null}
           </div>
         ) : null}
-        {showLog ? (
-          <>
-            <h3 style={{ margin: 0, fontSize: "1rem" }}>Sync log</h3>
-            <ConnectionLog organisationId={organisationId} connectionId={connection.id} version={logVersion} />
-          </>
-        ) : (
-          <div>
+        {connected ? (
+          <details className={styles.more}>
+            <summary>More: what comes in, {connection.platform === "shopify" ? "Shopify's parts, stock, " : ""}test or disconnect</summary>
+            <div style={{ display: "grid", gap: 12 }}>
+              {connection.platform === "shopify" ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <strong>What comes in</strong>
+                  <span className={ui.muted}>Each box saves as soon as you tick it.</span>
+                  <div className={ui.actions}>
+                    <label className={ui.checkbox}>
+                      <input type="checkbox" checked={connection.syncCustomers} disabled={!isAdmin || busy} onChange={(event) => void choose({ syncCustomers: event.target.checked })} />{" "}
+                      Customers, as contacts
+                    </label>
+                    <label className={ui.checkbox}>
+                      <input type="checkbox" checked={connection.syncProducts} disabled={!isAdmin || busy} onChange={(event) => void choose({ syncProducts: event.target.checked })} />{" "}
+                      Products, as items
+                    </label>
+                  </div>
+                  {connection.pricesIncludeTax ? (
+                    <span className={ui.muted}>This store&apos;s prices include tax, so they aren&apos;t copied to items (Tohyee&apos;s item prices exclude GST).</span>
+                  ) : null}
+                </div>
+              ) : null}
+              {connection.platform === "shopify" ? <ShopifyPartsList grantedScopes={connection.grantedScopes} /> : null}
+              {connection.platform === "shopify" ? <StockSection organisationId={organisationId} connectionId={connection.id} /> : null}
+              {isAdmin ? (
+                <div className={ui.actions}>
+                  <Button variant="secondary" onClick={() => void test()} disabled={busy}>
+                    Test connection
+                  </Button>
+                  <Button variant="danger" onClick={disconnect} disabled={busy}>
+                    Disconnect
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
+        <div ref={logRef}>
+          {showLog ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div className={ui.actions} style={{ justifyContent: "space-between" }}>
+                <h3 style={{ margin: 0, fontSize: "1rem" }}>Sync log</h3>
+                <Button variant="secondary" size="small" onClick={() => setShowLog(false)}>
+                  Hide the log
+                </Button>
+              </div>
+              <ConnectionLog organisationId={organisationId} connectionId={connection.id} version={logVersion} filter={logFilter} onFilter={setLogFilter} />
+            </div>
+          ) : (
             <Button variant="secondary" size="small" onClick={() => setShowLog(true)}>
-              Show its sync log
+              Show the sync log
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </Card>
   );
@@ -453,244 +544,60 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
   const isAdmin = can("admin");
   const { data, error, loading, reload } = useApiData<{ connections: SalesPlatformConnection[] }>("/api/sales-platforms/connections", { organisationId });
   const [notice, setNotice] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (loading || !data) return <p className={ui.muted}>Loading…</p>;
   const current = data.connections.filter((connection) => connection.status !== "disconnected");
   const earlier = data.connections.filter((connection) => connection.status === "disconnected");
+  const setupOpen = isAdmin && (connecting || current.length === 0);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <Notice tone="warning">
-        This hasn&apos;t been tried against a real Shopify store yet, only against Shopify&apos;s documented responses. Check the first sync&apos;s log
-        carefully. Orders, refunds and payouts are posted only when &quot;Post to the accounts&quot; is on for a store.
-      </Notice>
       {notice ? <Notice tone="success">{notice}</Notice> : null}
-      {current.map((connection) => (
-        <ConnectionCard key={connection.id} organisationId={organisationId} connection={connection} isAdmin={isAdmin} onChanged={reload} />
-      ))}
-      <ShopifyScopesCard />
-      {isAdmin ? (
-        <Card
-          title={current.length === 0 ? "Connect a Shopify store" : "Connect another Shopify store"}
-          description="Shopify's customers become contacts (as customers) and its products' variants become items, matched to existing ones by email or SKU."
-        >
-          <ConnectForm
+      {setupOpen ? (
+        <Card title={current.length === 0 ? "Connect your shop" : "Connect another shop"} description="One step at a time. Nothing goes into your accounts until you turn posting on at the end.">
+          <StoreSetup
             organisationId={organisationId}
-            onConnected={(text) => {
+            onClose={(text) => {
+              setConnecting(false);
               setNotice(text);
               reload();
             }}
           />
         </Card>
-      ) : current.length === 0 ? (
-        <Empty>No sales platform is connected. An admin can connect a Shopify store here.</Empty>
       ) : null}
+      {current.map((connection) => (
+        <ConnectionCard key={connection.id} organisationId={organisationId} connection={connection} isAdmin={isAdmin} onChanged={reload} />
+      ))}
+      {isAdmin && !setupOpen ? (
+        <div>
+          <Button variant="secondary" onClick={() => setConnecting(true)}>
+            Connect another shop
+          </Button>
+        </div>
+      ) : null}
+      {!isAdmin && current.length === 0 ? <Empty>No shop is connected. An admin can connect a Shopify or WooCommerce store here.</Empty> : null}
+      {current.some((connection) => connection.platform === "shopify") ? (
+        <details id="shopify-scopes" className={styles.more}>
+          <summary>Shopify access scopes: what to give the app</summary>
+          <ShopifyScopesCard />
+        </details>
+      ) : null}
+      <p className={ui.muted} style={{ margin: 0 }}>
+        This hasn&apos;t been tried against a real store&apos;s orders, refunds and payouts yet, only against the platforms&apos; documented responses. Check the first sync&apos;s log
+        carefully.
+      </p>
       {earlier.length > 0 ? (
-        <>
-          <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Earlier connections</h2>
-          {earlier.map((connection) => (
-            <ConnectionCard key={connection.id} organisationId={organisationId} connection={connection} isAdmin={isAdmin} onChanged={reload} />
-          ))}
-        </>
+        <details className={styles.more}>
+          <summary>Earlier connections ({earlier.length})</summary>
+          <div style={{ display: "grid", gap: 12 }}>
+            {earlier.map((connection) => (
+              <ConnectionCard key={connection.id} organisationId={organisationId} connection={connection} isAdmin={isAdmin} onChanged={reload} />
+            ))}
+          </div>
+        </details>
       ) : null}
     </div>
-  );
-}
-
-/**
- * Posting to the accounts (SPC11-SPC24): the switch, the start date, the
- * accounts, Shopify's tax rates matched to tax codes, the code for untaxed
- * sales and the contact for guest checkouts (decision 317). Saved together;
- * the server checks everything posting needs before the switch goes on.
- */
-function PostingSettings({
-  organisationId,
-  connection,
-  isAdmin,
-  busy,
-  run,
-  path,
-}: {
-  organisationId: string;
-  connection: SalesPlatformConnection;
-  isAdmin: boolean;
-  busy: boolean;
-  run: (work: () => Promise<string>) => Promise<void>;
-  path: string;
-}) {
-  const accounts = useAccounts(organisationId);
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
-  const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const [form, setForm] = useState(() => ({
-    postToAccounts: connection.postToAccounts,
-    startDate: connection.startDate ?? "",
-    clearingAccountCode: connection.clearingAccountCode ?? "",
-    payoutAccountCode: connection.payoutAccountCode ?? "",
-    feesAccountCode: connection.feesAccountCode ?? "",
-    salesAccountCode: connection.salesAccountCode ?? "",
-    shippingAccountCode: connection.shippingAccountCode ?? "",
-    chargebacksAccountCode: connection.chargebacksAccountCode ?? "",
-    reserveAccountCode: connection.reserveAccountCode ?? "",
-    paymentMethods: connection.paymentMethods.map((entry) => ({ method: entry.method, title: entry.title, choice: entry.leftOwing ? OWING : (entry.accountCode ?? "") })),
-    untaxedTaxCode: connection.untaxedTaxCode ?? "",
-    guestContactId: connection.guestContactId ?? "",
-    taxCodes: connection.taxCodes.length > 0 ? connection.taxCodes.map((entry) => ({ ...entry })) : [{ rate: "15", taxCode: "" }],
-  }));
-  const woo = connection.platform === "woocommerce";
-  const list = accounts.data?.accounts ?? [];
-  const codes = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive && code.availableOn !== "purchases");
-  const customers = (contacts.data?.contacts ?? []).filter((contact) => contact.isCustomer);
-  const set = (change: Partial<typeof form>) => setForm((current) => ({ ...current, ...change }));
-  const save = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void run(async () => {
-      await api(path, {
-        method: "PATCH",
-        body: {
-          organisationId,
-          postToAccounts: form.postToAccounts,
-          startDate: form.startDate || null,
-          salesAccountCode: form.salesAccountCode || null,
-          shippingAccountCode: form.shippingAccountCode || null,
-          ...(woo
-            ? {
-                paymentMethods: form.paymentMethods.map((entry) => ({
-                  method: entry.method,
-                  leftOwing: entry.choice === OWING,
-                  accountCode: entry.choice === OWING || entry.choice === "" ? null : entry.choice,
-                })),
-              }
-            : {
-                clearingAccountCode: form.clearingAccountCode || null,
-                payoutAccountCode: form.payoutAccountCode || null,
-                feesAccountCode: form.feesAccountCode || null,
-                chargebacksAccountCode: form.chargebacksAccountCode || null,
-                reserveAccountCode: form.reserveAccountCode || null,
-              }),
-          untaxedTaxCode: form.untaxedTaxCode || null,
-          guestContactId: form.guestContactId || null,
-          taxCodes: form.taxCodes.filter((entry) => entry.rate !== "" && entry.taxCode !== ""),
-        },
-      });
-      return "Posting settings saved.";
-    });
-  };
-  const accountField = (label: string, key: "clearingAccountCode" | "payoutAccountCode" | "feesAccountCode" | "salesAccountCode" | "shippingAccountCode" | "chargebacksAccountCode" | "reserveAccountCode", filter: (account: (typeof list)[number]) => boolean, hint?: string) => (
-    <Field label={label} hint={hint}>
-      <AccountSelect accounts={list} filter={filter} placeholder="Not chosen" value={form[key]} onChange={(code) => set({ [key]: code } as Partial<typeof form>)} />
-    </Field>
-  );
-  return (
-    <details>
-      <summary>
-        <strong>Posting to the accounts</strong> · {connection.postToAccounts ? `on, from ${connection.startDate}` : "off"}
-      </summary>
-      <form onSubmit={save} style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        <fieldset disabled={!isAdmin || busy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 12 }}>
-          <label className={ui.checkbox}>
-            <input type="checkbox" checked={form.postToAccounts} onChange={(event) => set({ postToAccounts: event.target.checked })} /> {woo ? "Post orders and refunds to the accounts" : "Post orders, refunds and payouts to the accounts"}
-          </label>
-          <div className={ui.grid2}>
-            <Field label="Start date" hint="Orders processed before it aren't brought in.">
-              <DateInput value={form.startDate} onChange={(event) => set({ startDate: event.target.value })} />
-            </Field>
-            {woo ? null : accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds until it pays out.")}
-            {woo ? null : accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank")}
-            {woo ? null : accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense")}
-            {accountField("Sales", "salesAccountCode", (account) => account.accountClass === "revenue")}
-            {accountField("Shipping", "shippingAccountCode", (account) => account.accountClass === "revenue")}
-            {woo ? null : accountField("Chargebacks", "chargebacksAccountCode", (account) => account.accountClass === "expense", "Disputed amounts Shopify takes back. Needed once a payout has a chargeback.")}
-            {woo ? null : accountField("Reserve", "reserveAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds back. Needed once a payout has a reserve.")}
-            <Field label="Tax code for untaxed sales" hint="Zero-rated or exempt; needed when the organisation is GST registered.">
-              <select value={form.untaxedTaxCode} onChange={(event) => set({ untaxedTaxCode: event.target.value })}>
-                <option value="">Not chosen</option>
-                {codes.filter((code) => code.category === "zero_rated" || code.category === "exempt").map((code) => (
-                  <option key={code.id} value={code.code}>{code.code} {code.label}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Guest checkouts go to" hint={`Orders without a ${SALES_PLATFORM_LABELS[connection.platform]} customer. Not chosen: they're refused and logged.`}>
-              <select value={form.guestContactId} onChange={(event) => set({ guestContactId: event.target.value })}>
-                <option value="">Not chosen (refused)</option>
-                {customers.map((contact) => (
-                  <option key={contact.id} value={String(contact.id)}>{contact.name}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          {woo ? (
-            <div style={{ display: "grid", gap: 8 }}>
-              <strong>Payment methods</strong>
-              <p className={ui.muted} style={{ margin: 0 }}>
-                Where each payment method&apos;s money goes.{" "}
-                <InfoTip label="Payment methods">A card gateway with a bank feed (e.g. Stripe) goes into that account, so the feed&apos;s line
-                matches the payment. Bank transfers are left owing for the bank feed to match. Methods appear here once an order uses them; orders wait
-                until their method is chosen.</InfoTip>
-              </p>
-              {form.paymentMethods.length === 0 ? <p className={ui.muted}>No orders yet.</p> : null}
-              {form.paymentMethods.map((entry, index) => (
-                <Field key={entry.method} label={`${entry.title ?? entry.method} (${entry.method})`}>
-                  <select
-                    value={entry.choice}
-                    onChange={(event) =>
-                      set({ paymentMethods: form.paymentMethods.map((other, at) => (at === index ? { ...other, choice: event.target.value } : other)) })
-                    }
-                  >
-                    <option value="">Not chosen (orders wait)</option>
-                    <option value={OWING}>Left owing (bank transfer, cheque)</option>
-                    {list
-                      .filter((account) => account.accountType === "bank")
-                      .map((account) => (
-                        <option key={account.code} value={account.code}>
-                          Into {account.code} · {account.name}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
-              ))}
-            </div>
-          ) : null}
-          <div>
-            <strong>{SALES_PLATFORM_LABELS[connection.platform]}&apos;s tax rates</strong>
-            {form.taxCodes.map((entry, index) => (
-              <div key={index} className={ui.actions}>
-                <input
-                  aria-label="Rate %"
-                  inputMode="decimal"
-                  value={entry.rate}
-                  style={{ width: 80 }}
-                  onChange={(event) => set({ taxCodes: form.taxCodes.map((other, at) => (at === index ? { ...other, rate: event.target.value } : other)) })}
-                />
-                % →
-                <select
-                  aria-label="Tax code"
-                  value={entry.taxCode}
-                  onChange={(event) => set({ taxCodes: form.taxCodes.map((other, at) => (at === index ? { ...other, taxCode: event.target.value } : other)) })}
-                >
-                  <option value="">Choose a tax code</option>
-                  {codes.map((code) => (
-                    <option key={code.id} value={code.code}>{code.code} {code.label}</option>
-                  ))}
-                </select>
-                <Button type="button" size="small" variant="secondary" onClick={() => set({ taxCodes: form.taxCodes.filter((_, at) => at !== index) })}>
-                  Remove
-                </Button>
-              </div>
-            ))}
-            <Button type="button" size="small" variant="secondary" onClick={() => set({ taxCodes: [...form.taxCodes, { rate: "", taxCode: "" }] })}>
-              Add a rate
-            </Button>
-          </div>
-          {isAdmin ? (
-            <div className={ui.actions}>
-              <Button type="submit">Save posting settings</Button>
-            </div>
-          ) : (
-            <p className={ui.muted}>Only admins can change these.</p>
-          )}
-        </fieldset>
-      </form>
-    </details>
   );
 }
