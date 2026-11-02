@@ -2,7 +2,7 @@
 
 Actual ready-to-use vector assets for issue #509, following the user's request for simple illustrations instead of realistic AI imagery. The draft PR now integrates selected icons into the app launcher, Farm menu and navigation, and Sales/Purchases overviews. Nothing is deployed until the PR is merged and released.
 
-![All 28 illustrated icons](preview.svg)
+![All 32 illustrated icons](preview.svg)
 
 ## Files and use
 
@@ -78,3 +78,31 @@ Eight additional original assets: `banking.svg`, `sales.svg`, `purchases.svg`, `
 `navigation-art.ts` maps existing routes to illustrations; specific subroutes take precedence over module defaults. It does not grant access, add destinations or change permissions. Unknown/external paths receive no image. Headers hide decorative art when printing; embedded Analytics reports keep their existing header-free layout.
 
 Checked in a production build on 1 November 2026 (PR #520 review): desktop dropdowns at 1280px, the phone menu at 390px and 320px, light and dark, and print (art hidden). Not checked: browser zoom, screen readers and keyboard-only use beyond the unchanged link markup. This is an app-wide navigation/heading treatment, not a redesign of every table or report. The public marketing website is unchanged.
+
+## Settings cog redrawn, and settings pages with their own pictures
+
+Jess said the old Settings cog looked like a soft flower, and that a cog on Sales platforms says nothing about selling (2 November 2026). Changes:
+
+- `settings.svg` is redrawn as a geometric 8-tooth gear with evenly spaced, square-ended teeth and a centre hole. It reads as a gear at 20px.
+- Four new original icons: `shop.svg` (shop front with striped awning), `team.svg` (two people), `card.svg` (a plain payment card, no brand marks) and `key.svg`.
+- The cog stays on the Settings hubs (Organisation settings, All settings, Server settings) and general settings (Modules, Custom fields, Tracking categories, Updates, CRM teams, record types and stages, Analytics shaping). The CRM Settings menu keeps the cog because its first link is Teams.
+
+| Page | Icon |
+|---|---|
+| Settings › Sales platforms | Shop |
+| Settings › Online payments | Card |
+| Settings › Email | Mail |
+| Settings › Bank files | Banking |
+| Settings › Import and export | Documents |
+| Settings › PowerPoint add-in | Reports |
+| Settings › Payroll access | Payroll |
+| Settings › Customer settings | CRM |
+| Settings › Salespeople | Team |
+| Settings › Approval rules | Purchases (it covers bills, purchase orders and expense claims) |
+| Settings › Kilometre rates | Maps |
+| People and roles | Team |
+| CRM › Duplicates | CRM |
+| Server › Users | Team (was CRM) |
+| Server › Sign-ins, Sign in with Google, Remote access | Key |
+
+No brand logos: the shop and card are generic drawings, not any platform's or card scheme's mark.
