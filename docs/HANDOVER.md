@@ -173,6 +173,7 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.23.0 ready to publish from main** (2 Nov 2026): security cameras (#525), camera post box (#526), (i) help (#522, #524) and icons everywhere (#520). Notes in docs/releases/0.23.0.md.
 - **0.22.0 ready to publish from main** (31 Oct 2026): Meta (#517) plus 0.21.0's
   contents (not published). Publish only after the release PR has merged.
 - **0.21.0 (not published) ready to publish from main** (31 Oct 2026): #506, #510, #511.
