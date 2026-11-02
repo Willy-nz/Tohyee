@@ -34,12 +34,13 @@ export function ShopifyScopesCard() {
       <div style={{ display: "grid", gap: 8 }}>
         <label className={ui.muted} htmlFor="shopify-scopes-line">Scopes</label>
         <div className={ui.actions} style={{ alignItems: "stretch", flexWrap: "wrap" }}>
-          <input
+          <textarea
             id="shopify-scopes-line"
             readOnly
+            rows={4}
             value={SHOPIFY_SCOPES_LINE}
             onFocus={(event) => event.currentTarget.select()}
-            style={{ flex: "1 1 260px", minWidth: 0, fontFamily: "var(--font-mono, monospace)", fontSize: "0.85rem" }}
+            style={{ flex: "1 1 260px", minWidth: 0, resize: "vertical", wordBreak: "break-all", fontFamily: "var(--font-mono, monospace)", fontSize: "0.85rem" }}
           />
           <Button variant="secondary" onClick={() => void copy()}>
             {copied === "yes" ? "Copied" : "Copy"}
@@ -47,39 +48,30 @@ export function ShopifyScopesCard() {
         </div>
         {copied === "no" ? <p className={ui.muted} role="status">Couldn&apos;t copy. Select the line and copy it yourself.</p> : null}
         {copied === "yes" ? <p className={ui.muted} role="status">Copied to the clipboard.</p> : null}
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
-            <thead>
-              <tr>
-                <th>Part</th>
-                <th>Needs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SHOPIFY_PARTS.map((part) => (
-                <tr key={part.key}>
-                  <td>
-                    {part.label}{" "}
-                    <InfoTip label={part.label}>
-                      {part.brings}
-                      {part.needsApproval ? ` ${part.needsApproval}` : ""}
-                    </InfoTip>
-                  </td>
-                  <td style={{ overflowWrap: "anywhere" }}>
-                    <code>{part.scopes.join(", ")}</code>
-                    {part.optionalScopes?.length ? (
-                      <>
-                        {" "}
-                        <span className={ui.muted}>(and optionally <code>{part.optionalScopes.join(", ")}</code>)</span>
-                      </>
-                    ) : null}
-                    {part.needsApproval ? <> <Badge tone="amber">Shopify approval</Badge></> : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <h3 style={{ margin: "8px 0 0", fontSize: "1rem" }}>What each part needs</h3>
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+          {SHOPIFY_PARTS.map((part) => (
+            <li key={part.key} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 8px", paddingBottom: 6, borderBottom: "1px solid var(--border)" }}>
+              <span style={{ minWidth: 200 }}>
+                {part.label}{" "}
+                <InfoTip label={part.label}>
+                  {part.brings}
+                  {part.needsApproval ? ` ${part.needsApproval}` : ""}
+                </InfoTip>
+              </span>
+              <span style={{ overflowWrap: "anywhere", minWidth: 0 }}>
+                <code>{part.scopes.join(", ")}</code>
+                {part.optionalScopes?.length ? (
+                  <>
+                    {" "}
+                    <span className={ui.muted}>(and optionally <code>{part.optionalScopes.join(", ")}</code>)</span>
+                  </>
+                ) : null}
+                {part.needsApproval ? <> <Badge tone="amber">Shopify approval</Badge></> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </Card>
   );
@@ -143,36 +135,28 @@ export function StockDifferences({ organisationId, connectionId }: { organisatio
       {shown.length === 0 ? (
         <Empty>Nothing differs.</Empty>
       ) : (
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th className={ui.num}>Shopify on hand</th>
-                <th className={ui.num}>Shopify available</th>
-                <th className={ui.num}>Tohyee on hand</th>
-                <th>Difference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((row) => (
-                <tr key={row.variantId}>
-                  <td>
-                    {row.itemCode ? <strong>{row.itemCode}</strong> : null} {row.itemName ?? row.shopifyName}
-                    <div className={ui.muted}>
-                      {row.sku ? `SKU ${row.sku}` : "No SKU"}
-                      {row.locations.length > 1 ? ` · ${row.locations.map((l) => `${l.name} ${l.onHand}`).join(", ")}` : row.locations[0] ? ` · ${row.locations[0].name}` : ""}
-                    </div>
-                  </td>
-                  <td className={ui.num}>{row.shopifyOnHand}</td>
-                  <td className={ui.num}>{row.shopifyAvailable}</td>
-                  <td className={ui.num}>{quantity(row.tohyeeOnHand)}</td>
-                  <td>{differenceBadge(row)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 0 }} aria-label="Stock by item">
+          {shown.map((row) => (
+            <li key={row.variantId} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "6px 16px", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ minWidth: 0, flex: "1 1 240px" }}>
+                {row.itemCode ? <strong>{row.itemCode}</strong> : null} {row.itemName ?? row.shopifyName}
+                <div className={ui.muted}>
+                  {row.sku ? `SKU ${row.sku}` : "No SKU"}
+                  {row.locations.length > 1 ? ` · ${row.locations.map((l) => `${l.name} ${l.onHand}`).join(", ")}` : row.locations[0] ? ` · ${row.locations[0].name}` : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 16px" }}>
+                <span>
+                  Shopify <strong>{row.shopifyOnHand}</strong> <span className={ui.muted}>({row.shopifyAvailable} available)</span>
+                </span>
+                <span>
+                  Tohyee <strong>{quantity(row.tohyeeOnHand)}</strong>
+                </span>
+                {differenceBadge(row)}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
