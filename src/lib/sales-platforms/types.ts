@@ -152,3 +152,32 @@ export type SyncResult = {
   /** Orders waiting (not paid yet, or posting stopped on Tohyee's side and tried again next sync). */
   waiting?: number;
 };
+
+/**
+ * A store customer not brought in because an active contact has the same
+ * name and nothing (no matching email) says whether they're the same person
+ * (#539, decisions 1269-1272). An admin decides: same person (link) or
+ * different person (a new contact, under `suggestedName` unless they type
+ * another).
+ */
+export type CustomerMatch = {
+  externalId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  /** The existing contact with the same name. */
+  contactId: string;
+  contactName: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  /** An archived contact can't be linked; only "different person" is offered. */
+  contactArchived: boolean;
+  /** Whether that contact is already linked to another customer of this store (so it can't be linked to this one). */
+  contactLinkedTo: string | null;
+  /** A free name for a new contact, e.g. "Alex Example (Shopify)". */
+  suggestedName: string;
+  firstSeenAt: string;
+};
+
+export const CUSTOMER_MATCH_RESOLUTIONS = ["same", "different"] as const;
+export type CustomerMatchResolution = (typeof CUSTOMER_MATCH_RESOLUTIONS)[number];

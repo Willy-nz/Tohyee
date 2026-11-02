@@ -19,6 +19,7 @@ import {
 } from "@/lib/sales-platforms/types";
 import { integrationsSummary } from "@/lib/sales-platforms/summary";
 import { useConfirm } from "@/components/confirm-dialog";
+import { CustomerMatches } from "@/components/customer-matches";
 import { ShopifyPartsList, ShopifyScopesCard, StockSection } from "@/components/sales-platform-extras";
 import { type SetupStep, StoreSetup } from "@/components/store-setup";
 import styles from "./store-setup.module.css";
@@ -418,6 +419,19 @@ export function ConnectionCard({
           ) : (
             <p className={ui.muted}>Working out what&apos;s been brought in…</p>
           )
+        ) : null}
+        {connected ? (
+          <CustomerMatches
+            organisationId={organisationId}
+            connectionId={connection.id}
+            platform={connection.platform}
+            isAdmin={isAdmin}
+            version={logVersion}
+            onResolved={(text) => {
+              setMessage({ tone: "success", text });
+              setLogVersion((value) => value + 1);
+            }}
+          />
         ) : null}
         {connected && isAdmin ? (
           <div className={ui.actions}>

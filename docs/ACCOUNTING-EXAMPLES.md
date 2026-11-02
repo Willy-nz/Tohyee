@@ -5765,7 +5765,7 @@ The rules (our choice where Shopify and Jess are silent):
   the same email (ignoring case). A variant links to the item whose code is
   the variant's SKU (ignoring case). Anything else that isn't clear is
   skipped and logged, never guessed: no email match and a contact with the
-  same name already exists; more than one contact with that email; a
+  same name already exists (an admin then checks, SPC35-SPC37); more than one contact with that email; a
   record already linked to another Shopify record; a variant with no SKU,
   or a SKU that can't be an item code; an archived contact or item.
   Otherwise a new contact (a customer) or a new **non-stock** item is
@@ -6385,6 +6385,40 @@ from SPC11-SPC31; this is what the setup fills in and shows.
 Built (decisions 1250-1259). Tests: `tests/unit/sales-platform-setup.test.ts`
 (SPC32-SPC34) and `tests/unit/sales-platform-coverage.test.ts` and
 `tests/integration/sales-platforms.test.ts` (#532).
+
+### Same-name customers to check (#539; follows the issue's suggestion, not yet reviewed)
+
+A review found that a Shopify customer with the same name as a contact
+but another email was skipped with "Give the contact the same email to
+link them", which could lead someone to overwrite a different person's
+email. Nothing posts differently; these are contacts and links only.
+Made-up people.
+
+- **SPC35** Contact **Alex Example** (alex-a@example.test). Shopify
+  customer 1101 **Alex Example** (alex-b@example.test) and customer 1102
+  **Alex Example** (no email). The sync links and adds nothing, changes no
+  email, and logs each as skipped: "...contact Alex Example has the same
+  name but a different email, so they may be different people. Check who
+  they are, then choose "Same person" or "Different person" under
+  "Customers to check"." (1102: "...and Shopify has no email to tell
+  whether they're the same person."). Both are listed to check. Syncing
+  again adds no log lines and no second entry.
+- **SPC36** An admin says 1101 is a **different person**: contact **Alex
+  Example (Shopify)** is added with alex-b@example.test and linked. 1102
+  is the **same person**: linked to Alex Example, whose email stays
+  alex-a@example.test. Neither is listed any more. Later, Shopify gives
+  1101 a phone and 1102 the email alex-new@example.test: the next sync
+  copies the phone to Alex Example (Shopify) (not renamed) and keeps
+  alex-a@example.test on Alex Example (logged as kept, SPC5).
+- **SPC37** Alex Example is already linked to customer 1100 (same email).
+  "Same person" for 1101 is refused ("already linked to Shopify customer
+  1100"); one contact links to one customer of a store. "Different
+  person" adds **Alex Example (Shopify)** for 1101, then **Alex Example
+  (Shopify 1102)** for 1102 (no email, and the first name is taken). A
+  typed name already used by a contact is refused.
+
+Built (decisions 1269-1272). Tests: `tests/integration/sales-platforms.test.ts`
+(SPC35-SPC37) and `tests/unit/sales-platform-customer-matches.test.ts`.
 
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 

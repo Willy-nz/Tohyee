@@ -65,6 +65,8 @@ const REASONS: ReadonlyArray<[RegExp, string]> = [
   [/already linked to/, "already_linked"],
   [/is archived/, "archived_in_tohyee"],
   [/has no name/, "missing_name"],
+  // A customer with a same-name contact and no email match (#539): an admin checks whether they're the same person.
+  [/has the same name/, "same_name_needs_check"],
   [/\bscopes?\b/i, "missing_scope"],
   [/isn't matched to a Tohyee tax code|no tax code for untaxed/, "tax_code_not_set"],
   [/Choose an? .* account|account in the .* settings/, "account_not_set"],

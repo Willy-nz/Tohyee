@@ -1556,7 +1556,8 @@ that something happened.
   contact with the same email (ignoring case); variants become non-stock
   items, linked to an existing item with the SKU as its code. Unclear ones
   are skipped with the reason (two contacts with the email, a contact with
-  the name but another email, no SKU). Shopify's changes are copied unless
+  the name but another email, no SKU); a same-name customer waits under
+  "Customers to check" (#539). Shopify's changes are copied unless
   someone changed that value in Tohyee, which is kept and logged. Prices
   are copied only from a store in the base currency whose prices exclude
   tax. Customer and product create/update webhooks are handled once each
@@ -1627,6 +1628,17 @@ that something happened.
   no SKU") and a button to set up or see why. The sync log loads 200
   lines at a time with "Load older", and filters by part and by what
   happened.
+- **Customers to check** (#539, decisions 1269-1272, SPC35-SPC37): a
+  Shopify or WooCommerce customer with the same name as a contact and no
+  matching email isn't linked, merged or added, and the log no longer
+  suggests changing anyone's email. The store's card lists them (customer
+  and contact side by side). Admins choose **Same person** (after a
+  confirmation: linked to that contact, whose details aren't changed;
+  refused when the contact is archived or already linked to another of
+  the store's customers) or **Different person** (a new contact under a
+  name that tells them apart, e.g. "Alex Example (Shopify)", which they
+  can change). The log and audit trail record who decided; later syncs
+  treat the customer as linked, and waiting orders come in.
 - **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):

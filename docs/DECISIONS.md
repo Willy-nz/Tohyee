@@ -11752,3 +11752,40 @@ guide, and Link My Books' Shopify chargebacks article.
       a balance on another), bank files by folder or mailbox, Meta and
       Search Console connections, online payments, payroll settings; the
       camera post box is already step by step.
+1269. **Same-name customers wait for a person to check** (#539). A store
+      customer with no email match and an active contact of the same
+      name (ignoring case) is still skipped, never merged, but what the
+      store said is kept in `sales_platform_customer_matches` (migration
+      0215) so it can be resolved without fetching it again. The row goes
+      when the customer is linked any way, when the sync next finds no
+      clash, or when the store is disconnected. Re-syncing refreshes the
+      row and doesn't add log lines (the line is unchanged). Follows the
+      issue's suggestion; Xero's own Shopify import wasn't checked for
+      this case.
+1270. **The skip message is neutral.** It says the contact has the same
+      name and a different (or no) email, that they may be different
+      people, and to check who they are and choose "Same person" or
+      "Different person" under "Customers to check". It never suggests
+      giving the contact the same email. The Sales platforms reasons call
+      it "same name as a contact: check who they are"; the read-only AI
+      diagnostics call it `same_name_needs_check`.
+1271. **Same person links without changing the contact.** Admins only,
+      after a confirmation naming both emails. The request must name the
+      contact shown (a stale page can't link someone else). Refused when
+      the contact is archived or already linked to another customer of
+      the same store; the existing unique links stay the last word. The
+      link stores the store's current values as "last copied", so nothing
+      is copied now and later store changes follow SPC5: the contact's own
+      email is kept (and logged) rather than replaced. The contact is
+      marked as a customer, as any sync link does. Log line ("linked", by
+      the admin) and audit event `sales_platform.customer_linked`.
+1272. **Different person adds a contact with a distinguishing name.**
+      Contact names are unique among active contacts, so the new contact
+      is named "Name (Shopify)", else "Name (email)", else "Name (Shopify
+      <customer number>)", whichever is free (150 characters at most); the
+      admin can type another, and a taken one is refused. It gets the
+      customer's email, phone and country and is linked; the name the store
+      sent is remembered as last copied, so later syncs don't rename it.
+      Log line ("created") and audit event
+      `sales_platform.customer_added_separately`. Viewers see the list but
+      not the buttons.
