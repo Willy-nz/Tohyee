@@ -2212,6 +2212,18 @@ that something happened.
   covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
   turned off. Not yet tried against each AI app.
+- **AI: sales platform diagnostics and the connection's access** (#531,
+  #532 part 3, decisions 1246-1249). get_organisation now says what the
+  key or app connection may do now (Look only, Make drafts, Make and post or
+  Full access, capped by the person's role), matching the server's
+  instructions. Two Look only tools: get_sales_platform_status (per store:
+  what syncs, posting and its start date, missing settings, Shopify scopes
+  given against needed, links made, records not brought in by reason such
+  as a missing SKU, and how fresh the last sync is) and
+  list_sales_platform_log (the sync log, paged and filtered by action,
+  record kind, outcome or record, with a reason on each skip or failure).
+  They only read and never show credentials, tokens or webhook addresses.
+  Tested on made-up stores and log lines, not a real Shopify store.
 - **AI apps connect by signing in** (#427, decisions 810-829, core
   migration 0018). Claude.ai, ChatGPT and other cloud AI connect by pasting
   one address (the MCP address on the remote access address) and signing in
