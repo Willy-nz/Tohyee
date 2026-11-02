@@ -3211,7 +3211,23 @@ that something happened.
   and media address checks. The page always says cameras record staff and
   visitors. Not built: fetching clips from the camera's SD card, AI tags,
   live view, backing up the media folder. 4G cameras can't upload through
-  remote access; the server needs a public address and port forwarding.
+  remote access, so they use a camera post box (below) or, with a public
+  address at home, direct uploads.
+
+- **Camera post box** (#508 follow-up, decisions 1226-1233; tenant
+  migration 0213; not tried on a real server or camera; not yet reviewed
+  by Jess; docs/FARM-SECURITY.md): Farm › Security › **Post box** (owners
+  and admins) walks through renting a small Ubuntu server, pasting a
+  one-command install, and pasting its pairing code, each step with why,
+  then shows what to type into the Reolink app per camera. Cameras upload
+  by FTPS to the post box (Tohyee's own upload-only receiver, image
+  `ghcr.io/willy-nz/tohyee-postbox`); each file is sealed to Tohyee's key
+  on arrival. Every minute Tohyee calls out over HTTPS (certificate
+  pinned, token kept encrypted), pushes the camera logins as hashes,
+  downloads and ingests new files like direct uploads, and only then has
+  the post box delete them. Status: connected, last collected, files
+  waiting, disk space, errors (a changed certificate stops it loudly).
+  Pairing and unpairing are audited.
 
 - **Paddock photos and covers from photos** (#503, decisions 1160-1169;
   tenant migration 0209): a cover reading on the Log, each paddock on a

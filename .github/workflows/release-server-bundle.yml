@@ -3,7 +3,9 @@ name: Release server bundle
 # Pushing a v* tag (matching package.json's version) publishes a release with:
 # - tohyee-v<version>-windows.zip: Docker Desktop installer for Windows
 # - tohyee-v<version>-linux-x64.tar.gz: the plain Node.js bundle
-# and the Docker image ghcr.io/willy-nz/tohyee:<version> (and :latest).
+# and the Docker images ghcr.io/willy-nz/tohyee:<version> (and :latest) and
+# ghcr.io/willy-nz/tohyee-postbox:<version> (and :latest), the camera post box
+# (postbox/Dockerfile, decisions 1226-1233).
 #
 # The token is read-only by default. The build job runs npm ci (third-party
 # install scripts) with no write access; the image job can push packages
@@ -80,6 +82,10 @@ jobs:
       - name: Version from the tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
+      # The post box image is also built for ARM servers (many cheap ones are).
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -102,6 +108,22 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/Willy-nz/Tohyee
             org.opencontainers.image.description=Tohyee: self-hosted, open-source accounting for New Zealand organisations
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.version=${{ env.VERSION }}
+
+      - name: Build and push the camera post box image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: postbox/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/willy-nz/tohyee-postbox:${{ env.VERSION }}
+            ghcr.io/willy-nz/tohyee-postbox:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/Willy-nz/Tohyee
+            org.opencontainers.image.description=Tohyee camera post box: cameras upload here by FTPS, Tohyee collects over HTTPS
             org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.version=${{ env.VERSION }}
 

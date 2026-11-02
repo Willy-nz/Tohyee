@@ -167,6 +167,12 @@ export async function register() {
     void startCameraUploads();
   }
 
+  // Collecting from camera post boxes (decision 1230): every minute, only for organisations that paired one. Tohyee calls out; nothing is opened.
+  if (process.env.TOHYEE_CAMERA_POSTBOX !== "off") {
+    const { startPostboxCollector } = await import("@/lib/camera-postbox/collector");
+    startPostboxCollector();
+  }
+
   if (process.env.TOHYEE_FARM_MAIL_SCHEDULER !== "off") {
     const { startFarmMailScheduler } = await import("@/lib/farming/calendar");
     startFarmMailScheduler();

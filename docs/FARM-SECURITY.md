@@ -1,6 +1,6 @@
 # Farm security cameras
 
-Issue #508, decisions 1216-1225. Farm › More › **Security**.
+Issue #508, decisions 1216-1225; the camera post box, decisions 1226-1233. Farm › More › **Security**.
 
 Tohyee keeps the photos and clips your cameras upload, shows them per farm
 (or all farms), and lets you keep incidents and clean up the rest. It was
@@ -19,8 +19,9 @@ See [What's verified and what isn't](#whats-verified-and-what-isnt).
    hash (like people's passwords). No Reolink account or cloud password is
    ever asked for or stored.
 3. You type them into the Reolink app's FTP settings. The camera then sends
-   each photo (JPEG) and clip (MP4) to Tohyee's **camera upload receiver**,
-   a small FTPS server built into Tohyee.
+   each photo (JPEG) and clip (MP4) by FTPS, either to a **camera post
+   box** that Tohyee collects from, or straight to Tohyee's own **camera
+   upload receiver** (see [Getting camera uploads to Tohyee](#getting-camera-uploads-to-tohyee)).
 4. Each file becomes an **event**: which camera, the camera's time (from the
    file name) and when Tohyee got it, photo or clip, and its size.
 5. People with camera access see the events as photos and clips, can keep
@@ -28,9 +29,165 @@ See [What's verified and what isn't](#whats-verified-and-what-isnt).
    delete (with delete access). An hourly clean-up removes media older than
    the farm's retention, except kept events.
 
-## Setting up the server
+## Getting camera uploads to Tohyee
 
-Camera uploads are **off** until the server's administrator turns them on.
+Decisions 1226-1233. Two ways:
+
+| | **Camera post box** (most farms) | **Direct** |
+| --- | --- | --- |
+| What | A small rented online server. Cameras send to it; Tohyee collects from it every minute. | Cameras send straight to Tohyee at home. |
+| Needs | A server from any provider (about $5-10 a month) | A public address at home, and ports forwarded on the router |
+| Opens at home | Nothing. Tohyee only calls out. | The FTP port and 20 passive ports |
+| Set up in | Farm › Security › **Post box** (owners and admins) | The server's settings ([below](#direct-uploads-setting-up-the-server)) |
+
+### Why a post box
+
+A 4G camera is out on the internet, not on the farm network. Tohyee's
+remote access (the Tohyee address, Cloudflare, Tailscale Funnel) only
+carries web pages, and many New Zealand connections share one public
+address between customers. So most farms can't take uploads at home. The
+post box has its own public address; Tohyee reaches out to it over
+HTTPS, so nothing at home is opened.
+
+### Setting one up (Farm › Security › Post box)
+
+The screen walks through it, with why for each step:
+
+1. **Why you need one.**
+2. **Rent a small server:** Ubuntu 24.04, 1 CPU, 1 GB memory, about 20 GB
+   disk, a public IPv4 address, in Sydney or Auckland if offered. Open TCP
+   **21** (cameras log in), **50000-50019** (each file) and **8443**
+   (Tohyee collects) in the provider's firewall. Any provider is fine; the
+   screen names a few as examples, not recommendations.
+3. **Paste the install command** on the server. It's for the same version
+   as your Tohyee:
+   `curl -fsSL https://raw.githubusercontent.com/Willy-nz/Tohyee/v<version>/postbox/install.sh | sudo bash -s -- --version <version>`.
+   It installs Docker (Ubuntu's own packages), finds the server's public
+   address (`--address` if it can't), writes `/opt/tohyee-postbox`, starts
+   the image `ghcr.io/willy-nz/tohyee-postbox:<version>`, opens the ports
+   in ufw if ufw is on, and shows a **pairing code**. Running it again is
+   safe.
+4. **Paste the pairing code** into Tohyee. It works once, within a day. A
+   new one: `sudo docker exec tohyee-postbox node /app/postbox.cjs pairing-code`.
+5. **Tohyee tests it** and shows what to type into the Reolink app: the
+   post box's address, port 21, FTPS only, and each camera's user name
+   (the password is the one shown when the login was made).
+
+Afterwards the screen shows: connected or not, last heard from, last
+collected, files waiting, the post box's free disk space, whether the
+camera logins on it are up to date, and any problem. **Check now** collects
+straight away; **Disconnect** forgets it (audited).
+
+### How it works
+
+- **The post box program** is in this repository (`postbox/main.ts`,
+  `src/lib/camera-postbox/box/`). It runs Tohyee's own upload-only FTPS
+  receiver, with the same checks as direct uploads (JPEG and MP4 only,
+  size limit, ten wrong passwords locks an address out, connection
+  limits), and a small HTTPS API for Tohyee.
+- **Camera logins come from Tohyee.** There's no user list on the post
+  box. Tohyee pushes each active camera's user name and **scrypt hash**
+  (never a password) whenever they differ from the post box's, so making,
+  replacing or removing a login (or archiving a camera) reaches the post
+  box within a minute.
+- **Pairing.** The install script shows a code with the post box's
+  address, port, certificate fingerprint and a one-time secret. Tohyee
+  makes a long random token, sends the post box only its SHA-256 (with the
+  one-time secret), and keeps the token encrypted with the server's secret
+  key, like other secrets.
+- **The certificate.** Without a domain, the post box makes its own
+  certificate (RSA 2048, ten years) and Tohyee **pins** its fingerprint
+  from the code. Every connection checks it before anything is sent. A
+  different certificate stops collection with a red "the post box's
+  certificate changed" until it's paired again: if you didn't rebuild the
+  post box, someone may be pretending to be it.
+- **With a domain:** put a proper certificate's files on the server, set
+  `POSTBOX_TLS_CERT`, `POSTBOX_TLS_KEY` and `POSTBOX_PUBLIC_NAME` in
+  `/opt/tohyee-postbox/.env` (and mount the files into the container),
+  restart, and pair with a new code. Tohyee then checks the certificate
+  the normal way, so renewing it doesn't break anything. **Not tried.**
+- **Files are locked on arrival.** Each file is sealed to Tohyee's public
+  key (X25519, HKDF-SHA256, AES-256-GCM, a new key for every file). The
+  post box keeps only the public key, so someone who takes the server
+  can't open files waiting there. Not locked: the camera's user name,
+  the file name, when it came, its size and SHA-256. The plain file is on
+  the post box's disk for a moment while it's checked and sealed.
+  Tohyee's key pair is kept across re-pairing, so files already waiting
+  still open.
+- **Collecting** (every minute; `TOHYEE_CAMERA_POSTBOX=off` stops it):
+  Tohyee downloads each file, opens it, checks its size, SHA-256 and that
+  it's a JPEG or MP4, and hands it to the same ingest as a direct upload
+  (one event per camera and SHA-256, the camera's clock, retention). Only
+  then does it tell the post box it has it, and the post box deletes it.
+  If Tohyee stops in between, the file is still there; next time ingest
+  says "already have it" and it's confirmed. Nothing lost, nothing doubled.
+  A file that fails three times is left on the post box and reported.
+  A file from a camera archived since it uploaded is dropped, as a direct
+  upload would be.
+- **Limits on the post box:** 600 requests a minute per address; ten
+  wrong tokens or pairing secrets in 15 minutes locks the address out for
+  15 minutes; JSON bodies up to 1 MB; at most 500 camera logins; uploads
+  refused when under 1 GB is free; files not collected in 30 days are
+  deleted (`POSTBOX_MAX_AGE_DAYS`).
+- **Permissions:** only owners and admins (camera "set up") see or
+  change the post box. Pairing and unpairing are audited.
+
+### The post box's settings
+
+In `/opt/tohyee-postbox/.env` (the install script writes the first three):
+
+| Setting | What it does |
+| --- | --- |
+| `POSTBOX_PUBLIC_ADDRESS` | The server's public IPv4 address. Needed. |
+| `POSTBOX_FTP_PUBLIC_PORT` | The port cameras use, default 21 (the program listens on 2121). |
+| `POSTBOX_API_PUBLIC_PORT` | The port Tohyee uses, default 8443. |
+| `POSTBOX_PASSIVE_PORTS` | The file transfer ports, default `50000-50019`. |
+| `POSTBOX_MAX_FILE_MB` | Biggest file, default 200. |
+| `POSTBOX_MIN_FREE_MB` | Refuse uploads below this much free disk, default 1024. |
+| `POSTBOX_MAX_AGE_DAYS` | Delete files not collected in this many days, default 30. |
+| `POSTBOX_TLS_CERT`, `POSTBOX_TLS_KEY`, `POSTBOX_PUBLIC_NAME` | A proper certificate for a domain name (see above). |
+
+### Building it yourself
+
+The image is published with each release (with `amd64` and `arm64`). To
+build it from this repository instead:
+
+```
+docker build -f postbox/Dockerfile -t tohyee-postbox .
+POSTBOX_PUBLIC_ADDRESS=<public IPv4> docker compose -f postbox/compose.yaml up -d --build
+docker exec tohyee-postbox node /app/postbox.cjs pairing-code
+```
+
+Or run the install script with `--image <your image>`. Without Docker:
+`npm ci && node scripts/build-postbox.mjs` makes `dist/tohyee-postbox.cjs`,
+which needs only Node 22 and `openssl` (`POSTBOX_PUBLIC_ADDRESS=… node
+dist/tohyee-postbox.cjs serve`).
+
+### What's tested and what isn't
+
+**Tested** (`tests/unit/camera-postbox-protocol.test.ts`,
+`tests/unit/camera-postbox-box.test.ts`,
+`tests/integration/camera-postbox.test.ts`): the post box program run in
+the tests on local ports, with a stand-in camera (basic-ftp) and Tohyee's
+own routes and collector: pairing once with the current code; a forged
+fingerprint refused with nothing sent; a changed certificate stopping
+collection; token and pairing lockouts; rate and size limits; logins
+pushed as hashes and kept in step; sealing and opening (wrong key and
+changed files refused, nothing readable on the post box's disk);
+list, download and delete only after confirming with the right SHA-256;
+Tohyee stopping between saving and confirming (no loss, one event);
+archived cameras; unpairing; owner-and-admin-only routes and auditing.
+CI builds the image, starts it and checks it answers and makes a code.
+
+**Not tested:** a real rented server, the install script on a fresh
+Ubuntu (only syntax and shellcheck), any provider's firewall, a Reolink
+camera uploading to it over 4G (FTPS, passive ports through Docker), the
+domain-certificate option, the `arm64` image, and the published image
+(it's first built by the next release).
+
+## Direct uploads: setting up the server
+
+For a server with a public address at home. Camera uploads are **off** until the server's administrator turns them on.
 They open a port to the internet, so they're never on by surprise.
 
 | Setting | What it does |
@@ -63,7 +220,10 @@ example from Let's Encrypt) is safest. Whether a Reolink camera checks the
 certificate, or accepts a self-made one, **isn't known**: try it with the
 first camera.
 
-## Reaching the server from a 4G camera
+## Reaching the server directly from a 4G camera
+
+Most farms should use a [camera post box](#getting-camera-uploads-to-tohyee)
+instead. This is for direct uploads.
 
 A 4G camera is on the internet, not your farm network, so it must reach
 the server over the internet.

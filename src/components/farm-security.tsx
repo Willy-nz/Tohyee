@@ -5,6 +5,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { DateInput } from "@/components/date-input";
 import { type MapOverlay, PaddockMap } from "@/components/farming";
 import { useApiData } from "@/components/hooks";
+import { PostboxScreen } from "@/components/farm-security-postbox";
 import { InfoPara, InfoTip } from "@/components/info-tip";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
@@ -34,7 +35,7 @@ import styles from "./farm-security.module.css";
 
 type CamerasAnswer = { cameras: Camera[]; access: SecurityAccess; uploads: { on: boolean; why: string | null; port: number | null; ftps: boolean; publicAddress: string | null } | null };
 type EventsAnswer = { events: SecurityEvent[]; access: SecurityAccess; more: boolean };
-type Screen = "events" | "cameras" | "settings";
+type Screen = "events" | "cameras" | "postbox" | "settings";
 
 const mediaUrl = (organisationId: string, eventId: string, query: string) => `/api/farming/security/events/${eventId}/media?organisationId=${encodeURIComponent(organisationId)}&${query}`;
 
@@ -66,7 +67,7 @@ export function FarmSecurity({ organisationId, farm, farms }: { organisationId: 
     );
   }
   if (!cameras.data || !access) return <p className={ui.muted}>Loading…</p>;
-  const screens: Array<[Screen, string]> = [["events", "Events"], ["cameras", "Cameras"], ...(access.configure ? ([["settings", "Settings"]] as Array<[Screen, string]>) : [])];
+  const screens: Array<[Screen, string]> = [["events", "Events"], ["cameras", "Cameras"], ...(access.configure ? ([["postbox", "Post box"], ["settings", "Settings"]] as Array<[Screen, string]>) : [])];
   return (
     <div className={styles.stack}>
       <CameraPrivacyNotice />
@@ -78,7 +79,7 @@ export function FarmSecurity({ organisationId, farm, farms }: { organisationId: 
             </button>
           ))}
         </div>
-        {farms.length > 1 && screen !== "settings" ? (
+        {farms.length > 1 && screen !== "settings" && screen !== "postbox" ? (
           <label className={ui.checkbox}>
             <input type="checkbox" checked={allFarms} onChange={(event) => setAllFarms(event.target.checked)} /> All farms
           </label>
@@ -87,6 +88,7 @@ export function FarmSecurity({ organisationId, farm, farms }: { organisationId: 
       <CameraHealth cameras={cameras.data.cameras} showFarm={allFarms} />
       {screen === "events" ? <EventBrowser organisationId={organisationId} farm={farm} allFarms={allFarms} cameras={cameras.data.cameras} access={access} /> : null}
       {screen === "cameras" ? <CamerasScreen organisationId={organisationId} farm={farm} allFarms={allFarms} answer={cameras.data} onChanged={cameras.reload} /> : null}
+      {screen === "postbox" && access.configure ? <PostboxScreen organisationId={organisationId} onChanged={cameras.reload} /> : null}
       {screen === "settings" && access.configure ? <SettingsScreen organisationId={organisationId} farm={farm} /> : null}
     </div>
   );
@@ -403,8 +405,11 @@ function CamerasScreen({ organisationId, farm, allFarms, answer, onChanged }: { 
     <>
       {access.configure && uploads && !uploads.on ? (
         <Notice tone="warning">
-          This server isn&apos;t taking camera uploads yet.{" "}
-          <InfoTip label="Turning on camera uploads">The server&apos;s administrator turns them on with TOHYEE_CAMERA_FTP_PORT and an FTPS certificate, and opens the ports on the router. See docs/FARM-SECURITY.md. Reason it&apos;s off: {uploads.why}.</InfoTip>
+          Cameras have nowhere to upload yet. For 4G cameras, set up a camera post box (the Post box tab).{" "}
+          <InfoTip label="Where cameras upload">
+            <InfoPara>A camera post box is a small rented server cameras send to, and Tohyee collects from. It works without opening anything at home.</InfoPara>
+            <InfoPara>Or, with a public address at home, the server&apos;s administrator can take uploads directly: TOHYEE_CAMERA_FTP_PORT, an FTPS certificate and ports forwarded on the router. See docs/FARM-SECURITY.md. Why direct uploads are off: {uploads.why}.</InfoPara>
+          </InfoTip>
         </Notice>
       ) : null}
       {login ? (

@@ -1,0 +1,31 @@
+# The Tohyee camera post box, for building it yourself from this repository:
+#   POSTBOX_PUBLIC_ADDRESS=203.0.113.10 docker compose -f postbox/compose.yaml up -d --build
+#   docker exec tohyee-postbox node /app/postbox.cjs pairing-code
+# postbox/install.sh writes a copy of this that uses the published image instead.
+services:
+  postbox:
+    build:
+      context: ..
+      dockerfile: postbox/Dockerfile
+    image: tohyee-postbox:local
+    container_name: tohyee-postbox
+    restart: unless-stopped
+    environment:
+      POSTBOX_PUBLIC_ADDRESS: ${POSTBOX_PUBLIC_ADDRESS:?Set POSTBOX_PUBLIC_ADDRESS to this server's public IPv4 address}
+      POSTBOX_FTP_PUBLIC_PORT: ${POSTBOX_FTP_PUBLIC_PORT:-21}
+      POSTBOX_API_PUBLIC_PORT: ${POSTBOX_API_PUBLIC_PORT:-8443}
+      POSTBOX_PASSIVE_PORTS: 50000-50019
+    ports:
+      # Cameras log in on 21 (the Reolink app's usual port); the program listens on 2121.
+      - "${POSTBOX_FTP_PUBLIC_PORT:-21}:2121"
+      - "50000-50019:50000-50019"
+      - "${POSTBOX_API_PUBLIC_PORT:-8443}:8443"
+    volumes:
+      - postbox-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  postbox-data:

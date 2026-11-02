@@ -1,13 +1,17 @@
 import { json, readJson, route, searchParams, withFarmWork } from "@/lib/api/http";
+import { postboxUploadTarget } from "@/lib/camera-postbox/service";
 import { securityAccess } from "@/lib/security-cameras/access";
 import { addCamera, listCameras } from "@/lib/security-cameras/cameras";
+import type { OrgTx } from "@/lib/db/org-transaction";
 import { receiverSettings } from "@/lib/security-cameras/receiver";
 
-/** Whether this server takes camera uploads, for those who set cameras up. Never the certificate's place. */
-function uploadsOnThisServer() {
+/** Where cameras upload, for those who set cameras up: the camera post box if one is paired (decision 1226), else this server's own receiver. Never the certificate's place. */
+async function uploadsOnThisServer(tx: OrgTx) {
+  const postbox = await postboxUploadTarget(tx);
+  if (postbox) return { on: true, why: null, port: postbox.port, ftps: true, publicAddress: postbox.address, via: "postbox" as const };
   const settings = receiverSettings(process.env);
-  if ("off" in settings) return { on: false, why: settings.off, port: null, ftps: false, publicAddress: null };
-  return { on: true, why: null, port: settings.port, ftps: settings.certPath !== null, publicAddress: settings.publicAddress };
+  if ("off" in settings) return { on: false, why: settings.off, port: null, ftps: false, publicAddress: null, via: null };
+  return { on: true, why: null, port: settings.port, ftps: settings.certPath !== null, publicAddress: settings.publicAddress, via: "direct" as const };
 }
 
 /*
@@ -22,7 +26,7 @@ export const GET = route(async (request) => {
   const result = await withFarmWork(request, params.get("organisationId"), "read", async (tx) => {
     const cameras = await listCameras(tx, { farmId: params.get("farmId") });
     const access = await securityAccess(tx);
-    return { cameras, access, uploads: access.configure ? uploadsOnThisServer() : null };
+    return { cameras, access, uploads: access.configure ? await uploadsOnThisServer(tx) : null };
   });
   return json(result);
 });
