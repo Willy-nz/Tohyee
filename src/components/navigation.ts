@@ -1,5 +1,6 @@
 import type { Modules } from "@/components/modules";
 import type { Role } from "@/lib/auth/roles";
+import type { IllustratedIconName } from "@/components/illustrated-icon";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. Accounting counts as on unless it's been turned off (MOD2). */
 export type ModuleKey = "accounting" | "crm" | "reporting" | "notForProfit" | "analytics" | "gst" | "livestock" | "farming";
@@ -9,7 +10,11 @@ export type MenuGroup = { heading: string; links: MenuLink[] };
 /** A run of links under one sub-heading (none for a column without sub-headings). */
 export type MenuSection = { heading: string | null; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
-export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
+export type Menu = {
+  label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role;
+  /** Decorative picture for the whole menu, when its first link's picture would mislead (CRM Settings opens on Teams). */
+  art?: IllustratedIconName;
+};
 
 /**
  * The accounting menus: Home, Sales, Purchases, Banking, Payroll,
@@ -445,6 +450,7 @@ export const CRM_MENUS: Menu[] = (
     },
     {
       label: "Settings",
+      art: "settings",
       area: ["/crm/teams", "/crm/reassign", "/crm/duplicates", "/crm/record-types", "/crm/stages"],
       groups: [
         {
