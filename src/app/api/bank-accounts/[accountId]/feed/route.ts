@@ -1,6 +1,7 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { akahuProblem, listAkahuAccounts } from "@/lib/bank/akahu/client";
 import { akahuCredentialsFor, linkBankFeed, unlinkBankFeed } from "@/lib/bank/akahu/settings";
+import { akahuLinkability } from "@/lib/bank/akahu/setup";
 import { ValidationError } from "@/lib/errors";
 
 type Context = { params: Promise<{ accountId: string }> };
@@ -24,6 +25,8 @@ export const POST = route<Context>(async (request, context) => {
   }
   const akahuAccount = accounts.find((account) => account._id === body.akahuAccountId);
   if (!akahuAccount) throw new ValidationError(`Akahu doesn't have that account for ${credentials.name}.`);
+  const fit = akahuLinkability({ type: akahuAccount.type ?? null, status: akahuAccount.status ?? null, attributes: akahuAccount.attributes ?? null });
+  if (!fit.canLink) throw new ValidationError(`${akahuAccount.name} can't be linked. ${fit.reason}`);
   await withOrganisation(request, body.organisationId, "admin", (tx) =>
     linkBankFeed(tx, accountId, {
       akahuAccountId: akahuAccount._id,
