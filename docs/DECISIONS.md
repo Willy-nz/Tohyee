@@ -11849,3 +11849,41 @@ guide, and Link My Books' Shopify chargebacks article.
       confirm registration on upgrade (1282); and how past months should be
       corrected when registration is backdated (1284: Tohyee lists them but
       doesn't advise, since IRD's rules for backdated registration decide).
+
+### Shopify payout deposits matched in the bank (#548; decisions 1300-1307)
+
+1300. **Match, never post sales from the bank (SPR3).** As Xero with A2X:
+      orders post sales into the clearing account and the payout moves the
+      net to the bank (SPC15). A deposit is matched to that posted
+      transfer with the reconcile screen's ordinary "match"; no new
+      journal. As Xero/A2X do, not yet reviewed.
+1301. **Settlements are kept (SPR1, tenant migration 0219).**
+      `sales_platform_payouts` keeps each payout read at sync, keyed by
+      store like `sales_platform_documents`, with gross sales, refunds,
+      fees, adjustments, chargebacks, reserves, other and net. Payouts
+      posted before it have only their transfer's net.
+1302. **Evidence for a match (SPR2-SPR5).** The payout number on the line
+      (as its own word), or the platform's name with the same amount
+      within 10 days after (1 day before) the payout. Amount and date
+      alone are offered for a person to check. Several fits are listed,
+      not picked. Claude's rule from the issue.
+1303. **Combined payouts (SPR7).** Up to 4 posted payouts from the 12
+      nearest, only when the line names the platform and exactly one set
+      adds up.
+1304. **Three kinds of "not matched" (SPR8-SPR10).**
+      `missing_posting_setup`, `missing_settlement_data` and `unmatched`,
+      plus `already_matched` (duplicate import) and `payout_not_posted`
+      (not paid, or refused: the sync's own reason). Each stays
+      unreconciled.
+1305. **No settlement data (SPR9).** Before the start date: code by hand.
+      No payout scopes: a transfer out of the clearing account for the
+      deposit, offered for a person to choose; fees stay in clearing.
+      Never assumes net = gross or splits fees.
+1306. **GST (SPR10).** Payouts, fees and transfers carry no GST. GST on
+      sales comes only from orders, which use `isGstRegisteredOn` (#546);
+      the guide states the registration status on the line's date and
+      lists a payout's orders not in the books.
+1307. **Read-only for AI.** `list_sales_platform_payout_matches` (Look
+      only) reports payouts, deposits, suggestions and the clearing
+      balance. No new write tool; a person reconciles on screen (or with
+      the existing bank tools).
