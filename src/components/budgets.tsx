@@ -13,7 +13,9 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
-import { ReportExport } from "@/components/reports/report-export";
+import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYearEndMonth } from "@/components/reports/report-frame";
+import { monthEndOf, monthStartOf } from "@/lib/financial-year";
+import { statementPeriod } from "@/lib/reports/report-dates";
 
 /**
  * Budgets (examples BU1-BU8): the list, a budget's month-by-month amounts
@@ -445,23 +447,26 @@ export function BudgetEditor({ organisationId, budgetId }: { organisationId: str
   );
 }
 
+const ZERO = /^-?0*(\.0*)?$/;
+
+/** Actual, budget, variance and %, blank where there's nothing (decision 1351). */
 function VarianceCells({ figures, actualHref }: { figures: VarianceFigures; actualHref?: string }) {
   return (
     <>
       <td className={ui.num}>
-        {actualHref ? (
+        {actualHref && !ZERO.test(figures.actual) ? (
           <Link href={actualHref}>
             <Money value={figures.actual} />
           </Link>
         ) : (
-          <Money value={figures.actual} />
+          <Money value={figures.actual} blankZero />
         )}
       </td>
       <td className={ui.num}>
-        <Money value={figures.budget} />
+        <Money value={figures.budget} blankZero />
       </td>
       <td className={ui.num}>
-        <Money value={figures.variance} />
+        <Money value={figures.variance} blankZero />
       </td>
       <td className={ui.num}>{figures.variancePercent == null ? "" : `${figures.variancePercent}%`}</td>
     </>
@@ -488,10 +493,8 @@ function VarianceGroup({
       {group.sections.map((section) => (
         <Fragment key={section.key}>
           {group.sections.length > 1 ? (
-            <tr>
-              <td className={ui.muted} colSpan={5}>
-                {section.label}
-              </td>
+            <tr className={ui.reportSubheading}>
+              <td colSpan={5}>{section.label}</td>
             </tr>
           ) : null}
           {section.lines.map((line) => (
@@ -515,11 +518,18 @@ function VarianceGroup({
 /** Budget vs actual (BU5, BU6) for whole months against a chosen budget. */
 export function BudgetVsActualReport({ organisationId, initialBudgetId }: { organisationId: string; initialBudgetId?: string | null }) {
   const budgets = useBudgets(organisationId);
+  const yearEndMonth = useYearEndMonth(organisationId);
   const [budgetId, setBudgetId] = useState<string | null>(initialBudgetId ?? null);
-  const [from, setFrom] = useState<string | null>(null);
-  const [to, setTo] = useState(() => todayInBrowser().slice(0, 7));
+  const [draftBudget, setDraftBudget] = useState<string | null>(initialBudgetId ?? null);
+  // Budgets are by month: the toolbar's dates are widened to whole months.
+  const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: monthEndOf(todayInBrowser()) }));
   const chosen = budgetId ?? budgets.data?.budgets[0]?.id ?? null;
-  const report = useApiData<BudgetVsActual>(chosen ? "/api/reports/budget-vs-actual" : null, { organisationId, budgetId: chosen, from, to });
+  const report = useApiData<BudgetVsActual>(chosen ? "/api/reports/budget-vs-actual" : null, {
+    organisationId,
+    budgetId: chosen,
+    from: dates.from ? dates.from.slice(0, 7) : null,
+    to: dates.to.slice(0, 7),
+  });
   const data = report.data;
   const actualHref = (accountId: string) =>
     data
@@ -531,54 +541,65 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
           trackingValueId: data.budget.trackingValueId,
         })
       : "";
+  const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
+  const lines = data ? [`Budget: ${data.budget.name}`, ...(data.budget.trackingLabel ? [`Only lines tagged ${data.budget.trackingLabel}`] : [])] : [];
   return (
-    <Card
-      title="Budget vs actual"
-      description="Variance is actual less budget, so on costs a positive variance is over budget."
-      actions={
-        <div className={ui.inlineForm}>
-          <Field label="Budget">
-            <select value={chosen ?? ""} onChange={(event) => setBudgetId(event.target.value)}>
-              {(budgets.data?.budgets ?? []).map((budget) => (
-                <option key={budget.id} value={budget.id}>
-                  {budget.name}
-                  {trackingSuffix(budget)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="From">
-            <input type="month" value={from ?? data?.from.slice(0, 7) ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
-          </Field>
-          <Field label="To">
-            <input type="month" value={to} onChange={(event) => event.target.value && setTo(event.target.value)} />
-          </Field>
-        </div>
+    <ReportFrame
+      label="Budget vs actual"
+      toolbar={
+        <ReportToolbar
+          mode="range"
+          dates={dates}
+          shownFrom={data?.from}
+          yearEndMonth={yearEndMonth}
+          busy={report.loading}
+          onUpdate={(next) => {
+            setDates({ from: next.from ? monthStartOf(next.from) : null, to: monthEndOf(next.to) });
+            setBudgetId(draftBudget);
+          }}
+          filters={
+            <Field label="Budget">
+              <select value={draftBudget ?? chosen ?? ""} onChange={(event) => setDraftBudget(event.target.value)}>
+                {(budgets.data?.budgets ?? []).map((budget) => (
+                  <option key={budget.id} value={budget.id}>
+                    {budget.name}
+                    {trackingSuffix(budget)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          }
+          info={<>Budgets are by month, so the dates cover whole months. Variance is actual less budget, so on costs a positive variance is over budget.</>}
+          more={[{ label: "Print", onSelect: () => window.print() }, ...(data ? [{ label: "Open the budget", href: `/operations/budgets/${data.budget.id}` }] : [])]}
+          exportProps={
+            data
+              ? {
+                  organisationId,
+                  report: "budget-vs-actual",
+                  title: "Budget vs actual",
+                  period,
+                  filters: lines,
+                  style: "statement",
+                  tables: [{ id: "budget-vs-actual-report" }],
+                }
+              : null
+          }
+        />
       }
     >
       {budgets.error ? <Notice tone="error">{budgets.error}</Notice> : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
+      {budgets.data && budgets.data.budgets.length === 0 ? <Empty>No budgets yet.</Empty> : null}
+      {data ? <StatementHeading title="Budget vs actual" period={period} lines={lines} /> : null}
       {data ? (
-        <>
-          <ReportExport
-            organisationId={organisationId}
-            report="budget-vs-actual"
-            title="Budget vs actual"
-            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
-            filters={[`Budget: ${data.budget.name}`, ...(data.budget.trackingLabel ? [`Tracking: ${data.budget.trackingLabel}`] : [])]}
-            tables={[{ id: "budget-vs-actual-report" }]}
-          />
-          <p className={ui.muted}>
-            {formatDate(data.from)} to {formatDate(data.to)}
-            {data.budget.trackingLabel ? `, only lines tagged ${data.budget.trackingLabel}` : ""}.{" "}
-            <Link href={`/operations/budgets/${data.budget.id}`}>Open the budget</Link>
-          </p>
-          <div className={ui.tableWrap}>
-            <table id="budget-vs-actual-report" className={ui.table}>
+        <div className={ui.statementWrap}>
+          <table id="budget-vs-actual-report" className={`${ui.table} ${ui.statement} ${ui.statementWide}`}>
             <thead>
               <tr>
-                <th>Account</th>
+                <th>
+                  <span className={ui.srOnly}>Account</span>
+                </th>
                 <th className={ui.num}>Actual</th>
                 <th className={ui.num}>Budget</th>
                 <th className={ui.num}>Variance</th>
@@ -596,15 +617,14 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
               <VarianceGroup title="Expenses" group={data.expenses} totalLabel="Total expenses" actualHref={actualHref} />
             </tbody>
             <tfoot>
-              <tr>
-                <td>Net profit ({data.currencyCode})</td>
+              <tr className={ui.reportGrand}>
+                <td>Net profit</td>
                 <VarianceCells figures={data.netProfit} />
               </tr>
             </tfoot>
-            </table>
-          </div>
-        </>
+          </table>
+        </div>
       ) : null}
-    </Card>
+    </ReportFrame>
   );
 }

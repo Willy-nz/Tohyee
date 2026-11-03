@@ -16,7 +16,16 @@ export type MoreMenuItem =
  * item, Up on the last; arrows, Home and End move; Escape or Tab closes it
  * and Escape puts focus back on the button; a click elsewhere closes it.
  */
-export function MoreMenu({ label = "More actions", items }: { label?: string; items: MoreMenuItem[] }) {
+export function MoreMenu({
+  label = "More actions",
+  items,
+  text,
+}: {
+  label?: string;
+  items: MoreMenuItem[];
+  /** Shown on the button instead of "⋯" (e.g. "Export", decision 1352); the button's name is then this text. */
+  text?: string;
+}) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -51,8 +60,8 @@ export function MoreMenu({ label = "More actions", items }: { label?: string; it
       <button
         ref={button}
         type="button"
-        className={`${styles.button} ${styles.secondary} ${styles.moreMenuButton}`}
-        aria-label={label}
+        className={`${styles.button} ${styles.secondary} ${text ? "" : styles.moreMenuButton}`}
+        aria-label={text ? undefined : label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -64,14 +73,20 @@ export function MoreMenu({ label = "More actions", items }: { label?: string; it
           }
         }}
       >
-        <span aria-hidden="true">⋯</span>
+        {text ? (
+          <>
+            {text} <span aria-hidden="true">▾</span>
+          </>
+        ) : (
+          <span aria-hidden="true">⋯</span>
+        )}
       </button>
       {open ? (
         <ul
           ref={list}
           id={menuId}
           role="menu"
-          aria-label={label}
+          aria-label={text ?? label}
           className={styles.moreMenuList}
           onKeyDown={(event) => {
             if (event.key === "Escape") {

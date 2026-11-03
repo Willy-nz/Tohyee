@@ -1336,3 +1336,216 @@
   .pageHeading > [aria-hidden="true"] { width: 32px !important; height: 32px !important; }
   .pageHeading > [aria-hidden="true"] svg { width: 32px; height: 32px; }
 }
+
+/*
+ * Financial statements (decisions 1350-1352): a toolbar (dates, filters,
+ * Update, ⋯ and Export), then the statement's heading (title, organisation,
+ * period) and the table in statement style, as Xero lays them out: no row
+ * lines, a line above each total, a double line under net profit and net
+ * assets, amounts in the text colour that underline on hover (they're still
+ * links to the account's transactions).
+ */
+.reportFrame {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 20px 24px 28px;
+}
+
+.reportToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+
+.reportToolbar > .field {
+  flex: 0 1 190px;
+  min-width: 150px;
+}
+
+.reportToolbarEnd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.reportExportError {
+  display: block;
+  max-width: 280px;
+  margin-top: 4px;
+  color: var(--danger-text);
+  font-size: var(--text-sm);
+}
+
+.statementHeading {
+  display: grid;
+  gap: 2px;
+}
+
+.statementTitle {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.statementHeading p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.statementHeading .statementOrg {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.statementWrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.table.statement {
+  border-collapse: collapse;
+}
+
+.table.statement th,
+.table.statement td {
+  height: auto;
+  border-bottom: 0;
+  padding: 6px 12px;
+}
+
+.table.statement .reportSection td:first-child {
+  padding-left: 28px;
+}
+
+.table.statement thead th {
+  position: static;
+  border-bottom: 1px solid var(--border-strong);
+  background: none;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.table.statement tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.table.statement .reportHeading td {
+  background: none;
+  padding-top: 18px;
+  font-weight: 700;
+}
+
+.table.statement .reportSubheading td {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.table.statement .reportTotal td {
+  border-top: 1px solid var(--border-strong);
+  font-weight: 700;
+}
+
+.table.statement tfoot td {
+  border-top: 1px solid var(--border-strong);
+  background: none;
+}
+
+.table.statement .reportGrand td,
+.table.statement tfoot .reportGrand td {
+  border-top: 1px solid var(--text);
+  border-bottom: 3px double var(--text);
+  background: none;
+  font-weight: 700;
+}
+
+.table.statement .reportGrand + tr td {
+  padding-top: 14px;
+}
+
+.table.statement a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.table.statement a:hover,
+.table.statement a:focus-visible {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.statementNote {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Phones (390 px): account names wrap and the amounts stay on screen. */
+@media (max-width: 700px) {
+  .reportFrame {
+    padding: 14px 12px 20px;
+  }
+
+  .reportToolbarEnd {
+    margin-left: 0;
+  }
+
+  .table.statement td:first-child,
+  .table.statement th:first-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .table.statement th,
+  .table.statement td {
+    padding: 6px 6px;
+  }
+
+  .table.statement .reportSection td:first-child {
+    padding-left: 14px;
+  }
+
+  /* With several amount columns the names stay in view while the amounts scroll. */
+  .table.statement.statementWide td:first-child,
+  .table.statement.statementWide th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    min-width: 46vw;
+    max-width: 46vw;
+    background: var(--surface);
+  }
+}
+
+@media print {
+  .reportFrame {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .reportToolbar {
+    display: none;
+  }
+}
+
+/* Read by screen readers, not shown. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

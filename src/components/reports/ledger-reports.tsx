@@ -1,15 +1,14 @@
 "use client";
 
-import { InfoTip } from "@/components/info-tip";
-import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
 import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, TrackingTagsText, useTracking } from "@/components/tracking";
-import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
-import { ReportExport } from "@/components/reports/report-export";
-import { SaveAsCustomReportButton } from "@/components/reports/save-as-custom-report";
+import { Button, Empty, Field, Notice, ui } from "@/components/ui";
+import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYearEndMonth } from "@/components/reports/report-frame";
+import { useSaveAsCustomReport } from "@/components/reports/save-as-custom-report";
+import { statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import type { AccountTransactions } from "@/lib/reports/account-transactions";
 import type { AgedPayables } from "@/lib/reports/aged-payables";
@@ -30,6 +29,8 @@ export const BUCKET_LABELS: Record<AgeBucket, string> = {
   over90: "Over 90 days",
 };
 export const BUCKETS = Object.keys(BUCKET_LABELS) as AgeBucket[];
+
+const PRINT = { label: "Print", onSelect: () => window.print() };
 
 export function PrintButton() {
   return (
@@ -74,36 +75,40 @@ function AgedCells({ amounts }: { amounts: AgedAmounts }) {
 }
 
 export function AgedPayablesReport({ organisationId }: { organisationId: string }) {
-  const [asAt, setAsAt] = useState(todayInBrowser);
+  const yearEndMonth = useYearEndMonth(organisationId);
+  const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
+  const asAt = dates.to;
   const [open, setOpen] = useState<string | null>(null);
   const report = useApiData<AgedPayables>("/api/reports/aged-payables", { organisationId, asAt });
   const data = report.data;
+  const save = useSaveAsCustomReport(organisationId, "aged_payables", { asAt });
+  const period = data ? statementAsAt(data.asAt) : "";
   return (
-    <Card
-      title="Aged payables"
-      description={<>What you owe each supplier, by days past the due date.{" "}<InfoTip label="Aged payables">Less supplier credit not yet used, in the base currency (foreign-currency bills at their own rates, with their own currency beside them). The total matches accounts payable on the balance sheet, with any FX revaluation on the date.</InfoTip></>}
-      actions={
-        <div className={ui.inlineForm} data-print="hide">
-          <Field label="As at">
-            <DateInput value={asAt} onChange={(event) => setAsAt(event.target.value)} />
-          </Field>
-          <PrintButton />
-          <SaveAsCustomReportButton organisationId={organisationId} base="aged_payables" filters={{ asAt }} />
-        </div>
+    <ReportFrame
+      label="Aged payables"
+      toolbar={
+        <ReportToolbar
+          mode="asAt"
+          dates={dates}
+          yearEndMonth={yearEndMonth}
+          onUpdate={setDates}
+          busy={report.loading}
+          more={[PRINT, ...(save.item ? [save.item] : [])]}
+          info={
+            <>
+              What you owe each supplier, by days past the due date, less supplier credit not yet used, in the base currency (foreign-currency bills at
+              their own rates, with their own currency beside them). The total matches accounts payable on the balance sheet, with any FX revaluation on
+              the date.
+            </>
+          }
+          exportProps={data ? { organisationId, report: "aged-payables", title: "Aged payables", period, tables: [{ id: "aged-payables-report" }] } : null}
+        />
       }
     >
+      {save.error ? <Notice tone="error">{save.error}</Notice> : null}
+      {data ? <StatementHeading title="Aged payables" period={period} /> : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {data ? <p className={`${ui.muted} ${ui.printOnly}`}>As at {formatDate(data.asAt)}</p> : null}
-      {data ? (
-        <ReportExport
-          organisationId={organisationId}
-          report="aged-payables"
-          title="Aged payables"
-          period={`As at ${formatDate(data.asAt)}`}
-          tables={[{ id: "aged-payables-report" }]}
-        />
-      ) : null}
       {data && data.rows.length === 0 ? <Empty>You don&apos;t owe any supplier anything on this date.</Empty> : null}
       {data && data.rows.length > 0 ? (
         <div className={ui.tableWrap}>
@@ -201,7 +206,7 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
           </table>
         </div>
       ) : null}
-    </Card>
+    </ReportFrame>
   );
 }
 
@@ -230,6 +235,8 @@ export function AccountTransactionsReport({
         ? initialTrackingValueId
         : "",
   }));
+  const [draft, setDraft] = useState({ accountId, filter });
+  const yearEndMonth = useYearEndMonth(organisationId);
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);
   const categories = reportCategories(tracking.data);
@@ -241,91 +248,98 @@ export function AccountTransactionsReport({
     accountId: accountId || null,
     from,
     to,
-    trackingCategoryId: valueId ? filter.categoryId : null,
+    trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
     trackingValueId: valueId || (unassigned ? "unassigned" : null),
   });
   const data = report.data;
+  const save = useSaveAsCustomReport(organisationId, "account_transactions", {
+    accountId: accountId || null,
+    from,
+    to,
+    trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
+    trackingValueId: valueId || (unassigned ? "unassigned" : null),
+  });
+  const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
+  const lines = data
+    ? [
+        ...(data.accounts.length === 1 ? [`${data.accounts[0].code} · ${data.accounts[0].name}`] : []),
+        ...(data.filter ? [`Only lines tagged ${data.filter.label}`] : []),
+      ]
+    : [];
   return (
-    <Card
-      title="Account transactions"
-      actions={
-        <div className={ui.inlineForm} data-print="hide">
-          <Field label="Account">
-            <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
-              <option value="">All accounts</option>
-              {(accounts.data?.accounts ?? []).map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.code} · {account.name}
-                  {account.isActive ? "" : " (archived)"}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="From">
-            <DateInput value={from ?? data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
-          </Field>
-          <Field label="To">
-            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
-          </Field>
-          {categories.length > 0 ? (
-            <Field label="Only lines tagged">
-              <select
-                value={valueId || unassigned ? `${filter.categoryId}:${valueId || "unassigned"}` : ""}
-                onChange={(event) => {
-                  const [categoryId = "", value = ""] = event.target.value.split(":");
-                  setFilter({ categoryId, valueId: value });
-                }}
-              >
-                <option value="">Any</option>
-                {categories.map((entry) => (
-                  <optgroup key={entry.id} label={entry.name}>
-                    {entry.values.map((value) => (
-                      <option key={value.id} value={`${entry.id}:${value.id}`}>
-                        {value.name}
-                      </option>
+    <ReportFrame
+      label="Account transactions"
+      toolbar={
+        <ReportToolbar
+          mode="range"
+          dates={{ from, to }}
+          shownFrom={data?.from}
+          yearEndMonth={yearEndMonth}
+          busy={report.loading}
+          onUpdate={(next) => {
+            setFrom(next.from);
+            setTo(next.to);
+            setAccountId(draft.accountId);
+            setFilter(draft.filter);
+          }}
+          filters={
+            <>
+              <Field label="Account">
+                <select value={draft.accountId} onChange={(event) => setDraft({ ...draft, accountId: event.target.value })}>
+                  <option value="">All accounts</option>
+                  {(accounts.data?.accounts ?? []).map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.code} · {account.name}
+                      {account.isActive ? "" : " (archived)"}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {categories.length > 0 ? (
+                <Field label="Tracking">
+                  <select
+                    value={draft.filter.categoryId && draft.filter.valueId ? `${draft.filter.categoryId}:${draft.filter.valueId}` : ""}
+                    onChange={(event) => {
+                      const [categoryId = "", value = ""] = event.target.value.split(":");
+                      setDraft({ ...draft, filter: { categoryId, valueId: value } });
+                    }}
+                  >
+                    <option value="">Any</option>
+                    {categories.map((entry) => (
+                      <optgroup key={entry.id} label={entry.name}>
+                        {entry.values.map((value) => (
+                          <option key={value.id} value={`${entry.id}:${value.id}`}>
+                            {value.name}
+                          </option>
+                        ))}
+                        <option value={`${entry.id}:unassigned`}>Not set</option>
+                      </optgroup>
                     ))}
-                    <option value={`${entry.id}:unassigned`}>Not set</option>
-                  </optgroup>
-                ))}
-              </select>
-            </Field>
-          ) : null}
-          <PrintButton />
-          <SaveAsCustomReportButton
-            organisationId={organisationId}
-            base="account_transactions"
-            filters={{
-              accountId: accountId || null,
-              from,
-              to,
-              trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
-              trackingValueId: valueId || (unassigned ? "unassigned" : null),
-            }}
-          />
-        </div>
+                  </select>
+                </Field>
+              ) : null}
+            </>
+          }
+          more={[PRINT, ...(save.item ? [save.item] : [])]}
+          exportProps={
+            data
+              ? {
+                  organisationId,
+                  report: "account-transactions",
+                  title: "Account transactions",
+                  period,
+                  filters: lines,
+                  tables: [{ id: "account-transactions-report" }],
+                }
+              : null
+          }
+        />
       }
     >
+      {save.error ? <Notice tone="error">{save.error}</Notice> : null}
+      {data ? <StatementHeading title="Account transactions" period={period} lines={lines} /> : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {data ? (
-        <p className={ui.muted}>
-          {formatDate(data.from)} to {formatDate(data.to)} · {data.currencyCode}
-          {data.filter ? ` · only lines tagged ${data.filter.label}` : ""}
-        </p>
-      ) : null}
-      {data ? (
-        <ReportExport
-          organisationId={organisationId}
-          report="account-transactions"
-          title="Account transactions"
-          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
-          filters={[
-            ...(data.accounts.length === 1 ? [`Account: ${data.accounts[0].code} · ${data.accounts[0].name}`] : []),
-            ...(data.filter ? [`Tracking: ${data.filter.label}`] : []),
-          ]}
-          tables={[{ id: "account-transactions-report" }]}
-        />
-      ) : null}
       {data && data.accounts.length === 0 ? <Empty>Nothing posted to these accounts yet.</Empty> : null}
       {data && data.accounts.length > 0 ? (
         <>
@@ -409,50 +423,41 @@ export function AccountTransactionsReport({
           </div>
         </>
       ) : null}
-    </Card>
+    </ReportFrame>
   );
 }
 
 export function JournalReportView({ organisationId }: { organisationId: string }) {
-  const [from, setFrom] = useState<string | null>(null);
-  const [to, setTo] = useState(todayInBrowser);
+  const yearEndMonth = useYearEndMonth(organisationId);
+  const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
+  const { from, to } = dates;
   const tracking = useTracking(organisationId);
   const report = useApiData<JournalReport & { truncated: boolean }>("/api/reports/journal-report", { organisationId, from, to });
   const data = report.data;
+  const save = useSaveAsCustomReport(organisationId, "journal_report", { from, to });
+  const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
   return (
-    <Card
-      title="Journal report"
-      actions={
-        <div className={ui.inlineForm} data-print="hide">
-          <Field label="From">
-            <DateInput value={from ?? data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
-          </Field>
-          <Field label="To">
-            <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
-          </Field>
-          <PrintButton />
-          <SaveAsCustomReportButton organisationId={organisationId} base="journal_report" filters={{ from, to }} />
-        </div>
+    <ReportFrame
+      label="Journal report"
+      toolbar={
+        <ReportToolbar
+          mode="range"
+          dates={dates}
+          shownFrom={data?.from}
+          yearEndMonth={yearEndMonth}
+          onUpdate={setDates}
+          busy={report.loading}
+          more={[PRINT, ...(save.item ? [save.item] : [])]}
+          exportProps={data ? { organisationId, report: "journal-report", title: "Journal report", period, tables: [{ id: "journal-report" }] } : null}
+        />
       }
     >
+      {save.error ? <Notice tone="error">{save.error}</Notice> : null}
+      {data ? <StatementHeading title="Journal report" period={period} lines={[`${data.journals.length} journals`]} /> : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {data ? (
-        <p className={ui.muted}>
-          {formatDate(data.from)} to {formatDate(data.to)} · {data.journals.length} journals · {data.currencyCode}
-        </p>
-      ) : null}
       {data?.truncated ? <Notice tone="warning">Only the first {data.journals.length} journals are shown. Choose a shorter period to see the rest.</Notice> : null}
       {data && data.journals.length === 0 ? <Empty>No journals were posted in this period.</Empty> : null}
-      {data ? (
-        <ReportExport
-          organisationId={organisationId}
-          report="journal-report"
-          title="Journal report"
-          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
-          tables={[{ id: "journal-report" }]}
-        />
-      ) : null}
       {data && data.journals.length > 0 ? (
         <>
           <div className={ui.tableWrap}>
@@ -514,6 +519,6 @@ export function JournalReportView({ organisationId }: { organisationId: string }
           </div>
         </>
       ) : null}
-    </Card>
+    </ReportFrame>
   );
 }

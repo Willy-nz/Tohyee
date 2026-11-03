@@ -1,7 +1,8 @@
 import ExcelJS from "exceljs";
 import { ValidationError } from "@/lib/errors";
 import { CONTENT_WIDTH, PdfWriter, type Column } from "@/lib/pdf/writer";
-import { REPORT_EXPORTS, type ReportExportCell, type ReportExportData, type ReportExportTable } from "@/lib/reports/export-types";
+import { producedAtText } from "@/lib/reports/report-dates";
+import { REPORT_EXPORT_ROW_KINDS, REPORT_EXPORTS, type ReportExportCell, type ReportExportRowKind, type ReportExportData, type ReportExportTable } from "@/lib/reports/export-types";
 
 const DECIMAL = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const MAX_ROWS = 10_000;
@@ -40,7 +41,7 @@ export function parseReportExport(input: unknown): ReportExportData {
       const cells = (row as { cells?: unknown }).cells;
       if (!Array.isArray(cells) || cells.length > columns.length) throw new ValidationError(`Report row ${rowIndex + 1} has too many cells.`);
       return {
-        kind: (row as { kind?: unknown }).kind === "section" || (row as { kind?: unknown }).kind === "total" ? (row as { kind: "section" | "total" }).kind : undefined,
+        kind: REPORT_EXPORT_ROW_KINDS.includes((row as { kind?: unknown }).kind as ReportExportRowKind) ? (row as { kind: ReportExportRowKind }).kind : undefined,
         cells: cells.map((cell, cellIndex): ReportExportCell => {
           if (!cell || typeof cell !== "object" || Array.isArray(cell)) throw new ValidationError(`Cell ${cellIndex + 1} in report row ${rowIndex + 1} is invalid.`);
           const value = cell as Record<string, unknown>;
@@ -70,6 +71,7 @@ export function parseReportExport(input: unknown): ReportExportData {
     basis,
     filters: data.filters.map((filter, index) => text(filter, `Filter ${index + 1}`)),
     producedAt,
+    style: data.style === "statement" ? "statement" : "table",
     tables,
   };
 }
@@ -86,7 +88,7 @@ function headingRows(data: ReportExportData): string[][] {
     ["Period", data.period],
     ...(data.basis ? [["Basis", data.basis]] : []),
     ...data.filters.map((filter) => ["Filter", filter]),
-    ["Produced", data.producedAt],
+    ["Produced", producedAtText(data.producedAt)],
     [],
   ];
 }
@@ -140,8 +142,10 @@ export async function reportXlsx(data: ReportExportData): Promise<Uint8Array> {
           return fitsExcelNumber(cell.value!) ? Number(cell.value) : cell.value!;
         }),
       );
-      if (item.kind === "section" || item.kind === "total") row.font = { bold: true };
+      if (item.kind === "section" || item.kind === "total" || item.kind === "grand") row.font = { bold: true };
       if (item.kind === "total") row.border = { top: { style: "thin", color: { argb: "FF35423D" } } };
+      if (item.kind === "grand") row.border = { top: { style: "thin", color: { argb: "FF35423D" } }, bottom: { style: "double", color: { argb: "FF35423D" } } };
+      if (item.kind === "account") row.getCell(1).alignment = { indent: 1 };
       for (const [index, cell] of item.cells.entries()) {
         if (cell.numeric && fitsExcelNumber(cell.value!)) row.getCell(index + 1).numFmt = "#,##0.00;[Red](#,##0.00)";
       }
@@ -164,12 +168,13 @@ export async function reportPdf(data: ReportExportData): Promise<Uint8Array> {
     author: data.organisationName,
     footer: `${data.organisationName} · ${data.title}`,
   });
-  writer.text(data.organisationName, { size: 16, bold: true, gap: 4 });
-  writer.text(data.title, { size: 13, bold: true, gap: 3 });
-  writer.text(`Period: ${data.period}`);
+  // Title, organisation, period: the same heading as on screen (decision 1350).
+  writer.text(data.title, { size: 16, bold: true, gap: 4 });
+  writer.text(data.organisationName, { size: 11, gap: 2 });
+  writer.text(data.period);
   if (data.basis) writer.text(`Basis: ${data.basis}`);
-  for (const filter of data.filters) writer.text(`Filter: ${filter}`);
-  writer.text(`Produced: ${data.producedAt}`, { muted: true, gap: 10 });
+  for (const filter of data.filters) writer.text(filter);
+  writer.text(`Produced ${producedAtText(data.producedAt)}`, { muted: true, gap: 10 });
   for (const table of data.tables) {
     if (table.title) writer.text(table.title, { size: 11, bold: true, gap: 3 });
     const columns: Column[] = table.columns.map((header, index) => ({
@@ -181,6 +186,7 @@ export async function reportPdf(data: ReportExportData): Promise<Uint8Array> {
     writer.table(columns, rows, {
       width: CONTENT_WIDTH,
       rowKinds: table.rows.map((row) => row.kind ?? "normal"),
+      style: data.style === "statement" ? "statement" : "grid",
     });
     writer.space(10);
   }

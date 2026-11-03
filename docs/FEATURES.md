@@ -263,6 +263,15 @@ that something happened.
   expense accounts show this financial year to date, and earlier years'
   profit is in retained earnings, so it matches the balance sheet and still
   balances.
+  Each standard report reads like Xero's (decisions 1350-1352, not yet
+  reviewed): one toolbar (date presets from This month to Last financial
+  year or your own dates, the report's filters, Update, "⋯" and Export to
+  PDF, CSV or Excel), then a statement heading (title, organisation, "For
+  the period ..." or "As at ...") and the table in statement style (no row
+  lines, a line above totals, a double line under net profit and net
+  assets, blank zero cells, amounts that link to their transactions). PDFs
+  have the same lines and say when they were produced in NZ time. On a
+  phone account names wrap and the amounts stay on screen.
 - **Period close** (Accounting; PC1-PC12, not yet approved by Jess), like
   NetSuite's period close checklist: each financial year and its months,
   Open or Closed; for a month, checks Tohyee works out itself (bank accounts

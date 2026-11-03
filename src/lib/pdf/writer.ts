@@ -217,6 +217,10 @@ export class PdfWriter {
    * A table: header row (repeated on each new page), one row per `rows`
    * entry (cells wrap), and `footer` rows under a line: a label across the
    * first columns and `values` in the last ones (bold where asked).
+   *
+   * The "statement" style (decision 1351) is for financial statements, as on
+   * screen: tighter rows with no grid lines, account lines indented, a line
+   * above each total and a double line under the last one ("grand").
    */
   table(
     columns: Column[],
@@ -226,12 +230,15 @@ export class PdfWriter {
       footer?: TableFooterRow[];
       x?: number;
       width?: number;
-      rowKinds?: Array<"normal" | "section" | "total">;
+      rowKinds?: Array<"normal" | "section" | "total" | "account" | "grand">;
+      style?: "grid" | "statement";
     } = {},
   ): void {
+    const statement = options.style === "statement";
     const size = options.size ?? 9;
-    const lineHeight = size * 1.3;
-    const pad = 4;
+    const lineHeight = size * (statement ? 1.2 : 1.3);
+    const pad = statement ? 2.5 : 4;
+    const indent = 10;
     const x0 = options.x ?? 0;
     const tableWidth = options.width ?? CONTENT_WIDTH - x0;
     const total = columns.reduce((sum, column) => sum + column.width, 0);
@@ -239,13 +246,16 @@ export class PdfWriter {
     const lefts = widths.map((_, index) => x0 + widths.slice(0, index).reduce((sum, width) => sum + width, 0));
 
     type Cell = { lines: string[]; x: number; width: number; align?: Align };
-    const cellsOf = (values: string[], bold: boolean): Cell[] =>
-      values.map((value, index) => ({
-        lines: this.wrap(value ?? "", widths[index] - pad * 2, size, bold),
-        x: lefts[index],
-        width: widths[index],
-        align: columns[index].align,
-      }));
+    const cellsOf = (values: string[], bold: boolean, firstIndent = 0): Cell[] =>
+      values.map((value, index) => {
+        const shift = index === 0 ? firstIndent : 0;
+        return {
+          lines: this.wrap(value ?? "", widths[index] - pad * 2 - shift, size, bold),
+          x: lefts[index] + shift,
+          width: widths[index] - shift,
+          align: columns[index].align,
+        };
+      });
     const rowHeight = (cells: Cell[]) => Math.max(1, ...cells.map((cell) => cell.lines.length)) * lineHeight + pad * 2;
 
     const drawRow = (cells: Cell[], bold: boolean, shade: boolean) => {
@@ -268,17 +278,26 @@ export class PdfWriter {
       true,
     );
     const drawHeader = () => {
-      drawRow(header, true, true);
-      this.rule({ x: x0, width: tableWidth });
+      drawRow(header, true, !statement);
+      this.rule({ x: x0, width: tableWidth, thick: statement });
     };
     this.ensure(rowHeight(header) + lineHeight * 2);
     drawHeader();
     for (const [index, row] of rows.entries()) {
-      const cells = cellsOf(row, false);
-      if (this.ensure(rowHeight(cells))) drawHeader();
       const kind = options.rowKinds?.[index] ?? "normal";
-      drawRow(cells, kind !== "normal", kind === "section");
-      this.rule({ x: x0, width: tableWidth });
+      const bold = kind === "section" || kind === "total" || kind === "grand";
+      const cells = cellsOf(row, bold, kind === "account" ? indent : 0);
+      if (statement && kind === "section" && index > 0) this.space(4);
+      if (this.ensure(rowHeight(cells))) drawHeader();
+      if (statement && (kind === "total" || kind === "grand")) this.rule({ x: x0, width: tableWidth, thick: true });
+      drawRow(cells, bold, !statement && kind === "section");
+      if (statement && kind === "grand") {
+        this.rule({ x: x0, width: tableWidth, thick: true });
+        this.space(1.5);
+        this.rule({ x: x0, width: tableWidth, thick: true });
+        this.space(1.5);
+      }
+      if (!statement) this.rule({ x: x0, width: tableWidth });
     }
     for (const [index, row] of (options.footer ?? []).entries()) {
       const bold = row.bold ?? false;
