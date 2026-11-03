@@ -6,6 +6,10 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { newLoginName, optionalConnectionId, pickLogin } from "@/lib/bank/logins";
+import { type AkahuAccount } from "@/lib/bank/akahu/client";
+import { akahuAccountNumber, akahuLinkability, type LinkedFeed } from "@/lib/bank/akahu/setup";
+
+export { akahuAccountNumber } from "@/lib/bank/akahu/setup";
 import { optionalString, requireId, requireString } from "@/lib/validation";
 
 /**
@@ -25,10 +29,12 @@ export type AkahuLogin = {
   syncEveryHours: number;
   /** Why its tokens stopped working (BK33), until new ones are saved. */
   tokenProblem: string | null;
+  /** When Akahu last accepted its tokens: when they were saved, or a sync Akahu answered (#543). */
+  tokensCheckedAt: string | null;
   createdAt: string;
   createdByEmail: string | null;
-  /** The Tohyee accounts linked through it. */
-  linkedAccounts: Array<{ accountId: string; code: string; name: string }>;
+  /** The Tohyee accounts linked through it, each with its own last sync (#543). */
+  linkedAccounts: LinkedFeed[];
 };
 
 export type AkahuSettings = {
@@ -52,13 +58,14 @@ type ConnectionRow = {
   app_token_hint: string;
   sync_every_hours: number;
   token_problem: string | null;
+  tokens_checked_at: string | null;
   created_at: string;
   created_by_email: string | null;
 };
 
 async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow[]> {
   const result = await tx.query<ConnectionRow>(
-    `select id::text, name, app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, token_problem, created_at, created_by_email
+    `select id::text, name, app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, token_problem, tokens_checked_at, created_at, created_by_email
        from akahu_connections where status = 'active' order by akahu_connections.id ${lock ? "for update" : ""}`,
   );
   return result.rows;
@@ -71,8 +78,23 @@ async function activeConnection(tx: OrgTx, connectionId?: unknown, lock = false)
 
 export async function getAkahuSettings(tx: OrgTx): Promise<AkahuSettings> {
   const rows = await activeConnections(tx);
-  const linked = await tx.query<{ connection_id: string; account_id: string; code: string; name: string }>(
-    `select s.akahu_connection_id::text as connection_id, a.id::text as account_id, a.code, a.name
+  const linked = await tx.query<{
+    connection_id: string;
+    account_id: string;
+    code: string;
+    name: string;
+    feed_active: boolean;
+    last_sync_status: "never" | "ok" | "failed";
+    last_synced_at: string | null;
+    last_sync_ok_at: string | null;
+    last_sync_added: number | null;
+    last_sync_error: string | null;
+    lines: string;
+  }>(
+    `select s.akahu_connection_id::text as connection_id, a.id::text as account_id, a.code, a.name, s.feed_active, s.last_sync_status,
+            s.last_synced_at, s.last_sync_ok_at, s.last_sync_added, s.last_sync_error,
+            (select count(*) from bank_statement_lines b join bank_statement_imports i on i.id = b.import_id
+              where b.account_id = s.account_id and i.source = 'akahu' and b.status <> 'deleted')::text as lines
        from bank_account_settings s join accounts a on a.id = s.account_id
       where s.akahu_account_id is not null and s.akahu_connection_id is not null order by a.code`,
   );
@@ -83,11 +105,25 @@ export async function getAkahuSettings(tx: OrgTx): Promise<AkahuSettings> {
       appTokenHint: row.app_token_hint,
       syncEveryHours: row.sync_every_hours,
       tokenProblem: row.token_problem,
+      tokensCheckedAt: row.tokens_checked_at,
       createdAt: row.created_at,
       createdByEmail: row.created_by_email,
       linkedAccounts: linked.rows
         .filter((link) => link.connection_id === row.id)
-        .map((link) => ({ accountId: link.account_id, code: link.code, name: link.name })),
+        .map(
+          (link): LinkedFeed => ({
+            accountId: link.account_id,
+            code: link.code,
+            name: link.name,
+            feedActive: link.feed_active,
+            lastSyncStatus: link.last_sync_status,
+            lastSyncedAt: link.last_synced_at,
+            lastSyncOkAt: link.last_sync_ok_at,
+            lastSyncAdded: link.last_sync_added,
+            lastSyncError: link.last_sync_error,
+            linesBroughtIn: Number(link.lines),
+          }),
+        ),
     }),
   );
   const first = rows[0];
@@ -171,7 +207,7 @@ export async function saveAkahuSettings(
   credentials: AkahuCredentials,
   syncEveryHours: number | null,
   options: { adding?: boolean; connectionId?: string | null; name?: unknown; visibleAccountIds?: readonly string[] } = {},
-): Promise<AkahuSettings> {
+): Promise<AkahuSettings & { connectionId: string }> {
   requireSecrets();
   const previous = options.adding ? null : await activeConnection(tx, options.connectionId, true);
   const hours = syncEveryHours ?? previous?.sync_every_hours ?? DEFAULT_SYNC_HOURS;
@@ -181,15 +217,16 @@ export async function saveAkahuSettings(
     connectionId = previous.id;
     name = previous.name;
     await tx.query(
-      `update akahu_connections set app_token_ciphertext = $2, user_token_ciphertext = $3, app_token_hint = $4, sync_every_hours = $5, token_problem = null
+      `update akahu_connections set app_token_ciphertext = $2, user_token_ciphertext = $3, app_token_hint = $4, sync_every_hours = $5, token_problem = null,
+              tokens_checked_at = now()
         where id = $1`,
       [previous.id, encryptSecret(credentials.appToken), encryptSecret(credentials.userToken), hint(credentials.appToken), hours],
     );
   } else {
     name = await newLoginName(tx, "akahu", options.name);
     const inserted = await tx.query<{ id: string }>(
-      `insert into akahu_connections (name, app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, created_by_email)
-       values ($1, $2, $3, $4, $5, $6) returning id::text`,
+      `insert into akahu_connections (name, app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, created_by_email, tokens_checked_at)
+       values ($1, $2, $3, $4, $5, $6, now()) returning id::text`,
       [name, encryptSecret(credentials.appToken), encryptSecret(credentials.userToken), hint(credentials.appToken), hours, tx.actor.email],
     );
     connectionId = inserted.rows[0].id;
@@ -212,7 +249,7 @@ export async function saveAkahuSettings(
     entityId: connectionId,
     details: { name, appTokenHint: hint(credentials.appToken), syncEveryHours: hours, replaced: previous !== null, ...(gone.length ? { stoppedAccounts: gone } : {}) },
   });
-  return getAkahuSettings(tx);
+  return { ...(await getAkahuSettings(tx)), connectionId };
 }
 
 /**
@@ -309,20 +346,6 @@ export async function markAkahuTokenProblem(tx: OrgTx, connectionId: string): Pr
 }
 
 /**
- * A bank account number as Akahu formats it, as digits to compare; null when
- * there isn't a usable one. NZ numbers (bank-branch-account-suffix) have a
- * 2- or 3-digit suffix for the same account, so the suffix is made 3 digits:
- * 03-0123-0456789-00 and 03-0123-0456789-000 are the same account.
- */
-export function akahuAccountNumber(input: unknown): string | null {
-  if (typeof input !== "string") return null;
-  const nz = /^\s*(\d{2})[\s-]?(\d{4})[\s-]?(\d{7})[\s-]?(\d{2,3})\s*$/.exec(input);
-  if (nz) return `${nz[1]}${nz[2]}${nz[3]}${nz[4].padStart(3, "0")}`;
-  const digits = input.replace(/\D/g, "");
-  return digits.length >= 6 && digits.length <= 34 ? digits : null;
-}
-
-/**
  * Links an Akahu account to a bank or credit card account, with the first
  * date to bring in. `accountNumber` is the number Akahu reports for it,
  * so a joint account seen through two logins can't be linked twice (#257).
@@ -337,6 +360,16 @@ export async function linkBankFeed(
   if (!/^acc_[A-Za-z0-9]+$/.test(akahuAccountId)) throw new ValidationError("That isn't an Akahu account id.");
   const startDate = parseIsoDate(input.startDate, "startDate");
   const account = await lockStatementAccount(tx, accountId, "feed");
+  // #543 (decision 1290): a working link is never replaced by another Akahu account without stopping it first.
+  const current = await tx.query<{ akahu_account_id: string | null; akahu_account_name: string | null }>(
+    "select akahu_account_id, akahu_account_name from bank_account_settings where account_id = $1 and feed_active",
+    [accountId],
+  );
+  if (current.rows[0]?.akahu_account_id && current.rows[0].akahu_account_id !== akahuAccountId) {
+    throw new ValidationError(
+      `${account.code} already has a bank feed from ${current.rows[0].akahu_account_name ?? "another Akahu account"}. Stop that feed first if you want to change it.`,
+    );
+  }
   // BK36: one Tohyee account per Akahu account, even when two logins can both see it (a joint account).
   const taken = await tx.query<{ code: string; name: string }>(
     `select a.code, a.name from bank_account_settings s join accounts a on a.id = s.account_id
@@ -370,7 +403,7 @@ export async function linkBankFeed(
   await tx.query(
     `update bank_account_settings
         set akahu_account_id = $2, akahu_account_name = $3, akahu_connection_name = $4, feed_start_date = $5,
-            feed_active = true, last_sync_status = 'never', last_sync_error = null, akahu_connection_id = $6, akahu_account_number = $7, updated_at = now()
+            feed_active = true, last_sync_status = 'never', last_sync_error = null, last_sync_ok_at = null, last_sync_added = null, akahu_connection_id = $6, akahu_account_number = $7, updated_at = now()
       where account_id = $1`,
     [
       accountId,
@@ -402,4 +435,51 @@ export async function unlinkBankFeed(tx: OrgTx, accountIdInput: unknown): Promis
   );
   if (result.rowCount === 0) throw new NotFoundError("This account has no bank feed.");
   await writeAuditEvent(tx, { eventType: "bank_feed.unlinked", entityType: "account", entityId: accountId });
+}
+
+/**
+ * Links several Akahu accounts of one login at once (the guided setup's
+ * last step, #543): all of them or none. Each link follows linkBankFeed's
+ * rules; `available` is what Akahu listed for the login just before, read
+ * outside this transaction. A failure names the account it was for.
+ */
+export async function linkBankFeeds(
+  tx: OrgTx,
+  input: { connectionId: unknown; startDate: unknown; links: unknown },
+  available: readonly AkahuAccount[],
+): Promise<{ linked: Array<{ accountId: string; akahuAccountId: string }> }> {
+  if (!Array.isArray(input.links) || input.links.length === 0) throw new ValidationError("Choose at least one account to link.");
+  if (input.links.length > 100) throw new ValidationError("Link at most 100 accounts at a time.");
+  const links = input.links.map((entry: unknown) => {
+    const value = (entry ?? {}) as Record<string, unknown>;
+    return { accountId: requireId(value.accountId, "accountId"), akahuAccountId: requireString(value.akahuAccountId, "akahuAccountId", { maxLength: 100 }) };
+  });
+  const accountIds = new Set<string>();
+  const akahuIds = new Set<string>();
+  for (const link of links) {
+    if (accountIds.has(link.accountId)) throw new ValidationError("Two Akahu accounts can't go into the same Tohyee account.");
+    if (akahuIds.has(link.akahuAccountId)) throw new ValidationError("The same Akahu account was chosen twice.");
+    accountIds.add(link.accountId);
+    akahuIds.add(link.akahuAccountId);
+  }
+  for (const link of links) {
+    const akahuAccount = available.find((account) => account._id === link.akahuAccountId);
+    if (!akahuAccount) throw new ValidationError("Akahu no longer shares one of the chosen accounts. Look again.");
+    const fit = akahuLinkability({ type: akahuAccount.type ?? null, status: akahuAccount.status ?? null, attributes: akahuAccount.attributes ?? null });
+    if (!fit.canLink) throw new ValidationError(`${akahuAccount.name} can't be linked. ${fit.reason}`);
+    try {
+      await linkBankFeed(tx, link.accountId, {
+        akahuAccountId: akahuAccount._id,
+        akahuAccountName: [akahuAccount.name, akahuAccount.formatted_account].filter(Boolean).join(" · "),
+        connectionName: akahuAccount.connection?.name ?? null,
+        startDate: input.startDate,
+        connectionId: input.connectionId,
+        accountNumber: akahuAccount.formatted_account ?? null,
+      });
+    } catch (error) {
+      if (error instanceof ValidationError) throw new ValidationError(`${akahuAccount.name}: ${error.message}`);
+      throw error;
+    }
+  }
+  return { linked: links };
 }

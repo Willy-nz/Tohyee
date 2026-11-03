@@ -36,7 +36,8 @@ export const PUT = route(async (request) => {
   const akahu = await withOrganisation(request, body.organisationId, "admin", (tx) =>
     saveAkahuSettings(tx, credentials, typed.syncEveryHours, { adding, connectionId: typed.connectionId, name: body.name, visibleAccountIds: visible }),
   );
-  return json({ akahu, accountCount: visible.length });
+  const { connectionId, ...settings } = akahu;
+  return json({ akahu: settings, connectionId, accountCount: visible.length });
 });
 
 /** Removes an Akahu login (`connectionId`, or the only one): its accounts' feeds stop, their lines stay (BK35). */

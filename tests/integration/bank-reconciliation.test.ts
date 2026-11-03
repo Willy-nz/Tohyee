@@ -727,7 +727,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     expect((await saveTokens(bookkeeper, { appToken: "app_token_abc", userToken: "user_token_xyz" })).status).toBe(403);
     const refused = await saveTokens(owner, { appToken: "app_token_abc", userToken: "user_token_bad" });
     expect(refused.status).toBe(400);
-    expect(((await body(refused)) as { error: string }).error).toBe("Akahu refused the tokens: Invalid token. Check the App ID token and user token.");
+    expect(((await body(refused)) as { error: string }).error).toBe("Akahu refused the tokens: Invalid token. Copy the App ID token and user token again from the Developers page at my.akahu.nz. Both must come from the same personal app.");
     const accountsReply = { success: true, items: [{ _id: "acc_1", name: "Business", type: "CHECKING", balance: { current: 1023.5 } }] };
     setAkahuFetchForTests(async () => new Response(JSON.stringify(accountsReply), { status: 200 }));
     const saved = await saveTokens(owner, { appToken: "app_token_abc", userToken: "user_token_xyz", syncEveryHours: 4 });
@@ -798,7 +798,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     await expect(syncBankFeedAccount(organisation, world.bank.id)).rejects.toThrow("Akahu refused the tokens: Token revoked");
     expect(await world.asUser(viewer, (tx) => getBankAccount(tx, world.bank.id))).toMatchObject({
       // BK33: the login needs new tokens (its row says so too).
-      feed: { lastSyncStatus: "failed", lastSyncError: "Akahu needs new tokens. Akahu refused the tokens: Token revoked. Check the App ID token and user token." },
+      feed: { lastSyncStatus: "failed", lastSyncError: "Akahu needs new tokens. Akahu refused the tokens: Token revoked. Copy the App ID token and user token again from the Developers page at my.akahu.nz. Both must come from the same personal app." },
     });
     expect((await world.lines(world.bank.id, "unreconciled")).length).toBe(3);
   });

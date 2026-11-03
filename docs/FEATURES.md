@@ -1041,7 +1041,18 @@ that something happened.
   (examples BR1-BR10, decisions 380-383). Rules only suggest; nothing posts
   until OK. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
-  with Akahu and stored encrypted. See examples BK1-BK16. **One-click
+  with Akahu and stored encrypted. See examples BK1-BK16. **Guided Akahu
+  setup** (#543, decisions 1288-1291, BK38-BK42, tenant migration 0217): from
+  the Akahu bank feeds card, one step at a time: connect (tokens checked and
+  the login saved), choose accounts (each Akahu account into an existing bank
+  or credit card account, or one added on the spot), start date, check, then
+  link and run the first sync, showing what each account brought in. Each
+  login on the card shows its own status (Needs new tokens, Accounts need
+  linking with a **Link bank accounts** button, Ready to sync, Last sync
+  failed, Last sync succeeded), when Akahu last accepted its tokens, its
+  schedule, its last successful sync, and each linked account's last result
+  ("Nothing new" apart from "Not synced yet") and lines brought in.
+  Existing links are never replaced. **One-click
   matching** (like Xero's OK): a line whose only exact-amount candidate (a
   posted transaction on the account, or an invoice or bill due) isn't wanted
   by another line, or that only a bank rule fits, shows the suggestion
