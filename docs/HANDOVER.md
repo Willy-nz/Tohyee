@@ -173,6 +173,7 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
+- **0.26.0 ready to publish from main** (4 Nov 2026): #558-#564. Notes in docs/releases/0.26.0.md.
 - **0.25.0 ready to publish from main** (3 Nov 2026): includes unpublished 0.24.0 plus #549–#556. Notes in docs/releases/0.25.0.md.
 - **0.24.0 ready to publish from main** (3 Nov 2026): guided shop setup (#535), Shopify extras (#533), customers to check (#541), menu pictures (#529, #536), AI diagnostics and fixes (#534, #540). Notes in docs/releases/0.24.0.md.
 - **0.23.0 ready to publish from main** (2 Nov 2026): security cameras (#525), camera post box (#526), (i) help (#522, #524) and icons everywhere (#520). Notes in docs/releases/0.23.0.md.
