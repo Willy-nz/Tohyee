@@ -48,6 +48,8 @@ export type KindCoverage = {
   reasons: Array<{ text: string; count: number; outcome: "skipped" | "failed" | "waiting" }>;
   /** What to do about it, if anything. */
   action: { kind: "setup" | "turn_on" | "scopes" | "log"; text: string } | null;
+  /** Payouts only (SPC39): some weren't posted, so "Try again" reads them from the store again. */
+  retry?: boolean;
 };
 
 /** Plain reasons for the messages Tohyee writes when it skips or refuses a record. Unknown ones are "other". */
@@ -63,7 +65,13 @@ export function reasonFor(message: string): string {
     [/locked/i, "date is in a locked period"],
     [/Choose a chargebacks account/, "no chargebacks account chosen"],
     [/Choose a reserve account/, "no reserve account chosen"],
-    [/Choose where .* payments go|payment method/i, "payment method not chosen"],
+    [/Choose where .* payments go|only Shopify Payments payouts clear/i, "payment method not chosen"],
+    [/more than one payment method/i, "split payment"],
+    [/payment method/i, "payment method not chosen"],
+    [/can't be posted: no .* account is chosen/, "payout account not chosen"],
+    [/transfer rows come to|transfer has a fee/, "payout's transfer doesn't match"],
+    [/of a type Tohyee doesn't post|a kind Tohyee doesn't know/, "a payout line Tohyee doesn't post"],
+    [/transactions come to .* but the payout is/, "totals don't add up"],
     [/customer couldn't be linked/, "customer not linked"],
     [/isn't linked to stock item/, "product not linked yet"],
     [/test order/i, "test order"],
@@ -159,5 +167,6 @@ export function coverageFor(kind: CoverageKind, connection: SalesPlatformConnect
     state: !postedAny && problems.every((record) => record.action === "failed") ? "failed" : "partly",
     summary: `${posted}; ${count(problems.length, kind === "orders" ? "order or refund" : "payout", kind === "orders" ? "orders or refunds" : "payouts")}${more} not posted yet`,
     action: { kind: "log", text: "See why" },
+    ...(kind === "payouts" ? { retry: true } : {}),
   };
 }

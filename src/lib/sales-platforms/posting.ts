@@ -16,10 +16,12 @@ import {
   type LinkedItem,
   type PostingRules,
   PAID_STATUSES,
+  SHOPIFY_PAYMENTS_GATEWAY,
   gstWaitReason,
   localDate,
   money,
   orderPayments,
+  paymentGateway,
   planOrder,
   type PayoutLine,
   planPayout,
@@ -53,8 +55,11 @@ export type Posting = PostingRules & {
   clearingAccountCode: string | null;
   payoutAccountCode: string | null;
   feesAccountCode: string | null;
-  /** WooCommerce (WC2-WC8): where each payment method's money goes; null when the platform uses the clearing account. */
-  paymentMethods: Map<string, { accountCode: string | null; leftOwing: boolean }> | null;
+  /**
+   * Where each payment method's money goes: WooCommerce's payment methods (WC2-WC8), or Shopify's payment
+   * gateways (SPC42-SPC46; shopify_payments always goes to the clearing account, which its payouts clear).
+   */
+  paymentMethods: Map<string, { accountCode: string | null; leftOwing: boolean }>;
   /** Where disputed amounts go, and the bank account Shopify's reserve sits in (SPC25-SPC31); null until chosen. */
   chargebacksAccountCode: string | null;
   reserveAccountCode: string | null;
@@ -112,14 +117,12 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     [connectionId],
   );
   const row = found.rows[0];
-  const usesPaymentMethods = row?.platform === "woocommerce";
-  if (!row || !row.post_to_accounts || !row.start_date || (!usesPaymentMethods && !row.clearing_account_id)) return null;
-  const methods = usesPaymentMethods
-    ? await tx.query<{ method: string; code: string | null; left_owing: boolean }>(
-        `select m.method, a.code, m.left_owing from sales_platform_payment_methods m left join accounts a on a.id = m.account_id where m.connection_id = $1`,
-        [connectionId],
-      )
-    : null;
+  const usesClearing = row?.platform !== "woocommerce";
+  if (!row || !row.post_to_accounts || !row.start_date || (usesClearing && !row.clearing_account_id)) return null;
+  const methods = await tx.query<{ method: string; code: string | null; left_owing: boolean }>(
+    `select m.method, a.code, m.left_owing from sales_platform_payment_methods m left join accounts a on a.id = m.account_id where m.connection_id = $1`,
+    [connectionId],
+  );
   const mapped = await tx.query<{ rate: string; code: string; code_rate: string }>(
     `select m.rate::text as rate, t.code, t.rate::text as code_rate
        from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id
@@ -137,7 +140,7 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     clearingAccountCode: row.clearing_code,
     payoutAccountCode: row.payout_code,
     feesAccountCode: row.fees_code,
-    paymentMethods: methods ? new Map(methods.rows.map((entry) => [entry.method, { accountCode: entry.code, leftOwing: entry.left_owing }])) : null,
+    paymentMethods: new Map(methods.rows.map((entry) => [entry.method, { accountCode: entry.code, leftOwing: entry.left_owing }])),
     chargebacksAccountCode: row.chargebacks_code,
     reserveAccountCode: row.reserve_code,
     guestContactId: row.guest_contact_id,
@@ -325,29 +328,58 @@ const errorText = (error: Error) => error.message.replace(/\s+$/, "");
 // ---------------------------------------------------------------------------
 // Orders and refunds (SPC11-SPC14, SPC16-SPC18, SPC20, SPC21, SPC23)
 
-type PaymentTarget = { ok: true; accountCode: string | null; leftOwing: boolean } | { ok: false; message: string };
+type PaymentTarget = { ok: true; accountCode: string | null; leftOwing: boolean } | { ok: false; message: string; refuse?: boolean };
+
+/** The payment method an order's money came through: WooCommerce's, or (Shopify) the gateway its payments went through. Null: nothing was paid through one. */
+function methodOf(posting: Posting, order: PlatformOrder): { ok: true; id: string | null; title: string | null } | { ok: false; message: string; refuse?: boolean } {
+  if (posting.platform === "woocommerce") {
+    const method = order.paymentMethod;
+    if (!method) return { ok: false, message: `${order.name} has no payment method, so Tohyee can't tell where its money went.` };
+    return { ok: true, id: method.id, title: method.title };
+  }
+  const gateway = paymentGateway(order);
+  if (!gateway.ok) return { ok: false, message: gateway.reason, refuse: true };
+  return { ok: true, id: gateway.gateway, title: null };
+}
 
 /**
- * Where an order's money goes (WC2-WC8): Shopify's clearing account, or for
- * WooCommerce the account its payment method is mapped to, or left owing
- * for the bank feed to match. A method not seen before is added to the
- * settings' list (unmapped), so an admin can choose.
+ * Where an order's money goes (WC2-WC8, SPC42-SPC46): the account its
+ * payment method (WooCommerce) or gateway (Shopify) is mapped to, or left
+ * owing for the bank feed to match. Shopify Payments always goes to the
+ * clearing account, which its payouts clear. A method not seen before is
+ * added to the settings' list (unmapped), so an admin can choose; until then
+ * its orders wait rather than going to the wrong account.
  */
 async function paymentTarget(tx: OrgTx, posting: Posting, order: PlatformOrder): Promise<PaymentTarget> {
-  if (!posting.paymentMethods) return { ok: true, accountCode: posting.clearingAccountCode, leftOwing: false };
-  const method = order.paymentMethod;
-  if (!method) return { ok: false, message: `${order.name} has no payment method, so Tohyee can't tell where its money went.` };
+  const method = methodOf(posting, order);
+  if (!method.ok) return method;
+  // Nothing paid through a gateway (a Shopify order that came to 0.00): the clearing account, as before.
+  if (method.id === null) return { ok: true, accountCode: posting.clearingAccountCode, leftOwing: false };
   await tx.query(
     `insert into sales_platform_payment_methods (connection_id, method, title) values ($1, $2, $3)
      on conflict (connection_id, method) do update set title = coalesce(excluded.title, sales_platform_payment_methods.title)
       where sales_platform_payment_methods.title is distinct from coalesce(excluded.title, sales_platform_payment_methods.title)`,
     [posting.connectionId, method.id.slice(0, 100), method.title?.slice(0, 200) ?? null],
   );
+  if (posting.platform === "shopify" && method.id === SHOPIFY_PAYMENTS_GATEWAY) return { ok: true, accountCode: posting.clearingAccountCode, leftOwing: false };
   const mapped = posting.paymentMethods.get(method.id);
   if (!mapped || (!mapped.accountCode && !mapped.leftOwing)) {
     return { ok: false, message: `Choose where ${method.id}${method.title ? ` (${method.title})` : ""} payments go in the ${platformLabel(posting)} settings.` };
   }
+  // Only Shopify Payments payouts clear the Shopify clearing account (SPC45): another gateway's money there would never clear.
+  if (posting.platform === "shopify" && mapped.accountCode !== null && mapped.accountCode === posting.clearingAccountCode) {
+    return { ok: false, message: `${method.id} payments are set to go into ${mapped.accountCode}, the Shopify clearing account, which only Shopify Payments payouts clear. Choose where ${method.id} payments go in the Shopify settings.` };
+  }
   return { ok: true, accountCode: mapped.accountCode, leftOwing: mapped.leftOwing };
+}
+
+/** Where a refund is paid back from: the account the order's payment went into, whatever the settings say now (SPC46); else as a new payment would go. */
+async function refundSource(tx: OrgTx, posting: Posting, order: PlatformOrder, paymentId: string | null): Promise<PaymentTarget> {
+  if (paymentId !== null) {
+    const found = await tx.query<{ code: string }>("select a.code from customer_payments p join accounts a on a.id = p.bank_account_id where p.id = $1", [paymentId]);
+    if (found.rows[0]) return { ok: true, accountCode: found.rows[0].code, leftOwing: false };
+  }
+  return paymentTarget(tx, posting, order);
 }
 
 /** WooCommerce statuses of an order that's been placed and is waiting to be paid by bank transfer or similar (WC4). */
@@ -511,7 +543,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
   }
 
   // A WooCommerce order left owing and cancelled before it was paid (WC7): the invoice is voided if nothing's paid against it.
-  if (doc.invoice_id !== null && doc.customer_payment_id === null && order.cancelledAt && !paid && posting.paymentMethods) {
+  if (doc.invoice_id !== null && doc.customer_payment_id === null && order.cancelledAt && !paid) {
     const invoice = await getInvoice(tx, doc.invoice_id);
     if (invoice.status === "voided") return;
     if (cmp(dec(invoice.amountDue ?? "0"), dec(invoice.total)) !== 0) {
@@ -542,7 +574,8 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
   if (doc.invoice_id === null) {
     const target = await paymentTarget(tx, posting, order);
     if (!target.ok) {
-      if (paid || PLACED.includes(order.financialStatus ?? "")) await wait(`${target.message}`, "waiting");
+      if (target.refuse) await refuse(target.message);
+      else if (paid || PLACED.includes(order.financialStatus ?? "")) await wait(`${target.message}`, "waiting");
       return;
     }
     const owing = target.leftOwing && PLACED.includes(order.financialStatus ?? "");
@@ -623,8 +656,8 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
 
   // Refunds (SPC14, WC5): paid back from where the payment went; an invoice left owing is credited instead.
   let failedRefund = false;
-  const refundTarget = order.refunds.length > 0 ? await paymentTarget(tx, posting, order) : null;
-  const owingInvoice = doc.customer_payment_id === null && posting.paymentMethods !== null;
+  const refundTarget = order.refunds.length > 0 ? await refundSource(tx, posting, order, doc.customer_payment_id) : null;
+  const owingInvoice = doc.customer_payment_id === null;
   const overseas = await contactIsOverseas(tx, doc.contact_id!);
   const items = await linkedItems(tx, posting, order.lines.flatMap((line) => (line.variantId ? [line.variantId] : [])));
   for (const refund of order.refunds) {
@@ -747,23 +780,38 @@ export type PayoutOutcome = "posted" | "done" | "waiting" | "refused" | "failed"
 
 /**
  * Posts a paid payout: a transfer from the clearing account to the bank for
- * its net, and spend money from the clearing account for the fees and
- * adjustments (no GST). "done" means there's nothing more to do with it.
+ * its net (a withdrawal: from the bank into the clearing account, SPC40),
+ * and spend money from the clearing account for the fees and adjustments
+ * (no GST). "done" means there's nothing more to do with it.
  */
 export async function postPayout(tx: OrgTx, context: PostingContext, payout: PlatformPayout): Promise<PayoutOutcome> {
   const given = context.posting;
-  // Only Shopify pays out, through its clearing account.
-  if (!given.clearingAccountId || !given.clearingAccountCode || !given.payoutAccountCode || !given.feesAccountCode) return "done";
+  const id = payout.externalId;
+  // Only Shopify pays out, through its clearing account. An account not set is fixed on Tohyee's side: logged and tried again (SPC41).
+  const missingAccounts = [
+    ...(!given.clearingAccountId || !given.clearingAccountCode ? ["clearing"] : []),
+    ...(!given.payoutAccountCode ? ["payouts arrive in"] : []),
+    ...(!given.feesAccountCode ? ["fees"] : []),
+  ];
+  if (await findDocument(tx, given, "payout", id)) return "done";
+  if (Date.parse(payout.issuedAt) < Date.parse(given.startInstant)) return "done";
+  if (missingAccounts.length > 0) {
+    await refused(
+      tx,
+      context,
+      "payout",
+      id,
+      `Payout ${id} can't be posted: no ${missingAccounts.join(", ")} account is chosen. Choose it in the ${platformLabel(given)} settings; the payout is tried again at the next sync.`,
+    );
+    return "failed";
+  }
   const posting = {
     ...given,
-    clearingAccountId: given.clearingAccountId,
-    clearingAccountCode: given.clearingAccountCode,
-    payoutAccountCode: given.payoutAccountCode,
-    feesAccountCode: given.feesAccountCode,
+    clearingAccountId: given.clearingAccountId!,
+    clearingAccountCode: given.clearingAccountCode!,
+    payoutAccountCode: given.payoutAccountCode!,
+    feesAccountCode: given.feesAccountCode!,
   };
-  const id = payout.externalId;
-  if (await findDocument(tx, posting, "payout", id)) return "done";
-  if (Date.parse(payout.issuedAt) < Date.parse(posting.startInstant)) return "done";
   if (payout.status === "CANCELED" || payout.status === "FAILED") {
     await log(tx, context, { action: "skipped", recordKind: "payout", externalId: id, message: `Payout ${id} ${payout.status === "FAILED" ? "failed" : "was cancelled"} in ${platformLabel(posting)}, so there's nothing to post.` });
     return "done";
@@ -817,6 +865,20 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
       receiptId = bankTransaction.id;
     }
     const releasedId = await moveReserve("reserve-released", plan.reserveReleased, posting.reserveAccountCode!, posting.clearingAccountCode, "released");
+    // SPC40: a withdrawal brings the money in from the bank first, so the fees and refunds it covers come out of it.
+    const moveNet = async () =>
+      (
+        await createTransfer(tx, {
+          source: SOURCE,
+          idempotencyKey: keyFor(posting, "payout", id, "transfer"),
+          fromAccountCode: plan.direction === "withdrawal" ? posting.payoutAccountCode : posting.clearingAccountCode,
+          toAccountCode: plan.direction === "withdrawal" ? posting.clearingAccountCode : posting.payoutAccountCode,
+          date: plan.date,
+          amount: plan.net,
+          reference: plan.direction === "withdrawal" ? `${platformLabel(posting)} withdrawal, payout ${id}` : reference,
+        })
+      ).transfer;
+    const withdrawn = plan.direction === "withdrawal" ? await moveNet() : null;
     const heldId = await moveReserve("reserve-held", plan.reserveHeld, posting.clearingAccountCode, posting.reserveAccountCode!, "held");
     let bankTransactionId: string | null = null;
     if (plan.charges.length > 0) {
@@ -833,15 +895,7 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
       });
       bankTransactionId = bankTransaction.id;
     }
-    const { transfer } = await createTransfer(tx, {
-      source: SOURCE,
-      idempotencyKey: keyFor(posting, "payout", id, "transfer"),
-      fromAccountCode: posting.clearingAccountCode,
-      toAccountCode: posting.payoutAccountCode,
-      date: plan.date,
-      amount: plan.net,
-      reference,
-    });
+    const transfer = withdrawn ?? (await moveNet());
     return { transferId: transfer.id, bankTransactionId, receiptId, heldId, releasedId };
   });
   if (!made.ok) {
@@ -865,7 +919,11 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
     ...(value.releasedId ? { reserve_released_transfer_id: value.releasedId } : {}),
   });
   context.counts.posted = (context.counts.posted ?? 0) + 1;
-  const parts = [`${plan.net} from ${posting.clearingAccountCode} to ${posting.payoutAccountCode}`];
+  const parts = [
+    plan.direction === "withdrawal"
+      ? `${plan.net} taken from ${posting.payoutAccountCode} into ${posting.clearingAccountCode} (a withdrawal)`
+      : `${plan.net} from ${posting.clearingAccountCode} to ${posting.payoutAccountCode}`,
+  ];
   if (plan.charges.length > 0) parts.push(`${plan.charges.map((line) => `${line.amount} to ${accountFor(line)}`).join(", ")} paid out of ${posting.clearingAccountCode}`);
   if (plan.receipts.length > 0) parts.push(`${plan.receipts.map((line) => `${line.amount} from ${accountFor(line)}`).join(", ")} back into ${posting.clearingAccountCode}`);
   if (plan.reserveHeld) parts.push(`${plan.reserveHeld} held in ${posting.reserveAccountCode}`);

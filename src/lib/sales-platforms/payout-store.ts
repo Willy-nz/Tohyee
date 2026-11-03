@@ -21,14 +21,14 @@ const money = (value: string) => toFixedString(dec(value), 2);
  * payout read twice is one row.
  */
 export async function savePayout(tx: OrgTx, connection: { id: string; platform: SalesPlatform; storeDomain: string }, payout: PlatformPayout): Promise<void> {
-  const detail = payout.transactions.length > 0 ? summariseSettlement(payout.transactions, payout.net) : null;
+  const detail = payout.transactions.length > 0 ? summariseSettlement(payout.transactions, payout.net, payout.direction) : null;
   await tx.query(
     `insert into sales_platform_payouts (platform, store_domain, external_id, connection_id, issued_on, status, direction, currency_code, net,
                                          detail_read, gross_sales, refunds, fees, adjustments, chargebacks, reserves, other_amounts,
-                                         transaction_count, incomplete, order_names)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                                         transaction_count, incomplete, order_names, recheck)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, false)
      on conflict (platform, store_domain, external_id) do update
-        set connection_id = excluded.connection_id, issued_on = excluded.issued_on, status = excluded.status,
+        set connection_id = excluded.connection_id, recheck = false, issued_on = excluded.issued_on, status = excluded.status,
             direction = excluded.direction, currency_code = excluded.currency_code, net = excluded.net, last_seen_at = now(),
             detail_read = sales_platform_payouts.detail_read or excluded.detail_read,
             gross_sales = coalesce(excluded.gross_sales, sales_platform_payouts.gross_sales),
@@ -66,3 +66,34 @@ export async function savePayout(tx: OrgTx, connection: { id: string; platform: 
   );
 }
 
+
+/**
+ * Where the next sync starts reading payouts when some are to be looked at
+ * again (SPC39): the start of the earliest such payout's day, or null when
+ * none are. Payouts posted already are skipped by their document, so
+ * reading them again never posts one twice.
+ */
+export async function payoutsRecheckFrom(tx: OrgTx, connectionId: string): Promise<string | null> {
+  const found = await tx.query<{ issued_on: string | null }>(
+    "select min(issued_on)::text as issued_on from sales_platform_payouts where connection_id = $1 and recheck",
+    [connectionId],
+  );
+  return found.rows[0]?.issued_on ?? null;
+}
+
+/**
+ * "Try again" (SPC39): every paid payout of the store that isn't in the
+ * accounts is read again at the next sync. Returns how many. Nothing is
+ * posted here.
+ */
+export async function markPayoutsForRecheck(tx: OrgTx, connectionId: string): Promise<number> {
+  await tx.query(
+    `update sales_platform_payouts p set recheck = true
+      where p.connection_id = $1 and p.status = 'PAID' and not p.recheck
+        and not exists (select 1 from sales_platform_documents d
+                         where d.platform = p.platform and d.store_domain = p.store_domain and d.record_kind = 'payout' and d.external_id = p.external_id)`,
+    [connectionId],
+  );
+  const waiting = await tx.query<{ n: string }>("select count(*)::text as n from sales_platform_payouts where connection_id = $1 and recheck", [connectionId]);
+  return Number(waiting.rows[0].n);
+}
