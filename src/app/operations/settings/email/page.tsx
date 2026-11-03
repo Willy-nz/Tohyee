@@ -469,7 +469,7 @@ function TestEmail({ organisationId, settings, onTested }: { organisationId: str
     }
   }
   return (
-    <Card title="Send a test email" description="Checks the account works by sending a short email now.">
+    <Card title="Send a test email">
       {settings.lastTest ? (
         <p className={ui.muted} style={{ margin: 0 }}>
           Last test {formatDateTime(settings.lastTest.at)}: {settings.lastTest.ok ? "sent" : `failed. ${settings.lastTest.error ?? ""}`}
@@ -552,7 +552,6 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
       {problem ? <Notice tone="error">{problem}</Notice> : null}
       <Card
         title="Email account"
-        description="Invoices, quotes, credit notes, purchase orders and statements are emailed from this account, so they come from your address and replies come back to you."
         actions={settings.configured ? <Badge tone="green">Sending with {METHOD_BADGES[settings.sendingMethod]}</Badge> : <Badge tone="amber">Not set up</Badge>}
       >
         {settings.updatedAt ? (
@@ -601,7 +600,7 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
 export default function EmailSettingsPage() {
   return (
     <Page>
-      <PageHeader title="Email" description="Send documents from the organisation's own email account." />
+      <PageHeader title="Email" />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <EmailSettings organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

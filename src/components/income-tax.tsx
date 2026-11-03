@@ -1945,7 +1945,6 @@ export function IncomeTaxView({ organisationId }: { organisationId: string }) {
     <>
       <PageHeader
         title="Income tax"
-        description="What's due, what to set aside, and the working behind it."
         actions={
           report ? (
             <Field label="Income year">

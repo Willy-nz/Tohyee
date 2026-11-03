@@ -299,7 +299,6 @@ export function DealRenewals({ organisationId, opportunity, onChanged }: { organ
   return (
     <Card
       title="Renewals"
-      description="When the deal or its products come up for renewal. A follow-up rule can remind the owner beforehand."
       actions={
         canCrm("write") && !lost && !editing ? (
           <Button

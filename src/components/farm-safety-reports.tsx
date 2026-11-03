@@ -573,7 +573,7 @@ export function ReportsCard({
   const openCount = reports.filter((report) => report.state === "open" || report.state === "actions").length;
   return (
     <>
-      <Card title={`Reports (${openCount} open)`} description="Hazards spotted, near misses and incidents, newest first, with what's being done about them.">
+      <Card title={`Reports (${openCount} open)`}>
         {!reports.length ? <Empty>Nothing reported on this farm yet.</Empty> : null}
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {reports.map((report) => (

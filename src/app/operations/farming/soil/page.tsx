@@ -15,7 +15,7 @@ function ForFarm() {
 export default function SoilTestsPage() {
   return (
     <Page>
-      <PageHeader title="Soil tests" description="Each paddock's soil tests as the lab reported them, with the lab's report attached." />
+      <PageHeader title="Soil tests" />
       <Suspense fallback={null}>
         <ForFarm />
       </Suspense>

@@ -9,7 +9,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmMailPage() {
   return (
     <Page>
-      <PageHeader title="Email and calendar" description="CRM: emails and meetings with the people and companies you know, on their timelines." />
+      <PageHeader title="Email and calendar" />
       <Suspense fallback={null}>
         <RequireOrganisation>
           {(organisationId) => (

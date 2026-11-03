@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmRecordTypesPage() {
   return (
     <Page>
-      <PageHeader
-        title="Record types"
-        description="Kinds of company, person and opportunity, like a standard account or a funding body. Each has its own page layout: which fields show, in which sections, and which are required or read-only."
-      />
+      <PageHeader title="Record types" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

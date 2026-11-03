@@ -11,7 +11,7 @@ export default function ApprovalRequestPage() {
   const { requestId } = useParams<{ requestId: string }>();
   return (
     <Page>
-      <PageHeader title="Approval" description={<Link href="/operations/purchases/approvals">Back to Approvals</Link>} />
+      <PageHeader title="Approval" actions={<Link href="/operations/purchases/approvals">Back to Approvals</Link>} />
       <RequireOrganisation>{(organisationId) => <ApprovalRequestView key={`${organisationId}-${requestId}`} organisationId={organisationId} requestId={requestId} />}</RequireOrganisation>
     </Page>
   );

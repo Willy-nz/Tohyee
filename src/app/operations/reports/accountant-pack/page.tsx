@@ -43,7 +43,7 @@ function AccountantPack({ organisationId }: { organisationId: string }) {
 export default function AccountantPackPage() {
   return (
     <Page>
-      <PageHeader title="Year-end pack" description="The reports your accountant asks for at the year end, in one download." />
+      <PageHeader title="Year-end pack" />
       <RequireOrganisation>{(organisationId) => <AccountantPack key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

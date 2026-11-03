@@ -66,10 +66,8 @@ export default function ServerAnalyticsPage() {
 
   return (
     <Page>
-      <PageHeader
-        title="Analytics folders"
-        description="The folder on this computer each organisation's analytics reads CSV files from (and the folders inside it). Tohyee only reads them; it never changes or deletes files there."
-      />
+      <PageHeader title="Analytics folders" />
+      <Notice>Tohyee only reads files there; it never changes or deletes them.</Notice>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Card title="Organisations" description="Use a full path, e.g. D:\Reports\Glimmers. The Tohyee service needs to be able to read it. Leave blank for none.">
         {!rows ? (

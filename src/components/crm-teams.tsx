@@ -95,7 +95,6 @@ export function TeamsPage({ organisationId }: { organisationId: string }) {
       {teams.error ? <Notice tone="error">{teams.error}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Card
-        title="Sales teams"
         description="A sales rep sees their own deals and tasks; a team's manager also sees everyone's in the team. Everyone sees every company and person."
         actions={
           admin && editing === null ? (

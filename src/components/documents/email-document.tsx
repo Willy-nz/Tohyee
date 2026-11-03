@@ -120,8 +120,8 @@ function EmailForm({ organisationId, kind, id, statement, onQueued, onCancel }: 
         <Field label="To" hint="Separate addresses with commas.">
           <input value={values.to} onChange={(event) => set("to")(event.target.value)} required />
         </Field>
-        <Field label="Cc" hint="Optional.">
-          <input value={values.cc} onChange={(event) => set("cc")(event.target.value)} />
+        <Field label="Cc">
+          <input placeholder="Optional" value={values.cc} onChange={(event) => set("cc")(event.target.value)} />
         </Field>
       </div>
       <Field label="Subject">
@@ -265,7 +265,6 @@ export function EmailDocumentPanel(props: Props & { title?: string }) {
   return (
     <Card
       title={props.title ?? "Email"}
-      description={`Emails of this ${noun} with its PDF attached, sent from the organisation's own email account.`}
       actions={
         can("bookkeeper") && !open ? (
           <Button size="small" onClick={() => setOpen(true)} disabled={Boolean(props.unavailableReason)} title={props.unavailableReason ?? undefined}>

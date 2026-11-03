@@ -41,7 +41,7 @@ import {
   visibleNewActions,
 } from "@/components/navigation";
 import { ThemeSwitch } from "@/components/theme";
-import { Page, PageHeader } from "@/components/ui";
+import { Notice, Page, PageHeader } from "@/components/ui";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { handleFormKeys } from "@/lib/form-keys";
 import { cancelReminders } from "@/lib/native/notifications";
@@ -729,18 +729,16 @@ function AccountingOff() {
   if (pathname === "/operations") return null;
   return (
     <Page>
-      <PageHeader
-        title={`Accounting is off for ${current?.displayName ?? "this organisation"}`}
-        description={
-          can("admin") ? (
-            <>
-              An admin can turn it on under <Link href="/operations/modules">Modules</Link>. Everything entered before is kept.
-            </>
-          ) : (
-            "An admin can turn it on under Modules. Everything entered before is kept."
-          )
-        }
-      />
+      <PageHeader title={`Accounting is off for ${current?.displayName ?? "this organisation"}`} />
+      <Notice>
+        {can("admin") ? (
+          <>
+            An admin can turn it on under <Link href="/operations/modules">Modules</Link>. Everything entered before is kept.
+          </>
+        ) : (
+          "An admin can turn it on under Modules. Everything entered before is kept."
+        )}
+      </Notice>
     </Page>
   );
 }

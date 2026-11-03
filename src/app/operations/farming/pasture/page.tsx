@@ -15,7 +15,7 @@ function ForFarm() {
 export default function PasturePage() {
   return (
     <Page>
-      <PageHeader title="Pasture and feed" description="Cover readings, grazings and supplements fed." />
+      <PageHeader title="Pasture and feed" />
       <Suspense fallback={null}>
         <ForFarm />
       </Suspense>

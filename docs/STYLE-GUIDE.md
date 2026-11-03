@@ -23,10 +23,23 @@
 - Charts: every chart takes its colours and styling from
   `src/lib/charts/theme.ts` (ECharts) or the `--chart-*` CSS variables
   (hand-drawn SVG). Don't hard-code chart colours; see decisions 599-601.
-- Help text: keep a short line visible (one or two short sentences) and
-  put the rest in `<InfoTip>` from `src/components/info-tip.tsx`, the (i)
-  button (decisions 1210-1215). Warnings, irreversible-action confirmations
-  and who-can-see-this notices stay visible.
+- Words on screen (decisions 1316-1320, superseding the "short line under
+  headings" rule of 1210-1215): no taglines, subtitles or secondary labels.
+  `PageHeader` has no description; if a screen needs one to make sense, fix
+  the layout. List pages are title + main button in the header, then tabs
+  and the table, with no card repeating the title. Don't give a card a
+  description that restates its title. An example belongs in the input's
+  placeholder, not a hint; a behaviour note ("approving posts on this date")
+  belongs in the confirm step. Make a card's title its link (`Card href`)
+  rather than adding an "Open X" link. Short GST and accounting hints may go
+  behind `<InfoTip>` (the (i) button, `src/components/info-tip.tsx`).
+- What always stays visible, cut to one line beside its action or as a
+  one-line `<Notice>` under the heading: warnings, void/period-lock and
+  other irreversible-action confirmations, who-can-see-this and privacy
+  notes (location sharing, cameras, farm mail), the WorkSafe note, "not
+  tried with a real X" honesty notes, accounting labels (excl./incl. GST,
+  GST return box numbers in IRD's wording, account codes) and notes that
+  explain why a control is locked.
 - Browser-safe value modules also include `ui/info-tip` and `bank/mixed-use-rules`.
 
 ## Organisation data

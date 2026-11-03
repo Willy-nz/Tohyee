@@ -192,7 +192,6 @@ function BillCredit({ creditApplied }: { creditApplied: SupplierCreditNoteApplic
   return (
     <Card
       title="Credit applied"
-      description="Credit from supplier credit notes lowers the amount due without posting a journal. Apply or remove it on the supplier credit note."
     >
       <div className={ui.tableWrap}>
         <table className={ui.table}>

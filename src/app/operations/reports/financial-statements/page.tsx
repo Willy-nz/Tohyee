@@ -167,10 +167,7 @@ function YearEndReports({ organisationId }: { organisationId: string }) {
 export default function FinancialStatementsPage() {
   return (
     <Page>
-      <PageHeader
-        title="Financial statements"
-        description="Year-end financial statements, or a not-for-profit's Tier 3 or Tier 4 performance report, with your notes, as one PDF."
-      />
+      <PageHeader title="Financial statements" />
       <RequireOrganisation>{(organisationId) => <YearEndReports key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

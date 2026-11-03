@@ -58,7 +58,7 @@ export function ConsolidationGroups() {
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <Card title="Consolidation groups" description="Organisations on this server reported together in the parent's currency, with intercompany amounts eliminated. You see a group when you're a member of every organisation in it.">
+      <Card description="You see a group when you're a member of every organisation in it.">
         {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
         {loaded.data && loaded.data.groups.length === 0 ? <Empty>No consolidation groups you can see.</Empty> : null}
         {loaded.data && loaded.data.groups.length > 0 ? (

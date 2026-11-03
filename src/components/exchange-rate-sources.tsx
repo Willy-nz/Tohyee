@@ -178,8 +178,8 @@ export function RateSetsCard({ organisationId, baseCurrency, canEdit, onChanged 
       {canEdit ? (
         <form onSubmit={showPreview} style={{ display: "grid", gap: 12 }}>
           <div className={ui.grid4}>
-            <Field label="Name" hint="Where the rates came from, e.g. IRD monthly average">
-              <input value={name} maxLength={100} required onChange={(event) => (setName(event.target.value), reset())} />
+            <Field label="Name">
+              <input placeholder="IRD monthly average" value={name} maxLength={100} required onChange={(event) => (setName(event.target.value), reset())} />
             </Field>
             <Field label="Period from">
               <DateInput value={periodStart} required onChange={(event) => (setPeriodStart(event.target.value), reset())} />

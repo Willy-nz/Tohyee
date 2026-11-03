@@ -51,7 +51,6 @@ export function GroupWorkspaceTab({ group }: { group: ConsolidationGroup }) {
     <>
       <Card
         title="Group workspace"
-        description="The whole group on one date: the consolidated books, the CRM pipeline and linked customers, read from each organisation's own records."
         actions={
           <div className={ui.inlineForm}>
             <Field label="As at">
@@ -345,7 +344,7 @@ export function GroupCustomersTab({ group, canEdit, canAdmin }: { group: Consoli
         ))}
       </Card>
       {canEdit ? (
-        <Card title="Link a customer" description="Choose the customer's contact in two or more of the organisations.">
+        <Card title="Link a customer">
           <form
             onSubmit={async (event) => {
               event.preventDefault();

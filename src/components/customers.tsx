@@ -627,7 +627,7 @@ export function CustomerSettings({ organisationId }: { organisationId: string })
               ))}
             </div>
           </Card>
-          <Card title="Customer groups" description="Like NetSuite's customer categories: Retail, Wholesale and so on.">
+          <Card title="Customer groups">
             {setup.customerGroups.length === 0 ? <Empty>No customer groups yet.</Empty> : null}
             {setup.customerGroups.length > 0 ? (
               <div className={ui.tableWrap}>

@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function PayRunsPage() {
   return (
     <Page>
-      <PageHeader title="Pay runs" description="Calculate a pay group's pay, then approve it to post one journal dated the pay date." />
+      <PageHeader title="Pay runs" />
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>

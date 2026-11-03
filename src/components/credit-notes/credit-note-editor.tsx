@@ -350,13 +350,13 @@ function CreditNoteForm({
           </select>
           <ExportBadge contact={chosenCustomer} />
         </Field>
-        <Field label="Credit note date" hint="Approving posts the credit note on this date.">
+        <Field label="Credit note date">
           <DateInput value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
         <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />
-        <Field label="Reference" hint="Optional, like the invoice it credits.">
-          <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
+        <Field label="Reference">
+          <input placeholder="Optional" value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
         <Field label="Stock returned from" hint="For stock items: the invoice they were sold on, so they go back into stock at that sale's cost.">
           <select value={returnInvoiceId} onChange={(event) => setReturnInvoiceId(event.target.value)}>

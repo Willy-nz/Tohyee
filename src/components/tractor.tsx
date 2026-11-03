@@ -312,7 +312,7 @@ export function TractorHome({ organisationId, farm }: FarmContext) {
         />
       ) : null}
       {!canRecord ? <Notice tone="info">Recording tractor jobs needs the farm staff or bookkeeper role. You can look at jobs below.</Notice> : null}
-      <Card title="Jobs on the server" description={`${farm.name}. Open one to see its map, numbers and exports.`}>
+      <Card title="Jobs on the server">
         {server.error ? <Notice tone="error">{server.error}</Notice> : null}
         {!server.data && !server.error ? <p className={ui.muted}>Loading…</p> : null}
         {server.data && server.data.jobs.length === 0 ? <Empty>No tractor jobs yet.</Empty> : null}

@@ -19,7 +19,7 @@ function Statements() {
 export default function CustomerStatementsPage() {
   return (
     <Page>
-      <PageHeader title="Customer statements" description="Activity or outstanding statements to print or save as PDF." />
+      <PageHeader title="Customer statements" />
       <Suspense fallback={null}>
         <Statements />
       </Suspense>

@@ -122,8 +122,6 @@ export function ProjectList({ organisationId }: { organisationId: string }) {
   const list = useApiData<{ projects: ProjectSummary[] }>("/api/projects", { organisationId, status: filter.status });
   return (
     <Card
-      title="Projects"
-      description="Work for customers: time, expenses and what's still to invoice."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/projects/new")}>New project</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Projects">
@@ -1280,7 +1278,6 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Time report"
-      description="Time recorded on projects, by person, project and task, with its cost at staff cost rates."
       actions={
         <Button variant="secondary" onClick={() => window.print()}>
           Print or save as PDF

@@ -244,7 +244,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
       </Card>
       <AppTiles organisationId={organisationId} farmId={farm.id} manage={false} />
       {!farmWorker && can("viewer") ? (
-        <Card title="Money and year-end" description="The books and budgets are in Accounting; benchmarks are under More.">
+        <Card title="Money and year-end">
           <div className={styles.actions}>
             <Link href="/operations">Accounting</Link>
             <Link href="/operations/farming/benchmarks">Farm benchmarks</Link>
@@ -470,7 +470,7 @@ export function FarmMore({ organisationId, farm }: FarmContext) {
   return (
     <div className={styles.grid}>
       {/* The full Farm menu (#498 item 3): everything on the farm, so Effluent is found without searching. */}
-      <Card title="Farm menu" description="Today, Map, Log and Safety are the tabs. Everything else on the farm is here.">
+      <Card title="Farm menu">
         <nav aria-label="Farm menu" className={styles.menuTiles}>
           {shown(FARM_WORK).map((link) => (
             <Link key={link.href} href={link.href} className={styles.menuTile}>
@@ -484,12 +484,12 @@ export function FarmMore({ organisationId, farm }: FarmContext) {
         </nav>
       </Card>
       {details.length ? (
-        <Card title="Details" description="Every record as a table, for checking and the accounts.">
+        <Card title="Details">
           <LinkList links={details} />
         </Card>
       ) : null}
       {farmWorker ? null : (
-        <Card title="Year-end and setup" description="These are linked to the books and open in Accounting where they're kept.">
+        <Card title="Year-end and setup">
           <LinkList links={shown(YEAR_END)} />
         </Card>
       )}

@@ -90,10 +90,7 @@ function NewSupplierCreditNoteFromQuery() {
 export default function NewSupplierCreditNotePage() {
   return (
     <Page>
-      <PageHeader
-        title="New supplier credit note"
-        description="Save it as a draft first. Nothing is posted to the ledger until you approve it."
-      />
+      <PageHeader title="New supplier credit note" />
       <Suspense fallback={null}>
         <NewSupplierCreditNoteFromQuery />
       </Suspense>

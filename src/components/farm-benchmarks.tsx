@@ -60,7 +60,6 @@ export function FarmBenchmarksView({ organisationId }: { organisationId: string 
   return (
     <>
       <Card
-        title="Farm benchmarks"
         description={<>Gross farm revenue and farm working expenses for the year, in total and per kg of milk solids, effective hectare, peak cow milked and stock unit.{" "}<InfoTip label="Farm benchmarks">Only expense accounts put in a group below are working expenses.</InfoTip></>}
         actions={
           data ? (

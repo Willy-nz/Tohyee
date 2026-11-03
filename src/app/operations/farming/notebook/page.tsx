@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function FarmNotebookPage() {
   return (
     <Page>
-      <PageHeader title="Farm notebook" description="The farm's history, goals, people and ways, for you and your AI." />
+      <PageHeader title="Farm notebook" />
       <RequireOrganisation>{(organisationId) => <FarmNotebook key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

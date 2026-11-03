@@ -13,10 +13,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function LeaveRoutePage() {
   return (
     <Page>
-      <PageHeader
-        title="Leave"
-        description="Holidays Act 2003 leave: annual holidays, sick, bereavement and family violence leave, public and alternative holidays. Pay runs pay what's booked."
-      />
+      <PageHeader title="Leave" />
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>

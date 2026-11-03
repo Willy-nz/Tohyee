@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CashFlowForecastPage() {
   return (
     <Page>
-      <PageHeader title="Cash flow forecast" description="What's expected to come into and go out of the bank, from what's in the books." />
+      <PageHeader title="Cash flow forecast" />
       <RequireOrganisation>{(organisationId) => <CashFlowForecastView key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

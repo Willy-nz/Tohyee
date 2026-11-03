@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function SalesOverviewPage() {
   return (
     <Page>
-      <PageHeader title="Sales" description="Invoices, credit notes and customer payments." />
+      <PageHeader title="Sales" />
       <RequireOrganisation>{(organisationId) => <AreaOverview key={organisationId} organisationId={organisationId} area="sales" />}</RequireOrganisation>
     </Page>
   );

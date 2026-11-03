@@ -174,8 +174,6 @@ export function LeadsPage({ organisationId }: { organisationId: string }) {
     <>
       {leads.error ? <Notice tone="error">{leads.error}</Notice> : null}
       <Card
-        title="Leads"
-        description="Enquiries before they're customers. Work them, then convert the good ones into a company, a person and an opportunity."
         actions={
           canCrm("write") && !adding ? (
             <span className={ui.rowButtons}>
@@ -506,7 +504,7 @@ export function LeadRecordPage({ organisationId, leadId }: { organisationId: str
           <p className={ui.muted}>Owner: {lead.ownerUserId ? memberName(team, lead.ownerUserId) : "Unassigned"}</p>
         )}
       </Card>
-      <Card title="Activity" description="Calls, meetings, notes and emails with this lead, and its tasks. They stay with it when it's converted.">
+      <Card title="Activity">
         {canCrm("write") ? (
           <form
             className={ui.inlineForm}

@@ -60,10 +60,7 @@ export default function ServerUpdatesPage() {
   const windows = details?.platform === "win32";
   return (
     <Page>
-      <PageHeader
-        title="Updates"
-        description="Tohyee checks GitHub for a new release a minute after it starts and then once a day."
-      />
+      <PageHeader title="Updates" />
       <Card title="Latest release" actions={<Button onClick={() => void load(true)} disabled={busy}>{busy ? "Checking…" : "Check now"}</Button>}>
         {error ? <Notice tone="error">{error}</Notice> : null}
         {details ? (

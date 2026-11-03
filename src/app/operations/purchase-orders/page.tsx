@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/purchase-order-editor";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate } from "@/lib/format";
 import type { PurchaseOrderSummary } from "@/lib/purchase-orders/service";
@@ -97,15 +96,9 @@ function PurchaseOrderList({ organisationId, filter }: { organisationId: string;
 }
 
 function PurchaseOrders({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Purchase orders"
-      description="Latest entered first. Purchase orders post nothing. Approving numbers one; copying it to a bill makes a draft bill with what's still to bill."
-      actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/purchase-orders/new")}>New purchase order</Button> : null}
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Purchase order status">
         {FILTERS.map((entry) => (
           <button
@@ -121,14 +114,15 @@ function PurchaseOrders({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <PurchaseOrderList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function PurchaseOrdersPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader title="Purchase orders" description="Orders to suppliers. An approved purchase order is copied to a bill when the supplier's invoice arrives." />
+      <PageHeader title="Purchase orders" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? <Button onClick={() => router.push("/operations/purchase-orders/new")}>New purchase order</Button> : null}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <PurchaseOrders organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

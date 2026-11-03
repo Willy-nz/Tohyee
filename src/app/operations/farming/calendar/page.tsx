@@ -5,12 +5,13 @@ import { RequireOrganisation } from "@/components/books";
 import { FarmCalendarHome } from "@/components/farm-calendar";
 import { FarmEffluentDue } from "@/components/farm-effluent-care";
 import { FarmSafetyDue } from "@/components/farm-safety-tab";
-import { Page, PageHeader } from "@/components/ui";
+import { Page, PageHeader, Notice } from "@/components/ui";
 
 export default function FarmCalendarPage() {
   return (
     <Page>
-      <PageHeader title="Farm calendar" description="Visits, deliveries, contractors and deadlines read from your own email, items you add, and what others share with the farm team." />
+      <PageHeader title="Farm calendar" />
+      <Notice>Read from your own email, items you add, and what others share with the farm team.</Notice>
       <Suspense fallback={null}>
         <RequireOrganisation>
           {(organisationId) => (

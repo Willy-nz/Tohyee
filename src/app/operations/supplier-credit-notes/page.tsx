@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate } from "@/lib/format";
 import type { SupplierCreditNoteStatus, SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
@@ -126,19 +125,9 @@ function SupplierCreditNoteList({ organisationId, filter }: { organisationId: st
 }
 
 function SupplierCreditNotes({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Supplier credit notes"
-      description="Latest entered first. Drafts post nothing; approving posts the credit note. Remaining credit is the total less the credit applied to bills and refunded by the supplier."
-      actions={
-        can("bookkeeper") ? (
-          <Button onClick={() => router.push("/operations/supplier-credit-notes/new")}>New supplier credit note</Button>
-        ) : null
-      }
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Supplier credit note status">
         {FILTERS.map((entry) => (
           <button
@@ -154,17 +143,17 @@ function SupplierCreditNotes({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <SupplierCreditNoteList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function SupplierCreditNotesPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader
-        title="Supplier credit notes"
-        description="Credit from your suppliers, applied to their bills or refunded to you, with GST worked out per line."
-      />
+      <PageHeader title="Supplier credit notes" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? (
+          <Button onClick={() => router.push("/operations/supplier-credit-notes/new")}>New supplier credit note</Button>
+        ) : null}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <SupplierCreditNotes organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

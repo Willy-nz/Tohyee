@@ -4,12 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { BillStatusBadge } from "@/components/bills/bill-editor";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
 import { PaidStatusBadge } from "@/components/invoices/invoice-editor";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import type { BillStatus, BillSummary } from "@/lib/bills/service";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate } from "@/lib/format";
@@ -115,24 +114,12 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
 }
 
 function Bills({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
   const router = useRouter();
   const params = useSearchParams();
   // The list shown is in the address (?show=), so the menus can open "Awaiting payment".
   const filter = FILTERS.find((entry) => entry.slug === params.get("show")) ?? FILTERS[0];
   return (
-    <Card
-      title="Bills"
-      description="Latest entered first. Drafts post nothing; approving posts the bill to accounts payable on its bill date. Amount due is the total less the bill's payments."
-      actions={
-        <>
-          <Button variant="secondary" onClick={() => router.push("/operations/bills/inbox")}>
-            Bills inbox
-          </Button>
-          {can("bookkeeper") ? <Button onClick={() => router.push("/operations/bills/new")}>New bill</Button> : null}
-        </>
-      }
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Bill status">
         {FILTERS.map((entry) => (
           <button
@@ -148,14 +135,20 @@ function Bills({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <BillList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function BillsPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader title="Bills" description="Bills from your suppliers, with GST worked out per line." />
+      <PageHeader title="Bills" actions={<OrganisationActions>{({ can }) => <>
+          <Button variant="secondary" onClick={() => router.push("/operations/bills/inbox")}>
+            Bills inbox
+          </Button>
+          {can("bookkeeper") ? <Button onClick={() => router.push("/operations/bills/new")}>New bill</Button> : null}
+        </>}</OrganisationActions>} />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <Bills organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

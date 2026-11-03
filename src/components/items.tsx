@@ -577,7 +577,6 @@ export function ItemsManager({ organisationId }: { organisationId: string }) {
       {editing === "new" ? <Card title="New item">{form(null)}</Card> : null}
       {editingItem ? <Card title={`${editingItem.code} · ${editingItem.name}`}>{form(editingItem)}</Card> : null}
       <Card
-        title="Products and services"
         description={
           advanced
             ? "Pick them on invoice, bill and credit note lines. Units, price level prices, supplier prices and kits are on (Advanced reporting)."

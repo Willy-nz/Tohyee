@@ -161,8 +161,8 @@ function NumberFields({ name, value, onChange, labels }: { name: string; value: 
           <Field label="Before the number">
             <input aria-label={`${name} text before`} maxLength={20} value={current.prefix ?? ""} onChange={(event) => onChange({ ...current, prefix: event.target.value || undefined })} />
           </Field>
-          <Field label="After the number" hint='e.g. "customers"'>
-            <input aria-label={`${name} text after`} maxLength={20} value={current.suffix ?? ""} onChange={(event) => onChange({ ...current, suffix: event.target.value || undefined })} />
+          <Field label="After the number">
+            <input placeholder="customers" aria-label={`${name} text after`} maxLength={20} value={current.suffix ?? ""} onChange={(event) => onChange({ ...current, suffix: event.target.value || undefined })} />
           </Field>
         </>
       ) : null}
