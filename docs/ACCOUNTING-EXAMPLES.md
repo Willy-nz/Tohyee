@@ -1631,6 +1631,30 @@ INV-0001 (115.00, I1); supplier Kauri Supplies.
   reading expense claims (people's own spending).
 - **AIF6** A refund of 23.00 paid to Kobe Ltd for a second approved 23.00
   credit note, from 1000, posts Dr 1100 23.00 / Cr 1000 23.00 (as CN8).
+- **AIF7** (decision 1345, as the asset types page does; not yet reviewed)
+  With no asset types set up, Claude adds "Plant" (1640, 1650, 6300, SL 20%)
+  with create_fixed_asset_type and renames it "Plant and machinery" at 25%
+  with update_fixed_asset_type. The page's checks apply: the accumulated
+  depreciation account can't be the asset account, the expense account must
+  be an expense account, a rate is needed unless there's no depreciation,
+  names are unique, and accounts can't change once the type has assets. It
+  can't archive a type. A Make and post key can't use either tool, and a Full
+  access key whose owner is now an admin works as Make and post. Audited as
+  the page's changes are.
+- **AIF8** (decision 1346, the Income tax page's rules, ITX11 and ITX14)
+  Claude registers a new machine costing 100,000.00, bought 1 June 2025, with
+  taxDetails SL 20%, new, Investment Boost: the answer shows the 2026 income
+  year's boost **20,000.00** and depreciation **13,333.33** (ITX14 for 10
+  months). Investment Boost is refused, and nothing is registered, when the
+  asset isn't ticked as new, was bought or first available before 22 May
+  2025, or is low-value or not depreciable. update_fixed_asset changes tax
+  details with taxDetails.version from get_fixed_asset; fields left out keep
+  what's saved.
+- **AIF9** (decision 1347) With the machine and a new 2,500.00 desk (DV 25%
+  from July 2025, boost then turned off), the 2026 workpaper has Investment
+  Boost **-20,000.00** and tax depreciation **-13,802.08** (13,333.33 +
+  468.75). get_fixed_asset and list_fixed_assets show taxDetails to owners
+  and admins only.
 
 ### Bank feeds (Akahu)
 

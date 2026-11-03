@@ -1,7 +1,7 @@
 import { createAccount, updateAccount } from "@/lib/accounts/service";
 import { documentWithLineIds, type LineDocument, linesForEdit, type SavedLine } from "@/lib/ai/document-lines";
 import { boundedLimit, CURSOR, pageAfter } from "@/lib/ai/limits";
-import { type AiTool, DATE, type JsonSchema, schema } from "@/lib/ai/tools";
+import { type AiTool, DATE, type JsonSchema, schema, type ToolContext } from "@/lib/ai/tools";
 import { AMOUNTS_MODE, DOCUMENT_LINES, editFields, ID, IDEMPOTENCY, idempotencyKey, SALES_DOCUMENT_LINES } from "@/lib/ai/write-tools";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
@@ -12,7 +12,15 @@ import { approveCreditNote, createCreditNote, getCreditNote, listCreditNotes, up
 import { approveExpenseClaim, EXPENSE_CLAIM_STATUSES, getExpenseClaim, listExpenseClaims, recordExpenseClaimPayment } from "@/lib/expense-claims/service";
 import { DEPRECIATION_METHODS } from "@/lib/fixed-assets/depreciation";
 import { previewDepreciationRun, runDepreciation } from "@/lib/fixed-assets/runs";
-import { createFixedAsset, getFixedAsset, listFixedAssets, listFixedAssetTypes, updateFixedAsset } from "@/lib/fixed-assets/service";
+import {
+  createFixedAsset,
+  createFixedAssetType,
+  getFixedAsset,
+  listFixedAssets,
+  listFixedAssetTypes,
+  updateFixedAsset,
+  updateFixedAssetType,
+} from "@/lib/fixed-assets/service";
 import { applyOverpayment, listOverpayments, refundOverpayment } from "@/lib/invoices/overpayments";
 import { ITEM_TYPES } from "@/lib/items/pricing";
 import { createItem, getItem, listItems, updateItem } from "@/lib/items/service";
@@ -34,7 +42,10 @@ import {
   updateSupplierCreditNote,
 } from "@/lib/supplier-credit-notes/service";
 import { createTrackingCategory, createTrackingValue, getTrackingSetup, updateTrackingCategory, updateTrackingValue } from "@/lib/tracking/service";
-import { ConflictError } from "@/lib/errors";
+import { roleAtLeast } from "@/lib/auth/roles";
+import { ConflictError, ForbiddenError, ValidationError } from "@/lib/errors";
+import { setTaxDetails, type TaxAsset, type TaxDetails, taxDetailsByAsset } from "@/lib/tax/income/assets";
+import { TAX_DEPRECIATION_METHODS } from "@/lib/tax/income/depreciation";
 import { requireId } from "@/lib/validation";
 
 /**
@@ -46,6 +57,10 @@ import { requireId } from "@/lib/validation";
  * filing, users, roles or settings. A bill, purchase order or expense claim
  * an approval rule covers is approved by people only (AW13; Jess, 9 Oct
  * 2026). Lists are capped; ask with filters for more.
+ *
+ * Fixed asset types and an asset's tax details (Investment Boost) go through
+ * the same services as the asset types page and the Income tax page, with
+ * their checks (decisions 1345-1347, examples AIF7-AIF9).
  */
 
 const MAX_LIST = 200;
@@ -211,6 +226,66 @@ const ASSET_FIELDS: Record<string, JsonSchema> = {
   openingDate: { ...DATE, description: "Only for an asset brought in part way through its life." },
   openingAccumulatedDepreciation: MONEY("Depreciation already taken before the opening date"),
 };
+
+const TYPE_FIELDS: Record<string, JsonSchema> = {
+  name: { type: "string" },
+  assetAccountCode: { type: "string", description: "A fixed or non-current asset account's code (list_accounts) for the assets' cost." },
+  accumulatedDepreciationAccountCode: { type: "string", description: "Another fixed or non-current asset account's code for accumulated depreciation." },
+  depreciationExpenseAccountCode: { type: "string", description: "An expense account's code for depreciation." },
+  method: { type: "string", enum: [...DEPRECIATION_METHODS], description: "The default book depreciation method for assets of this type." },
+  rate: { type: ["string", "null"], description: "The default yearly %, e.g. \"30\"; none for no depreciation." },
+};
+
+const TAX_DETAIL_NAMES = ["method", "rate", "taxCost", "businessUsePercent", "availableOn", "newAsset", "investmentBoost", "openingIncomeYear", "openingAtv"] as const;
+const TAX_DETAILS: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  description:
+    "Its tax depreciation and Investment Boost, as on the Income tax page (owners and admins). On an edit, fields left out keep what's saved. Investment Boost is only for new (or new to New Zealand) assets bought and first available for use on or after 22 May 2025, depreciated by diminishing value or straight line.",
+  properties: {
+    method: { type: "string", enum: [...TAX_DEPRECIATION_METHODS], description: "Tax method: dv, sl, low_value (1,000.00 or less) or not_depreciable." },
+    rate: { type: "string", description: "IRD's rate as a %, e.g. \"20\" (dv and sl only)." },
+    taxCost: MONEY("Its cost for tax; left out, its cost"),
+    businessUsePercent: { type: "string", description: "Left out, 100." },
+    availableOn: { ...DATE, description: "When it was first available for use; left out, its purchase date." },
+    newAsset: { type: "boolean", description: "New, or new to New Zealand. Needed for Investment Boost." },
+    investmentBoost: { type: "boolean", description: "Claim Investment Boost: 20% of its tax cost in the income year it's first available." },
+    openingIncomeYear: { type: ["integer", "null"], description: "Only for an asset with tax history before Tohyee: the income year openingAtv is at the start of." },
+    openingAtv: { type: ["string", "null"], description: "Its adjusted tax value at the start of openingIncomeYear." },
+    version: { type: "integer", description: "taxDetails.version from get_fixed_asset (0 when it has none). Needed on update_fixed_asset." },
+  },
+};
+
+/** Income tax is for owners and admins (decision 545), whatever the key's level. */
+function canSeeTax(role: ToolContext["role"]): boolean {
+  return roleAtLeast(role, "admin");
+}
+
+/** An asset with its tax details for owners and admins (null when it has none); others don't see them. */
+function withTax<A extends { id: string }>(asset: A, details: Map<string, TaxDetails> | null) {
+  return details ? { ...asset, taxDetails: details.get(asset.id) ?? null } : asset;
+}
+
+async function taxDetailsFor(tx: OrgTx, context: ToolContext, ids: readonly string[]): Promise<Map<string, TaxDetails> | null> {
+  return canSeeTax(context.role) ? taxDetailsByAsset(tx, ids) : null;
+}
+
+/** Sets an asset's tax details through the Income tax page's service, keeping saved fields that aren't sent (decision 1346). */
+async function saveTaxDetails(tx: OrgTx, context: ToolContext, assetId: string, input: unknown, version: unknown): Promise<TaxAsset> {
+  if (!canSeeTax(context.role)) throw new ForbiddenError("Tax details are only for owners and admins, and this key's owner isn't one.");
+  if (typeof input !== "object" || input === null || Array.isArray(input)) throw new ValidationError("taxDetails must be an object.");
+  const unknown = Object.keys(input).filter((name) => name !== "version" && !(TAX_DETAIL_NAMES as readonly string[]).includes(name));
+  if (unknown.length > 0) throw new ValidationError(`taxDetails can't have ${unknown.join(", ")}. It takes ${TAX_DETAIL_NAMES.join(", ")} and version.`);
+  const current = (await taxDetailsByAsset(tx, [assetId])).get(assetId);
+  const saved: Record<string, unknown> = current ? Object.fromEntries(TAX_DETAIL_NAMES.map((name) => [name, current[name]])) : {};
+  const sent = pick(input as Record<string, unknown>, TAX_DETAIL_NAMES);
+  return setTaxDetails(tx, assetId, { ...saved, ...sent, version });
+}
+
+/** What saving tax details answers with: the details and the figures for the income year it's first available. */
+function taxAnswer(saved: TaxAsset) {
+  return { taxDetails: saved.details, taxYear: saved.year };
+}
 
 /** Tools that only look: read-level ones any key sees, and expense claims for Full access (they're people's own spending). */
 export const FULL_READ_TOOLS: readonly AiTool[] = [
@@ -389,20 +464,25 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     name: "list_fixed_assets",
     title: "Fixed assets",
     level: "read",
-    description: "The fixed asset register: each asset's cost, depreciation so far and book value.",
+    description:
+      "The fixed asset register: each asset's cost, depreciation so far and book value. For owners and admins, also taxDetails (tax method and rate, and investmentBoost), or null when it has none.",
     inputSchema: schema({ status: { type: "string", enum: ["registered", "disposed", "archived", "all"], description: "Default registered." }, limit: LIMIT, cursor: CURSOR }),
-    async run(tx, args) {
+    async run(tx, args, context) {
       const { rows, ...rest } = page(await listFixedAssets(tx, { status: args.status }), args);
-      return { assets: rows, ...rest };
+      const details = await taxDetailsFor(tx, context, rows.map((row) => row.id));
+      return { assets: rows.map((row) => withTax(row, details)), ...rest };
     },
   },
   {
     name: "get_fixed_asset",
     title: "One fixed asset",
     level: "read",
-    description: "One fixed asset with its depreciation.",
+    description: "One fixed asset with its depreciation. For owners and admins, also taxDetails (tax method and rate, investmentBoost and version), or null when it has none.",
     inputSchema: schema({ assetId: ID("fixed asset") }, ["assetId"]),
-    run: (tx, args) => getFixedAsset(tx, args.assetId),
+    async run(tx, args, context) {
+      const asset = await getFixedAsset(tx, args.assetId);
+      return withTax(asset, await taxDetailsFor(tx, context, [asset.id]));
+    },
   },
   {
     name: "list_fixed_asset_types",
@@ -807,20 +887,53 @@ export const FULL_WRITE_TOOLS: readonly AiTool[] = [
     run: (tx, args) => setBudgetAmounts(tx, args.budgetId, { version: args.version, amounts: args.amounts }),
   },
   {
+    name: "create_fixed_asset_type",
+    title: "Add a fixed asset type",
+    level: "full",
+    description: "Adds a fixed asset type (e.g. Computer equipment): its asset, accumulated depreciation and depreciation expense accounts, and default method and rate. Check list_fixed_asset_types first: names must be new.",
+    inputSchema: schema({ ...TYPE_FIELDS, idempotencyKey: IDEMPOTENCY }, ["name", "assetAccountCode", "accumulatedDepreciationAccountCode", "depreciationExpenseAccountCode", "method"]),
+    run: (tx, args, context) =>
+      createFixedAssetType(tx, { ...pick(args, Object.keys(TYPE_FIELDS)), source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey) }),
+  },
+  {
+    name: "update_fixed_asset_type",
+    title: "Edit a fixed asset type",
+    level: "full",
+    description: "Edits a fixed asset type's name or default method and rate (for assets registered afterwards), or its accounts while it has no assets (not archive it).",
+    inputSchema: schema({ typeId: ID("fixed asset type (list_fixed_asset_types)"), ...TYPE_FIELDS }, ["typeId"]),
+    run: (tx, args) => updateFixedAssetType(tx, args.typeId, pick(args, Object.keys(TYPE_FIELDS))),
+  },
+  {
     name: "register_fixed_asset",
     title: "Register a fixed asset",
     level: "full",
-    description: "Adds an asset to the fixed asset register. Posts nothing (its cost is already in the books).",
-    inputSchema: schema({ ...ASSET_FIELDS, idempotencyKey: IDEMPOTENCY }, ["name", "typeId", "purchaseDate", "cost"]),
-    run: (tx, args, context) => createFixedAsset(tx, { ...pick(args, Object.keys(ASSET_FIELDS)), source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey) }),
+    description:
+      "Adds an asset to the fixed asset register, optionally with its taxDetails (including Investment Boost). Posts nothing (its cost is already in the books). Sent again with the same idempotencyKey, nothing changes.",
+    inputSchema: schema({ ...ASSET_FIELDS, taxDetails: TAX_DETAILS, idempotencyKey: IDEMPOTENCY }, ["name", "typeId", "purchaseDate", "cost"]),
+    async run(tx, args, context) {
+      const result = await createFixedAsset(tx, { ...pick(args, Object.keys(ASSET_FIELDS)), source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey) });
+      if (args.taxDetails !== undefined && result.created) {
+        const saved = await saveTaxDetails(tx, context, result.asset.id, args.taxDetails, 0);
+        return { ...result, asset: { ...result.asset, taxDetails: saved.details }, taxYear: saved.year };
+      }
+      return { ...result, asset: withTax(result.asset, await taxDetailsFor(tx, context, [result.asset.id])) };
+    },
   },
   {
     name: "update_fixed_asset",
     title: "Edit a fixed asset",
     level: "full",
-    description: "Edits a registered asset's details or depreciation settings (not dispose of or archive it).",
-    inputSchema: schema({ assetId: ID("fixed asset"), ...ASSET_FIELDS }, ["assetId"]),
-    run: (tx, args) => updateFixedAsset(tx, args.assetId, pick(args, Object.keys(ASSET_FIELDS))),
+    description:
+      "Edits a registered asset's details or depreciation settings (not dispose of or archive it), and its taxDetails (including Investment Boost; send taxDetails.version from get_fixed_asset). Tax details can change after depreciation has run; the other settings can't.",
+    inputSchema: schema({ assetId: ID("fixed asset"), ...ASSET_FIELDS, taxDetails: TAX_DETAILS }, ["assetId"]),
+    async run(tx, args, context) {
+      const fields = pick(args, Object.keys(ASSET_FIELDS));
+      const asset = Object.keys(fields).length > 0 || args.taxDetails === undefined ? await updateFixedAsset(tx, args.assetId, fields) : await getFixedAsset(tx, args.assetId);
+      if (args.taxDetails === undefined) return withTax(asset, await taxDetailsFor(tx, context, [asset.id]));
+      const tax = args.taxDetails as Record<string, unknown> | null;
+      const saved = await saveTaxDetails(tx, context, asset.id, args.taxDetails, typeof tax === "object" && tax !== null ? tax.version : undefined);
+      return { ...(await getFixedAsset(tx, asset.id)), ...taxAnswer(saved) };
+    },
   },
   {
     name: "run_depreciation",
