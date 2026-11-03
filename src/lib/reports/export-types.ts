@@ -29,7 +29,15 @@ export const REPORT_EXPORTS = [
 
 export type ReportExportName = (typeof REPORT_EXPORTS)[number];
 export type ReportExportCell = { text: string; value?: string; numeric?: boolean };
-export type ReportExportRow = { cells: ReportExportCell[]; kind?: "section" | "total" };
+/**
+ * How a row looks (decision 1351): a section heading, an account line
+ * (indented), a total (a line above it) or the statement's last total, net
+ * profit or net assets (a line above, a double line below). Rows without a
+ * kind are plain.
+ */
+export type ReportExportRowKind = "section" | "account" | "total" | "grand";
+export const REPORT_EXPORT_ROW_KINDS: readonly ReportExportRowKind[] = ["section", "account", "total", "grand"];
+export type ReportExportRow = { cells: ReportExportCell[]; kind?: ReportExportRowKind };
 export type ReportExportTable = { title?: string; columns: string[]; rows: ReportExportRow[] };
 
 export type ReportExportData = {
@@ -40,5 +48,7 @@ export type ReportExportData = {
   basis: string | null;
   filters: string[];
   producedAt: string;
+  /** "statement" (P&L, balance sheet and the like): no grid lines, lines above totals, as on screen. */
+  style?: "statement" | "table";
   tables: ReportExportTable[];
 };

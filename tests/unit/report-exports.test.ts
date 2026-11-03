@@ -90,4 +90,25 @@ describe("standard report exports", () => {
     expect(Buffer.from(bytes).subarray(0, 4).toString()).toBe("%PDF");
     expect(bytes.length).toBeGreaterThan(1000);
   });
+
+  it("keeps statement row kinds and style, and says when it was produced in NZ time (decision 1351)", async () => {
+    const data = report("profit-and-loss");
+    data.style = "statement";
+    data.tables[0].rows.splice(1, 1, { kind: "account", cells: data.tables[0].rows[1].cells });
+    data.tables[0].rows.push({ kind: "grand", cells: [{ text: "Net profit" }, { text: "1,234.56", value: "1234.56", numeric: true }] });
+    const parsed = parseReportExport(JSON.parse(JSON.stringify({ ...data, tables: [{ ...data.tables[0], rows: [...data.tables[0].rows, { kind: "bogus", cells: [] }] }] })));
+    expect(parsed.style).toBe("statement");
+    expect(parsed.tables[0].rows.map((row) => row.kind)).toEqual(["section", "account", "total", "grand", undefined]);
+    expect(reportCsv(parsed)).toContain("Produced,\"3 Oct 2026, 2:30 pm\"");
+    const bytes = await reportPdf(parsed);
+    expect(Buffer.from(bytes).subarray(0, 4).toString()).toBe("%PDF");
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(await reportXlsx(parsed)) as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    const rows = workbook.getWorksheet("Report")!.getRows(1, 40)!;
+    const net = rows.find((candidate) => candidate.getCell(1).value === "Net profit")!;
+    expect(net.getCell(2).border?.bottom?.style).toBe("double");
+    const sales = rows.find((candidate) => candidate.getCell(1).value === "4000 · Sales")!;
+    expect(sales.getCell(1).alignment?.indent).toBe(1);
+  });
 });

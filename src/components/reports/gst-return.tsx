@@ -3,7 +3,10 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { ReportExport } from "@/components/reports/report-export";
+import { MoreMenu } from "@/components/more-menu";
+import { ExportMenu } from "@/components/reports/report-export";
+import { StatementHeading } from "@/components/reports/report-frame";
+import { statementPeriod } from "@/lib/reports/report-dates";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -741,47 +744,63 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
 
   return (
     <>
-      <Card
-        actions={
-          <div className={ui.inlineForm}>
-            <Field label="Start month">
-              <input
-                type="month"
-                value={start.slice(0, 7)}
-                onChange={(event) => {
-                  if (/^\d{4}-\d{2}$/.test(event.target.value)) changePeriod(`${event.target.value}-01`, months);
-                }}
-                required
+      <section className={ui.reportFrame} aria-label="GST return">
+        <div className={ui.reportToolbar} data-print="hide" role="group" aria-label="Report options">
+          <Field label="Start month">
+            <input
+              type="month"
+              value={start.slice(0, 7)}
+              onChange={(event) => {
+                if (/^\d{4}-\d{2}$/.test(event.target.value)) changePeriod(`${event.target.value}-01`, months);
+              }}
+              required
+            />
+          </Field>
+          <Field label="Length">
+            <select value={months} onChange={(event) => changePeriod(start, Number(event.target.value))}>
+              {GST_RETURN_PERIOD_MONTHS.map((length) => (
+                <option key={length} value={length}>
+                  {length === 1 ? "1 month" : `${length} months`}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className={ui.reportToolbarEnd}>
+            <MoreMenu label="More report options" items={[{ label: "Print", onSelect: () => window.print() }, { label: "GST settings", href: "/operations/settings" }]} />
+            {data ? (
+              <ExportMenu
+                organisationId={organisationId}
+                report="gst-return"
+                title="GST return"
+                period={statementPeriod(start, periodEnd)}
+                basis={data.basis}
+                tables={[
+                  { id: "gst-return-boxes", title: "GST return boxes" },
+                  ...(adjustments.length ? [{ id: "gst-return-adjustments", title: "Adjustments" }] : []),
+                  ...(data.lateClaims.length ? [{ id: "gst-return-late-claims", title: "Late claims" }] : []),
+                  ...(selected ? [{ id: "gst-return-detail", title: selectionTitle(selected) }] : []),
+                ]}
               />
-            </Field>
-            <Field label="Length">
-              <select value={months} onChange={(event) => changePeriod(start, Number(event.target.value))}>
-                {GST_RETURN_PERIOD_MONTHS.map((length) => (
-                  <option key={length} value={length}>
-                    {length === 1 ? "1 month" : `${length} months`}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            ) : null}
           </div>
-        }
-      >
-        <p className={ui.muted}>
-          {formatDate(start)} to {formatDate(periodEnd)}
-          {data ? (
-            <>
-              {` · ${data.currencyCode} · ${GST_BASIS_LABELS[data.basis]} `}
-              <InfoTip label="GST basis">{BASIS_DESCRIPTIONS[data.basis]}</InfoTip>
-            </>
-          ) : null}
-          {filed.data ? (
-            filed.data.periodSetting ? (
-              <> · Filing: {describeGstPeriodSetting(filed.data.periodSetting)}</>
-            ) : (
-              <> · No GST filing frequency set (Settings)</>
-            )
-          ) : null}
-        </p>
+        </div>
+        <StatementHeading title="GST return" period={statementPeriod(start, periodEnd)}>
+          <p>
+            {data ? (
+              <>
+                {`${data.currencyCode} · ${GST_BASIS_LABELS[data.basis]} `}
+                <InfoTip label="GST basis">{BASIS_DESCRIPTIONS[data.basis]}</InfoTip>
+              </>
+            ) : null}
+            {filed.data ? (
+              filed.data.periodSetting ? (
+                <> · Filing: {describeGstPeriodSetting(filed.data.periodSetting)}</>
+              ) : (
+                <> · No GST filing frequency set (Settings)</>
+              )
+            ) : null}
+          </p>
+        </StatementHeading>
         {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
         {current?.error ? <Notice tone="error">{current.error}</Notice> : null}
         {!current ? <p className={ui.muted}>Loading…</p> : null}
@@ -815,19 +834,6 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                 onAdd={(adjustment) => void keepAdjustment(adjustment)}
               />
             ) : null}
-            <ReportExport
-              organisationId={organisationId}
-              report="gst-return"
-              title="GST return"
-              period={`${formatDate(start)} to ${formatDate(periodEnd)}`}
-              basis={data.basis}
-              tables={[
-                { id: "gst-return-boxes", title: "GST return boxes" },
-                ...(adjustments.length ? [{ id: "gst-return-adjustments", title: "Adjustments" }] : []),
-                ...(data.lateClaims.length ? [{ id: "gst-return-late-claims", title: "Late claims" }] : []),
-                ...(selected ? [{ id: "gst-return-detail", title: selectionTitle(selected) }] : []),
-              ]}
-            />
             <BoxesTable figures={data} selected={selected} onSelect={setSelected} />
             {can("admin") && !alreadyFiled ? (
               <div className={ui.actions}>
@@ -838,7 +844,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
             ) : null}
           </>
         ) : null}
-      </Card>
+      </section>
 
       {data ? (
         <LateClaimsCard

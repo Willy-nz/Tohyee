@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Notice, ui } from "@/components/ui";
+import { MoreMenu } from "@/components/more-menu";
+import { ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { apiDownload, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
@@ -9,8 +10,16 @@ import type { ReportExportData, ReportExportName, ReportExportRow, ReportExportT
 
 export type ReportExportTableTarget = { id: string; title?: string; columns?: string[] };
 
+/** A cell's text, leaving out what's marked data-export-ignore (an (i) button, a badge). */
+function cellText(cell: HTMLTableCellElement): string {
+  if (!cell.querySelector("[data-export-ignore]")) return cell.innerText;
+  const copy = cell.cloneNode(true) as HTMLElement;
+  for (const ignored of copy.querySelectorAll("[data-export-ignore]")) ignored.remove();
+  return copy.textContent ?? "";
+}
+
 function cellValue(cell: HTMLTableCellElement) {
-  const text = cell.innerText.replace(/\s+/g, " ").trim();
+  const text = cellText(cell).replace(/\s+/g, " ").trim();
   const candidates = [...cell.querySelectorAll<HTMLElement>("[data-export-value]")];
   const valueNodes = candidates.filter((candidate) => !candidate.parentElement?.closest("[data-export-value]"));
   const valueNode = valueNodes.length === 1 ? valueNodes[0] : undefined;
@@ -35,21 +44,21 @@ function tableData(target: ReportExportTableTarget): ReportExportTable | null {
   const footerRows = table.tFoot ? [...table.tFoot.rows] : [];
   for (const row of [...bodyRows, ...footerRows]) {
     const cells = [...row.cells].filter((cell) => !cell.dataset.exportIgnore).flatMap((cell) => [cellValue(cell), ...Array.from({ length: cell.colSpan - 1 }, () => ({ text: "" }))]);
-    const kind = row.classList.contains(ui.reportHeading) ? "section" : row.classList.contains(ui.reportTotal) ? "total" : undefined;
+    const kind = row.classList.contains(ui.reportHeading)
+      ? "section"
+      : row.classList.contains(ui.reportGrand)
+        ? "grand"
+        : row.classList.contains(ui.reportTotal)
+          ? "total"
+          : row.classList.contains(ui.reportSection)
+            ? "account"
+            : undefined;
     rows.push({ cells, kind });
   }
   return { title: target.title, columns: headers, rows };
 }
 
-export function ReportExport({
-  organisationId,
-  report,
-  title,
-  period,
-  basis = null,
-  filters = [],
-  tables,
-}: {
+export type ReportExportProps = {
   organisationId: string;
   report: ReportExportName;
   title: string;
@@ -57,13 +66,26 @@ export function ReportExport({
   basis?: string | null;
   filters?: string[];
   tables: ReportExportTableTarget[];
-}) {
+  /** Statements export without grid lines, with lines above totals (decision 1351). */
+  style?: "statement" | "table";
+  /** Which files to offer; all three by default. */
+  formats?: Array<"pdf" | "csv" | "xlsx">;
+};
+
+const FORMAT_LABELS = { pdf: "PDF", csv: "CSV", xlsx: "Excel (.xlsx)" } as const;
+
+/**
+ * Downloads the report as shown, as a PDF, CSV or Excel file (decision
+ * 1352): the tables are read from the page, so the file has the same rows,
+ * labels and totals as the screen. Returns when it's done, with an error
+ * message or null.
+ */
+function useReportDownload(props: ReportExportProps) {
   const { current } = useWorkspace();
-  const organisationName = current?.id === organisationId ? current.displayName : "Organisation";
-  const filterText = filters.join(" · ");
-  const [producedAt, setProducedAt] = useState(() => new Date().toISOString());
+  const organisationName = current?.id === props.organisationId ? current.displayName : "Organisation";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [producedAt, setProducedAt] = useState(() => new Date().toISOString());
 
   async function download(format: "csv" | "xlsx" | "pdf") {
     setBusy(true);
@@ -72,20 +94,21 @@ export function ReportExport({
       const exportProducedAt = new Date().toISOString();
       setProducedAt(exportProducedAt);
       const data: ReportExportData = {
-        report,
+        report: props.report,
         organisationName,
-        title,
-        period,
-        basis,
-        filters,
+        title: props.title,
+        period: props.period,
+        basis: props.basis ?? null,
+        filters: props.filters ?? [],
         producedAt: exportProducedAt,
-        tables: tables.map(tableData).filter((table): table is ReportExportTable => table !== null),
+        style: props.style ?? "table",
+        tables: props.tables.map(tableData).filter((table): table is ReportExportTable => table !== null),
       };
-      const blob = await apiDownload("/api/reports/export", { organisationId, format, data });
+      const blob = await apiDownload("/api/reports/export", { organisationId: props.organisationId, format, data });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `tohyee-${report}.${format}`;
+      link.download = `tohyee-${props.report}.${format}`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (caught) {
@@ -94,30 +117,50 @@ export function ReportExport({
       setBusy(false);
     }
   }
+  return { organisationName, busy, error, producedAt, download };
+}
 
+/** The Export menu button (PDF, CSV, Excel), the same on every report (decision 1352). */
+export function ExportMenu(props: ReportExportProps) {
+  const { busy, error, download } = useReportDownload(props);
+  const formats = props.formats ?? ["pdf", "csv", "xlsx"];
+  return (
+    <span className={ui.reportExport} data-print="hide">
+      <MoreMenu
+        text={busy ? "Exporting…" : "Export"}
+        label="Export"
+        items={formats.map((format) => ({ label: FORMAT_LABELS[format], disabled: busy, onSelect: () => void download(format) }))}
+      />
+      {error ? (
+        <span role="alert" className={ui.reportExportError}>
+          {error}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * A report's printed heading (organisation, title, period, filters, when
+ * it was produced) with the Export menu beside it, for reports that don't
+ * use the statement layout of `report-frame.tsx`.
+ */
+export function ReportExport(props: ReportExportProps) {
+  const { organisationName, producedAt } = useReportDownload(props);
+  const filterText = (props.filters ?? []).join(" · ");
   return (
     <>
       <div className={ui.reportMeta}>
         <div className={ui.reportMetaText}>
           <strong>{organisationName}</strong>
-          <span className={ui.reportMetaTitle}>{title}</span>
-          <span>{period}</span>
-          {basis ? <span>Basis: {basis}</span> : null}
+          <span className={ui.reportMetaTitle}>{props.title}</span>
+          <span>{props.period}</span>
+          {props.basis ? <span>Basis: {props.basis}</span> : null}
           {filterText ? <span>Filters: {filterText}</span> : null}
           {producedAt ? <span>Produced: {formatDateTime(producedAt)}</span> : null}
         </div>
-        <details className={ui.reportExport} data-print="hide">
-          <summary className={`${ui.button} ${ui.secondary}`}>Export</summary>
-          <div className={ui.reportExportMenu}>
-            {(["csv", "xlsx", "pdf"] as const).map((format) => (
-              <button key={format} type="button" disabled={busy} onClick={() => void download(format)}>
-                {format === "csv" ? "CSV" : format === "xlsx" ? "Excel (.xlsx)" : "PDF"}
-              </button>
-            ))}
-          </div>
-        </details>
+        <ExportMenu {...props} />
       </div>
-      {error ? <Notice tone="error">{error}</Notice> : null}
     </>
   );
 }

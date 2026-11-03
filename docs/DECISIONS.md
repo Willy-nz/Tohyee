@@ -12461,3 +12461,58 @@ removes sessions and the GET stream and adds `subscriptions/listen`).
       of `tools/list` and refuses calls to them at once. A client that
       doesn't send the session id back gets no notification and no note;
       the person refreshes the tools or reconnects in their AI app.
+
+
+### Reports that read like Xero's (Jess, 4 Nov 2026; decisions 1350-1352)
+
+Jess asked: "the reports in tohyee suck. Can you do a deep review on how to
+make the editing and look similar to Xero", then "do your best and just do
+it". A review compared each report with Xero's; these follow it. Where she
+didn't say how, they follow Xero (decision 537) and are **not yet
+reviewed**.
+
+1350. **A report is headed like a financial statement.** Above each
+      standard report's table: the report's title, the organisation's name
+      and the period in Xero's words ("For the month ended 31 October
+      2026", "For the year ended 31 March 2027", "For the period 1 June
+      2026 to 4 November 2026", "As at 4 November 2026"), on screen and on
+      paper. The amount column is headed with the period ("Oct 2026",
+      "1 Jun-4 Nov 2026", "4 Nov 2026"). This is a statement's header, not
+      a page subtitle: it **supersedes decision 1323 for reports only** (the
+      title is no longer shown only in the picker, and the organisation,
+      title and period block is no longer print-only), because Jess asked
+      for reports like Xero's. Decision 1316 (no subtitle under page
+      headings) still stands everywhere: the page heading is still just
+      "Reports". The GST return has the same heading, with its IRD box
+      layout and the GST-on-transactions check unchanged.
+1351. **Statement style.** The profit and loss, balance sheet, trial
+      balance, budget vs actual, changes in equity and cash flows have no
+      row lines: a line above each total, a double line under net profit,
+      net assets, total equity and the trial balance totals. Amounts are in
+      the text colour and underline on hover or focus; they still open the
+      account's transactions. Zero cells in the trial balance and budget vs
+      actual are blank (no "0.00" links). An empty profit and loss group
+      (no other income, say) is left out, as in Xero. On a phone (390 px)
+      account names wrap and the amounts stay on screen; with several
+      amount columns the names stay in view while the amounts scroll.
+      Notes that explained a figure ("includes earlier years' earnings",
+      "profit before 1 June") are behind an (i). The balance checks show
+      only when something doesn't balance, as a warning. PDF exports use
+      the same style (tighter rows, account lines indented, the same lines
+      above and under totals) and say "Produced 4 Nov 2026, 9:05 am" in New
+      Zealand time, whatever the server's clock; Excel exports get the same
+      lines and indents. Other PDFs (financial statements pack, payslips)
+      keep their grid.
+1352. **One report toolbar.** Every standard report starts with the same
+      row: Date range (This month, Last month, This quarter, Last quarter,
+      This financial year, Last financial year, or Custom dates, with From
+      and To; as-at reports offer "End of ..." and one date), the report's
+      own filters, **Update**, an (i) for what the report shows, "⋯" for
+      less-used actions (Print, Save as custom report, Open the budget) and
+      **Export** (PDF, CSV, Excel), a WAI-ARIA menu button like "⋯". As in
+      Xero nothing changes until Update, so dates and filters are set
+      together. Quarters are quarters of the financial year (as on
+      dashboards, decision 577). Budget vs actual widens the dates to whole
+      months, because budgets are monthly. Reports not yet moved to the
+      toolbar (aged receivables and others outside Reports) get the same
+      Export menu.
