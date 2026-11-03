@@ -7,7 +7,7 @@
  * amount inside the timing window. Anything less is offered for a person to
  * choose, or left unresolved with its reason.
  */
-import { add, cmp, dec, isZero, neg, sum, toFixedString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
+import { abs, add, cmp, dec, isZero, neg, sum, toFixedString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
 
 /** How many days before the bank line a payout can be issued (banks take a few working days, longer over holidays). */
 export const PAYOUT_DAYS_BEFORE = 10;
@@ -42,6 +42,13 @@ const CHARGEBACK_TYPES = ["DISPUTE_WITHDRAWAL", "DISPUTE_REVERSAL"];
 const CHARGEBACK_FEE_TYPES = ["CHARGEBACK_FEE", "CHARGEBACK_FEE_REFUND"];
 const RESERVE_TYPES = ["RESERVED_FUNDS", "RESERVED_FUNDS_REVERSAL"];
 const KNOWN = ["CHARGE", "REFUND", "ADJUSTMENT", ...CHARGEBACK_TYPES, ...CHARGEBACK_FEE_TYPES, ...RESERVE_TYPES];
+/** The payout's own transfer to (or from) the bank (SPC38): the payout itself, so not part of its settlement. */
+const TRANSFER_TYPE = "TRANSFER";
+
+/** A payout's net as it moves money to the bank: a withdrawal's is negative, whichever sign the store gave (SPC40). */
+export function signedNet(net: string, direction: string): Decimal {
+  return direction === "WITHDRAWAL" ? neg(abs(dec(net))) : abs(dec(net));
+}
 
 const money = (value: Decimal) => toFixedString(value, 2);
 
@@ -51,7 +58,9 @@ const money = (value: Decimal) => toFixedString(value, 2);
  * disputes are chargebacks. Each transaction's net is its amount less its
  * fee, so the parts add up to the net when Shopify's figures agree.
  */
-export function summariseSettlement(transactions: readonly SettlementTransaction[], net: string): Settlement {
+export function summariseSettlement(all: readonly SettlementTransaction[], net: string, direction = "DEPOSIT"): Settlement {
+  // The payout's own TRANSFER row is the payout leaving the balance, not part of what it's made of (SPC38).
+  const transactions = all.filter((t) => t.type !== TRANSFER_TYPE);
   const amounts = (match: (type: string) => boolean) => sum(transactions.filter((t) => match(t.type)).map((t) => dec(t.amount)));
   const grossSales = amounts((type) => type === "CHARGE");
   const refunds = amounts((type) => type === "REFUND");
@@ -70,9 +79,9 @@ export function summariseSettlement(transactions: readonly SettlementTransaction
     chargebacks: money(chargebacks),
     reserves: money(reserves),
     other: money(other),
-    net: money(dec(net)),
+    net: money(signedNet(net, direction)),
     transactionCount: transactions.length,
-    addsUp: cmp(total, dec(net)) === 0,
+    addsUp: cmp(total, signedNet(net, direction)) === 0,
     orderNames,
   };
 }
@@ -270,16 +279,27 @@ export function guidePayoutLine(line: DepositLine, connections: readonly PayoutC
   const byId = ofRelevant.filter((payout) => mentionsId(line.text, payout.externalId));
 
   if (!moneyIn) {
-    const withdrawal = byId.find((payout) => payout.direction !== "DEPOSIT");
-    if (!withdrawal) return null;
-    return {
-      status: "payout_not_posted",
-      platformLabel: withdrawal.platformLabel,
-      reason: `${describe(withdrawal)} took money from the bank. Tohyee doesn't post withdrawals yet, so record this one by hand.`,
-      payouts: [withdrawal],
-      action: null,
-      evidence: "payout_id",
-    };
+    // SPC40: a withdrawal (money taken from the bank), by its ID on the line, or Shopify's name and the amount in the window.
+    const withdrawals = ofRelevant.filter((payout) => payout.direction === "WITHDRAWAL");
+    const out = abs(dec(line.amount));
+    const named = withdrawals.filter((payout) => mentionsId(line.text, payout.externalId));
+    const fits = named.length > 0 ? named : withdrawals.filter((payout) => mentionsPlatform(line.text, connections.find((c) => c.connectionId === payout.connectionId)!) && inTimingWindow(payout.issuedOn, line.date) && cmp(abs(dec(payout.net)), out) === 0);
+    if (fits.length !== 1) return null;
+    const withdrawal = fits[0];
+    if (cmp(abs(dec(withdrawal.net)), out) !== 0) {
+      return {
+        status: "unmatched",
+        platformLabel: withdrawal.platformLabel,
+        reason: `The line names ${describe(withdrawal)}, but it's ${cents(line.amount)}. Check the bank line and the payout in ${withdrawal.platformLabel}; nothing is matched on amount alone.`,
+        payouts: [withdrawal],
+        action: null,
+        evidence: null,
+      };
+    }
+    const guided = settle([withdrawal], named.length > 0 ? "payout_id" : "platform_amount_date", withdrawal.platformLabel);
+    return guided.status === "matched"
+      ? { ...guided, reason: `This is ${describe(withdrawal)}: ${withdrawal.platformLabel} took it from the bank to cover refunds or fees. It's already in the accounts; matching only ties the bank line to it.` }
+      : guided;
   }
   if (relevant.length === 0) return null;
   const amount = dec(line.amount);

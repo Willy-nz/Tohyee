@@ -242,7 +242,18 @@ const PROBLEM_OUTCOME = "problems";
  * and Payouts, each with its state, real counts and what to do next. Shown
  * apart from whether the connection itself works.
  */
-export function CoverageList({ parts, onAction }: { parts: KindCoverage[]; onAction: (part: KindCoverage) => void }) {
+export function CoverageList({
+  parts,
+  onAction,
+  onRetry,
+  busy = false,
+}: {
+  parts: KindCoverage[];
+  onAction: (part: KindCoverage) => void;
+  /** "Try again" for payouts not posted (SPC39); admins only. */
+  onRetry?: () => void;
+  busy?: boolean;
+}) {
   return (
     <ul className={styles.parts} aria-label="What's been brought in">
       {parts.map((part) => {
@@ -264,6 +275,11 @@ export function CoverageList({ parts, onAction }: { parts: KindCoverage[]; onAct
             </span>
             <span className={ui.actions} style={{ justifyContent: "end" }}>
               <Badge tone={badge.tone}>{badge.text}</Badge>
+              {part.retry && onRetry ? (
+                <Button size="small" onClick={onRetry} disabled={busy} aria-label={`Try again: ${part.label}`}>
+                  Try again
+                </Button>
+              ) : null}
               {part.action ? (
                 <Button size="small" variant={part.action.kind === "log" ? "secondary" : "primary"} onClick={() => onAction(part)} aria-label={`${part.action.text}: ${part.label}`}>
                   {part.action.text}
@@ -327,6 +343,12 @@ export function ConnectionCard({
     });
   const sync = () =>
     run(async () => describeSyncResult((await api<{ result: SyncResult }>(`${path}/sync`, { method: "POST", body: { organisationId } })).result));
+  // SPC39: reads the payouts not in the accounts from the store again, then syncs. None is posted twice.
+  const retryPayouts = () =>
+    run(async () => {
+      const answer = await api<{ payoutsToReadAgain: number; result: SyncResult }>(`${path}/payouts/retry`, { method: "POST", body: { organisationId } });
+      return `Read ${answer.payoutsToReadAgain} payout${answer.payoutsToReadAgain === 1 ? "" : "s"} again. ${describeSyncResult(answer.result)}`;
+    });
   const choose = (change: { syncProducts: boolean }) =>
     run(async () => {
       await api(path, { method: "PATCH", body: { organisationId, ...change } });
@@ -420,7 +442,7 @@ export function ConnectionCard({
         {connected && connection.webhooksNote ? <Notice tone="warning">{connection.webhooksNote}</Notice> : null}
         {connected ? (
           coverage.data ? (
-            <CoverageList parts={coverage.data.parts} onAction={act} />
+            <CoverageList parts={coverage.data.parts} onAction={act} onRetry={isAdmin ? () => void retryPayouts() : undefined} busy={busy} />
           ) : coverage.error ? (
             <Notice tone="error">{coverage.error}</Notice>
           ) : (

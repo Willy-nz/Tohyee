@@ -752,10 +752,10 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     expect((await doc(w, "order", "5001"))!.state).toBe("done");
     expect(await count(w, "sales_credit_notes")).toBe(0);
     expect((await last("6001")).message).toContain("order adjustment");
-    // A withdrawal payout.
+    // A withdrawal whose transactions add up to money paid out, not taken (SPC40 posts the ones that add up).
     w.state.payouts.push(payout70001({ direction: "WITHDRAWAL" }));
     await w.sync("2026-10-07T04:00:00Z");
-    expect((await last("70001")).message).toContain("withdrawal");
+    expect((await last("70001")).message).toBe("Payout 70001's transactions come to 49.38 but the payout is -49.38, so nothing was posted.");
     expect(await doc(w, "payout", "70001")).toBeNull();
   });
 });

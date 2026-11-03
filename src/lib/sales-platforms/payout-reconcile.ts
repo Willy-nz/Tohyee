@@ -23,6 +23,7 @@ import {
   PAYOUT_DAYS_BEFORE,
   type PayoutCandidate,
   type PayoutConnection,
+  signedNet,
   type PayoutGuidance,
   type Settlement,
 } from "@/lib/sales-platforms/payout-match";
@@ -100,7 +101,9 @@ async function loadPayouts(tx: OrgTx, connectionIds: string[], from: string, to:
        from known k
        left join sales_platform_documents d on d.platform = k.platform and d.store_domain = k.store_domain and d.record_kind = 'payout' and d.external_id = k.external_id
        left join bank_transfers t on t.id = d.transfer_id and t.status = 'posted'
-       left join ledger_journal_lines l on l.journal_id = t.journal_id and l.account_id = t.to_account_id
+       -- The bank side of the payout's transfer: where it went, or for a withdrawal (SPC40) where it came from.
+       left join ledger_journal_lines l on l.journal_id = t.journal_id
+             and l.account_id = case when k.direction = 'WITHDRAWAL' then t.from_account_id else t.to_account_id end
        left join bank_reconciliation_items i on i.journal_line_id = l.id and i.active
        left join bank_reconciliations r on r.id = i.reconciliation_id
        left join bank_statement_lines rl on rl.id = r.statement_line_id
@@ -122,9 +125,9 @@ function settlementOf(row: PayoutRow): Settlement | null {
     chargebacks: parts[4],
     reserves: parts[5],
     other: parts[6],
-    net: money(row.net),
+    net: toFixedString(signedNet(row.net, row.direction), 2),
     transactionCount: row.transaction_count ?? 0,
-    addsUp: total === money(row.net),
+    addsUp: total === money(toFixedString(signedNet(row.net, row.direction), 2)),
     orderNames: row.order_names,
   };
 }
@@ -280,7 +283,7 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
   const accounts = connections.map((connection) => connection.payoutAccountId).filter((id): id is string => id !== null);
   const lines = await tx.query<{ id: string }>(
     `select b.id::text from bank_statement_lines b
-      where b.account_id = any($1::bigint[]) and b.status = 'unreconciled' and b.amount > 0 and b.line_date between $2::date and $3::date
+      where b.account_id = any($1::bigint[]) and b.status = 'unreconciled' and b.amount <> 0 and b.line_date between $2::date and $3::date
       order by b.line_date, b.id limit ${LINE_LIMIT + 1}`,
     [accounts, from, to],
   );
@@ -288,6 +291,8 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
   for (const row of lines.rows.slice(0, LINE_LIMIT)) {
     const line = await getStatementLine(tx, row.id);
     const guidance = await payoutGuidanceForLine(tx, row.id);
+    // Money out is listed only when it's a withdrawal payout (SPC40), not every bill paid from the account.
+    if (!guidance && line.amount.startsWith("-")) continue;
     deposits.push({
       lineId: line.id,
       date: line.date,
