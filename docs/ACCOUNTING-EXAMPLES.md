@@ -20375,3 +20375,83 @@ Not built: a live IRD connection (gateway services need IRD's approval;
 #360 item 3 says it's a parallel workstream), reading figures out of PDFs
 here (the connected AI does that, ITX30-ITX35), and credits IRD transfers
 in from other years or tax types as payments (decision 623).
+
+## GST registration a person has confirmed (GSR1-GSR10; built by Claude 3 Nov 2026 for #546, as Xero does where it has an answer, otherwise Claude's rules from the issue, not yet reviewed)
+
+Before this, **Registered for GST** (NR1-NR8) started on for every
+organisation and nobody was ever asked. The Shopify setup then suggested
+"Shopify's 15% → GST" and orders posted GST for organisations that may
+never have registered. Xero asks whether an organisation is registered for
+GST when it's set up, and never changes posted transactions when the GST
+settings change (from Claude's knowledge of Xero; not re-checked today).
+Xero has no "not confirmed" state and no evidence rule for its bank
+suggestions: those parts are Claude's rules, from the issue.
+
+Setup: Kowhai Crafts, NZD, the standard chart and codes (GST 15%, ZERO,
+EXEMPT, NONE). Kobe Cafe is a customer; Z Energy a supplier.
+
+- **GSR1 Registered when created.** The server admin answers "Yes,
+  registered for GST". Kowhai Crafts is registered from the start and the
+  answer is confirmed (who and when are kept). Invoices behave as NR5.
+- **GSR2 Not registered, or not sure.** "No, not registered" is confirmed
+  and works as NR1-NR4. "Not sure yet" also starts with no GST (amounts in
+  full), but isn't confirmed, so Settings asks the owner once. Nothing is
+  preselected on the form.
+- **GSR3 Not confirmed, but the setting says registered** (every
+  organisation that existed before, unless GSR5's upgrade rule confirms
+  it). Invoices and bills a person enters work as before (NR8). Automatic
+  posting doesn't guess: Shopify order #1001 (2 x 23.00, Shopify charged
+  6.00 GST) **waits** with "Kowhai Crafts's GST registration hasn't been
+  confirmed yet …"; nothing is posted, and it comes in at the next sync
+  after someone confirms. The store setup asks no GST questions and
+  suggests no 15% → GST. Settings shows one notice; no screen repeats it
+  per transaction.
+- **GSR4 Saving other settings confirms nothing.** Changing the name
+  while unconfirmed leaves it unconfirmed. The GST question shows no
+  answer until one is chosen.
+- **GSR5 Confirming.** Choosing an answer in Settings and saving confirms
+  it (audit event `organisation.settings_updated` with
+  `gstRegistrationConfirmed: true`). So does changing registration or its
+  dates, or typing a GST number in while registered. The upgrade (migration
+  0216) confirms an organisation already registered with a GST number in
+  Settings ("GST number in Settings"), or one whose registration a person
+  changed in Settings before (taken from the audit trail). A GST basis on
+  its own confirms nothing, and a missing GST number never makes an
+  organisation not registered.
+- **GSR6 Registered from a date.** Registered (confirmed) from **1 Nov
+  2026**. Shopify order #1001 dated **31 Oct**: **46.00** sales, no GST
+  (Dr Accounts receivable 46.00, Cr 4000 Sales 46.00). The same order dated
+  **1 Nov**: tax inclusive, **40.00** sales + **6.00** GST. A store whose
+  start date is 1 Oct is asked for GST codes (it meets GST from 1 Nov). A
+  store starting after registration ended isn't.
+- **GSR7 Not registered means no GST questions.** A non-registered
+  organisation's store setup and diagnostics never ask for "a tax code for
+  untaxed sales", and orders come in at the full amount (SPC12).
+- **GSR8 Changing registration rewrites nothing.** Not registered, with
+  invoices of 115.00 (no GST) on 10 Sep, 15 Oct and 20 Oct 2026. Changing to
+  registered **from 1 Oct 2026** lists the months it reaches: **Oct 2026: 2
+  entries**. Saving is refused until the person ticks "I'll correct these
+  months myself". After saving, the October invoices are still 115.00
+  sales with nothing on the GST account; the person corrects them on
+  purpose (credit note and a new tax invoice, or a journal). September
+  isn't listed (outside the change). Dates that would leave GST already in
+  the books outside the registration are still refused (NR8).
+- **GSR9 One answer everywhere.** Settings, MCP's `get_organisation`
+  (`gstRegistration`: status today, confirmed, by whom, dates) and the
+  posting services all read the same setting. Unconfirmed reads
+  `statusToday: "unconfirmed"`; registered from 1 Nov reads
+  `not_registered` on 31 Oct and `registered` from 1 Nov.
+- **GSR10 AI bank coding.** A 46.00 Z ENERGY bank line. Registered and
+  confirmed: `create_and_match` with GST 15% and no `gstEvidence` is
+  refused ("leave the line unreconciled for the person to review"); with
+  `gstEvidence: "tax_document"` it posts Dr 6120 40.00, Dr GST 6.00, Cr bank
+  46.00 (BK6). `no_gst_supply` (bank fees, wages, drawings, loans, tax,
+  transfers) allows only lines with no GST. Unconfirmed: any GST code is
+  refused; only `no_gst_supply` lines can be coded. Not registered: no
+  evidence needed; GST codes are refused as NR2. "Needs review" is the
+  line staying unreconciled, never a tax code.
+
+Not built: an automatic rewrite of past postings (the issue rules it out),
+and GST on Shopify's fees (#548 will use `isGstRegisteredOn`). Tested in
+`tests/unit/gst-registration-status.test.ts` and
+`tests/integration/gst-registration-status.test.ts`.

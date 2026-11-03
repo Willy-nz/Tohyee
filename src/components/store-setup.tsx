@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { AccountPicker } from "@/components/account-picker";
 import { ChoiceTiles } from "@/components/choice-tiles";
 import { ShopifyScopesCard } from "@/components/sales-platform-extras";
@@ -9,7 +10,6 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { InfoPara, InfoTip } from "@/components/info-tip";
-import { useModules } from "@/components/modules";
 import { Button, Field, Notice, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage } from "@/lib/client/api";
@@ -22,12 +22,15 @@ import {
   type PostingAccountRole,
   type PostingDraft,
   stepGaps,
+  type StoreGstSetup,
+  storeGstSetup,
   suggestAccounts,
   suggestTaxCodes,
   workedExample,
 } from "@/lib/sales-platforms/setup";
 import { SALES_PLATFORM_LABELS, type SalesPlatform, type SalesPlatformConnection, SHOPIFY_AUTH_METHODS, type ShopifyAuthMethod } from "@/lib/sales-platforms/types";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { GstRegistration } from "@/lib/tax/registration";
 import styles from "./store-setup.module.css";
 
 /**
@@ -145,9 +148,10 @@ export function initialDraft(
   connection: SalesPlatformConnection,
   accounts: Account[],
   taxCodes: TaxCode[],
+  gstRegistered = false,
 ): PostingDraft {
   const suggested = suggestAccounts(accounts, connection.platform);
-  const tax = suggestTaxCodes(taxCodes);
+  const tax = suggestTaxCodes(taxCodes, gstRegistered);
   const sales = connection.salesAccountCode ?? suggested.sales.existing ?? "";
   const shipping = connection.shippingAccountCode ?? "";
   return {
@@ -186,10 +190,10 @@ export function StoreSetup({
   onClose: (message: string | null) => void;
 }) {
   const confirm = useConfirm();
-  const modules = useModules(organisationId);
-  const gstRegistered = Boolean(modules?.gst);
   const accounts = useAccounts(organisationId);
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useApiData<{ taxCodes: TaxCode[]; gstRegistration?: Pick<GstRegistration, "registered" | "from" | "until" | "confirmed"> }>("/api/tax/codes", {
+    organisationId,
+  });
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const [added, setAdded] = useState<Account[]>([]);
   const [platform, setPlatform] = useState<SalesPlatform>(given?.platform ?? "shopify");
@@ -211,10 +215,13 @@ export function StoreSetup({
 
   // The posting draft starts from what's saved plus the suggestions, once the chart is loaded; the person's changes go on top.
   const startingDraft = useMemo(
-    () => (connection && accounts.data && taxCodes.data ? initialDraft(connection, accounts.data.accounts, taxCodes.data.taxCodes) : null),
+    () => (connection && accounts.data && taxCodes.data ? initialDraft(connection, accounts.data.accounts, taxCodes.data.taxCodes, storeGstSetup(taxCodes.data.gstRegistration, connection.startDate ?? "", todayInBrowser()) === "registered") : null),
     [connection, accounts.data, taxCodes.data],
   );
   const draft = edited ?? startingDraft;
+  // #546 (GSR3, GSR6): GST questions and the 15% → GST suggestion only for a confirmed registration covering the start date on.
+  const gstSetup = storeGstSetup(taxCodes.data?.gstRegistration, draft?.startDate ?? connection?.startDate ?? "", todayInBrowser());
+  const gstRegistered = gstSetup === "registered";
 
   const dirty = Boolean(draft && connection && JSON.stringify(draftToSettings(draft, connection.platform, connection.postToAccounts)) !== savedDraft(connection));
   const typingCredentials = step === "connect" && (connectForm.storeDomain !== "" || connectForm.clientId !== "" || connectForm.consumerKey !== "");
@@ -375,6 +382,7 @@ export function StoreSetup({
         taxCodes={taxCodes.data?.taxCodes ?? []}
         customers={(contacts.data?.contacts ?? []).filter((contact) => contact.isCustomer)}
         gstRegistered={gstRegistered}
+        gstSetup={gstSetup}
         onAdded={(account) => {
           setAdded((list) => [...list, account]);
           accounts.reload();
@@ -393,7 +401,7 @@ export function StoreSetup({
       </Button>
     );
   } else if (step === "review") {
-    body = <ReviewStep connection={connection} draft={draft} accounts={allAccounts} customers={contacts.data?.contacts ?? []} gstRegistered={gstRegistered} />;
+    body = <ReviewStep connection={connection} draft={draft} accounts={allAccounts} customers={contacts.data?.contacts ?? []} gstRegistered={gstRegistered} gstSetup={gstSetup} />;
     next = <Button onClick={() => go("turn_on")}>Looks right: next</Button>;
   } else {
     body = <TurnOnStep connection={connection} draft={draft} />;
@@ -668,6 +676,7 @@ function AccountsStep({
   taxCodes,
   customers,
   gstRegistered,
+  gstSetup,
   onAdded,
 }: {
   organisationId: string;
@@ -678,6 +687,7 @@ function AccountsStep({
   taxCodes: TaxCode[];
   customers: Contact[];
   gstRegistered: boolean;
+  gstSetup: StoreGstSetup;
   onAdded: (account: Account) => void;
 }) {
   const platform = connection.platform;
@@ -777,6 +787,7 @@ function AccountsStep({
         </section>
       )}
 
+      {gstSetup === "unconfirmed" ? <GstUnconfirmedNotice /> : null}
       {gstRegistered ? (
         <section className={styles.group} aria-label="GST">
           <h4 className={styles.groupTitle}>GST</h4>
@@ -870,6 +881,20 @@ function AccountsStep({
   );
 }
 
+/** #546 (GSR3): the setting says registered, but no one has confirmed it, so the setup asks no GST questions and orders wait. */
+function GstUnconfirmedNotice() {
+  return (
+    <Notice tone="warning">
+      Your GST registration hasn&apos;t been confirmed yet, so orders will wait rather than Tohyee guessing their GST.{" "}
+      <Link href="/operations/settings">Confirm it in Settings</Link>, then come back to choose GST codes.{" "}
+      <InfoTip label="Why orders wait">
+        <InfoPara>Tohyee starts every organisation as registered for GST until someone says otherwise. Posting Shopify&apos;s 15% as GST for a business that isn&apos;t registered would be wrong, and so would leaving GST out for one that is.</InfoPara>
+        <InfoPara>Nothing is lost while orders wait. Each sync tries them again, and they come in once registration is confirmed.</InfoPara>
+      </InfoTip>
+    </Notice>
+  );
+}
+
 /** "GST (15%)" rather than "GST GST (15%)": the code only when the label doesn't start with it. */
 const codeLabel = (code: TaxCode) => (code.label.toUpperCase().startsWith(code.code.toUpperCase()) ? code.label : `${code.code} ${code.label}`);
 
@@ -884,12 +909,14 @@ function ReviewStep({
   accounts,
   customers,
   gstRegistered,
+  gstSetup,
 }: {
   connection: SalesPlatformConnection;
   draft: PostingDraft;
   accounts: Account[];
   customers: Contact[];
   gstRegistered: boolean;
+  gstSetup: StoreGstSetup;
 }) {
   const platform = connection.platform;
   const shop = SALES_PLATFORM_LABELS[platform];
@@ -943,6 +970,7 @@ function ReviewStep({
       <p className={styles.lead}>
         Here&apos;s what you chose, and where a {platform === "shopify" ? "$100 sale with a $3 Shopify fee" : "$100 sale"} would go. Nothing is saved yet.
       </p>
+      {gstSetup === "unconfirmed" ? <GstUnconfirmedNotice /> : null}
       <dl className={styles.summary}>
         {rows.map(([label, value]) => (
           <div key={label} style={{ display: "contents" }}>

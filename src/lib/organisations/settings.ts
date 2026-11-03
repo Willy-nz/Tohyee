@@ -59,12 +59,19 @@ export type OrganisationSettings = {
   postalAddress: string | null;
   /** The organisation's GST number, as digits (PD1); shown on tax invoices. */
   gstNumber: string | null;
-  /** Registered for GST (issue #180, NR1-NR8); new organisations start registered. */
+  /** Registered for GST (issue #180, NR1-NR8); new organisations start registered, as a guess until confirmed (#546). */
   gstRegistered: boolean;
   /** Registered from this date (NR5); null = from the start. */
   gstRegisteredFrom: string | null;
   /** Registration ended on this date (NR6), or null while still registered. */
   gstRegisteredUntil: string | null;
+  /**
+   * When a person confirmed the registration setting (#546, GSR1-GSR10), and
+   * who (their email, or what it came from). Null: still Tohyee's guess, so
+   * automatic posting doesn't charge or claim GST on its own.
+   */
+  gstRegistrationConfirmedAt: string | null;
+  gstRegistrationConfirmedBy: string | null;
   /** How customers pay, e.g. the bank account number (PD1); shown on printed invoices. */
   paymentDetails: string | null;
   hasPostings: boolean;
@@ -94,12 +101,15 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     gst_registered: boolean;
     gst_registered_from: string | null;
     gst_registered_until: string | null;
+    gst_registration_confirmed_at: string | null;
+    gst_registration_confirmed_by: string | null;
     payment_details: string | null;
     has_postings: boolean;
   }>(
     `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, accounting_enabled, crm_enabled, analytics_enabled, not_for_profit_enabled, allow_negative_stock,
             foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
             postal_address, gst_number, gst_registered, gst_registered_from::text, gst_registered_until::text, payment_details,
+            to_char(gst_registration_confirmed_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as gst_registration_confirmed_at, gst_registration_confirmed_by,
             coalesce((select enabled from livestock_settings where id = true), false) as livestock_enabled,
             coalesce((select enabled from farming_settings where id = true), false) as farming_enabled,
             exists (select 1 from ledger_journals) as has_postings
@@ -131,6 +141,8 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     gstRegistered: row.gst_registered,
     gstRegisteredFrom: row.gst_registered_from,
     gstRegisteredUntil: row.gst_registered_until,
+    gstRegistrationConfirmedAt: row.gst_registration_confirmed_at,
+    gstRegistrationConfirmedBy: row.gst_registration_confirmed_by,
     paymentDetails: row.payment_details,
     hasPostings: row.has_postings,
   };
@@ -222,6 +234,10 @@ export async function updateOrganisationSettings(
     gstRegistered?: unknown;
     gstRegisteredFrom?: unknown;
     gstRegisteredUntil?: unknown;
+    /** true: the person confirms the registration as sent (#546). false: a change that isn't a confirmation ("not sure yet"). */
+    gstRegistrationConfirmed?: unknown;
+    /** true: the person has seen the periods a registration change affects and will correct them (GSR8). */
+    acknowledgeAffectedPeriods?: unknown;
     paymentDetails?: unknown;
   },
 ): Promise<OrganisationSettings> {
@@ -331,6 +347,28 @@ export async function updateOrganisationSettings(
       ? current.gstRegisteredUntil
       : optionalDate(input.gstRegisteredUntil, "The date GST registration ended");
   await checkGstRegistration(tx, current, { gstNumber, gstRegistered, gstRegisteredFrom, gstRegisteredUntil });
+  if (input.gstRegistrationConfirmed !== undefined && typeof input.gstRegistrationConfirmed !== "boolean") {
+    throw new ValidationError("gstRegistrationConfirmed must be true or false.");
+  }
+  if (input.acknowledgeAffectedPeriods !== undefined && typeof input.acknowledgeAffectedPeriods !== "boolean") {
+    throw new ValidationError("acknowledgeAffectedPeriods must be true or false.");
+  }
+  const registrationChanged =
+    gstRegistered !== current.gstRegistered || gstRegisteredFrom !== current.gstRegisteredFrom || gstRegisteredUntil !== current.gstRegisteredUntil;
+  if (registrationChanged) {
+    // GSR8: postings already made are never rewritten. Show the periods the change reaches; the person corrects them on purpose.
+    const affected = await gstRegistrationImpact(tx, current, { registered: gstRegistered, from: gstRegisteredFrom, until: gstRegisteredUntil });
+    if (affected.length > 0 && input.acknowledgeAffectedPeriods !== true) {
+      throw new ValidationError(
+        `This changes GST registration for months that already have entries (${affected.map((period) => period.label).join(", ")}). Nothing already posted is changed: correct those months yourself (credit notes, new documents or journals), then tick that you will and save again.`,
+      );
+    }
+  }
+  // GSR5: a deliberate change to the registration, or an explicit confirmation, is the person confirming it.
+  // false never takes a confirmation back; it only stops this change counting as one.
+  // Typing a GST number in while registered confirms it too, as the upgrade treats a number already there (migration 0216).
+  const numberAdded = gstRegistered && gstNumber !== null && current.gstNumber === null && current.gstRegistrationConfirmedAt === null;
+  const confirmed = input.gstRegistrationConfirmed === true || ((registrationChanged || numberAdded) && input.gstRegistrationConfirmed !== false);
 
   if (financialYearEndMonth !== current.financialYearEndMonth) {
     await assertFinancialYearEndChangeable(tx, current.financialYearEndMonth);
@@ -348,7 +386,10 @@ export async function updateOrganisationSettings(
             postal_address = $9, gst_number = $10, payment_details = $11, gst_period_months = $12,
             gst_period_end_month = $13, foreign_trade = $14,
             export_tax_code_id = coalesce($15::bigint, export_tax_code_id), analytics_enabled = $16,
-            gst_registered = $19, gst_registered_from = $17::date, gst_registered_until = $18::date, accounting_enabled = $20, updated_at = now()
+            gst_registered = $19, gst_registered_from = $17::date, gst_registered_until = $18::date, accounting_enabled = $20,
+            gst_registration_confirmed_at = case when $21::boolean then now() else gst_registration_confirmed_at end,
+            gst_registration_confirmed_by = case when $21::boolean then $22::text else gst_registration_confirmed_by end,
+            updated_at = now()
       where id = true`,
     [
       displayName,
@@ -371,6 +412,8 @@ export async function updateOrganisationSettings(
       gstRegisteredUntil,
       gstRegistered,
       accountingEnabled,
+      confirmed,
+      tx.actor.email || "Tohyee",
     ],
   );
   await writeAuditEvent(tx, {
@@ -398,8 +441,11 @@ export async function updateOrganisationSettings(
       ...(gstRegistered !== current.gstRegistered ? { gstRegistered } : {}),
       ...(gstRegisteredFrom !== current.gstRegisteredFrom ? { gstRegisteredFrom } : {}),
       ...(gstRegisteredUntil !== current.gstRegisteredUntil ? { gstRegisteredUntil } : {}),
+      ...(confirmed ? { gstRegistrationConfirmed: true } : {}),
+      ...(registrationChanged && input.acknowledgeAffectedPeriods === true ? { acknowledgedAffectedPeriods: true } : {}),
     },
   });
+  const fresh = confirmed ? (await getOrganisationSettings(tx)) : current;
   return {
     ...current,
     displayName,
@@ -420,8 +466,46 @@ export async function updateOrganisationSettings(
     gstRegistered,
     gstRegisteredFrom,
     gstRegisteredUntil,
+    gstRegistrationConfirmedAt: fresh.gstRegistrationConfirmedAt,
+    gstRegistrationConfirmedBy: fresh.gstRegistrationConfirmedBy,
     paymentDetails,
   };
+}
+
+/** A month whose entries a GST registration change reaches (GSR8). */
+export type AffectedGstPeriod = { month: string; label: string; entries: number; withGst: number };
+
+/**
+ * The months with posted entries on dates whose registration the change
+ * flips (registered to not, or not to registered), oldest first (GSR8).
+ * Nothing is changed: it's what the person has to look at and correct.
+ */
+export async function gstRegistrationImpact(
+  tx: OrgTx,
+  current: Pick<OrganisationSettings, "gstRegistered" | "gstRegisteredFrom" | "gstRegisteredUntil">,
+  next: { registered: boolean; from: string | null; until: string | null },
+): Promise<AffectedGstPeriod[]> {
+  const result = await tx.query<{ month: string; entries: string; with_gst: string }>(
+    `with flipped as (
+       select j.id, j.posting_date
+         from ledger_journals j
+        where ($1::boolean and ($2::date is null or j.posting_date >= $2::date) and ($3::date is null or j.posting_date <= $3::date))
+           <> ($4::boolean and ($5::date is null or j.posting_date >= $5::date) and ($6::date is null or j.posting_date <= $6::date))
+     )
+     select to_char(f.posting_date, 'YYYY-MM') as month, count(*)::text as entries,
+            count(*) filter (where exists (select 1 from ledger_journal_lines l join accounts a on a.id = l.account_id
+                                            where l.journal_id = f.id and a.system_key = 'gst'))::text as with_gst
+       from flipped f
+      group by 1
+      order by 1`,
+    [current.gstRegistered, current.gstRegisteredFrom, current.gstRegisteredUntil, next.registered, next.from, next.until],
+  );
+  return result.rows.map((row) => ({ month: row.month, label: monthLabel(row.month), entries: Number(row.entries), withGst: Number(row.with_gst) }));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function monthLabel(month: string): string {
+  return `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
 }
 
 /**
