@@ -62,6 +62,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/operations/crm", destination: "/crm/companies", permanent: false },
       { source: "/operations/crm/:path+", destination: "/crm/:path+", permanent: false },
+      // The Sales overview was folded into Invoices (decision 1325): what's owed shows on its Awaiting payment tab.
+      { source: "/operations/sales", destination: "/operations/invoices", permanent: false },
     ];
   },
 };

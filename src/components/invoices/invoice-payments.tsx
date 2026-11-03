@@ -52,10 +52,12 @@ function RecordPaymentForm({
   organisationId,
   invoice,
   onRecorded,
+  onCancel,
 }: {
   organisationId: string;
   invoice: Invoice;
   onRecorded: (result: PaymentResult) => void;
+  onCancel?: () => void;
 }) {
   const confirm = useConfirm();
   const accounts = useAccounts(organisationId);
@@ -176,15 +178,19 @@ function RecordPaymentForm({
         <Button type="submit" disabled={busy || !accounts.data}>
           {busy ? "Recording…" : "Record payment"}
         </Button>
-        <span className={ui.muted}>
-          {foreign
-            ? `${
-                isRateText(rate) && /^\d+(\.\d+)?$/.test(fields.amount.trim())
-                  ? `${invoice.currencyCode} ${formatMoney(fields.amount)} at ${rate} is ${baseCurrency} ${formatMoney(convertAtRate(fields.amount.trim(), rate))}. `
-                  : ""
-              }Accounts receivable is cleared at the invoice's rate; the difference is a realised currency gain or loss.`
-            : "Posts the whole payment on its date: debit the bank account, credit accounts receivable."}
-        </span>
+        {onCancel ? (
+          <Button variant="secondary" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+        ) : null}
+        {foreign ? (
+          <span className={ui.muted}>
+            {isRateText(rate) && /^\d+(\.\d+)?$/.test(fields.amount.trim())
+              ? `${invoice.currencyCode} ${formatMoney(fields.amount)} at ${rate} is ${baseCurrency} ${formatMoney(convertAtRate(fields.amount.trim(), rate))}. `
+              : ""}
+            Accounts receivable is cleared at the invoice&apos;s rate; the difference is a realised currency gain or loss.
+          </span>
+        ) : null}
       </div>
     </form>
   );
@@ -270,10 +276,15 @@ export function InvoicePayments({
   organisationId,
   invoice,
   onChanged,
+  recording = true,
+  onRecordingDone,
 }: {
   organisationId: string;
   invoice: Invoice;
   onChanged: (invoice: Invoice, message: string) => void;
+  /** Whether the record payment form shows (the invoice page opens it from its Record payment button). */
+  recording?: boolean;
+  onRecordingDone?: () => void;
 }) {
   const { can } = useWorkspace();
   const list = useApiData<{ payments: CustomerPayment[] }>(`/api/invoices/${encodeURIComponent(invoice.id)}/payments`, {
@@ -284,19 +295,23 @@ export function InvoicePayments({
   // A paid invoice can still take a payment (example OP4: the customer paid twice); it's all kept as credit.
   const canRecord = bookkeeper && invoice.status === "approved";
   const payments = list.data?.payments ?? [];
+  // With nothing recorded and the form closed there's nothing to show: the totals already say what's due.
+  if (list.data && payments.length === 0 && !(canRecord && recording) && invoice.status === "approved") return null;
 
   return (
     <Card
       title="Payments"
       description={
         invoice.status === "approved"
-          ? `Paid ${formatMoney(invoice.amountPaid)} of ${formatMoney(invoice.total)}; ${formatMoney(invoice.amountDue)} is due. A payment can't be edited: void it and record it again.`
+          ? payments.length > 0
+            ? "A payment can't be edited: void it and record it again."
+            : undefined
           : "This invoice was voided. Any payments against it were voided first."
       }
     >
       {list.error ? <Notice tone="error">{list.error}</Notice> : null}
       {!list.data && !list.error ? <p className={ui.muted}>Loading payments…</p> : null}
-      {list.data && payments.length === 0 ? <Empty>No payments yet.</Empty> : null}
+      {list.data && payments.length === 0 && invoice.status !== "approved" ? <Empty>No payments yet.</Empty> : null}
       {payments.length > 0 ? (
         <div className={ui.tableWrap}>
           <table className={ui.table}>
@@ -391,13 +406,15 @@ export function InvoicePayments({
           }}
         />
       ) : null}
-      {canRecord && !voiding ? (
+      {canRecord && recording && !voiding ? (
         <RecordPaymentForm
           key={invoice.amountDue}
           organisationId={organisationId}
           invoice={invoice}
+          onCancel={onRecordingDone}
           onRecorded={(result) => {
             list.reload();
+            onRecordingDone?.();
             onChanged(
               result.invoice,
               result.payment.overpaymentStatus

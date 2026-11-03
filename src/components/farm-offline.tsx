@@ -94,7 +94,12 @@ export function readinessLabel(state: FarmReadiness["state"], missingScreens: nu
  * screen is showing what's kept on the device, that it's the last known
  * information and how old it is.
  */
-export function FarmOfflineStatus({ organisationId, farmId }: { organisationId: string; farmId: string }) {
+/**
+ * A farm's offline state. `part="inline"` is the short line for the title row
+ * (getting ready, or ready and when); `part="notice"` is the warning shown
+ * while the page is served from what's kept on the device (decision 1325).
+ */
+export function FarmOfflineStatus({ organisationId, farmId, part = "all" }: { organisationId: string; farmId: string; part?: "all" | "inline" | "notice" }) {
   const served = useSyncExternalStore(subscribeOfflineServed, offlineServedSnapshot, () => new Map<string, string>());
   const rows = useReadiness(organisationId);
   const running = usePackProgress();
@@ -102,22 +107,24 @@ export function FarmOfflineStatus({ organisationId, farmId }: { organisationId: 
   const farm = rows?.find((row) => row.farmId === farmId) ?? null;
   const times = [...served.values()].sort();
   if (times.length) {
+    if (part === "inline") return null;
     return (
       <Notice tone="warning">
         <strong>Last known information, kept on this device</strong> (oldest part kept {when(times[0])}). Mobs, machinery, actions and who&apos;s on site may have changed since. Lists and searches only cover what&apos;s kept here. <Link href={OFFLINE_PAGE}>What&apos;s kept</Link>
       </Notice>
     );
   }
+  if (part === "notice") return null;
   if (running?.running && running.total) {
     return (
-      <p className={styles.status} role="status">
+      <p className={`${styles.status} ${part === "inline" ? styles.inline : ""}`} role="status">
         Getting this farm ready to use offline: {running.done} of {running.total}…
       </p>
     );
   }
   if (!farm) return null;
   return (
-    <p className={styles.status}>
+    <p className={`${styles.status} ${part === "inline" ? styles.inline : ""}`}>
       <Link href={OFFLINE_PAGE}>
         {readinessLabel(farm.state, missing?.length ?? 0)}
         {farm.state === "ready" && missing?.length ? ` · ${missing.length} screen${missing.length === 1 ? "" : "s"} not saved yet` : ""}

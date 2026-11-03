@@ -881,7 +881,7 @@ export function CustomFieldsManager({ organisationId }: { organisationId: string
   // Accounting fields need Advanced reporting; prospect, people and opportunity fields need the CRM (CRMF1).
   const records = CUSTOM_FIELD_RECORDS.filter((record) => availableUses(setup, record).length > 0);
   if (records.length === 0) {
-    return <Notice tone="info">Advanced reporting and the CRM are both off. Turn one on in Settings › Modules to use custom fields.</Notice>;
+    return <Notice tone="info">Advanced reporting and the CRM are both off. Turn one on in Modules to use custom fields.</Notice>;
   }
   if (!can("admin")) return <Notice tone="warning">Only organisation admins and owners can change custom fields.</Notice>;
   const saved = (next: CustomFieldSetup, text: string) => {
@@ -892,7 +892,7 @@ export function CustomFieldsManager({ organisationId }: { organisationId: string
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
       {!setup.advancedFeatures ? (
-        <Notice tone="info">Advanced reporting is off, so only CRM fields (on prospects, people and opportunities) can be set up. Turn it on in Settings › Modules for the rest.</Notice>
+        <Notice tone="info">Advanced reporting is off, so only CRM fields (on prospects, people and opportunities) can be set up. Turn it on in Modules for the rest.</Notice>
       ) : null}
       {records.map((record) => {
         const sections = hasSections(record) ? setup.sections.filter((section) => section.record === record) : [];

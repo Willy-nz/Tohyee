@@ -28,7 +28,7 @@ export const AI_ACCESS_LEVEL_LABELS: Record<AiAccessLevel, string> = {
 export const AI_ACCESS_LEVEL_HELP: Record<AiAccessLevel, string> = {
   read: "It can look things up and answer questions. It can't change anything.",
   draft:
-    "It can also add and edit contacts, and make and edit draft invoices, bills and journals for you to check. Drafts post nothing.",
+    "It can also add and edit contacts, make and edit draft invoices, bills and journals, and propose bank coding, for you to check. Drafts and proposals post nothing.",
   post:
     "It can also approve invoices and bills, post draft journals and record payments, so what it does goes into the books.",
   full:
@@ -42,7 +42,7 @@ export const AI_ACCESS_LEVEL_HELP: Record<AiAccessLevel, string> = {
 export const AI_ACCESS_LEVEL_AI_WORDS: Record<AiAccessLevel, string> = {
   read: "You can look things up but not change anything.",
   draft:
-    "You can look things up, add and edit contacts, and make and edit draft invoices, bills and journals (drafts post nothing). You can't approve, post, delete, void or archive anything.",
+    "You can look things up, add and edit contacts, make and edit draft invoices, bills and journals, and propose bank coding for a person to approve (drafts and proposals post nothing). You can't approve, post, delete, void or archive anything.",
   post:
     "You can look things up, add and edit contacts, make and edit drafts, approve invoices and bills, post draft journals and record payments. You can't delete, void, archive, roll back or refund anything.",
   full:

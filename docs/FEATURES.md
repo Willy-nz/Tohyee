@@ -1108,6 +1108,14 @@ that something happened.
   with the other side of a transfer, and voids the spend or receive money
   and transfers it posted on the line's date. Payments stay. Bookkeepers
   and above.
+  **Bank coding proposals** (#544, decisions 1292-1299, examples
+  BCP1-BCP8): an AI with a "Make drafts" key or above proposes coding for
+  unreconciled lines (propose_bank_coding); nothing posts. The **Proposals**
+  tab shows each proposal with totals by account and GST, a filter
+  (including "Needs a look") and CSV export. Bookkeepers edit, reject or
+  approve rows or a selection; approving posts as cash coding does, as a
+  batch that can be resumed. Rows whose line changed since are marked stale
+  and left alone; lock dates and GST are checked again. An AI can't approve.
   **Foreign-currency bank and card accounts** (following NetSuite, as Jess
   decided): every posting keeps the foreign amount, the NZD amount and the
   rate; statement files are imported in the account's currency (a file in
@@ -1916,12 +1924,13 @@ that something happened.
   imported twice. The **map** draws the paddock outlines to scale, north
   up. With an organisation's own free **LINZ Basemaps key**, **aerial
   photos** show under the outlines (#485, decisions 1060-1066). An owner or
-  admin adds it in three steps on Settings › **Aerial photos for farm maps**
-  (also on Farms and paddocks): open LINZ Basemaps, copy its API Key box,
+  admin adds it in three steps on the farm **Map** (All settings › **Aerial
+  photos for farm maps** opens it there, decision 1324; also on Farms and
+  paddocks): open LINZ Basemaps, copy its API Key box,
   paste it. Tohyee checks it straight away by loading one photo in the
   browser and says "Aerial photos are on" or what went wrong. Tohyee keeps
   the day the key was saved; from day 80 of a standard key's 90 owners and
-  admins are reminded on Farm Home and in Settings. When photos stop
+  admins are reminded on Farm Home. When photos stop
   loading, the map says so and shows the same three steps. Without a key,
   maps show the outlines on a plain background with "Add aerial photos
   (free, 1 minute)". The browser loads photos straight from LINZ, with
@@ -2311,7 +2320,8 @@ that something happened.
   Jess). bulk_reconcile works as a durable batch: each action's outcome is
   kept, get_bank_batch reads it after a lost answer, and resume_bank_batch
   carries on after a rate limit or restart without doing anything twice
-  (#547). Full access also makes, edits and approves
+  (#547). A "Make drafts" key can propose bank coding for a person to
+  review (propose_bank_coding, #544); nothing posts until they approve. Full access also makes, edits and approves
   credit notes, quotes, sales and purchase orders and repeating invoices and
   bills, applies credit and records refunds, approves and pays expense
   claims, adds and edits items, accounts, tracking, budgets and fixed assets,

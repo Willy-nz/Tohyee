@@ -1,13 +1,12 @@
 "use client";
 
 import { FarmMore, FarmWorkspace } from "@/components/farm-workspace";
-import { Page, PageHeader } from "@/components/ui";
+import { Page } from "@/components/ui";
 
 export default function FarmMorePage() {
   return (
     <Page>
-      <PageHeader title="More" />
-      <FarmWorkspace>{(context) => <FarmMore {...context} />}</FarmWorkspace>
+      <FarmWorkspace title="More">{(context) => <FarmMore {...context} />}</FarmWorkspace>
     </Page>
   );
 }

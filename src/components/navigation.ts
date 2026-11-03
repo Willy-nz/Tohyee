@@ -42,7 +42,6 @@ export const MENUS: Menu[] = [
       {
         heading: "Documents",
         links: [
-          { href: "/operations/sales", label: "Sales overview" },
           { href: "/operations/invoices", label: "Invoices" },
           { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/quotes", label: "Quotes" },
@@ -356,6 +355,8 @@ export const SETTINGS: MenuGroup[] = [
     links: [
       { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
       { href: "/operations/livestock/settings", label: "Livestock", module: "livestock" },
+      // Set up on the farm Map since decision 1324.
+      { href: "/operations/farm/map?aerial=1", label: "Aerial photos for farm maps", minRole: "admin", module: "farming" },
     ],
   },
   {

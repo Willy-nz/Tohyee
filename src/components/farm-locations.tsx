@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { MapPersonMarker } from "@/components/farming";
+import { InfoTip } from "@/components/info-tip";
 import { Button, Card, Field, Notice, ui } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
 import { dismissEnded, loadSharing, sendFromHere, serverSnapshot, sharingSnapshot, startSharing, stopSharing, subscribeSharing } from "@/lib/client/location-sharing";
@@ -244,7 +245,15 @@ export function FarmPeopleCard({
   const chosen = list.find((person) => person.shareId === selected) ?? null;
   const sharingHere = sharing.mine?.farmId === farm.id;
   return (
-    <Card title="People on the map" description="Only people who chose to share their location with this farm. Sharing is never on unless the person turns it on.">
+    <Card
+      title="People on the map"
+      description={
+        <>
+          Only people who turned on sharing with this farm.{" "}
+          <InfoTip label="The avatars">Sharing is never on unless the person turns it on. Solid avatars were updated in the last 5 minutes. Grey, dashed ones are last known positions, not live. A dashed circle is a rough position.</InfoTip>
+        </>
+      }
+    >
       {offline ? (
         <Notice tone="warning">
           Not live: this device can&apos;t reach Tohyee.{people.fetchedAt ? ` What's shown was last checked ${timeAgo(people.fetchedAt, now)}, and people may have moved or stopped sharing.` : ""}
@@ -284,7 +293,6 @@ export function FarmPeopleCard({
           })}
         </ul>
       ) : null}
-      <p className={ui.muted}>Solid avatars were updated in the last 5 minutes. Grey, dashed ones are last known positions, not live. A dashed circle is a rough position.</p>
       {sharingHere ? null : <ShareMyLocation organisationId={organisationId} farm={farm} otherFarm={sharing.mine && !sharingHere ? sharing.mine.farmName : null} onStarted={() => void people.reload()} />}
     </Card>
   );

@@ -684,22 +684,24 @@ function StockReport({ organisationId }: { organisationId: string }) {
   );
 }
 
+/** The standard reports, in the picker's groups (decision 1323). */
 const TABS = [
-  { key: "pnl", label: "Profit and loss" },
-  { key: "bs", label: "Balance sheet" },
-  { key: "tb", label: "Trial balance" },
-  { key: "equity", label: "Changes in equity" },
-  { key: "cashflow", label: "Cash flows" },
-  { key: "stock", label: "Stock valuation" },
-  { key: "aged", label: "Aged receivables" },
-  { key: "payables", label: "Aged payables" },
-  { key: "transactions", label: "Account transactions" },
-  { key: "bankrec", label: "Bank reconciliation" },
-  { key: "journals", label: "Journal report" },
-  { key: "sales", label: "Sales by salesperson" },
-  { key: "budget", label: "Budget vs actual" },
+  { key: "pnl", label: "Profit and loss", group: "Financial statements" },
+  { key: "bs", label: "Balance sheet", group: "Financial statements" },
+  { key: "equity", label: "Changes in equity", group: "Financial statements" },
+  { key: "cashflow", label: "Cash flows", group: "Financial statements" },
+  { key: "aged", label: "Aged receivables", group: "Owed and owing" },
+  { key: "payables", label: "Aged payables", group: "Owed and owing" },
+  { key: "sales", label: "Sales by salesperson", group: "Owed and owing" },
+  { key: "tb", label: "Trial balance", group: "Ledger" },
+  { key: "transactions", label: "Account transactions", group: "Ledger" },
+  { key: "journals", label: "Journal report", group: "Ledger" },
+  { key: "bankrec", label: "Bank reconciliation", group: "Ledger" },
+  { key: "stock", label: "Stock valuation", group: "Ledger" },
+  { key: "budget", label: "Budget vs actual", group: "Budgets" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
+const TAB_GROUPS = [...new Set(TABS.map((entry) => entry.group))];
 
 function StandardReports({ organisationId }: { organisationId: string }) {
   const router = useRouter();
@@ -708,21 +710,25 @@ function StandardReports({ organisationId }: { organisationId: string }) {
   const tab: TabKey = TABS.find((entry) => entry.key === params.get("report"))?.key ?? "pnl";
   // Sales by salesperson is an advanced feature (SR3).
   const advanced = useSalespeople(organisationId).data?.advancedFeatures ?? false;
+  const shown = TABS.filter((entry) => entry.key !== "sales" || advanced || tab === "sales");
   return (
-    <>
-      <div className={ui.tabs} role="tablist" aria-label="Standard reports" data-print="hide">
-        {TABS.filter((entry) => entry.key !== "sales" || advanced || tab === "sales").map((entry) => (
-          <button
-            key={entry.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === entry.key}
-            className={`${ui.tab} ${tab === entry.key ? ui.tabActive : ""}`}
-            onClick={() => router.replace(`/operations/reports?report=${entry.key}`, { scroll: false })}
-          >
-            {entry.label}
-          </button>
-        ))}
+    <div className={ui.standardReport}>
+      <div className={ui.reportPicker} data-print="hide">
+        <Field label="Report">
+          <select value={tab} onChange={(event) => router.replace(`/operations/reports?report=${event.target.value}`, { scroll: false })}>
+            {TAB_GROUPS.map((group) => (
+              <optgroup key={group} label={group}>
+                {shown
+                  .filter((entry) => entry.group === group)
+                  .map((entry) => (
+                    <option key={entry.key} value={entry.key}>
+                      {entry.label}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </Field>
       </div>
       {tab === "pnl" ? <ProfitAndLossReport organisationId={organisationId} /> : null}
       {tab === "bs" ? <BalanceSheetReport organisationId={organisationId} /> : null}
@@ -748,11 +754,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "journals" ? <JournalReportView organisationId={organisationId} /> : null}
       {tab === "sales" ? <SalesBySalespersonReport organisationId={organisationId} /> : null}
       {tab === "budget" ? <BudgetVsActualReport organisationId={organisationId} initialBudgetId={params.get("budget")} /> : null}
-      <p className={ui.muted} data-print="hide">
-        The GST return and GST audit report are under <Link href="/operations/gst-return">Tax</Link>; customer statements are under{" "}
-        <Link href="/operations/customer-statements">Contacts</Link>.
-      </p>
-    </>
+    </div>
   );
 }
 

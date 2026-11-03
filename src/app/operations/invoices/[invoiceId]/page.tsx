@@ -4,7 +4,7 @@ import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { DocumentExportFlags } from "@/components/exports";
 import { useApiData } from "@/components/hooks";
@@ -19,7 +19,6 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { CreditNoteApplication } from "@/lib/credit-notes/applications";
 import type { CreditNoteSummary } from "@/lib/credit-notes/service";
 import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser, personName } from "@/lib/format";
-import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { OverpaymentApplication } from "@/lib/invoices/overpayments";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
@@ -28,27 +27,21 @@ import { InvoicePayNowCard } from "@/components/online-payments";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { RecodeCard } from "@/components/recode";
 import { useConfirm } from "@/components/confirm-dialog";
+import { MoreMenu, type MoreMenuItem } from "@/components/more-menu";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
 }
 
-function InvoiceActions({
-  organisationId,
-  invoice,
-  onChanged,
-}: {
-  organisationId: string;
-  invoice: Invoice;
-  onChanged: (invoice: Invoice, message: string, warning?: string) => void;
-}) {
+type Panel = "payment" | "void" | "recode" | "email" | "notes";
+
+/** Approve and delete for a draft: the header's Approve button and its ⋯ menu use these. */
+function useDraftActions(organisationId: string, invoice: Invoice, onChanged: (invoice: Invoice, message: string, warning?: string) => void) {
   const confirm = useConfirm();
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
   // returns the first result instead of posting again.
   const [approveKey] = useState(() => newIdempotencyKey("invoice-approve"));
-  const [voidKey] = useState(() => newIdempotencyKey("invoice-void"));
-  const [voidDate, setVoidDate] = useState(todayInBrowser());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,36 +81,50 @@ function InvoiceActions({
     });
   }
 
+  return { approve, remove, busy, error };
+}
+
+/** Voiding an approved invoice, opened from the ⋯ menu. The warning stays here and in the confirmation. */
+function VoidInvoicePanel({
+  organisationId,
+  invoice,
+  onChanged,
+  onClose,
+}: {
+  organisationId: string;
+  invoice: Invoice;
+  onChanged: (invoice: Invoice, message: string) => void;
+  onClose: () => void;
+}) {
+  const confirm = useConfirm();
+  const [voidKey] = useState(() => newIdempotencyKey("invoice-void"));
+  const [voidDate, setVoidDate] = useState(todayInBrowser());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   async function voidInvoice() {
     if (!(await confirm(`Void ${invoice.invoiceNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`))) {
       return;
     }
-    void run(async () => {
+    setBusy(true);
+    setError(null);
+    try {
       const result = await api<{ invoice: Invoice }>(`/api/invoices/${invoice.id}/void`, {
         method: "POST",
         body: { organisationId, source: "ui", idempotencyKey: voidKey, voidDate },
       });
-      onChanged(
-        result.invoice,
-        `Voided ${result.invoice.invoiceNumber}. Its journal was reversed on ${formatDate(result.invoice.voidDate)}.`,
-      );
-    });
+      onChanged(result.invoice, `Voided ${result.invoice.invoiceNumber}. Its journal was reversed on ${formatDate(result.invoice.voidDate)}.`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (invoice.status === "voided") {
-    return null;
-  }
   // Examples CP5 and CN9: an invoice with active payments or credit applied is voided after they're removed.
-  const hasPayments = invoice.status === "approved" && invoice.paidStatus !== "unpaid";
+  const hasPayments = invoice.paidStatus !== "unpaid";
   return (
-    <Card
-      title={invoice.status === "draft" ? "Draft" : "Void"}
-      description={
-        invoice.status === "draft"
-          ? "Drafts post nothing. Approving gives the invoice its number and posts it on the invoice date, if that date is in an open period."
-          : "Voiding posts the exact reversal of the invoice's journal on the void date, which must be in an open period. The invoice keeps its number."
-      }
-    >
+    <Card title="Void invoice" description="Posts the exact reversal of its journal on the void date, which must be in an open period. It keeps its number.">
       {error ? <Notice tone="error">{error}</Notice> : null}
       {hasPayments ? (
         <Notice tone="info">
@@ -125,34 +132,34 @@ function InvoiceActions({
           invoice.
         </Notice>
       ) : null}
-      {invoice.status === "draft" ? (
-        <div className={ui.actions}>
-          <Button onClick={approve} disabled={busy}>
-            {busy ? "Working…" : "Approve"}
-          </Button>
-          <Button variant="secondary" onClick={() => router.push(`/operations/invoices/${invoice.id}/edit`)} disabled={busy}>
-            Edit
-          </Button>
-          <Button variant="danger" onClick={remove} disabled={busy}>
-            Delete draft
-          </Button>
-        </div>
-      ) : (
-        <div className={ui.inlineForm}>
-          <Field label="Void date">
-            <DateInput
-              value={voidDate}
-              min={invoice.invoiceDate}
-              onChange={(event) => setVoidDate(event.target.value)}
-              required
-            />
-          </Field>
-          <Button variant="danger" onClick={voidInvoice} disabled={busy || !voidDate || hasPayments}>
-            {busy ? "Working…" : "Void invoice"}
-          </Button>
-        </div>
-      )}
+      <div className={ui.inlineForm}>
+        <Field label="Void date">
+          <DateInput value={voidDate} min={invoice.invoiceDate} onChange={(event) => setVoidDate(event.target.value)} required />
+        </Field>
+        <Button variant="danger" onClick={() => void voidInvoice()} disabled={busy || !voidDate || hasPayments}>
+          {busy ? "Working…" : "Void invoice"}
+        </Button>
+        <Button variant="secondary" onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+      </div>
     </Card>
+  );
+}
+
+/** A section opened from the header or the ⋯ menu: it scrolls into view and takes focus when opened. */
+function OpenedPanel({ id, focus, children }: { id: string; focus: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focus || !ref.current) return;
+    ref.current.scrollIntoView({ block: "start", behavior: "smooth" });
+    const field = ref.current.querySelector<HTMLElement>("input, select, textarea, button");
+    (field ?? ref.current).focus({ preventScroll: true });
+  }, [focus]);
+  return (
+    <div id={id} ref={ref} tabIndex={-1} style={{ display: "grid", gap: 24, outline: "none" }}>
+      {children}
+    </div>
   );
 }
 
@@ -285,7 +292,6 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   const customSetup = useCustomFields(organisationId);
   const { can, current } = useWorkspace();
   const baseCurrency = current?.baseCurrency ?? "NZD";
-  const router = useRouter();
   const details = useApiData<{
     invoice: Invoice;
     creditApplied: CreditNoteApplication[];
@@ -300,10 +306,22 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   const [updated, setUpdated] = useState<Invoice | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // Sections opened from the header button or the ⋯ menu; the last one opened takes focus.
+  const [panels, setPanels] = useState<Panel[]>([]);
+  const [focused, setFocused] = useState<Panel | null>(null);
+  const invoice = updated ?? details.data?.invoice ?? null;
+  const changed = (next: Invoice, text: string, creditWarning?: string) => {
+    setUpdated(next);
+    setMessage(text);
+    setWarning(creditWarning ?? null);
+    setPanels((open) => open.filter((panel) => panel !== "void" && panel !== "payment"));
+  };
+  const draft = useDraftActions(organisationId, invoice ?? ({ id: invoiceId } as Invoice), changed);
 
   if (details.error) {
     return (
       <>
+        <PageHeader title="Invoice" />
         <Notice tone="error">{details.error}</Notice>
         <p>
           <Link href="/operations/invoices">Back to invoices</Link>
@@ -311,48 +329,76 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
       </>
     );
   }
-  if (!details.data) {
-    return <p className={ui.muted}>Loading…</p>;
+  if (!details.data || !invoice) {
+    return (
+      <>
+        <PageHeader title="Invoice" />
+        <p className={ui.muted}>Loading…</p>
+      </>
+    );
   }
-  const invoice = updated ?? details.data.invoice;
+  const open = (panel: Panel) => {
+    setPanels((current) => (current.includes(panel) ? current : [...current, panel]));
+    setFocused(panel);
+  };
+  const close = (panel: Panel) => setPanels((current) => current.filter((entry) => entry !== panel));
+  const shown = (panel: Panel) => panels.includes(panel);
   const hasTax = invoice.amountsMode !== "no_tax";
   const discounted = invoice.lines.some((line) => line.discountPercent && Number(line.discountPercent) !== 0);
   const { creditApplied, overpaymentCreditApplied, fromQuote, fromRepeating } = details.data;
+  const bookkeeper = can("bookkeeper");
+  const pdf: MoreMenuItem = { label: "Download PDF", href: pdfHref(organisationId, "invoice", invoice.id), newTab: true };
+  const notes: MoreMenuItem = { label: "Notes, files and history", onSelect: () => open("notes") };
+  const email: MoreMenuItem = { label: "Email invoice", onSelect: () => open("email") };
+  const menu: MoreMenuItem[] =
+    invoice.status === "draft"
+      ? bookkeeper
+        ? [
+            { label: "Edit", href: `/operations/invoices/${invoice.id}/edit` },
+            pdf,
+            notes,
+            { label: "Delete draft", onSelect: () => void draft.remove(), danger: true, disabled: draft.busy },
+          ]
+        : [pdf, notes]
+      : invoice.status === "approved"
+        ? [
+            ...(bookkeeper ? [email, { label: "Create credit note", href: `/operations/credit-notes/new?fromInvoice=${encodeURIComponent(invoice.id)}` }] : []),
+            pdf,
+            { label: "Recode a line", onSelect: () => open("recode") },
+            notes,
+            ...(bookkeeper ? [{ label: "Void invoice…", onSelect: () => open("void"), danger: true }] : []),
+          ]
+        : [pdf, { label: "Emails sent", onSelect: () => open("email") }, notes];
   return (
     <>
+      <PageHeader
+        title={invoice.invoiceNumber ?? `Draft #${invoice.id}`}
+        actions={
+          <>
+            <InvoiceStatusBadge status={invoice.status} />
+            {invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}
+            {bookkeeper && invoice.status === "draft" ? (
+              <Button onClick={() => void draft.approve()} disabled={draft.busy}>
+                {draft.busy ? "Working…" : "Approve"}
+              </Button>
+            ) : null}
+            {bookkeeper && invoice.status === "approved" ? <Button onClick={() => open("payment")}>Record payment</Button> : null}
+            <MoreMenu label="More invoice actions" items={menu} />
+          </>
+        }
+      />
+      {draft.error ? <Notice tone="error">{draft.error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
       {warning ? <Notice tone="warning">Over the credit limit: {warning}</Notice> : null}
       {invoice.status === "approved" && invoice.paidStatus !== "paid" ? (
         <UnusedCredit organisationId={organisationId} invoice={invoice} />
       ) : null}
-      <Card
-        title={invoice.invoiceNumber ?? `Draft #${invoice.id}`}
-        description={`To ${invoice.contactName} · ${AMOUNTS_MODE_LABELS[invoice.amountsMode]} · ${invoice.currencyCode}`}
-        actions={
-          <>
-            <InvoiceStatusBadge status={invoice.status} />
-            {invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}
-            <Link href={`/operations/invoices/${invoice.id}/print`}>Print or save as PDF</Link>
-            <a href={pdfHref(organisationId, "invoice", invoice.id)} target="_blank" rel="noreferrer">
-              PDF
-            </a>
-            {invoice.status === "approved" && can("bookkeeper") ? (
-              <Button
-                size="small"
-                variant="secondary"
-                onClick={() => router.push(`/operations/credit-notes/new?fromInvoice=${encodeURIComponent(invoice.id)}`)}
-              >
-                Create credit note
-              </Button>
-            ) : null}
-          </>
-        }
-      >
+      <Card>
         <div className={ui.grid4}>
+          <Stat label="Customer" value={invoice.contactName} />
           <Stat label="Invoice date" value={formatDate(invoice.invoiceDate)} />
           <Stat label="Due date" value={formatDate(invoice.dueDate)} />
           <Stat label="Reference" value={invoice.reference ?? "—"} />
-          <Stat label="Customer" value={invoice.contactName} />
         </div>
         {invoice.salespersonName ? <div className={ui.muted}>Salesperson: {invoice.salespersonName}</div> : null}
         <DocumentExportFlags organisationId={organisationId} contactId={invoice.contactId} lineTaxCodes={invoice.lines.map((line) => line.taxCode)}
@@ -425,17 +471,29 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
             </tbody>
           </table>
         </div>
-        <div className={ui.statRow}>
-          <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={<Money value={invoice.subtotal} />} />
-          {hasTax ? <Stat label="GST" value={<Money value={invoice.taxTotal} />} /> : null}
-          <Stat label={`Total (${invoice.currencyCode})`} value={<Money value={invoice.total} />} />
-          {invoice.status === "approved" ? (
+        <dl className={ui.totals} aria-label="Totals">
+          <dt>{hasTax ? "Subtotal (excl. GST)" : "Subtotal"}</dt>
+          <dd><Money value={invoice.subtotal} /></dd>
+          {hasTax ? (
             <>
-              <Stat label="Paid" value={<Money value={invoice.amountPaid} />} />
-              <Stat label="Credited" value={<Money value={invoice.amountCredited} />} />
-              <Stat label="Amount due" value={<Money value={invoice.amountDue} />} />
+              <dt>GST</dt>
+              <dd><Money value={invoice.taxTotal} /></dd>
             </>
           ) : null}
+          <dt className={ui.totalsStrong}>Total ({invoice.currencyCode})</dt>
+          <dd className={ui.totalsStrong}><Money value={invoice.total} /></dd>
+          {invoice.status === "approved" ? (
+            <>
+              <dt>Paid</dt>
+              <dd><Money value={invoice.amountPaid} /></dd>
+              <dt>Credited</dt>
+              <dd><Money value={invoice.amountCredited} /></dd>
+              <dt className={ui.totalsStrong}>Amount due</dt>
+              <dd className={ui.totalsStrong}><Money value={invoice.amountDue} /></dd>
+            </>
+          ) : null}
+        </dl>
+        <div className={ui.statRow}>
           <ForeignTotals document={invoice} baseCurrency={baseCurrency} hasTax={hasTax} openLabel="Due" openBase={invoice.amountDueBase} />
         </div>
         <p className={ui.muted}>
@@ -457,14 +515,18 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
         </p>
       </Card>
       {invoice.status !== "draft" ? (
-        <InvoicePayments
-          organisationId={organisationId}
-          invoice={invoice}
-          onChanged={(next, text) => {
-            setUpdated(next);
-            setMessage(text);
-          }}
-        />
+        <OpenedPanel id="invoice-payment" focus={focused === "payment" && shown("payment")}>
+          <InvoicePayments
+            organisationId={organisationId}
+            invoice={invoice}
+            recording={shown("payment")}
+            onRecordingDone={() => close("payment")}
+            onChanged={(next, text) => {
+              setUpdated(next);
+              setMessage(text);
+            }}
+          />
+        </OpenedPanel>
       ) : null}
       {invoice.status !== "draft" ? (
         <InvoicePayNowCard organisationId={organisationId} invoiceId={invoice.id} refreshKey={`${invoice.status}-${invoice.amountDue ?? ""}`} />
@@ -475,42 +537,47 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
       {creditApplied.length > 0 || overpaymentCreditApplied.length > 0 ? (
         <InvoiceCredit creditApplied={creditApplied} overpaymentCreditApplied={overpaymentCreditApplied} />
       ) : null}
-      {can("bookkeeper") ? (
-        <InvoiceActions
-          key={invoice.status}
-          organisationId={organisationId}
-          invoice={invoice}
-          onChanged={(next, text, creditWarning) => {
-            setUpdated(next);
-            setMessage(text);
-            setWarning(creditWarning ?? null);
-          }}
-        />
+      {invoice.status === "approved" && bookkeeper && shown("void") ? (
+        <OpenedPanel id="invoice-void" focus={focused === "void"}>
+          <VoidInvoicePanel key={invoice.status} organisationId={organisationId} invoice={invoice} onChanged={changed} onClose={() => close("void")} />
+        </OpenedPanel>
       ) : null}
-      {invoice.status === "approved" ? (
-        <RecodeCard
-          organisationId={organisationId}
-          documentType="invoice"
-          documentId={invoice.id}
-          lines={invoice.lines}
-          onRecoded={() => {
-            setUpdated(null);
-            details.reload();
-          }}
-        />
+      {invoice.status === "approved" && shown("recode") ? (
+        <OpenedPanel id="invoice-recode" focus={focused === "recode"}>
+          <RecodeCard
+            organisationId={organisationId}
+            documentType="invoice"
+            documentId={invoice.id}
+            lines={invoice.lines}
+            defaultOpen={bookkeeper}
+            onRecoded={() => {
+              setUpdated(null);
+              details.reload();
+            }}
+          />
+        </OpenedPanel>
       ) : null}
-      <EmailDocumentPanel
-        organisationId={organisationId}
-        kind="invoice"
-        id={invoice.id}
-        unavailableReason={invoice.status === "draft" ? "Approve the invoice to email it." : invoice.status === "voided" ? "A voided invoice can't be emailed." : null}
-      />
-      <RecordExtrasPanel
-        key={`${invoice.status}-${message ?? ""}`}
-        organisationId={organisationId}
-        recordType="sales_invoice"
-        recordId={invoice.id}
-      />
+      {shown("email") ? (
+        <OpenedPanel id="invoice-email" focus={focused === "email"}>
+          <EmailDocumentPanel
+            organisationId={organisationId}
+            kind="invoice"
+            id={invoice.id}
+            defaultOpen={invoice.status === "approved"}
+            unavailableReason={invoice.status === "draft" ? "Approve the invoice to email it." : invoice.status === "voided" ? "A voided invoice can't be emailed." : null}
+          />
+        </OpenedPanel>
+      ) : null}
+      {shown("notes") ? (
+        <OpenedPanel id="invoice-notes" focus={focused === "notes"}>
+          <RecordExtrasPanel
+            key={`${invoice.status}-${message ?? ""}`}
+            organisationId={organisationId}
+            recordType="sales_invoice"
+            recordId={invoice.id}
+          />
+        </OpenedPanel>
+      ) : null}
       <p>
         <Link href="/operations/invoices">Back to invoices</Link>
       </p>
@@ -522,7 +589,6 @@ export default function InvoicePage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   return (
     <Page>
-      <PageHeader title="Invoice" />
       <RequireOrganisation>{(organisationId) => <InvoiceView organisationId={organisationId} invoiceId={invoiceId} />}</RequireOrganisation>
     </Page>
   );

@@ -12070,7 +12070,8 @@ confirmations, who-can-see-this notices) still stays visible, as below.
       honesty note, it's now a one-line `<Notice>` under the heading: my
       mail ("only you can see your mail"), payroll reports and workforce
       budget (payroll access only), payroll access and bank file settings
-      (who can change them), sales platforms (admins connect shops), the
+      (who can change them), sales platforms (admins connect shops; shown
+      to non-admins since decision 1325), the
       server's analytics and bank-file folders (Tohyee only reads them),
       restore (nothing is overwritten), sign-ins (flagged, not blocked),
       Google sign-in (uninvited accounts can't sign in), the farm calendar
@@ -12153,3 +12154,116 @@ confirmations, who-can-see-this notices) still stays visible, as below.
       only) reports payouts, deposits, suggestions and the clearing
       balance. No new write tool; a person reconciles on screen (or with
       the existing bank tools).
+
+### Bank coding proposals reviewed before anything posts (#544; decisions 1292-1299)
+
+Claude's choices from the issue, 3 Nov 2026, following Xero where it has an
+answer (nothing posts until a person OKs a suggestion), not yet reviewed.
+
+1292. **A proposal is stored, not posted.** `propose_bank_coding` (any key
+      at "Make drafts" or above, since it posts nothing) keeps coding for
+      up to 100 unreconciled lines on one bank account: contact, account,
+      GST code, the line's full amount, why, how sure (0 to 1), and what
+      supports the GST (#546's evidence kinds plus free text). Tenant
+      migration 0220 adds `bank_coding_proposals` and
+      `bank_coding_proposal_rows`; neither can be deleted. Rows that can't
+      be kept (line reconciled, on another account, already in an open
+      proposal, unknown contact, account or code) are listed with why.
+      Splits, transfers and matches aren't proposed; they stay on the
+      reconcile screen and in create_and_match and bulk_reconcile, which
+      are unchanged.
+1293. **Only a person reviews.** Editing, rejecting and approving are for
+      bookkeepers and above in Tohyee; an AI can't do any of them, even
+      with Full access, so an AI draft is never shown as reviewed. A row
+      shows "AI draft" until a person edits, approves or rejects it, and
+      who did. Saving an edit records that a person said the GST is right
+      (person_said); the AI's own coding is kept beside it.
+1294. **Approving runs through the durable batches (#547).** The chosen rows
+      that still hold become a batch of kind `bank_coding` ("Approved
+      proposals" on the Batches tab). Each row is posted in its own
+      transaction as cash coding posts it (BK22: spend or receive money for
+      the full amount, GST inclusive with a code, reconciled to the line),
+      with the key `<approval key>:<row>`, so a lost answer, a double click
+      or a resume posts nothing twice. The review shows totals by account
+      and by GST code (money in and out apart, rejected rows left out).
+1295. **Stale rows are flagged, never changed to fit.** Each row keeps the
+      line's date, amount and how many reconciliations it had when proposed.
+      If the line is now reconciled, excluded or deleted, its date or amount
+      changed, or it was reconciled and unreconciled since, the row is
+      marked stale with why and approving leaves it as it is. Each request
+      carries the row versions the person saw; a row changed since is
+      refused ("changed since you looked"). Everything is checked again
+      when each row is posted, so a change after approval makes that row
+      **Failed** instead of overwriting anything.
+1296. **GST and lock dates are checked at approval and at posting.** A row
+      dated in a locked period can't be approved. While GST registration
+      isn't confirmed, only rows with no GST can be; when registered, a row
+      with a GST code needs something supporting it (as #546 requires of
+      an AI); a person's edit counts. Not registered: no GST codes.
+1297. **States are plain and separate.** Proposed, Approved (waiting to
+      post), Posted, Failed (with why) and Rejected. Posted and Failed come
+      from the batch action itself, so they're always true. A failed row
+      can be edited, rejected or approved again. The review filters by
+      state or "Needs a look" (open rows with a problem) and exports the
+      rows shown as CSV (cells that would run as a spreadsheet formula are
+      quoted as text).
+1298. **No private data in logs.** The audit trail records counts and ids
+      for proposing, editing, rejecting and approving, not descriptions,
+      amounts, reasons or evidence; those stay in the proposal.
+1299. **Where it lives.** A Proposals tab on each bank account lists its
+      proposals (newest first) and opens one for review. Proposal and row
+      ids are stable and are what the MCP tools (`list_bank_coding_proposals`,
+      `get_bank_coding_proposal`) and the API use.
+
+### Screens made simpler (Jess's design brief, 3 Nov 2026; decisions 1321-1325)
+
+Items 6-10 of the review of Jess's 3 November 2026 brief ("simple purpose,
+simple architecture, simple design, simple implementation"), approved by
+her. Where she didn't say how, these follow Xero (decision 537) and are
+**not yet reviewed**.
+
+1321. **An invoice reads like Xero's.** The invoice number is the page
+      title, with its status badges. There is one primary button: Record
+      payment on an approved invoice (it opens the payment form and moves
+      focus to it), Approve on a draft. Everything else is in a "⋯" menu
+      (`MoreMenu`, the WAI-ARIA menu button pattern: arrows, Home/End,
+      Escape back to the button): Email invoice, Create credit note,
+      Download PDF (the one PDF action; the print page still works at its
+      address), Recode a line, Notes, files and history, and Void invoice…
+      (Edit and Delete draft for a draft). Void, Recode, Email and Notes
+      open their section below and move focus to it. The totals are a
+      right-hand column under the lines (subtotal excl. GST, GST, total,
+      paid, credited, amount due). The void warning stays in its section
+      and in the confirmation; the payments card only shows once there are
+      payments or the form is open.
+1322. **Home has no greeting.** The page is titled Home; the organisation
+      and year line and the farm Home's "All farms in…" sentence are gone,
+      and the farm Home's Cash this season card no longer repeats "In the
+      bank today" (the Money card shows cash in bank).
+1323. **Reports have one picker.** The 13 standard reports are one
+      "Report" list (grouped: financial statements, owed and owing, ledger,
+      budgets) instead of two rows of tabs; the address (?report=) still
+      picks the report. The report's dates and Export share one row. The
+      report's name shows once (in the picker); the card's own title stays
+      for screen readers, and the organisation, title and period block is
+      the printed heading only. The "GST return is under Tax" line is gone.
+1324. **All settings is the hub.** The Settings page is "Organisation
+      settings" (organisation, GST, logo, period locks). Modules is only on
+      its own page (links that said "Settings › Modules" go there). The LINZ
+      aerial photo key is set up on the farm Map (`?aerial=1`, linked from
+      All settings, the map's "Add aerial photos" and the key reminders);
+      the old address /operations/settings#aerial-photos goes there.
+1325. **Farm pages, Analytics, Sales.** Farm pages show their title, the
+      farm picker and the offline status on one row, which stays in view;
+      the "kept on this device" warning stays a notice below. The Map's
+      People on the map says "Only people who turned on sharing with this
+      farm" with the rest behind an (i). The Analytics report editor has
+      Save as its primary button, Undo and Redo as icon buttons (their
+      names and shortcuts unchanged), Theme, Discard changes and Delete in a
+      "⋯" menu, and the report's name and description typed where they're
+      shown. The Sales overview is gone: /operations/sales redirects to
+      Invoices, whose Awaiting payment tab shows what customers owe. Sales
+      platforms: the shop choice comes straight after the steps (no card
+      title or description), "Admins connect shops" shows only to people
+      who can't, and the "not tried with a real store" note is one line at
+      the Turn on step (and under connected shops).

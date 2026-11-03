@@ -99,7 +99,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         Analytics is off.{" "}
         {can("admin") ? (
           <>
-            Turn it on in <Link href="/operations/settings">Settings › Modules</Link>.
+            Turn it on in <Link href="/operations/modules">Modules</Link>.
           </>
         ) : (
           "An admin can turn it on in Settings."

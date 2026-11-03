@@ -20,6 +20,22 @@
   background: var(--page-background, var(--background, var(--surface-sunken)));
 }
 
+.farmPicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.hiddenLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .farmName {
   font-size: var(--text-lg);
   font-weight: 700;
@@ -29,7 +45,6 @@
   width: auto;
   max-width: 100%;
   min-height: 44px;
-  margin-left: 6px;
   font-weight: 600;
 }
 

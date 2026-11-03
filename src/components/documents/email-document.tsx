@@ -256,9 +256,9 @@ export function useEmailedStatus(organisationId: string, kind: EmailDocumentKind
   return (emails.data?.emails ?? []).some((email) => email.status === "sent");
 }
 
-export function EmailDocumentPanel(props: Props & { title?: string }) {
+export function EmailDocumentPanel({ defaultOpen = false, ...props }: Props & { title?: string; /** Starts with the email form open. */ defaultOpen?: boolean }) {
   const { can } = useWorkspace();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen && !props.unavailableReason);
   const [version, setVersion] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const noun = EMAIL_KIND_NOUNS[props.kind];
