@@ -92,8 +92,8 @@ function WebForms({ organisationId }: { organisationId: string }) {
           });
         }}
       >
-        <Field label="New form" hint="e.g. Contact page">
-          <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
+        <Field label="New form">
+          <input placeholder="Contact page" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
         </Field>
         <Field label="Thank-you page (optional)" hint="Where people go after sending; else a plain thank-you.">
           <input value={thankYouUrl} placeholder="https://" onChange={(event) => setThankYouUrl(event.target.value)} />

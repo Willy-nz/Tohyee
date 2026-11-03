@@ -10,7 +10,6 @@ export default function RdClaimPage() {
     <Page>
       <PageHeader
         title="R&D claim report"
-        description="The R&D tax credit for an income year, the supplementary return's figures, overhead rules and deadlines."
         actions={<Link href="/operations/rd/costs">Tagged R&amp;D costs</Link>}
       />
       <RequireOrganisation>{(organisationId) => <RdClaimView key={organisationId} organisationId={organisationId} />}</RequireOrganisation>

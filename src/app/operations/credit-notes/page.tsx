@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
 import { useSalespeople } from "@/components/salespeople";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { CreditNoteStatus, CreditNoteSummary } from "@/lib/credit-notes/service";
 import { formatDate } from "@/lib/format";
@@ -131,17 +130,9 @@ function CreditNoteList({ organisationId, filter }: { organisationId: string; fi
 }
 
 function CreditNotes({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Sales credit notes"
-      description="Latest entered first. Drafts post nothing; approving numbers the credit note and posts it. Remaining credit is the total less the credit applied to invoices and refunded."
-      actions={
-        can("bookkeeper") ? <Button onClick={() => router.push("/operations/credit-notes/new")}>New credit note</Button> : null
-      }
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Credit note status">
         {FILTERS.map((entry) => (
           <button
@@ -157,17 +148,15 @@ function CreditNotes({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <CreditNoteList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function CreditNotesPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader
-        title="Credit notes"
-        description="Credit for your customers, applied to their invoices or refunded, with GST worked out per line."
-      />
+      <PageHeader title="Credit notes" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? <Button onClick={() => router.push("/operations/credit-notes/new")}>New credit note</Button> : null}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <CreditNotes organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

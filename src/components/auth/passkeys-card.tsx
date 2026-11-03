@@ -154,8 +154,8 @@ export function PasskeysCard() {
       ) : null}
       {canAdd ? (
         <form className={styles.add} onSubmit={(event) => void add(event)}>
-          <Field label="Name" hint="So you can tell your passkeys apart, such as “Jess’s iPhone”.">
-            <input value={chosenName} maxLength={60} required onChange={(event) => setName(event.target.value)} />
+          <Field label="Name">
+            <input placeholder="My iPhone" value={chosenName} maxLength={60} required onChange={(event) => setName(event.target.value)} />
           </Field>
           {data.needsPassword ? (
             <Field label="Your password" hint="To check it's you before adding another way to sign in.">

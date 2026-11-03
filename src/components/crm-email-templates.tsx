@@ -60,7 +60,6 @@ export function EmailTemplatesPage({ organisationId }: { organisationId: string 
       {data.error ? <Notice tone="error">{data.error}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Card
-        title="Email templates"
         description="Starting points for sales emails. The person sending checks and can change the words before it goes; nothing is sent automatically."
         actions={
           editing === null ? (

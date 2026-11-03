@@ -15,7 +15,7 @@ function ForFarm() {
 export default function FarmingPage() {
   return (
     <Page>
-      <PageHeader title="Farms and paddocks" description="Your paddocks, their areas and boundaries, and where each came from." />
+      <PageHeader title="Farms and paddocks" />
       <Suspense fallback={null}>
         <ForFarm />
       </Suspense>

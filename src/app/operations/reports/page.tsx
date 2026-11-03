@@ -608,7 +608,7 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
 function StockReport({ organisationId }: { organisationId: string }) {
   const report = useApiData<Valuation>("/api/reports/inventory-valuation", { organisationId });
   return (
-    <Card title="Stock on hand" description="By item and location, at weighted average cost per location. Matches the inventory account to the cent.">
+    <Card title="Stock on hand">
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
@@ -796,7 +796,7 @@ function Reports({ organisationId }: { organisationId: string }) {
 export default function ReportsPage() {
   return (
     <Page>
-      <PageHeader title="Reports" description="Built straight from the ledger, in the organisation's base currency." />
+      <PageHeader title="Reports" />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <Reports key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

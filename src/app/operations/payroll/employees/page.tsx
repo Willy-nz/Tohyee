@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function PayrollEmployeesPage() {
   return (
     <Page>
-      <PageHeader
-        title="Payroll employees"
-        description="Employee payroll details, pay rates and where their pay is charged. Pay calculations, payments, payslips and payday filing are not supported yet."
-      />
+      <PageHeader title="Payroll employees" />
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>

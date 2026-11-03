@@ -213,10 +213,7 @@ export default function EmailSettingsPage() {
 
   return (
     <Page>
-      <PageHeader
-        title="Email"
-        description="The email account this server sends from: security alerts (two-step sign-in changes, backup codes used, locked accounts) and links to reset two-step sign-in when someone loses their phone."
-      />
+      <PageHeader title="Email" />
       {settings.error ? <Notice tone="error">{settings.error}</Notice> : null}
       {email ? (
         <Card

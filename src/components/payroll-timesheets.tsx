@@ -162,7 +162,7 @@ export function TimesheetsPage({ organisationId }: { organisationId: string }) {
 
 function ToApprove({ items, onOpen }: { items: TimesheetSummary[]; onOpen: (item: TimesheetSummary) => void }) {
   return (
-    <Card title="To approve" description="Submitted timesheets you can approve or reject.">
+    <Card title="To approve">
       <div className={ui.tableWrap}>
         <table className={ui.stackOnPhone}>
           <thead><tr><th>Employee</th><th>Week starting</th><th className={ui.num}>Hours</th><th></th></tr></thead>

@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function JobCalendarPage() {
   return (
     <Page>
-      <PageHeader title="Job calendar" description="Everyone's visits by day, or one person's." />
+      <PageHeader title="Job calendar" />
       <RequireOrganisation>{(organisationId) => <JobCalendar key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

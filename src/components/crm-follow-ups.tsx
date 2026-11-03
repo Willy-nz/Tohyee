@@ -159,7 +159,6 @@ export function FollowUpsPage({ organisationId }: { organisationId: string }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {ran ? <Notice tone="success">{ran}</Notice> : null}
       <Card
-        title="Follow-up rules"
         description="Each rule makes a task for the right person. Rules are checked every 15 minutes; a lead or a stage change only counts from when its rule was added. Reminders stay in Tohyee: nothing is emailed."
         actions={
           editing === null ? (
@@ -222,7 +221,7 @@ export function FollowUpsPage({ organisationId }: { organisationId: string }) {
           ),
         )}
       </Card>
-      <Card title="What the rules did" description="The latest 100 runs, newest first.">
+      <Card title="What the rules did">
         {data.data && runs.length === 0 ? <Empty>Nothing yet.</Empty> : null}
         {runs.length > 0 ? (
           <table className={ui.table}>

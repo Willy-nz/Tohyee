@@ -579,7 +579,7 @@ function BankRules({ organisationId }: { organisationId: string }) {
 export default function BankRulesPage() {
   return (
     <Page>
-      <PageHeader title="Bank rules" description="Conditions to look for in statement lines, and the bank transaction to suggest." />
+      <PageHeader title="Bank rules" />
       <RequireOrganisation>{(organisationId) => <BankRules key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

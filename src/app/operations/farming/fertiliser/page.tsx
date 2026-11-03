@@ -16,7 +16,7 @@ function ForPlan() {
 export default function FertiliserPage() {
   return (
     <Page>
-      <PageHeader title="Fertiliser plans" description="Plan what goes on each paddock, link the bills that bought and spread it, and compare the plan with what was applied." />
+      <PageHeader title="Fertiliser plans" />
       <Suspense fallback={null}>
         <ForPlan />
       </Suspense>

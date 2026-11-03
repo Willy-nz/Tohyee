@@ -27,7 +27,7 @@ function NewFixedAsset({ organisationId }: { organisationId: string }) {
 export default function NewFixedAssetPage() {
   return (
     <Page>
-      <PageHeader title="New fixed asset" description="Registering records the asset's cost; it posts nothing, since the cost is already in the ledger from its bill or journal." />
+      <PageHeader title="New fixed asset" />
       <Suspense>
         <RequireOrganisation>{(organisationId) => <NewFixedAsset organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

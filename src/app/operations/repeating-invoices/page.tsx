@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { RepeatingStatusBadge } from "@/components/repeating/repeating-editor";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { describeSchedule } from "@/lib/repeating/schedule";
 import type { RepeatingInvoiceSummary, RepeatingStatus } from "@/lib/repeating/service";
@@ -78,26 +77,9 @@ function RepeatingList({ organisationId, filter }: { organisationId: string; fil
 }
 
 function RepeatingInvoices({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Repeating invoices"
-      description="Each template makes an invoice on every scheduled date, once, by the hourly job. Missed dates are caught up the next time it runs."
-      actions={
-        can("bookkeeper") ? (
-          <>
-            <Button variant="secondary" onClick={() => router.push("/operations/repeating-invoices/price-changes")}>
-              Change prices
-            </Button>
-            <Button onClick={() => router.push("/operations/repeating-invoices/new")}>New repeating invoice</Button>
-          </>
-        ) : (
-          <Link href="/operations/repeating-invoices/price-changes">Price changes</Link>
-        )
-      }
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Repeating invoice status">
         {FILTERS.map((entry) => (
           <button
@@ -113,14 +95,24 @@ function RepeatingInvoices({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <RepeatingList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function RepeatingInvoicesPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader title="Repeating invoices" description="Invoices made for you every so many weeks or months." />
+      <PageHeader title="Repeating invoices" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? (
+          <>
+            <Button variant="secondary" onClick={() => router.push("/operations/repeating-invoices/price-changes")}>
+              Change prices
+            </Button>
+            <Button onClick={() => router.push("/operations/repeating-invoices/new")}>New repeating invoice</Button>
+          </>
+        ) : (
+          <Link href="/operations/repeating-invoices/price-changes">Price changes</Link>
+        )}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <RepeatingInvoices organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

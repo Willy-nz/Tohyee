@@ -610,8 +610,8 @@ function RuleForm({
             ))}
           </select>
         </Field>
-        <Field label="How it was worked out" hint="e.g. lab 30 m² of 200 m²">
-          <input value={draft.basisDetail} maxLength={500} required onChange={(event) => set({ basisDetail: event.target.value })} />
+        <Field label="How it was worked out">
+          <input placeholder="lab 30 m² of 200 m²" value={draft.basisDetail} maxLength={500} required onChange={(event) => set({ basisDetail: event.target.value })} />
         </Field>
         <Field label={rule ? "Change from" : "From"}>
           <DateInput value={draft.effectiveFrom} required onChange={(event) => set({ effectiveFrom: event.target.value })} />

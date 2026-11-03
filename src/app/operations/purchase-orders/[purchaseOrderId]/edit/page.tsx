@@ -42,7 +42,7 @@ export default function EditPurchaseOrderPage() {
   const { purchaseOrderId } = useParams<{ purchaseOrderId: string }>();
   return (
     <Page>
-      <PageHeader title="Edit draft purchase order" description="Drafts can be changed freely until they're approved." />
+      <PageHeader title="Edit draft purchase order" />
       <RequireOrganisation>{(organisationId) => <EditPurchaseOrder organisationId={organisationId} purchaseOrderId={purchaseOrderId} />}</RequireOrganisation>
     </Page>
   );

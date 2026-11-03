@@ -24,7 +24,7 @@ function NewExpenseClaim({ organisationId }: { organisationId: string }) {
 export default function NewExpenseClaimPage() {
   return (
     <Page>
-      <PageHeader title="New expense claim" description="Enter each receipt as paid, including GST. Save it as a draft, attach the receipts, then submit it." />
+      <PageHeader title="New expense claim" />
       <RequireOrganisation>{(organisationId) => <NewExpenseClaim organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

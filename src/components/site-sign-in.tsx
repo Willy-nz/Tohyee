@@ -135,7 +135,8 @@ export function SiteSignIn({ organisationId, token }: { organisationId: string; 
   return (
     <div style={{ paddingTop: 16, minHeight: "100vh", background: "var(--background, transparent)" }}>
     <Page>
-      <PageHeader title={site.farmName} description="Read this before you start, then sign in. Sign out when you leave." />
+      <PageHeader title={site.farmName} />
+      <Notice>Sign out when you leave.</Notice>
       {state.error ? <Notice tone="warning">Couldn&apos;t reach the farm&apos;s records ({state.error}). This is the copy saved on this phone {state.cachedAt ? formatDateTime(state.cachedAt) : ""}; it may be out of date. You can&apos;t sign in or out until there&apos;s a connection.</Notice> : null}
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Card title="In an emergency">

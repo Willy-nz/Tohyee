@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { SalesOrderStatusBadge } from "@/components/sales-orders/sales-order-editor";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate } from "@/lib/format";
@@ -100,15 +100,9 @@ function SalesOrderList({ organisationId, filter }: { organisationId: string; fi
 }
 
 function SalesOrders({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Sales orders"
-      description="Latest entered first. Sales orders post nothing. Approving numbers an order; invoicing it makes a draft invoice for what's left to invoice."
-      actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/sales-orders/new")}>New sales order</Button> : null}
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Sales order status">
         {FILTERS.map((entry) => (
           <button
@@ -124,14 +118,15 @@ function SalesOrders({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <SalesOrderList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function SalesOrdersPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader title="Sales orders" description="What customers have ordered, and how much of it has been invoiced." />
+      <PageHeader title="Sales orders" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? <Button onClick={() => router.push("/operations/sales-orders/new")}>New sales order</Button> : null}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <SalesOrders organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

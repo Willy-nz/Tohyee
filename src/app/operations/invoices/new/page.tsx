@@ -27,10 +27,7 @@ function NewInvoice({ organisationId }: { organisationId: string }) {
 export default function NewInvoicePage() {
   return (
     <Page>
-      <PageHeader
-        title="New invoice"
-        description="Save it as a draft first. Nothing is posted to the ledger until you approve it."
-      />
+      <PageHeader title="New invoice" />
       <RequireOrganisation>{(organisationId) => <NewInvoice organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

@@ -42,10 +42,8 @@ export default function EditRepeatingInvoicePage() {
   const { repeatingInvoiceId } = useParams<{ repeatingInvoiceId: string }>();
   return (
     <Page>
-      <PageHeader
-        title="Change repeating invoice"
-        description="Invoices already made keep what they had. Changing how often or the first date starts the new schedule from today."
-      />
+      <PageHeader title="Change repeating invoice" />
+      <Notice tone="warning">Changing how often or the first date starts the new schedule from today.</Notice>
       <RequireOrganisation>{(organisationId) => <EditRepeating organisationId={organisationId} id={repeatingInvoiceId} />}</RequireOrganisation>
     </Page>
   );

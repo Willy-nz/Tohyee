@@ -1,6 +1,5 @@
 "use client";
 
-import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -262,7 +261,7 @@ function PeriodClose({ organisationId }: { organisationId: string }) {
         />
       ) : null}
       {data && data.history.length > 0 ? (
-        <Card title="History" description="Every close and reopen, from the audit log.">
+        <Card title="History">
           <div className={ui.tableWrap}>
             <table className={ui.table}>
               <thead>
@@ -301,10 +300,7 @@ function PeriodClose({ organisationId }: { organisationId: string }) {
 export default function PeriodClosePage() {
   return (
     <Page>
-      <PageHeader
-        title="Period close"
-        description={<>Close each month once its checks pass.{" "}<InfoTip label="Period close">It works like NetSuite&apos;s period close checklist. There are no closing journals: a year&apos;s profit moves into retained earnings on the balance sheet on the first day of the next year.</InfoTip></>}
-      />
+      <PageHeader title="Period close" />
       <RequireOrganisation>{(organisationId) => <PeriodClose key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

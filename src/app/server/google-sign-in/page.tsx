@@ -118,10 +118,8 @@ export default function GoogleSignInPage() {
 
   return (
     <Page>
-      <PageHeader
-        title="Sign in with Google"
-        description="Invited people can sign in with their Google account instead of a password and authenticator app. A Google account that wasn't invited can never make a login."
-      />
+      <PageHeader title="Sign in with Google" />
+      <Notice>A Google account that wasn&apos;t invited can never sign in.</Notice>
       {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
       {settings ? (
         <>

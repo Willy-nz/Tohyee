@@ -184,7 +184,6 @@ export function SalespeopleManager({ organisationId }: { organisationId: string 
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
       <Card
-        title="Salespeople"
         description="Put on invoices and credit notes, with a default for each customer. They never change an amount or GST. Archived, never deleted."
       >
         {setup.salespeople.length === 0 ? <Empty>No salespeople yet.</Empty> : null}

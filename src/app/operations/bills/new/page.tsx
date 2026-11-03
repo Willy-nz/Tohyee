@@ -43,10 +43,7 @@ function NewBillFromQuery() {
 export default function NewBillPage() {
   return (
     <Page>
-      <PageHeader
-        title="New bill"
-        description="Enter a supplier's invoice and save it as a draft first. Nothing is posted to the ledger until you approve it."
-      />
+      <PageHeader title="New bill" />
       <Suspense fallback={null}>
         <NewBillFromQuery />
       </Suspense>

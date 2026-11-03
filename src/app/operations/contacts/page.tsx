@@ -312,8 +312,8 @@ function ContactForm({
             maxLength={50}
           />
         </Field>
-        <Field label="GST number" hint="8 or 9 digits, like 123-456-789.">
-          <input
+        <Field label="GST number">
+          <input placeholder="123-456-789"
             value={draft.gstNumber}
             onChange={(event) => setDraft({ ...draft, gstNumber: event.target.value })}
             maxLength={20}
@@ -752,10 +752,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
 export default function ContactsPage() {
   return (
     <Page>
-      <PageHeader
-        title="Contacts"
-        description="Your customers and suppliers. Contacts you no longer deal with can be archived; they're kept, never deleted."
-      />
+      <PageHeader title="Contacts" />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <Contacts key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

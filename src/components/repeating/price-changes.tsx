@@ -211,8 +211,8 @@ export function RepeatingPriceChanges({ organisationId }: { organisationId: stri
                   </select>
                 </Field>
                 {method === "percent" ? (
-                  <Field label="Minimum increase" hint="Optional">
-                    <input inputMode="decimal" value={minimumIncrease} onChange={(event) => (setMinimumIncrease(event.target.value), changed())} />
+                  <Field label="Minimum increase">
+                    <input placeholder="Optional" inputMode="decimal" value={minimumIncrease} onChange={(event) => (setMinimumIncrease(event.target.value), changed())} />
                   </Field>
                 ) : null}
                 <Field label="Rounding">
@@ -227,8 +227,8 @@ export function RepeatingPriceChanges({ organisationId }: { organisationId: stri
                 <Field label="New prices from" hint="Invoices dated on or after this use them">
                   <DateInput value={effectiveDate} onChange={(event) => (setEffectiveDate(event.target.value), changed())} />
                 </Field>
-                <Field label="Note" hint="Optional, e.g. 2027 price review">
-                  <input value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} />
+                <Field label="Note">
+                  <input placeholder="2027 price review" value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} />
                 </Field>
               </div>
               <div className={ui.actions}>

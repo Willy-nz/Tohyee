@@ -173,7 +173,7 @@ function RepeatingBillView({ organisationId, id }: { organisationId: string; id:
           }}
         />
       ) : null}
-      <Card title="Bills made" description="One per scheduled date, newest first. A date is never made twice.">
+      <Card title="Bills made">
         {template.runs.length === 0 ? (
           <Empty>No bills made yet.</Empty>
         ) : (

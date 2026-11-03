@@ -119,10 +119,7 @@ export default function OrganisationsPage() {
 
   return (
     <Page>
-      <PageHeader
-        title="Organisations"
-        description="Each organisation has its own PostgreSQL database, so it can be backed up, restored or moved on its own."
-      />
+      <PageHeader title="Organisations" />
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       <Card title="New organisation" description="Creates the database and a starting NZ chart of accounts.">
         <form onSubmit={(event) => void create(event)} style={{ display: "grid", gap: 12 }}>

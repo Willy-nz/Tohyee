@@ -345,8 +345,8 @@ export function BankFileSettingsView({ organisationId, canEdit }: { organisation
                   ))}
                 </select>
               </Field>
-              <Field label="Account number" hint="Like 12-3456-0123456-00.">
-                <input
+              <Field label="Account number">
+                <input placeholder="12-3456-0123456-00"
                   disabled={!canEdit || !draft.format}
                   inputMode="numeric"
                   value={draft.accountNumber}

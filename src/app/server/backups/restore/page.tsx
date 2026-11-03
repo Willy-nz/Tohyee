@@ -138,9 +138,9 @@ export default function RestoreWizardPage() {
     <Page>
       <PageHeader
         title="Restore on this computer"
-        description="Bring an organisation, or the server's people, back from a backup. It always makes something new: nothing on this server is overwritten or deleted, and the copies never synchronise with the original."
         actions={<Link href="/server/backups">Back to Backups</Link>}
       />
+      <Notice>A restore always makes something new: nothing on this server is overwritten or deleted.</Notice>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <Card title="Replacing a lost computer?">

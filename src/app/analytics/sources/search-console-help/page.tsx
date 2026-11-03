@@ -16,10 +16,7 @@ const list = { paddingLeft: 20, display: "grid", gap: 8, margin: 0 };
 export default function SearchConsoleHelpPage() {
   return (
     <Page>
-      <PageHeader
-        title="Adding your website to Google Search Console"
-        description="Do this once in Google, then come back and connect Search Console in Data sources."
-      />
+      <PageHeader title="Adding your website to Google Search Console" />
       <div style={{ display: "grid", gap: 16, maxWidth: 820 }}>
         <Card title="1. Add your website">
           <ol style={list}>

@@ -27,7 +27,7 @@ function NewRepeatingBill({ organisationId }: { organisationId: string }) {
 export default function NewRepeatingBillPage() {
   return (
     <Page>
-      <PageHeader title="New repeating bill" description="Saving it posts nothing. Bills are made on their dates by the hourly job." />
+      <PageHeader title="New repeating bill" />
       <RequireOrganisation>{(organisationId) => <NewRepeatingBill organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

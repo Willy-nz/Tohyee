@@ -369,7 +369,7 @@ export function ConnectionCard({
 
   if (setup && isAdmin && connected) {
     return (
-      <Card title={`${shop}: ${connection.storeName ?? connection.storeDomain}`} description="Set up posting to the accounts, one step at a time.">
+      <Card title={`${shop}: ${connection.storeName ?? connection.storeDomain}`}>
         <StoreSetup
           organisationId={organisationId}
           connection={connection}
@@ -525,7 +525,6 @@ export function SalesPlatformsSummary({ organisationId }: { organisationId: stri
     return (
       <Card
         title="Selling on Shopify?"
-        description="Connect your Shopify store to bring its customers in as companies and its products in as items."
         actions={<Link href={SALES_PLATFORMS_HREF}>Connect Shopify</Link>}
       >
         <p className={ui.muted}>This is set up under Accounting settings, in Sales platforms. It hasn&apos;t been tried with a real Shopify store yet.</p>
@@ -533,7 +532,7 @@ export function SalesPlatformsSummary({ organisationId }: { organisationId: stri
     );
   }
   return (
-    <Card title="Sales platforms" description="Stores bringing customers and products into Tohyee." actions={<Link href={SALES_PLATFORMS_HREF}>Sales platforms</Link>}>
+    <Card title="Sales platforms" actions={<Link href={SALES_PLATFORMS_HREF}>Sales platforms</Link>}>
       <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
         {summary.connections.map((connection) => {
           const status = STATUS_BADGES[connection.status];

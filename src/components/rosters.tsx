@@ -545,7 +545,7 @@ export function MyShifts({ organisationId }: { organisationId: string }) {
   const own = useApiData<{ unavailability: Unavailability[]; linked: boolean }>("/api/payroll/unavailability", { organisationId });
   return (
     <>
-      <Card title="Coming up" description="Your published shifts for the next four weeks.">
+      <Card title="Coming up">
         {shifts.error ? <Notice tone="error">{shifts.error}</Notice> : null}
         {shifts.data && shifts.data.shifts.length === 0 ? <Empty>No published shifts.</Empty> : null}
         {shifts.data && shifts.data.shifts.length > 0 ? (

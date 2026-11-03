@@ -153,7 +153,7 @@ function EventBrowser({ organisationId, farm, allFarms, cameras, access }: { org
   const open = events.find((event) => event.id === selected) ?? null;
   return (
     <>
-      <Card title="Events" description="Each photo or clip a camera sent. Newest first.">
+      <Card title="Events">
         <div className={styles.filters}>
           <Field label="Camera">
             <select value={cameraId} onChange={(event) => setCameraId(event.target.value)}>
@@ -332,8 +332,8 @@ function EventViewer({ organisationId, event, access, onClose, onChanged }: { or
         {error ? <Notice tone="error">{error}</Notice> : null}
         {keeping ? (
           <div className={styles.viewer}>
-            <Field label="Why it's kept" hint="For example: ute at the gate, not ours.">
-              <textarea value={note} maxLength={1000} rows={2} onChange={(entry) => setNote(entry.target.value)} />
+            <Field label="Why it's kept">
+              <textarea placeholder="Ute at the gate, not ours" value={note} maxLength={1000} rows={2} onChange={(entry) => setNote(entry.target.value)} />
             </Field>
             <div className={styles.row}>
               <Button disabled={busy} onClick={() => void keep()}>
@@ -542,8 +542,8 @@ function CameraForm({ organisationId, farm, camera, cameras, onDone, onCancel }:
   return (
     <Card title={camera ? `Change ${camera.name}` : `Add a camera to ${farm.name}`}>
       <div className={styles.viewer}>
-        <Field label="Name" hint="As you call it, e.g. Front gate.">
-          <input value={form.name} maxLength={60} onChange={set("name")} />
+        <Field label="Name">
+          <input placeholder="Front gate" value={form.name} maxLength={60} onChange={set("name")} />
         </Field>
         <Field label="Model">
           <input value={form.model} maxLength={60} onChange={set("model")} />

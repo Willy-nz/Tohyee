@@ -37,11 +37,7 @@ const quarterLabel = (start: string, end: string) => `${formatDate(start)} – $
 function PipelineCard({ data }: { data: SalesHome }) {
   const { pipeline } = data;
   return (
-    <Card
-      title="Pipeline"
-      description={`Open opportunities by stage, excluding GST${data.scoped ? ": yours and your team's" : ""}.`}
-      actions={<Link href="/crm/pipeline">Open the pipeline</Link>}
-    >
+    <Card title="Pipeline" href="/crm/pipeline" description={`Excluding GST${data.scoped ? ": yours and your team's" : ""}.`}>
       {pipeline.count === 0 ? (
         <Empty>No open opportunities.</Empty>
       ) : (
@@ -76,7 +72,6 @@ function PipelineCard({ data }: { data: SalesHome }) {
           </table>
         </div>
       )}
-      <p className={ui.muted}><Link href="/crm/dashboard">Sales dashboard</Link>: stage ageing, with the opportunities behind each figure.</p>
     </Card>
   );
 }
@@ -84,7 +79,7 @@ function PipelineCard({ data }: { data: SalesHome }) {
 function ConversionCard({ data }: { data: SalesHome }) {
   const rate = (value: string | null) => (value === null ? "–" : `${value}%`);
   return (
-    <Card title="Conversion" description="Leads added that have been converted, and opportunities won of those closed, by quarter of the financial year." actions={<Link href="/crm/dashboard">Sales dashboard</Link>}>
+    <Card title="Conversion" href="/crm/dashboard">
       <div className={ui.tableWrap}>
         <table className={ui.table}>
           <thead>
@@ -145,7 +140,7 @@ function NextActionsCard({ data }: { data: SalesHome }) {
   const { tasks, pastClose, noNextStep } = data.nextActions;
   const nothing = tasks.count + pastClose.count + noNextStep.count === 0;
   return (
-    <Card title="Next actions" description="Yours: tasks due, opportunities past their close date, and open ones with nothing to do next.">
+    <Card title="Next actions">
       {nothing ? <Empty>You&apos;re up to date.</Empty> : null}
       {tasks.count ? (
         <section className={styles.group} aria-label="Tasks due">
