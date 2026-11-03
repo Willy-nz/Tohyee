@@ -246,6 +246,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "profit_and_loss",
         "trial_balance",
         "budget_vs_actual",
+        "list_custom_reports",
+        "run_custom_report",
         "list_draft_journals",
         "get_draft_journal",
         "list_bill_inbox",

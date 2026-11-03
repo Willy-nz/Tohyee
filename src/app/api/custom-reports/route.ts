@@ -18,6 +18,7 @@ export const POST = route(async (request) => {
       base: body.base,
       periodEnd: body.periodEnd,
       layout: body.layout,
+      start: body.start,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

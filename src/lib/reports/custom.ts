@@ -31,6 +31,7 @@ import {
   type TransactionCustomReportFigures,
   type TransactionReportLayout,
   isTransactionReportBase,
+  standardLayout,
   templateLayout,
 } from "@/lib/reports/custom-layout";
 import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth, naturalAmount, type TrackingFilter } from "@/lib/reports/financial";
@@ -126,6 +127,20 @@ function parseRow(base: FinancialReportBase, input: unknown, ids: Set<string>): 
   if (ids.has(id)) throw new ValidationError(`Two rows or blocks share the id ${id}.`);
   ids.add(id);
   const label = text(raw.label, "A row's name", LIMITS.labelLength, { required: true });
+  const row = parseRowBody(base, raw, id, label);
+  // What any row can carry (decision 1360): hidden, a page break after it, a note.
+  const note = text(raw.note, `The note on ${label}`, LIMITS.rowNoteLength, { required: false });
+  return {
+    ...row,
+    ...(bool(raw.hidden, "hidden") ? { hidden: true } : {}),
+    ...(bool(raw.pageBreakAfter, "pageBreakAfter") ? { pageBreakAfter: true } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+const NUMBER = /^-?(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
+
+function parseRowBody(base: FinancialReportBase, raw: Record<string, unknown>, id: string, label: string): ReportRow {
   switch (raw.kind) {
     case "heading":
       return { id, kind: "heading", label };
@@ -138,16 +153,37 @@ function parseRow(base: FinancialReportBase, input: unknown, ids: Set<string>): 
         text(code, `An account code in ${label}`, 20, { required: true }),
       );
       if (types.length === 0 && codes.length === 0) throw new ValidationError(`Choose the accounts or account types for ${label}.`);
+      const except = list(raw.exceptCodes, `The accounts left out of ${label}`, LIMITS.accountCodesPerGroup).map((code) =>
+        text(code, `An account code left out of ${label}`, 20, { required: true }),
+      );
       return {
         id,
         kind: "group",
         label,
         accountTypes: [...new Set(types as AccountType[])],
         accountCodes: [...new Set(codes)],
+        ...(except.length > 0 && codes.length === 0 ? { exceptCodes: [...new Set(except)] } : {}),
         showAccounts: bool(raw.showAccounts, "showAccounts"),
       };
     }
     case "formula": {
+      const operation = raw.operation ?? "sum";
+      if (operation !== "sum") {
+        if (operation !== "multiply" && operation !== "divide" && operation !== "percent") {
+          throw new ValidationError(`${label} must add up rows, multiply, divide or be a % of a row.`);
+        }
+        const rowRef = (value: unknown, what: string) => {
+          if (typeof value !== "string" || !ID_PATTERN.test(value)) throw new ValidationError(`Choose ${what} for ${label}.`);
+          return value;
+        };
+        const a = rowRef(raw.a, "the first row");
+        if (operation !== "percent" && raw.by != null && raw.by !== "") {
+          const by = String(raw.by).trim();
+          if (!NUMBER.test(by)) throw new ValidationError(`${label}: ${String(raw.by)} isn't a number.`);
+          return { id, kind: "formula", label, terms: [], operation, a, by };
+        }
+        return { id, kind: "formula", label, terms: [], operation, a, b: rowRef(raw.b, operation === "percent" ? "the row it's a % of" : "the second row or a number") };
+      }
       const terms = list(raw.terms, `The rows ${label} adds up`, LIMITS.termsPerFormula).map((term): FormulaTerm => {
         const t = record(term, `A part of ${label}`);
         if (typeof t.rowId !== "string" || !ID_PATTERN.test(t.rowId)) throw new ValidationError(`A part of ${label} has no row.`);
@@ -167,15 +203,25 @@ function parseRow(base: FinancialReportBase, input: unknown, ids: Set<string>): 
 }
 
 /** Formulas use rows of their own table, never themselves, directly or through other formulas (CR8). */
+/** The rows a formula uses. */
+export function formulaUses(row: Extract<ReportRow, { kind: "formula" }>): string[] {
+  if ((row.operation ?? "sum") === "sum") return row.terms.map((term) => term.rowId);
+  return [row.a!, ...(row.b ? [row.b] : [])];
+}
+
 function checkFormulas(rows: ReportRow[]): void {
   const byId = new Map(rows.map((row) => [row.id, row]));
   for (const row of rows) {
     if (row.kind !== "formula") continue;
-    for (const term of row.terms) {
-      if (term.rowId === row.id) throw new ValidationError(`${row.label} can't use itself.`);
-      const used = byId.get(term.rowId);
+    for (const usedId of formulaUses(row)) {
+      if (usedId === row.id) throw new ValidationError(`${row.label} can't use itself.`);
+      const used = byId.get(usedId);
       if (!used) throw new ValidationError(`${row.label} uses a row that isn't in its table.`);
       if (used.kind === "heading") throw new ValidationError(`${row.label} can't use the heading ${used.label}.`);
+      // A % is a % (CR17): adding it to money, or taking a % of it, would mix units.
+      if (used.kind === "formula" && used.operation === "percent") {
+        throw new ValidationError(`${row.label} can't use ${used.label}: it's a %.`);
+      }
     }
   }
   const state = new Map<string, "visiting" | "done">();
@@ -183,7 +229,7 @@ function checkFormulas(rows: ReportRow[]): void {
     if (row.kind !== "formula" || state.get(row.id) === "done") return;
     if (state.get(row.id) === "visiting") throw new ValidationError(`${row.label} uses itself through another formula.`);
     state.set(row.id, "visiting");
-    for (const term of row.terms) visit(byId.get(term.rowId)!);
+    for (const usedId of formulaUses(row)) visit(byId.get(usedId)!);
     state.set(row.id, "done");
   };
   rows.forEach(visit);
@@ -210,7 +256,9 @@ export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: u
     checkFormulas(rows);
     return { id, kind: "table", title: text(block.title, "A table's title", LIMITS.labelLength, { required: false }), rows };
   });
-  const codes = new Set(blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? row.accountCodes : [])) : [])));
+  const codes = new Set(
+    blocks.flatMap((block) => (block.kind === "table" ? block.rows.flatMap((row) => (row.kind === "group" ? [...row.accountCodes, ...(row.exceptCodes ?? [])] : [])) : [])),
+  );
   if (codes.size > 0) {
     const found = await tx.query<{ code: string }>("select code from accounts where code = any($1::text[])", [[...codes]]);
     const known = new Set(found.rows.map((row) => row.code));
@@ -242,18 +290,41 @@ const SCOPE: Record<FinancialReportBase, AccountClass[]> = {
 };
 
 function groupIncludes(row: Extract<ReportRow, { kind: "group" }>, account: Account): boolean {
-  return row.accountCodes.length > 0 ? row.accountCodes.includes(account.code) : row.accountTypes.includes(account.accountType);
+  if (row.accountCodes.length > 0) return row.accountCodes.includes(account.code);
+  return row.accountTypes.includes(account.accountType) && !(row.exceptCodes ?? []).includes(account.code);
 }
 
-/** Works out a layout's figures (CR1-CR6, CR9). */
-export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, layout: CustomReportLayout): Promise<CustomReportFigures> {
+/**
+ * Run instead of the layout's own columns and filter (decision 1359): the
+ * standard report's toolbar dates, comparisons and tracking filter, when the
+ * standard profit and loss or balance sheet shows its default layout.
+ */
+export type CustomReportRunOptions = {
+  /** Period and year to date columns with their dates, in order. */
+  columns?: ReportColumn[];
+  /** Replaces the layout's filter; null for none. */
+  filter?: { categoryId: string; valueIds: string[]; unassigned?: boolean; label: string } | null;
+};
+
+/** Works out a layout's figures (CR1-CR6, CR9, CR16-CR18). */
+export async function computeCustomReport(
+  tx: OrgTx,
+  base: FinancialReportBase,
+  layout: CustomReportLayout,
+  options: CustomReportRunOptions = {},
+): Promise<CustomReportFigures> {
   const scale = currencyMinorUnits(tx.baseCurrency);
   const money = (value: Decimal) => toFixedString(value, scale);
   const yearEndMonth = await financialYearEndMonth(tx);
-  const setting = layout.columns;
+  const setting: ReportColumnsSetting = options.columns
+    ? { ...layout.columns, difference: false, percent: false, yearToDate: false, budgetId: undefined, budgetDifference: false }
+    : layout.columns;
   let trackingFilter: TrackingFilter | null = null;
   let filterLabel: string | null = null;
-  if (layout.filter && base === "profit_and_loss") {
+  if (options.filter !== undefined) {
+    trackingFilter = options.filter;
+    filterLabel = options.filter?.label ?? null;
+  } else if (layout.filter && base === "profit_and_loss") {
     trackingFilter = { categoryId: layout.filter.categoryId, valueIds: await valueWithDescendants(tx, layout.filter.valueId) };
     const label = await tx.query<{ category: string; value: string }>(
       "select c.name as category, v.name as value from tracking_values v join tracking_categories c on c.id = v.category_id where v.id = $1",
@@ -263,7 +334,7 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
   }
 
   // The columns that hold amounts: each period, and the year to date.
-  const amountColumns: ReportColumn[] = periodColumns(base, setting);
+  const amountColumns: ReportColumn[] = options.columns ? options.columns.map((column) => ({ ...column })) : periodColumns(base, setting);
   if (setting.yearToDate && base === "profit_and_loss") {
     const from = financialYearStart(setting.periodEnd, yearEndMonth);
     amountColumns.push({ key: "ytd", kind: "year_to_date", label: "Year to date", from, to: setting.periodEnd });
@@ -314,27 +385,33 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
     for (const row of totals) byAccount.set(row.id, naturalAmount(row));
     amounts.set(column.key, byAccount);
     if (base === "balance_sheet") {
-      const current = earningsOf(await accountTotals(tx, financialYearStart(column.to!, yearEndMonth), column.to!));
+      const current = earningsOf(await accountTotals(tx, financialYearStart(column.to!, yearEndMonth), column.to!, trackingFilter));
       earnings.set(column.key, { current, previous: sub(earningsOf(totals), current) });
     }
   }
   const amountOf = (accountId: string, columnKey: string) => amounts.get(columnKey)?.get(accountId) ?? ZERO_DECIMAL;
   const hasAmount = (accountId: string) => amountColumns.some((column) => !isZero(amountOf(accountId, column.key)));
 
-  const withDerived = (values: Map<string, Decimal>): ReportValues => {
+  type Values = Map<string, Decimal | null>;
+  type Format = "money" | "number" | "percent";
+  const shown = (value: Decimal | null, format: Format) => (value == null ? null : format === "percent" ? toFixedString(value, 1) : money(value));
+  const withDerived = (values: Values, format: Format = "money"): ReportValues => {
     const out: ReportValues = {};
-    for (const column of amountColumns) out[column.key] = money(values.get(column.key) ?? ZERO_DECIMAL);
+    for (const column of amountColumns) out[column.key] = shown(values.get(column.key) ?? (format === "money" ? ZERO_DECIMAL : null), format);
     if (setting.difference) {
-      const first = values.get("p0") ?? ZERO_DECIMAL;
-      const second = values.get("p1") ?? ZERO_DECIMAL;
-      const difference = sub(first, second);
-      out.diff = money(difference);
+      const first = values.get("p0") ?? null;
+      const second = values.get("p1") ?? null;
+      const difference = first == null || second == null ? null : sub(first, second);
+      out.diff = shown(difference, format);
       if (setting.percent) {
-        out.pct = isZero(second) ? null : toFixedString(divide(mul(difference, dec("100")), abs(second), 1), 1);
+        // A change in a % is in points, so it has no % change of its own.
+        out.pct = difference == null || second == null || isZero(second) || format === "percent" ? null : toFixedString(divide(mul(difference, dec("100")), abs(second), 1), 1);
       }
     }
     if (budgetAmounts && setting.budgetDifference) {
-      out.bdiff = money(sub(values.get("p0") ?? ZERO_DECIMAL, values.get("bud") ?? ZERO_DECIMAL));
+      const actual = values.get("p0") ?? null;
+      const budget = values.get("bud") ?? null;
+      out.bdiff = actual == null || budget == null ? null : shown(sub(actual, budget), format);
     }
     return out;
   };
@@ -345,21 +422,36 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
   const blocks: ComputedBlock[] = layout.blocks.map((block): ComputedBlock => {
     if (block.kind === "text") return { id: block.id, kind: "text", text: block.text };
     const rowsById = new Map(block.rows.map((row) => [row.id, row]));
-    const memo = new Map<string, Map<string, Decimal>>();
+    const memo = new Map<string, Values>();
     const groupsOfAccount = new Map<string, string[]>();
-    const valuesOf = (row: ReportRow): Map<string, Decimal> => {
+    const formatOf = (row: ReportRow): Format =>
+      row.kind !== "formula" || (row.operation ?? "sum") === "sum"
+        ? row.kind === "formula" && row.terms.some((term) => formatOf(rowsById.get(term.rowId)!) === "number")
+          ? "number"
+          : "money"
+        : row.operation === "percent"
+          ? "percent"
+          : row.operation === "divide" && !row.by
+            ? "number"
+            : formatOf(rowsById.get(row.a!)!) === "number"
+              ? "number"
+              : "money";
+    const valuesOf = (row: ReportRow): Values => {
       const known = memo.get(row.id);
       if (known) return known;
-      const values = new Map<string, Decimal>();
+      const values: Values = new Map();
       for (const column of amountColumns) {
-        let total = ZERO_DECIMAL;
+        let total: Decimal | null = ZERO_DECIMAL;
         if (row.kind === "group") {
-          for (const account of accounts) if (groupIncludes(row, account)) total = add(total, amountOf(account.id, column.key));
-        } else if (row.kind === "formula") {
+          for (const account of accounts) if (groupIncludes(row, account)) total = add(total!, amountOf(account.id, column.key));
+        } else if (row.kind === "formula" && (row.operation ?? "sum") === "sum") {
           for (const term of row.terms) {
-            const part = valuesOf(rowsById.get(term.rowId)!).get(column.key) ?? ZERO_DECIMAL;
-            total = term.sign === 1 ? add(total, part) : sub(total, part);
+            const part = valuesOf(rowsById.get(term.rowId)!).get(column.key) ?? null;
+            // A blank part (a division by 0.00) makes the sum blank too.
+            total = total == null || part == null ? null : term.sign === 1 ? add(total, part) : sub(total, part);
           }
+        } else if (row.kind === "formula") {
+          total = operate(row, valuesOf(rowsById.get(row.a!)!).get(column.key) ?? null, row.by ? dec(row.by) : (valuesOf(rowsById.get(row.b!)!).get(column.key) ?? null));
         } else if (row.kind === "earnings") {
           const found = earnings.get(column.key);
           total = found ? found[row.which] : ZERO_DECIMAL;
@@ -370,7 +462,8 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
       return values;
     };
     const rows = block.rows.map((row): ComputedRow => {
-      if (row.kind === "heading") return { id: row.id, kind: "heading", label: row.label, values: {}, showAccounts: false, lines: [] };
+      const extras = { ...(row.hidden ? { hidden: true } : {}), ...(row.pageBreakAfter ? { pageBreakAfter: true } : {}), ...(row.note ? { note: row.note } : {}) };
+      if (row.kind === "heading") return { id: row.id, kind: "heading", label: row.label, values: {}, showAccounts: false, lines: [], ...extras };
       const lines: ComputedLine[] = [];
       if (row.kind === "group") {
         for (const account of accounts) {
@@ -381,11 +474,14 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
           lines.push({ code: account.code, name: account.name, values: withDerived(accountValues(account)), accountId: String(account.id) });
         }
       }
+      const format = formatOf(row);
       return {
         id: row.id,
         kind: row.kind,
         label: row.label,
-        values: withDerived(valuesOf(row)),
+        values: withDerived(valuesOf(row), format),
+        ...(format === "money" ? {} : { format }),
+        ...extras,
         showAccounts: row.kind === "group" && row.showAccounts,
         lines,
         ...(row.kind === "group" ? { accountIds: lines.map((line) => line.accountId!) } : {}),
@@ -414,6 +510,26 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
     filterLabel,
     computedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * A × ÷ or % of formula (decision 1361, CR17), in decimal maths: × and ÷
+ * keep 6 places until shown (money is then rounded to the currency's cents,
+ * halves away from zero), a % is to 1 place. Dividing by 0.00, or using a
+ * blank, gives a blank.
+ */
+function operate(row: Extract<ReportRow, { kind: "formula" }>, a: Decimal | null, b: Decimal | null): Decimal | null {
+  if (a == null || b == null) return null;
+  switch (row.operation) {
+    case "multiply":
+      return mul(a, b);
+    case "divide":
+      return isZero(b) ? null : divide(a, b, 6);
+    case "percent":
+      return isZero(b) ? null : divide(mul(a, dec("100")), b, 6);
+    default:
+      return null;
+  }
 }
 
 export type CustomReport = {
@@ -520,17 +636,24 @@ function parseBase(input: unknown): CustomReportBase {
 /** Starts a draft as a copy of a standard report (CR1, CR6). */
 export async function createCustomReport(
   tx: OrgTx,
-  command: { source?: unknown; idempotencyKey: unknown; base: unknown; periodEnd?: unknown; layout?: unknown },
+  command: { source?: unknown; idempotencyKey: unknown; base: unknown; periodEnd?: unknown; layout?: unknown; start?: unknown },
 ): Promise<{ created: boolean; report: CustomReport }> {
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const base = parseBase(command.base);
   const periodEnd = command.periodEnd == null || command.periodEnd === "" ? lastDayOfMonth(todayIsoDate()) : parseIsoDate(command.periodEnd, "periodEnd");
+  // A profit and loss or balance sheet starts from its template, the standard
+  // report's rows (`start: "standard"`, Edit layout, decision 1359), or a
+  // layout given ("Save as" from the editor).
   const layout: StoredCustomReportLayout = isTransactionReportBase(base)
     ? command.layout == null
       ? templateTransactionReportLayout(base, periodEnd)
       : await parseTransactionReportLayout(tx, base, command.layout)
-    : templateLayout(base as FinancialReportBase, periodEnd);
+    : command.layout != null
+      ? await parseLayout(tx, base as FinancialReportBase, command.layout)
+      : command.start === "standard"
+        ? standardLayout(base as FinancialReportBase, periodEnd)
+        : templateLayout(base as FinancialReportBase, periodEnd);
   if (isTransactionReportBase(base)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
   const hash = requestHash("custom_report_create", { base, layout });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
@@ -577,6 +700,15 @@ export async function updateCustomReport(
   return { report, figures: await computeSavedReport(tx, report.base, report.layout) };
 }
 
+/** A draft's figures for a layout that isn't saved yet, so the editor can show changes before Save (decision 1360). Saves nothing. */
+export async function previewCustomReport(tx: OrgTx, idInput: unknown, layoutInput: unknown): Promise<AnyCustomReportFigures> {
+  const id = requireId(idInput, "reportId");
+  const report = await findReport(tx, id);
+  if (report.kind === "published") throw new ConflictError("A published report can't be changed.");
+  if (isTransactionReportBase(report.base)) return computeTransactionCustomReport(tx, report.base, await parseTransactionReportLayout(tx, report.base, layoutInput));
+  return computeCustomReport(tx, report.base as FinancialReportBase, await parseLayout(tx, report.base as FinancialReportBase, layoutInput));
+}
+
 /** Keeps a frozen copy of a draft: its layout and today's figures (CR7). */
 export async function publishCustomReport(
   tx: OrgTx,
@@ -620,6 +752,8 @@ export async function setCustomReportArchived(tx: OrgTx, idInput: unknown, archi
   const id = requireId(idInput, "reportId");
   const report = await findReport(tx, id, true);
   if (Boolean(report.archivedAt) === archived) return report;
+  // An archived draft stops being a default layout (decision 1359).
+  if (archived) await tx.query("delete from report_layout_defaults where custom_report_id = $1", [id]);
   await tx.query(
     archived
       ? "update custom_reports set archived_at = now(), archived_by_email = $2 where id = $1"
@@ -640,6 +774,7 @@ export async function deleteCustomReport(tx: OrgTx, idInput: unknown): Promise<v
   const id = requireId(idInput, "reportId");
   const report = await findReport(tx, id, true);
   if (report.kind === "published") throw new ConflictError("A published report can't be deleted. Archive it instead.");
+  await tx.query("delete from report_layout_defaults where custom_report_id = $1", [id]);
   await tx.query("delete from custom_reports where id = $1", [id]);
   await writeAuditEvent(tx, { eventType: "custom_report.deleted", entityType: "custom_report", entityId: id, details: { title: report.title } });
 }

@@ -37,8 +37,11 @@ export function ReportToolbar({
   more = [],
   exportProps,
   info,
+  actions,
   busy = false,
 }: {
+  /** Buttons beside ⋯ and Export, e.g. Edit layout. */
+  actions?: ReactNode;
   /** "range" for a from and to date, "asAt" for one date, "none" for no dates. */
   mode: "range" | "asAt" | "none";
   /** The dates the report shows now. */
@@ -128,6 +131,7 @@ export function ReportToolbar({
       </Button>
       <div className={ui.reportToolbarEnd}>
         {info ? <InfoTip label="About this report">{info}</InfoTip> : null}
+        {actions}
         <MoreMenu label="More report options" items={more} />
         {exportProps ? <ExportMenu {...exportProps} /> : null}
       </div>

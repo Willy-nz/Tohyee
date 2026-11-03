@@ -281,6 +281,16 @@ that something happened.
   accounts there open at the start of the financial year (ATX6). The
   connected AI has the same options and a budget_vs_actual tool
   (decisions 1353-1358, not yet reviewed).
+  **Edit layout** on the profit and loss and balance sheet starts from the
+  standard rows; the editor has one Save (changes preview first), drag or
+  arrow-key row moves, names typed in place, Group for chosen accounts,
+  hidden rows, page breaks, row notes, and × ÷ and % of formulas (blank
+  when dividing by zero). Save as keeps named versions; one can be the
+  **default layout** that Reports shows (deliberately unlike Xero, which
+  keeps one org-wide layout). Saved reports are in the picker, with
+  favourites; custom reports export like the standard ones. The AI can
+  list and run custom reports and start drafts (CR16-CR20, decisions
+  1359-1363, not yet reviewed).
 - **Period close** (Accounting; PC1-PC12, not yet approved by Jess), like
   NetSuite's period close checklist: each financial year and its months,
   Open or Closed; for a month, checks Tohyee works out itself (bank accounts
@@ -3528,6 +3538,10 @@ isn't acceptable, because people would trust it:
   notes giving quantities back, and printing or emailing orders
 
 ## Next, in rough order
+
+- Reports (from the 4 Nov 2026 review): cash basis for the profit and loss
+  and balance sheet, and management report packs (several reports, a cover
+  and commentary as one PDF), as Xero has. Not built yet.
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 

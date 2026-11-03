@@ -13,10 +13,15 @@ import { AccountTransactionsReport, AgedPayablesReport, JournalReportView } from
 import { ReportExport } from "@/components/reports/report-export";
 import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYearEndMonth } from "@/components/reports/report-frame";
 import { CashFlowStatementReport, ChangesInEquityReport } from "@/components/reports/statements";
-import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
+import { CustomReportList, FavouriteToggle, ReportWarnings, StartCustomReport, useFavourite } from "@/components/reports/custom-report";
+import { CustomFiguresTable } from "@/components/reports/custom-report-table";
+import type { MoreMenuItem } from "@/components/more-menu";
+import { useWorkspace } from "@/components/workspace";
+import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
+import { type CustomReportFigures, type FinancialReportBase, lastDayOfMonth } from "@/lib/reports/custom-layout";
 import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
-import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
@@ -444,6 +449,79 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   );
 }
 
+/**
+ * The standard profit and loss or balance sheet's default layout (decision
+ * 1359): whether it has one, "Edit layout" (opens it, or starts one from the
+ * standard rows), and switching between it and the standard layout.
+ */
+function useReportLayout(organisationId: string, base: FinancialReportBase) {
+  const router = useRouter();
+  const { can } = useWorkspace();
+  const defaults = useApiData<{ defaults: Array<{ base: string; reportId: string; title: string }> }>("/api/report-layouts", { organisationId });
+  const chosen = defaults.data?.defaults.find((entry) => entry.base === base) ?? null;
+  const [standard, setStandard] = useState(false);
+  const [key] = useState(() => newIdempotencyKey("edit-layout"));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function edit(periodEnd: string) {
+    if (chosen) return router.push(`/operations/reports/custom/${chosen.reportId}`);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ report: { id: string } }>("/api/custom-reports", {
+        method: "POST",
+        body: { organisationId, source: "ui", idempotencyKey: key, base, start: "standard", periodEnd: lastDayOfMonth(periodEnd) },
+      });
+      router.push(`/operations/reports/custom/${result.report.id}`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+  const active = Boolean(chosen && !standard);
+  const more: MoreMenuItem[] = chosen
+    ? [standard ? { label: `Show in ${chosen.title}`, onSelect: () => setStandard(false) } : { label: "Show the standard layout", onSelect: () => setStandard(true) }]
+    : [];
+  const button = (periodEnd: string) =>
+    can("bookkeeper") ? (
+      <Button variant="secondary" disabled={busy || !defaults.data} onClick={() => void edit(periodEnd)}>
+        Edit layout
+      </Button>
+    ) : null;
+  return { chosen, active, more, button, error, loaded: Boolean(defaults.data) };
+}
+
+type LayoutRun = { layout: { report: { id: string; title: string }; figures: CustomReportFigures } | null };
+
+/** The report's figures in its default layout, as the custom report shows them. */
+function LayoutFigures({ run, filter }: { run: NonNullable<LayoutRun["layout"]>; filter: TrackingChoice }) {
+  return (
+    <>
+      {run.figures.blocks.map((block) =>
+        block.kind === "table" ? (
+          <section key={block.id}>
+            {block.title ? <h3 className={ui.reportBlockTitle}>{block.title}</h3> : null}
+            <CustomFiguresTable
+              id={`layout-${block.id}`}
+              block={block}
+              figures={run.figures}
+              filter={filter && filter.valueId !== "unassigned" ? { categoryId: filter.categoryId, valueId: filter.valueId } : null}
+            />
+          </section>
+        ) : (
+          <p key={block.id} className={ui.reportNote}>
+            {block.text}
+          </p>
+        ),
+      )}
+      <ReportWarnings figures={run.figures} />
+    </>
+  );
+}
+
+const layoutTables = (run: LayoutRun["layout"]) =>
+  run ? run.figures.blocks.filter((block) => block.kind === "table").map((block) => ({ id: `layout-${block.id}`, title: (block as { title: string }).title || undefined })) : [];
+
 type PnlOptions = { splitBy: string; tracking: string; compare: number; compareBy: PeriodLength; total: boolean; ytd: boolean; percent: boolean };
 const PNL_OPTIONS: PnlOptions = { splitBy: "", tracking: "", compare: 0, compareBy: "month", total: false, ytd: false, percent: false };
 
@@ -486,7 +564,18 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
   const splitting = categories.some((category) => category.id === applied.splitBy) ? applied.splitBy : "";
   const filter = parseTrackingChoice(applied.tracking);
   const multi = !splitting && (applied.compare > 0 || applied.ytd || applied.percent || (applied.total && applied.compare > 0));
-  const report = useApiData<ProfitAndLoss | ProfitAndLossSplit | MultiColumnStatement>("/api/reports/profit-and-loss", {
+  const layout = useReportLayout(organisationId, "profit_and_loss");
+  const inLayout = layout.active && !splitting;
+  const layoutRun = useApiData<LayoutRun>(inLayout ? "/api/reports/layout" : null, {
+    organisationId,
+    base: "profit_and_loss",
+    from: dates.from,
+    to: dates.to,
+    ...trackingQuery(filter),
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
+    ...(applied.ytd ? { ytd: true } : {}),
+  });
+  const report = useApiData<ProfitAndLoss | ProfitAndLossSplit | MultiColumnStatement>(!layout.loaded || inLayout ? null : "/api/reports/profit-and-loss", {
     organisationId,
     from: dates.from,
     to: dates.to,
@@ -494,15 +583,22 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
     ...(splitting ? { splitBy: splitting } : {}),
     ...(multi ? { compare: applied.compare, compareBy: applied.compareBy, total: applied.total, ytd: applied.ytd, percent: applied.percent } : {}),
   });
-  const data = report.data;
-  const from = data ? (data.from as string) : null;
-  const period = data && from ? statementPeriod(from, data.to, yearEndMonth) : "";
+  const data = inLayout ? null : report.data;
+  const run = inLayout ? (layoutRun.data?.layout ?? null) : null;
+  const runPeriods = run ? run.figures.columns.filter((column) => column.kind === "period") : [];
+  const from = data ? (data.from as string) : (runPeriods[0]?.from ?? null);
+  const to = data ? data.to : (runPeriods[0]?.to ?? null);
+  const period = from && to ? statementPeriod(from, to, yearEndMonth) : "";
   const lines = data
     ? [
         ...("category" in data ? [`Split by ${data.category.name}`] : []),
         ...(data.filter ? [`Only lines tagged ${data.filter.label}`] : []),
       ]
-    : [];
+    : run?.figures.filterLabel
+      ? [`Only lines tagged ${run.figures.filterLabel}`]
+      : [];
+  const loading = inLayout ? layoutRun.loading : report.loading;
+  const loadError = inLayout ? layoutRun.error : report.error;
   return (
     <ReportFrame
       label="Profit and loss"
@@ -512,11 +608,12 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
           dates={dates}
           shownFrom={from}
           yearEndMonth={yearEndMonth}
-          busy={report.loading}
+          busy={loading}
           onUpdate={(next) => {
             setDates(next);
             setApplied(draft);
           }}
+          actions={layout.button(to ?? dates.to)}
           filters={
             <>
               <CompareFields compare={draft.compare} compareBy={draft.compareBy} onChange={(compare, compareBy) => setDraft({ ...draft, compare, compareBy, splitBy: compare > 0 ? "" : draft.splitBy })} />
@@ -557,18 +654,32 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
               </fieldset>
             </>
           }
-          more={[printReport, startCustom]}
-          info={<>% of trading income is each amount divided by that column&apos;s total trading income, to one decimal place; it&apos;s blank when there&apos;s none.</>}
+          more={[...layout.more, printReport, startCustom]}
+          info={
+            <>
+              % of trading income is each amount divided by that column&apos;s total trading income, to one decimal place; it&apos;s blank when there&apos;s none.
+              {inLayout ? " In your default layout, the layout's own rows are shown: Total and % of trading income are on the standard layout." : ""}
+            </>
+          }
           exportProps={
-            data
-              ? { organisationId, report: "profit-and-loss", title: "Profit and loss", period, filters: lines, style: "statement", tables: [{ id: "profit-and-loss-report" }] }
+            data || run
+              ? {
+                  organisationId,
+                  report: "profit-and-loss",
+                  title: "Profit and loss",
+                  period,
+                  filters: lines,
+                  style: "statement",
+                  tables: run ? layoutTables(run) : [{ id: "profit-and-loss-report" }],
+                }
               : null
           }
         />
       }
     >
-      <LoadState loading={report.loading} error={report.error} />
-      {data ? <StatementHeading title="Profit and loss" period={period} lines={lines} /> : null}
+      <LoadState loading={loading} error={loadError ?? layout.error} />
+      {data || run ? <StatementHeading title="Profit and loss" period={period} lines={lines} /> : null}
+      {run ? <LayoutFigures run={run} filter={filter} /> : null}
       {data && "category" in data ? <SplitProfitAndLoss report={data} filter={filter} /> : null}
       {data && "rows" in data ? <MultiColumnStatementTable id="profit-and-loss-report" report={data} tracking={filter} /> : null}
       {data && "revenue" in data && !("category" in data) ? <ProfitAndLossTable report={data as ProfitAndLoss} filter={filter} /> : null}
@@ -622,16 +733,25 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
   const [draft, setDraft] = useState<SheetOptions>(SHEET_OPTIONS);
   const tracking = useTracking(organisationId).data;
   const filter = parseTrackingChoice(applied.tracking);
-  const report = useApiData<BalanceSheet | MultiColumnStatement>("/api/reports/balance-sheet", {
+  const layout = useReportLayout(organisationId, "balance_sheet");
+  const layoutRun = useApiData<LayoutRun>(layout.active ? "/api/reports/layout" : null, {
+    organisationId,
+    base: "balance_sheet",
+    asAt: dates.to,
+    ...trackingQuery(filter),
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
+  });
+  const run = layout.active ? (layoutRun.data?.layout ?? null) : null;
+  const report = useApiData<BalanceSheet | MultiColumnStatement>(!layout.loaded || layout.active ? null : "/api/reports/balance-sheet", {
     organisationId,
     asAt: dates.to,
     ...trackingQuery(filter),
     ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
   });
-  const data = report.data;
-  const asAt = data ? ("asAt" in data ? data.asAt : data.to) : "";
-  const period = data ? statementAsAt(asAt) : "";
-  const lines = data?.filter ? [`Only lines tagged ${data.filter.label}`] : [];
+  const data = layout.active ? null : report.data;
+  const asAt = data ? ("asAt" in data ? data.asAt : data.to) : (run?.figures.columns[0]?.to ?? "");
+  const period = asAt ? statementAsAt(asAt) : "";
+  const lines = data?.filter ? [`Only lines tagged ${data.filter.label}`] : run?.figures.filterLabel ? [`Only lines tagged ${run.figures.filterLabel}`] : [];
   const unbalanced = data ? ("rows" in data ? Object.values(data.balanced ?? {}).some((ok) => !ok) : !data.balanced) : false;
   return (
     <ReportFrame
@@ -645,7 +765,8 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
             setDates(next);
             setApplied(draft);
           }}
-          busy={report.loading}
+          busy={report.loading || layoutRun.loading}
+          actions={layout.button(dates.to)}
           filters={
             <>
               <CompareFields compare={draft.compare} compareBy={draft.compareBy} onChange={(compare, compareBy) => setDraft({ ...draft, compare, compareBy })} />
@@ -653,15 +774,26 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
             </>
           }
           info={draft.tracking ? <>Filtered by tracking, a balance sheet only balances when both sides of each journal are tagged.</> : null}
-          more={[printReport, startCustom]}
+          more={[...layout.more, printReport, startCustom]}
           exportProps={
-            data ? { organisationId, report: "balance-sheet", title: "Balance sheet", period, filters: lines, style: "statement", tables: [{ id: "balance-sheet-report" }] } : null
+            data || run
+              ? {
+                  organisationId,
+                  report: "balance-sheet",
+                  title: "Balance sheet",
+                  period,
+                  filters: lines,
+                  style: "statement",
+                  tables: run ? layoutTables(run) : [{ id: "balance-sheet-report" }],
+                }
+              : null
           }
         />
       }
     >
-      <LoadState loading={report.loading} error={report.error} />
-      {data ? <StatementHeading title="Balance sheet" period={period} lines={lines} /> : null}
+      <LoadState loading={report.loading || layoutRun.loading} error={report.error ?? layoutRun.error ?? layout.error} />
+      {data || run ? <StatementHeading title="Balance sheet" period={period} lines={lines} /> : null}
+      {run ? <LayoutFigures run={run} filter={filter} /> : null}
       {unbalanced ? (
         <Notice tone="warning">
           {data && "rows" in data
@@ -837,24 +969,57 @@ function StandardReports({ organisationId }: { organisationId: string }) {
   // Sales by salesperson is an advanced feature (SR3).
   const advanced = useSalespeople(organisationId).data?.advancedFeatures ?? false;
   const shown = TABS.filter((entry) => entry.key !== "sales" || advanced || tab === "sales");
+  // Saved reports are in the picker too, with each person's favourites first (decision 1362).
+  const drafts = useApiData<{ reports: Array<{ id: string; title: string }> }>("/api/custom-reports", { organisationId, view: "drafts" });
+  const published = useApiData<{ reports: Array<{ id: string; title: string }> }>("/api/custom-reports", { organisationId, view: "published" });
+  const custom = [
+    ...(drafts.data?.reports ?? []).map((report) => ({ key: `custom:${report.id}`, label: `${report.title} (draft)` })),
+    ...(published.data?.reports ?? []).map((report) => ({ key: `custom:${report.id}`, label: report.title })),
+  ];
+  const favourite = useFavourite(organisationId, `std:${tab}`);
+  const labelOf = (key: string) => (key.startsWith("std:") ? TABS.find((entry) => `std:${entry.key}` === key)?.label : custom.find((entry) => entry.key === key)?.label);
+  const starred = favourite.favourites.filter((key) => labelOf(key));
+  const choose = (value: string) => {
+    if (value.startsWith("custom:")) router.push(`/operations/reports/custom/${value.slice(7)}`);
+    else router.replace(`/operations/reports?report=${value.replace(/^std:/, "")}`, { scroll: false });
+  };
   return (
     <div className={ui.standardReport}>
-      <div className={ui.reportPicker} data-print="hide">
+      <div className={`${ui.reportPicker} ${ui.reportPickerRow}`} data-print="hide">
         <Field label="Report">
-          <select value={tab} onChange={(event) => router.replace(`/operations/reports?report=${event.target.value}`, { scroll: false })}>
+          <select value={`std:${tab}`} onChange={(event) => choose(event.target.value)}>
+            {starred.length > 0 ? (
+              <optgroup label="Favourites">
+                {starred.map((key) => (
+                  <option key={`fav-${key}`} value={key}>
+                    ★ {labelOf(key)}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
             {TAB_GROUPS.map((group) => (
               <optgroup key={group} label={group}>
                 {shown
                   .filter((entry) => entry.group === group)
                   .map((entry) => (
-                    <option key={entry.key} value={entry.key}>
+                    <option key={entry.key} value={`std:${entry.key}`}>
                       {entry.label}
                     </option>
                   ))}
               </optgroup>
             ))}
+            {custom.length > 0 ? (
+              <optgroup label="Custom reports">
+                {custom.map((entry) => (
+                  <option key={entry.key} value={entry.key}>
+                    {entry.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </select>
         </Field>
+        <FavouriteToggle favourite={favourite} name={TABS.find((entry) => entry.key === tab)?.label ?? ""} />
       </div>
       {tab === "pnl" ? <ProfitAndLossReport organisationId={organisationId} /> : null}
       {tab === "bs" ? <BalanceSheetReport organisationId={organisationId} /> : null}
