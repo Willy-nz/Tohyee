@@ -178,7 +178,15 @@ function mentionsPlatform(text: string, connection: PayoutConnection): boolean {
   return connection.names.some((name) => lower.includes(name));
 }
 
-const describe = (payout: PayoutCandidate) => `${payout.platformLabel} payout ${payout.externalId} (${payout.net}, ${payout.issuedOn})`;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "27 Oct 2026", as the screens show dates. */
+export function shortDate(date: string): string {
+  const [year, month, day] = date.split("-");
+  return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+}
+
+const describe = (payout: PayoutCandidate) => `${payout.platformLabel} payout ${payout.externalId} (${payout.net}, ${shortDate(payout.issuedOn)})`;
 
 function list(payouts: PayoutCandidate[]): string {
   return payouts.map(describe).join(", ");
@@ -211,7 +219,7 @@ function settle(chosen: PayoutCandidate[], evidence: NonNullable<PayoutGuidance[
     return {
       status: "already_matched",
       platformLabel: label,
-      reason: `${describe(first)} is already matched to the bank line on ${first.posted!.reconciledLineDate}. This line may be a duplicate import: if it is, exclude it.`,
+      reason: `${describe(first)} is already matched to the bank line on ${shortDate(first.posted!.reconciledLineDate!)}. This line may be a duplicate import: if it is, exclude it.`,
       payouts: chosen,
       action: null,
       evidence,
@@ -379,7 +387,7 @@ export function guidePayoutLine(line: DepositLine, connections: readonly PayoutC
     return {
       status: "missing_settlement_data",
       platformLabel: label,
-      reason: `This deposit is from before the ${label} start date (${connection.startDate}), so its payout and sales aren't in Tohyee. Code it by hand.`,
+      reason: `This deposit is from before the ${label} start date (${shortDate(connection.startDate)}), so its payout and sales aren't in Tohyee. Code it by hand.`,
       payouts: [],
       action: null,
       evidence: null,

@@ -37,7 +37,7 @@ function Settlement({ payout }: { payout: PayoutCandidate }) {
         </span>
       </strong>
       {payout.settlement ? (
-        <table className={ui.table} style={{ maxWidth: 360 }}>
+        <table className={ui.table} style={{ maxWidth: 320 }}>
           <tbody>
             {settlementRows(payout.settlement).map((row) => (
               <tr key={row.label}>
@@ -77,8 +77,13 @@ export function PayoutGuide({
   if (!guidance) return null;
   const badge = BADGES[guidance.status];
   const action = guidance.action;
+  // In the reconcile row's table cell (which doesn't wrap): wrap, and keep to the screen so a phone needn't scroll sideways.
   return (
-    <section className={ui.suggestion} aria-label={`${guidance.platformLabel} payout`} style={{ display: "grid", gap: 8 }}>
+    <section
+      className={ui.suggestion}
+      aria-label={`${guidance.platformLabel} payout`}
+      style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 8, maxWidth: "min(720px, calc(100vw - 80px))", boxSizing: "border-box", whiteSpace: "normal" }}
+    >
       <div>
         <Badge tone={badge.tone}>{badge.text}</Badge>{" "}
         <InfoTip label="About payout matching">
