@@ -2,14 +2,27 @@ import { randomBytes } from "node:crypto";
 import { boundedLimit } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema, type ToolContext } from "@/lib/ai/tools";
 import { getStatementLine, listBankAccounts, listStatementLines, type StatementLine } from "@/lib/bank/accounts";
-import { lineErrorText } from "@/lib/bank/bulk";
-import { reconcileStatementLine, suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
-import { type BankRule, createBankRule, getBankRule, listBankRules, ruleAmountsMode, ruleContact, ruleLinesFor, ruleMatches, updateBankRule } from "@/lib/bank/rules";
+import {
+  applyRule,
+  createAndMatch,
+  inSavepoint,
+  MAX_BATCH_ACTIONS,
+  matchLine,
+  planUnreconcile,
+  RECONCILE_ACTIONS,
+  resumeBankBatch,
+  startReconcileBatch,
+  startUnreconcileBatch,
+  transferAndMatch,
+} from "@/lib/bank/batches";
+import { suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
+import { type BankRule, createBankRule, getBankRule, listBankRules, updateBankRule } from "@/lib/bank/rules";
 import { voidBankTransaction, voidTransfer } from "@/lib/bank/transactions";
-import type { OrgTx } from "@/lib/db/org-transaction";
+import { type Batch, getBatch, listBatches, type RunOutcome } from "@/lib/batches/service";
+import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ValidationError } from "@/lib/errors";
-import { dec, neg, sub, toFixedString } from "@/lib/money/decimal";
-import { asRecord, requireArray, requireId, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
+import { dec, sub, toFixedString } from "@/lib/money/decimal";
+import { requireArray, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
  * Bank reconciliation for a connected AI (#205, decision 488, examples
@@ -17,13 +30,17 @@ import { asRecord, requireArray, requireId, requireIdempotencyKey, requireOneOf 
  * key. Each reconciling tool sends the same command the reconcile screen
  * does (BK4-BK9), so it posts exactly what a person's click would; nothing
  * here excludes a line, deletes an import, voids, or deletes or switches off
- * a rule. The one undo is unmatch_bank_line, for the key's own
- * reconciliations in the last 24 hours (AIB7, AIB8).
+ * a rule. The undos are unmatch_bank_line, for the key's own
+ * reconciliations in the last 24 hours (AIB7, AIB8), and unmatch_bank_lines,
+ * which unreconciles any lines after a preview and posts or voids nothing
+ * (decision 1277, Jess). bulk_reconcile and unmatch_bank_lines are durable
+ * batches (#547, src/lib/bank/batches.ts): get_bank_batch reads one after a
+ * lost answer and resume_bank_batch carries on with the original keys.
  */
 
 const MAX_LINES = 200;
-/** At most this many lines in one call of bulk_reconcile or apply_bank_rule (#205). */
-export const MAX_BULK_LINES = 100;
+/** At most this many lines in one call of bulk_reconcile, apply_bank_rule or unmatch_bank_lines (#205, #547). */
+export const MAX_BULK_LINES = MAX_BATCH_ACTIONS;
 /** How long a key can undo its own reconciliation (#205). */
 const UNDO_HOURS = 24;
 
@@ -177,153 +194,102 @@ function ruleSummary(rule: BankRule) {
   };
 }
 
-/** Runs `work` in a savepoint, so a refused line rolls back on its own and the call carries on. */
-async function inSavepoint<T>(tx: OrgTx, work: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
-  await tx.query("savepoint ai_bank_line");
-  try {
-    const value = await work();
-    await tx.query("release savepoint ai_bank_line");
-    return { ok: true, value };
-  } catch (error) {
-    await tx.query("rollback to savepoint ai_bank_line");
-    return { ok: false, error: lineErrorText(error) };
+/** One step after another inside the one transaction a caller already has (each in a savepoint), when there's no runner. */
+function savepointRunner(tx: OrgTx): OrgRunner {
+  return async (work) => {
+    await tx.query("savepoint batch_step");
+    try {
+      const value = await work(tx);
+      await tx.query("release savepoint batch_step");
+      return value;
+    } catch (error) {
+      await tx.query("rollback to savepoint batch_step");
+      throw error;
+    }
+  };
+}
+
+/** What to tell the AI to do next about a batch. */
+function nextStep(batch: Batch, outcome: Pick<RunOutcome, "stopped" | "retryAfterSeconds"> | null): string {
+  const { counts } = batch;
+  if (outcome?.stopped === "busy") return `Another request is working on this batch. Wait ${outcome.retryAfterSeconds ?? 5} seconds, then call get_bank_batch.`;
+  if (outcome?.stopped === "lost_connection") {
+    return "The server lost its database connection part way. Don't send these actions again as new ones: call resume_bank_batch with this batchId; it checks each unfinished one with its original key.";
   }
-}
-
-type Reconciled = { created: boolean; line: StatementLine };
-
-async function matchLine(tx: OrgTx, args: Record<string, unknown>, context: ToolContext, key: string): Promise<Reconciled> {
-  const hasMatches = args.journalLineIds != null;
-  const hasAllocations = args.allocations != null;
-  if (hasMatches === hasAllocations) {
-    throw new ValidationError("Give either journalLineIds (things already posted) or allocations (invoices or bills to pay), not both.");
+  if (batch.state === "rate_limited" || outcome?.stopped === "rate_limit") {
+    return `Wait ${outcome?.retryAfterSeconds ?? batch.retryAfterSeconds ?? 5} seconds, then call resume_bank_batch with this batchId. What's done stays done.`;
   }
-  return reconcileStatementLine(tx, args.lineId, {
-    source: context.source,
-    idempotencyKey: key,
-    ...(hasMatches ? { kind: "match", journalLineIds: args.journalLineIds } : { kind: "payments", allocations: args.allocations }),
-    ...(args.exchangeRate != null ? { exchangeRate: args.exchangeRate } : {}),
-  });
+  if (counts.pending + counts.unknown > 0) {
+    return `${counts.pending + counts.unknown} not finished yet${counts.unknown ? ` (${counts.unknown} with an unknown outcome)` : ""}. Call resume_bank_batch with this batchId; don't send them again as new actions.`;
+  }
+  if (counts.failed > 0) return `${counts.committed} done, ${counts.failed} refused (see each error). Fix them with new actions, or resume_bank_batch with retryFailed if the reason has gone.`;
+  return "All done.";
 }
 
-async function createAndMatch(tx: OrgTx, args: Record<string, unknown>, context: ToolContext, key: string): Promise<Reconciled> {
-  return reconcileStatementLine(tx, args.lineId, {
-    source: context.source,
-    idempotencyKey: key,
-    kind: "bank_transaction",
-    contactId: args.contactId,
-    amountsMode: args.amountsMode,
-    lines: args.lines,
-    ...(args.reference != null ? { reference: args.reference } : {}),
-    ...(args.exchangeRate != null ? { exchangeRate: args.exchangeRate } : {}),
-  });
+function actionView(action: Batch["actions"][number]) {
+  const result = (action.result ?? {}) as Record<string, unknown>;
+  return {
+    index: action.position,
+    actionId: action.id,
+    action: action.action,
+    lineId: action.targetId,
+    status: action.status,
+    ok: action.status === "committed",
+    ...(action.status === "committed" && typeof result.created === "boolean" ? { created: result.created } : {}),
+    ...(result.otherSide ? { otherSide: result.otherSide } : {}),
+    ...(result.unreconciled ? { unreconciled: result.unreconciled } : {}),
+    ...(action.error ? { error: action.error } : {}),
+    attempts: action.attempts,
+  };
 }
 
-type TransferResult = Reconciled & { otherSide: { lineId: string; matched: true } | { matched: false; reason: string } };
+function batchView(batch: Batch, outcome: Pick<RunOutcome, "stopped" | "retryAfterSeconds"> | null = null) {
+  return {
+    batchId: batch.id,
+    kind: batch.kind,
+    state: batch.state,
+    counts: batch.counts,
+    succeeded: batch.counts.committed,
+    failed: batch.counts.failed,
+    ...(outcome?.retryAfterSeconds || batch.retryAfterSeconds ? { retryAfterSeconds: outcome?.retryAfterSeconds ?? batch.retryAfterSeconds } : {}),
+    next: nextStep(batch, outcome),
+    createdAt: batch.createdAt,
+    createdBy: batch.createdVia ? `${batch.createdByEmail ?? "someone"} via ${batch.createdVia}` : batch.createdByEmail,
+    undoneByBatchIds: batch.undoneByBatchIds,
+    results: batch.actions.map(actionView),
+  };
+}
 
-/**
- * A transfer from the line (BK8), then the other account's own line for it
- * when there's exactly one unreconciled line there for the opposite amount on
- * the same day (AIB3). That second match is left for later if it's refused.
- */
-async function transferAndMatch(tx: OrgTx, args: Record<string, unknown>, context: ToolContext, key: string): Promise<TransferResult> {
-  const result = await reconcileStatementLine(tx, args.lineId, {
-    source: context.source,
-    idempotencyKey: key,
-    kind: "transfer",
-    otherAccountCode: args.otherAccountCode,
-    ...(args.otherAmount != null ? { otherAmount: args.otherAmount } : {}),
-    ...(args.reference != null ? { reference: args.reference } : {}),
-  });
-  const line = result.line;
-  const journalId = line.reconciliation?.items[0]?.journalId;
-  if (!journalId) return { ...result, otherSide: { matched: false, reason: "The transfer wasn't found." } };
-  const other = await tx.query<{ journal_line_id: string; account_id: string }>(
-    `select l.id::text as journal_line_id, l.account_id::text
-       from ledger_journal_lines l join accounts a on a.id = l.account_id
-      where l.journal_id = $1 and l.account_id <> $2 and a.account_type in ('bank', 'credit_card')
-      order by l.id`,
-    [journalId, line.accountId],
-  );
-  if (other.rows.length !== 1) return { ...result, otherSide: { matched: false, reason: "The transfer has no single line on the other account." } };
-  const { journal_line_id: otherJournalLineId, account_id: otherAccountId } = other.rows[0];
-  const already = await tx.query<{ statement_line_id: string }>(
-    `select r.statement_line_id::text from bank_reconciliation_items i join bank_reconciliations r on r.id = i.reconciliation_id
-      where i.journal_line_id = $1 and i.active`,
-    [otherJournalLineId],
-  );
-  if (already.rows[0]) return { ...result, otherSide: { lineId: already.rows[0].statement_line_id, matched: true } };
-  const opposite = toFixedString(neg(dec(line.amount)), 2);
-  const candidates = await tx.query<{ id: string }>(
-    `select b.id::text from bank_statement_lines b
-      where b.account_id = $1 and b.status = 'unreconciled' and b.line_date = $2::date and b.amount = $3::numeric
-      order by b.id limit 2`,
-    [otherAccountId, line.date, opposite],
-  );
-  if (candidates.rows.length !== 1) {
+function batchAnswer(outcome: RunOutcome) {
+  return batchView(outcome.batch, outcome);
+}
+
+/** unmatch_bank_lines: the preview, or (with its hash) the batch (decision 1277). */
+async function unmatchLines(run: OrgRunner, args: Record<string, unknown>, context: ToolContext) {
+  if (args.previewHash == null || args.previewHash === "") {
+    const plan = await run((tx) => planUnreconcile(tx, args.lineIds));
     return {
-      ...result,
-      otherSide: {
-        matched: false,
-        reason:
-          candidates.rows.length === 0
-            ? `No unreconciled ${opposite} line on the other account on ${line.date} yet; match it to the transfer when it arrives.`
-            : `More than one ${opposite} line on the other account on ${line.date}; choose which with match_bank_line.`,
-      },
+      preview: true,
+      previewHash: plan.hash,
+      lines: plan.counts.lines,
+      blocked: plan.counts.blocked,
+      items: plan.items.map((item) => ({
+        lineId: item.lineId,
+        account: `${item.accountCode} ${item.accountName}`,
+        date: item.date,
+        amount: item.amount,
+        description: item.description,
+        reconciledWith: item.reconciledWith,
+        alsoUnreconciled: item.alsoLines.map((line) => ({ lineId: line.lineId, date: line.date, amount: line.amount, why: line.why })),
+        notes: item.notes,
+        blocked: item.blocked,
+      })),
+      next: "Tell the person what this will do. To go ahead, call unmatch_bank_lines again with the same lineIds, this previewHash and a new idempotencyKey.",
     };
   }
-  const otherLineId = candidates.rows[0].id;
-  const matched = await inSavepoint(tx, () =>
-    reconcileStatementLine(tx, otherLineId, {
-      source: context.source,
-      idempotencyKey: `${key}:other`,
-      kind: "match",
-      journalLineIds: [otherJournalLineId],
-    }),
+  return batchAnswer(
+    await startUnreconcileBatch(run, { lineIds: args.lineIds, previewHash: args.previewHash, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source }),
   );
-  return { ...result, otherSide: matched.ok ? { lineId: otherLineId, matched: true } : { matched: false, reason: matched.error } };
-}
-
-/** A rule's spend or receive money for a line, as OKing its suggestion does (BK10, BK18). */
-async function applyRule(tx: OrgTx, lineId: string, ruleIdInput: unknown, context: ToolContext, key: string): Promise<Reconciled> {
-  const line = await getStatementLine(tx, lineId);
-  if (line.status !== "unreconciled") {
-    // A retry of the same call finds the line reconciled with this key: the same answer as before.
-    const replay = await tx.query("select 1 from bank_reconciliations where command_source = $1 and idempotency_key = $2 and statement_line_id = $3", [
-      context.source,
-      key,
-      lineId,
-    ]);
-    if ((replay.rowCount ?? 0) > 0) return { created: false, line };
-    throw new ConflictError(`This line is ${line.status}.`);
-  }
-  let rule: BankRule;
-  if (ruleIdInput == null || ruleIdInput === "") {
-    const fitting = (await suggestionsForLine(tx, lineId)).rule;
-    if (!fitting) throw new ConflictError("No bank rule applies to this line.");
-    rule = fitting;
-  } else {
-    rule = await getBankRule(tx, ruleIdInput);
-    if (!ruleMatches(rule, line)) throw new ConflictError(`Bank rule "${rule.name}" doesn't apply to this line${rule.isActive ? "" : " (it's switched off)"}.`);
-  }
-  const lines = ruleLinesFor(rule, line);
-  if (!lines) throw new ConflictError(`Bank rule "${rule.name}" can't split this line's amount.`);
-  const contact = await ruleContact(tx, rule, line);
-  if (!contact) throw new ConflictError(`No contact called "${line.payee ?? line.description}" for bank rule "${rule.name}". Use create_and_match with a contact.`);
-  return reconcileStatementLine(tx, lineId, {
-    source: context.source,
-    idempotencyKey: key,
-    kind: "bank_transaction",
-    contactId: contact.id,
-    amountsMode: ruleAmountsMode(lines),
-    lines: lines.map((entry) => ({
-      description: entry.description,
-      accountCode: entry.accountCode,
-      ...(entry.taxCode ? { taxCode: entry.taxCode } : {}),
-      amount: entry.amount,
-      ...(Object.keys(entry.tracking).length > 0 ? { tracking: entry.tracking } : {}),
-    })),
-  });
 }
 
 type UnmatchResult = { created: boolean; line: StatementLine; voided: { bankTransactionId: string } | { transferId: string } | null; otherLines: string[] };
@@ -404,7 +370,7 @@ async function unmatchLine(tx: OrgTx, lineIdInput: unknown, context: ToolContext
   return { created: undone.created, line: await getStatementLine(tx, lineId), voided, otherLines };
 }
 
-const BULK_ACTIONS = ["match", "create_and_match", "transfer_and_match", "apply_bank_rule"] as const;
+const BULK_ACTIONS = RECONCILE_ACTIONS;
 
 export const BANK_READ_TOOLS: readonly AiTool[] = [
   {
@@ -545,6 +511,27 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
       };
     },
   },
+  {
+    name: "get_bank_batch",
+    title: "One batch",
+    level: "read",
+    description:
+      "A batch of bank actions (from bulk_reconcile, unmatch_bank_lines, or a person's Unreconcile selected or undo) with each action's status: committed (done), failed (refused, with why), pending (not started), unknown (it was being done when the server or connection stopped; resuming checks it with its original key) or in_progress. Use it after a lost answer instead of sending the actions again.",
+    inputSchema: schema({ batchId: ID("batch") }, ["batchId"]),
+    async run(tx, args) {
+      return batchView(await getBatch(tx, args.batchId));
+    },
+  },
+  {
+    name: "list_bank_batches",
+    title: "Batches",
+    level: "read",
+    description: "The newest batches of bank actions, with their counts. mine: only this key's own.",
+    inputSchema: schema({ mine: { type: "boolean" }, limit: { type: "integer", minimum: 1, maximum: 100 } }),
+    async run(tx, args, context) {
+      return { batches: await listBatches(tx, { source: args.mine === true ? context.source : undefined, limit: boundedLimit(args.limit, 20, 100) }) };
+    },
+  },
 ];
 
 const MATCH_FIELDS: Record<string, JsonSchema> = {
@@ -583,7 +570,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
       "Reconciles an unreconciled statement line with things already posted on its account (journalLineIds: payments, transfers, spend or receive money, journals), which posts nothing, or by paying invoices (money in) or bills (money out) from it (allocations), which records the payments on the line's date. The total must equal the line exactly. Refused in a locked period.",
     inputSchema: schema({ ...MATCH_FIELDS, idempotencyKey: IDEMPOTENCY }, ["lineId"]),
     async run(tx, args, context) {
-      const result = await matchLine(tx, args, context, idempotencyKey(args.idempotencyKey));
+      const result = await matchLine(tx, args, context.source, idempotencyKey(args.idempotencyKey));
       return { created: result.created, line: lineSummary(result.line) };
     },
   },
@@ -595,7 +582,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
       "Posts spend money (money out) or receive money (money in) for an unreconciled statement line, dated the line's date, to the accounts, GST codes and contact given, and reconciles the line with it. The lines must add up to the line's amount. Refused in a locked period.",
     inputSchema: schema({ ...CREATE_FIELDS, idempotencyKey: IDEMPOTENCY }, ["lineId", "contactId", "amountsMode", "lines"]),
     async run(tx, args, context) {
-      const result = await createAndMatch(tx, args, context, idempotencyKey(args.idempotencyKey));
+      const result = await createAndMatch(tx, args, context.source, idempotencyKey(args.idempotencyKey));
       return { created: result.created, line: lineSummary(result.line) };
     },
   },
@@ -607,7 +594,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
       "Records a transfer between the line's account and another bank or credit card account, dated the line's date, and reconciles the line with it. If the other account has exactly one unreconciled line for the opposite amount on the same day, that's matched too.",
     inputSchema: schema({ ...TRANSFER_FIELDS, idempotencyKey: IDEMPOTENCY }, ["lineId", "otherAccountCode"]),
     async run(tx, args, context) {
-      const result = await transferAndMatch(tx, args, context, idempotencyKey(args.idempotencyKey));
+      const result = await transferAndMatch(tx, args, context.source, idempotencyKey(args.idempotencyKey));
       return { created: result.created, line: lineSummary(result.line), otherSide: result.otherSide };
     },
   },
@@ -629,7 +616,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
       const lineIds = [...new Set(requireArray(args.lineIds, "lineIds", MAX_BULK_LINES).map((id, index) => requireId(id, `lineIds[${index}]`)))];
       const results = [];
       for (const lineId of lineIds) {
-        const done = await inSavepoint(tx, () => applyRule(tx, lineId, args.ruleId, context, `${key}:${lineId}`));
+        const done = await inSavepoint(tx, () => applyRule(tx, lineId, args.ruleId, context.source, `${key}:${lineId}`));
         results.push(done.ok ? { lineId, ok: true, created: done.value.created } : { lineId, ok: false, error: done.error });
       }
       const succeeded = results.filter((result) => result.ok).length;
@@ -657,40 +644,47 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
       },
       ["actions"],
     ),
+    async runSteps(run, args, context) {
+      return batchAnswer(await startReconcileBatch(run, { actions: args.actions, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source }));
+    },
     async run(tx, args, context) {
-      const key = idempotencyKey(args.idempotencyKey);
-      const actions = requireArray(args.actions, "actions", MAX_BULK_LINES).map((raw, index) => asRecord(raw, `Action ${index + 1}`));
-      if (actions.length === 0) throw new ValidationError("Give at least one action.");
-      const seen = new Set<string>();
-      const results = [];
-      for (const [index, action] of actions.entries()) {
-        const label = `Action ${index + 1}`;
-        const done = await inSavepoint(tx, async () => {
-          const kind = requireOneOf(action.action, `${label} action`, BULK_ACTIONS);
-          const lineId = requireId(action.lineId, `${label} lineId`);
-          if (seen.has(lineId)) throw new ValidationError(`${label}: line ${lineId} is already in this call.`);
-          seen.add(lineId);
-          const lineKey = `${key}:${lineId}`;
-          const fields = { ...action, lineId };
-          if (kind === "match") return { kind, ...(await matchLine(tx, fields, context, lineKey)) };
-          if (kind === "create_and_match") return { kind, ...(await createAndMatch(tx, fields, context, lineKey)) };
-          if (kind === "transfer_and_match") return { kind, ...(await transferAndMatch(tx, fields, context, lineKey)) };
-          return { kind, ...(await applyRule(tx, lineId, action.ruleId, context, lineKey)) };
-        });
-        results.push(
-          done.ok
-            ? {
-                index,
-                lineId: done.value.line.id,
-                ok: true,
-                created: done.value.created,
-                ...("otherSide" in done.value ? { otherSide: done.value.otherSide } : {}),
-              }
-            : { index, lineId: typeof action.lineId === "string" ? action.lineId : null, ok: false, error: done.error },
-        );
-      }
-      const succeeded = results.filter((result) => result.ok).length;
-      return { results, succeeded, failed: results.length - succeeded };
+      return batchAnswer(
+        await startReconcileBatch(savepointRunner(tx), { actions: args.actions, idempotencyKey: idempotencyKey(args.idempotencyKey), source: context.source }),
+      );
+    },
+  },
+  {
+    name: "resume_bank_batch",
+    title: "Resume a batch",
+    level: "full",
+    description:
+      "Carries on with one of your own batches (from bulk_reconcile or unmatch_bank_lines) after a lost answer, a rate limit or a server restart: its pending actions, and those whose outcome is unknown, each with its original key and fields, so nothing is posted twice. retryFailed also tries the refused ones again. Resuming a finished batch changes nothing.",
+    inputSchema: schema({ batchId: ID("batch"), retryFailed: { type: "boolean" } }, ["batchId"]),
+    async runSteps(run, args, context) {
+      return batchAnswer(await resumeBankBatch(run, args.batchId, { onlySource: context.source, retryFailed: args.retryFailed === true }));
+    },
+    async run(tx, args, context) {
+      return batchAnswer(await resumeBankBatch(savepointRunner(tx), args.batchId, { onlySource: context.source, retryFailed: args.retryFailed === true }));
+    },
+  },
+  {
+    name: "unmatch_bank_lines",
+    title: "Unreconcile bank lines",
+    level: "full",
+    description: `Unreconciles up to ${MAX_BULK_LINES} statement lines, anyone's, as "Unreconcile selected" does in Tohyee (decision 1277): each goes back to be reconciled, with the rest of its split. Nothing is posted or voided; a transfer's other side stays reconciled unless you choose it too. Lines in a locked period are refused. First call it without previewHash to see what it will do and tell the person; then call it again with the previewHash it gave, and a new idempotencyKey. It's done as a batch: see get_bank_batch and resume_bank_batch.`,
+    inputSchema: schema(
+      {
+        lineIds: { type: "array", minItems: 1, maxItems: MAX_BULK_LINES, items: { type: "string" } },
+        previewHash: { type: "string", description: "From the preview. Left out, nothing changes and the preview is the answer." },
+        idempotencyKey: IDEMPOTENCY,
+      },
+      ["lineIds"],
+    ),
+    async runSteps(run, args, context) {
+      return unmatchLines(run, args, context);
+    },
+    async run(tx, args, context) {
+      return unmatchLines(savepointRunner(tx), args, context);
     },
   },
   {

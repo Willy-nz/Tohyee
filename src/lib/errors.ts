@@ -55,8 +55,9 @@ export class PayloadTooLargeError extends HttpError {
 }
 
 export class TooManyRequestsError extends HttpError {
-  constructor(message: string) {
-    super(429, "too_many_requests", message);
+  /** `retryAfterSeconds`, when known, is sent as the Retry-After header and in the details. */
+  constructor(message: string, retryAfterSeconds?: number) {
+    super(429, "too_many_requests", message, retryAfterSeconds ? { retryAfterSeconds: Math.ceil(retryAfterSeconds) } : undefined);
   }
 }
 

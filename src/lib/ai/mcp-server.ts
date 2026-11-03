@@ -31,7 +31,9 @@ export { aiKeyVia } from "@/lib/ai/tokens";
  * transaction per tool call. The tools offered are the ones the key's level,
  * capped by its owner's role now, allows (decision 346). Read tools run in a
  * read-only transaction (decision 342); the others in a normal one, noted as
- * done through the key (decision 348).
+ * done through the key (decision 348). A batch tool (#547) commits each of
+ * its steps in a transaction of its own, so its progress survives a lost
+ * answer.
  */
 export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?: boolean } = {}): McpServer {
   const organisation = identity.membership.organisation;
@@ -66,19 +68,19 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
       if (!tool || !levelAllows(level, tool.level) || !roleAllows(tool)) return text(`This key can't use ${name}.`, true);
       try {
         const people = await loadMemberNames(organisation.id);
-        const result = await withOrganisationTransaction(
-          organisation,
-          { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role },
-          (tx) =>
-            tool.run(tx, args, {
-              role: identity.membership.role,
-              organisationId: organisation.id,
-              source: `ai-${identity.tokenId}`,
-              accessLevel: level,
-              grantedAccessLevel: identity.accessLevel,
-            }),
-          { people, readOnly: tool.readOnly ?? tool.level === "read" },
-        );
+        const actor = { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role };
+        const context = {
+          role: identity.membership.role,
+          organisationId: organisation.id,
+          source: `ai-${identity.tokenId}`,
+          accessLevel: level,
+          grantedAccessLevel: identity.accessLevel,
+        };
+        const readOnly = tool.readOnly ?? tool.level === "read";
+        // A tool that works in steps (a durable batch, #547) commits each step on its own.
+        const result = tool.runSteps
+          ? await tool.runSteps((work) => withOrganisationTransaction(organisation, actor, work, { people, readOnly }), args, context)
+          : await withOrganisationTransaction(organisation, actor, (tx) => tool.run(tx, args, context), { people, readOnly });
         const answer = result instanceof ToolFileAnswer ? result.answer : result;
         const json = boundedJson(answer);
         if (json === null) {

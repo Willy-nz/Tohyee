@@ -11789,3 +11789,77 @@ guide, and Link My Books' Shopify chargebacks article.
       Log line ("created") and audit event
       `sales_platform.customer_added_separately`. Viewers see the list but
       not the buttons.
+
+### Durable bank batches, Unreconcile selected and batch undo (#547; decisions 1273-1279)
+
+1273. **Batches are kept in the organisation's database** (#547, migration
+      0216): `batches` and `batch_actions`, generic so other kinds of batch
+      (e.g. #544's staged AI coding) can use them. A batch has a durable id,
+      its command source and key, and who asked (with the AI key, decision
+      348); each action keeps what was asked (action, line, payload, its own
+      idempotency key), which can't be changed or deleted. Each action runs
+      in its own transaction and its status is written in that same
+      transaction, so "committed" and "failed" are always true. An action is
+      marked started first, in a transaction of its own; one left started
+      with no worker on the batch is shown as **outcome unknown**, never as
+      failed, because a lost connection isn't proof of a rollback. One
+      worker at a time holds a lease on the batch (60 seconds, renewed after
+      each action), so a server that stopped mid-batch blocks it for at most
+      a minute.
+1274. **Resume uses the original keys and payloads.** bulk_reconcile with
+      the same key and the same actions resumes that batch; with different
+      actions it's refused. resume_bank_batch (an AI, its own batches only)
+      and Resume on the Batches tab (bookkeepers and above, anyone's batch)
+      run pending and outcome-unknown actions with their stored keys and
+      fields, as the batch's own command source, so a resume finds what was
+      already done instead of doing it twice; the person resuming is the
+      actor in the history. "Try refused ones again" re-runs failed actions
+      that were tried at all; ones refused before any work (malformed, or
+      blocked in a preview) stay refused. Resuming a finished batch changes
+      nothing.
+1275. **Unreconcile selected** (Statement lines tab; bookkeepers and above,
+      as the single Unreconcile button) shows a preview first and is
+      refused unless the request carries the hash of the plan as it is now,
+      so what's done is what was shown. Each line is unreconciled as BK11
+      does: nothing is posted or voided. A split's lines go together
+      (BK28). A transfer's other side stays reconciled unless it's chosen
+      too, and the preview says so; that's what Xero's Unreconcile does
+      (not reviewed by Jess). Lines in a locked period or not reconciled are
+      shown as left alone and recorded in the batch as refused.
+1276. **Undoing a batch of reconciliations is a person's job, after a
+      preview** (bookkeepers and above, as voiding is). It's a batch of its
+      own, linked both ways. For each line the batch reconciled that's still
+      reconciled the way it did: unreconcile it, and the other side of its
+      transfer (whoever matched it; the preview shows it), then void the
+      spend or receive money or transfer the batch posted, on the line's
+      date (the AIB7 rule Jess chose on 9 Oct 2026). Matches to things
+      already posted are only unreconciled; payments stay for a person to
+      void. A line reconciled again since, or in a locked period, is left
+      alone with the reason. Nothing is deleted: reconciliations are kept
+      as removed and voids are reversal journals. As Xero's "Remove & Redo",
+      except that it voids instead of deleting (not reviewed by Jess).
+1277. **An AI with Full access may unreconcile anyone's lines** (Jess, 3 Nov
+      2026, relayed by the lead agent: "AI can do it if it has power to do
+      that"). unmatch_bank_lines uses the same service, preview hash, lock
+      date, split and transfer handling and audit trail as Unreconcile
+      selected, with the person via the AI key as the actor. Only a key
+      whose effective level is Full access (the level that reconciles,
+      capped by its owner's role) gets it; Make and post and Look only keys
+      don't. It never voids: undoing what a batch posted (1276) stays with
+      people, and unmatch_bank_line's 24-hour rule for the key's own
+      reconciliations is unchanged. This is the explicit exception to
+      decision 347's "never removes" for AI keys, as AIB7 was.
+1278. **Rate limits and retry-after.** An action that hits a rate limit (a
+      429 with a wait) or a lock or serialisation clash goes back to not
+      started and the batch waits (`not_before`); resuming before then
+      answers "busy" with the seconds to wait (and a Retry-After header on
+      the resume route). The MCP endpoint's 429 now says how many seconds
+      are left in its one-minute window instead of always 60. One call
+      works for at most 25 seconds, then pauses with the rest waiting for a
+      resume. `TooManyRequestsError` can carry a wait, sent as Retry-After.
+1279. **Batches tab.** Each bank account has a Batches tab listing the
+      batches that touched its lines (viewers can see it): kind, who (and
+      via which AI key), counts, and each line's status in plain words
+      (Done, Refused with why, Not started, Outcome unknown, Working on it),
+      with Resume, Try refused ones again and Undo batch… for bookkeepers.
+      get_bank_batch and list_bank_batches let any AI key read them.

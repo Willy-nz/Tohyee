@@ -11,7 +11,7 @@ import { getInboxItem, getInboxItemContent, type InboxItem, listInboxPage } from
 import { getBill, listBills, type BillSummary } from "@/lib/bills/service";
 import { listContacts } from "@/lib/contacts/service";
 import { todayIsoDate } from "@/lib/dates";
-import type { OrgTx } from "@/lib/db/org-transaction";
+import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { MONTH_NAMES } from "@/lib/financial-year";
 import { formatGstNumber } from "@/lib/format";
@@ -92,6 +92,12 @@ export type AiTool = {
   /** The role the key's owner needs now, beyond the level's own, e.g. income tax is for owners and admins (decision 549). Hidden otherwise. */
   minRole?: Role;
   run(tx: OrgTx, args: Record<string, unknown>, context: ToolContext): Promise<unknown>;
+  /**
+   * For a tool that works in steps, each committed on its own (a durable
+   * batch, #547): used instead of `run` by the MCP server, with a runner that
+   * opens one transaction per step. `run` stays as the all-in-one version.
+   */
+  runSteps?(run: OrgRunner, args: Record<string, unknown>, context: ToolContext): Promise<unknown>;
 };
 
 export const DATE = { type: "string", format: "date", description: "A date as YYYY-MM-DD." } as const;
