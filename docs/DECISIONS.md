@@ -2289,7 +2289,8 @@ with the top bar redesign.
      simplest stateless form: each POST carries one JSON-RPC 2.0 message
      (or a batch, as 2025-03-26 allowed) and gets one `application/json`
      answer; notifications get 202 with no body; GET and DELETE get 405
-     (no event stream, no `Mcp-Session-Id`). Methods: `initialize` (echoes
+     (no GET event stream; since decision 1342 a session id and a
+     list-changed notification, see there). Methods: `initialize` (echoes
      a supported protocol version, 2025-11-25, 2025-06-18, 2025-03-26 or
      2024-11-05, else answers 2025-06-18; capabilities `tools` only;
      `serverInfo` name `tohyee` and the app version), `ping`, `tools/list`,
@@ -12267,3 +12268,50 @@ her. Where she didn't say how, these follow Xero (decision 537) and are
       title or description), "Admins connect shops" shows only to people
       who can't, and the "not tried with a real store" note is one line at
       the Turn on step (and under connected shops).
+
+### The AI's tool list follows the connection (4 Nov 2026; decisions 1342-1344)
+
+An AI client connected at Look only kept its Look only tool list after the
+connection was raised to Full access and a new release went out, so tools
+the server's own instructions named weren't there. Checked against the MCP
+Streamable HTTP rules (2025-06-18, and the 2026-07-28 revision, which
+removes sessions and the GET stream and adds `subscriptions/listen`).
+
+1342. **Tell the client on its next request.** Tohyee stays stateless POST
+      with no GET event stream, so it can't push while a client is quiet.
+      `initialize` now gives an `Mcp-Session-Id` (`tsv1.<tool-set
+      version>.<random>`), and Tohyee remembers, in memory, which tool-set
+      version (a hash of every tool's name, title, description, schema and
+      read-only flag) each session last got from `tools/list`. When the
+      tools this connection may use now differ (its level, its owner's
+      role, the private-mail scope, or a release that changed the tools),
+      or the session never fetched the list, the answer to the next request
+      (other than `tools/list`) is a short `text/event-stream` with
+      `notifications/tools/list_changed` first, then the answer. The 2025
+      rules allow notifications on a POST's stream before its answer
+      ("SHOULD relate to the originating request": a changed list is what
+      decides whether that request can work). So `initialize` now says
+      `tools.listChanged: true`. Memory is one process's: after a restart
+      the session id still says what the client was offered at
+      `initialize`, so a release that changed the tools is still noticed (a
+      client that had refreshed since may be told once more, which is
+      harmless). A session id sent with another person's key, or one
+      Tohyee didn't make, is ignored; Tohyee never answers 404 for a
+      session. GET and DELETE still get 405. `subscriptions/listen`
+      (2026-07-28) isn't built: Tohyee doesn't offer that protocol version
+      yet.
+1343. **Say it in words too.** For a client that reads only JSON, or
+      ignores the notification: while the list is out of date,
+      get_organisation adds `toolListUpToDate: false`, a `toolListNote`
+      ("refresh its tools … or disconnect and reconnect") and `toolsNow`,
+      the tools this connection has now (only those), and a refused call to
+      a tool it no longer has carries the same note. get_organisation always
+      gives `toolListVersion` over MCP. The server instructions say Tohyee
+      sends the notification and to refresh or reconnect if a named tool is
+      missing.
+1344. **The list never decides what's allowed.** Every `tools/call` is still
+      checked against the key's level and its owner's role now (decision
+      346), whatever list the client holds: a lowered level takes tools out
+      of `tools/list` and refuses calls to them at once. A client that
+      doesn't send the session id back gets no notification and no note;
+      the person refreshes the tools or reconnects in their AI app.

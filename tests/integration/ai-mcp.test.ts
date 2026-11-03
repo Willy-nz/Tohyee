@@ -213,7 +213,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       id: rpcId,
       result: {
         protocolVersion: "2025-06-18",
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: true } },
         serverInfo: { name: "tohyee", version: expect.stringMatching(/^\d+\.\d+\.\d+/) },
       },
     });
