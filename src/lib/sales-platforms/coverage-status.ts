@@ -54,6 +54,7 @@ export type KindCoverage = {
 export function reasonFor(message: string): string {
   const rules: Array<[RegExp, string]> = [
     [/has no SKU/, "no SKU"],
+    [/is a test customer/, "test customer"],
     [/has the same name/, "same name as a contact: check who they are"],
     [/can't be an item code/, "SKU can't be an item code"],
     [/is already linked to .* with the same SKU/, "SKU already linked to another variant"],

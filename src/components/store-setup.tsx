@@ -16,11 +16,15 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import {
+  CUSTOMER_CHOICES,
+  type CustomerChoice,
+  customerChoiceSettings,
   draftToSettings,
   fitsRole,
   LEFT_OWING,
   type PostingAccountRole,
   type PostingDraft,
+  skuNote,
   stepGaps,
   type StoreGstSetup,
   storeGstSetup,
@@ -126,7 +130,7 @@ type ConnectForm = {
   apiSecret: string;
   consumerKey: string;
   consumerSecret: string;
-  syncCustomers: boolean;
+  customers: CustomerChoice;
   syncProducts: boolean;
 };
 
@@ -139,7 +143,8 @@ const EMPTY_CONNECT: ConnectForm = {
   apiSecret: "",
   consumerKey: "",
   consumerSecret: "",
-  syncCustomers: true,
+  // Decision 1334: only customers who have ordered, unless the person chooses otherwise.
+  customers: "buyers",
   syncProducts: true,
 };
 
@@ -276,11 +281,11 @@ export function StoreSetup({
               storeDomain: f.storeDomain,
               authMethod: f.authMethod,
               ...(f.authMethod === "access_token" ? { accessToken: f.accessToken, apiSecret: f.apiSecret } : { clientId: f.clientId, clientSecret: f.clientSecret }),
-              syncCustomers: f.syncCustomers,
+              ...customerChoiceSettings(f.customers),
               syncProducts: f.syncProducts,
             };
       const made = (await api<{ connection: SalesPlatformConnection }>("/api/sales-platforms/connections", { method: "POST", body })).connection;
-      setConnectForm({ ...EMPTY_CONNECT, syncCustomers: f.syncCustomers, syncProducts: f.syncProducts });
+      setConnectForm({ ...EMPTY_CONNECT, customers: f.customers, syncProducts: f.syncProducts });
       setConnection(made);
       setSaved(`Connected ${made.storeName ?? made.storeDomain}.`);
       go("start");
@@ -421,6 +426,7 @@ export function StoreSetup({
     <div className={styles.wizard}>
       <Progress steps={steps} current={step} done={doneStep} />
       {saved && step === "start" ? <Notice tone="success">{saved} It only reads your store. Next, choose how its sales go into your accounts, or finish here.</Notice> : null}
+      {connection && step === "start" ? <SkuNote connection={connection} /> : null}
       {isPostingStep && connection ? (
         <div className={styles.saveState} data-state={dirty ? "unsaved" : "clean"} role="status">
           {dirty ? (
@@ -604,12 +610,10 @@ function ImportStep({ form, onChange }: { form: ConnectForm; onChange: (form: Co
         These come in by a sync every 15 minutes, and as they change in Shopify. You can change them later.{" "}
         <InfoTip label="How records are matched">
           A customer is matched to a contact with the same email, and a product variant to an item with the same SKU (item code). Anything with no match is added. A variant
-          without a SKU is skipped and the log says so.
+          without a SKU is added with a code made from its Shopify ID; if you add a SKU later, it becomes the item&apos;s code.
         </InfoTip>
       </p>
-      <label className={ui.checkbox}>
-        <input type="checkbox" checked={form.syncCustomers} onChange={(event) => onChange({ ...form, syncCustomers: event.target.checked })} /> Customers, as contacts
-      </label>
+      <CustomerChoiceField name="new-store-customers" value={form.customers} onChange={(customers) => onChange({ ...form, customers })} />
       <label className={ui.checkbox}>
         <input type="checkbox" checked={form.syncProducts} onChange={(event) => onChange({ ...form, syncProducts: event.target.checked })} /> Products, as items
       </label>
@@ -618,6 +622,41 @@ function ImportStep({ form, onChange }: { form: ConnectForm; onChange: (form: Co
       </p>
     </>
   );
+}
+
+/** Which customers become contacts (decision 1334): a radio group. */
+export function CustomerChoiceField({
+  name,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  name: string;
+  value: CustomerChoice;
+  onChange: (value: CustomerChoice) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset className={styles.customerChoice} disabled={disabled}>
+      <legend>Customers, as contacts</legend>
+      {CUSTOMER_CHOICES.map((choice) => (
+        <label key={choice.value} className={styles.customerOption}>
+          <input type="radio" name={name} value={choice.value} checked={value === choice.value} onChange={() => onChange(choice.value)} />
+          <span>
+            <strong>{choice.label}</strong>
+            <span className={ui.muted}>{choice.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+/** Variants without a SKU (decision 1338), from what's linked so far; nothing when they all have one. */
+export function SkuNote({ connection }: { connection: SalesPlatformConnection }) {
+  if (!connection.syncProducts) return null;
+  const note = skuNote(SALES_PLATFORM_LABELS[connection.platform], connection.productVariants);
+  return note ? <Notice tone={note.tone}>{note.text}</Notice> : null;
 }
 
 function firstOfMonth(today: string): string {

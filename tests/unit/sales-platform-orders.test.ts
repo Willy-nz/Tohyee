@@ -5,6 +5,7 @@ import {
   type LinkedItem,
   type PostingRules,
   localDate,
+  oldestFirst,
   orderPayments,
   planOrder,
   planPayout,
@@ -391,5 +392,43 @@ describe("Shopify Admin API 2026-10 checks (decision 665)", () => {
     } finally {
       setSalesPlatformFetchForTests(null);
     }
+  });
+});
+
+describe("posting order (decision 1341)", () => {
+  it("posts orders oldest first, whatever order the store listed them in", () => {
+    const order = (externalId: string, name: string, processedAt: string) => ({ externalId, name, processedAt });
+    const listed = [
+      order("5003", "#1003", "2026-09-20T01:00:00Z"),
+      order("5001", "#1001", "2026-09-11T01:00:00Z"),
+      order("5010", "#1010", "2026-09-25T01:00:00Z"),
+      order("5002", "#1002", "2026-09-11T01:00:00Z"),
+      order("5009", "#999", "2026-09-11T01:00:00Z"),
+    ];
+    expect(oldestFirst(listed).map((o) => o.name)).toEqual(["#999", "#1001", "#1002", "#1003", "#1010"]);
+    // A copy: what the store sent is left as it was.
+    expect(listed[0].name).toBe("#1003");
+  });
+});
+
+describe("an order's customer with no name (decision 1336)", () => {
+  const nameless = { id: 1301, first: "", last: "", email: "pip@made-up.test", updatedAt: "2026-10-01T00:00:00Z" };
+  it("uses the billing name, then the shipping name, before the email", () => {
+    expect(read(order1001({ customer: nameless, billingName: { first: " Pip ", last: "Rua  Rua" } })).customer).toMatchObject({
+      externalId: "1301",
+      name: "Pip Rua Rua",
+      nameIsFallback: false,
+      email: "pip@made-up.test",
+    });
+    expect(read(order1001({ customer: nameless, billingName: { first: null, last: null }, shippingName: { first: "Pip", last: null } })).customer).toMatchObject({
+      name: "Pip",
+      nameIsFallback: false,
+    });
+    expect(read(order1001({ customer: nameless })).customer).toMatchObject({ name: "pip@made-up.test", nameIsFallback: true });
+  });
+  it("keeps the customer's own name over the address's", () => {
+    expect(read(order1001({ customer: { ...nameless, first: "Pippa", last: "Rua" }, billingName: { first: "Someone", last: "Else" } })).customer).toMatchObject({
+      name: "Pippa Rua",
+    });
   });
 });
