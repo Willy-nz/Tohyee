@@ -11850,6 +11850,67 @@ guide, and Link My Books' Shopify chargebacks article.
       corrected when registration is backdated (1284: Tohyee lists them but
       doesn't advise, since IRD's rules for backdated registration decide).
 
+
+### Guided Akahu setup and clearer feed statuses (#543; decisions 1288-1291)
+
+Issue #543 asked for Akahu setup as a guided flow with clear statuses.
+Built like the shop setup Jess liked (decisions 1250-1259): one step at a
+time, accounts added on the spot, short lines with detail in info tips.
+Where Jess hasn't decided we follow Xero's bank feed setup (decision 537):
+**as Xero does, not yet reviewed**. Akahu's developer docs were read on 3
+November 2026 ("The Account Model", "Response Formats", "Personal Apps" and
+the 2024 response-code change). No real Akahu account was used; tests use
+made-up answers.
+
+1288. **Akahu setup is guided, from the bank feeds card.** Connect → choose
+      accounts → start date → check → first sync. Connecting checks the
+      tokens with Akahu and saves the login (it only reads), as connecting
+      a shop does. Choices change nothing until "Link and sync" on the
+      check step, which links all chosen accounts or none
+      (`POST /api/bank-feeds/akahu/links`), then runs each account's first
+      sync in turn and shows what it brought in, with a link to reconcile.
+      Each Akahu account goes into an existing bank or credit card account
+      (base currency, no other feed) or one added there ("Add a new
+      account", decision 1254; credit cards are added as credit cards).
+      The start date is three tiles: a year back (default, as before), this
+      month, or a chosen date. A login with nothing linked shows "Accounts
+      need linking" and a **Link bank accounts** button; "Link more
+      accounts" and "Add another login" use the same steps. The per-account
+      Bank feed tab still links one account.
+1289. **Statuses say what has happened, not what's planned.** Each login
+      shows, in this order: Needs new tokens; Accounts need linking; Last
+      sync failed (any linked account failed or stopped); Ready to sync
+      (linked, never synced); Last sync succeeded. "Syncing…" shows while a
+      sync started on the card runs. Shown beside it: when Akahu last
+      accepted the tokens (saved, or a sync Akahu answered), the schedule
+      as "Checks Akahu every 6 hours" with a tip that it isn't proof of an
+      import, the last successful sync, and each linked account's last
+      result ("12 new lines", "Nothing new", "Not synced yet", or the
+      failure) and lines brought in. Tenant migration 0217 keeps the last
+      successful sync and its new-line count per account, so a failure
+      doesn't hide the last success; accounts synced before it show
+      "Synced" with no count until their next sync.
+1290. **Existing links are never replaced.** Akahu accounts already linked
+      show where they go and can't be chosen. Linking a Tohyee account with
+      a working Akahu feed to a different Akahu account is refused ("Stop
+      that feed first"), on both routes. An account Akahu can't get
+      transactions for (no TRANSACTIONS attribute), one whose bank
+      connection Akahu has lost (INACTIVE) and a FOREIGN account can't be
+      linked; loans, KiwiSaver and the like can be, but aren't ticked. The
+      setup suggests a Tohyee account with the same bank account number
+      (in its name or description) or, failing that, the same name; with
+      two equally good fits it suggests none.
+1291. **Akahu's answers read as Akahu documents them.** A 401 means the
+      tokens are wrong or revoked: the login is marked "needs new tokens"
+      (BK33). A 403 is a missing permission or a blocked IP address, not a
+      revoked token, so it's shown as such with what to check and the
+      tokens aren't marked refused (Akahu warns against treating 403 as
+      revoked). A credit card's balance is negative when money is owed, so
+      it's kept as Akahu sends it; before, it was always made negative,
+      which showed a card in credit as owing. Not checked against a real
+      account: personal app token prefixes (still app_token_ and
+      user_token_, as before), and whether a personal app can be limited to
+      some accounts (Tohyee lists whatever Akahu shares).
 ### Fewer words on screen (Jess's design brief, 3 Nov 2026; decisions 1316-1320)
 
 Jess (3 November 2026): "I want this to be as perfect as Linear's website
