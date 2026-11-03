@@ -12,6 +12,16 @@ import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationAdminView } from "@/lib/organisations/admin";
 import { useConfirm } from "@/components/confirm-dialog";
 import { HandoverCard } from "@/components/server-handover";
+import { InfoPara, InfoTip } from "@/components/info-tip";
+import { GST_CHOICES, type GstChoiceInput, gstChoiceValue } from "@/lib/tax/registration-choice";
+
+// #181: the modules it starts with (changed later under Modules). #546: GST registration is chosen, not assumed.
+const NEW_MODULES: { accounting: boolean; gstRegistered: GstChoiceInput; crm: boolean; analytics: boolean } = {
+  accounting: true,
+  gstRegistered: "",
+  crm: false,
+  analytics: false,
+};
 
 function slugify(name: string): string {
   return name
@@ -44,8 +54,7 @@ export default function OrganisationsPage() {
   const [idTouched, setIdTouched] = useState(false);
   const [baseCurrency, setBaseCurrency] = useState("NZD");
   const [ownerEmail, setOwnerEmail] = useState("");
-  // #181: the modules it starts with (changed later under Modules).
-  const [modules, setModules] = useState({ accounting: true, gstRegistered: true, crm: false, analytics: false });
+  const [modules, setModules] = useState(NEW_MODULES);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const { reload } = list;
@@ -70,7 +79,7 @@ export default function OrganisationsPage() {
     try {
       const result = await api<{ organisation: OrganisationAdminView; modulesNote: string | null }>("/api/admin/organisations", {
         method: "POST",
-        body: { id, displayName: name, baseCurrency, ownerEmail: ownerEmail || undefined, modules: { ...modules, gstRegistered: modules.accounting && modules.gstRegistered } },
+        body: { id, displayName: name, baseCurrency, ownerEmail: ownerEmail || undefined, modules: { ...modules, gstRegistered: modules.accounting ? gstChoiceValue(modules.gstRegistered) : "unsure" } },
       });
       if (result.organisation.provisioningStatus === "ready") {
         setStatus({
@@ -87,7 +96,7 @@ export default function OrganisationsPage() {
       setId("");
       setIdTouched(false);
       setOwnerEmail("");
-      setModules({ accounting: true, gstRegistered: true, crm: false, analytics: false });
+      setModules(NEW_MODULES);
       list.reload();
       router.refresh();
     } catch (caught) {
@@ -159,10 +168,33 @@ export default function OrganisationsPage() {
               <input type="checkbox" checked={modules.accounting} onChange={(event) => setModules({ ...modules, accounting: event.target.checked })} /> Accounting
             </label>
             {modules.accounting ? (
-              <label className={ui.checkbox}>
-                <input type="checkbox" checked={modules.gstRegistered} onChange={(event) => setModules({ ...modules, gstRegistered: event.target.checked })} /> Tax: registered
-                for GST
-              </label>
+              <fieldset style={{ border: 0, padding: "0 0 0 24px", margin: 0, display: "grid", gap: 4 }}>
+                <legend>
+                  Is it registered for GST?{" "}
+                  <InfoTip label="Why we ask">
+                    <InfoPara>
+                      Tohyee only charges and claims GST for an organisation registered with Inland Revenue. Choosing here means its first invoices, bank coding and
+                      Shopify or WooCommerce sales get GST right from the start.
+                    </InfoPara>
+                    <InfoPara>
+                      <strong>Not sure yet</strong> starts it with no GST (amounts are recorded in full) and asks the owner to confirm in Settings. The date
+                      registration started can be set there too.
+                    </InfoPara>
+                  </InfoTip>
+                </legend>
+                {GST_CHOICES.map((choice) => (
+                  <label key={choice.value} className={ui.checkbox}>
+                    <input
+                      type="radio"
+                      name="gst-choice"
+                      required
+                      checked={modules.gstRegistered === choice.value}
+                      onChange={() => setModules({ ...modules, gstRegistered: choice.value })}
+                    />{" "}
+                    {choice.label}
+                  </label>
+                ))}
+              </fieldset>
             ) : null}
             <label className={ui.checkbox}>
               <input type="checkbox" checked={modules.crm} onChange={(event) => setModules({ ...modules, crm: event.target.checked })} /> CRM
@@ -172,7 +204,7 @@ export default function OrganisationsPage() {
             </label>
           </fieldset>
           <div>
-            <Button type="submit" disabled={busy || (!modules.accounting && !modules.crm && !modules.analytics)}>
+            <Button type="submit" disabled={busy || (!modules.accounting && !modules.crm && !modules.analytics) || (modules.accounting && modules.gstRegistered === "")}>
               {busy ? "Creating database…" : "Create organisation"}
             </Button>
           </div>

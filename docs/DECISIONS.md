@@ -11793,7 +11793,7 @@ guide, and Link My Books' Shopify chargebacks article.
 ### Durable bank batches, Unreconcile selected and batch undo (#547; decisions 1273-1279)
 
 1273. **Batches are kept in the organisation's database** (#547, migration
-      0216): `batches` and `batch_actions`, generic so other kinds of batch
+      0218): `batches` and `batch_actions`, generic so other kinds of batch
       (e.g. #544's staged AI coding) can use them. A batch has a durable id,
       its command source and key, and who asked (with the AI key, decision
       348); each action keeps what was asked (action, line, payload, its own
@@ -11863,3 +11863,64 @@ guide, and Link My Books' Shopify chargebacks article.
       (Done, Refused with why, Not started, Outcome unknown, Working on it),
       with Resume, Try refused ones again and Undo batch… for bookkeepers.
       get_bank_batch and list_bank_batches let any AI key read them.
+
+1280. **GST registration is confirmed by a person (#546, GSR1-GSR5).**
+      `gst_registered` stays Tohyee's starting guess (NR8) until someone
+      confirms it; `gst_registration_confirmed_at`/`_by` (migration 0216)
+      record when and who. Confirming is choosing an answer in Settings, a
+      deliberate change to registration or its dates, typing a GST number
+      in while registered, or the answer given when the organisation is
+      created. Saving other settings never confirms. Xero asks at set-up;
+      the "not confirmed" state is Claude's rule from the issue.
+1281. **What "not confirmed" does.** Set as not registered (confirmed or
+      not): no GST, amounts in full (the issue's safe default). Set as
+      registered but not confirmed: documents a person enters work as NR8
+      (no change for them), but automatic posting doesn't guess. New
+      Shopify/WooCommerce orders wait (retried each sync), the store setup
+      asks no GST questions, and the AI can't choose GST codes for bank
+      lines. One notice in Settings; nothing repeats it per transaction.
+      Orders already in the books (their refunds and payouts) follow what
+      they were.
+1282. **The upgrade confirms only on evidence a person gave.** Migration
+      0216 confirms an organisation already registered with a GST number in
+      Settings, or one whose registration a person changed in Settings (the
+      latest such audit event gives who and when). NR8's own guesses, either
+      way, aren't confirmed. A GST basis alone confirms nothing, and a
+      missing GST number never makes an organisation not registered.
+1283. **Creating an organisation asks the question with nothing
+      preselected.** Yes (registered, confirmed), No (not registered,
+      confirmed) or Not sure yet (not registered, not confirmed: no GST
+      until the owner confirms). The API takes `modules.gstRegistered` as
+      true, false or "unsure"; left out it keeps NR8's unconfirmed guess,
+      so existing callers and tests are unchanged.
+1284. **Changing registration never rewrites history (GSR8).** The months
+      with posted entries whose registration the change flips are listed
+      (Settings shows them before saving; `GET
+      /api/organisations/{id}/settings/gst-impact`) and the change is
+      refused until the person acknowledges them
+      (`acknowledgeAffectedPeriods`). They correct those months with
+      ordinary credit notes, documents or journals. No automatic
+      correction, as the issue asks; NR8's refusal of GST left outside the
+      registration stays.
+1285. **One helper for automatic posting.** `gstStatusOn(registration,
+      date)` gives registered / not_registered / unconfirmed, and
+      `isGstRegisteredOn` is true only for a confirmed registration
+      covering the date. Sales platform posting, the store setup and
+      diagnostics use them by date (a store starting before a registration
+      date is asked for GST codes); #548's payout work should too. MCP's
+      `get_organisation` returns the same as `gstRegistration` and no longer
+      says a GST number means registered.
+1286. **AI bank coding needs evidence for GST (GSR10).** For a registered
+      organisation, `create_and_match` (alone or in `bulk_reconcile`) needs
+      `gstEvidence`: tax_document, person_said, contact_usual or
+      no_gst_supply (which allows only lines with no GST). Without it the
+      line stays unreconciled for a person: "needs review" is that status,
+      never a tax code. Bank rules are a person's own choice and are
+      unaffected. The evidence is the AI's own statement and isn't stored;
+      it makes guessing deliberate rather than impossible.
+1287. **Legal questions left for Jess and Will.** Whether to keep posting
+      documents a person enters with GST while unconfirmed (decision 1281
+      keeps NR8 for them); whether a GST number in Settings is enough to
+      confirm registration on upgrade (1282); and how past months should be
+      corrected when registration is backdated (1284: Tohyee lists them but
+      doesn't advise, since IRD's rules for backdated registration decide).

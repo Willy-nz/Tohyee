@@ -1,3 +1,4 @@
+import { assertAiGstTreatment } from "@/lib/ai/gst-evidence";
 import { getStatementLine, type StatementLine } from "@/lib/bank/accounts";
 import { lineErrorText } from "@/lib/bank/bulk";
 import { reconcileStatementLine, suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
@@ -71,7 +72,10 @@ export async function matchLine(tx: OrgTx, args: Record<string, unknown>, source
   });
 }
 
+/** An AI's spend or receive money (create_and_match, also in bulk_reconcile batches). */
 export async function createAndMatch(tx: OrgTx, args: Record<string, unknown>, source: string, key: string): Promise<Reconciled> {
+  // #546 (GSR10): no GST treatment invented from a merchant's name.
+  await assertAiGstTreatment(tx, args);
   return reconcileStatementLine(tx, args.lineId, {
     source,
     idempotencyKey: key,

@@ -19,6 +19,7 @@ import { coreQuery } from "@/lib/db/transactions";
 import { TooManyRequestsError } from "@/lib/errors";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { getOrganisation } from "@/lib/organisations/registry";
+import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import {
   apiRequest,
   createTestOrganisation,
@@ -127,6 +128,7 @@ describeWithDatabase("Durable bank batches: resume, unreconcile selected and und
     contactId: zEnergy.id,
     amountsMode: "no_tax",
     lines: [{ description: "Fuel", accountCode: "6120", amount }],
+    gstEvidence: "person_said",
   });
 
   /** Each line reconciled at most once, and at most one spend money per line: no double posting. */
@@ -178,6 +180,8 @@ describeWithDatabase("Durable bank batches: resume, unreconcile selected and und
     ]);
     const organisation = (await getOrganisation(ORG))!;
     run = (work) => withOrganisationTransaction(organisation, { userId: owner.id, email: owner.email, via: 'AI key "Test"' }, work);
+    // #546: a confirmed GST registration, so the AI's coding needs evidence rather than being refused.
+    await asUser(owner, (tx) => updateOrganisationSettings(tx, { gstRegistrationConfirmed: true }));
     zEnergy = (await asUser(owner, (tx) => createContact(tx, { idempotencyKey: key("c"), name: "Z Energy", isSupplier: true }))).contact;
     await asUser(owner, (tx) => createBankAccount(tx, { code: "1010", name: "Savings account", accountType: "bank" }));
     const accounts = await asUser(owner, (tx) => listBankAccounts(tx));
@@ -490,7 +494,7 @@ describeWithDatabase("Durable bank batches: resume, unreconcile selected and und
     const made = await startReconcileBatch(run, {
       actions: [
         spend(locked.id, "19.00"),
-        { action: "create_and_match", lineId: spendLine.id, contactId: zEnergy.id, amountsMode: "inclusive", lines: [{ description: "Fuel", accountCode: "6120", taxCode: "GST", amount: "46.00" }] },
+        { action: "create_and_match", lineId: spendLine.id, contactId: zEnergy.id, amountsMode: "inclusive", lines: [{ description: "Fuel", accountCode: "6120", taxCode: "GST", amount: "46.00" }], gstEvidence: "tax_document" },
         { action: "transfer_and_match", lineId: transferOut.id, otherAccountCode: "1010" },
         { action: "match", lineId: matchLine.id, journalLineIds: [postedLine] },
       ],

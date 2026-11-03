@@ -23,6 +23,7 @@ import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { requireArray, requireId, requireIdempotencyKey } from "@/lib/validation";
+import { GST_EVIDENCE_FIELD } from "@/lib/ai/gst-evidence";
 
 /**
  * Bank reconciliation for a connected AI (#205, decision 488, examples
@@ -551,6 +552,7 @@ const CREATE_FIELDS: Record<string, JsonSchema> = {
   contactId: { type: "string", description: "From list_contacts." },
   amountsMode: { type: "string", enum: ["inclusive", "exclusive", "no_tax"], description: "Whether the amounts include GST, exclude it, or have none." },
   lines: CODE_LINES,
+  gstEvidence: GST_EVIDENCE_FIELD,
   reference: { type: "string" },
   exchangeRate: EXCHANGE_RATE,
 };
@@ -579,7 +581,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
     title: "Code a bank line",
     level: "full",
     description:
-      "Posts spend money (money out) or receive money (money in) for an unreconciled statement line, dated the line's date, to the accounts, GST codes and contact given, and reconciles the line with it. The lines must add up to the line's amount. Refused in a locked period.",
+      "Posts spend money (money out) or receive money (money in) for an unreconciled statement line, dated the line's date, to the accounts, GST codes and contact given, and reconciles the line with it. The lines must add up to the line's amount. When the organisation is registered for GST on the line's date, gstEvidence must say what supports the GST treatment; while its registration is unconfirmed, only no_gst_supply lines can be coded. Without evidence, leave the line for the person to review. Refused in a locked period.",
     inputSchema: schema({ ...CREATE_FIELDS, idempotencyKey: IDEMPOTENCY }, ["lineId", "contactId", "amountsMode", "lines"]),
     async run(tx, args, context) {
       const result = await createAndMatch(tx, args, context.source, idempotencyKey(args.idempotencyKey));

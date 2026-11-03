@@ -1,5 +1,5 @@
 import { businessTimeZone } from "@/lib/dates";
-import { type GstRegistration, isRegisteredOn } from "@/lib/tax/registration";
+import { type GstRegistration, gstStatusOn, isRegisteredOn, unconfirmedMessage } from "@/lib/tax/registration";
 import { type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
 import {
   abs,
@@ -180,6 +180,17 @@ type Draft = { what: string; amount: Decimal; quantity: string; shopifyTax: Deci
  * or why it can't come in. `items` are the items linked to the order's
  * variants; `overseas` is whether the customer's contact is overseas.
  */
+/**
+ * Why a new order dated `date` waits instead of coming in (#546, GSR3): the
+ * setting says registered on that date but no one has confirmed it, so
+ * Tohyee doesn't decide on its own whether the order has GST. Null: go on.
+ * Orders already in the books (refunds, payments) follow what they were.
+ */
+export function gstWaitReason(rules: PostingRules, date: string): string | null {
+  if (!rules.gstRegistration || gstStatusOn(rules.gstRegistration, date) !== "unconfirmed") return null;
+  return unconfirmedMessage(rules.gstRegistration.organisationName);
+}
+
 /** The rules as they apply on a date: registered for GST on that date or not (issue #180). */
 function rulesOn(rules: PostingRules, date: string): PostingRules {
   return rules.gstRegistration ? { ...rules, gstRegistered: isRegisteredOn(rules.gstRegistration, date) } : rules;
