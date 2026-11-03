@@ -8,6 +8,7 @@
 import { add, cmp, dec, divide, isPositive, mul, sub, toFixedString } from "@/lib/money/decimal";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import type { SalesPlatform } from "@/lib/sales-platforms/types";
+import { type GstRegistration, mayBeRegisteredFrom } from "@/lib/tax/registration";
 
 /** The parts of an account the setup looks at (a subset of the chart's Account). */
 export type SetupAccount = {
@@ -155,14 +156,34 @@ export function suggestAccounts(
   };
 }
 
-/** The tax code for untaxed sales (ZERO, else the first zero-rated or exempt sales code) and Shopify's 15% → GST. */
-export function suggestTaxCodes(codes: readonly SetupTaxCode[]): { untaxed: string | null; rates: Array<{ rate: string; taxCode: string }> } {
+/**
+ * How the setup treats GST for orders from `startDate` on (#546, GSR3, GSR6):
+ * `registered` only when a person confirmed a registration that covers some
+ * of those dates; `unconfirmed` when the setting says registered but no one
+ * has confirmed it (no GST suggestions; orders wait); else `not_registered`
+ * (orders come in at the full amount, with no GST questions).
+ */
+export type StoreGstSetup = "registered" | "not_registered" | "unconfirmed";
+
+export function storeGstSetup(registration: Pick<GstRegistration, "registered" | "from" | "until" | "confirmed"> | null | undefined, startDate: string, today: string): StoreGstSetup {
+  if (!registration) return "unconfirmed";
+  if (!mayBeRegisteredFrom(registration, /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : today)) return "not_registered";
+  return registration.confirmed === false ? "unconfirmed" : "registered";
+}
+
+/**
+ * The tax code for untaxed sales (ZERO, else the first zero-rated or exempt
+ * sales code) and Shopify's 15% → GST. The 15% → GST suggestion is only made
+ * for a confirmed registration (#546, GSR6): otherwise nothing is suggested.
+ */
+export function suggestTaxCodes(codes: readonly SetupTaxCode[], gstRegistered = true): { untaxed: string | null; rates: Array<{ rate: string; taxCode: string }> } {
   const sales = codes.filter((code) => code.isActive && code.availableOn !== "purchases");
   const untaxed =
     sales.find((code) => code.code.toUpperCase() === "ZERO" && code.category === "zero_rated") ??
     sales.find((code) => code.category === "zero_rated") ??
     sales.find((code) => code.category === "exempt");
   const standard = sales.find((code) => code.category === "standard" && cmp(dec(code.rate), dec("0.15")) === 0);
+  if (!gstRegistered) return { untaxed: null, rates: [] };
   return { untaxed: untaxed?.code ?? null, rates: standard ? [{ rate: "15", taxCode: standard.code }] : [] };
 }
 

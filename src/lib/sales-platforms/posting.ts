@@ -16,6 +16,7 @@ import {
   type LinkedItem,
   type PostingRules,
   PAID_STATUSES,
+  gstWaitReason,
   localDate,
   money,
   orderPayments,
@@ -142,7 +143,13 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     guestContactId: row.guest_contact_id,
     baseCurrency: tx.baseCurrency,
     gstRegistered: settings.gstRegistered,
-    gstRegistration: { registered: settings.gstRegistered, from: settings.gstRegisteredFrom, until: settings.gstRegisteredUntil, organisationName: settings.displayName },
+    gstRegistration: {
+      registered: settings.gstRegistered,
+      from: settings.gstRegisteredFrom,
+      until: settings.gstRegisteredUntil,
+      organisationName: settings.displayName,
+      confirmed: settings.gstRegistrationConfirmedAt !== null,
+    },
     foreignTrade: settings.foreignTrade,
     exportTaxCode: settings.exportTaxCode,
     untaxedTaxCode: row.untaxed_code,
@@ -399,6 +406,12 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         externalId: id,
         message: `${order.name} was cancelled in ${shop} before it was paid or brought in, so there's nothing to post.`,
       });
+      return;
+    }
+    // GSR3: registration not confirmed: the order waits rather than Tohyee guessing its GST.
+    const gstWait = gstWaitReason(posting, localDate(order.processedAt));
+    if (gstWait) {
+      await wait(`${order.name} waits: ${gstWait}`, "waiting");
       return;
     }
     let contactId: string | null;

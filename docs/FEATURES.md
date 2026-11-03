@@ -358,6 +358,18 @@ that something happened.
   deregistering lists the fixed assets still held as a reminder. Approved
   documents never change; dates that would leave GST in the books outside
   the registration are refused.
+- **Confirmed GST registration** (#546, GSR1-GSR10, decisions 1280-1287,
+  as Xero does where it has an answer, not yet reviewed): a new
+  organisation is created with an answer to "Is it registered for GST?"
+  (yes, no, or not sure yet: no GST until confirmed). Settings › GST asks
+  until someone confirms, and records who and when. While unconfirmed but
+  set as registered, Shopify and WooCommerce orders wait and the AI can't
+  choose GST codes on bank lines; the store setup only suggests 15% → GST
+  for a confirmed registration. Changing registration lists the months
+  with entries it reaches and needs the person to say they'll correct
+  them; nothing posted is rewritten. MCP's `get_organisation` reports the
+  same status. AI bank coding needs `gstEvidence` for registered
+  organisations.
 - **Tax codes** as settings. Sales invoices and bills apply them; manual
   journals don't. A new organisation starts with the standard NZ codes
   (GST 15%, Zero rated, Exempt, No GST, from 1 Oct 2010); existing

@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoTip } from "@/components/info-tip";
+import { InfoPara, InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -21,6 +21,8 @@ import { describeGstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-bo
 import { GST_BASES, GST_BASIS_LABELS, type GstBasis } from "@/lib/tax/categories";
 import type { TaxCode } from "@/lib/tax/codes";
 import { codesForSide, unavailableNote } from "@/lib/tax/available-on";
+import type { AffectedGstPeriod } from "@/lib/organisations/settings";
+import { initialRegistrationChoice, registrationChanges, registrationPatch } from "@/lib/tax/registration-choice";
 
 /** The GST filing frequency choices (GP1): "months:endMonth", or "" for not set. */
 const GST_PERIOD_CHOICES: Array<{ value: string; label: string }> = [
@@ -64,11 +66,22 @@ function SettingsForm({
   const [postalAddress, setPostalAddress] = useState(settings.postalAddress ?? "");
   const [gstNumber, setGstNumber] = useState(settings.gstNumber ? formatGstNumber(settings.gstNumber) : "");
   // Issue #180: registered for GST, optionally from and until a date (NR5, NR6).
-  const [gstRegistered, setGstRegistered] = useState(settings.gstRegistered);
+  // #546: nothing is chosen until someone confirms it (GSR4).
+  const [gstChoice, setGstChoice] = useState(initialRegistrationChoice(settings));
+  const gstRegistered = gstChoice === "registered";
+  const [acknowledged, setAcknowledged] = useState(false);
   const [gstRegisteredFrom, setGstRegisteredFrom] = useState(settings.gstRegisteredFrom ?? "");
   const [gstRegisteredUntil, setGstRegisteredUntil] = useState(settings.gstRegisteredUntil ?? "");
   const [paymentDetails, setPaymentDetails] = useState(settings.paymentDetails ?? "");
   const [error, setError] = useState<string | null>(null);
+  const registrationForm = { choice: gstChoice, from: gstRegisteredFrom, until: gstRegisteredUntil };
+  const changing = registrationChanges(settings, registrationForm);
+  // GSR8: the months already holding entries that this change reaches. Nothing is rewritten.
+  const impact = useApiData<{ periods: AffectedGstPeriod[] }>(
+    changing ? `/api/organisations/${organisationId}/settings/gst-impact` : null,
+    { registered: String(gstRegistered), from: gstRegisteredFrom, until: gstRegisteredUntil },
+  );
+  const affected = changing ? (impact.data?.periods ?? []) : [];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,9 +101,7 @@ function SettingsForm({
           ...(exportTaxCode ? { exportTaxCode } : {}),
           postalAddress: postalAddress.trim() || null,
           gstNumber: gstNumber.trim() || null,
-          gstRegistered,
-          gstRegisteredFrom: gstRegistered ? gstRegisteredFrom || null : null,
-          gstRegisteredUntil: gstRegistered ? gstRegisteredUntil || null : null,
+          ...registrationPatch(settings, registrationForm, acknowledged),
           paymentDetails: paymentDetails.trim() || null,
         },
       });
@@ -134,11 +145,58 @@ function SettingsForm({
         </Field>
       </div>
       <h3 style={{ margin: "8px 0 0" }}>GST</h3>
-      <label className={ui.checkbox}>
-        <input type="checkbox" checked={gstRegistered} onChange={(event) => setGstRegistered(event.target.checked)} />
-        Registered for GST. When it&apos;s off, documents use only tax codes with no GST, print as &ldquo;Invoice&rdquo;, and the
-        GST return and GST audit are hidden.
-      </label>
+      {settings.gstRegistrationConfirmedAt === null ? (
+        <Notice tone="warning">
+          Is {settings.displayName} registered for GST? Choose below and save.{" "}
+          {settings.gstRegistered
+            ? "Until then, Shopify and WooCommerce sales wait and the AI won't choose GST codes."
+            : "Until then, everything is recorded with no GST."}
+        </Notice>
+      ) : null}
+      <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 4 }}>
+        <legend>
+          Registered for GST?{" "}
+          <InfoTip label="What this changes">
+            <InfoPara>
+              <strong>Yes:</strong> documents can charge and claim GST, invoices print as &ldquo;Tax invoice&rdquo;, and the GST return is in the menus. Use the dates
+              if registration started or ended part way through.
+            </InfoPara>
+            <InfoPara>
+              <strong>No:</strong> amounts are recorded in full with no GST, documents print as &ldquo;Invoice&rdquo;, and the GST return and GST audit are hidden.
+              Shopify and WooCommerce sales come in at the full amount.
+            </InfoPara>
+            <InfoPara>Changing this never changes anything already recorded. If it reaches months that already have entries, Tohyee lists them for you to correct.</InfoPara>
+          </InfoTip>
+        </legend>
+        <label className={ui.checkbox}>
+          <input type="radio" name="gst-registered" checked={gstChoice === "registered"} onChange={() => setGstChoice("registered")} /> Yes, registered for GST
+        </label>
+        <label className={ui.checkbox}>
+          <input type="radio" name="gst-registered" checked={gstChoice === "not_registered"} onChange={() => setGstChoice("not_registered")} /> No, not registered
+        </label>
+        {settings.gstRegistrationConfirmedAt !== null && settings.gstRegistrationConfirmedBy ? (
+          <span className={ui.muted}>
+            Confirmed by {settings.gstRegistrationConfirmedBy} on {formatDate(settings.gstRegistrationConfirmedAt.slice(0, 10))}.
+          </span>
+        ) : null}
+      </fieldset>
+      {affected.length > 0 ? (
+        <Notice tone="warning">
+          <p style={{ margin: 0 }}>This reaches months that already have entries. Nothing already recorded will change:</p>
+          <ul style={{ margin: "4px 0" }}>
+            {affected.map((period) => (
+              <li key={period.month}>
+                {period.label}: {period.entries} {period.entries === 1 ? "entry" : "entries"}
+                {period.withGst > 0 ? `, ${period.withGst} with GST` : ""}
+              </li>
+            ))}
+          </ul>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I&apos;ll correct these months myself (credit
+            notes, new documents or journals)
+          </label>
+        </Notice>
+      ) : null}
       {gstRegistered ? (
         <div className={ui.grid3}>
           <Field label="GST number" hint="Printed on tax invoices and credit notes. Without it, invoices print as “Invoice”, not “Tax invoice”.">

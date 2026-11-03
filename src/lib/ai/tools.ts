@@ -18,6 +18,7 @@ import { formatGstNumber } from "@/lib/format";
 import { getInvoice, listInvoices, type InvoiceSummary } from "@/lib/invoices/service";
 import { getJournalDraft, listJournalDraftsPage } from "@/lib/ledger/journal-drafts";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { gstRegistrationSummary } from "@/lib/tax/registration";
 import { accountTransactions } from "@/lib/reports/account-transactions";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
@@ -258,7 +259,7 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "get_organisation",
     title: "Organisation",
     description:
-      "The organisation these books are for: name, base currency, financial year end, GST basis, GST filing period and GST number (registered when Tohyee has one), your role, what this connection may do now (access: read, draft, post or full, capped by your role now), and today's date. Call this first.",
+      "The organisation these books are for: name, base currency, financial year end, GST registration (gstRegistration: status today, whether a person has confirmed it, and its dates; the GST number alone doesn't decide it), GST basis, GST filing period and GST number, your role, what this connection may do now (access: read, draft, post or full, capped by your role now), and today's date. Call this first.",
     inputSchema: schema(),
     async run(tx, _args, context) {
       const settings = await getOrganisationSettings(tx);
@@ -273,6 +274,7 @@ export const READ_TOOLS: readonly AiTool[] = (
         gstRegistered: settings.gstRegistered,
         gstRegisteredFrom: settings.gstRegisteredFrom,
         gstRegisteredUntil: settings.gstRegisteredUntil,
+        gstRegistration: gstRegistrationSummary(settings, todayIsoDate()),
         gstNumber: settings.gstNumber ? formatGstNumber(settings.gstNumber) : null,
         modules: {
           advancedReporting: settings.advancedFeatures,
