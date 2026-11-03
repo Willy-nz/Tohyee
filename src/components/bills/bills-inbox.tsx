@@ -191,8 +191,7 @@ export function BillsInbox({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="Bills inbox"
-        description="Supplier bills and receipts that have arrived but aren't bills yet. Nothing here is posted. Make a bill from each one, or remove it with a reason."
+        description="Nothing here is posted."
         actions={
           <Link className={ui.muted} href="/operations/bills">
             All bills
@@ -461,7 +460,6 @@ function InboxMailboxes({ organisationId, onChecked }: { organisationId: string;
   return (
     <Card
       title="Bills from email"
-      description="A mailbox folder or Gmail label whose bills come into the inbox by themselves."
       actions={can("admin") && !adding ? <Button size="small" variant="secondary" onClick={() => setAdding(true)}>Add a mailbox</Button> : null}
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}

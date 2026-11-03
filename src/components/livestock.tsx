@@ -596,7 +596,7 @@ export function LivestockMovements({ organisationId }: { organisationId: string 
         </Card>
       ) : null}
 
-      <Card title="Movements" description="Newest first. Voided movements stay, marked voided.">
+      <Card title="Movements">
         {movements.error ? <Notice tone="error">{movements.error}</Notice> : null}
         {movements.data && movements.data.movements.length === 0 ? <Empty>No movements yet.</Empty> : null}
         {movements.data && movements.data.movements.length > 0 ? (

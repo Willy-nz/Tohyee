@@ -46,7 +46,7 @@ export function JournalDrafts({
   if (drafts.data && list.length === 0 && !status) return null;
 
   return (
-    <Card title="Draft journals" description="Saved but not posted: they aren't in the ledger until someone posts them.">
+    <Card title="Draft journals">
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {drafts.error ? <Notice tone="error">{drafts.error}</Notice> : null}
       {editing && accounts ? (

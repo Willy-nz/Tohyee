@@ -313,6 +313,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_staff",
         "get_sales_platform_status",
         "list_sales_platform_log",
+        "list_sales_platform_payout_matches",
       ].sort(),
     );
     for (const tool of tools) {

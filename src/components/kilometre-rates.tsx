@@ -133,7 +133,6 @@ export function KilometreRates({ organisationId, canEdit }: { organisationId: st
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
       <Card
-        title="Kilometre rates"
         description={<>Mileage lines on expense claims are paid at these rates.{" "}<InfoTip label="Kilometre rates">Tier 1 for the first 14,000 km of a person&apos;s mileage for a vehicle type in an income year, tier 2 after that. No GST. When a year&apos;s rates aren&apos;t entered, the latest rates are used and the line says so.</InfoTip></>}
       >
         {years.map((year) => {

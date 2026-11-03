@@ -45,7 +45,8 @@ function time12(value: string | null): string {
   return `${hour % 12 === 0 ? 12 : hour % 12}${minute ? `:${String(minute).padStart(2, "0")}` : ""}${hour >= 12 ? "pm" : "am"}`;
 }
 
-function Card({ title, href, linkLabel, children, wide = false, aside }: { title: string; href: string; linkLabel: string; children: ReactNode; wide?: boolean; aside?: ReactNode }) {
+/** A farm Home card: its title is the link to the page behind it (no "Open X" footer). */
+function Card({ title, href, children, wide = false, aside }: { title: string; href: string; children: ReactNode; wide?: boolean; aside?: ReactNode }) {
   return (
     <section className={`${homeStyles.tile} ${wide ? styles.wide : ""}`} aria-label={title}>
       <div className={homeStyles.tileTitle}>
@@ -53,7 +54,6 @@ function Card({ title, href, linkLabel, children, wide = false, aside }: { title
         {aside}
       </div>
       {children}
-      <Link className={styles.more} href={href}>{linkLabel}</Link>
     </section>
   );
 }
@@ -62,7 +62,7 @@ function CalendarCard({ data }: { data: FarmHomeCalendar }) {
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of data.items) if (item.date) byDay.set(item.date, [...(byDay.get(item.date) ?? []), item]);
   return (
-    <Card title="This week on the farm" href="/operations/farming/calendar" linkLabel="Open the farm calendar" wide aside={<span className={homeStyles.kind}>Private to you</span>}>
+    <Card title="This week on the farm" href="/operations/farming/calendar" wide aside={<span className={homeStyles.kind}>Private to you</span>}>
       {data.needsChecking ? (
         <p className={styles.attention}>
           <Link href="/operations/farming/calendar">{data.needsChecking} {data.needsChecking === 1 ? "item needs" : "items need"} checking</Link>
@@ -110,7 +110,7 @@ function Agenda({ byDay, from }: { byDay: Map<string, CalendarItem[]>; from: str
 function StockCard({ data }: { data: FarmHomeStock }) {
   const kinds = new Set(data.classes.map((row) => row.kind));
   return (
-    <Card title="Stock" href="/operations/livestock" linkLabel="Open Livestock" aside={<span className={homeStyles.kind}>Year to {formatDate(data.yearEnd)}</span>}>
+    <Card title="Stock" href="/operations/livestock" aside={<span className={homeStyles.kind}>Year to {formatDate(data.yearEnd)}</span>}>
       <div className={homeStyles.figure}>{int.format(data.total)} <span className={styles.unit}>head</span></div>
       <div className={homeStyles.rows}>
         {data.classes.slice(0, 6).map((row) => (
@@ -133,7 +133,7 @@ function StockCard({ data }: { data: FarmHomeStock }) {
 
 function PastureCard({ farms }: { farms: FarmHomePasture[] }) {
   return (
-    <Card title="Pasture and feed" href="/operations/farming/pasture" linkLabel="Open Pasture">
+    <Card title="Pasture and feed" href="/operations/farming/pasture">
       {farms.map((farm) => (
         <div key={farm.farmId} className={styles.farm}>
           {farms.length > 1 ? <h3 className={styles.farmName}><Link href={`/operations/farming/pasture?farm=${encodeURIComponent(farm.farmId)}`}>{farm.farmName}</Link></h3> : null}
@@ -173,7 +173,7 @@ function PastureCard({ farms }: { farms: FarmHomePasture[] }) {
 
 function FertiliserCard({ plans }: { plans: FarmHomeFertiliser[] }) {
   return (
-    <Card title="Fertiliser" href="/operations/farming/fertiliser" linkLabel="Open the fertiliser plan">
+    <Card title="Fertiliser" href="/operations/farming/fertiliser">
       {plans.map((plan) => (
         <div key={plan.planId} className={styles.farm}>
           <h3 className={styles.farmName}><Link href={`/operations/farming/fertiliser?plan=${encodeURIComponent(plan.planId)}`}>{plans.length > 1 ? `${plan.farmName}: ` : ""}{plan.planName}</Link></h3>
@@ -197,7 +197,7 @@ function PerformanceCard({ data }: { data: FarmHomePerformance }) {
   ];
   const shown = rows.filter(([, key]) => data.workingExpenses[key] !== null);
   return (
-    <Card title="Farm performance" href="/operations/farming/benchmarks" linkLabel="Open Farm benchmarks" aside={<span className={homeStyles.kind}>Year to {formatDate(data.yearEnd)}</span>}>
+    <Card title="Farm performance" href="/operations/farming/benchmarks" aside={<span className={homeStyles.kind}>Year to {formatDate(data.yearEnd)}</span>}>
       <div>
         <div className={homeStyles.figure}><Money value={data.workingExpenses.amount} /></div>
         <small className={ui.muted}>Farm working expenses{data.previous ? ` · last year ` : ""}{data.previous ? <Money value={data.previous.amount} /> : null}</small>
@@ -222,7 +222,7 @@ function PerformanceCard({ data }: { data: FarmHomePerformance }) {
 function MoneyCard({ summary }: { summary: HomeSummary }) {
   const gst = summary.nextGstReturn;
   return (
-    <Card title="Money" href="/operations/bank-accounts" linkLabel="Open Banking">
+    <Card title="Money" href="/operations/bank-accounts">
       <div className={homeStyles.figure}><Money value={summary.cashInBank} /></div>
       <small className={ui.muted}>Cash in bank · ledger balances, excluding credit cards</small>
       <div className={homeStyles.rows}>
@@ -263,7 +263,7 @@ export function catchUpLine(item: FarmHomeCatchUpItem): { text: string; action: 
 
 function CatchUpCard({ items }: { items: FarmHomeCatchUpItem[] }) {
   return (
-    <Card title="Records to catch up on" href="/operations/farming/pasture" linkLabel="Open Pasture">
+    <Card title="Records to catch up on" href="/operations/farming/pasture">
       <div className={homeStyles.rows}>
         {items.map((item, index) => {
           const line = catchUpLine(item);
@@ -288,7 +288,7 @@ function SeasonCashCard({ data }: { data: FarmHomeSeasonCash }) {
   }));
   const now = [...data.months].reverse().find((month) => month.closing !== null);
   return (
-    <Card title="Cash this season" href="/operations/reports/cash-flow-forecast" linkLabel="Open the cash flow forecast" wide aside={<span className={homeStyles.kind}>{formatDate(data.yearStart)} – {formatDate(data.yearEnd)}</span>}>
+    <Card title="Cash this season" href="/operations/reports/cash-flow-forecast" wide aside={<span className={homeStyles.kind}>{formatDate(data.yearStart)} – {formatDate(data.yearEnd)}</span>}>
       <p className={ui.muted}>In the bank at each month&apos;s end, then what the books expect. Excludes credit cards.</p>
       <Chart
         spec={{ kind: "column", category: "month", stacked: true, series: [{ field: "actual", label: "In the bank" }, { field: "forecast", label: "Expected" }], valueFormat: "money", currency: data.currencyCode, compact: true }}
@@ -332,7 +332,7 @@ function NotebookCard({ data }: { data: FarmHomeNotebook }) {
     </ul>
   );
   return (
-    <Card title="Farm notebook" href="/operations/farming/notebook" linkLabel="Open the farm notebook">
+    <Card title="Farm notebook" href="/operations/farming/notebook">
       {data.goals.length ? <><h3 className={styles.farmName}>Goals</h3>{list(data.goals)}</> : null}
       {data.recent.length ? <><h3 className={styles.farmName}>Recent notes</h3>{list(data.recent)}</> : null}
     </Card>
@@ -433,8 +433,8 @@ export function FarmHomeTiles({ organisationId }: { organisationId: string }) {
           </div>
         )}
       </PageDashboardFrame>
-      <p className={ui.muted}>
-        <Link href="/operations?view=business">Business overview</Link>: profit by month, what needs attention and bank accounts.
+      <p>
+        <Link href="/operations?view=business">Business overview</Link>
       </p>
     </>
   );

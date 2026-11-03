@@ -249,7 +249,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {creating ? <Card title="Create a report" description="Start blank or from a ready-made report, then add or change charts, key figures and pivot tables from your connected data.">
+      {creating ? <Card title="Create a report">
         <form onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <Field label="Report name"><input autoFocus value={name} maxLength={100} placeholder={template ? TEMPLATES.find((entry) => entry.id === template)?.name : "e.g. Sales and gross profit"} onChange={(event) => setName(event.target.value)} /></Field>
           <fieldset className={styles.templates}>

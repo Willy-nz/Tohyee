@@ -51,7 +51,7 @@ export default function EditBillPage() {
   const { billId } = useParams<{ billId: string }>();
   return (
     <Page>
-      <PageHeader title="Edit draft bill" description="Drafts can be changed freely until they're approved." />
+      <PageHeader title="Edit draft bill" />
       <RequireOrganisation>{(organisationId) => <EditBill organisationId={organisationId} billId={billId} />}</RequireOrganisation>
     </Page>
   );

@@ -300,10 +300,7 @@ export default function RemoteAccessPage() {
   const status = remote ? STATUS[remote.tunnel.status] : null;
   return (
     <Page>
-      <PageHeader
-        title="Remote access"
-        description="Use Tohyee from anywhere (phone or laptop): nothing to open on your router, and a proper https address. Three ways, one at a time: a Tohyee address, your own domain on Cloudflare, or Tailscale Funnel."
-      />
+      <PageHeader title="Remote access" />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {!remote && !error ? <p className={ui.muted}>Loading…</p> : null}
       {remote ? (

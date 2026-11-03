@@ -130,7 +130,7 @@ export function WorkforceBudgets({ organisationId }: { organisationId: string })
 
   return (
     <>
-      <Card title="Workforce budgets" description="Each feeds the budgets chosen on it with wages and employer KiwiSaver by month and Department.">
+      <Card title="Workforce budgets">
         {list.error ? <Notice tone="error">{list.error}</Notice> : null}
         {list.data && list.data.workforceBudgets.length === 0 ? <Empty>No workforce budgets yet.</Empty> : null}
         {list.data && list.data.workforceBudgets.length > 0 ? (

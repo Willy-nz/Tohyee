@@ -256,8 +256,8 @@ function ConnectionForm({
         }}
       >
         <div className={ui.grid}>
-          <Field label="Connection name" hint="For you, e.g. Shop database.">
-            <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} required />
+          <Field label="Connection name">
+            <input placeholder="Shop database" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} required />
           </Field>
           <Field label="Server" hint={engine === "sqlserver" ? "Name or IP address, e.g. OFFICE-PC or OFFICE-PC\\SQLEXPRESS." : "Name or IP address, e.g. 192.168.1.20."}>
             <input value={host} maxLength={260} autoComplete="off" spellCheck={false} onChange={(event) => setHost(event.target.value)} required />

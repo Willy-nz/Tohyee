@@ -117,7 +117,6 @@ function FarmSoil({
     <>
       <Card
         title={`Latest soil tests on ${farm.name}`}
-        description="Each paddock's most recent test, as the lab reported it."
       >
         {summary.error ? <Notice tone="error">{summary.error}</Notice> : null}
         {summary.data && summary.data.summary.paddocks.length === 0 ? (
@@ -206,7 +205,6 @@ function FarmSoil({
       <SoilSamples organisationId={organisationId} farm={farm} />
       <Card
         title="All soil tests"
-        description="Newest first. Open one to see every result and attach the lab's report."
       >
         {tests.error ? <Notice tone="error">{tests.error}</Notice> : null}
         {tests.data && tests.data.tests.length === 0 ? (
@@ -425,8 +423,8 @@ function ImportSoil({
             onChange={(event) => void pick(event.target.files?.[0])}
           />
         </Field>
-        <Field label="Lab" hint="Optional">
-          <input
+        <Field label="Lab">
+          <input placeholder="Optional"
             value={lab}
             maxLength={100}
             onChange={(event) => setLab(event.target.value)}

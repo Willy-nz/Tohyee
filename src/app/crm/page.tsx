@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmHome() {
   return (
     <Page>
-      <PageHeader title="Home" description="CRM: the pipeline, conversion, your next actions and what the team has been doing." />
+      <PageHeader title="Home" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

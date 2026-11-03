@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmReassignPage() {
   return (
     <Page>
-      <PageHeader title="Reassign records" description="CRM: move leads, companies, deals, tasks and sequences from one person to another." />
+      <PageHeader title="Reassign records" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

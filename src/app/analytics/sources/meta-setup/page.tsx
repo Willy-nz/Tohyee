@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useSyncExternalStore } from "react";
 import { MetaAppForm, MetaCheckSetup } from "@/components/analytics-meta";
 import { RequireOrganisation } from "@/components/books";
-import { Card, Page, PageHeader } from "@/components/ui";
+import { Card, Page, PageHeader, Notice } from "@/components/ui";
 import { META_ADS_PERMISSION, META_CALLBACK_PATH, META_PERMISSION_TEXT, META_PERMISSIONS } from "@/lib/analytics/meta-reports";
 
 const code = { wordBreak: "break-all" as const, overflowWrap: "anywhere" as const };
@@ -31,10 +31,8 @@ function ReturnAddress() {
 export default function MetaSetupPage() {
   return (
     <Page>
-      <PageHeader
-        title="Setting up Meta (Facebook and Instagram)"
-        description="Do this once. Then connect Meta in Data sources. Tohyee only ever reads: it can't post, reply or change anything."
-      />
+      <PageHeader title="Setting up Meta (Facebook and Instagram)" />
+      <Notice>Tohyee only reads from Meta: it can&apos;t post, reply or change anything.</Notice>
       <div style={{ display: "grid", gap: 16, maxWidth: 860 }}>
         <Card title="1. Make a free Meta app">
           <ol style={list}>

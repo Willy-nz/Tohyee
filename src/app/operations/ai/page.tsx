@@ -258,7 +258,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {keys.error ? <Notice tone="error">{keys.error}</Notice> : null}
 
-      <Card title="Connect your AI" description="For Claude, ChatGPT and other AI apps that can add an MCP server (a custom connector).">
+      <Card title="Connect your AI">
         {keys.data && signInUrl ? (
           <>
             <CopyBox label="MCP address" value={signInUrl} />
@@ -279,11 +279,11 @@ function AiConnect({ organisationId }: { organisationId: string }) {
         <AccessList items={connections} role={role} empty="No AI apps connected yet." endedLabel="Ended connections" onRevoke={(item) => void revoke(item)} />
       </Card>
 
-      <Card title="Keys" description="For Claude Desktop and other apps that need a key instead of signing in. Make one per AI or device.">
+      <Card title="Keys">
         {newToken ? <NewKey token={newToken} onDone={() => setNewToken(null)} /> : null}
         <form className={ui.inlineForm} onSubmit={(event) => void create(event)}>
-          <Field label="Name" hint="e.g. “Claude on my laptop”.">
-            <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} required />
+          <Field label="Name">
+            <input placeholder="Claude on my laptop" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} required />
           </Field>
           <Field label="What it can do" hint={AI_ACCESS_LEVEL_HELP[accessLevel]}>
             <select
@@ -415,7 +415,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
 export default function AiPage() {
   return (
     <Page>
-      <PageHeader title="AI" description="Connect your own AI (Claude, ChatGPT and others) to these books. It never deletes anything." />
+      <PageHeader title="AI" />
       <RequireOrganisation>{(organisationId) => <AiConnect key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
       <p className={ui.muted}>
         Chat with your AI in its own app. What it makes here, and the files you leave for it, are in{" "}

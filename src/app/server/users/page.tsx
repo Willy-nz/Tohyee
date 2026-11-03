@@ -62,10 +62,7 @@ export default function UsersPage() {
 
   return (
     <Page>
-      <PageHeader
-        title="Users"
-        description="Logins for this server. Access to each organisation's books is given separately, under People and roles."
-      />
+      <PageHeader title="Users" />
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {link ? (
         <Card title={`Setup link for ${link.email}`} description={`It works once, until ${formatDateTime(link.setupLink.expiresAt)}. Making a new one stops this one.`}>

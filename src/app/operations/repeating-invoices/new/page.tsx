@@ -27,7 +27,7 @@ function NewRepeating({ organisationId }: { organisationId: string }) {
 export default function NewRepeatingInvoicePage() {
   return (
     <Page>
-      <PageHeader title="New repeating invoice" description="Saving it posts nothing. Invoices are made on their dates by the hourly job." />
+      <PageHeader title="New repeating invoice" />
       <RequireOrganisation>{(organisationId) => <NewRepeating organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

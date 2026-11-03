@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function RostersPage() {
   return (
     <Page>
-      <PageHeader title="Rosters" description="Shifts by week for each area, their cost against its budget, and publishing them to staff." />
+      <PageHeader title="Rosters" />
       <RequireOrganisation>{(organisationId) => <Rosters key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

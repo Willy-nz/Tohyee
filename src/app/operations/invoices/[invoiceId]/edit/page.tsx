@@ -51,7 +51,7 @@ export default function EditInvoicePage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   return (
     <Page>
-      <PageHeader title="Edit draft invoice" description="Drafts can be changed freely until they're approved." />
+      <PageHeader title="Edit draft invoice" />
       <RequireOrganisation>{(organisationId) => <EditInvoice organisationId={organisationId} invoiceId={invoiceId} />}</RequireOrganisation>
     </Page>
   );

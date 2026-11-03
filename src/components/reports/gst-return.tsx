@@ -33,6 +33,7 @@ import type {
 } from "@/lib/reports/gst-return";
 import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
 import { useConfirm } from "@/components/confirm-dialog";
+import { InfoTip } from "@/components/info-tip";
 
 type Calculated = GstReturnFigures & {
   periodStart: string;
@@ -741,8 +742,6 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
   return (
     <>
       <Card
-        title="GST return"
-        description={data ? BASIS_DESCRIPTIONS[data.basis] : "NZ GST101A, worked out from the documents dated in the period."}
         actions={
           <div className={ui.inlineForm}>
             <Field label="Start month">
@@ -769,7 +768,12 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
       >
         <p className={ui.muted}>
           {formatDate(start)} to {formatDate(periodEnd)}
-          {data ? ` · ${data.currencyCode}` : ""}
+          {data ? (
+            <>
+              {` · ${data.currencyCode} · ${GST_BASIS_LABELS[data.basis]} `}
+              <InfoTip label="GST basis">{BASIS_DESCRIPTIONS[data.basis]}</InfoTip>
+            </>
+          ) : null}
           {filed.data ? (
             filed.data.periodSetting ? (
               <> · Filing: {describeGstPeriodSetting(filed.data.periodSetting)}</>

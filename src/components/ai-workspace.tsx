@@ -152,7 +152,7 @@ function Tables({ organisationId }: { organisationId: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const rows = useApiData<{ dataset: Dataset; rows: QueryResult }>(open ? `/api/ai-workspace/datasets/${encodeURIComponent(open)}` : null, { organisationId });
   return (
-    <Card title="The AI's tables" description="Tables your AI made from the files, the notebook and the books, laid out however suits the data. It answers questions and builds dashboards from these.">
+    <Card title="The AI's tables">
       {datasets.error ? <Notice tone="error">{datasets.error}</Notice> : null}
       {datasets.data && datasets.data.datasets.length === 0 ? <Empty>No tables yet. Ask your AI to organise a file you&apos;ve added.</Empty> : null}
       {(datasets.data?.datasets ?? []).map((dataset) => (
@@ -230,7 +230,6 @@ function Dashboards({ organisationId }: { organisationId: string }) {
     <>
       <Card
         title="Dashboards"
-        description="Dashboards your AI laid out over its tables. Ask it for one (e.g. calving by month, milk per cow), or to change one."
         actions={
           dashboards.length > 1 ? (
             <Field label="Dashboard">

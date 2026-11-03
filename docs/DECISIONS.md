@@ -11925,7 +11925,6 @@ guide, and Link My Books' Shopify chargebacks article.
       corrected when registration is backdated (1284: Tohyee lists them but
       doesn't advise, since IRD's rules for backdated registration decide).
 
-
 ### Guided Akahu setup and clearer feed statuses (#543; decisions 1288-1291)
 
 Issue #543 asked for Akahu setup as a guided flow with clear statuses.
@@ -11986,7 +11985,107 @@ made-up answers.
       account: personal app token prefixes (still app_token_ and
       user_token_, as before), and whether a personal app can be limited to
       some accounts (Tohyee lists whatever Akahu shares).
+### Fewer words on screen (Jess's design brief, 3 Nov 2026; decisions 1316-1320)
 
+Jess (3 November 2026): "I want this to be as perfect as Linear's website
+or Apple Notes: simple purpose, simple architecture, simple design, simple
+implementation. Cut taglines, helper text and secondary labels. If a screen
+needs them to make sense, fix the layout. Every decision should elevate UX,
+DX and AX at once, without breaking anything." A review listed what to cut;
+Jess approved it. These decisions **supersede the "keep a short line visible
+under headings" part of decisions 1210-1215**: there is no line under a page
+heading at all now. What 1213 kept visible (warnings, irreversible-action
+confirmations, who-can-see-this notices) still stays visible, as below.
+
+1316. **Page headings have no subtitle.** `PageHeader` takes a title and
+      actions only; its `description` prop is gone, so a page can't add a
+      tagline back. Where the old line held a warning, a privacy note or an
+      honesty note, it's now a one-line `<Notice>` under the heading: my
+      mail ("only you can see your mail"), payroll reports and workforce
+      budget (payroll access only), payroll access and bank file settings
+      (who can change them), sales platforms (admins connect shops), the
+      server's analytics and bank-file folders (Tohyee only reads them),
+      restore (nothing is overwritten), sign-ins (flagged, not blocked),
+      Google sign-in (uninvited accounts can't sign in), the farm calendar
+      (what it reads), Modules (turning off keeps the data), the repeating
+      invoice and bill edit pages (a schedule change starts from today),
+      the farm sign-in page (sign out when you leave), Meta setup (read
+      only), the "Accounting is off" page and All settings for non-admins.
+      Links that sat in the subtitle (Back to Approvals, All groups) are
+      header actions; a bank account's currency and "Archived" are badges.
+      The payroll employees line "pay calculations, payments, payslips and
+      payday filing are not supported yet" was out of date (pay runs,
+      payslips and payday filing are built) and was removed, not kept.
+1317. **List pages are title, tabs, table.** Invoices, bills, credit notes,
+      supplier credit notes, quotes, sales orders, purchase orders,
+      overpayments and repeating invoices and bills no longer wrap the list
+      in a card that repeats the page title: the main button (New invoice
+      and so on) is in the page header, then the status tabs and the table.
+      Header buttons that depend on the person's role render through
+      `OrganisationActions` (books.tsx), only after the page has hydrated,
+      so server and browser markup match. The Pipeline's New opportunity is
+      a header button that opens the form through `?new=1`. Other list pages
+      whose card repeated the page's name (Companies, People, Leads, Projects,
+      Expense claims, Budgets, Fixed assets, Jobs and others) keep the card
+      but lose its title. The GST return's period controls stay in its card;
+      the GST basis shows as a label with its explanation behind an (i).
+1318. **Card descriptions that only restate the title go.** About 80 were
+      removed ("Every close and reopen, from the audit log", "Newest
+      first", "Dashboards your AI laid out over its tables" and the like).
+      Descriptions that warn, say who can see something, are honest about
+      what isn't tested or done, explain a lock, or carry an accounting
+      label (excluding GST, box numbers, account codes) stay; a few were cut
+      to one line. `Card` shows a description even without a title.
+1319. **Example hints become placeholders.** A field hint that only gave an
+      example ("Optional, e.g. the customer's bank reference", "e.g. Front
+      gate") is now the input's placeholder, so the label stays the field's
+      accessible name and nothing sits under the box. Hints that explain
+      behaviour or a rule stay. "Approving posts the invoice on this date"
+      (and the bill and credit note versions) is gone from the date field:
+      the Approve confirmation already names the posting date.
+1320. **Home card titles are the links.** The farm Home's "Open Pasture",
+      "Open Banking" and similar footers are gone (the title already
+      linked); the CRM Home's Pipeline, Conversion, My open opportunities
+      and My tasks due titles link to their pages (`Card`'s new `href`)
+      instead of a separate "Open the pipeline" or "Sales dashboard" link,
+      and "where else to find X" sentences were removed.
+### Shopify payout deposits matched in the bank (#548; decisions 1300-1307)
+
+1300. **Match, never post sales from the bank (SPR3).** As Xero with A2X:
+      orders post sales into the clearing account and the payout moves the
+      net to the bank (SPC15). A deposit is matched to that posted
+      transfer with the reconcile screen's ordinary "match"; no new
+      journal. As Xero/A2X do, not yet reviewed.
+1301. **Settlements are kept (SPR1, tenant migration 0219).**
+      `sales_platform_payouts` keeps each payout read at sync, keyed by
+      store like `sales_platform_documents`, with gross sales, refunds,
+      fees, adjustments, chargebacks, reserves, other and net. Payouts
+      posted before it have only their transfer's net.
+1302. **Evidence for a match (SPR2-SPR5).** The payout number on the line
+      (as its own word), or the platform's name with the same amount
+      within 10 days after (1 day before) the payout. Amount and date
+      alone are offered for a person to check. Several fits are listed,
+      not picked. Claude's rule from the issue.
+1303. **Combined payouts (SPR7).** Up to 4 posted payouts from the 12
+      nearest, only when the line names the platform and exactly one set
+      adds up.
+1304. **Three kinds of "not matched" (SPR8-SPR10).**
+      `missing_posting_setup`, `missing_settlement_data` and `unmatched`,
+      plus `already_matched` (duplicate import) and `payout_not_posted`
+      (not paid, or refused: the sync's own reason). Each stays
+      unreconciled.
+1305. **No settlement data (SPR9).** Before the start date: code by hand.
+      No payout scopes: a transfer out of the clearing account for the
+      deposit, offered for a person to choose; fees stay in clearing.
+      Never assumes net = gross or splits fees.
+1306. **GST (SPR10).** Payouts, fees and transfers carry no GST. GST on
+      sales comes only from orders, which use `isGstRegisteredOn` (#546);
+      the guide states the registration status on the line's date and
+      lists a payout's orders not in the books.
+1307. **Read-only for AI.** `list_sales_platform_payout_matches` (Look
+      only) reports payouts, deposits, suggestions and the clearing
+      balance. No new write tool; a person reconciles on screen (or with
+      the existing bank tools).
 
 ### Bank coding proposals reviewed before anything posts (#544; decisions 1292-1299)
 

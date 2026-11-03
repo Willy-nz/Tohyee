@@ -1641,6 +1641,17 @@ that something happened.
   and money Shopify holds back moves to a reserve bank account until it's
   released. Chargeback holds and anything Shopify doesn't explain are
   still refused. No summary mode (Jess): each order keeps its invoice.
+- **Shopify payout deposits matched in the bank** (#548, SPR1-SPR10,
+  decisions 1300-1307, tenant migration 0219; as Xero/A2X do, not yet
+  reviewed). Each payout's settlement (gross sales, refunds, fees,
+  adjustments, chargebacks, reserves, net) is kept at sync. On the bank
+  reconcile screen a Shopify deposit shows its payout and a "Match
+  payout" button that ties it to the posted transfer, so sales and fees
+  are never posted twice. Matched by payout number, or Shopify's name
+  with amount and date; never amount alone. Combined payouts, duplicate
+  imports, missing setup and missing settlement data each say so. MCP:
+  list_sales_platform_payout_matches (read-only). Tested with made-up
+  payouts, not a real store.
 - **Shopify's read-only extras** (#530, SPD1-SPD11, decisions 1237-1245,
   tenant migration 0214): stock levels by location (with a Shopify vs
   Tohyee difference view on Settings › Sales platforms; Tohyee's stock is

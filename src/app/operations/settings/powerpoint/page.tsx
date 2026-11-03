@@ -20,7 +20,7 @@ export default function PowerPointAddinPage() {
   const data = status.data;
   return (
     <Page>
-      <PageHeader title="PowerPoint add-in" description="Live Tohyee Analytics reports on PowerPoint slides, for Windows, Mac and PowerPoint on the web." />
+      <PageHeader title="PowerPoint add-in" />
       {!can("admin") ? <Notice tone="info">An admin of this organisation sets up the add-in.</Notice> : null}
       {status.error ? <Notice tone="error">{status.error}</Notice> : null}
       {data && !data.available ? (

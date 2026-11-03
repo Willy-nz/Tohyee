@@ -373,7 +373,7 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
           </Card>
 
           <div className={styles.workspace}>
-            <Card title="Applied steps" description="Each step uses the columns produced by the step above it.">
+            <Card title="Applied steps">
               <div className={styles.stepList}>
                 {steps.map((step, index) => (
                   <div key={`${index}-${step.type}`} className={styles.step} aria-current={selectedStep === index ? "step" : undefined}>

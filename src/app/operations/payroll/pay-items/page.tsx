@@ -10,7 +10,7 @@ import styles from "@/components/payroll-employees.module.css";
 export default function PayrollPayItemsPage() {
   return (
     <Page>
-      <PageHeader title="Pay items" description="The earnings, deductions and employer contributions pay runs are made of, where each is posted, and payroll settings." />
+      <PageHeader title="Pay items" />
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>

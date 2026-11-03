@@ -235,7 +235,6 @@ export function StagesManager({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="Stages"
         description={<>In pipeline order.{" "}<InfoTip label="Stages">A Closed won stage is 100% and Closed (it can make the invoice); a Closed lost stage is 0% and Omitted. At least one active stage of each type must stay. Archived stages keep their opportunities. A new default probability doesn&apos;t change opportunities already in the stage.</InfoTip></>}
       >
         <div className={ui.tableWrap}>

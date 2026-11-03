@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function ApprovalsPage() {
   return (
     <Page>
-      <PageHeader title="Approvals" description="Bills, purchase orders and expense claims waiting for approval under an approval rule (Settings › Approval rules)." />
+      <PageHeader title="Approvals" />
       <RequireOrganisation>{(organisationId) => <ApprovalsList key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

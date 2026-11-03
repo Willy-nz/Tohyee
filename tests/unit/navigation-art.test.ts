@@ -79,11 +79,11 @@ describe("illustrated module navigation", () => {
     ]).filter(path => /^(\/operations|\/crm|\/analytics)(\/|$|\?)/.test(path));
     for (const href of links) expect(iconForDestination(href), href).toBeDefined();
   });
-  it("keeps page titles, descriptions and actions readable with decorative art", () => {
+  it("keeps page titles and actions readable with decorative art, and has no subtitle", () => {
     state.path = "/crm";
-    const html = renderToStaticMarkup(createElement(PageHeader, { title: "Companies", description: "Your contacts", actions: createElement("button", null, "Add company") }));
+    const html = renderToStaticMarkup(createElement(PageHeader, { title: "Companies", actions: createElement("button", null, "Add company") }));
     expect(html).toContain("Companies</h1>");
-    expect(html).toContain("Your contacts");
+    expect(html).not.toMatch(/<p[ >]/);
     expect(html).toContain("Add company</button>");
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain('focusable="false"');

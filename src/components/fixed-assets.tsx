@@ -92,8 +92,6 @@ export function FixedAssetList({ organisationId }: { organisationId: string }) {
   const list = useApiData<{ assets: FixedAssetSummary[] }>("/api/fixed-assets", { organisationId, status: tab.status });
   return (
     <Card
-      title="Fixed assets"
-      description="Registering an asset records its cost (already in the ledger from its bill or journal); depreciation runs and disposals post."
       actions={
         <>
           {can("bookkeeper") ? <Button onClick={() => router.push("/operations/fixed-assets/new")}>New asset</Button> : null}
@@ -317,8 +315,8 @@ export function FixedAssetForm({
           </select>
         </Field>
       </div>
-      <Field label="Description" hint="Optional: serial number, where it is.">
-        <input value={draft.description} maxLength={1000} onChange={(event) => set({ description: event.target.value })} />
+      <Field label="Description">
+        <input placeholder="Serial number, where it is" value={draft.description} maxLength={1000} onChange={(event) => set({ description: event.target.value })} />
       </Field>
       {!asset ? (
         <Field
@@ -1000,7 +998,7 @@ export function FixedAssetTypes({ organisationId }: { organisationId: string }) 
         Tohyee has no built-in IRD depreciation rates. Enter the method and rate for each type (and change them per asset when needed); check IRD&apos;s current rates
         and rules for each kind of asset first.
       </Notice>
-      <Card title="Asset types" description="Which accounts each kind of asset uses, and its default method and rate.">
+      <Card title="Asset types">
         {types.error ? <Notice tone="error">{types.error}</Notice> : null}
         {types.data && types.data.types.length === 0 ? <Empty>No asset types yet.</Empty> : null}
         {types.data && types.data.types.length > 0 ? (
@@ -1098,7 +1096,6 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
   return (
     <Card
       title="Fixed asset register"
-      description="Each asset held with its cost, accumulated depreciation, book value and this financial year's depreciation, tied to the ledger."
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">

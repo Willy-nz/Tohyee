@@ -81,6 +81,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "get_item", level: "read", words: "One product or service" },
   { name: "get_sales_platform_status", level: "read", words: "Connected Shopify and WooCommerce stores: what syncs, posting, scopes, what wasn't brought in and why (it can't sync or change settings)" },
   { name: "list_sales_platform_log", level: "read", words: "The sales platform sync log, filtered by action, record or problem" },
+  { name: "list_sales_platform_payout_matches", level: "read", words: "Shopify payouts, their settlement and which bank deposit each is (suggestions only; it can't reconcile)" },
   { name: "list_tracking", level: "read", words: "Tracking categories and options" },
   { name: "list_fixed_assets", level: "read", words: "The fixed asset register" },
   { name: "get_fixed_asset", level: "read", words: "One fixed asset with its depreciation" },

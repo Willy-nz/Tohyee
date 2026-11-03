@@ -24,7 +24,7 @@ function NewProject({ organisationId }: { organisationId: string }) {
 export default function NewProjectPage() {
   return (
     <Page>
-      <PageHeader title="New project" description="A project is work for one customer. Add its tasks after saving it." />
+      <PageHeader title="New project" />
       <RequireOrganisation>{(organisationId) => <NewProject organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

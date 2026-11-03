@@ -304,7 +304,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
             ))}
           </select>
         </Field>
-        <Field label="Bill date" hint="The date on the supplier's invoice. Approving posts the bill on this date.">
+        <Field label="Bill date" hint="The date on the supplier's invoice.">
           <DateInput
             value={billDate}
             onChange={(event) => {

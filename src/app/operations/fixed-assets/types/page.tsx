@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function FixedAssetTypesPage() {
   return (
     <Page>
-      <PageHeader title="Asset types" description="The accounts and default depreciation for each kind of asset, and how part months count." />
+      <PageHeader title="Asset types" />
       <RequireOrganisation>{(organisationId) => <FixedAssetTypes key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

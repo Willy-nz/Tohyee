@@ -4,7 +4,7 @@ import Link from "next/link";
 import { RequireOrganisation } from "@/components/books";
 import { useModules } from "@/components/modules";
 import { visibleSettings } from "@/components/navigation";
-import { Card, Page, PageHeader, ui } from "@/components/ui";
+import { Card, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import styles from "./all-settings.module.css";
 
@@ -35,14 +35,8 @@ export default function AllSettingsPage() {
   const { can } = useWorkspace();
   return (
     <Page>
-      <PageHeader
-        title="All settings"
-        description={
-          can("admin")
-            ? "Everything you can set up for this organisation. Settings for modules that are off don't show; turn them on under Modules."
-            : "The settings you can open. Admins see more."
-        }
-      />
+      <PageHeader title="All settings" />
+      {can("admin") ? null : <Notice>Admins see more settings.</Notice>}
       <RequireOrganisation>{(organisationId) => <AllSettings key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

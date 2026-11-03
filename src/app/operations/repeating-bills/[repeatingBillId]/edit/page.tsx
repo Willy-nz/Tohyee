@@ -42,10 +42,8 @@ export default function EditRepeatingBillPage() {
   const { repeatingBillId } = useParams<{ repeatingBillId: string }>();
   return (
     <Page>
-      <PageHeader
-        title="Change repeating bill"
-        description="Bills already made keep what they had. Changing how often or the first date starts the new schedule from today."
-      />
+      <PageHeader title="Change repeating bill" />
+      <Notice tone="warning">Changing how often or the first date starts the new schedule from today.</Notice>
       <RequireOrganisation>{(organisationId) => <EditRepeatingBill organisationId={organisationId} id={repeatingBillId} />}</RequireOrganisation>
     </Page>
   );

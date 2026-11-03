@@ -43,7 +43,7 @@ export default function EditSalesOrderPage() {
   const { salesOrderId } = useParams<{ salesOrderId: string }>();
   return (
     <Page>
-      <PageHeader title="Edit draft sales order" description="Drafts can be changed freely until they're approved." />
+      <PageHeader title="Edit draft sales order" />
       <RequireOrganisation>{(organisationId) => <EditSalesOrder organisationId={organisationId} salesOrderId={salesOrderId} />}</RequireOrganisation>
     </Page>
   );

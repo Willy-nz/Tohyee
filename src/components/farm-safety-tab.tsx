@@ -434,7 +434,7 @@ export function FarmSafetyDue({ organisationId }: { organisationId: string }) {
   const data = useApiData<{ items: Array<{ date: string; title: string; kind: string }> }>("/api/farming/safety/due", { organisationId, from, to });
   if (data.error || !data.data || !data.data.items.length) return null;
   return (
-    <Card title="Safety due" description="From Safety: actions due, training to renew and hazard reviews, the next 30 days.">
+    <Card title="Safety due">
       <ul style={{ margin: 0, paddingLeft: 18 }}>
         {data.data.items.map((item, index) => (
           <li key={`${item.date}-${index}`}>

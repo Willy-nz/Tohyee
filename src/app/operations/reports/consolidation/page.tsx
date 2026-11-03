@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function ConsolidationPage() {
   return (
     <Page>
-      <PageHeader title="Consolidation" description="Organisations on this server reported together, in the parent's currency, with intercompany amounts eliminated." />
+      <PageHeader title="Consolidation" />
       <ConsolidationGroups />
     </Page>
   );

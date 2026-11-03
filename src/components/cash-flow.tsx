@@ -110,7 +110,7 @@ function ForecastItems({ organisationId, canEdit, onChanged }: { organisationId:
 
   const items = loaded.data?.items;
   return (
-    <Card title="Forecast items" description="Money you expect in or out that isn't in the books yet, once or every week or month, e.g. a GST payment or a loan.">
+    <Card title="Forecast items">
       {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
       {items && items.length === 0 ? <Empty>No forecast items.</Empty> : null}
       {items && items.length > 0 ? (
@@ -362,7 +362,6 @@ export function CashFlowForecastView({ organisationId }: { organisationId: strin
           </div>
         }
         title="Will there be enough cash?"
-        description="From today's bank balance and what's in the books. It posts nothing."
       >
         {loaded.error ? (
           <Notice tone="error">

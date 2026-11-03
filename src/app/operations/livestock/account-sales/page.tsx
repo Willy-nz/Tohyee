@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function LivestockAccountSalesPage() {
   return (
     <Page>
-      <PageHeader title="Account sales" description="Stock agents' account sales: the stock sold, the agent's deductions and the net the agent owes." />
+      <PageHeader title="Account sales" />
       <RequireOrganisation>{(organisationId) => <LivestockAccountSales key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );
