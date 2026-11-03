@@ -1,4 +1,5 @@
 import { type AiTool, schema } from "@/lib/ai/tools";
+import { payoutMatchReport } from "@/lib/sales-platforms/payout-reconcile";
 import { readSyncLog, salesPlatformDiagnostics, SYNC_LOG_ACTIONS, SYNC_LOG_OUTCOMES, SYNC_RECORD_KINDS } from "@/lib/sales-platforms/diagnostics";
 
 /**
@@ -50,6 +51,21 @@ export const SALES_PLATFORM_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     async run(tx, args) {
       return readSyncLog(tx, args);
+    },
+  },
+  {
+    name: "list_sales_platform_payout_matches",
+    title: "Sales platform payout matches",
+    description:
+      "Shopify payouts issued between two dates (default the last 30 days) with their settlement (gross sales, refunds, fees, adjustments, chargebacks, reserves, net), whether each is in the accounts and which bank line it's matched to; every unreconciled deposit on the payout account in those dates with a status (matched, combined, needs_choice, already_matched, payout_not_posted, missing_posting_setup, missing_settlement_data, unmatched), the reason, and the reconcile command a person could review; the clearing account's balance; and what GST registration means for each payout. Never matches on amount alone. Read-only: it doesn't reconcile, post or contact the store.",
+    inputSchema: schema({
+      connectionId: CONNECTION_ID,
+      from: { type: "string", format: "date", description: "First payout or bank line date (YYYY-MM-DD). Default 30 days before to." },
+      to: { type: "string", format: "date", description: "Last date (YYYY-MM-DD). Default today." },
+    }),
+    level: "read",
+    async run(tx, args) {
+      return payoutMatchReport(tx, { connectionId: args.connectionId, from: args.from, to: args.to });
     },
   },
 ];

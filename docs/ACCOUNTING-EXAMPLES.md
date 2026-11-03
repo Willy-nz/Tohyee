@@ -20641,3 +20641,71 @@ than a typed amount; and how the refund of a purchase should fall in the
 GST return's boxes (Tohyee counts it as receive money, as BK7). Tested in
 `tests/integration/mixed-use-accounts.test.ts` and
 `tests/unit/mixed-use.test.ts`.
+
+## Shopify payout deposits matched in the bank (SPR1-SPR10; built by Claude 3 Nov 2026 for #548, as Xero/A2X do, not yet reviewed)
+
+Xero leaves Shopify payouts to apps like A2X: the app posts each payout's
+settlement into a clearing account ("Money held by Shopify"), and the bank
+deposit is then matched to that one posted amount. The sales are never
+posted again from the bank. Tohyee already posts the same way (SPC11-SPC15).
+These examples cover finding the right payout for a bank line. Taken from
+Claude's knowledge of Xero and A2X; not re-checked today. The timing window
+and the "never on amount alone" rules are Claude's, from the issue.
+
+Setup: as SPC11-SPC15. Glimmers Ltd, registered for GST (confirmed),
+posting on from 1 Oct 2026. 1010 Money held by Shopify (clearing),
+1000 bank (payouts arrive here), 6020 fees. Made-up store and numbers.
+
+- **SPR1 The settlement is kept.** Payout **70001**, issued 7 Oct, has
+  charges on #1001 (46.00, fee 1.38) and #1002 (28.90, fee 1.14) and a
+  refund on #1001 (-23.00). Tohyee keeps: gross sales **74.90**, refunds
+  **-23.00**, fees **-2.52**, net **49.38** (it adds up). Reading the same
+  payout again keeps one record. A chargeback payout (70003) shows
+  chargebacks **-28.90** and fees **-27.07** (2.07 + the 25.00 chargeback
+  fee). Nothing is posted by keeping it.
+- **SPR2 The payout number on the line.** A bank line "SHOPIFY 70001" for
+  49.38 on 8 Oct is payout 70001, even with another 49.38 payout nearby.
+  If the line names 70001 but is **50.00**, it isn't matched: "0.62
+  different", left for a person.
+- **SPR3 Shopify's name, the amount and the date.** "SHOPIFY PAYOUT" for
+  49.38 on 8 Oct, and one unmatched 49.38 payout in the window: matched.
+  Matching ties the bank line to the posted transfer (Dr 1000 49.38, Cr
+  1010 49.38 from SPC15). **No new journal.** Sales (4000), GST (2100) and
+  fees (6020 2.52) stay as the orders and payout posted them; 1010 stays
+  0.00.
+- **SPR4 Timing.** A payout can arrive up to **10 days** after it's
+  issued, or a day before (time zones). 70001 (7 Oct) fits a line on 17
+  Oct, not 18 Oct.
+- **SPR5 Amount alone isn't enough.** "DEPOSIT" for 49.38 (no Shopify
+  name) is offered as "Check the payout"; the person decides. Two 30.00
+  payouts and a 30.00 Shopify deposit: both listed, neither picked. Once
+  one is matched, the next 30.00 deposit is the other.
+- **SPR6 Duplicate import.** The 49.38 line imported again after 70001 is
+  matched: "Already matched to the bank line on 8 Oct … may be a
+  duplicate". Nothing is offered.
+- **SPR7 Combined payouts.** 70001 (49.38) and 70002 (17.33) arrive as one
+  **66.71** "SHOPIFY" deposit: both transfers are matched together. Only
+  when the line names Shopify and exactly one set adds up; two sets that
+  add up are left for the person.
+- **SPR8 Missing posting setup.** Posting off, or the line names Shopify
+  but payouts are set to arrive in another account: "Setup needed", with
+  what to change. Not matched.
+- **SPR9 Missing settlement data.** A Shopify deposit before the start
+  date (20 Sep, 80.00): its sales aren't in Tohyee, so it's left to code by
+  hand (no transfer from 1010, which would go negative). If the store
+  hasn't given the payout scopes, the deposit can be transferred out of
+  1010 for its amount, for the person to choose; the fees stay in 1010
+  until recorded. Tohyee never assumes the deposit is the gross sales or
+  invents the fee split. A payout posted before this change matches but
+  shows only its net.
+- **SPR10 GST and the AI.** Payouts, fees and transfers have no GST
+  (SPC15), registered or not. Not registered: the orders have no GST
+  (SPC12), sales are **51.90** (74.90 - 23.00) once, and 2100 stays 0.00
+  after matching. Registration not confirmed: the orders wait (GSR3), so
+  the payout says "Not in the books: #1001, #1002". MCP's
+  `list_sales_platform_payout_matches` lists payouts with their
+  settlement, which bank line each is matched to, each unreconciled
+  deposit's status (matched, combined, needs_choice, already_matched,
+  payout_not_posted, missing_posting_setup, missing_settlement_data,
+  unmatched) and suggested reconcile, and the clearing balance. It
+  changes nothing.

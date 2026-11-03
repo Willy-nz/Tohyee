@@ -17,6 +17,7 @@ import {
 import { CashCodingForm } from "@/components/bank/cash-coding";
 import { LineBaseValue, RateField } from "@/components/bank/foreign";
 import { OkAllBar, SuggestionBox } from "@/components/bank/confident";
+import { PayoutGuide } from "@/components/bank/payout-guide";
 import { AccountSelect, Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
@@ -1124,6 +1125,7 @@ function LineReconciler({
         </Notice>
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {moneyIn ? <PayoutGuide organisationId={organisationId} line={line} submit={submit} busy={busy} /> : null}
       <div className={ui.tabs} role="tablist" aria-label="How to reconcile">
         {modes.map((entry) => (
           <button
