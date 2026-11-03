@@ -20831,3 +20831,86 @@ posting on from 1 Oct 2026. 1010 Money held by Shopify (clearing),
   payout_not_posted, missing_posting_setup, missing_settlement_data,
   unmatched) and suggested reconcile, and the clearing balance. It
   changes nothing.
+
+## Shopify payouts from a live store, and payment gateways (SPC38-SPC46; built by Claude 4 Nov 2026, as Xero/A2X do, not yet reviewed)
+
+The first live Shopify sync showed two things the recorded responses
+didn't. Shopify lists each payout's own movement of money among its
+balance transactions (type TRANSFER: "a payout to the bank or a withdrawal
+into the balance; the sign shows the direction", Admin GraphQL
+ShopifyPaymentsTransactionType), so every payout was refused. And orders
+paid by Afterpay, PayPal or bank deposit all went into money held by
+Shopify, which only Shopify Payments payouts clear. These follow what A2X
+does for Xero: the payout is one transfer from the clearing account to the
+bank, fees come out of the clearing account, a negative payout is money
+taken from the bank, and each payment gateway has its own clearing
+account. Taken from Claude's knowledge of A2X and Xero; not re-checked
+today.
+
+Setup: as SPC11-SPC15. Glimmers Ltd, registered for GST (confirmed),
+posting on from 1 Oct 2026. 1010 Money held by Shopify, 1000 bank, 6020
+fees. Made-up store and numbers.
+
+- **SPC38 The payout's own transfer.** Payout **70001** (net 49.38) as
+  SPC15, plus a TRANSFER row of **-49.38** (fee 0.00). The transfer row is
+  the payout itself: posted exactly as SPC15, **Dr 6020 2.52 / Cr 1010
+  2.52** and **Dr 1000 49.38 / Cr 1010 49.38**; 1010 is back to **0.00**.
+  Nothing is posted for the row. Its settlement leaves it out (gross sales
+  74.90, refunds -23.00, fees -2.52, net 49.38, 3 transactions, adds up).
+  Refused with the reason, nothing posted: a transfer row that isn't
+  -49.38, two of them, or one with a fee (an instant payout); any other
+  type Tohyee doesn't post ("has transactions of a type Tohyee doesn't post
+  (SHOP_CASH_CREDIT)").
+- **SPC39 Read again, posted once.** Payouts refused before this change (or
+  any time) and not in the accounts are flagged by tenant migration 0222,
+  so the next sync reads them from the store again, from the earliest one's
+  day. 70001 refused earlier is then posted once. A sync after that posts
+  nothing more and doesn't fetch 70001's transactions again. "Try again" on
+  the store's Payouts line flags every paid payout not in the accounts and
+  syncs; one still refused keeps its reason in the log.
+- **SPC40 A withdrawal.** #1001's second candle is refunded (Cr 1010
+  23.00), so the Shopify balance is short. Payout **70010**, WITHDRAWAL,
+  13.40, issued 21 Oct: REFUND #1001 -23.00, CHARGE #1030 10.00 (fee 0.40,
+  net 9.60), TRANSFER +13.40. Posted 21 Oct: transfer **Dr 1010 13.40 / Cr
+  1000 13.40** ("Shopify withdrawal, payout 70010") and spend money **Dr
+  6020 0.40 / Cr 1010 0.40** (no GST). 1010: -23.00 + 13.40 - 0.40 =
+  **-10.00**, which is #1030's 10.00 still to come in from its order. The
+  bank line **-13.40 "SHOPIFY 70010"** matches the transfer's line on 1000;
+  no new journal. Shopify may give the net as 13.40 or -13.40: the same.
+  A withdrawal whose transactions add up to money paid out is refused.
+- **SPC41 An account not set.** A payout with no fees (or clearing, or
+  payouts) account posts nothing and logs "Payout 70001 can't be posted:
+  no fees account is chosen. Choose it in the Shopify settings; the payout
+  is tried again at the next sync." The sync's payout place stays there,
+  so it's tried again (before, it was passed over without a word).
+- **SPC42 Each gateway's own account.** Four orders of 46.00 (GST 6.00):
+  #1101 shopify_payments, #1102 afterpay, #1103 paypal, #1104 manual.
+  Before the gateways are chosen: #1101's payment **Dr 1010 46.00 / Cr 1100
+  46.00**; #1102-#1104 get their approved sales orders and wait: "Choose
+  where afterpay payments go in the Shopify settings." Nothing goes to 1010
+  for them.
+- **SPC43 Chosen.** afterpay → **1020 Afterpay clearing**, paypal → **1025
+  PayPal clearing** (bank accounts, "Create it for me" at the Payment
+  methods step), manual → left owing. The next sync: #1102 **Dr 1020 46.00
+  / Cr 1100 46.00**, #1103 **Dr 1025 46.00 / Cr 1100 46.00**, #1104
+  invoiced (Dr 1100 46.00 / Cr 4000 40.00 / Cr 2100 6.00) and left owing,
+  amount due 46.00, for the bank deposit to be matched to it. 1010 stays
+  46.00 (only #1101, cleared by its payout). Each provider's settlement is
+  reconciled against its own clearing account, with its fees.
+- **SPC44 A new gateway waits.** #1105 paid by laybuy, never chosen:
+  waits with the reason; nothing goes to 1010.
+- **SPC45 Not the Shopify clearing account.** Choosing 1010 for afterpay is
+  refused ("only Shopify Payments payouts clear it"), and Shopify Payments
+  can't be moved off 1010.
+- **SPC46 Refunds go back where the money went.** paypal is changed to
+  1020; #1103's refund of 23.00 (GST 3.00) is still paid from **1025**,
+  where its payment went: **Dr 1100 23.00 / Cr 1025 23.00**. Orders posted
+  before the gateways were chosen keep their payment in 1010; they aren't
+  rewritten (see decision 1333 for correcting them).
+
+Built (decisions 1326-1333, tenant migration 0222). Tests:
+`tests/unit/sales-platform-orders.test.ts`,
+`tests/unit/sales-platform-payout-match.test.ts`,
+`tests/unit/sales-platform-setup.test.ts` and
+`tests/integration/sales-platform-payout-gateways.test.ts`.
+

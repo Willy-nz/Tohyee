@@ -7,6 +7,8 @@ import {
   customerChoiceSettings,
   draftToSettings,
   fitsRole,
+  gatewayKind,
+  gatewayLabel,
   LEFT_OWING,
   nextFreeCode,
   type PostingDraft,
@@ -14,6 +16,7 @@ import {
   skuNote,
   stepGaps,
   suggestAccounts,
+  suggestGateway,
   suggestTaxCodes,
   workedExample,
 } from "@/lib/sales-platforms/setup";
@@ -176,6 +179,52 @@ describe("SPC34: the posting steps save nothing until the end, and never turn po
     expect(woo.paymentMethods).toEqual([
       { method: "bacs", leftOwing: true, accountCode: null },
       { method: "stripe", leftOwing: false, accountCode: "1020" },
+    ]);
+  });
+});
+
+describe("Shopify's payment gateways (SPC42-SPC46, decision 1330)", () => {
+  it("names each gateway and tells the kinds apart", () => {
+    expect(["shopify_payments", "afterpay", "paypal", "manual", "Bank Deposit", "Cash on Delivery (COD)", "laybuy"].map(gatewayKind)).toEqual([
+      "shopify_payments",
+      "afterpay",
+      "paypal",
+      "manual",
+      "manual",
+      "manual",
+      "other",
+    ]);
+    expect(gatewayLabel("shopify_payments")).toBe("Shopify Payments");
+    expect(gatewayLabel("paypal")).toBe("PayPal");
+    expect(gatewayLabel("laybuy")).toBe("laybuy");
+  });
+
+  it("suggests its own clearing account to create, one already in the chart, or left owing for manual payments", () => {
+    expect(suggestGateway("afterpay", chart)).toEqual({ choice: "", create: { code: "1020", name: "Afterpay clearing", accountType: "bank" } });
+    expect(suggestGateway("paypal", chart)).toEqual({ choice: "", create: { code: "1025", name: "PayPal clearing", accountType: "bank" } });
+    expect(suggestGateway("manual", chart).choice).toBe(LEFT_OWING);
+    expect(suggestGateway("laybuy", chart)).toMatchObject({ choice: "", create: { name: "laybuy clearing", accountType: "bank" } });
+    const withPaypal = [...chart, { code: "1021", name: "PayPal NZD", accountType: "bank" as const, accountClass: "asset" as const, currencyCode: null, systemKey: null, isActive: true }];
+    expect(suggestGateway("paypal", withPaypal).choice).toBe("1021");
+  });
+
+  it("sends the gateways (not Shopify Payments), and won't let another gateway use the Shopify clearing account", () => {
+    const gateways = draft({
+      paymentMethods: [
+        { method: "shopify_payments", title: null, choice: "" },
+        { method: "afterpay", title: null, choice: "1020" },
+        { method: "manual", title: null, choice: LEFT_OWING },
+        { method: "paypal", title: null, choice: "" },
+      ],
+    });
+    expect(draftToSettings(gateways, "shopify", true).paymentMethods).toEqual([
+      { method: "afterpay", leftOwing: false, accountCode: "1020" },
+      { method: "manual", leftOwing: true, accountCode: null },
+      { method: "paypal", leftOwing: false, accountCode: null },
+    ]);
+    expect(stepGaps("payments", gateways, { platform: "shopify", gstRegistered: true })).toEqual([]);
+    expect(stepGaps("payments", draft({ paymentMethods: [{ method: "afterpay", title: null, choice: "1010" }] }), { platform: "shopify", gstRegistered: true })).toEqual([
+      "Afterpay payments can't go into money held by Shopify: only Shopify Payments payouts clear it. Choose or create its own account.",
     ]);
   });
 });
