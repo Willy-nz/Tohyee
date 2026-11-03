@@ -3,12 +3,15 @@ import { NZ_DEFAULT_CHART } from "@/lib/accounts/default-chart";
 import { ACCOUNT_TYPES } from "@/lib/accounts/types";
 import { NZ_DEFAULT_TAX_CODES } from "@/lib/tax/default-codes";
 import {
+  customerChoiceOf,
+  customerChoiceSettings,
   draftToSettings,
   fitsRole,
   LEFT_OWING,
   nextFreeCode,
   type PostingDraft,
   type SetupAccount,
+  skuNote,
   stepGaps,
   suggestAccounts,
   suggestTaxCodes,
@@ -174,5 +177,28 @@ describe("SPC34: the posting steps save nothing until the end, and never turn po
       { method: "bacs", leftOwing: true, accountCode: null },
       { method: "stripe", leftOwing: false, accountCode: "1020" },
     ]);
+  });
+});
+
+/** Decisions 1334 and 1338: what comes in. */
+describe("customers and SKUs in the setup", () => {
+  it("maps the customers choice to the connection's settings and back", () => {
+    expect(customerChoiceSettings("buyers")).toEqual({ syncCustomers: true, customerScope: "buyers" });
+    expect(customerChoiceSettings("all")).toEqual({ syncCustomers: true, customerScope: "all" });
+    expect(customerChoiceSettings("off")).toEqual({ syncCustomers: false });
+    expect(customerChoiceOf({ syncCustomers: true, customerScope: "buyers" })).toBe("buyers");
+    expect(customerChoiceOf({ syncCustomers: true, customerScope: "all" })).toBe("all");
+    expect(customerChoiceOf({ syncCustomers: false, customerScope: "all" })).toBe("off");
+  });
+
+  it("warns when many variants have no SKU", () => {
+    expect(skuNote("Shopify", { linked: 30, withoutSku: 0 })).toBeNull();
+    expect(skuNote("Shopify", { linked: 40, withoutSku: 2 })).toMatchObject({ tone: "info" });
+    expect(skuNote("Shopify", { linked: 40, withoutSku: 1 })!.text).toMatch(/^1 of 40 Shopify variants has no SKU\. It came in as an item/);
+    expect(skuNote("Shopify", { linked: 8, withoutSku: 2 })).toMatchObject({ tone: "warning" });
+    const many = skuNote("Shopify", { linked: 200, withoutSku: 12 })!;
+    expect(many.tone).toBe("warning");
+    expect(many.text).toContain("12 of 200 Shopify variants have no SKU");
+    expect(many.text).toContain("add SKUs in Shopify: the items stay linked");
   });
 });

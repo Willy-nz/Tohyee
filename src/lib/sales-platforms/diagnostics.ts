@@ -68,6 +68,10 @@ const REASONS: ReadonlyArray<[RegExp, string]> = [
   [/has no name/, "missing_name"],
   // A customer with a same-name contact and no email match (#539): an admin checks whether they're the same person.
   [/has the same name/, "same_name_needs_check"],
+  // Decision 1335: the customer sync leaves out test customers.
+  [/is a test customer/, "test_customer"],
+  // An order waiting for its customer (e.g. one under "Customers to check").
+  [/customer couldn't be linked to a contact/, "customer_not_linked"],
   [/\bscopes?\b/i, "missing_scope"],
   [/isn't matched to a Tohyee tax code|no tax code for untaxed/, "tax_code_not_set"],
   [/Choose an? .* account|account in the .* settings/, "account_not_set"],
@@ -248,8 +252,15 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
       webhooksNote: connection.webhooksNote === null ? null : redactSecrets(connection.webhooksNote),
     },
     imports: {
-      customers: stage1("customer", connection.syncCustomers, cursors.customers_synced_until, "customers"),
-      products: stage1("product_variant", connection.syncProducts, cursors.products_synced_until, "products"),
+      customers: {
+        ...stage1("customer", connection.syncCustomers, cursors.customers_synced_until, "customers"),
+        // Decision 1334: "buyers" brings a customer in only with their first order.
+        scope: connection.customerScope,
+        ...(connection.syncCustomers && connection.customerScope === "buyers"
+          ? { scopeMeans: `Only customers who have ordered: a contact is added when the customer's first order is posted, so customers with no orders aren't brought in (not a problem).` }
+          : {}),
+      },
+      products: { ...stage1("product_variant", connection.syncProducts, cursors.products_synced_until, "products"), withoutSku: connection.productVariants.withoutSku },
       orders: {
         status: orderStatus,
         ...(orderWhy ? { why: orderWhy } : {}),
