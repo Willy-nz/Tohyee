@@ -1098,6 +1098,14 @@ that something happened.
   with the other side of a transfer, and voids the spend or receive money
   and transfers it posted on the line's date. Payments stay. Bookkeepers
   and above.
+  **Bank coding proposals** (#544, decisions 1292-1299, examples
+  BCP1-BCP8): an AI with a "Make drafts" key or above proposes coding for
+  unreconciled lines (propose_bank_coding); nothing posts. The **Proposals**
+  tab shows each proposal with totals by account and GST, a filter
+  (including "Needs a look") and CSV export. Bookkeepers edit, reject or
+  approve rows or a selection; approving posts as cash coding does, as a
+  batch that can be resumed. Rows whose line changed since are marked stale
+  and left alone; lock dates and GST are checked again. An AI can't approve.
   **Foreign-currency bank and card accounts** (following NetSuite, as Jess
   decided): every posting keeps the foreign amount, the NZD amount and the
   rate; statement files are imported in the account's currency (a file in
@@ -1633,6 +1641,17 @@ that something happened.
   and money Shopify holds back moves to a reserve bank account until it's
   released. Chargeback holds and anything Shopify doesn't explain are
   still refused. No summary mode (Jess): each order keeps its invoice.
+- **Shopify payout deposits matched in the bank** (#548, SPR1-SPR10,
+  decisions 1300-1307, tenant migration 0219; as Xero/A2X do, not yet
+  reviewed). Each payout's settlement (gross sales, refunds, fees,
+  adjustments, chargebacks, reserves, net) is kept at sync. On the bank
+  reconcile screen a Shopify deposit shows its payout and a "Match
+  payout" button that ties it to the posted transfer, so sales and fees
+  are never posted twice. Matched by payout number, or Shopify's name
+  with amount and date; never amount alone. Combined payouts, duplicate
+  imports, missing setup and missing settlement data each say so. MCP:
+  list_sales_platform_payout_matches (read-only). Tested with made-up
+  payouts, not a real store.
 - **Shopify's read-only extras** (#530, SPD1-SPD11, decisions 1237-1245,
   tenant migration 0214): stock levels by location (with a Shopify vs
   Tohyee difference view on Settings › Sales platforms; Tohyee's stock is
@@ -2291,7 +2310,8 @@ that something happened.
   Jess). bulk_reconcile works as a durable batch: each action's outcome is
   kept, get_bank_batch reads it after a lost answer, and resume_bank_batch
   carries on after a rate limit or restart without doing anything twice
-  (#547). Full access also makes, edits and approves
+  (#547). A "Make drafts" key can propose bank coding for a person to
+  review (propose_bank_coding, #544); nothing posts until they approve. Full access also makes, edits and approves
   credit notes, quotes, sales and purchase orders and repeating invoices and
   bills, applies credit and records refunds, approves and pays expense
   claims, adds and edits items, accounts, tracking, budgets and fixed assets,

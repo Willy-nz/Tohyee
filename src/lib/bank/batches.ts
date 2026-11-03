@@ -1,6 +1,7 @@
 import { assertAiGstTreatment } from "@/lib/ai/gst-evidence";
 import { getStatementLine, type StatementLine } from "@/lib/bank/accounts";
 import { lineErrorText } from "@/lib/bank/bulk";
+import { approvalWork } from "@/lib/bank/coding-proposals";
 import { reconcileStatementLine, suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
 import { type BankRule, getBankRule, ruleAmountsMode, ruleContact, ruleLinesFor, ruleMatches } from "@/lib/bank/rules";
 import { voidBankTransaction, voidTransfer } from "@/lib/bank/transactions";
@@ -640,6 +641,8 @@ export async function startBatchUndo(
 export function workFor(batch: Pick<Batch, "kind" | "source">): ActionWork {
   if (batch.kind === "bank_reconcile") return reconcileWork(batch.source);
   if (batch.kind === "bank_unreconcile") return unreconcileWork(batch.source);
+  // Approved bank coding proposals (#544): posted as they were approved, checked again first.
+  if (batch.kind === "bank_coding") return approvalWork(batch.source);
   return undoWork(batch.source);
 }
 

@@ -11925,7 +11925,6 @@ guide, and Link My Books' Shopify chargebacks article.
       corrected when registration is backdated (1284: Tohyee lists them but
       doesn't advise, since IRD's rules for backdated registration decide).
 
-
 ### Guided Akahu setup and clearer feed statuses (#543; decisions 1288-1291)
 
 Issue #543 asked for Akahu setup as a guided flow with clear statuses.
@@ -12051,6 +12050,103 @@ confirmations, who-can-see-this notices) still stays visible, as below.
       and My tasks due titles link to their pages (`Card`'s new `href`)
       instead of a separate "Open the pipeline" or "Sales dashboard" link,
       and "where else to find X" sentences were removed.
+### Shopify payout deposits matched in the bank (#548; decisions 1300-1307)
+
+1300. **Match, never post sales from the bank (SPR3).** As Xero with A2X:
+      orders post sales into the clearing account and the payout moves the
+      net to the bank (SPC15). A deposit is matched to that posted
+      transfer with the reconcile screen's ordinary "match"; no new
+      journal. As Xero/A2X do, not yet reviewed.
+1301. **Settlements are kept (SPR1, tenant migration 0219).**
+      `sales_platform_payouts` keeps each payout read at sync, keyed by
+      store like `sales_platform_documents`, with gross sales, refunds,
+      fees, adjustments, chargebacks, reserves, other and net. Payouts
+      posted before it have only their transfer's net.
+1302. **Evidence for a match (SPR2-SPR5).** The payout number on the line
+      (as its own word), or the platform's name with the same amount
+      within 10 days after (1 day before) the payout. Amount and date
+      alone are offered for a person to check. Several fits are listed,
+      not picked. Claude's rule from the issue.
+1303. **Combined payouts (SPR7).** Up to 4 posted payouts from the 12
+      nearest, only when the line names the platform and exactly one set
+      adds up.
+1304. **Three kinds of "not matched" (SPR8-SPR10).**
+      `missing_posting_setup`, `missing_settlement_data` and `unmatched`,
+      plus `already_matched` (duplicate import) and `payout_not_posted`
+      (not paid, or refused: the sync's own reason). Each stays
+      unreconciled.
+1305. **No settlement data (SPR9).** Before the start date: code by hand.
+      No payout scopes: a transfer out of the clearing account for the
+      deposit, offered for a person to choose; fees stay in clearing.
+      Never assumes net = gross or splits fees.
+1306. **GST (SPR10).** Payouts, fees and transfers carry no GST. GST on
+      sales comes only from orders, which use `isGstRegisteredOn` (#546);
+      the guide states the registration status on the line's date and
+      lists a payout's orders not in the books.
+1307. **Read-only for AI.** `list_sales_platform_payout_matches` (Look
+      only) reports payouts, deposits, suggestions and the clearing
+      balance. No new write tool; a person reconciles on screen (or with
+      the existing bank tools).
+
+### Bank coding proposals reviewed before anything posts (#544; decisions 1292-1299)
+
+Claude's choices from the issue, 3 Nov 2026, following Xero where it has an
+answer (nothing posts until a person OKs a suggestion), not yet reviewed.
+
+1292. **A proposal is stored, not posted.** `propose_bank_coding` (any key
+      at "Make drafts" or above, since it posts nothing) keeps coding for
+      up to 100 unreconciled lines on one bank account: contact, account,
+      GST code, the line's full amount, why, how sure (0 to 1), and what
+      supports the GST (#546's evidence kinds plus free text). Tenant
+      migration 0220 adds `bank_coding_proposals` and
+      `bank_coding_proposal_rows`; neither can be deleted. Rows that can't
+      be kept (line reconciled, on another account, already in an open
+      proposal, unknown contact, account or code) are listed with why.
+      Splits, transfers and matches aren't proposed; they stay on the
+      reconcile screen and in create_and_match and bulk_reconcile, which
+      are unchanged.
+1293. **Only a person reviews.** Editing, rejecting and approving are for
+      bookkeepers and above in Tohyee; an AI can't do any of them, even
+      with Full access, so an AI draft is never shown as reviewed. A row
+      shows "AI draft" until a person edits, approves or rejects it, and
+      who did. Saving an edit records that a person said the GST is right
+      (person_said); the AI's own coding is kept beside it.
+1294. **Approving runs through the durable batches (#547).** The chosen rows
+      that still hold become a batch of kind `bank_coding` ("Approved
+      proposals" on the Batches tab). Each row is posted in its own
+      transaction as cash coding posts it (BK22: spend or receive money for
+      the full amount, GST inclusive with a code, reconciled to the line),
+      with the key `<approval key>:<row>`, so a lost answer, a double click
+      or a resume posts nothing twice. The review shows totals by account
+      and by GST code (money in and out apart, rejected rows left out).
+1295. **Stale rows are flagged, never changed to fit.** Each row keeps the
+      line's date, amount and how many reconciliations it had when proposed.
+      If the line is now reconciled, excluded or deleted, its date or amount
+      changed, or it was reconciled and unreconciled since, the row is
+      marked stale with why and approving leaves it as it is. Each request
+      carries the row versions the person saw; a row changed since is
+      refused ("changed since you looked"). Everything is checked again
+      when each row is posted, so a change after approval makes that row
+      **Failed** instead of overwriting anything.
+1296. **GST and lock dates are checked at approval and at posting.** A row
+      dated in a locked period can't be approved. While GST registration
+      isn't confirmed, only rows with no GST can be; when registered, a row
+      with a GST code needs something supporting it (as #546 requires of
+      an AI); a person's edit counts. Not registered: no GST codes.
+1297. **States are plain and separate.** Proposed, Approved (waiting to
+      post), Posted, Failed (with why) and Rejected. Posted and Failed come
+      from the batch action itself, so they're always true. A failed row
+      can be edited, rejected or approved again. The review filters by
+      state or "Needs a look" (open rows with a problem) and exports the
+      rows shown as CSV (cells that would run as a spreadsheet formula are
+      quoted as text).
+1298. **No private data in logs.** The audit trail records counts and ids
+      for proposing, editing, rejecting and approving, not descriptions,
+      amounts, reasons or evidence; those stay in the proposal.
+1299. **Where it lives.** A Proposals tab on each bank account lists its
+      proposals (newest first) and opens one for review. Proposal and row
+      ids are stable and are what the MCP tools (`list_bank_coding_proposals`,
+      `get_bank_coding_proposal`) and the API use.
 
 ### Screens made simpler (Jess's design brief, 3 Nov 2026; decisions 1321-1325)
 

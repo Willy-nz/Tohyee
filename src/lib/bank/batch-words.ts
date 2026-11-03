@@ -8,6 +8,7 @@ export const BATCH_KIND_LABELS: Record<string, string> = {
   bank_reconcile: "Reconciled by AI",
   bank_unreconcile: "Unreconciled",
   bank_undo: "Undo of a batch",
+  bank_coding: "Approved proposals",
 };
 
 export const BATCH_STATE_LABELS: Record<string, string> = {
@@ -25,6 +26,7 @@ export const ACTION_LABELS: Record<string, string> = {
   apply_bank_rule: "Bank rule",
   unreconcile: "Unreconcile",
   undo: "Undo",
+  approve_coding: "Post approved coding",
 };
 
 export const ACTION_STATUS_LABELS: Record<string, string> = {

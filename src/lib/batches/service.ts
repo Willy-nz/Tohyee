@@ -27,7 +27,7 @@ import { requireId } from "@/lib/validation";
  * work for each action kind; other kinds can be added later.
  */
 
-export const BATCH_KINDS = ["bank_reconcile", "bank_unreconcile", "bank_undo"] as const;
+export const BATCH_KINDS = ["bank_reconcile", "bank_unreconcile", "bank_undo", "bank_coding"] as const;
 export type BatchKind = (typeof BATCH_KINDS)[number];
 
 /** What callers see: "started" is shown as in_progress while a worker holds the lease, else unknown. */
