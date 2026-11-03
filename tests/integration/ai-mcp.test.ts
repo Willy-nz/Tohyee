@@ -259,6 +259,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_bank_rules",
         "get_bank_rule",
         "reconciliation_summary",
+        "get_bank_batch",
+        "list_bank_batches",
         "list_credit_notes",
         "get_credit_note",
         "list_supplier_credit_notes",

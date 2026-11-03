@@ -1493,6 +1493,57 @@ and post key "Helper".
   than 24 hours ago, or is in a locked period; or when the other side of its
   transfer was matched by someone else.
 
+### Bank batches: resume, Unreconcile selected and undo (#547; as Xero does, not yet reviewed, except BB6, which Jess decided on 3 Nov 2026)
+
+Setup as BK1-BK9, AIB1-AIB3. Tested in `tests/integration/bank-batches.test.ts`.
+
+- **BB1 (lost answer, before commit)** Claude's bulk_reconcile codes three
+  lines (-10.10, -10.20, -10.30) as spend money. The connection is lost while
+  the second is being done, before it commits: the first is **committed**
+  (one journal), the second **outcome unknown** (its spend money rolled
+  back), the third **not started**. Resuming the batch posts the second and
+  third with their original keys: three journals in all, each line
+  reconciled once.
+- **BB2 (lost answer, after commit)** As BB1, but the second commits and
+  the answer is lost: it's shown **committed**, not failed. Claude sends the
+  same call (same key, same actions) again: that resumes the same batch and
+  posts only the third. Three journals in all. The same key with different
+  actions is refused.
+- **BB3 (rate limit and restart)** A rate limit part way (wait 30 seconds)
+  leaves the rest **not started**; resuming early is turned away with how
+  long to wait, and nothing changes; after the wait it finishes. A server
+  that stops mid-batch holds it for at most a minute; then a resume
+  finishes it. Resuming a finished batch again changes nothing.
+- **BB4 (Unreconcile selected)** Choosing a -16.00 line coded as spend
+  money, the -300.00 side of a transfer and one line of a 200.00 + 100.00
+  split, the preview shows four lines unreconciled (the split's other line
+  too) and says the transfer's +300.00 side on 1010 stays reconciled. Going
+  ahead posts **nothing** and voids nothing: the spend money and transfer
+  stay, as BK11. The transfer's other side stays reconciled (Xero's
+  Unreconcile does the same; its "Remove & Redo" is BB5).
+- **BB5 (undoing an AI batch)** A batch reconciled a -19.00 line dated 20
+  April (spend money), -46.00 on 20 July (spend money to 6120, GST
+  inclusive: Dr 6120 40.00 / Dr 2100 6.00 / Cr 1000 46.00), -500.00 on 21
+  July (transfer to 1010, both sides matched) and +25.00 on 22 July
+  (matched to a receive money already posted). April is then locked. The
+  undo preview shows: April's line left alone (locked period); 20 July
+  unreconciled and its spend money voided on **20 July** (Dr 1000 46.00 /
+  Cr 6120 40.00 / Cr 2100 6.00); 21 July unreconciled **with its +500.00
+  side on 1010**, then the transfer voided on **21 July**; 22 July
+  unreconciled only (it was matched to something already posted, so nothing
+  is voided). Two void journals in all. Payments made by paying invoices or
+  bills are only unreconciled; they stay for a person to void (as AIB7).
+  Like Xero's "Remove & Redo", except that Tohyee voids (an exact reversal)
+  instead of deleting, so the history stays.
+- **BB6 (an AI unreconciling, Jess, 3 Nov 2026)** A Full access key may
+  unreconcile any lines, a person's included, through the same preview and
+  batch as BB4 (unmatch_bank_lines): nothing posted or voided. Make and post
+  and Look only keys can't.
+- **BB7 (partial undo)** In BB5, if the connection is lost while the
+  transfer is being undone, the 20 July undo stays done, the transfer's
+  shows outcome unknown and the 22 July one not started; resuming finishes
+  them, with the same two voids in all.
+
 ### Full access outside banking (#205 section 4; approvals decided by Jess, 9 Oct 2026)
 
 A Full access key (decision 489) can also do day-to-day accounting outside

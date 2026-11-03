@@ -1084,6 +1084,20 @@ that something happened.
   unreconciling any of them unreconciles them all. One-click OK never
   suggests one, and the reconciliation report counts only the part on lines
   by its date (examples BK26-BK28, not yet approved by Jess).
+  **Unreconcile selected and batches** (#547, decisions 1273-1279, examples
+  BB1-BB7): on the Statement lines tab, tick reconciled lines and choose
+  "Unreconcile selected…"; a preview shows what will be unreconciled (a
+  split's other lines with it; a transfer's other side stays reconciled and
+  says so) and which lines are left alone and why (locked period, not
+  reconciled). Nothing is posted or voided. The **Batches** tab lists every
+  batch on the account (an AI's bulk_reconcile, Unreconcile selected, undos)
+  with each line's outcome: done, refused (with why), not started, or
+  outcome unknown (the server stopped while doing it). **Resume** carries on
+  with the original keys, so nothing is done twice; **Undo batch…** (for an
+  AI's batch of reconciliations, after a preview) unreconciles its lines,
+  with the other side of a transfer, and voids the spend or receive money
+  and transfers it posted on the line's date. Payments stay. Bookkeepers
+  and above.
   **Foreign-currency bank and card accounts** (following NetSuite, as Jess
   decided): every posting keeps the foreign amount, the NZD amount and the
   rate; statement files are imported in the account's currency (a file in
@@ -2272,7 +2286,12 @@ that something happened.
   **never deletes**: nothing at any level deletes, voids, archives, rolls
   back or refunds anything, except that a Full access key can undo its own
   bank reconciliation within 24 hours, reversing what it posted for the line
-  on the line's date (AIB7). Full access also makes, edits and approves
+  on the line's date (AIB7), and can unreconcile anyone's bank lines after a
+  preview, posting and voiding nothing (unmatch_bank_lines, decision 1277,
+  Jess). bulk_reconcile works as a durable batch: each action's outcome is
+  kept, get_bank_batch reads it after a lost answer, and resume_bank_batch
+  carries on after a rate limit or restart without doing anything twice
+  (#547). Full access also makes, edits and approves
   credit notes, quotes, sales and purchase orders and repeating invoices and
   bills, applies credit and records refunds, approves and pays expense
   claims, adds and edits items, accounts, tracking, budgets and fixed assets,

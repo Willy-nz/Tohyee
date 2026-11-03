@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { FeedBadge } from "@/components/bank/common";
+import { BatchesPanel } from "@/components/bank/batches";
 import { CurrencyMoney, OpeningBalancePanel } from "@/components/bank/foreign";
 import { FeedPanel } from "@/components/bank/feed-panel";
 import { FileFeedsPanel } from "@/components/bank/file-feeds-panel";
@@ -22,7 +23,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatDateTime } from "@/lib/format";
 
-const TABS = ["reconcile", "lines", "import", "feed", "transactions"] as const;
+const TABS = ["reconcile", "lines", "import", "feed", "transactions", "batches"] as const;
 type Tab = (typeof TABS)[number];
 
 function BankAccountView({ organisationId, accountId }: { organisationId: string; accountId: string }) {
@@ -39,6 +40,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
     import: "Import a statement",
     feed: "Bank feed",
     transactions: "Bank transactions",
+    batches: "Batches",
   };
   // A foreign-currency account's statement is in its currency, so compare its balance in that currency (FXB7).
   const balanceInCurrency = account.isForeign ? account.foreignBalance : account.ledgerBalance;
@@ -142,6 +144,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
           </>
         ) : null}
         {tab === "transactions" ? <TransactionsPanel organisationId={organisationId} account={account} /> : null}
+        {tab === "batches" ? <BatchesPanel organisationId={organisationId} accountId={account.id} onChanged={detail.reload} /> : null}
       </Card>
     </>
   );
