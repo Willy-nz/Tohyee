@@ -3,6 +3,7 @@
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
 import { Fragment, useState } from "react";
+import { outcomeText, PlanReview } from "@/components/bank/batches";
 import { InOutCells, journalHref, LineDetails, LineStatusBadge, originLabel } from "@/components/bank/common";
 import { Pager } from "@/components/bank/reconcile-panel";
 import { Money } from "@/components/books";
@@ -14,6 +15,9 @@ import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
+import type { Plan } from "@/lib/bank/batches";
+import { toggleAll, toggleSelection } from "@/lib/bank/batch-words";
+import type { RunOutcome } from "@/lib/batches/service";
 import type { BankTransaction, BankTransfer } from "@/lib/bank/transactions";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
@@ -98,9 +102,55 @@ export function StatementLinesPanel({
     offset,
   });
 
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [batchKey, setBatchKey] = useState(() => newIdempotencyKey("unreconcile"));
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchMessage, setBatchMessage] = useState<{ tone: "success" | "warning" | "error"; text: string; errors: string[] } | null>(null);
+  const canChoose = can("bookkeeper");
+  const choosable = (list.data?.lines ?? []).filter((line) => line.status === "reconciled").map((line) => line.id);
+
   function changed() {
     list.reload();
     onChanged();
+  }
+
+  async function previewUnreconcile() {
+    setBatchBusy(true);
+    setBatchMessage(null);
+    try {
+      const answer = await api<{ plan: Plan }>("/api/bank-batches/unreconcile", { method: "POST", body: { organisationId, lineIds: [...selected] } });
+      setPlan(answer.plan);
+    } catch (caught) {
+      setBatchMessage({ tone: "error", text: errorMessage(caught), errors: [] });
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function confirmUnreconcile() {
+    if (!plan) return;
+    setBatchBusy(true);
+    try {
+      const outcome = await api<RunOutcome>("/api/bank-batches/unreconcile", {
+        method: "POST",
+        body: { organisationId, lineIds: [...selected], previewHash: plan.hash, idempotencyKey: batchKey },
+      });
+      const errors = outcome.batch.actions.filter((action) => action.error).map((action) => `Line ${action.targetId}: ${action.error}`);
+      setBatchMessage({
+        tone: outcome.stopped || outcome.batch.counts.failed ? "warning" : "success",
+        text: `Unreconcile selected (batch ${outcome.batch.id}): ${outcomeText(outcome)}`,
+        errors,
+      });
+      setPlan(null);
+      setSelected(new Set());
+      setBatchKey(newIdempotencyKey("unreconcile"));
+      changed();
+    } catch (caught) {
+      setBatchMessage({ tone: "error", text: errorMessage(caught), errors: [] });
+    } finally {
+      setBatchBusy(false);
+    }
   }
 
   return (
@@ -116,6 +166,8 @@ export function StatementLinesPanel({
             onClick={() => {
               setStatus(filter.status);
               setOffset(0);
+              setSelected(new Set());
+              setPlan(null);
             }}
           >
             {filter.label}
@@ -137,6 +189,34 @@ export function StatementLinesPanel({
           Search
         </Button>
       </form>
+      {batchMessage ? (
+        <Notice tone={batchMessage.tone}>
+          {batchMessage.text}
+          {batchMessage.errors.length ? (
+            <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
+              {batchMessage.errors.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
+          ) : null}
+        </Notice>
+      ) : null}
+      {canChoose && selected.size > 0 && !plan ? (
+        <div className={ui.toolbar} role="region" aria-label="Chosen lines">
+          <span>
+            {selected.size} line{selected.size === 1 ? "" : "s"} chosen
+          </span>
+          <Button size="small" disabled={batchBusy} onClick={() => void previewUnreconcile()}>
+            {batchBusy ? "Checking…" : "Unreconcile selected…"}
+          </Button>
+          <Button size="small" variant="secondary" onClick={() => setSelected(new Set())}>
+            Clear
+          </Button>
+        </div>
+      ) : null}
+      {plan ? (
+        <PlanReview plan={plan} busy={batchBusy} onConfirm={() => void confirmUnreconcile()} onCancel={() => setPlan(null)} />
+      ) : null}
       {list.error ? <Notice tone="error">{list.error}</Notice> : null}
       {!list.data && !list.error ? <p className={ui.muted}>Loading…</p> : null}
       {list.data && list.data.total === 0 ? <Empty>No lines here.</Empty> : null}
@@ -146,6 +226,17 @@ export function StatementLinesPanel({
             <table className={ui.table}>
               <thead>
                 <tr>
+                  {canChoose ? (
+                    <th style={{ width: 36 }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Choose every reconciled line on this page"
+                        disabled={choosable.length === 0 || Boolean(plan)}
+                        checked={choosable.length > 0 && choosable.every((id) => selected.has(id))}
+                        onChange={() => setSelected(toggleAll(selected, choosable))}
+                      />
+                    </th>
+                  ) : null}
                   <th>Date</th>
                   <th>Description</th>
                   <th className={ui.num}>Money in{account.isForeign ? ` (${account.statementCurrency})` : ""}</th>
@@ -159,6 +250,19 @@ export function StatementLinesPanel({
               <tbody>
                 {list.data.lines.map((line) => (
                   <tr key={line.id}>
+                    {canChoose ? (
+                      <td>
+                        {line.status === "reconciled" ? (
+                          <input
+                            type="checkbox"
+                            aria-label={`Choose ${formatDate(line.date)} ${line.description} ${formatMoney(line.amount)}`}
+                            disabled={Boolean(plan)}
+                            checked={selected.has(line.id)}
+                            onChange={() => setSelected(toggleSelection(selected, line.id))}
+                          />
+                        ) : null}
+                      </td>
+                    ) : null}
                     <td style={{ whiteSpace: "nowrap" }}>{formatDate(line.date)}</td>
                     <td>
                       {line.description}
@@ -213,6 +317,11 @@ export function StatementLinesPanel({
             </table>
           </div>
           <Pager offset={offset} pageSize={PAGE_SIZE} total={list.data.total} onChange={setOffset} />
+          {canChoose && choosable.length > 0 && selected.size === 0 ? (
+            <p className={ui.muted} style={{ margin: 0 }}>
+              Tick reconciled lines to unreconcile several at once. You&apos;ll see what will happen before anything changes.
+            </p>
+          ) : null}
         </>
       ) : null}
     </div>

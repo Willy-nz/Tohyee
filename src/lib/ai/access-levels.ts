@@ -10,8 +10,10 @@ import { type Role, roleAtLeast } from "@/lib/auth/roles";
  *         (decision 489, #205); only Owners make one, and it works as
  *         "post" when its owner is no longer an Owner
  * Never delete (decision 347): no level deletes, voids, archives, rolls back,
- * refunds or removes anything. The one exception is a Full access key undoing
- * its own reconciliation within 24 hours (example AIB7). Browser-safe.
+ * refunds or removes anything. The exceptions are a Full access key undoing
+ * its own reconciliation within 24 hours (example AIB7) and unreconciling
+ * lines after a preview, posting and voiding nothing (decision 1277, Jess).
+ * Browser-safe.
  */
 export const AI_ACCESS_LEVELS = ["read", "draft", "post", "full"] as const;
 export type AiAccessLevel = (typeof AI_ACCESS_LEVELS)[number];
@@ -30,7 +32,7 @@ export const AI_ACCESS_LEVEL_HELP: Record<AiAccessLevel, string> = {
   post:
     "It can also approve invoices and bills, post draft journals and record payments, so what it does goes into the books.",
   full:
-    "It can also reconcile bank statement lines (up to 100 at a time) and make and edit bank rules; make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills; apply credit and record refunds; approve and pay expense claims; add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. Anything an approval rule covers still waits for a person. It can undo only its own bank reconciliations, within 24 hours. Only Owners can make one.",
+    "It can also reconcile bank statement lines (up to 100 at a time) and make and edit bank rules; make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills; apply credit and record refunds; approve and pay expense claims; add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. Anything an approval rule covers still waits for a person. It can unreconcile bank lines after showing what it will do (nothing is posted or voided), and undo only its own reconciliations, within 24 hours. Only Owners can make one.",
 };
 
 /**
@@ -44,7 +46,7 @@ export const AI_ACCESS_LEVEL_AI_WORDS: Record<AiAccessLevel, string> = {
   post:
     "You can look things up, add and edit contacts, make and edit drafts, approve invoices and bills, post draft journals and record payments. You can't delete, void, archive, roll back or refund anything.",
   full:
-    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines, make and edit bank rules, make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills, apply credit, record refunds, approve and pay expense claims, add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. You can't delete, void, archive, pause, roll back or dispose of anything, exclude lines or switch anything off, and anything an approval rule covers is for a person to approve. The only undo you have is unmatch_bank_line, for your own reconciliations in the last 24 hours. Work in small batches and check the results.",
+    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines, make and edit bank rules, make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills, apply credit, record refunds, approve and pay expense claims, add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. You can't delete, void, archive, pause, roll back or dispose of anything, exclude lines or switch anything off, and anything an approval rule covers is for a person to approve. Your undos are unmatch_bank_line, for your own reconciliations in the last 24 hours, and unmatch_bank_lines, which unreconciles any lines (nothing posted or voided) after you've shown the person its preview. bulk_reconcile works as a batch: if an answer is lost, read it with get_bank_batch and carry on with resume_bank_batch instead of sending the actions again. Work in small batches and check the results.",
 };
 
 /** Shown before a Full access key is made; the person must tick it (decision 488). */

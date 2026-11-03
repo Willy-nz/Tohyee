@@ -306,8 +306,14 @@ re-runs the whole sequence.
   every audit event. No tool deletes anything (decision 347). The bank
   tools (`src/lib/ai/bank-tools.ts`) send the reconcile screen's commands
   with the command source `ai-<key id>`, which is how unmatch_bank_line
-  knows a reconciliation is the key's own; their bulk tools do each line in
-  a savepoint inside the one transaction. No
+  knows a reconciliation is the key's own. apply_bank_rule does each line
+  in a savepoint inside the one transaction; bulk_reconcile and
+  unmatch_bank_lines are durable batches (#547, `src/lib/batches/service.ts`,
+  tables `batches` and `batch_actions`): the batch is committed first, then
+  each action in a transaction of its own with its status written in that
+  same transaction, so a lost answer or a restart can always be resumed
+  with the original keys (an `AiTool` with `runSteps` gets a runner instead
+  of one transaction). No
   same-origin check (AI services call it from elsewhere) and no CORS
   headers; cookies are ignored.
 - The PowerPoint add-in (#429, decisions 830-849; docs/POWERPOINT-ADDIN.md)
