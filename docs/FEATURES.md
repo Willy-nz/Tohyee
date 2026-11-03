@@ -1053,7 +1053,7 @@ that something happened.
   schedule, its last successful sync, and each linked account's last result
   ("Nothing new" apart from "Not synced yet") and lines brought in.
   Existing links are never replaced. **Personal and mixed-use accounts**
-  (#545, decisions 1308-1315, MU1-MU14, tenant migration 0219): an admin
+  (#545, decisions 1308-1315, MU1-MU14, tenant migration 0221): an admin
   marks a card or account as mixed use or personal in a guided setup. Its
   lines are reviewed (business, private, split, or a refund) instead of
   reconciled; a business part posts spend money and an owner journal, so the

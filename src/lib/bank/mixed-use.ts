@@ -42,7 +42,7 @@ import { asRecord, optionalSource, optionalString, requireArray, requireId, requ
  *
  * So the account's balance in the books is always 0.00; the database checks
  * that at commit, refuses reconciling these lines, and keeps a reviewed line
- * as it is until its review is undone (tenant migration 0219).
+ * as it is until its review is undone (tenant migration 0221).
  */
 
 export type UsageAccount = {

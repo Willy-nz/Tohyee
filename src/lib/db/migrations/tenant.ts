@@ -18685,7 +18685,7 @@ create trigger batches_no_delete before delete on batches
 `,
   },
   {
-    version: "0219",
+    version: "0221",
     name: "mixed_use_accounts",
     sql: `
 -- Personal and mixed-use bank and card accounts (#545, examples MU1-MU14,

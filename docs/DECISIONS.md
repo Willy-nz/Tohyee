@@ -12003,7 +12003,7 @@ choices are listed in 1315 as questions, not decided.
       introduced to start with), in a three-step guided setup on the
       account. It's refused for an account already in the business books
       (a balance or reconciled lines) and for foreign-currency accounts.
-      Tenant migration 0219 keeps it in `bank_account_usage`; each change is
+      Tenant migration 0221 keeps it in `bank_account_usage`; each change is
       audited.
 1309. **Reviewed, never reconciled.** A mixed-use or personal account's
       lines are reviewed as business, private, split or (money in) a refund
