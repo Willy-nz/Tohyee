@@ -340,3 +340,43 @@ export function workedExample(input: {
     clearingAfter: money(sub(sub(amount, fee), payout)),
   };
 }
+
+// ---------------------------------------------------------------------------
+// What comes in (decisions 1334, 1338)
+
+/** The customers choice: which customers become contacts, or none kept up to date. */
+export type CustomerChoice = "buyers" | "all" | "off";
+
+export function customerChoiceOf(connection: { syncCustomers: boolean; customerScope: "buyers" | "all" }): CustomerChoice {
+  return connection.syncCustomers ? connection.customerScope : "off";
+}
+
+/** The settings a customers choice saves (contacts already brought in stay, whichever is chosen). */
+export function customerChoiceSettings(choice: CustomerChoice): { syncCustomers: boolean; customerScope?: "buyers" | "all" } {
+  return choice === "off" ? { syncCustomers: false } : { syncCustomers: true, customerScope: choice };
+}
+
+export const CUSTOMER_CHOICES: ReadonlyArray<{ value: CustomerChoice; label: string; hint: string }> = [
+  {
+    value: "buyers",
+    label: "Only customers who have ordered",
+    hint: "A contact is added when their first order comes into the accounts, and kept up to date after that. Needs sales turned on.",
+  },
+  { value: "all", label: "All customers", hint: "Every customer in the store, including newsletter sign-ups. Test customers aren't brought in." },
+  { value: "off", label: "Don't keep contacts up to date", hint: "Customers still come in with their orders, but later changes in the store aren't copied." },
+];
+
+/**
+ * A note about variants without a SKU (decision 1338), from the linked
+ * variants: null when they all have one; a warning when many (a quarter or
+ * more, or 10 or more) don't. Pure.
+ */
+export function skuNote(platformLabel: string, counts: { linked: number; withoutSku: number }): { tone: "info" | "warning"; text: string } | null {
+  if (counts.withoutSku <= 0) return null;
+  const many = counts.withoutSku >= 10 || counts.withoutSku * 4 >= counts.linked;
+  const some = counts.withoutSku === 1 ? `1 of ${counts.linked} ${platformLabel} variants has` : `${counts.withoutSku} of ${counts.linked} ${platformLabel} variants have`;
+  return {
+    tone: many ? "warning" : "info",
+    text: `${some} no SKU. ${counts.withoutSku === 1 ? "It came in as an item with a code" : "They came in as items with codes"} made from ${platformLabel}'s ID (like ${platformLabel.toUpperCase()}-44012345). To use your own codes, add SKUs in ${platformLabel}: the items stay linked, and the SKU becomes the item's code at the next sync.`,
+  };
+}

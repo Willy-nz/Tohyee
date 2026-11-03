@@ -6013,8 +6013,11 @@ The rules (our choice where Shopify and Jess are silent):
   the variant's SKU (ignoring case). Anything else that isn't clear is
   skipped and logged, never guessed: no email match and a contact with the
   same name already exists (an admin then checks, SPC35-SPC37); more than one contact with that email; a
-  record already linked to another Shopify record; a variant with no SKU,
-  or a SKU that can't be an item code; an archived contact or item.
+  record already linked to another Shopify record; a SKU that can't be an
+  item code; an archived contact or item. (A variant with no SKU is added
+  by its Shopify ID since decision 1337, SPC38; a single first name
+  clashing with a contact gets its own contact since decision 1339,
+  SPC40.)
   Otherwise a new contact (a customer) or a new **non-stock** item is
   added. A new item's name is the product's title, followed by " - " and
   the variant's title unless Shopify calls it "Default Title".
@@ -6666,6 +6669,49 @@ Made-up people.
 
 Built (decisions 1269-1272). Tests: `tests/integration/sales-platforms.test.ts`
 (SPC35-SPC37) and `tests/unit/sales-platform-customer-matches.test.ts`.
+
+### Shopify import fixes from the first live sync (decisions 1334-1341; follows Jess's report, not yet reviewed)
+
+Made-up people and products. Store: prices include tax, GST registered,
+posting on from 1 Oct 2026. Order lines are one Large candle at 23.00
+including 3.00 GST.
+
+- **SPC38** Product "Paw print pendant": variant 3101 Silver and 3102 Gold,
+  neither with a SKU. The sync adds non-stock items **SHOPIFY-3101**
+  "Paw print pendant - Silver" and **SHOPIFY-3102** "Paw print pendant -
+  Gold"; nothing is skipped. Reading the products again adds nothing.
+  Shopify gives 3101 the SKU PAW-SILVER: the same item's code becomes
+  PAW-SILVER. An order for 3102 (129.00 incl. 16.83 GST) is invoiced on
+  item SHOPIFY-3102. The store's card says "1 of 3 Shopify variants has no
+  SKU".
+- **SPC39** A new connection brings in only customers who have ordered:
+  the customer sync adds no contacts. Customer 1402 has no name in
+  Shopify (pip@made-up.test); their order's billing name is "Pip Rua
+  Rua", so its order adds contact **Pip Rua Rua** and posts. Shopify then
+  changes 1402's email: copied; the contact isn't renamed to the email.
+  Switching to all customers adds Tui Waaka and skips Shop Tester (tagged
+  "test") and person@example.com as test customers. Switching back removes
+  nothing.
+- **SPC40** Contacts **Kiri** (kiri.a@made-up.test) and **Mere Tane**
+  (mere.a@made-up.test). Orders from Shopify customers "Kiri"
+  (kiri.b@made-up.test) and "Mere Tane" (mere.b@made-up.test). Kiri's
+  order adds contact **Kiri (kiri.b@made-up.test)** and posts; Mere
+  Tane's waits under "Customers to check" (#539), its order waiting with
+  reason `customer_not_linked`. Syncing again adds no second Kiri.
+- **SPC41** Left by the earlier version: "Hemi" and "Ana" (no email) under
+  "Customers to check" next to contacts Hemi and Ana, and Hemi's order
+  waiting. With all customers synced, the next sync adds **Hemi
+  (hemi.b@made-up.test)** and **Ana (Shopify)**, nothing is left to check,
+  and Hemi's order posts.
+- **SPC42** Orders #1701 (11 Oct), #1702 (15 Oct) and #1703 (20 Oct),
+  listed by Shopify in another order (by when they last changed). The
+  first sync invoices them INV-0001, INV-0002 and INV-0003 in date order;
+  a later order is INV-0004.
+
+Built (decisions 1334-1341). Tests:
+`tests/integration/shopify-import-fixes.test.ts` (SPC38-SPC42) and the
+unit tests `sales-platform-customer-matches`, `sales-platform-setup`,
+`sales-platform-orders` and `sales-platforms`.
 
 ### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 

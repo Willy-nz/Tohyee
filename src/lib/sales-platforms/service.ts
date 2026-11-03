@@ -28,17 +28,26 @@ import {
   type SalesPlatformConnector,
 } from "@/lib/sales-platforms/connector";
 import { type StockView, saveExtras, saveOrderExtras, stockDifferences } from "@/lib/sales-platforms/extras-store";
-import { forgetCustomerMatch, rememberCustomerMatch, sameNameMessage } from "@/lib/sales-platforms/customer-matches";
+import {
+  forgetCustomerMatch,
+  isWeakName,
+  rememberCustomerMatch,
+  sameNameMessage,
+  suggestName,
+  testCustomerReason,
+} from "@/lib/sales-platforms/customer-matches";
 import { writeLog } from "@/lib/sales-platforms/log";
 import type { CoverageFacts } from "@/lib/sales-platforms/coverage-status";
 import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
-import { startOfLocalDate } from "@/lib/sales-platforms/orders";
+import { oldestFirst, startOfLocalDate } from "@/lib/sales-platforms/orders";
 import { savePayout } from "@/lib/sales-platforms/payout-store";
 import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
 import { woocommerceConnector } from "@/lib/sales-platforms/woocommerce";
 import {
+  CUSTOMER_SCOPES,
+  type CustomerScope,
   ORDER_SCOPE,
   PAYOUT_SCOPES,
   SALES_PLATFORMS,
@@ -91,7 +100,10 @@ type ConnectionRow = {
   webhook_subscription_ids: string[];
   webhooks_note: string | null;
   sync_customers: boolean;
+  customer_scope: CustomerScope;
   sync_products: boolean;
+  variants_linked: number;
+  variants_without_sku: number;
   status: "active" | "paused" | "disconnected";
   customers_synced_until: string | null;
   products_synced_until: string | null;
@@ -139,7 +151,10 @@ const COLUMNS =
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_error, failures, connected_by_email, " +
   "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
   "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, untaxed_tax_code_id, granted_scopes, " +
-  "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, " +
+  "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, customer_scope, " +
+  "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant') as variants_linked, " +
+  "(select count(*)::int from sales_platform_mappings v where v.connection_id = sales_platform_connections.id and v.record_kind = 'product_variant'" +
+  " and coalesce(v.synced_values->>'sku', '') = '') as variants_without_sku, " +
   ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id"].map(accountCode).join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
   ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
@@ -160,7 +175,9 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     pricesIncludeTax: row.prices_include_tax,
     authMethod: row.auth_method,
     syncCustomers: row.sync_customers,
+    customerScope: row.customer_scope,
     syncProducts: row.sync_products,
+    productVariants: { linked: row.variants_linked, withoutSku: row.variants_without_sku },
     status: row.status,
     lastSyncAt: iso(row.last_sync_at),
     lastError: row.last_error,
@@ -472,6 +489,8 @@ export async function connectStore(
   // WooCommerce has no customer or product sync: customers are matched by email and lines by SKU.
   const syncCustomers = connector.syncsRecords && (optionalBoolean(body.syncCustomers, "syncCustomers") ?? true);
   const syncProducts = connector.syncsRecords && (optionalBoolean(body.syncProducts, "syncProducts") ?? true);
+  // Decision 1334: only customers who have ordered, unless "all" is chosen.
+  const customerScope: CustomerScope = body.customerScope === undefined ? "buyers" : requireOneOf(body.customerScope, "customerScope", CUSTOMER_SCOPES);
   const now = options.now ?? new Date();
 
   // 1. A short read: is this store already connected? (No call to the store if so.)
@@ -498,8 +517,8 @@ export async function connectStore(
       inserted = await tx.query<ConnectionRow>(
         `insert into sales_platform_connections (platform, store_domain, store_name, store_currency, prices_include_tax, auth_method,
                                                  credentials_ciphertext, access_token_ciphertext, access_token_expires_at, webhook_key,
-                                                 sync_customers, sync_products, connected_by_email, granted_scopes)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                                                 sync_customers, sync_products, connected_by_email, granted_scopes, customer_scope)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          returning ${COLUMNS}`,
         [
           platform,
@@ -516,6 +535,7 @@ export async function connectStore(
           syncProducts,
           actor.email,
           store.scopes,
+          customerScope,
         ],
       );
     } catch (error) {
@@ -526,13 +546,13 @@ export async function connectStore(
     await writeLog(tx, saved.id, {
       source: "connection",
       action: "connected",
-      message: `Connected ${store.storeName} (${input.storeDomain}). Its prices are in ${store.currency} and ${store.pricesIncludeTax ? "include" : "exclude"} tax. Syncing customers: ${syncCustomers ? "on" : "off"}; products: ${syncProducts ? "on" : "off"}.`,
+      message: `Connected ${store.storeName} (${input.storeDomain}). Its prices are in ${store.currency} and ${store.pricesIncludeTax ? "include" : "exclude"} tax. Syncing customers: ${syncCustomers ? (customerScope === "buyers" ? "only those who have ordered" : "all") : "off"}; products: ${syncProducts ? "on" : "off"}.`,
     });
     await writeAuditEvent(tx, {
       eventType: "sales_platform.connected",
       entityType: "sales_platform_connection",
       entityId: saved.id,
-      details: { platform, storeDomain: input.storeDomain, authMethod: input.authMethod, syncCustomers, syncProducts },
+      details: { platform, storeDomain: input.storeDomain, authMethod: input.authMethod, syncCustomers, customerScope, syncProducts },
     });
     return saved;
   });
@@ -663,6 +683,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   assertConnected(row);
   const syncCustomers = optionalBoolean(body.syncCustomers, "syncCustomers") ?? row.sync_customers;
   const syncProducts = optionalBoolean(body.syncProducts, "syncProducts") ?? row.sync_products;
+  const customerScope: CustomerScope = body.customerScope === undefined ? row.customer_scope : requireOneOf(body.customerScope, "customerScope", CUSTOMER_SCOPES);
   const postToAccounts = optionalBoolean(body.postToAccounts, "postToAccounts") ?? row.post_to_accounts;
   const startDate = body.startDate === undefined ? row.start_date : parseOptionalIsoDate(body.startDate, "startDate");
   const shop = label(row.platform);
@@ -811,6 +832,17 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   if (syncCustomers !== row.sync_customers || syncProducts !== row.sync_products) {
     changes.push(`syncing customers: ${syncCustomers ? "on" : "off"}; products: ${syncProducts ? "on" : "off"}`);
   }
+  if (customerScope !== row.customer_scope) {
+    // Decision 1334: contacts already brought in stay, whichever is chosen.
+    changes.push(customerScope === "buyers" ? "customers: only those who have ordered (contacts already brought in stay)" : "customers: all of the store's customers");
+    // Switching to all customers reads them all again: customers who haven't ordered were passed over until now.
+    await tx.query(
+      `update sales_platform_connections
+          set customer_scope = $2, customers_synced_until = case when $2 = 'all' then null else customers_synced_until end
+        where id = $1`,
+      [row.id, customerScope],
+    );
+  }
   if (postToAccounts !== row.post_to_accounts) changes.push(`posting to the accounts: ${postToAccounts ? "on" : "off"}`);
   if (startDate !== row.start_date) changes.push(`start date: ${startDate ?? "none"}`);
   const named = (choice: AccountChoice | null | undefined, current: string | null, text: string) => {
@@ -881,7 +913,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     eventType: "sales_platform.settings_changed",
     entityType: "sales_platform_connection",
     entityId: row.id,
-    details: { changes, syncCustomers, syncProducts, postToAccounts, startDate },
+    details: { changes, syncCustomers, customerScope, syncProducts, postToAccounts, startDate },
   });
   return toConnection(await readConnection(tx, row.id));
 }
@@ -948,7 +980,7 @@ export async function disconnectStore(organisation: OrganisationRecord, actor: A
 // Applying the platform's records (SPC2-SPC7)
 
 type ApplyContext = {
-  connection: Pick<ConnectionRow, "id" | "platform" | "store_currency" | "prices_include_tax">;
+  connection: Pick<ConnectionRow, "id" | "platform" | "store_currency" | "prices_include_tax" | "customer_scope">;
   source: "sync" | "webhook";
   counts: SyncResult;
 };
@@ -1110,19 +1142,22 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
   const platform = label(context.connection.platform);
   const connectionId = context.connection.id;
   const country = customer.country && isCountryCode(customer.country) ? customer.country : null;
+  const who = customer.name ?? customer.email ?? `customer ${customer.externalId}`;
+  const mapping = await findMapping(tx, connectionId, "customer", customer.externalId);
+  // Decision 1336: an email or phone standing in for a name only names a new contact; it never renames one.
+  const fallbackName = customer.nameIsFallback === true;
+  const lastName = mapping && "name" in mapping.synced_values ? mapping.synced_values.name : undefined;
   const snapshot: Record<string, string | null> = {
-    name: customer.name,
+    ...(fallbackName && mapping ? (lastName === undefined ? {} : { name: lastName }) : { name: customer.name }),
     email: customer.email,
     phone: customer.phone,
     ...(country ? { country } : {}),
   };
-  const who = customer.name ?? customer.email ?? `customer ${customer.externalId}`;
-  const mapping = await findMapping(tx, connectionId, "customer", customer.externalId);
 
   const merge = async (contact: ContactNow, last: Record<string, string | null> | undefined) => {
     const result = mergeFields(
       [
-        { key: "name", label: "name", tohyee: contact.name, incoming: customer.name },
+        ...(fallbackName ? [] : [{ key: "name", label: "name", tohyee: contact.name, incoming: customer.name }]),
         { key: "email", label: "email", tohyee: contact.email, incoming: customer.email, same: sameIgnoringCase },
         { key: "phone", label: "phone", tohyee: contact.phone, incoming: customer.phone },
         ...(country ? [{ key: "country", label: "country", tohyee: contact.billing_country, incoming: country }] : []),
@@ -1215,7 +1250,13 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
   const clash = await tx.query<{ id: string; name: string }>("select id::text as id, name from contacts where not is_archived and lower(name) = lower($1) limit 1", [
     customer.name,
   ]);
-  if (clash.rows[0]) {
+  let name = customer.name;
+  let because = "";
+  if (clash.rows[0] && isWeakName(customer.name, { email: customer.email, phone: customer.phone })) {
+    // Decision 1339: a first name alone (or an email or phone as the name) doesn't suggest the same person, so the customer gets their own contact.
+    name = await suggestName(tx, { name: customer.name, email: customer.email, platform: context.connection.platform, externalId: customer.externalId, weak: true });
+    because = `: contact ${clash.rows[0].name} has the same name, but ${customer.name.includes("@") ? "an email as the name" : /\d/.test(customer.name) && !/[a-z]/i.test(customer.name) ? "a phone number as the name" : "a single name"} doesn't show they're the same person`;
+  } else if (clash.rows[0]) {
     // Two people can share a name: nothing is linked or changed until an admin checks who they are (#539, decision 1269).
     await rememberCustomerMatch(tx, connectionId, {
       externalId: customer.externalId,
@@ -1232,7 +1273,7 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
   const { contact } = await createContact(tx, {
     idempotencyKey: `sp-${connectionId}-customer-${customer.externalId}`,
     source: SOURCE,
-    name: customer.name,
+    name,
     email: customer.email,
     phone: customer.phone,
     ...(country ? { billingCountry: country } : {}),
@@ -1245,12 +1286,15 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
     recordKind: "customer",
     externalId: customer.externalId,
     contactId: contact.id,
-    message: `Added contact ${contact.name} from ${platform} customer ${customer.externalId}${country ? ` (billing country ${country})` : ""}.`,
+    message: `Added contact ${contact.name} from ${platform} customer ${customer.externalId}${country ? ` (billing country ${country})` : ""}${because}.`,
   });
   await saveMapping(tx, connectionId, "customer", customer.externalId, { contactId: contact.id }, snapshot, customer.updatedAt);
 }
 
 type ItemNow = { id: string; code: string; name: string; sale_price: string | null; is_active: boolean };
+
+/** The code a variant without a SKU is added under (decision 1337), e.g. "SHOPIFY-44000001". */
+export const idCode = (platform: SalesPlatform, variantId: string): string => `${platform.toUpperCase()}-${variantId}`.slice(0, 50);
 
 const plainPrice = (value: string | null): string | null => (value === null ? null : toPlainString(dec(value)));
 
@@ -1289,10 +1333,22 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
       platform,
     );
     if ("name" in result.changes && result.changes.name === null) delete result.changes.name;
+    const changes: Record<string, unknown> = { ...result.changes };
     if (last !== undefined && "sku" in last && (last.sku ?? null) !== variant.sku) {
-      result.keptText.push(`Kept the item's code ${item.code}: ${platform}'s SKU changed to ${variant.sku === null ? "nothing" : `"${variant.sku}"`}.`);
+      // Decision 1337: a SKU added in the store replaces the code Tohyee made up for it (if no other item has it); any other code is kept.
+      const madeUp = item.code.toLowerCase() === idCode(context.connection.platform, variant.externalId).toLowerCase();
+      const free =
+        madeUp && variant.sku !== null && ITEM_CODE_PATTERN.test(variant.sku)
+          ? !(await tx.query("select 1 from items where lower(code) = lower($1) and id <> $2", [variant.sku, item.id])).rowCount
+          : false;
+      if (free) {
+        changes.code = variant.sku;
+        result.updatedText.push(`code "${item.code}" → "${variant.sku}" (${platform}'s new SKU)`);
+      } else {
+        result.keptText.push(`Kept the item's code ${item.code}: ${platform}'s SKU changed to ${variant.sku === null ? "nothing" : `"${variant.sku}"`}.`);
+      }
     }
-    if (Object.keys(result.changes).length > 0) await updateItem(tx, item.id, result.changes);
+    if (Object.keys(changes).length > 0) await updateItem(tx, item.id, changes);
     await logMerge(tx, context, result, { kind: "product_variant", externalId: variant.externalId, itemId: item.id, what: `item ${item.code}` });
     await saveMapping(tx, connectionId, "product_variant", variant.externalId, { itemId: item.id }, snapshot, variant.updatedAt);
   };
@@ -1310,11 +1366,9 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
     return;
   }
 
-  if (!variant.sku) {
-    await skip(tx, context, "product_variant", variant.externalId, `${platform} variant ${name} has no SKU, so it wasn't matched to an item or added.`);
-    return;
-  }
-  if (!ITEM_CODE_PATTERN.test(variant.sku)) {
+  // Decision 1337: no SKU: added under a code made from the variant's ID, which never changes (a link already made is used above).
+  const code = variant.sku ?? idCode(context.connection.platform, variant.externalId);
+  if (variant.sku && !ITEM_CODE_PATTERN.test(variant.sku)) {
     await skip(
       tx,
       context,
@@ -1324,9 +1378,11 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
     );
     return;
   }
+  // An item with the code made from the variant's ID (e.g. after connecting again) is linked like one with its SKU.
   const existing = (
-    await tx.query<ItemNow>("select id, code, name, sale_price::text, is_active from items where lower(code) = lower($1) order by id limit 1", [variant.sku])
+    await tx.query<ItemNow>("select id, code, name, sale_price::text, is_active from items where lower(code) = lower($1) order by id limit 1", [code])
   ).rows[0];
+  const sameWhat = variant.sku ? "the same SKU" : "the same made-up code";
   if (existing) {
     if (!existing.is_active) {
       await skip(tx, context, "product_variant", variant.externalId, `${platform} variant ${name} wasn't linked: item ${existing.code} has the same code but is archived.`);
@@ -1337,7 +1393,7 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
       [connectionId, existing.id],
     );
     if (linked.rows[0]) {
-      await skip(tx, context, "product_variant", variant.externalId, `${platform} variant ${name} wasn't linked: item ${existing.code} is already linked to ${platform} variant ${linked.rows[0].external_id} with the same SKU.`);
+      await skip(tx, context, "product_variant", variant.externalId, `${platform} variant ${name} wasn't linked: item ${existing.code} is already linked to ${platform} variant ${linked.rows[0].external_id} with ${sameWhat}.`);
       return;
     }
     context.counts.linked += 1;
@@ -1347,7 +1403,9 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
       recordKind: "product_variant",
       externalId: variant.externalId,
       itemId: existing.id,
-      message: `Linked ${platform} variant ${name} (SKU ${variant.sku}) to item ${existing.code} (same code).`,
+      message: variant.sku
+        ? `Linked ${platform} variant ${name} (SKU ${variant.sku}) to item ${existing.code} (same code).`
+        : `Linked ${platform} variant ${name} (no SKU) to item ${existing.code} (the code made from its ID).`,
     });
     await merge(existing, undefined);
     return;
@@ -1359,7 +1417,7 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
   const { item } = await createItem(tx, {
     idempotencyKey: `sp-${connectionId}-variant-${variant.externalId}`,
     source: SOURCE,
-    code: variant.sku,
+    code,
     name,
     itemType,
     salePrice: pricing.copy ? price : null,
@@ -1378,9 +1436,48 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
     recordKind: "product_variant",
     externalId: variant.externalId,
     itemId: item.id,
-    message: `Added ${itemType === "stock" ? "stock" : "non-stock"} item ${item.code} "${item.name}" from ${platform}${itemType === "stock" ? " (its inventory is tracked there)" : ""}${priceText}.`,
+    message: `Added ${itemType === "stock" ? "stock" : "non-stock"} item ${item.code} "${item.name}" from ${platform}${itemType === "stock" ? " (its inventory is tracked there)" : ""}${priceText}${variant.sku ? "" : `. It has no SKU in ${platform}, so its code is made from the variant's ID; a SKU added there later becomes its code`}.`,
   });
   await saveMapping(tx, connectionId, "product_variant", variant.externalId, { itemId: item.id }, snapshot, variant.updatedAt);
+}
+
+async function linkedCustomer(tx: OrgTx, connectionId: string, externalId: string): Promise<boolean> {
+  const found = await tx.query("select 1 from sales_platform_mappings where connection_id = $1 and record_kind = 'customer' and external_id = $2", [
+    connectionId,
+    externalId,
+  ]);
+  return (found.rowCount ?? 0) > 0;
+}
+
+/**
+ * Customers remembered under "Customers to check" whose name is weak
+ * (decision 1340): under decision 1339 they get their own contact, so they
+ * are looked at again. With all customers synced they're brought in now;
+ * otherwise they're forgotten, and a waiting order brings its customer in
+ * when it's tried again.
+ */
+async function recheckWeakMatches(tx: OrgTx, context: ApplyContext, allCustomers: boolean): Promise<void> {
+  const rows = await tx.query<{ external_id: string; name: string; email: string | null; phone: string | null; country: string | null; external_updated_at: string | null }>(
+    `select external_id, name, email, phone, country, external_updated_at
+       from sales_platform_customer_matches where connection_id = $1 order by first_seen_at, external_id`,
+    [context.connection.id],
+  );
+  for (const row of rows.rows) {
+    if (!isWeakName(row.name, row)) continue;
+    if (!allCustomers) {
+      await forgetCustomerMatch(tx, context.connection.id, row.external_id);
+      continue;
+    }
+    const customer: PlatformCustomer = {
+      externalId: row.external_id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      country: row.country,
+      updatedAt: row.external_updated_at ? new Date(row.external_updated_at).toISOString() : null,
+    };
+    await applyOne(tx, context, "customer", customer.externalId, () => applyCustomer(tx, context, customer));
+  }
 }
 
 async function applyRecords(
@@ -1389,6 +1486,16 @@ async function applyRecords(
   records: { customers: readonly PlatformCustomer[]; variants: readonly PlatformVariant[] },
 ): Promise<void> {
   for (const customer of records.customers) {
+    if (!(await linkedCustomer(tx, context.connection.id, customer.externalId))) {
+      // Decision 1334: only customers who have ordered; their contact is added when their first order is posted.
+      if (context.connection.customer_scope === "buyers") continue;
+      // Decision 1335: test records aren't brought in by the customer sync (an order's customer always is).
+      const test = testCustomerReason(customer);
+      if (test) {
+        await skip(tx, context, "customer", customer.externalId, `${label(context.connection.platform)} customer ${customer.name ?? customer.externalId} is a test customer (${test}), so no contact was added.`);
+        continue;
+      }
+    }
     await applyOne(tx, context, "customer", customer.externalId, () => applyCustomer(tx, context, customer));
   }
   for (const variant of records.variants) {
@@ -1567,6 +1674,7 @@ export async function syncConnection(
         customers: current.sync_customers ? changes.customers : [],
         variants: current.sync_products ? changes.variants : [],
       });
+      await recheckWeakMatches(tx, apply, current.sync_customers && current.customer_scope === "all");
       for (const note of changes.notes) {
         await writeLog(tx, row.id, { source: "sync", action: "skipped", message: note });
       }
@@ -1575,7 +1683,8 @@ export async function syncConnection(
       let payoutsUntil: string | null = null;
       if (posting && orders) {
         const postContext = postingContext(tx, apply, posting);
-        for (const order of orders.orders) await postOrder(tx, postContext, order);
+        // Decision 1341: oldest first, so invoice numbers run in date order.
+        for (const order of oldestFirst(orders.orders)) await postOrder(tx, postContext, order);
         for (const note of orders.notes) await writeNote(tx, row.id, "sync", note);
         if (payouts) {
           // The next sync starts at the first payout not finished with (not paid yet, or stopped on Tohyee's side).
