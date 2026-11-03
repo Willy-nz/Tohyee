@@ -155,6 +155,18 @@ export async function listTaxAssets(tx: OrgTx, incomeYear: number): Promise<TaxA
   return result.rows.map((row) => toAsset(row, incomeYear, endMonth));
 }
 
+/** These assets' tax details by asset id (assets without any are left out), for the AI's fixed asset tools (decision 1346). */
+export async function taxDetailsByAsset(tx: OrgTx, assetIds: readonly string[]): Promise<Map<string, TaxDetails>> {
+  if (assetIds.length === 0) return new Map();
+  const result = await tx.query<AssetRow>(`${ASSETS_SQL} where f.id = any($1::bigint[])`, [assetIds]);
+  const found = new Map<string, TaxDetails>();
+  for (const row of result.rows) {
+    const details = toDetails(row);
+    if (details) found.set(row.id, details);
+  }
+  return found;
+}
+
 function versionOf(input: unknown): number {
   const value = typeof input === "string" ? Number(input) : input;
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) throw new ValidationError("version must be the version you loaded (0 for none yet).");

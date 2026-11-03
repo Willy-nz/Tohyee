@@ -279,7 +279,8 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     return connectStore(
       w.record,
       w.actor,
-      { platform: "shopify", storeDomain: "glimmers", authMethod: "access_token", accessToken: TOKEN, apiSecret: SECRET, ...overrides },
+      // Stage 1's examples sync every customer (decision 1334's default for a new connection is only those who have ordered).
+      { platform: "shopify", storeDomain: "glimmers", authMethod: "access_token", accessToken: TOKEN, apiSecret: SECRET, customerScope: "all", ...overrides },
       { webhookOrigin },
     );
   }
@@ -429,7 +430,7 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(await contactsNamed(third, "Aroha Ngata")).toHaveLength(0);
   });
 
-  it("SPC3: variants link by SKU or are added as non-stock items; no SKU is skipped", async () => {
+  it("SPC3: variants link by SKU or are added as non-stock items; no SKU is added by its Shopify ID (decision 1337)", async () => {
     const w = await setup();
     shop();
     const connection = await connect(w, { syncCustomers: false });
@@ -445,8 +446,9 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(kept.message).toContain("Large soy candle");
     expect(entries.find((entry) => entry.externalId === "3002")!.action).toBe("created");
     const lavender = entries.find((entry) => entry.externalId === "3003")!;
-    expect(lavender.action).toBe("skipped");
-    expect(lavender.message).toContain("no SKU");
+    expect(lavender.action).toBe("created");
+    expect(lavender.message).toContain("no SKU in Shopify, so its code is made from the variant's ID");
+    expect(await w.as((tx) => getItem(tx, lavender.itemId))).toMatchObject({ code: "SHOPIFY-3003", name: "Wax melts - Lavender", itemType: "non_stock" });
     // Nothing reached the ledger.
     expect(await journals(w)).toBe(0);
   });
@@ -462,12 +464,12 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(again).toMatchObject({ created: 0, linked: 0, updated: 0, kept: 0, failed: 0 });
     // Only what changed since the last sync is asked for.
     expect(state.calls.some((call) => call.startsWith("customers:2026-09-30"))).toBe(true);
-    // Nothing new in the log: 1003 and Lavender are still skipped, but their lines are already there.
-    expect(again.skipped).toBe(2);
+    // Nothing new in the log: 1003 is still skipped, but its line is already there (Lavender came in by its ID).
+    expect(again.skipped).toBe(1);
     expect(await log(w, connection.id)).toHaveLength(before);
     expect(await contactsNamed(w, "Tama Rewi")).toHaveLength(1);
     // The second run skips 1003 again (it's still unclear) but adds nothing.
-    expect(await w.as(async (tx) => Number((await tx.query<{ n: string }>("select count(*)::text as n from items")).rows[0].n))).toBe(2);
+    expect(await w.as(async (tx) => Number((await tx.query<{ n: string }>("select count(*)::text as n from items")).rows[0].n))).toBe(3);
   });
 
   it("SPC5: Shopify's changes are applied unless someone changed the value in Tohyee", async () => {
@@ -671,7 +673,8 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     const result = await syncConnection(w.record, again.id);
     expect(result.created).toBe(0);
     expect(await contactsNamed(w, "Tama Rewi")).toHaveLength(1);
-    expect(await w.as(async (tx) => Number((await tx.query<{ n: string }>("select count(*)::text as n from items")).rows[0].n))).toBe(2);
+    // Lavender (no SKU) links again by the code made from its ID.
+    expect(await w.as(async (tx) => Number((await tx.query<{ n: string }>("select count(*)::text as n from items")).rows[0].n))).toBe(3);
     expect((await w.as((tx) => listConnections(tx))).map((c) => c.status)).toEqual(["active", "disconnected"]);
   });
 
@@ -696,7 +699,7 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     shop();
     const viewerCookie = await sessionCookieFor(viewer);
     const ownerCookie = await sessionCookieFor(owner);
-    const body = { organisationId: w.org, platform: "shopify", storeDomain: "glimmers", authMethod: "access_token", accessToken: TOKEN, apiSecret: SECRET };
+    const body = { organisationId: w.org, platform: "shopify", storeDomain: "glimmers", authMethod: "access_token", accessToken: TOKEN, apiSecret: SECRET, customerScope: "all" };
 
     const viewerConnect = await connectionsRoute.POST(apiRequest("/api/sales-platforms/connections", { method: "POST", cookie: viewerCookie, body }), undefined);
     expect(viewerConnect.status).toBe(403);
@@ -771,7 +774,7 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(new Set([...first.entries, ...second.entries].map((entry) => entry.id)).size).toBe(first.entries.length + second.entries.length);
     // Filters find product skips among the customer lines.
     const skips = await w.as((tx) => listSyncLog(tx, connection.id, { kind: "products", outcome: "problems" }));
-    expect(skips.entries.map((entry) => entry.externalId).sort()).toEqual(["3003", "9001"]);
+    expect(skips.entries.map((entry) => entry.externalId).sort()).toEqual(["9001"]);
     expect(skips.hasMore).toBe(false);
     await expect(w.as((tx) => listSyncLog(tx, connection.id, { kind: "everything" }))).rejects.toThrow(/kind/);
 
@@ -783,7 +786,7 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     const read = await coverageRoute.GET(apiRequest(`/x?organisationId=${w.org}`, { cookie: viewerCookie }), params(id));
     expect(read.status).toBe(200);
     const { parts } = (await read.json()) as { parts: Array<{ kind: string; state: string; summary: string; reasons: Array<{ text: string; count: number }> }> };
-    // Customers: Kiri (no email, and a contact of that name already) is skipped as SPC2 says. Lavender (no SKU) and the old mug are skipped. Posting was never set up.
+    // Customers: Kiri (no email, and a contact of that name already) is skipped as SPC2 says. The old mug's skip is from before decision 1337. Posting was never set up.
     expect(parts.map((part) => [part.kind, part.state])).toEqual([
       ["customers", "partly"],
       ["products", "partly"],
@@ -791,8 +794,8 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
       ["payouts", "needs_setup"],
     ]);
     expect(parts[0].summary).toMatch(/^\d+ contacts? linked, 1 record not brought in$/);
-    expect(parts[1].summary).toBe("2 items linked, 2 records not brought in");
-    expect(parts[1].reasons).toEqual([{ text: "no SKU", count: 2, outcome: "skipped" }]);
+    expect(parts[1].summary).toBe("3 items linked, 1 record not brought in");
+    expect(parts[1].reasons).toEqual([{ text: "no SKU", count: 1, outcome: "skipped" }]);
     expect(parts[2].summary).toBe("Posting not set up: nothing is brought in");
     expect((await coverageRoute.GET(apiRequest(`/x?organisationId=${w.org}`), params(id))).status).toBe(401);
     expect(await journals(w)).toBe(0);

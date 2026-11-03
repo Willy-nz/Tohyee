@@ -12269,6 +12269,100 @@ her. Where she didn't say how, these follow Xero (decision 537) and are
       who can't, and the "not tried with a real store" note is one line at
       the Turn on step (and under connected shops).
 
+### The AI can set up fixed asset types and Investment Boost (decisions 1345-1348)
+
+1345. **Fixed asset types over MCP.** A Full access key can add and edit
+      fixed asset types (create_fixed_asset_type, update_fixed_asset_type)
+      through the asset types page's service, with its checks and audit
+      events (example AIF7). Without a type no asset can be registered, so
+      an AI in a new organisation was stuck. Archiving a type stays with
+      people (decision 347). The page needs the admin role; Full access is
+      for Owners, so the key's owner always has it.
+1346. **Tax details and Investment Boost over MCP.** register_fixed_asset
+      and update_fixed_asset take an optional taxDetails object with the
+      Income tax page's fields (method, rate, tax cost, business use, date
+      first available, new, Investment Boost, opening ATV), saved through
+      the page's service, so its rules and checks apply unchanged: new (or
+      new to NZ), bought and first available on or after 22 May 2025,
+      diminishing value or straight line only (example AIF8). No new tax
+      rules. On an edit, fields left out keep what's saved, and
+      taxDetails.version must match, as on the page. Unknown fields in
+      taxDetails are refused rather than ignored, so a misnamed boost field
+      can't look as if it was saved. Registering and its tax details are one
+      transaction: if the tax details are refused, nothing is registered.
+      Tax details can be changed after book depreciation has run.
+1347. **Who sees tax details.** get_fixed_asset and list_fixed_assets show
+      taxDetails (null when none) only when the key's owner is an owner or
+      admin, as income tax is (decision 545); other keys' answers leave the
+      field out (example AIF9).
+1348. **Wording.** The Full access words (on the AI page and in
+      get_organisation's accessMeans) now say the AI adds and edits fixed
+      assets and their types, with an asset's tax details and Investment
+      Boost.
+### Shopify import fixes from the first live sync (decisions 1334-1341)
+
+Jess's report of 3 Nov 2026 (items 4, 5 and 6, and the missing orders in
+item 3). Follows the report's suggestions; the rest is as Xero does where
+it says, otherwise the simplest safe choice, not yet reviewed.
+
+1334. **Only customers who have ordered.** A connection's customers are
+      `all` or `buyers` (`customer_scope`, migration 0223). With `buyers`
+      the customer sync only updates customers already linked; a contact
+      is added when the customer's first order is posted (the order's
+      customer comes across first, decision 52). New connections default
+      to `buyers`; existing ones keep `all` until an admin chooses, on the
+      store's card (a notice offers it) or under More › What comes in.
+      Changing it never removes contacts. Switching to `all` reads every
+      customer again. Xero's own Shopify connection wasn't checked for
+      this.
+1335. **Test customers are left out of the customer sync**: tagged "test"
+      in Shopify, or an email at example.com, example.net or example.org
+      (or a subdomain; example.com.au is a real domain and is kept). An
+      order's customer is always brought in, or its order could never
+      post; Shopify's test orders are already left out. Reason code
+      `test_customer`.
+1336. **No name: the order's address name first.** When Shopify has no
+      name for a customer (its display name is their email or phone), an
+      order's billing name, then shipping name, is used before the email.
+      An email or phone standing in for a name only names a new contact;
+      it never renames one. Names are otherwise kept as typed: only spaces
+      are trimmed and runs of spaces made one.
+1337. **Variants without a SKU are added by their ID.** A variant with no
+      SKU is linked by its existing link, else to an item coded
+      `SHOPIFY-<variant ID>` (linked if one exists, e.g. after connecting
+      again, otherwise added). Repeat syncs use the link, so nothing is
+      added twice. A SKU added later in Shopify keeps the same item and
+      becomes its code when the code is still the made-up one and no other
+      item has the SKU; otherwise the code is kept and logged (SPC5).
+      Products are read again in full once after updating (migration 0223
+      clears the products cursor), so variants skipped before come in.
+1338. **The setup says when variants have no SKU**, counted from the
+      linked variants: on the store's card (More › What comes in) and at
+      the start of "Change posting settings", as a warning when a quarter
+      or more, or 10 or more, have none.
+1339. **A weak name isn't evidence of the same person.** A single word, or
+      an email or phone as the name, clashing with a contact's name no
+      longer waits under "Customers to check": the customer gets their own
+      contact, named as decision 1272 says but with the email first
+      ("Kiri (kiri@…)", then "Kiri (Shopify)", then "Kiri (Shopify
+      <number>)"), and its orders post. The log line says why. A
+      full-name clash still waits for an admin (#539). If the two really
+      are one person, there are two contacts (Tohyee has no contact merge
+      yet); that's the accepted cost of not holding orders back.
+1340. **Customers left waiting are looked at again.** Each sync checks the
+      remembered "Customers to check": weak-named ones are brought in
+      under decision 1339 when all customers are synced, otherwise
+      forgotten, and a waiting order brings its customer in when it's
+      tried again (waiting orders are tried at every sync). Reason code
+      `customer_not_linked` for an order waiting on its customer.
+1341. **Orders are posted oldest first** (processed, else created, then by
+      order number) in every sync, so a first sync numbers invoices in date
+      order. Webhooks post as orders arrive. Invoices already numbered
+      aren't renumbered (posted history is append-only); an order that
+      waited posts with the next number when it comes in. The read-only AI
+      diagnostics gain `scope` (and what `buyers` means) for customers,
+      `withoutSku` for products, and the reason codes `test_customer` and
+      `customer_not_linked`.
 ### The AI's tool list follows the connection (4 Nov 2026; decisions 1342-1344)
 
 An AI client connected at Look only kept its Look only tool list after the

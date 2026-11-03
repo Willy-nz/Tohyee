@@ -19,6 +19,14 @@ export type PlatformCustomer = {
   country?: string | null;
   /** ISO timestamp of the platform's last change. */
   updatedAt: string | null;
+  /**
+   * The platform has no name for them, so `name` is their email or phone
+   * (decision 1336). Such a name is only used for a new contact; it never
+   * renames one.
+   */
+  nameIsFallback?: boolean;
+  /** The store's tags on the customer (Shopify), e.g. "test" (decision 1335). */
+  tags?: string[];
 };
 
 /** One sellable variant of a platform's product (an item in Tohyee). */

@@ -74,15 +74,48 @@ export function sameNameMessage(platform: string, customer: { name: string; emai
 }
 
 /**
+ * Whether a name says too little to suggest two records are the same
+ * person (decision 1339): a single word ("Jess"), or an email or phone
+ * standing in for a name. Pure.
+ */
+export function isWeakName(name: string, contact: { email?: string | null; phone?: string | null } = {}): boolean {
+  const tidy = name.trim().replace(/\s+/g, " ");
+  if (tidy === "") return true;
+  const lower = tidy.toLowerCase();
+  if (lower === contact.email?.trim().toLowerCase() || tidy === contact.phone?.trim()) return true;
+  if (tidy.includes("@")) return true;
+  if (/^[+\d\s().-]+$/.test(tidy)) return true;
+  return !tidy.includes(" ");
+}
+
+/** Example domains (RFC 2606): addresses there are made up, e.g. a test customer's. */
+const EXAMPLE_DOMAINS = ["example.com", "example.net", "example.org"];
+
+/**
+ * Why a store customer is a test record and isn't brought in by the
+ * customer sync (decision 1335), or null. Tagged "test" in the store, or an
+ * email at an example domain (example.com, not example.com.au). Pure.
+ */
+export function testCustomerReason(customer: { email: string | null; tags?: readonly string[] }): string | null {
+  if (customer.tags?.some((tag) => tag.trim().toLowerCase() === "test")) return "it's tagged \"test\"";
+  const domain = customer.email?.trim().toLowerCase().split("@")[1];
+  if (domain && EXAMPLE_DOMAINS.some((example) => domain === example || domain.endsWith(`.${example}`))) return `its email is at ${domain}, a made-up address`;
+  return null;
+}
+
+/**
  * Names to try for a different person's new contact, best first: the
  * store's name, then "(Shopify)", the email, or the store's customer
- * number, cut to fit 150 characters. Pure.
+ * number, cut to fit 150 characters. For a weak name (decision 1339) the
+ * email comes first, since "Jess (Shopify)" would clash with the next
+ * Jess. Pure.
  */
-export function separateNameCandidates(input: { name: string; email: string | null; platform: SalesPlatform; externalId: string }): string[] {
+export function separateNameCandidates(input: { name: string; email: string | null; platform: SalesPlatform; externalId: string; weak?: boolean }): string[] {
   const shop = SALES_PLATFORM_LABELS[input.platform];
   const base = input.name.trim().replace(/\s+/g, " ");
   const withSuffix = (suffix: string) => `${base.slice(0, Math.max(1, NAME_MAX - suffix.length - 3)).trimEnd()} (${suffix})`.slice(0, NAME_MAX);
-  const suffixes = [shop, ...(input.email ? [input.email] : []), `${shop} ${input.externalId}`];
+  const email = input.email && input.email.trim().toLowerCase() !== base.toLowerCase() ? [input.email.trim()] : [];
+  const suffixes = input.weak ? [...email, shop, `${shop} ${input.externalId}`] : [shop, ...email, `${shop} ${input.externalId}`];
   return [...new Set(suffixes.map(withSuffix))];
 }
 
@@ -94,7 +127,7 @@ async function takenNames(tx: OrgTx, names: string[]): Promise<Set<string>> {
 }
 
 /** The first candidate no active contact has; the last one (with the customer number) if all are taken. */
-async function suggestName(tx: OrgTx, input: Parameters<typeof separateNameCandidates>[0]): Promise<string> {
+export async function suggestName(tx: OrgTx, input: Parameters<typeof separateNameCandidates>[0]): Promise<string> {
   const candidates = separateNameCandidates(input);
   const taken = await takenNames(tx, candidates);
   return candidates.find((name) => !taken.has(name.toLowerCase())) ?? candidates[candidates.length - 1];
