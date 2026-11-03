@@ -125,8 +125,6 @@ export function JobsList({ organisationId }: { organisationId: string }) {
         </Card>
       ) : null}
       <Card
-        title="Jobs"
-        description="Projects with a site. Make a project a job on its page (Job details), then book visits."
         actions={
           <div className={ui.actions}>
             <Link className={`${ui.button} ${ui.secondary}`} href="/operations/jobs/calendar">
@@ -562,7 +560,6 @@ export function JobCalendar({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title={`Week of ${formatDate(from)}`}
-      description="Visits by day. Book visits from a job's page."
       actions={
         <div className={ui.actions}>
           <Button variant="secondary" onClick={() => setFrom(addDays(from, -7))}>
@@ -626,7 +623,7 @@ export function MyVisits({ organisationId }: { organisationId: string }) {
     <>
       {visits.error ? <Notice tone="error">{visits.error}</Notice> : null}
       {waiting.length > 0 ? (
-        <Card title="Hours to confirm" description="Finished visits whose hours aren't in project time yet.">
+        <Card title="Hours to confirm">
           <VisitRows visits={waiting} showJob />
         </Card>
       ) : null}

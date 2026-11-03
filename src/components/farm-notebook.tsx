@@ -96,7 +96,6 @@ export function FarmNotebook({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="Farm notebook"
         description="What's worth knowing about the farm: its history, goals, people and how it's farmed. Your AI reads this to answer questions, and adds to it when it learns something (marked as written by the AI)."
         actions={
           editable && !adding ? (

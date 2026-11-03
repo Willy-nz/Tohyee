@@ -10,7 +10,6 @@ export default function RdCostsPage() {
     <Page>
       <PageHeader
         title="Tagged R&D costs"
-        description="Costs tagged to R&D activities, by activity and category, for an income year."
         actions={<Link href="/operations/rd">R&amp;D activities</Link>}
       />
       <RequireOrganisation>{(organisationId) => <RdCostsView key={organisationId} organisationId={organisationId} />}</RequireOrganisation>

@@ -146,7 +146,6 @@ export default function ServerBackupsPage() {
     <Page>
       <PageHeader
         title="Backups"
-        description="Every night Tohyee backs up each organisation, and its own database of people and settings, into encrypted files. It checks each file after making it, and checks the newest ones again every week."
         actions={
           <>
             <Button onClick={() => void backUp()} disabled={busy !== null}>

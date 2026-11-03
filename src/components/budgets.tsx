@@ -60,7 +60,7 @@ export function BudgetList({ organisationId }: { organisationId: string }) {
 
   return (
     <>
-      <Card title="Budgets" description="Monthly amounts per profit and loss account. Budgets post nothing; compare them in Budget vs actual and in custom reports.">
+      <Card>
         <div className={ui.tabs} role="tablist" aria-label="Budgets">
           {[false, true].map((value) => (
             <button
@@ -229,8 +229,8 @@ function QuickFill({
             <input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
           </Field>
         ) : null}
-        <Field label={method === "same" ? "% change each month" : "% change"} hint="Optional, e.g. 2 or -5.">
-          <input inputMode="decimal" value={percent} onChange={(event) => setPercent(event.target.value)} />
+        <Field label={method === "same" ? "% change each month" : "% change"}>
+          <input placeholder="Optional" inputMode="decimal" value={percent} onChange={(event) => setPercent(event.target.value)} />
         </Field>
         <Button onClick={() => void fill()} disabled={busy || !accountCode || (method === "same" && !amount.trim())}>
           {busy ? "Filling…" : "Fill"}

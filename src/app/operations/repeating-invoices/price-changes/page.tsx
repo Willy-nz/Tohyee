@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function RepeatingPriceChangesPage() {
   return (
     <Page>
-      <PageHeader
-        title="Price changes"
-        description="A yearly price rise, or any change, across your repeating invoices in one go."
-      />
+      <PageHeader title="Price changes" />
       <p>
         <Link href="/operations/repeating-invoices">All repeating invoices</Link>
       </p>

@@ -448,10 +448,7 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
 export default function BankAccountsPage() {
   return (
     <Page>
-      <PageHeader
-        title="Bank accounts"
-        description="Bank and credit card accounts: import statements or bring them in with a bank feed, then reconcile each line."
-      />
+      <PageHeader title="Bank accounts" />
       <RequireOrganisation>{(organisationId) => <BankAccounts key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

@@ -278,10 +278,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
 export default function AccountsPage() {
   return (
     <Page>
-      <PageHeader
-        title="Chart of accounts"
-        description="Every journal line posts to one of these accounts. Archived accounts keep their history but can't take new postings."
-      />
+      <PageHeader title="Chart of accounts" />
       <RequireOrganisation>{(organisationId) => <Accounts key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

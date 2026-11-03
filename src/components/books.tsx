@@ -59,6 +59,18 @@ export function RequireOrganisation({ children }: { children: (organisationId: s
   return <Fragment key={current.id}>{children(current.id)}</Fragment>;
 }
 
+/**
+ * Header actions (a page's main button) that need the organisation and the
+ * person's role: nothing until the page has hydrated and an organisation is
+ * ready, so the server and browser render the same header.
+ */
+export function OrganisationActions({ children }: { children: (workspace: ReturnType<typeof useWorkspace>) => ReactNode }) {
+  const workspace = useWorkspace();
+  const hydrated = useHydrated();
+  if (!hydrated || !workspace.current || workspace.current.status !== "ready") return null;
+  return <>{children(workspace)}</>;
+}
+
 export function useAccounts(organisationId: string | null, includeArchived = false) {
   return useApiData<{ accounts: Account[] }>(organisationId ? "/api/accounts" : null, {
     organisationId,

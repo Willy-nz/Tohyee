@@ -293,12 +293,12 @@ function SupplierCreditNoteForm({
             required
           />
         </Field>
-        <Field label="Credit note date" hint="The date on the supplier's credit note. Approving posts it on this date.">
+        <Field label="Credit note date" hint="The date on the supplier's credit note.">
           <DateInput value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
         <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
-        <Field label="Reference" hint="Optional, like the bill it credits.">
-          <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
+        <Field label="Reference">
+          <input placeholder="Optional" value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
         <Field label="Amounts are">
           <select value={amountsMode} onChange={(event) => setAmountsMode(event.target.value as AmountsMode)}>

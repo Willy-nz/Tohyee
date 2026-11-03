@@ -4,7 +4,7 @@ import { InfoTip } from "@/components/info-tip";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
+import { FeedBadge } from "@/components/bank/common";
 import { CurrencyMoney, OpeningBalancePanel } from "@/components/bank/foreign";
 import { FeedPanel } from "@/components/bank/feed-panel";
 import { FileFeedsPanel } from "@/components/bank/file-feeds-panel";
@@ -17,7 +17,7 @@ import { StatementLinesPanel, TransactionsPanel } from "@/components/bank/lines-
 import { ReconcilePanel } from "@/components/bank/reconcile-panel";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { Card, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
+import { Badge, Card, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -54,7 +54,12 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
     <>
       <PageHeader
         title={`${account.code} · ${account.name}`}
-        description={`${ACCOUNT_TYPE_LABELS[account.accountType]}${account.currencyCode ? ` in ${account.currencyCode}` : ""}${account.isActive ? "" : " (archived)"}`}
+        actions={
+          <>
+            {account.currencyCode ? <Badge>{account.currencyCode}</Badge> : null}
+            {account.isActive ? null : <Badge tone="amber">Archived</Badge>}
+          </>
+        }
       />
       <p className={ui.actions} style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <Link href="/operations/bank-accounts">← All bank accounts</Link>

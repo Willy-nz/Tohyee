@@ -3,15 +3,13 @@
 import { RequireOrganisation } from "@/components/books";
 import { PayrollAccessGate } from "@/components/payroll-access";
 import { WorkforceBudgets } from "@/components/payroll-workforce";
-import { Page, PageHeader } from "@/components/ui";
+import { Page, PageHeader, Notice } from "@/components/ui";
 
 export default function WorkforceBudgetPage() {
   return (
     <Page>
-      <PageHeader
-        title="Workforce budget"
-        description="Budget wages by employee or position and month. Each workforce budget writes wages and employer KiwiSaver, by Department, into the budgets it feeds. Only people with payroll access can see it."
-      />
+      <PageHeader title="Workforce budget" />
+      <Notice>Only people with payroll access can see this.</Notice>
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>

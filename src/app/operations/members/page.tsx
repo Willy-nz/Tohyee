@@ -253,7 +253,7 @@ function Members({ organisationId }: { organisationId: string }) {
 export default function MembersPage() {
   return (
     <Page>
-      <PageHeader title="People and roles" description="Who can see and change this organisation's books." />
+      <PageHeader title="People and roles" />
       <RequireOrganisation>{(organisationId) => <Members key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

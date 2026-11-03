@@ -504,8 +504,8 @@ function ConnectStep({ platform, form, onChange }: { platform: SalesPlatform; fo
           <li>Copy the consumer key and secret here.</li>
         </ol>
         <div className={ui.grid2}>
-          <Field label="Store address" hint="Like https://shop.example.nz">
-            <input value={form.storeDomain} onChange={(event) => set({ storeDomain: event.target.value })} maxLength={255} autoComplete="off" />
+          <Field label="Store address">
+            <input placeholder="https://shop.example.nz" value={form.storeDomain} onChange={(event) => set({ storeDomain: event.target.value })} maxLength={255} autoComplete="off" />
           </Field>
           <Field label="Consumer key" hint="Starts with ck_.">
             <input value={form.consumerKey} onChange={(event) => set({ consumerKey: event.target.value })} maxLength={200} autoComplete="off" />
@@ -544,8 +544,8 @@ function ConnectStep({ platform, form, onChange }: { platform: SalesPlatform; fo
         <ShopifyScopesCard />
       </details>
       <div className={ui.grid2}>
-        <Field label="Store address" hint="Like glimmers.myshopify.com, or just glimmers.">
-          <input value={form.storeDomain} onChange={(event) => set({ storeDomain: event.target.value })} maxLength={255} autoComplete="off" />
+        <Field label="Store address">
+          <input placeholder="glimmers.myshopify.com" value={form.storeDomain} onChange={(event) => set({ storeDomain: event.target.value })} maxLength={255} autoComplete="off" />
         </Field>
         <Field label="How the app signs in">
           <select value={form.authMethod} onChange={(event) => set({ authMethod: event.target.value as ShopifyAuthMethod })}>

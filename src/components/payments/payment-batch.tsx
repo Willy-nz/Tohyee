@@ -359,8 +359,8 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
                 required
               />
             </Field>
-            <Field label="Reference" hint="Optional, e.g. the bank reference.">
-              <input value={fields.reference} maxLength={100} onChange={(event) => setFields((f) => ({ ...f, reference: event.target.value }))} />
+            <Field label="Reference">
+              <input placeholder="Optional" value={fields.reference} maxLength={100} onChange={(event) => setFields((f) => ({ ...f, reference: event.target.value }))} />
             </Field>
           </div>
           {cmp(extra, ZERO_DECIMAL) !== 0 && ticked.length > 0 ? (

@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmForecastsPage() {
   return (
     <Page>
-      <PageHeader title="Forecasts" description="CRM: what's expected to close each month or quarter, by owner, with Salesforce's forecast categories and quotas." />
+      <PageHeader title="Forecasts" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

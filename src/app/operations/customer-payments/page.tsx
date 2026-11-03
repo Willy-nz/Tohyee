@@ -13,7 +13,6 @@ export default function CustomerPaymentsPage() {
     <Page>
       <PageHeader
         title="Payments for several invoices"
-        description="Each one is posted as one journal with one bank line. Payments for a single invoice are on the invoice itself."
         actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/customer-payments/new")}>Receive a payment</Button> : null}
       />
       <RequireOrganisation>{(organisationId) => <PaymentBatchList kind="customer" organisationId={organisationId} />}</RequireOrganisation>

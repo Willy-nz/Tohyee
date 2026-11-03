@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function BudgetsPage() {
   return (
     <Page>
-      <PageHeader title="Budgets" description="The overall budget and named budgets, month by month. Budgets never post to the ledger." />
+      <PageHeader title="Budgets" />
       <RequireOrganisation>{(organisationId) => <BudgetList key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

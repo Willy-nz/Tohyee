@@ -340,7 +340,7 @@ function InvoiceForm({
             />
           </div>
         ) : null}
-        <Field label="Invoice date" hint="Approving posts the invoice on this date.">
+        <Field label="Invoice date">
           <DateInput
             value={invoiceDate}
             onChange={(event) => {
@@ -372,8 +372,8 @@ function InvoiceForm({
           />
         </Field>
         <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />
-        <Field label="Reference" hint="Optional, like the customer's order number.">
-          <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
+        <Field label="Reference">
+          <input placeholder="Optional" value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
         <Field label="Amounts are">
           <select value={amountsMode} onChange={(event) => setAmountsMode(event.target.value as AmountsMode)}>

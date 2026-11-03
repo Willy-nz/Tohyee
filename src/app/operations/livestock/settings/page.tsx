@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function LivestockSettingsPage() {
   return (
     <Page>
-      <PageHeader title="Livestock settings" description="Turning livestock on, the opening position, elections, IRD rates, accounts and locations." />
+      <PageHeader title="Livestock settings" />
       <RequireOrganisation>{(organisationId) => <LivestockSettingsPanel key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

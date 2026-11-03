@@ -39,7 +39,6 @@ export function DashboardPage({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="Sales dashboard"
         description="Worked out from the CRM's records each time. Amounts exclude GST and are never added across currencies. A deal's closed date is the day it moved to Closed won or lost."
       >
         <div className={ui.grid3}>
@@ -60,7 +59,7 @@ export function DashboardPage({ organisationId }: { organisationId: string }) {
         <p className={ui.muted}>Loading…</p>
       ) : (
         <>
-          <Card title="Leads" description="Of the leads added in each period, how many have been converted so far.">
+          <Card title="Leads">
             <table className={ui.table}>
               <thead>
                 <tr>
@@ -120,7 +119,7 @@ export function DashboardPage({ organisationId }: { organisationId: string }) {
               </tbody>
             </table>
           </Card>
-          <Card title="Open deals by stage" description="Today, with how long they've been in the stage they're in.">
+          <Card title="Open deals by stage">
             {d.ageing.length === 0 ? (
               <Empty>No open deals.</Empty>
             ) : (
@@ -148,7 +147,7 @@ export function DashboardPage({ organisationId }: { organisationId: string }) {
               </table>
             )}
           </Card>
-          <Card title="Activity" description="Calls, meetings and notes logged, tasks done and sales emails sent, by who did them.">
+          <Card title="Activity">
             {d.activity.length === 0 ? (
               <Empty>Nothing logged.</Empty>
             ) : (
@@ -210,7 +209,7 @@ export function DashboardPage({ organisationId }: { organisationId: string }) {
               </table>
             )}
           </Card>
-          <Card title="Campaigns" description="Leads added and deals won in these periods, by their source campaign (one each).">
+          <Card title="Campaigns">
             {d.campaigns.length === 0 ? (
               <Empty>Nothing from campaigns in these periods.</Empty>
             ) : (

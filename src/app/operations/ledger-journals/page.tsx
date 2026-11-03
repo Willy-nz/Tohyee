@@ -585,10 +585,7 @@ function JournalsPage() {
   const params = useSearchParams();
   return (
     <Page>
-      <PageHeader
-        title="Journals"
-        description="Every posting in the ledger, and draft journals waiting to be posted. Posted journals are never edited: corrections reverse the original and post a replacement."
-      />
+      <PageHeader title="Journals" />
       <RequireOrganisation>
         {(organisationId) => (
           <Journals key={organisationId} organisationId={organisationId} initialJournalId={params.get("journal")} />

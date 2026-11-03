@@ -141,7 +141,6 @@ export function CampaignsPage({ organisationId }: { organisationId: string }) {
     <>
       {data.error ? <Notice tone="error">{data.error}</Notice> : null}
       <Card
-        title="Campaigns"
         description="Events, adverts, emails and other ways leads find you. Each lead and deal has at most one source campaign, so what a deal earns is counted once."
         actions={canCrm("admin") && !adding ? <Button size="small" onClick={() => setAdding(true)}>Add campaign</Button> : null}
       >

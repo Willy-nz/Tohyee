@@ -141,7 +141,7 @@ export function RecodeCard({
   const recodes = history.data?.recodes ?? [];
   if (!can("bookkeeper") && recodes.length === 0) return null;
   return (
-    <Card title="Recode" description="Coded to the wrong account or tracking? Recode a line instead of voiding the whole document.">
+    <Card title="Recode">
       {message ? <Notice tone="success">{message}</Notice> : null}
       {recodes.length > 0 ? (
         <ul style={{ margin: "0 0 12px", paddingLeft: 20, display: "grid", gap: 6 }}>

@@ -32,7 +32,7 @@ function NewPurchaseOrder({ organisationId }: { organisationId: string }) {
 export default function NewPurchaseOrderPage() {
   return (
     <Page>
-      <PageHeader title="New purchase order" description="Save it as a draft first. Purchase orders never post to the ledger." />
+      <PageHeader title="New purchase order" />
       <RequireOrganisation>{(organisationId) => <NewPurchaseOrder organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

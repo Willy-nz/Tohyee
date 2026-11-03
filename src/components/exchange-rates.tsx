@@ -251,8 +251,8 @@ function AddRate({ organisationId, data, onAdded }: { organisationId: string; da
           <Field label={`Rate (${data.baseCurrency} per 1 ${currencyCode})`} hint="Up to 8 decimal places.">
             <input inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value)} required aria-invalid={rate !== "" && !isRateText(rate)} />
           </Field>
-          <Field label="Note (optional)" hint="e.g. RBNZ, or the bank's rate">
-            <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={200} />
+          <Field label="Note (optional)">
+            <input placeholder="RBNZ, or the bank's rate" value={note} onChange={(event) => setNote(event.target.value)} maxLength={200} />
           </Field>
         </div>
         <div className={ui.actions}>

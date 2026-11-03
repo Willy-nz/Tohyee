@@ -202,8 +202,8 @@ function PurchaseOrderForm({
           <DateInput value={deliveryDate}
             base={orderDate} min={orderDate || undefined} onChange={(event) => setDeliveryDate(event.target.value)} />
         </Field>
-        <Field label="Reference" hint="Optional.">
-          <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
+        <Field label="Reference">
+          <input placeholder="Optional" value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
         <Field label="Amounts are">
           <select value={amountsMode} onChange={(event) => setAmountsMode(event.target.value as AmountsMode)}>
@@ -219,8 +219,8 @@ function PurchaseOrderForm({
         <Field label="Delivery address" hint="Printed on the purchase order.">
           <textarea value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} maxLength={500} rows={3} />
         </Field>
-        <Field label="Delivery instructions" hint="Optional.">
-          <textarea value={deliveryInstructions} onChange={(event) => setDeliveryInstructions(event.target.value)} maxLength={1000} rows={3} />
+        <Field label="Delivery instructions">
+          <textarea placeholder="Optional" value={deliveryInstructions} onChange={(event) => setDeliveryInstructions(event.target.value)} maxLength={1000} rows={3} />
         </Field>
       </div>
       <CustomFieldInputs setup={data.customSetup} record="document" uses={["bill"]} value={customFields} onChange={setCustomFields} />

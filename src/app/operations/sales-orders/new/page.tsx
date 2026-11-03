@@ -27,7 +27,7 @@ function NewSalesOrder({ organisationId }: { organisationId: string }) {
 export default function NewSalesOrderPage() {
   return (
     <Page>
-      <PageHeader title="New sales order" description="Save it as a draft first. Sales orders never post to the ledger." />
+      <PageHeader title="New sales order" />
       <RequireOrganisation>{(organisationId) => <NewSalesOrder organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

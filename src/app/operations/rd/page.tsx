@@ -10,7 +10,6 @@ export default function RdActivitiesPage() {
     <Page>
       <PageHeader
         title="R&D activities"
-        description="The R&D Tax Incentive activity register: core and supporting activities, their approvals and records."
         actions={<Link href="/operations/rd/costs">Tagged R&amp;D costs</Link>}
       />
       <RequireOrganisation>{(organisationId) => <RdRegister key={organisationId} organisationId={organisationId} />}</RequireOrganisation>

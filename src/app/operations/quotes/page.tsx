@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { QuoteStatusBadge } from "@/components/quotes/quote-editor";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate } from "@/lib/format";
 import type { QuoteSummary } from "@/lib/quotes/service";
@@ -103,15 +102,9 @@ function QuoteList({ organisationId, filter }: { organisationId: string; filter:
 }
 
 function Quotes({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Quotes"
-      description="Latest entered first. Quotes post nothing. Finalising numbers a quote; accepting it makes a draft invoice with the same lines."
-      actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/quotes/new")}>New quote</Button> : null}
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Quote status">
         {FILTERS.map((entry) => (
           <button
@@ -127,14 +120,15 @@ function Quotes({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <QuoteList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function QuotesPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader title="Quotes" description="Prices offered to customers. An accepted quote becomes a draft invoice." />
+      <PageHeader title="Quotes" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? <Button onClick={() => router.push("/operations/quotes/new")}>New quote</Button> : null}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <Quotes organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

@@ -214,8 +214,6 @@ export function GstAuditView({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="GST audit report"
-        description="Every document behind each box of the GST return, adding up to the box to the cent."
         actions={report.data ? <PrintButton /> : null}
       >
         <div className={ui.inlineForm} data-print="hide">

@@ -185,7 +185,7 @@ function RepeatingView({ organisationId, id }: { organisationId: string; id: str
           }}
         />
       ) : null}
-      <Card title="Invoices made" description="One per scheduled date, newest first. A date is never made twice.">
+      <Card title="Invoices made">
         {template.runs.length === 0 ? (
           <Empty>No invoices made yet.</Empty>
         ) : (

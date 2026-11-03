@@ -203,7 +203,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
       {tab === "connect" && connector === "email" && data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
 
       {tab === "connect" && (connector === "csv" || connector === "excel") && data.canManage && data.folder.readable ? (
-        <Card title="Files in the folder" description="CSV and Excel (.xlsx) files in this organisation's folder and its subfolders, newest first. Set one up to load it.">
+        <Card title="Files in the folder">
           {visibleFiles.length === 0 ? (
             <Empty>No data files yet. Save or copy CSV or .xlsx exports into the folder and they&apos;ll show here.</Empty>
           ) : (
@@ -241,7 +241,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         </Card>
       ) : null}
 
-      {tab === "history" ? <Card title="Load history" description="Every load, nightly or by hand, as the loader recorded it.">
+      {tab === "history" ? <Card title="Load history">
         {data.loads.length === 0 ? (
           <Empty>Nothing has been loaded yet.</Empty>
         ) : (
@@ -475,7 +475,7 @@ function SourcesCard({
   }
 
   return (
-    <Card title="Sources" description="Each source loads one file, or one database table, view or query, into one table. Money columns load as exact decimals.">
+    <Card title="Sources">
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {data.sources.length === 0 ? (
         <Empty>{data.canManage ? "No sources yet. Choose Add data source to connect a file or a database." : "No sources yet. An admin sets them up."}</Empty>

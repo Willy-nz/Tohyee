@@ -201,7 +201,7 @@ function Readings({ organisationId, farmId, paddocks, canEdit, version, onChange
   const history = useHistory<PastureReading>(`/api/farming/farms/${farmId}/pasture/readings`, "readings", organisationId, filters, version);
   const remove = (reading: PastureReading) => (canEdit ? <RemoveAction organisationId={organisationId} path={`/api/farming/pasture-readings/${reading.id}`} what="reading" onRemoved={onChanged} /> : null);
   return (
-    <Card title="Cover readings" description="Newest first.">
+    <Card title="Cover readings">
       <HistoryFilters value={filters} onChange={setFilters} paddocks={paddocks} />
       {!history.loading && history.rows.length === 0 && !history.error ? (
         <Empty>
@@ -416,7 +416,7 @@ function ImportReadings({ organisationId, farm, onImported }: { organisationId: 
     </Field>
   );
   return (
-    <Card title="Import cover readings" description="From a plate meter or app's CSV or Excel file.">
+    <Card title="Import cover readings">
       <details>
         <summary className={ui.linkButton}>Import a file</summary>
         <p className={ui.muted}>A row per reading: paddock, date and cover in kg DM/ha, and optionally the method. Paddocks are matched by their current name. Check the preview; nothing is saved until you import.</p>

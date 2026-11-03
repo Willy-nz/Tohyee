@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function BillsInboxPage() {
   return (
     <Page>
-      <PageHeader
-        title="Bills inbox"
-        description="Bills and receipts from suppliers, waiting to be entered. Upload them here, or have them emailed to a mailbox label."
-      />
+      <PageHeader title="Bills inbox" />
       <RequireOrganisation>{(organisationId) => <BillsInbox key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

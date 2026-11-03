@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function FixedAssetsPage() {
   return (
     <Page>
-      <PageHeader title="Fixed assets" description="The fixed asset register: what the organisation owns, its depreciation and disposals." />
+      <PageHeader title="Fixed assets" />
       <RequireOrganisation>{(organisationId) => <FixedAssetList key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

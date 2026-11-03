@@ -48,7 +48,7 @@ function GoogleCard({ google, reload }: { google: GoogleSignInStatus; reload: ()
   }
 
   return (
-    <Card title="Sign in with Google" description="Use your Google account to sign in, instead of your password and authenticator app.">
+    <Card title="Sign in with Google">
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {google.linked ? (
         <div style={{ display: "grid", gap: 12 }}>
@@ -123,7 +123,7 @@ function TwoStepCard() {
 
   const current = status.data?.status;
   return (
-    <Card title="Two-step sign-in" description="You sign in with your password and a code from your authenticator app.">
+    <Card title="Two-step sign-in">
       {status.error ? <Notice tone="error">{status.error}</Notice> : null}
       {current ? (
         current.enabled ? (
@@ -311,7 +311,7 @@ export default function ProfilePage() {
 
   return (
     <Page>
-      <PageHeader title="Your account" description={`${user.displayName} · ${user.email}${user.isServerAdmin ? " · server admin" : ""}`} />
+      <PageHeader title="Your account" actions={<span className={ui.muted}>{`${user.displayName} · ${user.email}${user.isServerAdmin ? " · server admin" : ""}`}</span>} />
       <Card title="Organisations you can open">
         <div className={ui.tableWrap}>
           <table className={ui.table}>
