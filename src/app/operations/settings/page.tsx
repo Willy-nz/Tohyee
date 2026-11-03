@@ -183,7 +183,7 @@ function SettingsForm({
       {affected.length > 0 ? (
         <Notice tone="warning">
           <p style={{ margin: 0 }}>This reaches months that already have entries. Nothing already recorded will change:</p>
-          <ul style={{ margin: "4px 0" }}>
+          <ul style={{ margin: "4px 0", paddingLeft: 20 }}>
             {affected.map((period) => (
               <li key={period.month}>
                 {period.label}: {period.entries} {period.entries === 1 ? "entry" : "entries"}
@@ -232,26 +232,29 @@ function SettingsForm({
         </div>
       ) : null}
       {gstRegistered ? <h3 style={{ margin: "8px 0 0" }}>Exports</h3> : null}
-      <div className={ui.grid3} hidden={!gstRegistered}>
-        <label className={ui.checkbox}>
-          <input type="checkbox" checked={foreignTrade} onChange={(event) => setForeignTrade(event.target.checked)} />
-          Foreign trade: new sales lines for customers outside New Zealand (by their delivery country, else their billing country)
-          start with the tax code for exports. A customer&apos;s own default sales tax code comes first, and any line can be changed.
-        </label>
-        <Field
-          label="Tax code for exports"
-          hint="A zero-rated code. Exported goods and most services to non-residents are zero-rated (GST at 0%), not exempt, so they count in Box 5 and Box 6 of the GST return."
-        >
-          <select value={exportTaxCode} onChange={(event) => setExportTaxCode(event.target.value)}>
-            {exportTaxCode === "" ? <option value="">None</option> : null}
-            {zeroRated.map((code) => (
-              <option key={code.id} value={code.code}>
-                {code.code} ({code.label}){unavailableNote(code)}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
+      {/* Only when registered: a grid's display would override the hidden attribute. */}
+      {gstRegistered ? (
+        <div className={ui.grid3}>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={foreignTrade} onChange={(event) => setForeignTrade(event.target.checked)} />
+            Foreign trade: new sales lines for customers outside New Zealand (by their delivery country, else their billing country)
+            start with the tax code for exports. A customer&apos;s own default sales tax code comes first, and any line can be changed.
+          </label>
+          <Field
+            label="Tax code for exports"
+            hint="A zero-rated code. Exported goods and most services to non-residents are zero-rated (GST at 0%), not exempt, so they count in Box 5 and Box 6 of the GST return."
+          >
+            <select value={exportTaxCode} onChange={(event) => setExportTaxCode(event.target.value)}>
+              {exportTaxCode === "" ? <option value="">None</option> : null}
+              {zeroRated.map((code) => (
+                <option key={code.id} value={code.code}>
+                  {code.code} ({code.label}){unavailableNote(code)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      ) : null}
       <h3 style={{ margin: "8px 0 0" }}>On printed invoices, credit notes and quotes</h3>
       <div className={ui.grid3}>
         <Field label="Address" hint="Your postal or business address, printed under your name.">
