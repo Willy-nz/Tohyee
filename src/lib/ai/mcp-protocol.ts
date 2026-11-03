@@ -1,8 +1,11 @@
 /**
  * The Model Context Protocol (MCP) as Tohyee speaks it (decision 344):
  * JSON-RPC 2.0 messages over HTTP POST, in the "Streamable HTTP" transport's
- * simplest stateless form. Each POST gets one application/json answer; there
- * are no sessions and no server-sent event streams. Only tools are offered.
+ * simplest stateless form. Each POST gets one answer, as application/json or,
+ * when the client's tool list is out of date, as a short event stream that
+ * carries notifications/tools/list_changed first (decisions 1342-1344,
+ * `@/lib/ai/mcp-tool-list`). There's no GET event stream. Only tools are
+ * offered.
  *
  * Pure: no database. `/api/mcp` authenticates and supplies the tools.
  */
@@ -24,6 +27,8 @@ export const JSON_RPC = {
   /** Not standard JSON-RPC: used in the body of a 401. */
   UNAUTHORIZED: -32001,
 } as const;
+
+import { STALE_TOOL_LIST_NOTE, type ToolListState } from "@/lib/ai/mcp-tool-list";
 
 export type JsonRpcId = string | number | null;
 
@@ -59,6 +64,8 @@ export type McpServer = {
   serverInfo: { name: string; title?: string; version: string };
   instructions: string;
   tools: readonly ToolInfo[];
+  /** The version of `tools`, and whether the client's copy is known to be out of date. */
+  toolList?: ToolListState;
   /** Why a tool that exists isn't offered to this caller, or null. */
   unavailableTool?(name: string): string | null;
   callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult>;
@@ -115,7 +122,8 @@ export async function handleMcpMessage(message: unknown, server: McpServer): Pro
     case "initialize":
       return rpcResult(id, {
         protocolVersion: negotiateProtocolVersion(params.protocolVersion),
-        capabilities: { tools: { listChanged: false } },
+        // Sent on the answer to the client's next request when its list is out of date (decision 1342).
+        capabilities: { tools: { listChanged: true } },
         serverInfo: server.serverInfo,
         instructions: server.instructions,
       });
@@ -142,7 +150,8 @@ export async function handleMcpMessage(message: unknown, server: McpServer): Pro
       const name = params.name;
       if (typeof name !== "string" || !server.tools.some((tool) => tool.name === name)) {
         const reason = typeof name === "string" ? server.unavailableTool?.(name) : null;
-        return rpcError(id, JSON_RPC.INVALID_PARAMS, reason ?? `Unknown tool: ${typeof name === "string" ? name : "(none)"}.`);
+        const message = reason ?? `Unknown tool: ${typeof name === "string" ? name : "(none)"}.`;
+        return rpcError(id, JSON_RPC.INVALID_PARAMS, server.toolList?.stale ? `${message} ${STALE_TOOL_LIST_NOTE}` : message);
       }
       const args = params.arguments ?? {};
       if (!args || typeof args !== "object" || Array.isArray(args)) {
