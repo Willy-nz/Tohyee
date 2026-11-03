@@ -2377,7 +2377,13 @@ that something happened.
   depreciation (decisions 489, 1345-1348, AIF1-AIF9); anything an approval rule
   covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
-  turned off. Not yet tried against each AI app.
+  turned off. Not yet tried against each AI app. When what a connection
+  may use changes (its level, its owner's role, a new release), the AI app
+  is told on its next request (`notifications/tools/list_changed`) and
+  get_organisation says the tool list is out of date until the app fetches
+  it again; calls are always checked against the level now (decisions
+  1342-1344). An app that ignores this needs its tools refreshed or the
+  connection reconnected.
 - **AI: lossless line edits and paged lists** (#537, #538, decisions
   1263-1268). Reading a document over MCP (get_invoice, get_bill, get_quote,
   get_sales_order, get_purchase_order, the credit notes and repeating
