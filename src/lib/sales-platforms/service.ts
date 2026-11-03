@@ -4,14 +4,15 @@ import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
 import { createBankAccount } from "@/lib/bank/accounts";
 import { createContact, updateContact } from "@/lib/contacts/service";
-import { parseOptionalIsoDate } from "@/lib/dates";
+import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import { type Actor, type OrgTx, assertOrganisationUsable, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, HttpError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { isCountryCode } from "@/lib/contacts/countries";
 import { ITEM_CODE_PATTERN, createItem, updateItem } from "@/lib/items/service";
 import { cmp, dec, divideTruncated, isPositive, mul, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
 import { listOrganisationsForJobs } from "@/lib/organisations/admin";
-import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { getGstRegistration } from "@/lib/tax/registration";
+import { storeGstSetup } from "@/lib/sales-platforms/setup";
 import { type OrganisationRecord, getOrganisation, parseOrganisationId } from "@/lib/organisations/registry";
 import {
   type AccessToken,
@@ -800,7 +801,8 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
         `${shop} hasn't given the app the ${ORDER_SCOPE} scope, so orders can't be read. Add it to the app's access scopes in ${shop}, then test the connection and try again.`,
       );
     }
-    if ((await getOrganisationSettings(tx)).gstRegistered && next.untaxed === null) {
+    // #546 (GSR6): only a confirmed registration covering the start date on needs GST codes; unconfirmed orders wait instead.
+    if (storeGstSetup(await getGstRegistration(tx), startDate!, todayIsoDate()) === "registered" && next.untaxed === null) {
       throw new ValidationError("The organisation is GST registered, so posting needs a tax code for untaxed sales (zero-rated or exempt).");
     }
   }

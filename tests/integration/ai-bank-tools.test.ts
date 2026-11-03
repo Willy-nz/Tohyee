@@ -15,6 +15,7 @@ import { approveInvoice, createInvoice, getInvoice, type InvoiceSummary } from "
 import { getJournal } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { getOrganisation } from "@/lib/organisations/registry";
+import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import {
   apiRequest,
   createTestOrganisation,
@@ -115,6 +116,8 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
     server = await startTestServer();
     owner = await createTestUser("owner@example.com", { serverAdmin: true, displayName: "Jess" });
     await createTestOrganisation(owner, ORG);
+    // #546: a confirmed registration, so GST codes need evidence rather than being refused outright.
+    await asOwner((tx) => updateOrganisationSettings(tx, { gstRegistrationConfirmed: true }));
     bookkeeper = await createTestUser("bookkeeper@example.com");
     formerOwner = await createTestUser("former@example.com");
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper'), ($1, $3, 'owner')", [
@@ -247,6 +250,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
       contactId: zEnergy.id,
       amountsMode: "inclusive",
       lines: [{ description: "Petrol", accountCode: "6120", taxCode: "GST", amount: "46.00" }],
+      gstEvidence: "tax_document",
       idempotencyKey: "aib2-create-and-match",
     };
     const done = await call(tokens.full, "create_and_match", args);
@@ -330,6 +334,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
       contactId: zEnergy.id,
       amountsMode: "no_tax",
       lines: [{ description: "Bulk", accountCode: "6120", amount }],
+      gstEvidence: "person_said",
     });
     const before = await journalCount();
     const result = await call(tokens.full, "bulk_reconcile", {
@@ -359,6 +364,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
       contactId: zEnergy.id,
       amountsMode: "inclusive",
       lines: [{ description: "Fuel", accountCode: "6120", taxCode: "GST", amount: "57.50" }],
+      gstEvidence: "tax_document",
     });
     const journalId = (made.line as Line).reconciliation!.items[0].journalId;
     const undone = await call(tokens.full, "unmatch_bank_line", { lineId: lines["-57.50"].id, idempotencyKey: "undo-spend-1" });
@@ -417,7 +423,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
 
   it("AIB8: unmatch_bank_line refuses a person's match, another key's, and one over 24 hours old", async () => {
     const lines = await importLines(bank, ["28/05/2026,-14.00,BY A PERSON", "28/05/2026,-15.00,BY OTHER KEY", "28/05/2026,-16.00,OLD MATCH"]);
-    const spend = (amount: string) => ({ contactId: zEnergy.id, amountsMode: "no_tax", lines: [{ description: "x", accountCode: "6120", amount }] });
+    const spend = (amount: string) => ({ contactId: zEnergy.id, amountsMode: "no_tax", lines: [{ description: "x", accountCode: "6120", amount }], gstEvidence: "person_said" });
     await asOwner((tx) => reconcileStatementLine(tx, lines["-14.00"].id, { idempotencyKey: key("person"), kind: "bank_transaction", ...spend("14.00") }));
     await call(tokens.other, "create_and_match", { lineId: lines["-15.00"].id, ...spend("15.00") });
     await call(tokens.full, "create_and_match", { lineId: lines["-16.00"].id, ...spend("16.00") });
@@ -450,7 +456,7 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
   // Last: it locks May for the rest of the file.
   it("AIB6: a locked period is refused, for reconciling and for undoing, and nothing changes", async () => {
     const lines = await importLines(bank, ["29/05/2026,-17.00,BEFORE LOCK", "29/05/2026,-18.00,LOCKED"]);
-    const spend = (amount: string) => ({ contactId: zEnergy.id, amountsMode: "no_tax", lines: [{ description: "x", accountCode: "6120", amount }] });
+    const spend = (amount: string) => ({ contactId: zEnergy.id, amountsMode: "no_tax", lines: [{ description: "x", accountCode: "6120", amount }], gstEvidence: "person_said" });
     await call(tokens.full, "create_and_match", { lineId: lines["-17.00"].id, ...spend("17.00") });
     await asOwner((tx) => updatePeriodControls(tx, { lockDate: "2026-05-31", reason: "Test set-up" }));
     const before = await journalCount();

@@ -8,7 +8,8 @@ export const GET = route(async (request) => {
     return {
       taxCodes: await listTaxCodes(tx),
       // So document screens can offer only no-GST codes while not registered (issue #180, NR1-NR2).
-      gstRegistration: { registered: registration.registered, from: registration.from, until: registration.until },
+      // #546: and whether a person confirmed it, so the store setup knows not to guess.
+      gstRegistration: { registered: registration.registered, from: registration.from, until: registration.until, confirmed: registration.confirmed ?? true },
     };
   });
   return json({ taxCodes, gstRegistration });
