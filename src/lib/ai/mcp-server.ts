@@ -3,7 +3,8 @@ import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, levelAllows, roleNeed
 import { findAiTool, toolsForLevel } from "@/lib/ai/catalogue";
 import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
 import { privateMailTools } from "@/lib/ai/private-mail-tools";
-import type { CallToolResult, McpServer, ToolContent } from "@/lib/ai/mcp-protocol";
+import type { CallToolResult, McpServer, ToolContent, ToolInfo } from "@/lib/ai/mcp-protocol";
+import { type ToolListSeen, toolListState, toolSetVersion } from "@/lib/ai/mcp-tool-list";
 import { ToolFileAnswer } from "@/lib/ai/tools";
 import { aiKeyVia, type AiTokenIdentity } from "@/lib/ai/tokens";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
@@ -35,7 +36,7 @@ export { aiKeyVia } from "@/lib/ai/tokens";
  * its steps in a transaction of its own, so its progress survives a lost
  * answer.
  */
-export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?: boolean } = {}): McpServer {
+export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?: boolean; toolListSeen?: ToolListSeen } = {}): McpServer {
   const organisation = identity.membership.organisation;
   const level = identity.effectiveLevel;
   const roleAllows = (tool: { minRole?: Role }) => !tool.minRole || roleAtLeast(identity.membership.role, tool.minRole);
@@ -43,6 +44,9 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
   const mailTools = options.privateMail ? privateMailTools(identity) : [];
   const findTool = (name: unknown) => findAiTool(name) ?? mailTools.find((tool) => tool.name === name) ?? null;
   const tools = [...toolsForLevel(level).filter(roleAllows), ...mailTools];
+  const offered: ToolInfo[] = tools.map((tool) => ({ ...tool, readOnly: tool.readOnly ?? tool.level === "read" }));
+  // What the client holds against what this connection has now (decisions 1342-1343).
+  const toolList = toolListState(toolSetVersion(offered), options.toolListSeen);
   return {
     serverInfo: { name: "tohyee", title: "Tohyee", version: packageJson.version },
     instructions:
@@ -52,8 +56,10 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
       "Amounts are decimal strings; dates are YYYY-MM-DD. Before changing anything, say what you'll do and check with the person." +
       (mailTools.length
         ? ` You can also search and read ${identity.user.displayName}'s own private mail (search_my_mail, read_my_mail), for them alone: say which email you used, and never pass what's in it to anyone else or into Tohyee.`
-        : ""),
-    tools: tools.map((tool) => ({ ...tool, readOnly: tool.readOnly ?? tool.level === "read" })),
+        : "") +
+      " If what this connection may do changes, Tohyee tells your app (notifications/tools/list_changed); if a tool named here isn't in your tool list, ask your app to refresh its tools or reconnect.",
+    tools: offered,
+    toolList,
     unavailableTool(name) {
       const tool = findTool(name);
       if (!tool) return null;
@@ -75,6 +81,7 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
           source: `ai-${identity.tokenId}`,
           accessLevel: level,
           grantedAccessLevel: identity.accessLevel,
+          toolList: { ...toolList, toolNames: offered.map((offeredTool) => offeredTool.name) },
         };
         const readOnly = tool.readOnly ?? tool.level === "read";
         // A tool that works in steps (a durable batch, #547) commits each step on its own.

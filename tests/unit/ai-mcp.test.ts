@@ -97,7 +97,7 @@ describe("MCP messages (decision 344)", () => {
       id: "a",
       result: {
         protocolVersion: "2024-11-05",
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: true } },
         serverInfo: { name: "tohyee", version: "9.9.9" },
         instructions: "Read-only.",
       },

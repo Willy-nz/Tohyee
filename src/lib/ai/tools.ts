@@ -1,3 +1,4 @@
+import { STALE_TOOL_LIST_NOTE } from "@/lib/ai/mcp-tool-list";
 import { listGroups } from "@/lib/consolidation/groups";
 import { consolidatedBalanceSheet, consolidatedBudgetVsActual, consolidatedProfitAndLoss } from "@/lib/consolidation/report";
 import { cashFlowForecast } from "@/lib/cash-flow/forecast";
@@ -44,6 +45,8 @@ export type ToolContext = {
   accessLevel: AiAccessLevel;
   /** The level it was given when made, before the role cap. */
   grantedAccessLevel: AiAccessLevel;
+  /** Over MCP: the tool-set version now, and whether the client's list is out of date (decision 1343). */
+  toolList?: { version: string; stale: boolean; toolNames: readonly string[] };
 };
 
 /**
@@ -66,6 +69,19 @@ export function connectionAccess(context: Pick<ToolContext, "accessLevel" | "gra
         }
       : {}),
   };
+}
+
+/**
+ * Whether the AI's tool list matches what this connection may use now
+ * (decision 1343). When it doesn't, the note says to refresh or reconnect,
+ * and toolsNow lists the tools this connection has now (only those).
+ */
+export function toolListStatus(context: Pick<ToolContext, "toolList">) {
+  const list = context.toolList;
+  if (!list) return {};
+  return list.stale
+    ? { toolListVersion: list.version, toolListUpToDate: false, toolListNote: STALE_TOOL_LIST_NOTE, toolsNow: [...list.toolNames] }
+    : { toolListVersion: list.version };
 }
 
 export type JsonSchema = Record<string, unknown>;
@@ -289,6 +305,7 @@ export const READ_TOOLS: readonly AiTool[] = (
         },
         yourRole: context.role,
         ...connectionAccess(context),
+        ...toolListStatus(context),
         today: todayIsoDate(),
         amounts: "Amounts are decimal strings in the base currency unless a currencyCode says otherwise.",
       };
