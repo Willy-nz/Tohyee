@@ -3,7 +3,10 @@ import { ValidationError } from "@/lib/errors";
 import { add, dec, type Decimal, divide, isZero, mul, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import {
   type CompareSetting,
+  chosenFirst,
   compareAmountColumns,
+  DEFAULT_PERIOD_ORDER,
+  isPeriodOrder,
   MAX_COMPARE_PERIODS,
   type StatementColumn,
   withPercentColumns,
@@ -50,7 +53,7 @@ function bool(input: unknown): boolean {
 }
 
 /** Reads the compare options from a request (query strings or JSON). */
-export function parseCompare(input: { compare?: unknown; compareBy?: unknown; total?: unknown; ytd?: unknown; percent?: unknown }): CompareSetting | null {
+export function parseCompare(input: { compare?: unknown; compareBy?: unknown; total?: unknown; ytd?: unknown; percent?: unknown; order?: unknown }): CompareSetting | null {
   const periods = input.compare == null || input.compare === "" ? 0 : Number(input.compare);
   if (!Number.isInteger(periods) || periods < 0 || periods > MAX_COMPARE_PERIODS) {
     throw new ValidationError(`Compare with 0 to ${MAX_COMPARE_PERIODS} earlier periods.`);
@@ -59,12 +62,15 @@ export function parseCompare(input: { compare?: unknown; compareBy?: unknown; to
   if (typeof periodLength !== "string" || !Object.hasOwn(PERIOD_LENGTHS, periodLength)) {
     throw new ValidationError("Compare by months, quarters or years.");
   }
+  const order = input.order == null || input.order === "" ? DEFAULT_PERIOD_ORDER : input.order;
+  if (!isPeriodOrder(order)) throw new ValidationError('Show the periods "oldest_first" or "newest_first".');
   const setting: CompareSetting = {
     periods,
     periodLength: periodLength as PeriodLength,
     total: bool(input.total),
     yearToDate: bool(input.ytd),
     percentOfIncome: bool(input.percent),
+    order,
   };
   if (setting.periods === 0 && !setting.total && !setting.yearToDate && !setting.percentOfIncome) return null;
   return setting;
@@ -150,8 +156,9 @@ export async function profitAndLossCompare(
   const run = amountColumns.filter((column) => column.kind === "period" || column.kind === "year_to_date");
   // One after another: they share the organisation's transaction.
   const reports: Array<{ key: string; report: typeof first }> = [];
-  for (const [index, column] of run.entries()) {
-    reports.push({ key: column.key, report: index === 0 ? first : await profitAndLoss(tx, { from: column.from, to: column.to, filter }) });
+  // `p0` is the chosen dates, wherever the order puts it; rows are merged chosen dates first, whatever the order.
+  for (const column of chosenFirst(run)) {
+    reports.push({ key: column.key, report: column.key === "p0" ? first : await profitAndLoss(tx, { from: column.from, to: column.to, filter }) });
   }
   const keys = amountColumns.map((column) => column.key);
   const blank = () => Object.fromEntries(keys.map((k) => [k, money(ZERO_DECIMAL)]));
@@ -209,8 +216,8 @@ export async function balanceSheetCompare(
   const yearEndMonth = await financialYearEndMonth(tx);
   const columns = compareAmountColumns("balance_sheet", { from: null, to: first.asAt }, setting, yearEndMonth);
   const reports: Array<{ key: string; report: typeof first }> = [];
-  for (const [index, column] of columns.entries()) {
-    reports.push({ key: column.key, report: index === 0 ? first : await balanceSheet(tx, { asAt: column.to, filter }) });
+  for (const column of chosenFirst(columns)) {
+    reports.push({ key: column.key, report: column.key === "p0" ? first : await balanceSheet(tx, { asAt: column.to, filter }) });
   }
   const keys = columns.map((column) => column.key);
   const blank = () => Object.fromEntries(keys.map((k) => [k, money(ZERO_DECIMAL)]));

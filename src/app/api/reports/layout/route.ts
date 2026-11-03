@@ -16,6 +16,7 @@ export const GET = route(async (request) => {
       asAt: params.get("asAt"),
       compare: params.get("compare"),
       compareBy: params.get("compareBy"),
+      order: params.get("order"),
       ytd: params.get("ytd"),
       trackingCategoryId: params.get("trackingCategoryId"),
       trackingValueId: params.get("trackingValueId"),

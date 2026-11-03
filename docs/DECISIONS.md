@@ -12631,3 +12631,33 @@ except where 1359 says it differs on purpose.
       (Make drafts, so bookkeepers' keys and up) starts a draft from the
       standard rows, the template or a full layout, with an idempotency key.
       It can't publish, set a default layout or delete: a person does.
+
+### Oldest period first (Jess, 4 Nov 2026; decisions 1366-1367)
+
+Jess, on the compared profit and loss: "I want to be able to go oldest to
+newest month on the right".
+
+1366. **Compared periods run oldest first.** On the profit and loss and
+      balance sheet, the period columns go from the oldest on the left to
+      the chosen period on the right (RX7); Total, Year to date and the %
+      columns stay after them. **Order** (Oldest first, Newest first) sits
+      next to "Each period". Xero shows newest first and has no such
+      setting (its ideas forum asks for one; its answer is to reorder the
+      columns in the layout editor), so oldest first is Jess's choice, not
+      Xero's. Column keys and dates don't change (`p0` is always the
+      chosen period), so every figure, row and drill-down link is the same
+      either way; the reports are run and their rows merged chosen period
+      first. The same order applies to a default layout run with the
+      toolbar (1359), exports (made from what's shown), the API (`order`
+      = `oldest_first` or `newest_first`, default oldest first) and the AI's
+      `profit_and_loss` and `balance_sheet` tools. Custom and published
+      reports keep their own saved columns, newest first, because their
+      Difference column is "the first less the second".
+1367. **The order is remembered per report, in the browser.** There's no
+      per-person store for report settings (the other toolbar settings
+      aren't kept either), so the last applied order for each report is
+      kept in this browser (`localStorage`) and put in the address
+      (`?order=`) while comparing; the address wins, then the browser's
+      last choice, then oldest first. A person on another device starts
+      from oldest first. If a server-side store for report settings is
+      added later, this should move there.

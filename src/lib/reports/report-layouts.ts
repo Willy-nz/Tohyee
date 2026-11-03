@@ -83,6 +83,7 @@ export async function runDefaultLayout(
     asAt?: unknown;
     compare?: unknown;
     compareBy?: unknown;
+    order?: unknown;
     ytd?: unknown;
     trackingCategoryId?: unknown;
     trackingValueId?: unknown;
@@ -94,7 +95,7 @@ export async function runDefaultLayout(
   if (!chosen) return null;
   const { report } = await getCustomReport(tx, chosen.reportId);
   const filter = await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
-  const compare = parseCompare({ compare: input.compare, compareBy: input.compareBy, ytd: base === "profit_and_loss" ? input.ytd : undefined }) ?? {
+  const compare = parseCompare({ compare: input.compare, compareBy: input.compareBy, order: input.order, ytd: base === "profit_and_loss" ? input.ytd : undefined }) ?? {
     periods: 0,
     periodLength: "month" as const,
   };

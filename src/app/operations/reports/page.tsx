@@ -25,7 +25,14 @@ import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from 
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
-import { MAX_COMPARE_PERIODS } from "@/lib/reports/compare-columns";
+import {
+  MAX_COMPARE_PERIODS,
+  PERIOD_ORDERS,
+  type PeriodOrder,
+  periodOrderStorageKey,
+  rememberedPeriodOrder,
+  searchWithOrder,
+} from "@/lib/reports/compare-columns";
 import type { PeriodLength } from "@/lib/reports/custom-layout";
 import { columnHeading, statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
 import type { MultiColumnStatement } from "@/lib/reports/statement-compare";
@@ -522,15 +529,57 @@ function LayoutFigures({ run, filter }: { run: NonNullable<LayoutRun["layout"]>;
 const layoutTables = (run: LayoutRun["layout"]) =>
   run ? run.figures.blocks.filter((block) => block.kind === "table").map((block) => ({ id: `layout-${block.id}`, title: (block as { title: string }).title || undefined })) : [];
 
-type PnlOptions = { splitBy: string; tracking: string; compare: number; compareBy: PeriodLength; total: boolean; ytd: boolean; percent: boolean };
-const PNL_OPTIONS: PnlOptions = { splitBy: "", tracking: "", compare: 0, compareBy: "month", total: false, ytd: false, percent: false };
+type PnlOptions = {
+  splitBy: string;
+  tracking: string;
+  compare: number;
+  compareBy: PeriodLength;
+  order: PeriodOrder;
+  total: boolean;
+  ytd: boolean;
+  percent: boolean;
+};
+const PNL_OPTIONS: PnlOptions = { splitBy: "", tracking: "", compare: 0, compareBy: "month", order: "oldest_first", total: false, ytd: false, percent: false };
 
-/** Compare with N earlier periods, by months, quarters or years (decision 1353). */
-function CompareFields({ compare, compareBy, onChange }: { compare: number; compareBy: PeriodLength; onChange: (compare: number, compareBy: PeriodLength) => void }) {
+function browserStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Which way the compared periods run (decisions 1366-1367): from the
+ * address, else this report's last choice in this browser, else oldest
+ * first. `remember` keeps an applied choice and puts it in the address.
+ * Reports only render in the browser (after the organisation is known), so
+ * reading storage while the state is set up can't differ from the server.
+ */
+function usePeriodOrder(base: FinancialReportBase) {
+  const [initial] = useState<PeriodOrder>(() => (typeof window === "undefined" ? "oldest_first" : rememberedPeriodOrder(base, window.location.search, browserStorage())));
+  const remember = (order: PeriodOrder, comparing: boolean) => {
+    if (comparing) {
+      try {
+        browserStorage()?.setItem(periodOrderStorageKey(base), order);
+      } catch {
+        // Not kept: the report still shows it.
+      }
+    }
+    const search = searchWithOrder(window.location.search, comparing ? order : null);
+    if (search !== window.location.search) window.history.replaceState(null, "", `${window.location.pathname}${search}`);
+  };
+  return { initial, remember };
+}
+
+type CompareChange = { compare: number; compareBy: PeriodLength; order: PeriodOrder };
+
+/** Compare with N earlier periods, by months, quarters or years (decision 1353), oldest or newest first (1366). */
+function CompareFields({ compare, compareBy, order, onChange }: CompareChange & { onChange: (next: CompareChange) => void }) {
   return (
     <>
       <Field label="Compare with">
-        <select value={compare} onChange={(event) => onChange(Number(event.target.value), compareBy)}>
+        <select value={compare} onChange={(event) => onChange({ compare: Number(event.target.value), compareBy, order })}>
           <option value={0}>None</option>
           {Array.from({ length: MAX_COMPARE_PERIODS }, (_, index) => index + 1).map((count) => (
             <option key={count} value={count}>
@@ -541,10 +590,21 @@ function CompareFields({ compare, compareBy, onChange }: { compare: number; comp
       </Field>
       {compare > 0 ? (
         <Field label="Each period">
-          <select value={compareBy} onChange={(event) => onChange(compare, event.target.value as PeriodLength)}>
+          <select value={compareBy} onChange={(event) => onChange({ compare, compareBy: event.target.value as PeriodLength, order })}>
             <option value="month">Month</option>
             <option value="quarter">Quarter</option>
             <option value="year">Year</option>
+          </select>
+        </Field>
+      ) : null}
+      {compare > 0 ? (
+        <Field label="Order">
+          <select value={order} onChange={(event) => onChange({ compare, compareBy, order: event.target.value as PeriodOrder })}>
+            {(Object.keys(PERIOD_ORDERS) as PeriodOrder[]).map((value) => (
+              <option key={value} value={value}>
+                {PERIOD_ORDERS[value]}
+              </option>
+            ))}
           </select>
         </Field>
       ) : null}
@@ -557,8 +617,9 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
   // No "from" date means the financial year to date (the server works it out
   // from the organisation's year end).
   const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
-  const [applied, setApplied] = useState<PnlOptions>(PNL_OPTIONS);
-  const [draft, setDraft] = useState<PnlOptions>(PNL_OPTIONS);
+  const periodOrder = usePeriodOrder("profit_and_loss");
+  const [applied, setApplied] = useState<PnlOptions>(() => ({ ...PNL_OPTIONS, order: periodOrder.initial }));
+  const [draft, setDraft] = useState<PnlOptions>(() => ({ ...PNL_OPTIONS, order: periodOrder.initial }));
   const tracking = useTracking(organisationId).data;
   const categories = reportCategories(tracking);
   const splitting = categories.some((category) => category.id === applied.splitBy) ? applied.splitBy : "";
@@ -572,7 +633,7 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
     from: dates.from,
     to: dates.to,
     ...trackingQuery(filter),
-    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}),
     ...(applied.ytd ? { ytd: true } : {}),
   });
   const report = useApiData<ProfitAndLoss | ProfitAndLossSplit | MultiColumnStatement>(!layout.loaded || inLayout ? null : "/api/reports/profit-and-loss", {
@@ -581,13 +642,15 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
     to: dates.to,
     ...trackingQuery(filter),
     ...(splitting ? { splitBy: splitting } : {}),
-    ...(multi ? { compare: applied.compare, compareBy: applied.compareBy, total: applied.total, ytd: applied.ytd, percent: applied.percent } : {}),
+    ...(multi ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order, total: applied.total, ytd: applied.ytd, percent: applied.percent } : {}),
   });
   const data = inLayout ? null : report.data;
   const run = inLayout ? (layoutRun.data?.layout ?? null) : null;
   const runPeriods = run ? run.figures.columns.filter((column) => column.kind === "period") : [];
-  const from = data ? (data.from as string) : (runPeriods[0]?.from ?? null);
-  const to = data ? data.to : (runPeriods[0]?.to ?? null);
+  // p0 is the chosen period, whichever way the columns run.
+  const chosen = runPeriods.find((column) => column.key === "p0") ?? runPeriods[0];
+  const from = data ? (data.from as string) : (chosen?.from ?? null);
+  const to = data ? data.to : (chosen?.to ?? null);
   const period = from && to ? statementPeriod(from, to, yearEndMonth) : "";
   const lines = data
     ? [
@@ -612,11 +675,17 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
           onUpdate={(next) => {
             setDates(next);
             setApplied(draft);
+            periodOrder.remember(draft.order, draft.compare > 0);
           }}
           actions={layout.button(to ?? dates.to)}
           filters={
             <>
-              <CompareFields compare={draft.compare} compareBy={draft.compareBy} onChange={(compare, compareBy) => setDraft({ ...draft, compare, compareBy, splitBy: compare > 0 ? "" : draft.splitBy })} />
+              <CompareFields
+                compare={draft.compare}
+                compareBy={draft.compareBy}
+                order={draft.order}
+                onChange={(next) => setDraft({ ...draft, ...next, splitBy: next.compare > 0 ? "" : draft.splitBy })}
+              />
               <TrackingFilterField setup={tracking} value={draft.tracking} onChange={(value) => setDraft({ ...draft, tracking: value })} exclude={draft.splitBy || undefined} />
               {categories.length > 0 && draft.compare === 0 && !draft.ytd && !draft.percent ? (
                 <Field label="Columns by">
@@ -723,14 +792,15 @@ function ProfitAndLossTable({ report, filter }: { report: ProfitAndLoss; filter:
   );
 }
 
-type SheetOptions = { tracking: string; compare: number; compareBy: PeriodLength };
-const SHEET_OPTIONS: SheetOptions = { tracking: "", compare: 0, compareBy: "month" };
+type SheetOptions = { tracking: string; compare: number; compareBy: PeriodLength; order: PeriodOrder };
+const SHEET_OPTIONS: SheetOptions = { tracking: "", compare: 0, compareBy: "month", order: "oldest_first" };
 
 function BalanceSheetReport({ organisationId }: { organisationId: string }) {
   const yearEndMonth = useYearEndMonth(organisationId);
   const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
-  const [applied, setApplied] = useState<SheetOptions>(SHEET_OPTIONS);
-  const [draft, setDraft] = useState<SheetOptions>(SHEET_OPTIONS);
+  const periodOrder = usePeriodOrder("balance_sheet");
+  const [applied, setApplied] = useState<SheetOptions>(() => ({ ...SHEET_OPTIONS, order: periodOrder.initial }));
+  const [draft, setDraft] = useState<SheetOptions>(() => ({ ...SHEET_OPTIONS, order: periodOrder.initial }));
   const tracking = useTracking(organisationId).data;
   const filter = parseTrackingChoice(applied.tracking);
   const layout = useReportLayout(organisationId, "balance_sheet");
@@ -739,17 +809,17 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
     base: "balance_sheet",
     asAt: dates.to,
     ...trackingQuery(filter),
-    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}),
   });
   const run = layout.active ? (layoutRun.data?.layout ?? null) : null;
   const report = useApiData<BalanceSheet | MultiColumnStatement>(!layout.loaded || layout.active ? null : "/api/reports/balance-sheet", {
     organisationId,
     asAt: dates.to,
     ...trackingQuery(filter),
-    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy, order: applied.order } : {}),
   });
   const data = layout.active ? null : report.data;
-  const asAt = data ? ("asAt" in data ? data.asAt : data.to) : (run?.figures.columns[0]?.to ?? "");
+  const asAt = data ? ("asAt" in data ? data.asAt : data.to) : ((run?.figures.columns.find((column) => column.key === "p0") ?? run?.figures.columns[0])?.to ?? "");
   const period = asAt ? statementAsAt(asAt) : "";
   const lines = data?.filter ? [`Only lines tagged ${data.filter.label}`] : run?.figures.filterLabel ? [`Only lines tagged ${run.figures.filterLabel}`] : [];
   const unbalanced = data ? ("rows" in data ? Object.values(data.balanced ?? {}).some((ok) => !ok) : !data.balanced) : false;
@@ -764,12 +834,13 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
           onUpdate={(next) => {
             setDates(next);
             setApplied(draft);
+            periodOrder.remember(draft.order, draft.compare > 0);
           }}
           busy={report.loading || layoutRun.loading}
           actions={layout.button(dates.to)}
           filters={
             <>
-              <CompareFields compare={draft.compare} compareBy={draft.compareBy} onChange={(compare, compareBy) => setDraft({ ...draft, compare, compareBy })} />
+              <CompareFields compare={draft.compare} compareBy={draft.compareBy} order={draft.order} onChange={(next) => setDraft({ ...draft, ...next })} />
               <TrackingFilterField setup={tracking} value={draft.tracking} onChange={(value) => setDraft({ ...draft, tracking: value })} />
             </>
           }

@@ -6,14 +6,26 @@ import { columnHeading } from "@/lib/reports/report-dates";
 /**
  * The columns of a standard profit and loss or balance sheet compared with
  * earlier periods (decision 1353, examples RX1-RX3), as Xero's "Compare
- * with": the chosen dates first, then each earlier period, newest first,
- * then an optional Total and Year to date (profit and loss only). Whole
+ * with": the chosen dates and each earlier period, then an optional Total
+ * and Year to date (profit and loss only). The periods run oldest first
+ * (left to right, ending with the chosen dates) unless `order` is
+ * "newest_first" (decision 1366); Total and Year to date stay last. Whole
  * months, quarters and years use the custom reports' own columns
  * (`periodColumns`, CR2-CR6), so their labels match; other dates move back
  * by the period with the same days (1-20 Jun, 1-20 May).
  *
  * Browser-safe: plain YYYY-MM-DD strings.
  */
+
+/** Which way the period columns run (decision 1366). */
+export type PeriodOrder = "oldest_first" | "newest_first";
+export const PERIOD_ORDERS: Record<PeriodOrder, string> = { oldest_first: "Oldest first", newest_first: "Newest first" };
+/** Jess asked for oldest first; Xero shows newest first. */
+export const DEFAULT_PERIOD_ORDER: PeriodOrder = "oldest_first";
+
+export function isPeriodOrder(value: unknown): value is PeriodOrder {
+  return typeof value === "string" && Object.hasOwn(PERIOD_ORDERS, value);
+}
 
 export type CompareSetting = {
   /** Earlier periods beside the chosen one: 0 to 11. */
@@ -25,6 +37,8 @@ export type CompareSetting = {
   yearToDate?: boolean;
   /** Profit and loss only: a % of trading income column beside each amount column (RX4). */
   percentOfIncome?: boolean;
+  /** The period columns oldest first (the default) or newest first. Column keys don't change: `p0` is always the chosen dates. */
+  order?: PeriodOrder;
 };
 
 export type StatementColumnKind = "period" | "total" | "year_to_date" | "percent";
@@ -85,6 +99,7 @@ export function compareAmountColumns(
       return { key: `p${index}`, kind: "period" as const, label: columnHeading(from, to), from, to };
     });
   }
+  if ((setting.order ?? DEFAULT_PERIOD_ORDER) === "oldest_first") periods.reverse();
   if (base === "balance_sheet") return periods.map((column) => ({ ...column, drillFrom: financialYearStart(column.to!, yearEndMonth) }));
   const columns = periods.map((column) => ({ ...column, drillFrom: column.from }));
   if (setting.total && count > 1) columns.push({ key: "total", kind: "total", label: "Total", from: null, to: null, drillFrom: null });
@@ -95,8 +110,54 @@ export function compareAmountColumns(
   return columns;
 }
 
+/**
+ * The columns with the chosen dates first, then each earlier period, then
+ * the rest: the order the reports are run and their rows merged in, so the
+ * rows don't depend on which way the columns are shown.
+ */
+export function chosenFirst<T extends { key: string; kind: string }>(columns: T[]): T[] {
+  const index = (column: T) => (column.kind === "period" && /^p\d+$/.test(column.key) ? Number(column.key.slice(1)) : Number.MAX_SAFE_INTEGER);
+  return columns
+    .map((column, position) => ({ column, position }))
+    .sort((a, b) => index(a.column) - index(b.column) || a.position - b.position)
+    .map(({ column }) => column);
+}
+
 /** All the columns in the order shown: each amount column, then its % column when asked for (RX4). */
 export function withPercentColumns(columns: StatementColumn[], percent: boolean): StatementColumn[] {
   if (!percent) return columns;
   return columns.flatMap((column) => [column, { key: `${column.key}_pct`, kind: "percent" as const, label: "%", from: null, to: null, of: column.key }]);
+}
+
+/** Where each person's last choice is kept, per report, in this browser (decision 1367). */
+export function periodOrderStorageKey(base: "profit_and_loss" | "balance_sheet"): string {
+  return `tohyee.reports.periodOrder.${base}`;
+}
+
+type OrderStorage = Pick<Storage, "getItem">;
+
+/**
+ * The order a report opens with: `?order=` in the address, then the last
+ * choice for this report in this browser, then oldest first. Storage that
+ * can't be read (a private window, blocked site data) is ignored.
+ */
+export function rememberedPeriodOrder(base: "profit_and_loss" | "balance_sheet", search: string, storage: OrderStorage | null): PeriodOrder {
+  const fromAddress = new URLSearchParams(search).get("order");
+  if (isPeriodOrder(fromAddress)) return fromAddress;
+  try {
+    const stored = storage?.getItem(periodOrderStorageKey(base));
+    if (isPeriodOrder(stored)) return stored;
+  } catch {
+    // Not readable: the default.
+  }
+  return DEFAULT_PERIOD_ORDER;
+}
+
+/** The address with `order` set (when comparing) or taken out. */
+export function searchWithOrder(search: string, order: PeriodOrder | null): string {
+  const params = new URLSearchParams(search);
+  if (order) params.set("order", order);
+  else params.delete("order");
+  const next = params.toString();
+  return next ? `?${next}` : "";
 }

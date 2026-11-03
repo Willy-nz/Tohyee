@@ -72,7 +72,7 @@ describeWithDatabase("comparing reports and tracking filters", () => {
 
   it("RX1: compares June with two earlier months, with a total, and with quarters and years", async () => {
     const w = await setup();
-    const report = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 2, periodLength: "month", total: true }));
+    const report = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 2, periodLength: "month", total: true, order: "newest_first" }));
     expect(report.columns.map((column) => column.label)).toEqual(["Jun 2026", "May 2026", "Apr 2026", "Total"]);
     const rows = table(report);
     expect(rows["4000 · Sales"]).toEqual(["1200.00", "1500.00", "1000.00", "3700.00"]);
@@ -85,28 +85,28 @@ describeWithDatabase("comparing reports and tracking filters", () => {
     const may = await w.as((tx) => profitAndLoss(tx, { from: "2026-05-01", to: "2026-05-31" }));
     expect(may.netProfit).toBe("1100.00");
 
-    const quarters = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-04-01", to: "2026-06-30" }, { periods: 1, periodLength: "quarter" }));
+    const quarters = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-04-01", to: "2026-06-30" }, { periods: 1, periodLength: "quarter", order: "newest_first" }));
     expect(table(quarters)["Net profit"]).toEqual(["2670.00", "500.00"]);
-    const years = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-04-01", to: "2026-06-30" }, { periods: 1, periodLength: "year" }));
+    const years = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-04-01", to: "2026-06-30" }, { periods: 1, periodLength: "year", order: "newest_first" }));
     expect(table(years)["Net profit"]).toEqual(["2670.00", "0.00"]);
   });
 
   it("RX2: moves part months back with the same days, and adds the year to date", async () => {
     const w = await setup();
-    const part = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-20" }, { periods: 1, periodLength: "month" }));
+    const part = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-20" }, { periods: 1, periodLength: "month", order: "newest_first" }));
     expect(part.columns.map((column) => [column.from, column.to])).toEqual([
       ["2026-06-01", "2026-06-20"],
       ["2026-05-01", "2026-05-20"],
     ]);
     expect(table(part)["Net profit"]).toEqual(["650.00", "1100.00"]);
-    const ytd = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 1, periodLength: "month", yearToDate: true }));
+    const ytd = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 1, periodLength: "month", yearToDate: true, order: "newest_first" }));
     expect(ytd.columns.map((column) => column.label)).toEqual(["Jun 2026", "May 2026", "Year to date"]);
     expect(table(ytd)["Net profit"]).toEqual(["670.00", "1100.00", "2670.00"]);
   });
 
   it("RX3: compares balance sheet dates; total, year to date and too many periods are refused", async () => {
     const w = await setup();
-    const report = await w.as((tx) => balanceSheetCompare(tx, { asAt: "2026-06-30" }, { periods: 1, periodLength: "month" }));
+    const report = await w.as((tx) => balanceSheetCompare(tx, { asAt: "2026-06-30" }, { periods: 1, periodLength: "month", order: "newest_first" }));
     expect(report.columns.map((column) => column.label)).toEqual(["30 Jun 2026", "31 May 2026"]);
     const rows = table(report);
     expect(rows["Net assets"]).toEqual(["8170.00", "7500.00"]);
@@ -119,6 +119,29 @@ describeWithDatabase("comparing reports and tracking filters", () => {
     const { parseCompare } = await import("@/lib/reports/statement-compare");
     expect(() => parseCompare({ compare: "12" })).toThrow("0 to 11");
     expect(parseCompare({ compare: "0" })).toBeNull();
+  });
+
+  it("RX7: the periods run oldest first by default, with Total, Year to date and % after them", async () => {
+    const w = await setup();
+    const report = await w.as((tx) =>
+      profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 2, periodLength: "month", total: true, yearToDate: true, percentOfIncome: true }),
+    );
+    expect(report.columns.map((column) => column.label)).toEqual(["Apr 2026", "%", "May 2026", "%", "Jun 2026", "%", "Total", "%", "Year to date", "%"]);
+    expect(report.from).toBe("2026-06-01");
+    const rows = table(report);
+    expect(rows["4000 · Sales"]).toEqual(["1000.00", "100.0", "1500.00", "100.0", "1200.00", "100.0", "3700.00", "100.0", "3700.00", "100.0"]);
+    expect(rows["Net profit"]).toEqual(["900.00", "90.0", "1100.00", "73.3", "670.00", "55.8", "2670.00", "72.2", "2670.00", "72.2"]);
+    // The rows are the same, in the same order, whichever way the columns run.
+    const newest = await w.as((tx) =>
+      profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30" }, { periods: 2, periodLength: "month", total: true, yearToDate: true, percentOfIncome: true, order: "newest_first" }),
+    );
+    expect(newest.rows.map((row) => row.label)).toEqual(report.rows.map((row) => row.label));
+    expect(newest.rows.map((row) => row.values)).toEqual(report.rows.map((row) => row.values));
+
+    const sheet = await w.as((tx) => balanceSheetCompare(tx, { asAt: "2026-06-30" }, { periods: 1, periodLength: "month" }));
+    expect(sheet.columns.map((column) => column.label)).toEqual(["31 May 2026", "30 Jun 2026"]);
+    expect(table(sheet)["Net assets"]).toEqual(["7500.00", "8170.00"]);
+    expect(sheet.to).toBe("2026-06-30");
   });
 
   it("RX4: % of trading income, rounded to 1 place, blank with no trading income", async () => {
@@ -172,7 +195,7 @@ describeWithDatabase("comparing reports and tracking filters", () => {
     const all = await w.as((tx) => profitAndLoss(tx, { from: "2026-06-01", to: "2026-06-30" }));
     expect(all.netProfit).toBe("970.00");
     // Filters work with compare too.
-    const compared = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30", ...otago }, { periods: 1, periodLength: "month" }));
+    const compared = await w.as((tx) => profitAndLossCompare(tx, { from: "2026-06-01", to: "2026-06-30", ...otago }, { periods: 1, periodLength: "month", order: "newest_first" }));
     expect(table(compared)["Net profit"]).toEqual(["300.00", "0.00"]);
     // A value from another category is refused.
     await expect(w.as((tx) => profitAndLoss(tx, { to: "2026-06-30", trackingCategoryId: "999999", trackingValueId: w.otago.id }))).rejects.toThrow();

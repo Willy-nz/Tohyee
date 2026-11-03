@@ -37,8 +37,13 @@ export const TRACKING_OPTIONS: Record<string, JsonSchema> = {
 };
 
 export const COMPARE_OPTIONS: Record<string, JsonSchema> = {
-  compare: { type: "integer", minimum: 0, maximum: 11, description: "How many earlier periods to show beside the chosen one (newest first)." },
+  compare: { type: "integer", minimum: 0, maximum: 11, description: "How many earlier periods to show beside the chosen one." },
   compareBy: { type: "string", enum: ["month", "quarter", "year"], description: "The length of each earlier period. Default month." },
+  order: {
+    type: "string",
+    enum: ["oldest_first", "newest_first"],
+    description: "Which way the period columns run. Default oldest_first (the chosen period last). Total and Year to date columns always come after the periods.",
+  },
 };
 
 export const PROFIT_AND_LOSS_SCHEMA = object({
@@ -58,7 +63,7 @@ export const TRIAL_BALANCE_SCHEMA = object({ asAt: DATE, ...TRACKING_OPTIONS });
 const tracking = (args: Record<string, unknown>) => ({ trackingCategoryId: args.trackingCategoryId, trackingValueId: args.trackingValueId });
 
 export function runProfitAndLoss(tx: OrgTx, args: Record<string, unknown>): Promise<unknown> {
-  const compare = parseCompare({ compare: args.compare, compareBy: args.compareBy, total: args.total, ytd: args.yearToDate, percent: args.percentOfIncome });
+  const compare = parseCompare({ compare: args.compare, compareBy: args.compareBy, order: args.order, total: args.total, ytd: args.yearToDate, percent: args.percentOfIncome });
   const input = { from: args.from, to: args.to, ...tracking(args) };
   if (args.splitBy != null && args.splitBy !== "") {
     if (compare) throw new ValidationError("Use splitBy or the compare options, not both.");
@@ -68,7 +73,7 @@ export function runProfitAndLoss(tx: OrgTx, args: Record<string, unknown>): Prom
 }
 
 export function runBalanceSheet(tx: OrgTx, args: Record<string, unknown>): Promise<unknown> {
-  const compare = parseCompare({ compare: args.compare, compareBy: args.compareBy });
+  const compare = parseCompare({ compare: args.compare, compareBy: args.compareBy, order: args.order });
   const input = { asAt: args.asAt, ...tracking(args) };
   return compare ? balanceSheetCompare(tx, input, compare) : balanceSheet(tx, input);
 }

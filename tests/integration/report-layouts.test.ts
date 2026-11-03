@@ -161,8 +161,12 @@ describeWithDatabase("report layouts", () => {
       rowsOfTable(layout)[0].label = "Sales";
     });
     shown = await w.as((tx) => runDefaultLayout(tx, { base: "profit_and_loss", from: "2026-06-01", to: "2026-06-30", compare: "1" }));
+    // Oldest first by default (decision 1366), as the standard layout.
+    expect(shown!.figures.columns.map((column) => column.label)).toEqual(["May 2026", "Jun 2026"]);
+    expect(rowsOf(shown!.figures)["Sales"]).toEqual(["1500.00", "1200.00"]);
+    expect(rowsOf(shown!.figures)["Net profit"]).toEqual(["1100.00", "670.00"]);
+    shown = await w.as((tx) => runDefaultLayout(tx, { base: "profit_and_loss", from: "2026-06-01", to: "2026-06-30", compare: "1", order: "newest_first" }));
     expect(shown!.figures.columns.map((column) => column.label)).toEqual(["Jun 2026", "May 2026"]);
-    expect(rowsOf(shown!.figures)["Sales"]).toEqual(["1200.00", "1500.00"]);
     expect(rowsOf(shown!.figures)["Net profit"]).toEqual(["670.00", "1100.00"]);
 
     // Save as: a second named draft; setting it replaces the first as the default.
