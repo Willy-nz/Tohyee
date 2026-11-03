@@ -279,7 +279,7 @@ async function saveTaxDetails(tx: OrgTx, context: ToolContext, assetId: string, 
   const current = (await taxDetailsByAsset(tx, [assetId])).get(assetId);
   const saved: Record<string, unknown> = current ? Object.fromEntries(TAX_DETAIL_NAMES.map((name) => [name, current[name]])) : {};
   const sent = pick(input as Record<string, unknown>, TAX_DETAIL_NAMES);
-  return setTaxDetails(tx, assetId, { ...saved, ...sent, version });
+  return setTaxDetails(tx, assetId, { ...saved, ...sent, method: sent.method ?? saved.method, version });
 }
 
 /** What saving tax details answers with: the details and the figures for the income year it's first available. */
