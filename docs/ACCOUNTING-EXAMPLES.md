@@ -1544,6 +1544,58 @@ Setup as BK1-BK9, AIB1-AIB3. Tested in `tests/integration/bank-batches.test.ts`.
   shows outcome unknown and the 22 July one not started; resuming finishes
   them, with the same two voids in all.
 
+### Bank coding proposals: review before anything posts (#544; as Xero does where it has an answer, otherwise Claude's rules from the issue, not yet reviewed)
+
+Xero has no AI proposal stage; the nearest are its bank rule suggestions and
+"cash coding", where nothing posts until a person clicks OK or Reconcile.
+These examples follow that: a proposal is a suggestion, and approving a row
+posts exactly what cash coding (BK22) posts for it. Setup as BK1 and GSR
+(GST registration confirmed); supplier Z Energy; 6120 Motor vehicle
+expenses; GST is 15% on 2100. Tested in
+`tests/integration/bank-coding-proposals.test.ts` and
+`tests/unit/bank-coding-proposals.test.ts`.
+
+- **BCP1 (a proposal changes nothing)** Claude proposes coding for 100
+  unreconciled lines (-10.50 to -109.50, 6000.00 in all) to 6120 with GST,
+  each with why, how sure and what supports the GST. No journal is posted,
+  no line is reconciled, and the audit trail records only "100 rows, 0 not
+  kept". Each row shows **Proposed** and **AI draft**: an AI's draft is
+  never shown as reviewed or approved.
+- **BCP2 (mixed approval)** A bookkeeper rejects 40 rows and approves 60.
+  The 40 post nothing. The 60 are posted as a batch: 60 spend money
+  journals, 60 lines reconciled, each row **Posted** with who approved it.
+  The totals by account and by GST leave the rejected rows out.
+- **BCP3 (duplicates)** The same proposal sent twice with the same key is
+  one proposal; the same key with different rows is refused. A line already
+  in an open proposal isn't kept in a second one. The same approval sent
+  twice (a double click, a lost answer) resumes the same batch: each row is
+  posted once. Approving posted rows again with a new key is refused.
+- **BCP4 (stale)** After proposing three lines, someone reconciles the
+  first on the reconcile screen, and reconciles and unreconciles the
+  second. Both rows are flagged **Stale** with why, and approving all three
+  posts only the third; the first two stay as proposed, and the person's
+  own reconciliation of the first is untouched. If a line changes after its
+  row is approved but before it's posted, posting refuses it (**Failed**,
+  "The line is now reconciled.") and nothing is overwritten.
+- **BCP5 (editing)** An AI row coded with GST but nothing to support it
+  can't be approved ("Nothing supports the GST"). A bookkeeper edits it
+  (description "Diesel"); saving records that a person said the GST is
+  right, and the AI's own coding is kept beside it. A version from before
+  the edit is refused ("changed since you looked"). Approved, the -57.50
+  line posts Dr 6120 50.00 / Dr 2100 7.50 / Cr 1000 57.50. An AI can't
+  edit, reject or approve.
+- **BCP6 (checked again at approval)** A row dated 20 April after April is
+  locked, and a row while GST registration isn't confirmed (#546): both
+  show why and neither can be approved; nothing posts. Once the period is
+  reopened and registration confirmed, both can be.
+- **BCP7 (a stopped approval)** Approving three rows stops after the
+  second posts (the server went away). The third shows **Approved, not
+  posted yet**; resuming the batch (Batches tab, "Approved proposals")
+  posts it. Three journals in all, each line reconciled once.
+- **BCP8 (who can)** A "Make drafts" key can propose; a "Look only" key can
+  only read proposals. Viewers can look but not approve. A proposal in one
+  organisation can't be seen or approved from another.
+
 ### Full access outside banking (#205 section 4; approvals decided by Jess, 9 Oct 2026)
 
 A Full access key (decision 489) can also do day-to-day accounting outside
