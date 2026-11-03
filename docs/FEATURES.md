@@ -1662,6 +1662,21 @@ that something happened.
   imports, missing setup and missing settlement data each say so. MCP:
   list_sales_platform_payout_matches (read-only). Tested with made-up
   payouts, not a real store.
+- **Shopify payouts from a live store, and payment gateways** (SPC38-SPC46,
+  decisions 1326-1333, tenant migration 0222; as Xero/A2X do, not yet
+  reviewed). A payout's own TRANSFER row is the payout itself, checked
+  against it and never posted twice. Withdrawals (Shopify taking money
+  from the bank) post as a transfer from the bank into the clearing
+  account, with their fees. A payout whose accounts aren't set waits and is
+  tried again. Payouts refused before this were read again once after the
+  update; "Try again" on the store's Payouts line reads any not in the
+  accounts again (none is posted twice). Each Shopify payment gateway
+  (Afterpay, PayPal, manual bank deposit...) goes to its own account,
+  chosen at a new "Payment methods" step of the setup: Shopify Payments
+  always to money held by Shopify, Afterpay and PayPal to their own
+  clearing accounts ("Create it for me"), manual payments left owing for
+  the bank feed. A gateway not chosen makes its orders wait. Orders posted
+  before stay as they are. Tested with made-up Shopify-shaped responses.
 - **Shopify's read-only extras** (#530, SPD1-SPD11, decisions 1237-1245,
   tenant migration 0214): stock levels by location (with a Shopify vs
   Tohyee difference view on Settings › Sales platforms; Tohyee's stock is

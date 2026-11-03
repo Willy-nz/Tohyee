@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { toPlainString } from "@/lib/money/decimal";
+import { dec, toPlainString } from "@/lib/money/decimal";
 import type { PlatformOrder } from "@/lib/sales-platforms/connector";
 import {
   type LinkedItem,
   type PostingRules,
   localDate,
   orderPayments,
+  paymentGateway,
   planOrder,
   planPayout,
   planRefund,
   splitAmount,
   startOfLocalDate,
+  SHOPIFY_PAYMENTS_GATEWAY,
   taxCodeFor,
 } from "@/lib/sales-platforms/orders";
 import {
@@ -233,6 +235,7 @@ describe("payouts (SPC15)", () => {
       ok: true,
       date: "2026-10-07",
       net: "49.38",
+      direction: "deposit",
       charges: [{ description: "Shopify Payments fees, payout 70001", amount: "2.52", account: "fees" }],
       receipts: [],
       reserveHeld: null,
@@ -245,6 +248,7 @@ describe("payouts (SPC15)", () => {
       ok: true,
       date: "2026-10-14",
       net: "17.33",
+      direction: "deposit",
       charges: [
         { description: "Shopify Payments fees, payout 70002", amount: "0.67", account: "fees" },
         { description: "Shopify adjustment: Shopify adjustment, payout 70002", amount: "5.00", account: "fees" },
@@ -259,13 +263,90 @@ describe("payouts (SPC15)", () => {
     const hold = payout70001({ transactions: [...payout70001().transactions, { id: 80009, type: "CHARGEBACK_HOLD", amount: "-10.00", fee: "0.00", net: "-10.00" }], net: "39.38" });
     expect(planPayout(payout(hold), "NZD")).toEqual({
       ok: false,
-      reason: "Payout 70001 has chargeback_hold transactions; only charges, refunds, adjustments, chargebacks and reserves are posted, so record this payout by hand.",
+      reason:
+        "Payout 70001 has transactions of a type Tohyee doesn't post (CHARGEBACK_HOLD); only charges, refunds, adjustments, chargebacks, reserves and the payout's own transfer are posted, so record this payout by hand.",
     });
     expect(planPayout(payout(payout70001({ net: "50.00" })), "NZD")).toEqual({
       ok: false,
       reason: "Payout 70001's transactions come to 49.38 but the payout is 50.00, so nothing was posted.",
     });
-    expect(planPayout(payout(payout70001({ direction: "WITHDRAWAL" })), "NZD")).toMatchObject({ ok: false });
+    // A withdrawal whose transactions add up to money paid out doesn't add up.
+    expect(planPayout(payout(payout70001({ direction: "WITHDRAWAL" })), "NZD")).toEqual({
+      ok: false,
+      reason: "Payout 70001's transactions come to 49.38 but the payout is -49.38, so nothing was posted.",
+    });
+  });
+});
+
+describe("the payout's own transfer and withdrawals (SPC38-SPC40)", () => {
+  /** As a live store sends it: the payout's own TRANSFER row, the payout the other way round. */
+  const withTransfer = (fixture: PayoutFixture, amount: string, fee = "0.00") => ({
+    ...fixture,
+    transactions: [...fixture.transactions, { id: 89999, type: "TRANSFER", amount, fee, net: toPlainString(dec(amount)) }],
+  });
+
+  it("SPC38: the TRANSFER row is the payout itself, not a line: 70001 posts as before", () => {
+    const plan = planPayout(payout(withTransfer(payout70001(), "-49.38")), "NZD");
+    expect(plan).toEqual(planPayout(payout(payout70001()), "NZD"));
+    expect(plan).toMatchObject({ ok: true, net: "49.38", direction: "deposit", charges: [{ amount: "2.52", account: "fees" }] });
+    // With a chargeback and a reserve too.
+    expect(planPayout(payout(withTransfer(payout70005(), "-87.10")), "NZD")).toMatchObject({ ok: true, net: "87.10", reserveHeld: "10.00" });
+  });
+
+  it("SPC38: a transfer row that isn't the payout, two of them, or one with a fee, stops the payout with the reason", () => {
+    expect(planPayout(payout(withTransfer(payout70001(), "-40.00")), "NZD")).toEqual({
+      ok: false,
+      reason: "Payout 70001's transfer rows come to -40.00, but Tohyee expects one transfer of -49.38 for this payout, so record this payout by hand.",
+    });
+    const twice = withTransfer(withTransfer(payout70001(), "-20.00"), "-29.38");
+    expect(planPayout(payout(twice), "NZD")).toMatchObject({ ok: false, reason: expect.stringContaining("expects one transfer of -49.38") });
+    expect(planPayout(payout(withTransfer(payout70001(), "-49.38", "0.50")), "NZD")).toMatchObject({ ok: false, reason: expect.stringContaining("transfer has a fee of 0.50") });
+    // A genuinely unknown type still stops it.
+    const unknown = withTransfer(payout70001({ net: "39.38", transactions: [...payout70001().transactions, { id: 80020, type: "SHOP_CASH_CREDIT", amount: "-10.00", fee: "0.00", net: "-10.00" }] }), "-39.38");
+    expect(planPayout(payout(unknown), "NZD")).toMatchObject({ ok: false, reason: expect.stringContaining("(SHOP_CASH_CREDIT)") });
+  });
+
+  it("SPC40: a withdrawal takes 30.80 from the bank: a refund of 50.00 less a charge of 20.00 with its 0.80 fee", () => {
+    const withdrawal: PayoutFixture = {
+      id: 70010,
+      issuedAt: "2026-10-28T03:00:00Z",
+      status: "PAID",
+      direction: "WITHDRAWAL",
+      net: "30.80",
+      transactions: [
+        { id: 80030, type: "REFUND", amount: "-50.00", fee: "0.00", net: "-50.00", orderName: "#1020" },
+        { id: 80031, type: "CHARGE", amount: "20.00", fee: "0.80", net: "19.20", orderName: "#1021" },
+        { id: 80032, type: "TRANSFER", amount: "30.80", fee: "0.00", net: "30.80" },
+      ],
+    };
+    expect(planPayout(payout(withdrawal), "NZD")).toEqual({
+      ok: true,
+      date: "2026-10-28",
+      net: "30.80",
+      direction: "withdrawal",
+      charges: [{ description: "Shopify Payments fees, payout 70010", amount: "0.80", account: "fees" }],
+      receipts: [],
+      reserveHeld: null,
+      reserveReleased: null,
+    });
+    // Shopify may give a withdrawal's net as negative: the same plan.
+    expect(planPayout(payout({ ...withdrawal, net: "-30.80" }), "NZD")).toMatchObject({ ok: true, net: "30.80", direction: "withdrawal" });
+    // Its transfer must be money into the balance.
+    expect(planPayout(payout({ ...withdrawal, transactions: [...withdrawal.transactions.slice(0, 2), { id: 80032, type: "TRANSFER", amount: "-30.80", fee: "0.00", net: "-30.80" }] }), "NZD")).toMatchObject({ ok: false });
+  });
+});
+
+describe("payment gateways (SPC42-SPC46)", () => {
+  const paid = (gateway: string, id = 9001) => ({ id, kind: "SALE", gateway, amount: "46.00", processedAt: "2026-10-02T01:30:00Z" });
+  it("the gateway of the order's successful payments; split payments are refused; nothing paid is null", () => {
+    expect(paymentGateway(read(order1001({ transactions: [paid("afterpay")] })))).toEqual({ ok: true, gateway: "afterpay" });
+    expect(paymentGateway(read(order1001()))).toEqual({ ok: true, gateway: SHOPIFY_PAYMENTS_GATEWAY });
+    expect(paymentGateway(read(order1001({ transactions: [{ ...paid("paypal"), status: "FAILURE" }, paid("manual", 9002)] })))).toEqual({ ok: true, gateway: "manual" });
+    expect(paymentGateway(read(order1001({ transactions: [{ ...paid("paypal"), amount: "20.00" }, { ...paid("afterpay", 9002), amount: "26.00" }] })))).toEqual({
+      ok: false,
+      reason: "#1001 was paid through more than one payment method (paypal, afterpay); split payments aren't supported yet, so it isn't invoiced.",
+    });
+    expect(paymentGateway(read(order1001({ transactions: [] })))).toEqual({ ok: true, gateway: null });
   });
 });
 
@@ -275,6 +356,7 @@ describe("chargebacks and reserves (SPC25-SPC31)", () => {
       ok: true,
       date: "2026-10-21",
       net: "13.03",
+      direction: "deposit",
       charges: [
         { description: "Shopify Payments fees, payout 70003", amount: "2.07", account: "fees" },
         { description: "Chargeback on #1002, payout 70003", amount: "28.90", account: "chargebacks" },
@@ -291,6 +373,7 @@ describe("chargebacks and reserves (SPC25-SPC31)", () => {
       ok: true,
       date: "2026-11-04",
       net: "76.23",
+      direction: "deposit",
       charges: [{ description: "Shopify Payments fees, payout 70004", amount: "0.67", account: "fees" }],
       receipts: [
         { description: "Chargeback won on #1002, payout 70004", amount: "28.90", account: "chargebacks" },

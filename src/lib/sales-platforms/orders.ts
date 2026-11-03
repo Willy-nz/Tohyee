@@ -309,6 +309,26 @@ export function orderPayments(order: PlatformOrder): { amount: Decimal; lastAt: 
   };
 }
 
+/** Shopify Payments' gateway name on an order's transactions: its money is paid out by Shopify Payments payouts, through the clearing account. */
+export const SHOPIFY_PAYMENTS_GATEWAY = "shopify_payments";
+
+/**
+ * The gateway a Shopify order was paid through (SPC42-SPC46): the gateway
+ * of its successful sales and captures, or null when nothing was paid
+ * (a 0.00 order). Refused when it was split across gateways, which Tohyee
+ * doesn't post yet. Gift cards are refused on their own (SPC23).
+ */
+export function paymentGateway(order: PlatformOrder): { ok: true; gateway: string | null } | Refusal {
+  const gateways = [
+    ...new Set(order.transactions.filter((t) => succeeded(t) && (t.kind === "SALE" || t.kind === "CAPTURE") && t.gateway !== "gift_card").map((t) => t.gateway ?? "")),
+  ];
+  if (gateways.length > 1) {
+    return refuse(`${order.name} was paid through more than one payment method (${gateways.map((g) => g || "unnamed").join(", ")}); split payments aren't supported yet, so it isn't invoiced.`);
+  }
+  if (gateways.length === 1 && gateways[0] === "") return refuse(`${order.name}'s payment doesn't say which payment method it came through, so Tohyee can't tell where its money went.`);
+  return { ok: true, gateway: gateways[0] ?? null };
+}
+
 /** Shopify's financial statuses for an order that's been paid in full (some may since have been refunded). */
 export const PAID_STATUSES = ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"];
 
@@ -406,7 +426,10 @@ export type PayoutPlan =
   | {
       ok: true;
       date: string;
+      /** The payout's amount, always positive: what reached the bank, or (a withdrawal) what Shopify took from it. */
       net: string;
+      /** A deposit moves the net from the clearing account to the bank; a withdrawal moves it from the bank into the clearing account (SPC40). */
+      direction: "deposit" | "withdrawal";
       /** The spend money's lines: the fees, each adjustment, chargebacks and chargeback fees. */
       charges: PayoutLine[];
       /** The receive money's lines: won disputes and chargeback fees given back (SPC26). */
@@ -435,45 +458,81 @@ const POSTABLE: Record<string, "any" | "negative" | "positive"> = {
   RESERVED_FUNDS_REVERSAL: "positive",
 };
 
+/**
+ * The payout's own movement of money (SPC38). Shopify lists it among the
+ * payout's balance transactions as TRANSFER ("a payout to the bank or a
+ * withdrawal into the balance; the sign shows the direction"). It is the
+ * clearing-to-bank transfer itself, so it is checked against the payout and
+ * never posted as a line of its own.
+ */
+export const PAYOUT_TRANSFER_TYPE = "TRANSFER";
+
 const DISPUTES = ["DISPUTE_WITHDRAWAL", "DISPUTE_REVERSAL", "CHARGEBACK_FEE", "CHARGEBACK_FEE_REFUND"];
 
+/** A payout's amount as it moves money to the bank: positive for a deposit, negative for a withdrawal, whichever sign Shopify gave it. */
+export function signedPayoutNet(net: string, direction: string): Decimal {
+  const amount = abs(dec(net));
+  return direction === "WITHDRAWAL" ? sub(ZERO_DECIMAL, amount) : amount;
+}
+
 /**
- * A Shopify Payments payout (SPC15, SPC25-SPC31): the transfer to the bank
- * for its net; the fees, adjustments, chargebacks and chargeback fees as one
- * spend money from the clearing account; won disputes and chargeback fees
- * given back as one receive money; and reserves held or released as
- * transfers to or from the reserve account. Refused if anything in it is
- * another type or has an unexpected sign, or the balance transactions don't
- * add up to the payout.
+ * A Shopify Payments payout (SPC15, SPC25-SPC31, SPC38-SPC41): the transfer
+ * to the bank for its net (a withdrawal: from the bank); the fees,
+ * adjustments, chargebacks and chargeback fees as one spend money from the
+ * clearing account; won disputes and chargeback fees given back as one
+ * receive money; and reserves held or released as transfers to or from the
+ * reserve account. The payout's own TRANSFER row must equal the payout: it
+ * is the transfer itself. Refused if anything else in it is another type or
+ * has an unexpected sign, or the balance transactions don't add up to it.
  */
 export function planPayout(payout: PlatformPayout, baseCurrency: string): PayoutPlan {
   const what = `Payout ${payout.externalId}`;
-  if (payout.direction !== "DEPOSIT") return refuse(`${what} is a ${payout.direction.toLowerCase()} (money taken from the bank); those aren't supported yet.`);
+  if (payout.direction !== "DEPOSIT" && payout.direction !== "WITHDRAWAL") {
+    return refuse(`${what} is a ${payout.direction.toLowerCase()} payout, a kind Tohyee doesn't know, so record this payout by hand.`);
+  }
   if (payout.currency !== baseCurrency) return refuse(`${what} is in ${payout.currency}; Tohyee only brings in payouts in ${baseCurrency}.`);
   if (payout.incomplete) return refuse(`${what} has more balance transactions than Tohyee reads.`);
-  const others = [...new Set(payout.transactions.filter((t) => !(t.type in POSTABLE)).map((t) => t.type))];
+  const withdrawal = payout.direction === "WITHDRAWAL";
+  const signed = signedPayoutNet(payout.net, payout.direction);
+  if (isZero(signed)) return refuse(`${what} is ${money(signed)}; only payouts of more than nothing are posted.`);
+  // SPC38: the payout's own transfer, the payout the other way round (out of Shopify's balance for a deposit).
+  const transfers = payout.transactions.filter((t) => t.type === PAYOUT_TRANSFER_TYPE);
+  const rows = payout.transactions.filter((t) => t.type !== PAYOUT_TRANSFER_TYPE);
+  if (transfers.length > 0) {
+    const moved = sum(transfers.map((t) => dec(t.amount)));
+    const expected = sub(ZERO_DECIMAL, signed);
+    if (transfers.length > 1 || cmp(moved, expected) !== 0) {
+      return refuse(
+        `${what}'s transfer rows come to ${money(moved)}, but Tohyee expects one transfer of ${money(expected)} for this payout, so record this payout by hand.`,
+      );
+    }
+    const transferFee = sum(transfers.map((t) => dec(t.fee)));
+    if (!isZero(transferFee)) {
+      return refuse(`${what}'s transfer has a fee of ${money(transferFee)} (an instant payout?); fees on the transfer itself aren't supported yet, so record this payout by hand.`);
+    }
+  }
+  const others = [...new Set(rows.filter((t) => !(t.type in POSTABLE)).map((t) => t.type))];
   if (others.length > 0) {
     return refuse(
-      `${what} has ${others.join(", ").toLowerCase()} transactions; only charges, refunds, adjustments, chargebacks and reserves are posted, so record this payout by hand.`,
+      `${what} has transactions of a type Tohyee doesn't post (${others.join(", ")}); only charges, refunds, adjustments, chargebacks, reserves and the payout's own transfer are posted, so record this payout by hand.`,
     );
   }
-  for (const t of payout.transactions) {
+  for (const t of rows) {
     const sign = POSTABLE[t.type];
     const amount = dec(t.amount);
     if ((sign === "negative" && !isNegative(amount)) || (sign === "positive" && !isPositive(amount))) {
       return refuse(`${what} has a ${t.type.toLowerCase()} transaction of ${money(amount)}; Tohyee expects it to be ${sign}, so record this payout by hand.`);
     }
   }
-  const net = dec(payout.net);
-  const nets = sum(payout.transactions.map((t) => dec(t.net)));
-  if (cmp(nets, net) !== 0) return refuse(`${what}'s transactions come to ${money(nets)} but the payout is ${money(net)}, so nothing was posted.`);
-  if (!isPositive(net)) return refuse(`${what} is ${money(net)}; only payouts of more than nothing are posted.`);
-  const fees = sum(payout.transactions.map((t) => dec(t.fee)));
+  const nets = sum(rows.map((t) => dec(t.net)));
+  if (cmp(nets, signed) !== 0) return refuse(`${what}'s transactions come to ${money(nets)} but the payout is ${money(signed)}, so nothing was posted.`);
+  const net = abs(signed);
+  const fees = sum(rows.map((t) => dec(t.fee)));
   if (isNegative(fees)) return refuse(`${what}'s fees come to ${money(fees)} (fees given back); that isn't supported yet.`);
   const charges: PayoutLine[] = [];
   const receipts: PayoutLine[] = [];
   if (isPositive(fees)) charges.push({ description: `Shopify Payments fees, payout ${payout.externalId}`, amount: money(fees), account: "fees" });
-  for (const t of payout.transactions.filter((entry) => entry.type === "ADJUSTMENT")) {
+  for (const t of rows.filter((entry) => entry.type === "ADJUSTMENT")) {
     // An adjustment's own fee is already in the fees; its amount is what's left.
     const amount = sub(dec(t.net), sub(ZERO_DECIMAL, dec(t.fee)));
     if (isPositive(amount)) return refuse(`${what} has an adjustment that adds ${money(amount)}; adjustments in Tohyee's favour aren't supported yet.`);
@@ -481,7 +540,7 @@ export function planPayout(payout: PlatformPayout, baseCurrency: string): Payout
     charges.push({ description: `Shopify adjustment${t.adjustmentReason ? `: ${t.adjustmentReason}` : ""}, payout ${payout.externalId}`, amount: money(sub(ZERO_DECIMAL, amount)), account: "fees" });
   }
   const on = (t: PlatformBalanceTransaction) => (t.orderName ? ` on ${t.orderName}` : "");
-  for (const t of payout.transactions.filter((entry) => DISPUTES.includes(entry.type))) {
+  for (const t of rows.filter((entry) => DISPUTES.includes(entry.type))) {
     // Each one's fee is already in the fees; its amount (taken or given back) is the line.
     const amount = dec(t.amount);
     const line: PayoutLine =
@@ -491,8 +550,8 @@ export function planPayout(payout: PlatformPayout, baseCurrency: string): Payout
     (isNegative(amount) ? charges : receipts).push(line);
   }
   const reserve = (type: string) => {
-    const total = sum(payout.transactions.filter((t) => t.type === type).map((t) => abs(dec(t.amount))));
+    const total = sum(rows.filter((t) => t.type === type).map((t) => abs(dec(t.amount))));
     return isZero(total) ? null : money(total);
   };
-  return { ok: true, date: localDate(payout.issuedAt), net: money(net), charges, receipts, reserveHeld: reserve("RESERVED_FUNDS"), reserveReleased: reserve("RESERVED_FUNDS_REVERSAL") };
+  return { ok: true, date: localDate(payout.issuedAt), net: money(net), direction: withdrawal ? "withdrawal" : "deposit", charges, receipts, reserveHeld: reserve("RESERVED_FUNDS"), reserveReleased: reserve("RESERVED_FUNDS_REVERSAL") };
 }

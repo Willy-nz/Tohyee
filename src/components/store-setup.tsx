@@ -18,7 +18,10 @@ import { formatDate, todayInBrowser } from "@/lib/format";
 import {
   draftToSettings,
   fitsRole,
+  gatewayLabel,
   LEFT_OWING,
+  SHOPIFY_PAYMENTS,
+  suggestGateway,
   type PostingAccountRole,
   type PostingDraft,
   stepGaps,
@@ -41,7 +44,7 @@ import styles from "./store-setup.module.css";
  * or save it off. Nothing is ever turned on for them.
  */
 
-export type SetupStep = "shop" | "connect" | "import" | "start" | "accounts" | "review" | "turn_on";
+export type SetupStep = "shop" | "connect" | "import" | "start" | "accounts" | "payments" | "review" | "turn_on";
 
 const STEP_NAMES: Record<SetupStep, string> = {
   shop: "Your shop",
@@ -49,13 +52,16 @@ const STEP_NAMES: Record<SetupStep, string> = {
   import: "What to bring in",
   start: "Start date",
   accounts: "Accounts",
+  payments: "Payment methods",
   review: "Check",
   turn_on: "Turn on",
 };
 
-/** The steps for a platform, in order. WooCommerce has no customer or product import (WC1). */
+/** The steps for a platform, in order. WooCommerce has no customer or product import (WC1), and chooses its payment methods with its accounts. */
 export function setupSteps(platform: SalesPlatform): SetupStep[] {
-  return platform === "woocommerce" ? ["shop", "connect", "start", "accounts", "review", "turn_on"] : ["shop", "connect", "import", "start", "accounts", "review", "turn_on"];
+  return platform === "woocommerce"
+    ? ["shop", "connect", "start", "accounts", "review", "turn_on"]
+    : ["shop", "connect", "import", "start", "accounts", "payments", "review", "turn_on"];
 }
 
 /** Original drawings (no brand logos): a hosted shopfront, and a shop on your own website. */
@@ -167,7 +173,12 @@ export function initialDraft(
     untaxedTaxCode: connection.untaxedTaxCode ?? tax.untaxed ?? "",
     guestContactId: connection.guestContactId ?? "",
     taxCodes: connection.taxCodes.length > 0 ? connection.taxCodes.map((entry) => ({ ...entry })) : tax.rates,
-    paymentMethods: connection.paymentMethods.map((entry) => ({ method: entry.method, title: entry.title, choice: entry.leftOwing ? LEFT_OWING : (entry.accountCode ?? "") })),
+    paymentMethods: connection.paymentMethods.map((entry) => {
+      const saved = entry.leftOwing ? LEFT_OWING : (entry.accountCode ?? "");
+      // Shopify's gateways (SPC42): one not chosen yet starts from the suggestion, once the chart is loaded.
+      const suggested = connection.platform === "shopify" && !saved && accounts.length > 0 && entry.method !== SHOPIFY_PAYMENTS ? suggestGateway(entry.method, accounts).choice : "";
+      return { method: entry.method, title: entry.title, choice: saved || suggested };
+    }),
   };
 }
 
@@ -322,7 +333,7 @@ export function StoreSetup({
   };
 
   const shop = SALES_PLATFORM_LABELS[platform];
-  const isPostingStep = step === "start" || step === "accounts" || step === "review" || step === "turn_on";
+  const isPostingStep = step === "start" || step === "accounts" || step === "payments" || step === "review" || step === "turn_on";
 
   let body: ReactNode;
   let next: ReactNode = null;
@@ -393,6 +404,30 @@ export function StoreSetup({
       <Button
         onClick={() => {
           const missing = stepGaps("accounts", draft, { platform, gstRegistered });
+          if (missing.length > 0) setGaps(missing);
+          else go(platform === "shopify" ? "payments" : "review");
+        }}
+      >
+        {platform === "shopify" ? "Next: payment methods" : "Next: check"}
+      </Button>
+    );
+  } else if (step === "payments") {
+    body = (
+      <PaymentsStep
+        organisationId={organisationId}
+        draft={draft}
+        set={set}
+        accounts={allAccounts}
+        onAdded={(account) => {
+          setAdded((list) => [...list, account]);
+          accounts.reload();
+        }}
+      />
+    );
+    next = (
+      <Button
+        onClick={() => {
+          const missing = stepGaps("payments", draft, { platform, gstRegistered });
           if (missing.length > 0) setGaps(missing);
           else go("review");
         }}
@@ -480,6 +515,8 @@ function stepTitle(step: SetupStep, platform: SalesPlatform): string {
       return `When should ${shop} sales start in Tohyee?`;
     case "accounts":
       return "Where should the money go?";
+    case "payments":
+      return "How do your customers pay?";
     case "review":
       return "Check how a sale will look";
     case "turn_on":
@@ -882,6 +919,95 @@ function AccountsStep({
   );
 }
 
+/**
+ * Shopify's payment gateways (SPC42-SPC46, decision 1330): where each one's
+ * money goes. Shopify Payments is fixed to money held by Shopify, which its
+ * payouts clear. Afterpay, PayPal and the like pay you on their own, so each
+ * gets its own clearing account (created here if needed). Manual payments
+ * are left owing for the bank feed to match. Only gateways seen on the
+ * store's orders are listed; a new one makes its orders wait until chosen.
+ */
+function PaymentsStep({
+  organisationId,
+  draft,
+  set,
+  accounts,
+  onAdded,
+}: {
+  organisationId: string;
+  draft: PostingDraft;
+  set: (change: Partial<PostingDraft>) => void;
+  accounts: Account[];
+  onAdded: (account: Account) => void;
+}) {
+  const others = draft.paymentMethods.filter((entry) => entry.method !== SHOPIFY_PAYMENTS);
+  const choose = (method: string, choice: string) => set({ paymentMethods: draft.paymentMethods.map((entry) => (entry.method === method ? { ...entry, choice } : entry)) });
+  return (
+    <>
+      <p className={styles.lead}>
+        Each way your customers pay is paid out to you on its own, so each has its own account.{" "}
+        <InfoTip label="Why each has its own account">
+          <InfoPara>
+            Shopify only pays out Shopify Payments. Afterpay and PayPal pay you themselves, on their own days. If their sales went into money held by Shopify, it would never go
+            back to $0.
+          </InfoPara>
+          <InfoPara>A clearing account for each one shows what it still owes you. Reconcile its deposits in your bank against that account, with its fees.</InfoPara>
+          <InfoPara>Orders already brought in aren&apos;t changed.</InfoPara>
+        </InfoTip>
+      </p>
+      <section className={styles.group} aria-label="Payment methods">
+        <h4 className={styles.groupTitle}>Payment methods your orders have used</h4>
+        <Role label="Shopify Payments" hint="Cards, Apple Pay and Shop Pay through Shopify. Shopify's payouts clear it.">
+          <p className={ui.muted} style={{ margin: 0 }}>
+            Always into {nameOf(accounts, draft.clearingAccountCode)}.
+          </p>
+        </Role>
+        {others.length === 0 ? (
+          <p className={ui.muted} style={{ margin: 0 }}>
+            No other payment methods yet. One appears here when an order uses it; until you choose where it goes, those orders wait (they aren&apos;t lost).
+          </p>
+        ) : null}
+        {others.map((entry) => {
+          const suggestion = suggestGateway(entry.method, accounts);
+          const owing = entry.choice === LEFT_OWING;
+          const label = gatewayLabel(entry.method, entry.title);
+          const name = `gateway-${entry.method}`;
+          return (
+            <Role key={entry.method} label={label} hint={entry.method === label ? "Seen on your orders." : `Shopify calls it “${entry.method}”.`}>
+              <div className={ui.actions} role="radiogroup" aria-label={`Where ${label} payments go`}>
+                <label className={ui.checkbox}>
+                  <input type="radio" name={name} checked={!owing} onChange={() => choose(entry.method, suggestion.choice === LEFT_OWING ? "" : suggestion.choice)} /> Into an account
+                </label>
+                <label className={ui.checkbox}>
+                  <input type="radio" name={name} checked={owing} onChange={() => choose(entry.method, LEFT_OWING)} /> Left owing, matched on the bank feed
+                </label>
+              </div>
+              {owing ? (
+                <p className={ui.muted} style={{ margin: 0 }}>
+                  The invoice stays owing until you match the deposit in your bank to it.
+                </p>
+              ) : (
+                <AccountPicker
+                  organisationId={organisationId}
+                  label={`${label} payments go into`}
+                  accounts={accounts}
+                  value={entry.choice}
+                  onChange={(code) => choose(entry.method, code)}
+                  filter={(account) => fitsRole(account, "clearing") && account.code !== draft.clearingAccountCode}
+                  types={["bank"]}
+                  suggestion={suggestion.create}
+                  canAdd
+                  onAdded={onAdded}
+                />
+              )}
+            </Role>
+          );
+        })}
+      </section>
+    </>
+  );
+}
+
 /** #546 (GSR3): the setting says registered, but no one has confirmed it, so the setup asks no GST questions and orders wait. */
 function GstUnconfirmedNotice() {
   return (
@@ -951,6 +1077,12 @@ function ReviewStep({
           ["Shopify's fees", nameOf(accounts, draft.feesAccountCode)],
           ["Chargebacks", draft.chargebacksAccountCode ? nameOf(accounts, draft.chargebacksAccountCode) : "Not chosen (a payout with one waits)"],
           ["Reserve", draft.reserveAccountCode ? nameOf(accounts, draft.reserveAccountCode) : "Not chosen (a payout with one waits)"],
+          ...draft.paymentMethods
+            .filter((entry) => entry.method !== SHOPIFY_PAYMENTS)
+            .map((entry): [string, string] => [
+              `${gatewayLabel(entry.method, entry.title)} payments`,
+              entry.choice === LEFT_OWING ? "Left owing (matched on the bank feed)" : entry.choice ? `Into ${nameOf(accounts, entry.choice)}` : "Not chosen (orders wait)",
+            ]),
         ] as Array<[string, string]>)
       : draft.paymentMethods.map(
           (entry): [string, string] => [
@@ -1039,7 +1171,7 @@ function TurnOnStep({ connection, draft }: { connection: SalesPlatformConnection
         <li>
           The next sync (within 15 minutes, or when you choose &quot;Sync now&quot;) brings in {shop} orders from {draft.startDate ? formatDate(draft.startDate) : "the start date"}.
         </li>
-        <li>Each paid order becomes a sales order and an invoice, paid {connection.platform === "shopify" ? "into money held by Shopify" : "the way its payment method says"}.</li>
+        <li>Each paid order becomes a sales order and an invoice, paid {connection.platform === "shopify" ? "into money held by Shopify, or where its payment method goes" : "the way its payment method says"}.</li>
         {connection.platform === "shopify" ? <li>Each payout moves the money to your bank, with Shopify&apos;s fees.</li> : null}
         <li>Anything Tohyee can&apos;t post is listed in the sync log with the reason, and nothing is posted twice.</li>
       </ul>

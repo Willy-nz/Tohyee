@@ -202,19 +202,86 @@ export type PostingDraft = {
   untaxedTaxCode: string;
   guestContactId: string;
   taxCodes: Array<{ rate: string; taxCode: string }>;
-  /** WooCommerce: method -> account code, "__owing__" (left owing), or "" (not chosen: orders wait). */
+  /** WooCommerce's payment methods, or Shopify's gateways (SPC42): method -> account code, "__owing__" (left owing), or "" (not chosen: orders wait). */
   paymentMethods: Array<{ method: string; title: string | null; choice: string }>;
 };
 
 export const LEFT_OWING = "__owing__";
 
+// ---------------------------------------------------------------------------
+// Shopify's payment gateways (SPC42-SPC46)
+
+/** Shopify Payments' gateway: always into the clearing account, which its payouts clear. */
+export const SHOPIFY_PAYMENTS = "shopify_payments";
+
+export type GatewayKind = "shopify_payments" | "afterpay" | "paypal" | "manual" | "other";
+
+/** What kind of gateway Shopify's gateway name is ("afterpay", "paypal", "manual", "Bank Deposit"...). */
+export function gatewayKind(gateway: string): GatewayKind {
+  const name = gateway.toLowerCase();
+  if (name === SHOPIFY_PAYMENTS) return "shopify_payments";
+  if (/afterpay|clearpay/.test(name)) return "afterpay";
+  if (/paypal/.test(name)) return "paypal";
+  if (/^manual$|bank deposit|bank transfer|cash on delivery|\(cod\)|money order|^cash$/.test(name)) return "manual";
+  return "other";
+}
+
+/** A gateway's name for people: "Shopify Payments", "Afterpay", "PayPal", "Manual (bank deposit)", or as Shopify gave it. */
+export function gatewayLabel(gateway: string, title: string | null = null): string {
+  switch (gatewayKind(gateway)) {
+    case "shopify_payments":
+      return "Shopify Payments";
+    case "afterpay":
+      return "Afterpay";
+    case "paypal":
+      return "PayPal";
+    default:
+      if (gateway.toLowerCase() === "manual") return "Manual (bank deposit and the like)";
+      return title ?? gateway;
+  }
+}
+
+export type GatewaySuggestion = {
+  /** The account code to pre-fill, LEFT_OWING, or "" (nothing to pre-fill). */
+  choice: string;
+  /** What "Create it for me" adds when there's no account to pre-fill. */
+  create: NewAccountSuggestion;
+};
+
+/**
+ * Where a Shopify gateway's money is suggested to go (decision 1330, as A2X
+ * and Xero do, not yet reviewed). Each provider that pays you on its own
+ * (Afterpay, PayPal) gets its own clearing account, a bank account its
+ * settlements are reconciled against; one already in the chart with its
+ * name is pre-filled, else "Create it for me" adds "Afterpay clearing"
+ * (1020) or "PayPal clearing" (1025). Manual payments (bank deposit, cash
+ * on delivery) are left owing, so the bank feed's line is matched to the
+ * invoice, as WooCommerce bank transfers are (WC4). Anything else gets
+ * "<name> clearing" (1030) to create; nothing is pre-filled.
+ */
+export function suggestGateway(gateway: string, accounts: readonly SetupAccount[], baseCurrency?: string): GatewaySuggestion {
+  const kind = gatewayKind(gateway);
+  const make = (code: string, name: string): NewAccountSuggestion => ({ code: nextFreeCode(code, accounts), name, accountType: "bank" });
+  const bankNamed = (word: RegExp) => accounts.find((account) => fitsRole(account, "clearing", baseCurrency) && word.test(account.name) && !/shopify/i.test(account.name))?.code ?? "";
+  if (kind === "afterpay") return { choice: bankNamed(/afterpay|clearpay/i), create: make("1020", "Afterpay clearing") };
+  if (kind === "paypal") return { choice: bankNamed(/paypal/i), create: make("1025", "PayPal clearing") };
+  if (kind === "manual") return { choice: LEFT_OWING, create: make("1030", "Manual payments clearing") };
+  return { choice: "", create: make("1030", `${gatewayLabel(gateway)} clearing`.slice(0, 150)) };
+}
+
 /** What a step still needs before Next, in plain words. Empty: ready. */
 export function stepGaps(
-  step: "start" | "accounts",
+  step: "start" | "accounts" | "payments",
   draft: PostingDraft,
   context: { platform: SalesPlatform; gstRegistered: boolean },
 ): string[] {
   if (step === "start") return /^\d{4}-\d{2}-\d{2}$/.test(draft.startDate) ? [] : ["Choose the start date."];
+  if (step === "payments") {
+    // Not chosen is allowed (those orders wait); the Shopify clearing account isn't, as nothing would ever clear it (SPC45).
+    return draft.paymentMethods
+      .filter((entry) => entry.method !== SHOPIFY_PAYMENTS && entry.choice !== "" && entry.choice === draft.clearingAccountCode)
+      .map((entry) => `${gatewayLabel(entry.method, entry.title)} payments can't go into money held by Shopify: only Shopify Payments payouts clear it. Choose or create its own account.`);
+  }
   const gaps: string[] = [];
   if (!draft.salesAccountCode) gaps.push("Choose the sales account.");
   if (draft.separateShipping && !draft.shippingAccountCode) gaps.push("Choose the shipping account, or record shipping in sales.");
@@ -250,6 +317,14 @@ export function draftToSettings(draft: PostingDraft, platform: SalesPlatform, tu
           })),
         }
       : {
+          // Shopify's gateways (SPC42): Shopify Payments always goes to the clearing account, so it isn't sent.
+          paymentMethods: draft.paymentMethods
+            .filter((entry) => entry.method !== SHOPIFY_PAYMENTS)
+            .map((entry) => ({
+              method: entry.method,
+              leftOwing: entry.choice === LEFT_OWING,
+              accountCode: entry.choice === LEFT_OWING || entry.choice === "" ? null : entry.choice,
+            })),
           clearingAccountCode: or(draft.clearingAccountCode),
           payoutAccountCode: or(draft.payoutAccountCode),
           feesAccountCode: or(draft.feesAccountCode),

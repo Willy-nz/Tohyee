@@ -33,8 +33,8 @@ import { writeLog } from "@/lib/sales-platforms/log";
 import type { CoverageFacts } from "@/lib/sales-platforms/coverage-status";
 import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
-import { startOfLocalDate } from "@/lib/sales-platforms/orders";
-import { savePayout } from "@/lib/sales-platforms/payout-store";
+import { SHOPIFY_PAYMENTS_GATEWAY, startOfLocalDate } from "@/lib/sales-platforms/orders";
+import { markPayoutsForRecheck, payoutsRecheckFrom, savePayout } from "@/lib/sales-platforms/payout-store";
 import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
 import { woocommerceConnector } from "@/lib/sales-platforms/woocommerce";
@@ -729,7 +729,10 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   // WooCommerce's payment methods (WC2): each method's bank account, or left owing; only methods already seen are listed.
   let paymentMethods: Array<{ method: string; account: AccountChoice | null; leftOwing: boolean }> | undefined;
   if (body.paymentMethods !== undefined) {
-    if (!connectorFor(row.platform).usesPaymentMethods) throw new ValidationError(`${shop} orders' money goes through the clearing account, so there are no payment methods to choose.`);
+    // Shopify's payment gateways (SPC42-SPC46) use the same list, keyed by the gateway.
+    if (!connectorFor(row.platform).usesPaymentMethods && row.platform !== "shopify") {
+      throw new ValidationError(`${shop} orders' money goes through the clearing account, so there are no payment methods to choose.`);
+    }
     paymentMethods = [];
     for (const [index, raw] of requireArray(body.paymentMethods, "paymentMethods", 50).entries()) {
       const entry = asRecord(raw, `Payment method ${index + 1}`);
@@ -741,6 +744,15 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
           ? null
           : await chooseAccount(tx, entry.accountCode, `paymentMethods[${index}].accountCode`, `account for ${method} payments`, bankInBase(tx.baseCurrency));
       if (leftOwing && account) throw new ValidationError(`${method} payments can go into an account or be left owing, not both.`);
+      if (row.platform === "shopify" && method === SHOPIFY_PAYMENTS_GATEWAY && (account || leftOwing)) {
+        throw new ValidationError("Shopify Payments money always goes into the clearing account, which its payouts clear.");
+      }
+      if (row.platform === "shopify" && account) {
+        const clearingNow = clearing === undefined ? row.clearing_account_id : (clearing?.id ?? null);
+        if (account.id === clearingNow) {
+          throw new ValidationError(`${method} payments can't go into the Shopify clearing account: only Shopify Payments payouts clear it. Choose ${method}'s own clearing account.`);
+        }
+      }
       paymentMethods.push({ method, account, leftOwing });
     }
   }
@@ -1523,7 +1535,7 @@ export async function syncConnection(
   now: Date = new Date(),
 ): Promise<SyncResult> {
   requireSecrets();
-  const { row, retryIds, postedPayouts, hasStats } = await withOrganisationTransaction(organisation, actor, async (tx) => {
+  const { row, retryIds, postedPayouts, hasStats, recheckFrom } = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const found = await readConnection(tx, connectionIdInput);
     assertConnected(found);
     const stats = await tx.query("select 1 from sales_platform_shop_stats where connection_id = $1 limit 1", [found.id]);
@@ -1532,6 +1544,8 @@ export async function syncConnection(
       hasStats: (stats.rowCount ?? 0) > 0,
       retryIds: posts(found) ? await ordersToRetry(tx, found.id) : [],
       postedPayouts: posts(found) && readsPayouts(found) ? await postedPayoutIds(tx, found.platform, found.store_domain) : new Set<string>(),
+      // SPC39: payouts to read again (refused before a fix, or "Try again"); the earliest one's day.
+      recheckFrom: posts(found) && readsPayouts(found) ? await payoutsRecheckFrom(tx, found.id) : null,
     };
   });
   const connector = connectorFor(row.platform);
@@ -1552,7 +1566,9 @@ export async function syncConnection(
       const startInstant = startOfLocalDate(row.start_date!);
       orders = await connector.fetchOrders(context, token, { updatedSince: iso(row.orders_synced_until), processedFrom: startInstant, retryIds, parts: orderParts(row) });
       if (readsPayouts(row)) {
-        const cursor = iso(row.payouts_synced_until);
+        const saved = iso(row.payouts_synced_until);
+        const again = recheckFrom ? startOfLocalDate(recheckFrom) : null;
+        const cursor = saved && again && Date.parse(again) < Date.parse(saved) ? again : saved;
         const issuedFrom = cursor && Date.parse(cursor) > Date.parse(startInstant) ? cursor : startInstant;
         payouts = await connector.fetchPayouts(context, token, { issuedFrom, alreadyPosted: (id) => postedPayouts.has(id) });
       }
@@ -1668,6 +1684,32 @@ export async function syncConnection(
     });
     throw error;
   }
+}
+
+/**
+ * "Try again" on the store's payouts (SPC39, admins): every paid payout not
+ * in the accounts is read from the store again, then the store is synced as
+ * "Sync now" does. A payout posted already is skipped by its record, so none
+ * is posted twice; one still refused keeps its reason in the log.
+ */
+export async function retryPayouts(
+  organisation: OrganisationRecord,
+  connectionIdInput: unknown,
+  actor: Actor,
+  now: Date = new Date(),
+): Promise<{ payoutsToReadAgain: number; result: SyncResult }> {
+  const marked = await withOrganisationTransaction(organisation, actor, async (tx) => {
+    const row = await readConnection(tx, connectionIdInput, { lock: true });
+    assertConnected(row);
+    if (!connectorFor(row.platform).hasPayouts) throw new ValidationError(`${label(row.platform)} has no payouts.`);
+    const count = await markPayoutsForRecheck(tx, row.id);
+    if (count > 0) {
+      await writeLog(tx, row.id, { source: "sync", action: "sync", message: `Reading ${count} payout${count === 1 ? "" : "s"} not in the accounts again ("Try again").` });
+    }
+    return { id: row.id, count };
+  });
+  const result = await syncConnection(organisation, marked.id, actor, now);
+  return { payoutsToReadAgain: marked.count, result };
 }
 
 let running = false;

@@ -104,6 +104,11 @@ describe("connection coverage", () => {
     expect(orders.summary).toBe("1,204 orders and 3 refunds posted since 2026-11-01; 2 orders or refunds not posted yet");
     expect(orders.reasons.map((reason) => reason.text).sort()).toEqual(["guest checkout, no contact chosen", "not paid yet"]);
     expect(coverageFor("payouts", on, f)).toMatchObject({ state: "up_to_date", summary: "Up to date: 40 payouts posted since 2026-11-01" });
+    expect(coverageFor("payouts", on, f).retry).toBeUndefined();
+    // SPC39: payouts not posted offer "Try again" (orders don't).
+    const refused = coverageFor("payouts", on, { ...f, postedPayouts: 0, outstanding: [{ recordKind: "payout", action: "failed", message: "Payout 7 has transactions of a type Tohyee doesn't post (X)" }] });
+    expect(refused).toMatchObject({ state: "failed", retry: true, reasons: [{ text: "a payout line Tohyee doesn't post", count: 1, outcome: "failed" }] });
+    expect(orders.retry).toBeUndefined();
   });
 
   it("missing scopes need setting up", () => {
@@ -138,6 +143,9 @@ describe("connection coverage", () => {
   it("names reasons in plain words and groups them", () => {
     expect(reasonFor("Shopify variant X has no SKU, so it wasn't matched")).toBe("no SKU");
     expect(reasonFor("Something new happened")).toBe("other reasons");
+    expect(reasonFor("Choose where afterpay payments go in the Shopify settings.")).toBe("payment method not chosen");
+    expect(reasonFor("Payout 7 can't be posted: no fees account is chosen.")).toBe("payout account not chosen");
+    expect(reasonFor("Payout 7 has transactions of a type Tohyee doesn't post (X)")).toBe("a payout line Tohyee doesn't post");
     expect(groupReasons([noSku(1), noSku(2), { recordKind: "order", action: "waiting", message: "#1 isn't paid yet" }])).toEqual([
       { text: "no SKU", count: 2, outcome: "skipped" },
       { text: "not paid yet", count: 1, outcome: "waiting" },

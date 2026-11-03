@@ -61,6 +61,13 @@ export function redactSecrets(text: string): string {
  * brought in. "other" when it isn't one of these; the message always says.
  */
 const REASONS: ReadonlyArray<[RegExp, string]> = [
+  // Payouts (SPC38-SPC41) and payment gateways (SPC42-SPC46), before the general ones below.
+  [/Payout \S+ can't be posted: no .* account is chosen/, "payout_account_missing"],
+  [/transfer rows come to|transfer has a fee/, "payout_transfer_mismatch"],
+  [/has transactions of a type Tohyee doesn't post|a kind Tohyee doesn't know/, "unknown_payout_transaction"],
+  [/transactions come to .* but the payout is/, "payout_doesnt_add_up"],
+  [/Choose where .* payments go|only Shopify Payments payouts clear/, "payment_method_not_mapped"],
+  [/more than one payment method|doesn't say which payment method/, "split_payment"],
   [/has no SKU/, "missing_sku"],
   [/SKU "[^"]*" can't be an item code/, "invalid_sku"],
   [/already linked to/, "already_linked"],
@@ -129,6 +136,12 @@ async function openProblems(tx: OrgTx, connectionId: string): Promise<Partial<Re
     }
   }
   return result;
+}
+
+/** Paid payouts the next sync reads again (SPC39: refused before an update, or "Try again"). */
+async function payoutsToReadAgain(tx: OrgTx, connectionId: string): Promise<number> {
+  const found = await tx.query<{ n: string }>("select count(*)::text as n from sales_platform_payouts where connection_id = $1 and recheck", [connectionId]);
+  return Number(found.rows[0].n);
 }
 
 const total = (problems: Problems | undefined) => Object.values(problems ?? {}).reduce((sum, entry) => sum + entry.count, 0);
@@ -267,7 +280,15 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
       payouts: {
         status: payoutStatus,
         ...(payoutWhy ? { why: payoutWhy } : {}),
-        ...(hasPayouts(connection) ? { ...documentCounts("payout"), notBroughtIn: total(problems.payout), problems: problems.payout ?? {}, fetchedUpTo: iso(cursors.payouts_synced_until) } : {}),
+        ...(hasPayouts(connection)
+          ? {
+              ...documentCounts("payout"),
+              notBroughtIn: total(problems.payout),
+              problems: problems.payout ?? {},
+              fetchedUpTo: iso(cursors.payouts_synced_until),
+              toReadAgain: await payoutsToReadAgain(tx, connection.id),
+            }
+          : {}),
       },
     },
     posting: {
@@ -286,15 +307,17 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
       taxRates: connection.taxCodes,
       untaxedTaxCode: connection.untaxedTaxCode,
       guestCheckouts: connection.guestContactName ? `to ${connection.guestContactName}` : "refused",
-      ...(connection.platform === "woocommerce"
-        ? {
-            paymentMethods: connection.paymentMethods.map((method) => ({
-              method: method.method,
-              title: method.title,
-              goesTo: method.leftOwing ? "left owing" : method.accountCode ?? "not chosen",
-            })),
-          }
-        : {}),
+      // WooCommerce's payment methods, or Shopify's gateways seen on orders (SPC42): shopify_payments always goes to the clearing account.
+      paymentMethods: connection.paymentMethods.map((method) => ({
+        method: method.method,
+        title: method.title,
+        goesTo:
+          connection.platform === "shopify" && method.method === "shopify_payments"
+            ? `${connection.clearingAccountCode ?? "the clearing account"} (always)`
+            : method.leftOwing
+              ? "left owing"
+              : (method.accountCode ?? "not chosen (its orders wait)"),
+      })),
     },
     scopes,
     settings: {

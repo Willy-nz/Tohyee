@@ -12267,3 +12267,55 @@ her. Where she didn't say how, these follow Xero (decision 537) and are
       title or description), "Admins connect shops" shows only to people
       who can't, and the "not tried with a real store" note is one line at
       the Turn on step (and under connected shops).
+
+### Shopify payouts from a live store, and payment gateways (4 Nov 2026, SPC38-SPC46; as Xero/A2X do, not yet reviewed)
+
+1326. **The payout's TRANSFER row is the payout (SPC38).** Shopify's
+      ShopifyPaymentsTransactionType says TRANSFER is "a payout to the bank
+      or a withdrawal into the balance". It must be exactly one row equal to
+      the payout the other way round, with no fee; it's then left out of
+      the posting and the settlement. Anything else about it refuses the
+      payout with the reason.
+1327. **Withdrawals post (SPC40).** As A2X: a negative payout is a transfer
+      from the bank account payouts arrive in into the clearing account,
+      posted before its fees and lines. Shopify's net is read as positive
+      whichever sign it comes with; the direction says which way. Matched on
+      the bank feed by its ID, or Shopify's name, the amount and the date.
+1328. **A missing account waits (SPC41).** postPayout logs and returns
+      "failed" instead of "done", so the sync's payout place stays and it's
+      tried again.
+1329. **Refused payouts are read again (SPC39, tenant migration 0222).**
+      sales_platform_payouts.recheck: set once by the migration for every
+      paid payout not in the accounts, and by "Try again"; cleared when the
+      sync reads the payout. The sync starts at the earliest flagged
+      payout's day. A payout already posted is skipped by its document and
+      its transfer's idempotency key, so none is posted twice.
+1330. **Each gateway its own account (SPC42-SPC45).** Shopify's gateway
+      (from the order's successful sales and captures) is keyed into the
+      WooCommerce payment-method list. shopify_payments always goes to the
+      clearing account. Suggested: Afterpay → "Afterpay clearing" (1020),
+      PayPal → "PayPal clearing" (1025), new bank accounts as A2X sets them
+      up; manual, bank deposit and cash on delivery → left owing (accounts
+      receivable), so the deposit on the bank feed is matched to the
+      invoice, as WooCommerce bank transfers are (WC4). A2X can also post
+      manual payments to a clearing account; left owing was chosen because
+      the bank feed then proves the money arrived. An unmapped gateway makes
+      its orders wait; another gateway can't use the Shopify clearing
+      account. An order split across gateways is refused (not supported
+      yet).
+1331. **Refunds go back where the payment went (SPC46).** From the account
+      of the order's recorded payment, not today's mapping, so older orders
+      in 1010 refund from 1010.
+1332. **"Try again" is a sync, not a status.** It flags the payouts and runs
+      the sync, admins only; the AI's status shows `toReadAgain` and new
+      reason codes (payout_transfer_mismatch, unknown_payout_transaction,
+      payout_doesnt_add_up, payout_account_missing,
+      payment_method_not_mapped, split_payment).
+1333. **Orders already posted aren't rewritten.** Orders paid by Afterpay or
+      PayPal before this went into 1010. Tohyee doesn't change posted
+      entries. To correct them, a person transfers each provider's total of
+      those orders from 1010 to its clearing account (a bank transfer, one
+      per provider, dated when the settings changed), or reconciles that
+      provider's settlements against 1010 until they're gone. A tool to list
+      those orders by gateway is a possible follow-up.
+

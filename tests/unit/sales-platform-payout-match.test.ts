@@ -205,4 +205,44 @@ describe("SPR2-SPR10: what a bank line is", () => {
     const guidance = guidePayoutLine(line("49.38", "2026-10-08", "SHOPIFY"), [shop], [payout("70001", "49.38", "2026-10-07")]);
     expect(JSON.stringify(guidance!.action)).not.toMatch(/tax/i);
   });
+
+  it("SPC40: a posted withdrawal matches the money taken from the bank; a Shopify bill doesn't", () => {
+    const withdrawal = payout("70010", "30.80", "2026-10-28", { direction: "WITHDRAWAL" });
+    expect(guidePayoutLine(line("-30.80", "2026-10-29", "SHOPIFY 70010"), [shop], [withdrawal])).toMatchObject({
+      status: "matched",
+      evidence: "payout_id",
+      action: { kind: "match", journalLineIds: ["jl-70010"] },
+    });
+    expect(guidePayoutLine(line("-30.80", "2026-10-29", "SHOPIFY PAYMENTS"), [shop], [withdrawal])).toMatchObject({ status: "matched", evidence: "platform_amount_date" });
+    expect(guidePayoutLine(line("-31.00", "2026-10-29", "SHOPIFY 70010"), [shop], [withdrawal])).toMatchObject({ status: "unmatched", action: null });
+    expect(guidePayoutLine(line("-39.00", "2026-10-29", "SHOPIFY* SUBSCRIPTION"), [shop], [withdrawal])).toBeNull();
+    // Not posted yet: says why.
+    expect(guidePayoutLine(line("-30.80", "2026-10-29", "SHOPIFY 70010"), [shop], [{ ...withdrawal, posted: null, refusal: "Payout 70010 waits." }])).toMatchObject({ status: "payout_not_posted" });
+  });
+});
+
+describe("SPC38 and SPC40: the payout's own transfer and withdrawals in the settlement", () => {
+  it("the TRANSFER row isn't part of the settlement, so it still adds up", () => {
+    const settlement = summariseSettlement(
+      [
+        { type: "CHARGE", amount: "46.00", fee: "1.38", net: "44.62", orderName: "#1001" },
+        { type: "TRANSFER", amount: "-44.62", fee: "0.00", net: "-44.62", orderName: null },
+      ],
+      "44.62",
+    );
+    expect(settlement).toMatchObject({ grossSales: "46.00", fees: "-1.38", other: "0.00", net: "44.62", transactionCount: 1, addsUp: true });
+  });
+
+  it("a withdrawal's settlement is negative and adds up", () => {
+    const settlement = summariseSettlement(
+      [
+        { type: "REFUND", amount: "-50.00", fee: "0.00", net: "-50.00", orderName: "#1020" },
+        { type: "CHARGE", amount: "20.00", fee: "0.80", net: "19.20", orderName: "#1021" },
+        { type: "TRANSFER", amount: "30.80", fee: "0.00", net: "30.80", orderName: null },
+      ],
+      "30.80",
+      "WITHDRAWAL",
+    );
+    expect(settlement).toMatchObject({ grossSales: "20.00", refunds: "-50.00", fees: "-0.80", net: "-30.80", addsUp: true });
+  });
 });
