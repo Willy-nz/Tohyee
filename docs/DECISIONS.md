@@ -12516,3 +12516,61 @@ reviewed**.
       months, because budgets are monthly. Reports not yet moved to the
       toolbar (aged receivables and others outside Reports) get the same
       Export menu.
+
+### Report filters, comparisons and drill-down like Xero's (Jess, 4 Nov 2026; decisions 1353-1358)
+
+The second part of the review of Jess's request for reports like Xero's.
+As Xero does, **not yet reviewed** (decision 537).
+
+1353. **Compare with earlier periods.** The standard profit and loss and
+      balance sheet have "Compare with" (none, or 1 to 11 previous periods)
+      and "Each period" (month, quarter or year), as Xero's. The chosen
+      dates come first, then each earlier period, newest first (RX1-RX3).
+      Whole months, quarters and years reuse the custom reports' columns
+      (`periodColumns`, so labels match CR2-CR6); other dates move back by
+      the period with the same days (1-20 Jun, then 1-20 May), and a month
+      end stays a month end. The profit and loss can add a **Total** (the
+      period columns added up) and a **Year to date** (start of the
+      financial year to the end date); a balance sheet refuses both. Each
+      column is the standard report run for its own dates, so it always
+      equals the one-column report (CR9). Compare and "Columns by"
+      (tracking columns, TC7) are one or the other, as in Xero.
+1354. **% of trading income.** A tick box adds a % column beside each
+      amount column: the amount over that column's total trading income,
+      times 100, to 1 decimal place, halves away from zero, in decimal maths
+      (RX4). With no trading income the % is blank, never an error or 0.0%;
+      a blank amount has a blank %. Worked example written first, as asked.
+1355. **Tracking filter on every financial report.** The profit and loss,
+      balance sheet, trial balance and budget vs actual take a tracking
+      filter: a value (and the values under it, as TC8) or "Not set" for
+      lines with no value in the category (RX5). Tracking columns on the
+      profit and loss (TC7) can be filtered by another category. A balance
+      sheet only balances when both sides of each journal are tagged; when
+      it doesn't, it says so rather than hiding it. Budget vs actual: a
+      budget for a tracking value keeps comparing with that value only (a
+      different filter is refused); for a budget without one, a filter
+      limits the actuals and the report says the budget is the whole budget
+      (RX6). Amounts drill down with the filter.
+1356. **Drill-down from custom reports.** In a custom or published custom
+      report, a period or year to date amount of an account opens its
+      transactions for the column's dates (a balance sheet column from the
+      start of that column's financial year) and the report's tracking
+      filter; a group's total opens all its accounts together
+      (`accountIds`, Account transactions' "The group's N accounts").
+      Differences, %, budgets and formula rows don't link. A published
+      report's figures stay frozen; its links open today's ledger, as
+      Xero's do. Published reports from before this keep no account ids,
+      so they don't link.
+1357. **Account transactions for income and expense accounts open at the
+      financial year's start** (ATX6), the trial balance's rule (TB2):
+      their opening balance is this financial year's postings before the
+      start date, not earlier years' profit (which is in retained
+      earnings). Balance sheet accounts are unchanged. A range that crosses
+      a year end runs on without restarting, and the report says so. Worked
+      example first, as asked.
+1358. **The AI gets the same options.** `profit_and_loss` takes compare,
+      compareBy, total, yearToDate, percentOfIncome, splitBy and a tracking
+      filter; `balance_sheet` compare, compareBy and a tracking filter;
+      `trial_balance` a tracking filter. A new read tool `budget_vs_actual`
+      (any key) runs budget vs actual with the screen's options. All read
+      through the screens' report functions, in a read-only transaction.

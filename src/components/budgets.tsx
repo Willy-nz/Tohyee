@@ -13,6 +13,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
+import { parseTrackingChoice, TrackingFilterField, trackingQuery } from "@/components/reports/statement-table";
 import { ReportFrame, type ReportDates, ReportToolbar, StatementHeading, useYearEndMonth } from "@/components/reports/report-frame";
 import { monthEndOf, monthStartOf } from "@/lib/financial-year";
 import { statementPeriod } from "@/lib/reports/report-dates";
@@ -524,11 +525,16 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
   // Budgets are by month: the toolbar's dates are widened to whole months.
   const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: monthEndOf(todayInBrowser()) }));
   const chosen = budgetId ?? budgets.data?.budgets[0]?.id ?? null;
+  const trackingSetup = useTracking(organisationId).data;
+  const [tracking, setTracking] = useState("");
+  const [draftTracking, setDraftTracking] = useState("");
+  const draftChosen = budgets.data?.budgets.find((budget) => budget.id === (draftBudget ?? chosen));
   const report = useApiData<BudgetVsActual>(chosen ? "/api/reports/budget-vs-actual" : null, {
     organisationId,
     budgetId: chosen,
     from: dates.from ? dates.from.slice(0, 7) : null,
     to: dates.to.slice(0, 7),
+    ...trackingQuery(parseTrackingChoice(tracking)),
   });
   const data = report.data;
   const actualHref = (accountId: string) =>
@@ -537,12 +543,19 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
           accountId,
           from: data.from,
           to: data.to,
-          trackingCategoryId: data.budget.trackingCategoryId,
-          trackingValueId: data.budget.trackingValueId,
+          trackingCategoryId: data.budget.trackingCategoryId ?? data.filter?.categoryId,
+          trackingValueId: data.budget.trackingValueId ?? (data.filter?.valueId === "unassigned" ? null : data.filter?.valueId),
+          trackingUnassigned: data.filter?.valueId === "unassigned",
         })
       : "";
   const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
-  const lines = data ? [`Budget: ${data.budget.name}`, ...(data.budget.trackingLabel ? [`Only lines tagged ${data.budget.trackingLabel}`] : [])] : [];
+  const lines = data
+    ? [
+        `Budget: ${data.budget.name}`,
+        ...(data.budget.trackingLabel ? [`Only lines tagged ${data.budget.trackingLabel}`] : []),
+        ...(data.filter ? [`Actuals only for lines tagged ${data.filter.label}; the budget is the whole budget`] : []),
+      ]
+    : [];
   return (
     <ReportFrame
       label="Budget vs actual"
@@ -556,8 +569,10 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
           onUpdate={(next) => {
             setDates({ from: next.from ? monthStartOf(next.from) : null, to: monthEndOf(next.to) });
             setBudgetId(draftBudget);
+            setTracking(draftChosen?.trackingValueId ? "" : draftTracking);
           }}
           filters={
+            <>
             <Field label="Budget">
               <select value={draftBudget ?? chosen ?? ""} onChange={(event) => setDraftBudget(event.target.value)}>
                 {(budgets.data?.budgets ?? []).map((budget) => (
@@ -568,6 +583,8 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
                 ))}
               </select>
             </Field>
+            {draftChosen?.trackingValueId ? null : <TrackingFilterField setup={trackingSetup} value={draftTracking} onChange={setDraftTracking} />}
+            </>
           }
           info={<>Budgets are by month, so the dates cover whole months. Variance is actual less budget, so on costs a positive variance is over budget.</>}
           more={[{ label: "Print", onSelect: () => window.print() }, ...(data ? [{ label: "Open the budget", href: `/operations/budgets/${data.budget.id}` }] : [])]}

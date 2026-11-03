@@ -5,6 +5,7 @@ import { FARM_READ_TOOLS, FARM_WRITE_TOOLS } from "@/lib/ai/farm-tools";
 import { FULL_READ_TOOLS, FULL_WRITE_TOOLS } from "@/lib/ai/full-tools";
 import { MIXED_USE_READ_TOOLS, MIXED_USE_WRITE_TOOLS } from "@/lib/ai/mixed-use-tools";
 import { PHOTO_READ_TOOLS, PHOTO_WRITE_TOOLS } from "@/lib/ai/photo-tools";
+import { REPORT_READ_TOOLS } from "@/lib/ai/report-tools";
 import { SALES_PLATFORM_READ_TOOLS } from "@/lib/ai/sales-platform-tools";
 import { TAX_READ_TOOLS, TAX_WRITE_TOOLS } from "@/lib/ai/tax-tools";
 import { type AiTool, READ_TOOLS } from "@/lib/ai/tools";
@@ -13,6 +14,7 @@ import { WRITE_TOOLS } from "@/lib/ai/write-tools";
 /** Every tool an AI key can be given, read tools first (decisions 342, 346, 488, 489). */
 export const AI_TOOLS: readonly AiTool[] = [
   ...READ_TOOLS,
+  ...REPORT_READ_TOOLS,
   ...BANK_READ_TOOLS,
   ...MIXED_USE_READ_TOOLS,
   ...BANK_PROPOSAL_READ_TOOLS,

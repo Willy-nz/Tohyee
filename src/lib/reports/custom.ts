@@ -276,6 +276,13 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
     budgetAmounts = await budgetTotals(tx, setting.budgetId, first.from!, first.to!);
     amountColumns.push({ key: "bud", kind: "budget", label: `Budget (${found.rows[0]?.name ?? `#${setting.budgetId}`})`, from: first.from, to: first.to });
   }
+  // Period and year to date amounts open their accounts' transactions: a profit
+  // and loss from the column's start, a balance sheet from its financial year's (decision 1356).
+  for (const column of amountColumns) {
+    if (column.kind === "period" || column.kind === "year_to_date") {
+      column.drillFrom = base === "balance_sheet" ? financialYearStart(column.to!, yearEndMonth) : column.from;
+    }
+  }
   const columns: ReportColumn[] = [...amountColumns.filter((c) => c.kind === "period")];
   if (setting.difference) columns.push({ key: "diff", kind: "difference", label: "Difference", from: null, to: null });
   if (setting.percent) columns.push({ key: "pct", kind: "percent", label: "%", from: null, to: null });
@@ -371,7 +378,7 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
           inGroups.add(account.id);
           if (!hasAmount(account.id)) continue;
           groupsOfAccount.set(account.id, [...(groupsOfAccount.get(account.id) ?? []), row.label]);
-          lines.push({ code: account.code, name: account.name, values: withDerived(accountValues(account)) });
+          lines.push({ code: account.code, name: account.name, values: withDerived(accountValues(account)), accountId: String(account.id) });
         }
       }
       return {
@@ -381,6 +388,7 @@ export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, 
         values: withDerived(valuesOf(row)),
         showAccounts: row.kind === "group" && row.showAccounts,
         lines,
+        ...(row.kind === "group" ? { accountIds: lines.map((line) => line.accountId!) } : {}),
       };
     });
     for (const [accountId, groups] of groupsOfAccount) {
