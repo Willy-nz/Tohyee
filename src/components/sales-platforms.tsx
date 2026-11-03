@@ -21,7 +21,8 @@ import { integrationsSummary } from "@/lib/sales-platforms/summary";
 import { useConfirm } from "@/components/confirm-dialog";
 import { CustomerMatches } from "@/components/customer-matches";
 import { ShopifyPartsList, ShopifyScopesCard, StockSection } from "@/components/sales-platform-extras";
-import { type SetupStep, StoreSetup } from "@/components/store-setup";
+import { CustomerChoiceField, type SetupStep, SkuNote, StoreSetup } from "@/components/store-setup";
+import { type CustomerChoice, CUSTOMER_CHOICES, customerChoiceOf, customerChoiceSettings } from "@/lib/sales-platforms/setup";
 import styles from "./store-setup.module.css";
 
 /**
@@ -348,10 +349,16 @@ export function ConnectionCard({
       const answer = await api<{ payoutsToReadAgain: number; result: SyncResult }>(`${path}/payouts/retry`, { method: "POST", body: { organisationId } });
       return `Read ${answer.payoutsToReadAgain} payout${answer.payoutsToReadAgain === 1 ? "" : "s"} again. ${describeSyncResult(answer.result)}`;
     });
-  const choose = (change: { syncCustomers?: boolean; syncProducts?: boolean }) =>
+  const choose = (change: { syncProducts: boolean }) =>
     run(async () => {
       await api(path, { method: "PATCH", body: { organisationId, ...change } });
-      return `Saved: ${change.syncCustomers !== undefined ? `customers ${change.syncCustomers ? "will" : "won't"} come in` : `products ${change.syncProducts ? "will" : "won't"} come in`} from the next sync.`;
+      return `Saved: products ${change.syncProducts ? "will" : "won't"} come in from the next sync.`;
+    });
+  const chooseCustomers = (choice: CustomerChoice) =>
+    run(async () => {
+      await api(path, { method: "PATCH", body: { organisationId, ...customerChoiceSettings(choice) } });
+      const label = CUSTOMER_CHOICES.find((entry) => entry.value === choice)!.label;
+      return `Saved: ${label.charAt(0).toLowerCase()}${label.slice(1)}, from the next sync. Contacts already brought in stay.`;
     });
   const turnOff = async () => {
     if (!(await confirm(`Turn posting off for ${connection.storeName ?? connection.storeDomain}? What's already posted stays. New ${shop} sales won't come into the accounts until it's on again.`))) return;
@@ -442,6 +449,15 @@ export function ConnectionCard({
             <p className={ui.muted}>Working out what&apos;s been brought in…</p>
           )
         ) : null}
+        {connected && isAdmin && connection.platform === "shopify" && connection.syncCustomers && connection.customerScope === "all" ? (
+          <Notice tone="info">
+            Every {shop} customer comes in as a contact, including newsletter sign-ups. You can bring in only customers who have ordered instead; contacts already brought in
+            stay.{" "}
+            <Button variant="secondary" disabled={busy} onClick={() => void chooseCustomers("buyers")}>
+              Only customers who have ordered
+            </Button>
+          </Notice>
+        ) : null}
         {connected ? (
           <CustomerMatches
             organisationId={organisationId}
@@ -477,17 +493,20 @@ export function ConnectionCard({
               {connection.platform === "shopify" ? (
                 <div style={{ display: "grid", gap: 6 }}>
                   <strong>What comes in</strong>
-                  <span className={ui.muted}>Each box saves as soon as you tick it.</span>
+                  <span className={ui.muted}>Each choice saves as soon as you make it.</span>
+                  <CustomerChoiceField
+                    name={`customers-${connection.id}`}
+                    value={customerChoiceOf(connection)}
+                    disabled={!isAdmin || busy}
+                    onChange={(choice) => void chooseCustomers(choice)}
+                  />
                   <div className={ui.actions}>
-                    <label className={ui.checkbox}>
-                      <input type="checkbox" checked={connection.syncCustomers} disabled={!isAdmin || busy} onChange={(event) => void choose({ syncCustomers: event.target.checked })} />{" "}
-                      Customers, as contacts
-                    </label>
                     <label className={ui.checkbox}>
                       <input type="checkbox" checked={connection.syncProducts} disabled={!isAdmin || busy} onChange={(event) => void choose({ syncProducts: event.target.checked })} />{" "}
                       Products, as items
                     </label>
                   </div>
+                  <SkuNote connection={connection} />
                   {connection.pricesIncludeTax ? (
                     <span className={ui.muted}>This store&apos;s prices include tax, so they aren&apos;t copied to items (Tohyee&apos;s item prices exclude GST).</span>
                   ) : null}

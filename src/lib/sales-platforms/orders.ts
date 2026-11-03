@@ -555,3 +555,15 @@ export function planPayout(payout: PlatformPayout, baseCurrency: string): Payout
   };
   return { ok: true, date: localDate(payout.issuedAt), net: money(net), direction: withdrawal ? "withdrawal" : "deposit", charges, receipts, reserveHeld: reserve("RESERVED_FUNDS"), reserveReleased: reserve("RESERVED_FUNDS_REVERSAL") };
 }
+
+/** Orders by when they were placed (processed, else created), then by number, so the first sync numbers them in date order (decision 1341). */
+export function oldestFirst<T extends { processedAt: string; name: string; externalId: string }>(orders: readonly T[]): T[] {
+  const number = (order: T) => Number(order.name.match(/\d+/)?.[0] ?? Number.NaN);
+  return [...orders].sort((a, b) => {
+    const byDate = Date.parse(a.processedAt) - Date.parse(b.processedAt);
+    if (byDate !== 0) return byDate;
+    const byNumber = number(a) - number(b);
+    if (!Number.isNaN(byNumber) && byNumber !== 0) return byNumber;
+    return a.externalId.localeCompare(b.externalId, "en", { numeric: true });
+  });
+}

@@ -195,8 +195,39 @@ function later(a: string | null, b: string | null): string | null {
   return Date.parse(a) >= Date.parse(b) ? a : b;
 }
 
+/** First and last name as typed, with the spaces around and between them tidied (decision 1336: nothing else is changed). */
 function joinName(first: unknown, last: unknown): string | null {
-  return text([text(first), text(last)].filter(Boolean).join(" "));
+  return text([text(first), text(last)].filter(Boolean).join(" ").replace(/\s+/g, " "));
+}
+
+/** A customer's name, or their email or phone when the store has no name (marked, decision 1336). */
+function customerName(
+  own: string | null,
+  email: string | null,
+  phone: string | null,
+  displayName: string | null = null,
+): Pick<PlatformCustomer, "name" | "nameIsFallback"> {
+  if (own) return { name: own, nameIsFallback: false };
+  // Shopify's display name is the email or phone when there's no name.
+  if (displayName && displayName !== email && displayName !== phone && !displayName.includes("@") && !/^[+\d\s().-]+$/.test(displayName)) return { name: displayName, nameIsFallback: false };
+  const fallback = email ?? phone ?? displayName;
+  return { name: fallback, nameIsFallback: fallback !== null };
+}
+
+/** Shopify's customer tags: a list in the Admin GraphQL API, a comma-separated string in webhooks. */
+function tagsOf(value: unknown): string[] {
+  const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  return list.flatMap((tag) => text(tag) ?? []);
+}
+
+/** The name on an order's billing address, else its shipping address (decision 1336). */
+function addressName(...addresses: unknown[]): string | null {
+  for (const address of addresses) {
+    const a = record(address);
+    const name = joinName(a.firstName, a.lastName) ?? text(text(a.name)?.replace(/\s+/g, " "));
+    if (name) return name;
+  }
+  return null;
 }
 
 /** A customer from the Admin GraphQL API. `email` and `phone` are deprecated there, so the default ones are read. */
@@ -206,11 +237,12 @@ export function shopifyCustomerFromGraphql(node: unknown): PlatformCustomer {
   const phone = text(record(n.defaultPhoneNumber).phoneNumber);
   return {
     externalId: shopifyId(n.id, "customer"),
-    name: joinName(n.firstName, n.lastName) ?? text(n.displayName) ?? email ?? phone,
+    ...customerName(joinName(n.firstName, n.lastName), email, phone, text(text(n.displayName)?.replace(/\s+/g, " "))),
     email,
     phone,
     country: countryCode(record(n.defaultAddress).countryCodeV2),
     updatedAt: timestamp(n.updatedAt),
+    tags: tagsOf(n.tags),
   };
 }
 
@@ -227,11 +259,12 @@ export function shopifyCustomerFromWebhook(body: unknown): PlatformCustomer {
   const phone = text(b.phone) ?? text(record(b.default_phone_number).phone_number);
   return {
     externalId: shopifyId(b.id, "customer"),
-    name: joinName(b.first_name, b.last_name) ?? email ?? phone,
+    ...customerName(joinName(b.first_name, b.last_name), email, phone),
     email,
     phone,
     country: countryCode(record(b.default_address).country_code),
     updatedAt: timestamp(b.updated_at),
+    tags: tagsOf(b.tags),
   };
 }
 
@@ -333,6 +366,19 @@ function refund(raw: Record<string, unknown>): PlatformRefund {
 }
 
 /**
+ * An order's customer. When the store has no name for them, the name on
+ * the order's billing (else shipping) address is used before their email
+ * (decision 1336).
+ */
+function orderCustomer(n: Record<string, unknown>): PlatformCustomer | null {
+  if (!n.customer || typeof n.customer !== "object") return null;
+  const customer = shopifyCustomerFromGraphql(n.customer);
+  if (!customer.nameIsFallback && customer.name) return customer;
+  const name = addressName(n.billingAddress, n.shippingAddress);
+  return name ? { ...customer, name, nameIsFallback: false } : customer;
+}
+
+/**
  * An order from the Admin GraphQL API (Order, LineItem, ShippingLine,
  * OrderTransaction, Refund: https://shopify.dev/docs/api/admin-graphql/2026-10/objects/Order).
  */
@@ -365,7 +411,7 @@ export function shopifyOrderFromGraphql(node: unknown): PlatformOrder {
     presentmentCurrency: text(n.presentmentCurrencyCode),
     financialStatus: text(n.displayFinancialStatus),
     total: amountOf(n.totalPriceSet),
-    customer: n.customer && typeof n.customer === "object" ? shopifyCustomerFromGraphql(n.customer) : null,
+    customer: orderCustomer(n),
     billingCountry: countryCode(record(n.billingAddress).countryCodeV2),
     lines: nodesOf(lineItems).map((line) => ({
       externalId: shopifyId(line.id, "order line"),
@@ -536,7 +582,7 @@ const SHOP_QUERY = `query TohyeeShop {
   currentAppInstallation { accessScopes { handle } }
 }`;
 
-const CUSTOMER_FIELDS = `id displayName firstName lastName updatedAt
+const CUSTOMER_FIELDS = `id displayName firstName lastName updatedAt tags
       defaultEmailAddress { emailAddress }
       defaultPhoneNumber { phoneNumber }
       defaultAddress { countryCodeV2 }`;
@@ -582,7 +628,8 @@ function orderQuery(parts: OrderParts): string {
     id name createdAt processedAt updatedAt cancelledAt test taxesIncluded currencyCode presentmentCurrencyCode displayFinancialStatus
     totalPriceSet { ${MONEY} }
     customer { ${CUSTOMER_FIELDS} }
-    billingAddress { countryCodeV2 }
+    billingAddress { countryCodeV2 firstName lastName name }
+    shippingAddress { firstName lastName name }
     lineItems(first: ${LINES_PER_ORDER}) {
       nodes {
         id name sku quantity isGiftCard

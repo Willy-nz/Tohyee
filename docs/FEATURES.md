@@ -1611,7 +1611,7 @@ that something happened.
   contact with the same email (ignoring case); variants become non-stock
   items, linked to an existing item with the SKU as its code. Unclear ones
   are skipped with the reason (two contacts with the email, a contact with
-  the name but another email, no SKU); a same-name customer waits under
+  the name but another email); a same-name customer waits under
   "Customers to check" (#539). Shopify's changes are copied unless
   someone changed that value in Tohyee, which is kept and logged. Prices
   are copied only from a store in the base currency whose prices exclude
@@ -1720,6 +1720,23 @@ that something happened.
   name that tells them apart, e.g. "Alex Example (Shopify)", which they
   can change). The log and audit trail record who decided; later syncs
   treat the customer as linked, and waiting orders come in.
+- **Shopify import fixes from the first live sync** (decisions 1334-1341,
+  SPC38-SPC42, follows Jess's issue report, not yet reviewed). Customers
+  can come in as **only customers who have ordered** (a contact is added
+  when their first order is posted; the default for new connections,
+  offered on existing ones without removing contacts already brought in),
+  **all customers** (test customers, tagged "test" or at example.com, are
+  left out) or not kept up to date. A customer with no name is named from
+  the order's billing, then shipping, address before their email. Names
+  are kept as typed (only spaces tidied). A clash on a single first name,
+  or an email as the name, isn't treated as maybe the same person: the
+  buyer gets their own contact ("Kiri (kiri@…)") and the order posts;
+  full-name clashes still wait under "Customers to check", and customers
+  left waiting under the old rule are looked at again at the next sync.
+  A variant without a SKU comes in as an item coded from its Shopify ID
+  (e.g. SHOPIFY-44012345), linked by that ID, and takes a SKU added later
+  as its code; the setup warns when many variants have none. Orders are
+  posted oldest first, so a first sync numbers invoices in date order.
 - **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):

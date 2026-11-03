@@ -35,6 +35,14 @@ export type PaymentMethodMapping = {
 
 export type ConnectionStatus = "active" | "paused" | "disconnected";
 
+/**
+ * Which store customers become contacts (decision 1334): every customer,
+ * or only customers who have ordered (a contact is added when their first
+ * order is posted). New connections default to "buyers".
+ */
+export const CUSTOMER_SCOPES = ["buyers", "all"] as const;
+export type CustomerScope = (typeof CUSTOMER_SCOPES)[number];
+
 export type SalesPlatformConnection = {
   id: string;
   platform: SalesPlatform;
@@ -44,7 +52,11 @@ export type SalesPlatformConnection = {
   pricesIncludeTax: boolean | null;
   authMethod: string;
   syncCustomers: boolean;
+  /** With syncCustomers on: all customers, or only those who have ordered (decision 1334). */
+  customerScope: CustomerScope;
   syncProducts: boolean;
+  /** The store's variants linked to items, and how many of them have no SKU in the store (decision 1337). */
+  productVariants: { linked: number; withoutSku: number };
   status: ConnectionStatus;
   lastSyncAt: string | null;
   lastError: string | null;
