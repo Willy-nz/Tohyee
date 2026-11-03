@@ -383,8 +383,8 @@ describeWithDatabase("Personal and mixed-use accounts (#545, MU1-MU14)", () => {
       });
       expect((done.line as Json).review).toMatchObject({ decision: "business", createdVia: expect.stringContaining("full") });
       await fuel(personLine.id, "20.00");
-      await expect(call(tokens.full, "undo_mixed_use_review", { lineId: personLine.id })).rejects.toThrow(/reviewed by a person/);
-      const undone = await call(tokens.full, "undo_mixed_use_review", { lineId: aiLine.id });
+      await expect(call(tokens.full, "unreview_mixed_use_line", { lineId: personLine.id })).rejects.toThrow(/reviewed by a person/);
+      const undone = await call(tokens.full, "unreview_mixed_use_line", { lineId: aiLine.id });
       expect((undone.line as Json).state).toBe("to_review");
 
       // A batch of reviews, readable as a bank batch.

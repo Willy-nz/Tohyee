@@ -114,7 +114,7 @@ export const MIXED_USE_WRITE_TOOLS: readonly AiTool[] = [
     },
   },
   {
-    name: "undo_mixed_use_review",
+    name: "unreview_mixed_use_line",
     title: "Undo your own review",
     level: "full",
     description:
