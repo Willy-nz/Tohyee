@@ -1,6 +1,7 @@
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
-import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { getGstRegistration } from "@/lib/tax/registration";
+import { storeGstSetup } from "@/lib/sales-platforms/setup";
 import { listConnections } from "@/lib/sales-platforms/service";
 import {
   ORDER_SCOPE,
@@ -322,9 +323,13 @@ export async function salesPlatformDiagnostics(
     ? all.filter((connection) => connection.id === connectionId)
     : all.filter((connection) => options.includeDisconnected || connection.status !== "disconnected");
   if (connectionId && chosen.length === 0) throw new ValidationError("That sales platform connection wasn't found.");
-  const { gstRegistered } = await getOrganisationSettings(tx);
+  // #546 (GSR6): GST codes are only needed for a confirmed registration covering the connection's start date on.
+  const registration = await getGstRegistration(tx);
+  const today = now.toISOString().slice(0, 10);
   const connections = [];
-  for (const connection of chosen) connections.push(await connectionReport(tx, connection, gstRegistered, now));
+  for (const connection of chosen) {
+    connections.push(await connectionReport(tx, connection, storeGstSetup(registration, connection.startDate ?? today, today) === "registered", now));
+  }
   return {
     connections,
     ...(connections.length === 0
