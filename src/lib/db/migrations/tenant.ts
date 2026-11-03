@@ -18657,8 +18657,14 @@ end;
 $$;
 create trigger batch_actions_guard before update or delete on batch_actions
   for each row execute function tohyee_guard_batch_action();
+create function tohyee_forbid_batch_delete() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'batches can''t be deleted' using errcode = 'P0001';
+end;
+$$;
 create trigger batches_no_delete before delete on batches
-  for each row execute function toeyee_forbid_mutation();
+  for each row execute function tohyee_forbid_batch_delete();
 `,
   },
 ];
