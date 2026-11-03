@@ -20,7 +20,8 @@ import styles from "./farm-imagery.module.css";
  */
 
 /** Where the key is pasted: the Settings card. */
-export const AERIAL_PHOTOS_SETTINGS = "/operations/settings#aerial-photos";
+/** Aerial photo setup lives on the farm Map (decision 1324); the old Settings address redirects here. */
+export const AERIAL_PHOTOS_SETTINGS = "/operations/farm/map?aerial=1#aerial-photos";
 
 /** The organisation's farming settings (the key and when it was saved). */
 export function useFarmingSettings(organisationId: string, enabled = true) {
@@ -196,10 +197,21 @@ export function AerialPhotosCard({ organisationId, settings, onSaved }: { organi
   );
 }
 
-/** The Settings page's card, shown when Farming is on. */
-export function AerialPhotosSettings({ organisationId }: { organisationId: string }) {
-  const settings = useFarmingSettings(organisationId);
-  if (!settings.data?.settings.enabled) return null;
+/**
+ * The aerial photos card on the farm Map, for owners and admins (decision
+ * 1324), opened by its links (?aerial=1): "Add aerial photos", the key
+ * reminders, and All settings.
+ */
+export function AerialPhotosSettings({ organisationId, open = false }: { organisationId: string; open?: boolean }) {
+  const { can } = useWorkspace();
+  const admin = can("admin") && open;
+  const settings = useFarmingSettings(organisationId, admin);
+  const ready = Boolean(settings.data?.settings.enabled);
+  // The card loads after the page, so its #aerial-photos anchor is scrolled to once it's there.
+  useEffect(() => {
+    if (ready) document.getElementById("aerial-photos")?.scrollIntoView({ block: "start" });
+  }, [ready]);
+  if (!admin || !settings.data?.settings.enabled) return null;
   return <AerialPhotosCard organisationId={organisationId} settings={settings.data.settings} onSaved={() => settings.reload()} />;
 }
 
@@ -242,7 +254,7 @@ export function AddAerialPhotos() {
       <Link href={AERIAL_PHOTOS_SETTINGS}>Add aerial photos (free, 1 minute)</Link>
     </p>
   ) : (
-    <p className={`${styles.note} ${ui.muted}`}>Aerial photos (free, 1 minute) can be added by an owner or admin in Settings.</p>
+    <p className={`${styles.note} ${ui.muted}`}>An owner or admin can add aerial photos (free, 1 minute) on the Map.</p>
   );
 }
 
@@ -259,7 +271,7 @@ export function AerialPhotosFailed({ all, online }: { all: boolean; online: bool
           <button type="button" className={styles.linkish} aria-expanded={open} onClick={() => setOpen(!open)}>
             {open ? "Hide the steps" : "Get a new key (1 minute)"}
           </button>
-          {open ? <KeySteps pasteHere={<Link href={AERIAL_PHOTOS_SETTINGS}>Paste it in Settings, Aerial photos.</Link>} /> : null}
+          {open ? <KeySteps pasteHere={<Link href={AERIAL_PHOTOS_SETTINGS}>Paste it under Aerial photos on the Map.</Link>} /> : null}
         </>
       ) : (
         "Ask an owner or admin to get a new key: it takes a minute."

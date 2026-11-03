@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { FarmSafetyTab } from "@/components/farm-safety-tab";
 import { FarmWorkspace } from "@/components/farm-workspace";
-import { Page, PageHeader } from "@/components/ui";
+import { Page } from "@/components/ui";
 import { readSafetyLink } from "@/lib/safety/screens";
 
 /**
@@ -16,7 +16,7 @@ import { readSafetyLink } from "@/lib/safety/screens";
 function SafetyForLink() {
   const link = readSafetyLink(useSearchParams());
   return (
-    <FarmWorkspace linkedFarmId={link.farmId}>
+    <FarmWorkspace title="Safety" linkedFarmId={link.farmId}>
       {(context) => <FarmSafetyTab {...context} link={link} />}
     </FarmWorkspace>
   );
@@ -25,7 +25,6 @@ function SafetyForLink() {
 export default function FarmSafetyPage() {
   return (
     <Page>
-      <PageHeader title="Safety" />
       <Suspense fallback={null}>
         <SafetyForLink />
       </Suspense>

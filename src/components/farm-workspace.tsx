@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { InfoTip } from "@/components/info-tip";
 import { IllustratedIcon, type IllustratedIconName } from "@/components/illustrated-icon";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
@@ -16,7 +17,7 @@ import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/component
 import { PaddockMap } from "@/components/farming";
 import { PaddockPhotoDiary } from "@/components/pasture-photos";
 import { useApiData } from "@/components/hooks";
-import { Button, Card, Empty, Notice, ui } from "@/components/ui";
+import { Button, Card, Empty, Notice, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { CALENDAR_KIND_LABELS, type CalendarItem } from "@/lib/farming/calendar-shared";
 import { addDays, coverText, daysAgo, mobText, shortDate } from "@/lib/farming/farm-words";
@@ -47,44 +48,61 @@ export { FARM_TABS, type FarmTab } from "@/lib/farming/farm-nav";
 export type FarmContext = { organisationId: string; farm: Farm; farms: Farm[] };
 
 /** `linkedFarmId` (a link's `?farm=`) opens that farm, so a link to a record opens it on the right farm (decision 984). */
-export function FarmWorkspace({ linkedFarmId = null, children }: { linkedFarmId?: string | null; children: (context: FarmContext) => ReactNode }) {
-  return <RequireOrganisation>{(organisationId) => <Workspace key={`${organisationId}:${linkedFarmId ?? ""}`} organisationId={organisationId} linkedFarmId={linkedFarmId} render={children} />}</RequireOrganisation>;
+/**
+ * `title` is the page's heading: the workspace shows it with the farm picker
+ * and the offline status on the same row (decision 1325), and that row stays
+ * in view as the page scrolls.
+ */
+export function FarmWorkspace({ title, linkedFarmId = null, children }: { title: string; linkedFarmId?: string | null; children: (context: FarmContext) => ReactNode }) {
+  return (
+    <RequireOrganisation>
+      {(organisationId) => <Workspace key={`${organisationId}:${linkedFarmId ?? ""}`} title={title} organisationId={organisationId} linkedFarmId={linkedFarmId} render={children} />}
+    </RequireOrganisation>
+  );
 }
 
-function Workspace({ organisationId, linkedFarmId, render }: { organisationId: string; linkedFarmId: string | null; render: (context: FarmContext) => ReactNode }) {
+function Workspace({ title, organisationId, linkedFarmId, render }: { title: string; organisationId: string; linkedFarmId: string | null; render: (context: FarmContext) => ReactNode }) {
   const farms = useApiData<{ farms: Farm[] }>("/api/farming/farms", { organisationId });
   const { farm, stale, deciding, selectFarm } = useSelectedFarm(organisationId, farms.data?.farms ?? [], linkedFarmId);
   const active = (farms.data?.farms ?? []).filter((entry) => entry.isActive);
   return (
     <div className={styles.workspace}>
+      <div className={styles.farmBar}>
+        <PageHeader
+          title={title}
+          actions={
+            farm ? (
+              <div className={styles.farmPicker}>
+                {active.length > 1 ? (
+                  <>
+                    {/* The picker's name stays "Farm", as before (decision 1325); the farm's name is what shows. */}
+                    <span id="farm-bar-label" className={styles.hiddenLabel}>
+                      Farm
+                    </span>
+                    <select value={farm.id} aria-labelledby="farm-bar-label" onChange={(event) => selectFarm(event.target.value)}>
+                    {active.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name}
+                      </option>
+                    ))}
+                    </select>
+                  </>
+                ) : (
+                  <span className={styles.farmName}>{farm.name}</span>
+                )}
+                <FarmOfflineStatus organisationId={organisationId} farmId={farm.id} part="inline" />
+              </div>
+            ) : null
+          }
+        />
+      </div>
       {farms.error ? <Notice tone="error">{farms.error}</Notice> : null}
       {!farms.data ? <p className={ui.muted}>Loading…</p> : null}
       {farms.data && active.length === 0 ? <Empty>No farms yet. {farms.data.farms.length ? "" : "An owner or admin adds them under Farms and paddocks."}</Empty> : null}
-      {farm ? (
-        <div className={styles.farmBar}>
-          {active.length > 1 ? (
-            <>
-              <span className={styles.farmName} id="farm-bar-label">
-                Farm
-              </span>
-              <select value={farm.id} aria-labelledby="farm-bar-label" onChange={(event) => selectFarm(event.target.value)}>
-                {active.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          ) : (
-            <span className={styles.farmName}>{farm.name}</span>
-          )}
-        </div>
-      ) : farms.data && active.length ? (
-        <FarmSelector farms={active} farm={null} stale={stale} deciding={deciding} onChange={selectFarm} />
-      ) : null}
+      {!farm && farms.data && active.length ? <FarmSelector farms={active} farm={null} stale={stale} deciding={deciding} onChange={selectFarm} /> : null}
       {/* While you share your location, on every farm page (#498, decision 1128). */}
       <LocationSharingBanner organisationId={organisationId} />
-      {farm ? <FarmOfflineStatus organisationId={organisationId} farmId={farm.id} /> : null}
+      {farm ? <FarmOfflineStatus organisationId={organisationId} farmId={farm.id} part="notice" /> : null}
       {/* Keyed by farm: anything half-filled belongs to the farm it was opened on, and goes when the farm changes (decision 902). */}
       {farm ? <div key={farm.id}>{render({ organisationId, farm, farms: active })}</div> : null}
     </div>
@@ -302,7 +320,12 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
     <div className={styles.grid}>
       <Card
         title="Paddocks"
-        description="Tap a paddock for its cover, mob and recent records. Colours show what was recorded, not whether it's good or bad. Red and amber triangles and dashed outlines are hazards and no-go zones."
+        description={
+        <>
+          Tap a paddock for its cover, mob and records.{" "}
+          <InfoTip label="Map colours">Colours show what was recorded, not whether it&apos;s good or bad. Red and amber triangles and dashed outlines are hazards and no-go zones.</InfoTip>
+        </>
+      }
         actions={
           <Link className={styles.bigButton} href={`/operations/farm/tractor?farm=${farm.id}`}>
             Tractor mode

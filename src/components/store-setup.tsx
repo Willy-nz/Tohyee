@@ -433,6 +433,7 @@ export function StoreSetup({
         {stepTitle(step, platform)}
       </h3>
       {body}
+      {step === "turn_on" ? <Notice tone="warning">Not tried with a real store&apos;s orders, refunds and payouts yet: check the first sync&apos;s log.</Notice> : null}
       {gaps.length > 0 ? (
         <Notice tone="warning">
           <strong>Before you go on:</strong>

@@ -34,6 +34,54 @@
   font-size: var(--text-2xl);
 }
 
+/* Editing: the name and description are typed where they're shown (decision 1325). */
+.inPlace {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.titleInput,
+.descriptionInput {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 2px 6px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.titleInput {
+  font-size: inherit;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.descriptionInput {
+  color: var(--text-muted);
+  font-size: var(--text-md);
+}
+
+.titleInput:hover,
+.descriptionInput:hover {
+  border-color: var(--border);
+}
+
+.titleInput:focus-visible,
+.descriptionInput:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.iconButton {
+  min-width: 40px;
+  padding-inline: 10px;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
 .filterBar {
   display: flex;
   flex-wrap: wrap;

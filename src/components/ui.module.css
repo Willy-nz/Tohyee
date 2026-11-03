@@ -394,6 +394,92 @@
   text-align: center;
 }
 
+/* "⋯" menu of a screen's less-used actions (MoreMenu, decision 1321). */
+.moreMenu {
+  position: relative;
+  display: inline-flex;
+}
+
+.moreMenuButton {
+  min-width: 40px;
+  padding-inline: 10px;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.moreMenuList {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  min-width: 200px;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  padding: 4px;
+  list-style: none;
+}
+
+.moreMenuItem {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  padding: 9px 12px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.moreMenuItem:hover,
+.moreMenuItem:focus-visible {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.moreMenuItem[aria-disabled="true"] {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.moreMenuDanger {
+  color: var(--danger-text);
+}
+
+/* An invoice's or bill's totals: a right-hand column under the lines, as in Xero (decision 1321). */
+.totals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 24px;
+  width: min(100%, 360px);
+  margin: 0 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.totals dt {
+  color: var(--text-muted);
+}
+
+.totals dd {
+  margin: 0;
+  text-align: right;
+}
+
+.totals .totalsStrong {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  color: var(--text);
+  font-weight: 650;
+}
+
 /* A list page's tabs and table, straight under the page header (no card around them). */
 .listSection {
   display: grid;
@@ -426,6 +512,13 @@
 .tab:hover {
   color: var(--text);
   text-decoration: none;
+}
+
+.tabFigure {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .tabActive {
@@ -508,6 +601,64 @@
 .reportMetaTitle {
   font-size: var(--text-lg);
   font-weight: 650;
+}
+
+/*
+ * Standard reports (decision 1323): one picker, then the report's card with
+ * its dates and Export on one row. The card's title is for screen readers
+ * only (the picker already shows it), and the organisation/title/period
+ * block is the printed heading, so it only shows on paper.
+ */
+.standardReport {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.reportPicker {
+  max-width: 320px;
+}
+
+.standardReport > .card > .cardHeader .cardTitle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media screen and (min-width: 601px) {
+  .standardReport > .card:has(> .reportMeta) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .standardReport > .card:has(> .reportMeta) > * {
+    grid-column: 1 / -1;
+  }
+
+  .standardReport > .card:has(> .reportMeta) > .cardHeader {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .standardReport > .card:has(> .reportMeta) > .reportMeta {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+  }
+}
+
+@media screen {
+  .standardReport .reportMeta {
+    border: 0;
+    background: none;
+    padding: 0;
+  }
+
+  .standardReport .reportMetaText {
+    display: none;
+  }
 }
 
 .reportExport {

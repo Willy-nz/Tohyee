@@ -126,17 +126,20 @@ export function RecodeCard({
   documentId,
   lines,
   onRecoded,
+  defaultOpen = false,
 }: {
   organisationId: string;
   documentType: RecodeDocument;
   documentId: string;
   lines: RecodableLine[];
   onRecoded: () => void;
+  /** Starts with the form open (the invoice's ⋯ menu opens it straight away). */
+  defaultOpen?: boolean;
 }) {
   const { can } = useWorkspace();
   const tracking = useTracking(organisationId);
   const history = useApiData<{ recodes: Recode[] }>("/api/recodes", { organisationId, documentType, documentId });
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [message, setMessage] = useState<string | null>(null);
   const recodes = history.data?.recodes ?? [];
   if (!can("bookkeeper") && recodes.length === 0) return null;

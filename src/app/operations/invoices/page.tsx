@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
+import { useHomeSummary } from "@/components/home/home";
 import { useSalespeople } from "@/components/salespeople";
 import { InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -124,6 +125,8 @@ function Invoices({ organisationId }: { organisationId: string }) {
   const params = useSearchParams();
   // The list shown is in the address (?show=), so the menus can open "Awaiting payment".
   const filter = FILTERS.find((entry) => entry.slug === params.get("show")) ?? FILTERS[0];
+  // What customers owe, on the Awaiting payment tab (the old Sales overview's figure, decision 1325).
+  const owed = useHomeSummary(organisationId).data?.owedToYou ?? null;
   return (
     <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Invoice status">
@@ -137,6 +140,12 @@ function Invoices({ organisationId }: { organisationId: string }) {
             onClick={() => router.replace(entry.slug === "all" ? "/operations/invoices" : `/operations/invoices?show=${entry.slug}`, { scroll: false })}
           >
             {entry.label}
+            {entry.awaitingPayment && owed ? (
+              <span className={ui.tabFigure}>
+                {" "}
+                <Money value={owed.total} />
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
