@@ -272,6 +272,15 @@ that something happened.
   assets, blank zero cells, amounts that link to their transactions). PDFs
   have the same lines and say when they were produced in NZ time. On a
   phone account names wrap and the amounts stay on screen.
+  The profit and loss and balance sheet **compare** with up to 11 earlier
+  months, quarters or years, with a Total and Year to date on the profit and
+  loss and a **% of trading income** column (RX1-RX4); every financial
+  report (profit and loss, balance sheet, trial balance, budget vs actual)
+  takes a **tracking filter**, including "Not set" (RX5, RX6). Custom report
+  amounts and group totals open Account transactions; income and expense
+  accounts there open at the start of the financial year (ATX6). The
+  connected AI has the same options and a budget_vs_actual tool
+  (decisions 1353-1358, not yet reviewed).
 - **Period close** (Accounting; PC1-PC12, not yet approved by Jess), like
   NetSuite's period close checklist: each financial year and its months,
   Open or Closed; for a month, checks Tohyee works out itself (bank accounts

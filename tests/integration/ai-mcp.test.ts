@@ -245,6 +245,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_invoices",
         "profit_and_loss",
         "trial_balance",
+        "budget_vs_actual",
         "list_draft_journals",
         "get_draft_journal",
         "list_bill_inbox",
@@ -344,6 +345,16 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     const pnl = await callTool(viewerToken, "profit_and_loss", { from: "2026-04-01", to: "2026-06-30" });
     expect(pnl.data).toMatchObject({ from: "2026-04-01", to: "2026-06-30", currencyCode: "NZD", netProfit: "60.00" });
     expect((pnl.data!.revenue as Json).total).toBe("100.00");
+    // Compare and % of trading income, as on the screen (decision 1358).
+    const compared = await callTool(viewerToken, "profit_and_loss", { from: "2026-04-01", to: "2026-06-30", compare: 1, compareBy: "quarter", percentOfIncome: true });
+    expect((compared.data!.columns as Json[]).map((column) => column.label)).toEqual(["Apr - Jun 2026", "%", "Jan - Mar 2026", "%"]);
+    expect((compared.data!.rows as Json[]).find((row) => row.label === "Net profit")).toMatchObject({ values: { p0: "60.00", p0_pct: "60.0" } });
+    const sheet = await callTool(viewerToken, "balance_sheet", { asAt: "2026-06-30", compare: 1 });
+    expect((sheet.data!.columns as Json[]).map((column) => column.label)).toEqual(["30 Jun 2026", "31 May 2026"]);
+    const budgets = await callTool(viewerToken, "list_budgets");
+    const budgetId = (budgets.data!.budgets as Json[])[0].id as string;
+    const variance = await callTool(viewerToken, "budget_vs_actual", { budgetId, from: "2026-04", to: "2026-06" });
+    expect((variance.data!.revenue as Json).total).toMatchObject({ actual: "100.00", budget: "0.00" });
 
     const invoices = await callTool(viewerToken, "list_invoices", { status: "approved" });
     expect(invoices.data!.invoices).toEqual([

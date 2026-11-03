@@ -86,8 +86,8 @@ export function statementAsAt(asAt: string): string {
 }
 
 /**
- * The amount column's heading: "Oct 2026" for a whole month, "1 Jun-4 Nov
- * 2026" for other dates in one year, "1 Jun 2026-4 Nov 2027" across years,
+ * The amount column's heading: "Oct 2026" for a whole month, "1-20 Jun 2026"
+ * within a month, "1 Jun-4 Nov 2026" for other dates in one year, "1 Jun 2026-4 Nov 2027" across years,
  * and "4 Nov 2026" for an as-at report (pass the same date twice).
  */
 export function columnHeading(from: string | null, to: string): string {
@@ -95,6 +95,7 @@ export function columnHeading(from: string | null, to: string): string {
   if (!from || from === to) return `${end.day} ${SHORT_MONTHS[end.month]} ${end.year}`;
   if (from === monthStartOf(to) && to === monthEndOf(to)) return `${SHORT_MONTHS[end.month]} ${end.year}`;
   const start = parts(from);
+  if (start.year === end.year && start.month === end.month) return `${start.day}-${end.day} ${SHORT_MONTHS[end.month]} ${end.year}`;
   if (start.year === end.year) return `${start.day} ${SHORT_MONTHS[start.month]}-${end.day} ${SHORT_MONTHS[end.month]} ${end.year}`;
   return `${start.day} ${SHORT_MONTHS[start.month]} ${start.year}-${end.day} ${SHORT_MONTHS[end.month]} ${end.year}`;
 }

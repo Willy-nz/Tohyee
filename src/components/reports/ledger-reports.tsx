@@ -213,6 +213,7 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
 export function AccountTransactionsReport({
   organisationId,
   initialAccountId,
+  initialAccountIds,
   initialFrom,
   initialTo,
   initialTrackingCategoryId,
@@ -220,12 +221,16 @@ export function AccountTransactionsReport({
 }: {
   organisationId: string;
   initialAccountId?: string | null;
+  /** Several accounts, "12,15": a custom report group's total (decision 1356). */
+  initialAccountIds?: string | null;
   initialFrom?: string | null;
   initialTo?: string | null;
   initialTrackingCategoryId?: string | null;
   initialTrackingValueId?: string | null;
 }) {
-  const [accountId, setAccountId] = useState(() => (initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
+  const [accountIds] = useState(() => (initialAccountIds && /^\d+(,\d+)*$/.test(initialAccountIds) ? initialAccountIds : ""));
+  // "several" while the report shows a group's accounts; choosing another account replaces them.
+  const [accountId, setAccountId] = useState(() => (accountIds ? "several" : initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
   const [from, setFrom] = useState<string | null>(() => (initialFrom && /^\d{4}-\d{2}-\d{2}$/.test(initialFrom) ? initialFrom : null));
   const [to, setTo] = useState(() => (initialTo && /^\d{4}-\d{2}-\d{2}$/.test(initialTo) ? initialTo : todayInBrowser()));
   const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>(() => ({
@@ -245,7 +250,8 @@ export function AccountTransactionsReport({
   const unassigned = Boolean(category && filter.valueId === "unassigned");
   const report = useApiData<AccountTransactions>("/api/reports/account-transactions", {
     organisationId,
-    accountId: accountId || null,
+    accountId: accountId && accountId !== "several" ? accountId : null,
+    accountIds: accountId === "several" ? accountIds : null,
     from,
     to,
     trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
@@ -253,7 +259,7 @@ export function AccountTransactionsReport({
   });
   const data = report.data;
   const save = useSaveAsCustomReport(organisationId, "account_transactions", {
-    accountId: accountId || null,
+    accountId: accountId && accountId !== "several" ? accountId : null,
     from,
     to,
     trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
@@ -287,6 +293,7 @@ export function AccountTransactionsReport({
               <Field label="Account">
                 <select value={draft.accountId} onChange={(event) => setDraft({ ...draft, accountId: event.target.value })}>
                   <option value="">All accounts</option>
+                  {accountIds ? <option value="several">The group&apos;s {accountIds.split(",").length} accounts</option> : null}
                   {(accounts.data?.accounts ?? []).map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.code} · {account.name}
@@ -321,6 +328,12 @@ export function AccountTransactionsReport({
             </>
           }
           more={[PRINT, ...(save.item ? [save.item] : [])]}
+          info={
+            <>
+              Balance sheet accounts open with every posting before the start date. Income and expense accounts open with this financial year&apos;s postings
+              only, as on the trial balance; earlier years&apos; profit is in retained earnings.
+            </>
+          }
           exportProps={
             data
               ? {
@@ -338,6 +351,12 @@ export function AccountTransactionsReport({
     >
       {save.error ? <Notice tone="error">{save.error}</Notice> : null}
       {data ? <StatementHeading title="Account transactions" period={period} lines={lines} /> : null}
+      {data?.crossesYearEnd ? (
+        <Notice tone="info">
+          These dates cross a financial year end ({formatDate(data.financialYearStart)} starts the first year): income and expense balances run on
+          without restarting, so they won&apos;t match the trial balance at the end date.
+        </Notice>
+      ) : null}
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data && data.accounts.length === 0 ? <Empty>Nothing posted to these accounts yet.</Empty> : null}

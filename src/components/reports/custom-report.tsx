@@ -12,6 +12,7 @@ import type { Account } from "@/lib/accounts/service";
 import { ACCOUNT_TYPES, type AccountType } from "@/lib/accounts/types";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { CustomReport, CustomReportView } from "@/lib/reports/custom";
 import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import {
@@ -156,12 +157,41 @@ function periodSummary(figures: CustomReportFigures): string {
   return `${formatDate(periods[periods.length - 1].from)} to ${formatDate(newest.to)}`;
 }
 
-function Cell({ column, values }: { column: ReportColumn; values: ReportValues }) {
+type CellAccounts = { accountId?: string; accountIds?: string[] };
+
+/**
+ * An amount; a period or year to date amount of an account or a group opens
+ * their transactions for the column's dates and the report's filter
+ * (decision 1356). Differences, % and budgets don't link.
+ */
+function Cell({ column, values, accounts, filter }: { column: ReportColumn; values: ReportValues; accounts?: CellAccounts; filter?: ReportTrackingFilter | null }) {
   const value = values[column.key];
   if (column.kind === "percent") return <td className={ui.num}>{value == null ? "" : `${value}%`}</td>;
+  const linkable =
+    accounts &&
+    (accounts.accountId || (accounts.accountIds && accounts.accountIds.length > 0)) &&
+    column.to &&
+    column.drillFrom !== undefined &&
+    (column.kind === "period" || column.kind === "year_to_date") &&
+    value != null &&
+    !/^-?0*(\.0*)?$/.test(value);
   return (
     <td className={ui.num}>
-      <Money value={value ?? null} />
+      {linkable ? (
+        <Link
+          href={accountTransactionsHref({
+            ...accounts,
+            from: column.drillFrom,
+            to: column.to!,
+            trackingCategoryId: filter?.categoryId,
+            trackingValueId: filter?.valueId,
+          })}
+        >
+          <Money value={value} />
+        </Link>
+      ) : (
+        <Money value={value ?? null} />
+      )}
     </td>
   );
 }
@@ -223,7 +253,9 @@ function ReportTable({
   onChange,
   onEditRow,
   onError,
+  filter,
 }: {
+  filter?: ReportTrackingFilter | null;
   block: Extract<ComputedBlock, { kind: "table" }>;
   figures: CustomReportFigures;
   layoutBlock: Extract<ReportBlock, { kind: "table" }> | undefined;
@@ -334,7 +366,7 @@ function ReportTable({
                           {line.code} · {line.name}
                         </td>
                         {columns.map((column) => (
-                          <Cell key={column.key} column={column} values={line.values} />
+                          <Cell key={column.key} column={column} values={line.values} accounts={{ accountId: line.accountId }} filter={filter} />
                         ))}
                         {editable ? <td data-print="hide" /> : null}
                       </tr>
@@ -342,7 +374,7 @@ function ReportTable({
                     <tr className={ui.reportTotal}>
                       <td>Total {row.label.charAt(0).toLowerCase() + row.label.slice(1)}</td>
                       {columns.map((column) => (
-                        <Cell key={column.key} column={column} values={row.values} />
+                        <Cell key={column.key} column={column} values={row.values} accounts={{ accountIds: row.accountIds }} filter={filter} />
                       ))}
                       {editable ? <td data-print="hide" /> : null}
                     </tr>
@@ -353,7 +385,7 @@ function ReportTable({
                 <tr key={row.id} className={row.kind === "formula" ? ui.reportTotal : undefined}>
                   <td>{row.label}</td>
                   {columns.map((column) => (
-                    <Cell key={column.key} column={column} values={row.values} />
+                    <Cell key={column.key} column={column} values={row.values} accounts={row.kind === "group" ? { accountIds: row.accountIds } : undefined} filter={filter} />
                   ))}
                   {actions(row)}
                 </tr>
@@ -1001,6 +1033,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
                 onChange={(apply) => change(apply)}
                 onEditRow={(row, isNew) => setEditing({ kind: "row", blockId: block.id, row, isNew })}
                 onError={setError}
+                filter={report.layout.filter ?? null}
               />
             ) : (
               <NoteBlock

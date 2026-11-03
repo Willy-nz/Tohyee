@@ -20,7 +20,17 @@ import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/compo
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
+import { MAX_COMPARE_PERIODS } from "@/lib/reports/compare-columns";
+import type { PeriodLength } from "@/lib/reports/custom-layout";
 import { columnHeading, statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
+import type { MultiColumnStatement } from "@/lib/reports/statement-compare";
+import {
+  MultiColumnStatementTable,
+  parseTrackingChoice,
+  type TrackingChoice,
+  TrackingFilterField,
+  trackingQuery,
+} from "@/components/reports/statement-table";
 
 type Line = { accountId: string; code: string; name: string; amount: string };
 type Section = { key: string; label: string; lines: Line[]; total: string };
@@ -60,6 +70,7 @@ const startCustom = { label: "Start a custom report", href: "/operations/reports
 type TrialBalance = {
   asAt: string;
   financialYearStart: string;
+  filter: ReportFilter;
   previousYearsEarnings: string;
   currencyCode: string;
   rows: Array<{ accountId: string | null; code: string; name: string; debit: string; credit: string; previousYearsEarnings?: string }>;
@@ -67,10 +78,12 @@ type TrialBalance = {
   totalCredit: string;
   balanced: boolean;
 };
+type ReportFilter = { categoryId: string; valueId: string; label: string } | null;
 type ProfitAndLoss = {
   from: string;
   to: string;
   currencyCode: string;
+  filter: ReportFilter;
   revenue: Group;
   costOfSales: Group;
   grossProfit: string;
@@ -82,6 +95,7 @@ type BalanceSheet = {
   asAt: string;
   financialYearStart: string;
   currencyCode: string;
+  filter: ReportFilter;
   assets: TermGroup;
   liabilities: TermGroup;
   netAssets: string;
@@ -190,6 +204,7 @@ function SplitGroupRows({
   from,
   to,
   categoryId,
+  totalDrill,
 }: {
   title: string;
   group: SplitGroup;
@@ -198,6 +213,7 @@ function SplitGroupRows({
   from: string;
   to: string;
   categoryId: string;
+  totalDrill: Pick<Drilldown, "trackingCategoryId" | "trackingValueId" | "trackingUnassigned">;
 }) {
   const span = columns.length + 1;
   if (group.sections.length === 0) return null;
@@ -234,7 +250,7 @@ function SplitGroupRows({
                       }}
                     />
                   ) : column.key === "total" ? (
-                    <AccountAmount accountId={line.accountId} value={line.amounts[column.key]} drilldown={{ from, to }} />
+                    <AccountAmount accountId={line.accountId} value={line.amounts[column.key]} drilldown={{ from, to, ...totalDrill }} />
                   ) : (
                     <Money value={line.amounts[column.key]} />
                   )}
@@ -257,10 +273,11 @@ function SplitGroupRows({
 }
 
 /** Profit and loss with one column per top-level value of a tracking category (TC7). */
-function SplitProfitAndLoss({ report }: { report: ProfitAndLossSplit }) {
+function SplitProfitAndLoss({ report, filter }: { report: ProfitAndLossSplit; filter: TrackingChoice }) {
   const { columns } = report;
+  // A drill-down can carry one tracking filter: the split's value wins, the Total column keeps the report's filter.
   const rows = (title: string, group: SplitGroup, totalLabel: string) => (
-    <SplitGroupRows title={title} group={group} columns={columns} totalLabel={totalLabel} from={report.from} to={report.to} categoryId={report.category.id} />
+    <SplitGroupRows title={title} group={group} columns={columns} totalLabel={totalLabel} from={report.from} to={report.to} categoryId={report.category.id} totalDrill={filterDrill(filter)} />
   );
   return (
     <div className={ui.statementWrap}>
@@ -316,10 +333,15 @@ function LoadState({ loading, error }: { loading: boolean; error: string | null 
 function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   const yearEndMonth = useYearEndMonth(organisationId);
   const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
-  const report = useApiData<TrialBalance>("/api/reports/trial-balance", { organisationId, asAt: dates.to });
+  const [applied, setApplied] = useState("");
+  const [draft, setDraft] = useState("");
+  const tracking = useTracking(organisationId).data;
+  const filter = parseTrackingChoice(applied);
+  const report = useApiData<TrialBalance>("/api/reports/trial-balance", { organisationId, asAt: dates.to, ...trackingQuery(filter) });
   const data = report.data;
-  const drilldown = data ? { from: data.financialYearStart, to: data.asAt } : null;
+  const drilldown = data ? { from: data.financialYearStart, to: data.asAt, ...filterDrill(filter) } : null;
   const period = data ? statementAsAt(data.asAt) : "";
+  const lines = data?.filter ? [`Only lines tagged ${data.filter.label}`] : [];
   return (
     <ReportFrame
       label="Trial balance"
@@ -328,7 +350,11 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
           mode="asAt"
           dates={dates}
           yearEndMonth={yearEndMonth}
-          onUpdate={setDates}
+          onUpdate={(next) => {
+            setDates(next);
+            setApplied(draft);
+          }}
+          filters={<TrackingFilterField setup={tracking} value={draft} onChange={setDraft} />}
           busy={report.loading}
           more={[printReport]}
           info={
@@ -341,14 +367,14 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
           }
           exportProps={
             data
-              ? { organisationId, report: "trial-balance", title: "Trial balance", period, style: "statement", tables: [{ id: "trial-balance-report" }] }
+              ? { organisationId, report: "trial-balance", title: "Trial balance", period, filters: lines, style: "statement", tables: [{ id: "trial-balance-report" }] }
               : null
           }
         />
       }
     >
       <LoadState loading={report.loading} error={report.error} />
-      {data ? <StatementHeading title="Trial balance" period={period} /> : null}
+      {data ? <StatementHeading title="Trial balance" period={period} lines={lines} /> : null}
       {data ? (
         data.rows.length === 0 ? (
           <Empty>No postings up to {formatDate(data.asAt)}.</Empty>
@@ -418,21 +444,65 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   );
 }
 
+type PnlOptions = { splitBy: string; tracking: string; compare: number; compareBy: PeriodLength; total: boolean; ytd: boolean; percent: boolean };
+const PNL_OPTIONS: PnlOptions = { splitBy: "", tracking: "", compare: 0, compareBy: "month", total: false, ytd: false, percent: false };
+
+/** Compare with N earlier periods, by months, quarters or years (decision 1353). */
+function CompareFields({ compare, compareBy, onChange }: { compare: number; compareBy: PeriodLength; onChange: (compare: number, compareBy: PeriodLength) => void }) {
+  return (
+    <>
+      <Field label="Compare with">
+        <select value={compare} onChange={(event) => onChange(Number(event.target.value), compareBy)}>
+          <option value={0}>None</option>
+          {Array.from({ length: MAX_COMPARE_PERIODS }, (_, index) => index + 1).map((count) => (
+            <option key={count} value={count}>
+              {count} previous {count === 1 ? "period" : "periods"}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {compare > 0 ? (
+        <Field label="Each period">
+          <select value={compareBy} onChange={(event) => onChange(compare, event.target.value as PeriodLength)}>
+            <option value="month">Month</option>
+            <option value="quarter">Quarter</option>
+            <option value="year">Year</option>
+          </select>
+        </Field>
+      ) : null}
+    </>
+  );
+}
+
 function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
   const yearEndMonth = useYearEndMonth(organisationId);
   // No "from" date means the financial year to date (the server works it out
   // from the organisation's year end).
   const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
-  const [splitBy, setSplitBy] = useState("");
-  const [draftSplit, setDraftSplit] = useState("");
-  const categories = reportCategories(useTracking(organisationId).data);
-  const splitting = categories.some((category) => category.id === splitBy) ? splitBy : "";
-  const report = useApiData<ProfitAndLoss>(splitting ? null : "/api/reports/profit-and-loss", { organisationId, from: dates.from, to: dates.to });
-  const split = useApiData<ProfitAndLossSplit>(splitting ? "/api/reports/profit-and-loss" : null, { organisationId, from: dates.from, to: dates.to, splitBy: splitting });
-  const shown = splitting ? split : report;
-  const data = shown.data;
-  const period = data ? statementPeriod(data.from, data.to, yearEndMonth) : "";
-  const filters = splitting && split.data ? [`Split by ${split.data.category.name}`] : [];
+  const [applied, setApplied] = useState<PnlOptions>(PNL_OPTIONS);
+  const [draft, setDraft] = useState<PnlOptions>(PNL_OPTIONS);
+  const tracking = useTracking(organisationId).data;
+  const categories = reportCategories(tracking);
+  const splitting = categories.some((category) => category.id === applied.splitBy) ? applied.splitBy : "";
+  const filter = parseTrackingChoice(applied.tracking);
+  const multi = !splitting && (applied.compare > 0 || applied.ytd || applied.percent || (applied.total && applied.compare > 0));
+  const report = useApiData<ProfitAndLoss | ProfitAndLossSplit | MultiColumnStatement>("/api/reports/profit-and-loss", {
+    organisationId,
+    from: dates.from,
+    to: dates.to,
+    ...trackingQuery(filter),
+    ...(splitting ? { splitBy: splitting } : {}),
+    ...(multi ? { compare: applied.compare, compareBy: applied.compareBy, total: applied.total, ytd: applied.ytd, percent: applied.percent } : {}),
+  });
+  const data = report.data;
+  const from = data ? (data.from as string) : null;
+  const period = data && from ? statementPeriod(from, data.to, yearEndMonth) : "";
+  const lines = data
+    ? [
+        ...("category" in data ? [`Split by ${data.category.name}`] : []),
+        ...(data.filter ? [`Only lines tagged ${data.filter.label}`] : []),
+      ]
+    : [];
   return (
     <ReportFrame
       label="Profit and loss"
@@ -440,46 +510,82 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
         <ReportToolbar
           mode="range"
           dates={dates}
-          shownFrom={data?.from}
+          shownFrom={from}
           yearEndMonth={yearEndMonth}
-          busy={shown.loading}
+          busy={report.loading}
           onUpdate={(next) => {
             setDates(next);
-            setSplitBy(draftSplit);
+            setApplied(draft);
           }}
           filters={
-            categories.length > 0 ? (
-              <Field label="Split by">
-                <select value={draftSplit} onChange={(event) => setDraftSplit(event.target.value)}>
-                  <option value="">No split</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            ) : null
+            <>
+              <CompareFields compare={draft.compare} compareBy={draft.compareBy} onChange={(compare, compareBy) => setDraft({ ...draft, compare, compareBy, splitBy: compare > 0 ? "" : draft.splitBy })} />
+              <TrackingFilterField setup={tracking} value={draft.tracking} onChange={(value) => setDraft({ ...draft, tracking: value })} exclude={draft.splitBy || undefined} />
+              {categories.length > 0 && draft.compare === 0 && !draft.ytd && !draft.percent ? (
+                <Field label="Columns by">
+                  <select value={draft.splitBy} onChange={(event) => setDraft({ ...draft, splitBy: event.target.value })}>
+                    <option value="">No tracking columns</option>
+                    {categories
+                      .filter((category) => category.id !== parseTrackingChoice(draft.tracking)?.categoryId)
+                      .map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              ) : null}
+              <fieldset className={ui.reportToolbarChecks}>
+                <legend className={ui.srOnly}>Extra columns</legend>
+                {draft.compare > 0 ? (
+                  <label className={ui.checkbox}>
+                    <input type="checkbox" checked={draft.total} onChange={(event) => setDraft({ ...draft, total: event.target.checked })} /> Total
+                  </label>
+                ) : null}
+                <label className={ui.checkbox}>
+                  <input type="checkbox" checked={draft.ytd} onChange={(event) => setDraft({ ...draft, ytd: event.target.checked, splitBy: event.target.checked ? "" : draft.splitBy })} /> Year to
+                  date
+                </label>
+                <label className={ui.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={draft.percent}
+                    onChange={(event) => setDraft({ ...draft, percent: event.target.checked, splitBy: event.target.checked ? "" : draft.splitBy })}
+                  />{" "}
+                  % of trading income
+                </label>
+              </fieldset>
+            </>
           }
           more={[printReport, startCustom]}
+          info={<>% of trading income is each amount divided by that column&apos;s total trading income, to one decimal place; it&apos;s blank when there&apos;s none.</>}
           exportProps={
             data
-              ? { organisationId, report: "profit-and-loss", title: "Profit and loss", period, filters, style: "statement", tables: [{ id: "profit-and-loss-report" }] }
+              ? { organisationId, report: "profit-and-loss", title: "Profit and loss", period, filters: lines, style: "statement", tables: [{ id: "profit-and-loss-report" }] }
               : null
           }
         />
       }
     >
-      <LoadState loading={shown.loading} error={shown.error} />
-      {data ? <StatementHeading title="Profit and loss" period={period} lines={filters} /> : null}
-      {splitting && split.data ? <SplitProfitAndLoss report={split.data} /> : null}
-      {!splitting && report.data ? <ProfitAndLossTable report={report.data} /> : null}
+      <LoadState loading={report.loading} error={report.error} />
+      {data ? <StatementHeading title="Profit and loss" period={period} lines={lines} /> : null}
+      {data && "category" in data ? <SplitProfitAndLoss report={data} filter={filter} /> : null}
+      {data && "rows" in data ? <MultiColumnStatementTable id="profit-and-loss-report" report={data} tracking={filter} /> : null}
+      {data && "revenue" in data && !("category" in data) ? <ProfitAndLossTable report={data as ProfitAndLoss} filter={filter} /> : null}
     </ReportFrame>
   );
 }
 
-function ProfitAndLossTable({ report }: { report: ProfitAndLoss }) {
-  const drilldown = { from: report.from, to: report.to };
+/** The drill-down's tracking filter, as the report has it. */
+function filterDrill(filter: TrackingChoice): Pick<Drilldown, "trackingCategoryId" | "trackingValueId" | "trackingUnassigned"> {
+  if (!filter) return {};
+  return filter.valueId === "unassigned"
+    ? { trackingCategoryId: filter.categoryId, trackingUnassigned: true }
+    : { trackingCategoryId: filter.categoryId, trackingValueId: filter.valueId };
+}
+
+function ProfitAndLossTable({ report, filter }: { report: ProfitAndLoss; filter: TrackingChoice }) {
+  const drilldown = { from: report.from, to: report.to, ...filterDrill(filter) };
   const empty = [report.revenue, report.costOfSales, report.otherIncome, report.expenses].every((group) => group.sections.length === 0);
   if (empty) return <Empty>Nothing posted to income or expense accounts in this period.</Empty>;
   return (
@@ -506,12 +612,27 @@ function ProfitAndLossTable({ report }: { report: ProfitAndLoss }) {
   );
 }
 
+type SheetOptions = { tracking: string; compare: number; compareBy: PeriodLength };
+const SHEET_OPTIONS: SheetOptions = { tracking: "", compare: 0, compareBy: "month" };
+
 function BalanceSheetReport({ organisationId }: { organisationId: string }) {
   const yearEndMonth = useYearEndMonth(organisationId);
   const [dates, setDates] = useState<ReportDates>(() => ({ from: null, to: todayInBrowser() }));
-  const report = useApiData<BalanceSheet>("/api/reports/balance-sheet", { organisationId, asAt: dates.to });
+  const [applied, setApplied] = useState<SheetOptions>(SHEET_OPTIONS);
+  const [draft, setDraft] = useState<SheetOptions>(SHEET_OPTIONS);
+  const tracking = useTracking(organisationId).data;
+  const filter = parseTrackingChoice(applied.tracking);
+  const report = useApiData<BalanceSheet | MultiColumnStatement>("/api/reports/balance-sheet", {
+    organisationId,
+    asAt: dates.to,
+    ...trackingQuery(filter),
+    ...(applied.compare > 0 ? { compare: applied.compare, compareBy: applied.compareBy } : {}),
+  });
   const data = report.data;
-  const period = data ? statementAsAt(data.asAt) : "";
+  const asAt = data ? ("asAt" in data ? data.asAt : data.to) : "";
+  const period = data ? statementAsAt(asAt) : "";
+  const lines = data?.filter ? [`Only lines tagged ${data.filter.label}`] : [];
+  const unbalanced = data ? ("rows" in data ? Object.values(data.balanced ?? {}).some((ok) => !ok) : !data.balanced) : false;
   return (
     <ReportFrame
       label="Balance sheet"
@@ -520,29 +641,45 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
           mode="asAt"
           dates={dates}
           yearEndMonth={yearEndMonth}
-          onUpdate={setDates}
+          onUpdate={(next) => {
+            setDates(next);
+            setApplied(draft);
+          }}
           busy={report.loading}
+          filters={
+            <>
+              <CompareFields compare={draft.compare} compareBy={draft.compareBy} onChange={(compare, compareBy) => setDraft({ ...draft, compare, compareBy })} />
+              <TrackingFilterField setup={tracking} value={draft.tracking} onChange={(value) => setDraft({ ...draft, tracking: value })} />
+            </>
+          }
+          info={draft.tracking ? <>Filtered by tracking, a balance sheet only balances when both sides of each journal are tagged.</> : null}
           more={[printReport, startCustom]}
           exportProps={
-            data ? { organisationId, report: "balance-sheet", title: "Balance sheet", period, style: "statement", tables: [{ id: "balance-sheet-report" }] } : null
+            data ? { organisationId, report: "balance-sheet", title: "Balance sheet", period, filters: lines, style: "statement", tables: [{ id: "balance-sheet-report" }] } : null
           }
         />
       }
     >
       <LoadState loading={report.loading} error={report.error} />
-      {data ? <StatementHeading title="Balance sheet" period={period} /> : null}
-      {data && !data.balanced ? (
+      {data ? <StatementHeading title="Balance sheet" period={period} lines={lines} /> : null}
+      {unbalanced ? (
         <Notice tone="warning">
-          Total assets less liabilities ({formatMoney(data.netAssets)}) doesn&apos;t equal total equity ({formatMoney(data.equity.total)}).
+          {data && "rows" in data
+            ? "Total assets less liabilities doesn't equal total equity in at least one column."
+            : data && !("rows" in data)
+              ? `Total assets less liabilities (${formatMoney(data.netAssets)}) doesn't equal total equity (${formatMoney(data.equity.total)}).`
+              : null}
+          {filter ? " With a tracking filter, both sides of each journal need the tag." : null}
         </Notice>
       ) : null}
-      {data ? <BalanceSheetTable report={data} /> : null}
+      {data && "rows" in data ? <MultiColumnStatementTable id="balance-sheet-report" report={data} tracking={filter} /> : null}
+      {data && !("rows" in data) ? <BalanceSheetTable report={data} filter={filter} /> : null}
     </ReportFrame>
   );
 }
 
-function BalanceSheetTable({ report }: { report: BalanceSheet }) {
-  const drilldown = { from: report.financialYearStart, to: report.asAt };
+function BalanceSheetTable({ report, filter }: { report: BalanceSheet; filter: TrackingChoice }) {
+  const drilldown = { from: report.financialYearStart, to: report.asAt, ...filterDrill(filter) };
   const retained = report.equity.retainedEarnings;
   return (
     <div className={ui.statementWrap}>
@@ -731,6 +868,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
         <AccountTransactionsReport
           organisationId={organisationId}
           initialAccountId={params.get("account")}
+          initialAccountIds={params.get("accounts")}
           initialFrom={params.get("from")}
           initialTo={params.get("to")}
           initialTrackingCategoryId={params.get("trackingCategoryId")}

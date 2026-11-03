@@ -8,6 +8,7 @@ import { parseIsoDate, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { financialYearStart } from "@/lib/financial-year";
+import { type ParsedTrackingFilter, parseTrackingFilter } from "@/lib/reports/tracking-filter";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import {
   add,
@@ -49,8 +50,16 @@ export async function financialYearEndMonth(tx: OrgTx): Promise<number> {
   return result.rows[0].financial_year_end_month;
 }
 
-/** Only lines tagged with one of these values of a tracking category (TC8). */
-export type TrackingFilter = { categoryId: string; valueIds: string[] };
+/**
+ * Only lines tagged with one of these values of a tracking category (TC8),
+ * or, with `unassigned`, only lines with no value in it (RX5).
+ */
+export type TrackingFilter = { categoryId: string; valueIds: string[]; unassigned?: boolean };
+
+/** A parsed report filter as the account totals take it. */
+export function totalsFilter(filter: ParsedTrackingFilter | null): TrackingFilter | null {
+  return filter ? { categoryId: filter.categoryId, valueIds: filter.valueIds, unassigned: filter.valueId === "unassigned" } : null;
+}
 
 export async function accountTotals(
   tx: OrgTx,
@@ -67,10 +76,12 @@ export async function accountTotals(
        join ledger_journals j on j.id = l.journal_id
       where j.posting_date <= $2
         and ($1::date is null or j.posting_date >= $1)
-        and ($3::text is null or (l.tracking ->> $3::text) = any($4::text[]))
+        and ($3::text is null
+             or ($5::boolean and l.tracking ->> $3::text is null)
+             or (not $5::boolean and (l.tracking ->> $3::text) = any($4::text[])))
       group by a.id
       order by a.code`,
-    [from, to, filter?.categoryId ?? null, filter?.valueIds ?? []],
+    [from, to, filter?.categoryId ?? null, filter?.valueIds ?? [], filter?.unassigned === true],
   );
   return result.rows;
 }
@@ -106,12 +117,13 @@ export type TrialBalanceRow = {
  * to the As of date", and retained earnings is "the sum of cumulative net
  * income and amounts posted directly to the retained earnings account".
  */
-export async function trialBalance(tx: OrgTx, input: { asAt?: unknown }) {
+export async function trialBalance(tx: OrgTx, input: { asAt?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown }) {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
   const money = moneyFormatter(tx);
   const yearStart = financialYearStart(asAt, await financialYearEndMonth(tx));
-  const all = await accountTotals(tx, null, asAt);
-  const thisYearRows = await accountTotals(tx, yearStart, asAt);
+  const tracking = await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
+  const all = await accountTotals(tx, null, asAt, totalsFilter(tracking));
+  const thisYearRows = await accountTotals(tx, yearStart, asAt, totalsFilter(tracking));
   const thisYear = new Map(thisYearRows.map((row) => [row.id, row]));
   const previousYearsEarnings = sub(earningsOf(all), earningsOf(thisYearRows));
   const retainedAccount = (
@@ -163,11 +175,17 @@ export async function trialBalance(tx: OrgTx, input: { asAt?: unknown }) {
     /** Profit of every financial year before this one, included in retained earnings. */
     previousYearsEarnings: money(previousYearsEarnings),
     currencyCode: tx.baseCurrency,
+    filter: filterView(tracking),
     rows,
     totalDebit: money(totalDebit),
     totalCredit: money(totalCredit),
     balanced: cmp(totalDebit, totalCredit) === 0,
   };
+}
+
+/** The filter as a report shows it, e.g. { label: "Location: Otago" }. */
+export function filterView(filter: ParsedTrackingFilter | null) {
+  return filter ? { categoryId: filter.categoryId, valueId: filter.valueId, label: filter.label } : null;
 }
 
 type ReportLine = { accountId: string; code: string; name: string; amount: string };
@@ -214,7 +232,7 @@ function buildSections(
  * Income and expenses between two dates (inclusive). Without a `from` date it
  * covers the financial year to date.
  */
-export async function profitAndLoss(tx: OrgTx, input: { from?: unknown; to?: unknown }) {
+export async function profitAndLoss(tx: OrgTx, input: { from?: unknown; to?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown; filter?: ParsedTrackingFilter | null }) {
   const to = parseOptionalIsoDate(input.to, "to") ?? todayIsoDate();
   const from =
     input.from == null || input.from === ""
@@ -224,7 +242,8 @@ export async function profitAndLoss(tx: OrgTx, input: { from?: unknown; to?: unk
     throw new ValidationError("'from' must be on or before 'to'.");
   }
   const money = moneyFormatter(tx);
-  const rows = await accountTotals(tx, from, to);
+  const tracking = input.filter !== undefined ? input.filter : await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
+  const rows = await accountTotals(tx, from, to, totalsFilter(tracking));
   const trading = buildSections(rows, ["revenue"], money);
   const costOfSales = buildSections(rows, ["direct_costs"], money);
   const otherIncome = buildSections(rows, ["other_income"], money);
@@ -235,6 +254,7 @@ export async function profitAndLoss(tx: OrgTx, input: { from?: unknown; to?: unk
     from,
     to,
     currencyCode: tx.baseCurrency,
+    filter: filterView(tracking),
     revenue: { sections: trading.sections, total: money(trading.total) },
     costOfSales: { sections: costOfSales.sections, total: money(costOfSales.total) },
     grossProfit: money(grossProfit),
@@ -283,11 +303,15 @@ function termGroup(rows: AccountTotalsRow[], types: readonly AccountType[], mone
   };
 }
 
-export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
+export async function balanceSheet(
+  tx: OrgTx,
+  input: { asAt?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown; filter?: ParsedTrackingFilter | null },
+) {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
   const money = moneyFormatter(tx);
   const yearStart = financialYearStart(asAt, await financialYearEndMonth(tx));
-  const rows = await accountTotals(tx, null, asAt);
+  const tracking = input.filter !== undefined ? input.filter : await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
+  const rows = await accountTotals(tx, null, asAt, totalsFilter(tracking));
   const assets = termGroup(rows, ASSET_TYPES, money);
   const liabilities = termGroup(rows, LIABILITY_TYPES, money);
   const retainedAccount = (
@@ -304,7 +328,7 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
   );
 
   const allEarnings = earningsOf(rows);
-  const currentYearEarnings = earningsOf(await accountTotals(tx, yearStart, asAt));
+  const currentYearEarnings = earningsOf(await accountTotals(tx, yearStart, asAt, totalsFilter(tracking)));
   const previousYearsEarnings = sub(allEarnings, currentYearEarnings);
   const retainedEarnings = add(retainedBalance, previousYearsEarnings);
   const totalEquity = add(add(equity.total, retainedBalance), allEarnings);
@@ -313,6 +337,7 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
     asAt,
     financialYearStart: yearStart,
     currencyCode: tx.baseCurrency,
+    filter: filterView(tracking),
     assets: assets.group,
     liabilities: liabilities.group,
     /** Total assets less total liabilities: equals total equity when the sheet balances. */
@@ -401,12 +426,18 @@ export type ProfitAndLossSplit = Awaited<ReturnType<typeof profitAndLossSplit>>;
  * top-level value (values under it count in its column), "Not set" for
  * untagged lines, and the total, which equals the profit and loss.
  */
-export async function profitAndLossSplit(tx: OrgTx, input: { from?: unknown; to?: unknown; categoryId: unknown }) {
+export async function profitAndLossSplit(
+  tx: OrgTx,
+  input: { from?: unknown; to?: unknown; categoryId: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown },
+) {
   const categoryId = typeof input.categoryId === "string" && /^[1-9]\d{0,17}$/.test(input.categoryId) ? input.categoryId : null;
   if (!categoryId) throw new ValidationError("Choose a tracking category to split by.");
   const category = await tx.query<{ name: string }>("select name from tracking_categories where id = $1", [categoryId]);
   if (!category.rows[0]) throw new ValidationError("There's no such tracking category.");
-  const plain = await profitAndLoss(tx, { from: input.from, to: input.to });
+  const tracking = await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
+  if (tracking && tracking.categoryId === categoryId) throw new ValidationError("Split by one tracking category and filter by another.");
+  const plain = await profitAndLoss(tx, { from: input.from, to: input.to, filter: tracking });
+  const filter = totalsFilter(tracking);
   const money = moneyFormatter(tx);
   const rows = await tx.query<AccountTotalsRow & { bucket: string | null }>(
     `with recursive roots as (
@@ -423,9 +454,12 @@ export async function profitAndLossSplit(tx: OrgTx, input: { from?: unknown; to?
        left join roots r on r.id::text = (l.tracking ->> $3::text)
       where j.posting_date between $1 and $2
         and a.account_class in ('revenue', 'expense')
+        and ($4::text is null
+             or ($6::boolean and l.tracking ->> $4::text is null)
+             or (not $6::boolean and (l.tracking ->> $4::text) = any($5::text[])))
       group by a.id, r.root_id
       order by a.code`,
-    [plain.from, plain.to, categoryId],
+    [plain.from, plain.to, categoryId, filter?.categoryId ?? null, filter?.valueIds ?? [], filter?.unassigned === true],
   );
   const tops = await tx.query<{ id: string; name: string; is_active: boolean }>(
     "select id::text, name, is_active from tracking_values where category_id = $1 and parent_id is null order by lower(name), tracking_values.id",
@@ -480,6 +514,7 @@ export async function profitAndLossSplit(tx: OrgTx, input: { from?: unknown; to?
     to: plain.to,
     currencyCode: tx.baseCurrency,
     category: { id: categoryId, name: category.rows[0].name },
+    filter: plain.filter,
     columns,
     revenue: asGroup(revenue),
     costOfSales: asGroup(costOfSales),

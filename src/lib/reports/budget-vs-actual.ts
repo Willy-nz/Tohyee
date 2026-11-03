@@ -7,7 +7,8 @@ import { ValidationError } from "@/lib/errors";
 import { financialYearStart } from "@/lib/financial-year";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { abs, add, dec, type Decimal, divide, isZero, mul, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
-import { accountTotals, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
+import { accountTotals, financialYearEndMonth, naturalAmount, totalsFilter } from "@/lib/reports/financial";
+import { parseTrackingFilter } from "@/lib/reports/tracking-filter";
 
 /**
  * Budget vs actual (examples BU5, BU6): for whole months, each profit and
@@ -26,6 +27,11 @@ export type BudgetVsActualGroup = { sections: BudgetVsActualSection[]; total: Va
 
 export type BudgetVsActual = {
   budget: Budget;
+  /**
+   * A tracking filter on the actuals of a budget that has no tracking value
+   * of its own (RX6): the budget figures are still the whole budget.
+   */
+  filter: { categoryId: string; valueId: string; label: string } | null;
   from: string;
   to: string;
   currencyCode: string;
@@ -45,8 +51,17 @@ function month(input: unknown, what: string): string | null {
   return input.trim();
 }
 
-export async function budgetVsActual(tx: OrgTx, input: { budgetId: unknown; from?: unknown; to?: unknown }): Promise<BudgetVsActual> {
+export async function budgetVsActual(
+  tx: OrgTx,
+  input: { budgetId: unknown; from?: unknown; to?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown },
+): Promise<BudgetVsActual> {
   const budget = await getBudgetSummary(tx, input.budgetId);
+  const asked = await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
+  // A budget for a tracking value compares with that value's lines only (BU6); another filter is refused (RX6).
+  if (asked && budget.trackingValueId && !(asked.categoryId === budget.trackingCategoryId && asked.valueId === budget.trackingValueId)) {
+    throw new ValidationError(`This budget is for ${budget.trackingLabel}, so its actuals are already only lines tagged with it.`);
+  }
+  const extraFilter = budget.trackingValueId ? null : asked;
   const toMonth = month(input.to, "to") ?? todayIsoDate().slice(0, 7);
   const fromMonth = month(input.from, "from") ?? financialYearStart(monthEndDate(toMonth), await financialYearEndMonth(tx)).slice(0, 7);
   if (fromMonth > toMonth) throw new ValidationError("'from' must be on or before 'to'.");
@@ -68,7 +83,8 @@ export async function budgetVsActual(tx: OrgTx, input: { budgetId: unknown; from
     "select id::text, code, name, account_class, account_type from accounts where account_class in ('revenue', 'expense') order by code",
   );
   const actuals = new Map<string, Decimal>();
-  for (const row of await accountTotals(tx, from, to, await budgetTrackingFilter(tx, budget))) actuals.set(String(row.id), naturalAmount(row));
+  const actualsFilter = extraFilter ? totalsFilter(extraFilter) : await budgetTrackingFilter(tx, budget);
+  for (const row of await accountTotals(tx, from, to, actualsFilter)) actuals.set(String(row.id), naturalAmount(row));
   const budgets = await budgetTotals(tx, budget.id, from, to);
 
   const group = (types: readonly AccountType[]): { group: BudgetVsActualGroup; pair: Pair } => {
@@ -98,6 +114,7 @@ export async function budgetVsActual(tx: OrgTx, input: { budgetId: unknown; from
   const net = combine((key) => sub(add(gross[key], otherIncome.pair[key]), expenses.pair[key]));
   return {
     budget,
+    filter: extraFilter ? { categoryId: extraFilter.categoryId, valueId: extraFilter.valueId, label: extraFilter.label } : null,
     from,
     to,
     currencyCode: tx.baseCurrency,

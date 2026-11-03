@@ -8,9 +8,10 @@ import type { AiAccessLevel } from "@/lib/ai/access-levels";
 export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel; words: string }[] = [
   { name: "get_organisation", level: "read", words: "The organisation's name, base currency, financial year end and GST settings, and what this connection may do" },
   { name: "list_accounts", level: "read", words: "The chart of accounts" },
-  { name: "profit_and_loss", level: "read", words: "Profit and loss for any dates" },
-  { name: "balance_sheet", level: "read", words: "The balance sheet at any date" },
+  { name: "profit_and_loss", level: "read", words: "Profit and loss for any dates, compared with earlier periods or filtered by tracking" },
+  { name: "balance_sheet", level: "read", words: "The balance sheet at any date, compared with earlier dates or filtered by tracking" },
   { name: "trial_balance", level: "read", words: "The trial balance at any date" },
+  { name: "budget_vs_actual", level: "read", words: "Budget vs actual for whole months" },
   { name: "aged_receivables", level: "read", words: "What customers owe, and how overdue it is" },
   { name: "aged_payables", level: "read", words: "What you owe suppliers, and how overdue it is" },
   { name: "list_invoices", level: "read", words: "Sales invoices (draft, approved or voided)" },

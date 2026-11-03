@@ -5,6 +5,7 @@ import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
 import { withLineIds } from "@/lib/ai/document-lines";
 import { boundedLimit, CURSOR, firstRows, pageAfter } from "@/lib/ai/limits";
+import { BALANCE_SHEET_SCHEMA, PROFIT_AND_LOSS_SCHEMA, runBalanceSheet, runProfitAndLoss, runTrialBalance, TRIAL_BALANCE_SCHEMA } from "@/lib/ai/report-tools";
 import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, type AiAccessLevel } from "@/lib/ai/access-levels";
 import type { Role } from "@/lib/auth/roles";
 import { getInboxItem, getInboxItemContent, type InboxItem, listInboxPage } from "@/lib/bills/inbox";
@@ -22,7 +23,6 @@ import { gstRegistrationSummary } from "@/lib/tax/registration";
 import { accountTransactions } from "@/lib/reports/account-transactions";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
-import { balanceSheet, profitAndLoss, trialBalance } from "@/lib/reports/financial";
 import { calculateGstReturn } from "@/lib/reports/gst-return";
 import { optionalString } from "@/lib/validation";
 
@@ -319,23 +319,25 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "profit_and_loss",
     title: "Profit and loss",
     description:
-      "Profit and loss (income statement) between two dates, inclusive, by section and account. Without `from` it starts at the beginning of the financial year containing `to`; without `to` it ends today.",
-    inputSchema: schema({ from: DATE, to: DATE }),
-    run: (tx, args) => profitAndLoss(tx, { from: args.from, to: args.to }),
+      "Profit and loss (income statement) between two dates, inclusive, by section and account. Without `from` it starts at the beginning of the financial year containing `to`; without `to` it ends today. Optional, as on the screen: compare with up to 11 earlier months, quarters or years (compare, compareBy), a total and a year to date column, % of trading income, one column per value of a tracking category (splitBy), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"). With compare, total, yearToDate or percentOfIncome the answer is columns and rows; each column is the report for its own dates.",
+    inputSchema: PROFIT_AND_LOSS_SCHEMA,
+    run: (tx, args) => runProfitAndLoss(tx, args),
   },
   {
     name: "balance_sheet",
     title: "Balance sheet",
-    description: "Balance sheet as at a date (default today): assets, liabilities and equity by account, with retained earnings.",
-    inputSchema: schema({ asAt: DATE }),
-    run: (tx, args) => balanceSheet(tx, { asAt: args.asAt }),
+    description:
+      "Balance sheet as at a date (default today): assets, liabilities and equity by account, with retained earnings. Optional: compare with up to 11 earlier month, quarter or year ends (compare, compareBy; the answer is then columns and rows), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"; it only balances when both sides of each journal are tagged).",
+    inputSchema: BALANCE_SHEET_SCHEMA,
+    run: (tx, args) => runBalanceSheet(tx, args),
   },
   {
     name: "trial_balance",
     title: "Trial balance",
-    description: "Trial balance as at a date (default today): each account's debit or credit balance.",
-    inputSchema: schema({ asAt: DATE }),
-    run: (tx, args) => trialBalance(tx, { asAt: args.asAt }),
+    description:
+      "Trial balance as at a date (default today): each account's debit or credit balance (income and expense accounts this financial year only; earlier years' profit is in retained earnings). Optional tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\").",
+    inputSchema: TRIAL_BALANCE_SCHEMA,
+    run: (tx, args) => runTrialBalance(tx, args),
   },
   {
     name: "aged_receivables",

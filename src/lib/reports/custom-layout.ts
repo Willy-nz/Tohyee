@@ -146,12 +146,14 @@ export type ReportColumn = {
   /** Profit and loss periods and year to date; null on a balance sheet (as at `to`). */
   from: string | null;
   to: string | null;
+  /** An amount in this column opens Account transactions from this date to `to` (decision 1356); none for a difference, % or budget. */
+  drillFrom?: string | null;
 };
 
 /** Amounts as strings, keyed by column; null for a % that can't be worked out (the compared amount is 0.00). */
 export type ReportValues = Record<string, string | null>;
 
-export type ComputedLine = { code: string; name: string; values: ReportValues };
+export type ComputedLine = { code: string; name: string; values: ReportValues; accountId?: string };
 
 export type ComputedRow = {
   id: string;
@@ -160,6 +162,8 @@ export type ComputedRow = {
   values: ReportValues;
   showAccounts: boolean;
   lines: ComputedLine[];
+  /** A group's accounts, so its total opens their transactions together (decision 1356). */
+  accountIds?: string[];
 };
 
 export type ComputedBlock =

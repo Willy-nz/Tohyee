@@ -134,7 +134,7 @@ describeWithDatabase("custom reports", () => {
       Expenses: ["250.00"],
       "Net profit": ["670.00"],
     });
-    expect(firstTable(figures).rows[0].lines).toEqual([{ code: "4000", name: "Sales", values: { p0: "1200.00" } }]);
+    expect(firstTable(figures).rows[0].lines).toEqual([{ code: "4000", name: "Sales", values: { p0: "1200.00" }, accountId: expect.any(String) }]);
     const standard = await w.as((tx) => profitAndLoss(tx, { from: "2026-06-01", to: "2026-06-30" }));
     expect(standard).toMatchObject({ grossProfit: "900.00", netProfit: "670.00" });
     expect(figures.notInReport).toEqual([]);

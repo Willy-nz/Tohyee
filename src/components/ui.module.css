@@ -1370,6 +1370,17 @@
   min-width: 150px;
 }
 
+.reportToolbarChecks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  min-height: 40px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
 .reportToolbarEnd {
   display: flex;
   flex-wrap: wrap;

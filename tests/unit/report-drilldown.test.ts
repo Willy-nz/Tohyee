@@ -33,4 +33,10 @@ describe("account transaction drill-down", () => {
 
     expect(href).toBe("/operations/reports?report=transactions&account=42&to=2026-06-30&trackingCategoryId=8&trackingValueId=unassigned");
   });
+
+  it("opens a custom report group's accounts together (decision 1356)", () => {
+    const href = accountTransactionsHref({ accountIds: ["42", "43"], from: "2026-06-01", to: "2026-06-30" });
+
+    expect(href).toBe("/operations/reports?report=transactions&accounts=42%2C43&from=2026-06-01&to=2026-06-30");
+  });
 });

@@ -8,13 +8,17 @@ import { add, cmp, dec, type Decimal, sub, sum, toFixedString, ZERO_DECIMAL } fr
 import { financialYearEndMonth } from "@/lib/reports/financial";
 import { dayBefore } from "@/lib/reports/ageing";
 import { JOURNAL_SOURCES_SQL, type JournalSource, journalSource, SOURCE_COLUMNS, SOURCE_JOINS, type SourceRow } from "@/lib/reports/journal-sources";
-import { type TrackingTags, valueWithDescendants } from "@/lib/tracking/service";
+import { parseTrackingFilter } from "@/lib/reports/tracking-filter";
+import type { TrackingTags } from "@/lib/tracking/service";
+
+export { parseTrackingFilter };
 import type { CustomValues } from "@/lib/custom-fields/values";
 import { optionalId } from "@/lib/validation";
 
 /**
- * Account transactions (general ledger detail, examples ATX1-ATX5): for one
- * account or all of them, the balance before the period, every posted
+ * Account transactions (general ledger detail, examples ATX1-ATX6): for one
+ * account, several or all of them, the balance before the period (for an
+ * income or expense account only this financial year's, ATX6), every posted
  * journal line in it (with its date, source, description, contact, debit,
  * credit and running balance) and the balance at the end. Balances are
  * debits less credits (a credit balance is negative) over all postings
@@ -59,6 +63,10 @@ export type AccountTransactionsAccount = {
 export type AccountTransactions = {
   from: string;
   to: string;
+  /** The first day of `from`'s financial year: income and expense accounts open from here (ATX6). */
+  financialYearStart: string;
+  /** The range starts in one financial year and ends in a later one (ATX6). */
+  crossesYearEnd: boolean;
   currencyCode: string;
   filter: { categoryId: string; valueId: string; label: string } | null;
   accounts: AccountTransactionsAccount[];
@@ -66,36 +74,22 @@ export type AccountTransactions = {
   totalCredit: string;
 };
 
-/** A tracking filter from a category and value (the value and everything under it), or null. */
-export async function parseTrackingFilter(
-  tx: OrgTx,
-  categoryInput: unknown,
-  valueInput: unknown,
-): Promise<{ categoryId: string; valueId: string; valueIds: string[]; label: string } | null> {
-  const categoryId = optionalId(categoryInput, "trackingCategoryId");
-  if (valueInput === "unassigned") {
-    if (!categoryId) throw new ValidationError("Choose a tracking category to filter untagged lines.");
-    const found = await tx.query<{ name: string }>("select name from tracking_categories where id = $1", [categoryId]);
-    if (!found.rows[0]) throw new ValidationError("That tracking category doesn't exist.");
-    return { categoryId, valueId: "unassigned", valueIds: [], label: `${found.rows[0].name}: Not set` };
-  }
-  const valueId = optionalId(valueInput, "trackingValueId");
-  if (!categoryId && !valueId) return null;
-  if (!categoryId || !valueId) throw new ValidationError("Choose both a tracking category and a value to filter by.");
-  const found = await tx.query<{ category: string; value: string }>(
-    "select c.name as category, v.name as value from tracking_values v join tracking_categories c on c.id = v.category_id where v.id = $1 and c.id = $2",
-    [valueId, categoryId],
-  );
-  if (!found.rows[0]) throw new ValidationError("That tracking value isn't in that category.");
-  return { categoryId, valueId, valueIds: await valueWithDescendants(tx, valueId), label: `${found.rows[0].category}: ${found.rows[0].value}` };
-}
-
 /** From and to dates: `to` defaults to today and `from` to the start of `to`'s financial year. */
 export async function parseReportPeriod(tx: OrgTx, fromInput: unknown, toInput: unknown): Promise<{ from: string; to: string }> {
   const to = parseOptionalIsoDate(toInput, "to") ?? todayIsoDate();
   const from = fromInput == null || fromInput === "" ? financialYearStart(to, await financialYearEndMonth(tx)) : parseIsoDate(fromInput, "from");
   if (from > to) throw new ValidationError("The start date must be on or before the end date.");
   return { from, to };
+}
+
+/** Several accounts, as "12,15" or a list (a custom report's group total, decision 1356); null for none. */
+function parseAccountIds(input: unknown): string[] | null {
+  if (input == null || input === "") return null;
+  const parts = Array.isArray(input) ? input : String(input).split(",");
+  if (parts.length > 500) throw new ValidationError("Choose at most 500 accounts.");
+  const ids = [...new Set(parts.map((part) => String(part).trim()))];
+  for (const id of ids) if (!/^[1-9]\d{0,17}$/.test(id)) throw new ValidationError("accountIds must be account ids separated by commas.");
+  return ids;
 }
 
 type LineRow = SourceRow & {
@@ -116,27 +110,36 @@ type LineRow = SourceRow & {
 
 export async function accountTransactions(
   tx: OrgTx,
-  input: { accountId?: unknown; from?: unknown; to?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown },
+  input: { accountId?: unknown; accountIds?: unknown; from?: unknown; to?: unknown; trackingCategoryId?: unknown; trackingValueId?: unknown },
 ): Promise<AccountTransactions> {
   const { from, to } = await parseReportPeriod(tx, input.from, input.to);
   const accountId = optionalId(input.accountId, "accountId");
+  const accountIds = parseAccountIds(input.accountIds);
+  const yearEndMonth = await financialYearEndMonth(tx);
+  const yearStart = financialYearStart(from, yearEndMonth);
   const filter = await parseTrackingFilter(tx, input.trackingCategoryId, input.trackingValueId);
   const scale = currencyMinorUnits(tx.baseCurrency);
   const money = (value: Decimal) => toFixedString(value, scale);
 
   const accountRows = await tx.query<{ id: string; code: string; name: string; account_class: AccountClass }>(
-    "select id::text, code, name, account_class from accounts where ($1::bigint is null or id = $1) order by code",
-    [accountId],
+    "select id::text, code, name, account_class from accounts where ($1::bigint is null or id = $1) and ($2::bigint[] is null or id = any($2::bigint[])) order by code",
+    [accountId, accountIds],
   );
   if (accountId && accountRows.rows.length === 0) throw new NotFoundError("Account not found.");
+  if (accountIds && accountRows.rows.length !== accountIds.length) throw new NotFoundError("One of those accounts wasn't found.");
   const openingTagged = `($2::text is null or ($5::boolean and l.tracking ->> $2::text is null) or (not $5::boolean and (l.tracking ->> $2::text) = any($3::text[])))`;
   const lineTagged = `($2::text is null or ($6::boolean and l.tracking ->> $2::text is null) or (not $6::boolean and (l.tracking ->> $2::text) = any($3::text[])))`;
+  // Income and expense accounts open from the start of the financial year,
+  // as on the trial balance (ATX6, TB2); balance sheet accounts from the start.
   const openingRows = await tx.query<{ account_id: string; balance: string }>(
     `select l.account_id::text, sum(l.debit_amount - l.credit_amount)::text as balance
        from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
+       join accounts a on a.id = l.account_id
       where j.posting_date <= $1 and ${openingTagged} and ($4::bigint is null or l.account_id = $4)
+        and ($6::bigint[] is null or l.account_id = any($6::bigint[]))
+        and (a.account_class not in ('revenue', 'expense') or j.posting_date >= $7)
       group by l.account_id`,
-    [dayBefore(from), filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, filter?.valueId === "unassigned"],
+    [dayBefore(from), filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, filter?.valueId === "unassigned", accountIds, yearStart],
   );
   const lineRows = await tx.query<LineRow>(
     `with ${JOURNAL_SOURCES_SQL}
@@ -147,8 +150,9 @@ export async function accountTransactions(
        join ledger_journals j on j.id = l.journal_id
        ${SOURCE_JOINS}
       where j.posting_date between $1 and $5 and ${lineTagged} and ($4::bigint is null or l.account_id = $4)
+        and ($7::bigint[] is null or l.account_id = any($7::bigint[]))
       order by j.posting_date, j.id, l.line_order`,
-    [from, filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, to, filter?.valueId === "unassigned"],
+    [from, filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, to, filter?.valueId === "unassigned", accountIds],
   );
 
   const opening = new Map(openingRows.rows.map((row) => [row.account_id, dec(row.balance)]));
@@ -162,7 +166,7 @@ export async function accountTransactions(
     const rows = byAccount.get(account.id) ?? [];
     const start = opening.get(account.id) ?? ZERO_DECIMAL;
     // One account asked for is always shown; with all accounts, only those with a balance or lines.
-    if (!accountId && rows.length === 0 && cmp(start, ZERO_DECIMAL) === 0) continue;
+    if (!accountId && !accountIds && rows.length === 0 && cmp(start, ZERO_DECIMAL) === 0) continue;
     let balance = start;
     const lines = rows.map((row): AccountTransactionLine => {
       balance = add(balance, sub(dec(row.debit_amount), dec(row.credit_amount)));
@@ -200,6 +204,8 @@ export async function accountTransactions(
   return {
     from,
     to,
+    financialYearStart: yearStart,
+    crossesYearEnd: financialYearStart(to, yearEndMonth) !== yearStart,
     currencyCode: tx.baseCurrency,
     filter: filter ? { categoryId: filter.categoryId, valueId: filter.valueId, label: filter.label } : null,
     accounts,

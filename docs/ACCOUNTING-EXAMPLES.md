@@ -4382,6 +4382,72 @@ document field **Channel** `Web`; its one line (4000) has line field
   the published report still shows `accounts@kobe.example.nz`; both total
   **115.00**.
 
+### Comparing periods, % of trading income and tracking filters (RX1-RX6)
+
+As Xero does, not yet reviewed (decisions 1353-1355, Jess's 4 Nov 2026
+request for reports like Xero's). The standard profit and loss and balance
+sheet can show earlier periods beside the one chosen, a total and a year to
+date, and a % of trading income; every financial report can be filtered by
+a tracking value. Nothing is posted or stored; each column is the standard
+report for its own dates (P3, CR9).
+
+Setup: the custom-report journals above (CR1-CR10, 31 March year end).
+
+- **RX1** Profit and loss for **1-30 Jun 2026** compared with **2 previous
+  months**: columns Jun 2026, May 2026, Apr 2026 (newest first). Trading
+  income 4000 **1,200.00 / 1,500.00 / 1,000.00**; cost of sales 5000
+  **300.00 / 400.00 / blank**; gross profit **900.00 / 1,100.00 /
+  1,000.00**; other income 4200 **20.00 / blank / blank**; operating
+  expenses 6010 **250.00 / blank / 100.00**; net profit **670.00 /
+  1,100.00 / 900.00**, the same as CR2. With **Total** the net profit total
+  is **2,670.00**, the three columns added up. Compared with 1 previous
+  quarter instead, the columns are 1 Apr-30 Jun 2026 (**2,670.00**) and
+  1 Jan-31 Mar 2026 (**500.00**), as CR3. Compared with 1 previous year:
+  1 Apr-30 Jun 2026 **2,670.00** and 1 Apr-30 Jun 2025 **0.00**.
+- **RX2** Dates that aren't whole months move back by the period with the
+  same days: **1-20 Jun 2026** with 1 previous month is compared with
+  **1-20 May 2026**: net profit **650.00** (1,200.00 - 300.00 - 250.00) and
+  **1,100.00** (1,500.00 - 400.00). A whole month stays a whole month: 1-31
+  May with 1 previous month is compared with 1-30 Apr. **Year to date**
+  for June with 1 previous month: Jun 2026 **670.00**, May 2026
+  **1,100.00**, Year to date (1 Apr-30 Jun 2026) **2,670.00**; it doesn't
+  include March's 500.00 sale (last financial year).
+- **RX3** Balance sheet as at **30 Jun 2026** compared with **1 previous
+  month**: columns 30 Jun 2026 and 31 May 2026; net assets **8,170.00 /
+  7,500.00**, earnings from previous years **500.00 / 500.00**, current year
+  earnings **2,670.00 / 2,000.00**, total equity **8,170.00 / 7,500.00**,
+  as CR6. Total and year to date columns are refused on a balance sheet
+  (each column is already a balance on a date). At most 11 earlier periods
+  (12 columns, as custom reports).
+- **RX4** **% of trading income** (each amount column gets a % column
+  beside it): each line and total divided by that column's total trading
+  income, times 100, to **1 decimal place**, halves away from zero, using
+  decimal maths. June 2026: Sales **100.0%**, cost of sales **25.0%**,
+  gross profit **75.0%**, interest income 20.00 / 1,200.00 = 1.666...
+  = **1.7%**, accounting fees 250.00 / 1,200.00 = 20.833... = **20.8%**, net
+  profit 670.00 / 1,200.00 = 55.833... = **55.8%**. A column with no trading
+  income (e.g. **1-28 Feb 2026**) shows its % cells **blank**, never an
+  error or 0.0%. A negative amount gives a negative % (a 60.00 credit on a
+  cost of sales account is -5.0% of 1,200.00).
+- **RX5** Tracking filter. A Location category with Otago and Canterbury.
+  On **15 Jun 2026** a journal Dr 1000 **300.00** / Cr 4000 **300.00**, both
+  lines tagged **Otago**. Filtered to Location: **Otago** (the value and
+  everything under it, as TC8): the profit and loss for June shows Sales
+  **300.00** and net profit **300.00**; the balance sheet at 30 Jun 2026
+  shows 1000 **300.00**, current year earnings **300.00**, net assets and
+  total equity **300.00** (balances); the trial balance shows 1000 Dr
+  **300.00** and 4000 Cr **300.00**. Filtered to **Not set**: everything
+  else, so the June profit and loss shows Sales **1,200.00** and net profit
+  **670.00**, and the two filtered profits add up to the unfiltered
+  **970.00**. A balance sheet filter only balances when both sides of each
+  journal are tagged; when they aren't, the report says it doesn't balance
+  rather than hiding it. A value from another category is refused.
+- **RX6** Budget vs actual with a tracking filter. For a budget with no
+  tracking value, filtering actuals to Otago shows the Otago actuals against
+  the **whole** budget, and the report says so. For a budget set up for a
+  tracking value, the filter is that value (a different one is refused):
+  its actuals are already only that value's lines (BU6).
+
 ### Home
 
 Home shows a card for each bank account, money owed to you, bills to pay and
@@ -7490,7 +7556,8 @@ RP-2, 200.00 + GST = **230.00**, dated 21 Jul, due 20 Aug; RP-3 dated
 Written overnight from Xero's account transactions report (general ledger
 detail); Jess hasn't approved them yet. For one account, or every account,
 and a date range: the **opening balance** (every posting before the start
-date), each **posted journal line** in the range in date order (date, the
+date; for an income or expense account only those since the start of the
+financial year, ATX6), each **posted journal line** in the range in date order (date, the
 source with a link to it, description, contact, debit, credit and the
 running balance), and the **closing balance**. Balances are debits less
 credits, so a credit balance is negative (shown as "Cr" on screen). A
@@ -7547,6 +7614,21 @@ Kobe Ltd, 50.00 + GST = **57.50**, dated 30 Apr, voided 5 May.
   (**280.00**); 10 May "Reversal REV-Fees" credit **80.00** (**200.00**);
   closing **200.00**. Account 6100: 10 May "Replacement Fees" debit
   **80.00**. Each links to its journal.
+- **ATX6** Income and expense accounts start each financial year at
+  **0.00** (as Xero does, not yet reviewed; decision 1357), the same rule as
+  the trial balance (TB2): their opening balance is only this financial
+  year's postings before the start date, not earlier years' profit, which
+  is in retained earnings. With the custom-report journals (CR1-CR10; 20 Mar
+  2026 sale of 500.00 in last year): account 4000 for **1-30 Apr 2026**:
+  opening **0.00** (before: -500.00), 10 Apr credit **1,000.00**, closing
+  **-1,000.00**; for **1-31 May 2026**: opening **-1,000.00** (April only),
+  12 May credit **1,500.00**, closing **-2,500.00**, the trial balance's
+  credit of 2,500.00 at 31 May. Balance sheet accounts are unchanged: 1000's
+  opening on 1 May 2026 is every posting before it, **6,400.00**. A range
+  that starts in one financial year and ends in the next (1 Mar-30 Apr
+  2026) opens from the first year (20 Mar sale included) and runs on
+  without restarting at 1 April; its closing balance is then not the trial
+  balance's, and the report says so.
 
 ### Not supported yet (refused rather than guessed)
 
