@@ -196,7 +196,7 @@ function ruleSummary(rule: BankRule) {
 }
 
 /** One step after another inside the one transaction a caller already has (each in a savepoint), when there's no runner. */
-function savepointRunner(tx: OrgTx): OrgRunner {
+export function savepointRunner(tx: OrgTx): OrgRunner {
   return async (work) => {
     await tx.query("savepoint batch_step");
     try {
@@ -261,7 +261,7 @@ function batchView(batch: Batch, outcome: Pick<RunOutcome, "stopped" | "retryAft
   };
 }
 
-function batchAnswer(outcome: RunOutcome) {
+export function batchAnswer(outcome: RunOutcome) {
   return batchView(outcome.batch, outcome);
 }
 

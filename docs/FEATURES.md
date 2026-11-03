@@ -1052,7 +1052,17 @@ that something happened.
   failed, Last sync succeeded), when Akahu last accepted its tokens, its
   schedule, its last successful sync, and each linked account's last result
   ("Nothing new" apart from "Not synced yet") and lines brought in.
-  Existing links are never replaced. **One-click
+  Existing links are never replaced. **Personal and mixed-use accounts**
+  (#545, decisions 1308-1315, MU1-MU14, tenant migration 0219): an admin
+  marks a card or account as mixed use or personal in a guided setup. Its
+  lines are reviewed (business, private, split, or a refund) instead of
+  reconciled; a business part posts spend money and an owner journal, so the
+  account's balance in the books stays 0.00 and the personal debt never
+  becomes a business liability. GST is claimed only on the business part,
+  with the receipt ticked (or, for an AI, evidence). Undo voids on the line's
+  date. A personal account's lines come in private. Several lines can be
+  marked private at once; an AI with Full access can review (one at a time or
+  as a batch) and undo its own reviews. **One-click
   matching** (like Xero's OK): a line whose only exact-amount candidate (a
   posted transaction on the account, or an invoice or bill due) isn't wanted
   by another line, or that only a bank rule fits, shows the suggestion

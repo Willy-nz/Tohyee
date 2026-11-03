@@ -14,6 +14,7 @@ import { PayPalPanel } from "@/components/bank/paypal";
 import { StripePanel } from "@/components/bank/stripe";
 import { WisePanel } from "@/components/bank/wise";
 import { ImportPanel } from "@/components/bank/import-panel";
+import { MixedUsePanel, UsageBadge, UsageSetup } from "@/components/bank/mixed-use";
 import { StatementLinesPanel, TransactionsPanel } from "@/components/bank/lines-panel";
 import { ReconcilePanel } from "@/components/bank/reconcile-panel";
 import { Money, RequireOrganisation } from "@/components/books";
@@ -21,6 +22,8 @@ import { useApiData } from "@/components/hooks";
 import { Card, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
+import type { UsageAccount } from "@/lib/bank/mixed-use";
+import { USAGE_LABELS } from "@/lib/bank/mixed-use-rules";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 const TABS = ["reconcile", "lines", "import", "feed", "transactions", "batches"] as const;
@@ -29,13 +32,22 @@ type Tab = (typeof TABS)[number];
 function BankAccountView({ organisationId, accountId }: { organisationId: string; accountId: string }) {
   const detail = useApiData<{ bankAccount: BankAccount }>(`/api/bank-accounts/${accountId}`, { organisationId });
   const { can, current } = useWorkspace();
+  const usageData = useApiData<{ account: UsageAccount }>(`/api/bank-accounts/${accountId}/usage`, { organisationId });
   const [tab, setTab] = useState<Tab>("reconcile");
+  const [changingUse, setChangingUse] = useState(false);
 
   if (detail.error) return <Notice tone="error">{detail.error}</Notice>;
   if (!detail.data) return <p className={ui.muted}>Loading…</p>;
   const account = detail.data.bankAccount;
+  const usage = usageData.data?.account ?? null;
+  // A mixed-use or personal account's lines are reviewed, never reconciled (#545, MU10).
+  const personal = usage !== null && usage.usage !== "business";
+  const reload = () => {
+    detail.reload();
+    usageData.reload();
+  };
   const labels: Record<Tab, string> = {
-    reconcile: `Reconcile${account.unreconciledCount ? ` (${account.unreconciledCount})` : ""}`,
+    reconcile: personal ? `Review${account.unreconciledCount ? ` (${account.unreconciledCount})` : ""}` : `Reconcile${account.unreconciledCount ? ` (${account.unreconciledCount})` : ""}`,
     lines: "Statement lines",
     import: "Import a statement",
     feed: "Bank feed",
@@ -60,8 +72,33 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
       />
       <p className={ui.actions} style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <Link href="/operations/bank-accounts">← All bank accounts</Link>
-        <Link href={`/operations/reports?report=bankrec&account=${account.id}`}>Bank reconciliation report</Link>
+        {personal ? null : <Link href={`/operations/reports?report=bankrec&account=${account.id}`}>Bank reconciliation report</Link>}
       </p>
+      {usage ? (
+        <p className={ui.actions} style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <span>
+            {USAGE_LABELS[usage.usage]} <UsageBadge usage={usage.usage} />
+          </span>
+          {usage.ownerAccount ? <span className={ui.muted}>Owner account {usage.ownerAccount.code}</span> : null}
+          {can("admin") && !changingUse ? (
+            <button type="button" className={ui.linkButton} onClick={() => setChangingUse(true)}>
+              Change how it&apos;s used
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+      {usage && changingUse ? (
+        <Card>
+          <UsageSetup
+            organisationId={organisationId}
+            account={usage}
+            onClose={(changed) => {
+              setChangingUse(false);
+              if (changed) reload();
+            }}
+          />
+        </Card>
+      ) : null}
       <div className={ui.statRow}>
         <Stat
           label={account.statementBalanceAt ? `Statement balance (${formatDateTime(account.statementBalanceAt)})` : "Statement balance"}
@@ -70,7 +107,12 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
         <Stat
           label="Balance in Tohyee"
           value={
-            account.isForeign ? (
+            personal ? (
+              <span>
+                Not a business balance{" "}
+                <InfoTip label="Why there's no balance">Business purchases are credited to the owner, so the business owes nothing on this account. Its balance in Tohyee stays 0.00.</InfoTip>
+              </span>
+            ) : account.isForeign ? (
               <>
                 {money(account.foreignBalance)}
                 <div className={ui.muted}>
@@ -82,7 +124,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
             )
           }
         />
-        <Stat label="Lines to reconcile" value={account.unreconciledCount} />
+        <Stat label={personal ? "Lines to review" : "Lines to reconcile"} value={account.unreconciledCount} />
         <Stat
           label={account.lastLineDate ? `Latest line ${formatDate(account.lastLineDate)}` : "Bank feed"}
           value={<FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} paypal={account.paypal} wise={account.wise} />}
@@ -100,10 +142,10 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
           these lines yet.</InfoTip>
         </p>
       ) : null}
-      {account.accountType === "credit_card" ? (
+      {account.accountType === "credit_card" && !personal ? (
         <p className={ui.muted}>For a credit card, a negative balance is what&apos;s owed on the card.</p>
       ) : null}
-      {difference ? (
+      {difference && !personal ? (
         <Notice tone="warning">
           Every line is reconciled, but the bank&apos;s balance and Tohyee&apos;s differ.{" "}
           <InfoTip label="Why the balances differ">Usually that&apos;s something posted to this account
@@ -125,7 +167,10 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
             </button>
           ))}
         </div>
-        {tab === "reconcile" ? <ReconcilePanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
+        {tab === "reconcile" && personal ? (
+          <MixedUsePanel organisationId={organisationId} accountId={account.id} canReview={can("bookkeeper")} onChanged={reload} />
+        ) : null}
+        {tab === "reconcile" && !personal && usage ? <ReconcilePanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "lines" ? <StatementLinesPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "import" ? <ImportPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "feed" ? (

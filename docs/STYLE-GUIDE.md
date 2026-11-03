@@ -27,7 +27,7 @@
   put the rest in `<InfoTip>` from `src/components/info-tip.tsx`, the (i)
   button (decisions 1210-1215). Warnings, irreversible-action confirmations
   and who-can-see-this notices stay visible.
-- Browser-safe value modules also include `ui/info-tip`.
+- Browser-safe value modules also include `ui/info-tip` and `bank/mixed-use-rules`.
 
 ## Organisation data
 
