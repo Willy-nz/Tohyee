@@ -17,6 +17,8 @@ export type AkahuAccount = {
   formatted_account?: string | null;
   type?: string;
   status?: string;
+  /** What Akahu can do with it: TRANSACTIONS, PAYMENT_TO, PAYMENT_FROM. */
+  attributes?: string[];
   balance?: { current?: number; available?: number; currency?: string } | null;
   connection?: { _id?: string; name?: string } | null;
   refreshed?: { balance?: string; transactions?: string } | null;
@@ -87,8 +89,22 @@ async function call<T>(
   }
   if (!response.ok || data.success === false) {
     const message = typeof data.message === "string" ? data.message : `Akahu answered ${response.status}.`;
-    const refused = response.status === 401 || response.status === 403;
-    throw new AkahuError(response.status, refused ? `Akahu refused the tokens: ${message}${/[.!?]$/.test(message) ? "" : "."} Check the App ID token and user token.` : message);
+    const said = `${message}${/[.!?]$/.test(message) ? "" : "."}`;
+    // Akahu: 401 is a token that's wrong or revoked; 403 is a missing permission or a blocked IP address,
+    // not a revoked token ("Response Formats" and the 2024 response-code change, read 3 Nov 2026; decision 1291).
+    if (response.status === 401) {
+      throw new AkahuError(
+        401,
+        `Akahu refused the tokens: ${said} Copy the App ID token and user token again from the Developers page at my.akahu.nz. Both must come from the same personal app.`,
+      );
+    }
+    if (response.status === 403) {
+      throw new AkahuError(
+        403,
+        `Akahu says this app isn't allowed to do that: ${said} At my.akahu.nz › Developers, check the app's IP address ranges let this server in, and that both tokens come from the same personal app.`,
+      );
+    }
+    throw new AkahuError(response.status, message);
   }
   return data as T;
 }

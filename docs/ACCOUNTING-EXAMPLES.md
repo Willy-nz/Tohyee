@@ -16682,6 +16682,38 @@ and 1010 to Will's BNZ savings.
   "Akahu", and every existing link points to it. Nothing needs to be
   entered again.
 
+#### Guided Akahu setup and feed statuses (#543; as Xero does, not yet reviewed)
+
+Xero's bank feed setup was followed (decision 537): connect the bank, then
+for each account choose an existing bank account or add one, then a start
+date. Nothing here posts; lines arrive unreconciled. Made-up tokens and
+accounts; tests: `tests/integration/akahu-guided-setup.test.ts`.
+
+Setup: Akahu shares an everyday account (01-0123-0456789-00), a Visa card
+$25.50 in credit and a term deposit with no transactions. Tohyee has 1901
+Everyday, 2901 Visa card and 1902 Old savings.
+
+- **BK38** Tokens Akahu refuses (401) or a missing permission (403) save
+  nothing and say what to check. Good tokens save the login and its "tokens
+  accepted" time; with nothing linked the card says **Accounts need
+  linking** with **Link bank accounts**. A login sharing no accounts lists
+  none and keeps its own status.
+- **BK39** Linking Everyday to 1901 and Visa to 2901 from 1 Sep 2026 links
+  both or neither. Two Akahu accounts into one Tohyee account, an account
+  Akahu no longer shares, or the term deposit (no TRANSACTIONS attribute)
+  are refused. Linked, not yet synced: **Ready to sync**.
+- **BK40** The first sync brings in 2 lines for each. Each account keeps its
+  last successful sync and "2 new lines"; the login says **Last sync
+  succeeded**. 2901's statement balance is +25.50: Akahu signs a card
+  negative when money is owed, so a card in credit stays positive.
+- **BK41** Syncing 1901 again adds nothing ("Nothing new", 2 already here),
+  which isn't the same as never synced. One new transaction later comes in
+  once. A failed sync shows Akahu's message and keeps the last success; it
+  doesn't mark the tokens refused.
+- **BK42** Existing links aren't replaced: 1901 can't be linked to the Visa
+  while its Everyday feed works ("Stop that feed first"), and Everyday can't
+  also go into 1902.
+
 Answered by Jess, 8 Oct 2026: several logins for **every** API feed
 (Akahu, SimpleFIN, Stripe, PayPal and Wise), replacing decision 388's "one
 connection per provider"; Stripe, PayPal and Wise's one-balance-per-currency

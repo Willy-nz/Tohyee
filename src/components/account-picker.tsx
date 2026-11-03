@@ -57,14 +57,15 @@ export function AccountPicker({
     try {
       const body = { organisationId, code: input.code.trim(), name: input.name.trim(), accountType: input.accountType };
       let added: Account;
-      if (input.accountType === "bank") {
+      if (input.accountType === "bank" || input.accountType === "credit_card") {
+        // Bank accounts and credit cards go through the bank accounts route, so they can hold statement lines and a feed.
         const { bankAccount } = await api<{ bankAccount: { id: string; code: string; name: string; currencyCode: string } }>("/api/bank-accounts", { method: "POST", body });
         added = {
           id: bankAccount.id,
           code: bankAccount.code,
           name: bankAccount.name,
-          accountClass: "asset",
-          accountType: "bank",
+          accountClass: ACCOUNT_TYPES[input.accountType].accountClass,
+          accountType: input.accountType,
           description: null,
           currencyCode: null,
           systemKey: null,

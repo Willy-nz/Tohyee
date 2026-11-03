@@ -15,7 +15,7 @@ import { makeLine, type ParsedStatementLine } from "@/lib/bank/formats/common";
 import { writeAuditEvent } from "@/lib/audit";
 import { businessTimeZone } from "@/lib/dates";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
-import { abs, dec, neg, toFixedString } from "@/lib/money/decimal";
+import { dec, toFixedString } from "@/lib/money/decimal";
 import { listOrganisationsForJobs } from "@/lib/organisations/admin";
 import { secretsAvailable } from "@/lib/secrets";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
@@ -102,11 +102,9 @@ export async function syncBankFeedAccount(
     }
     const current =
       typeof akahuAccount?.balance?.current === "number" ? dec(akahuMoney(akahuAccount.balance.current, "Akahu's account balance")) : null;
-    // Akahu reports a credit card's balance as what's owed; statement lines count what's owed as negative.
-    // Open (#147): forcing it negative gets a card in credit wrong if Akahu signs that as a credit; Akahu's
-    // sign convention for CREDITCARD balances isn't confirmed yet, so this is unchanged.
-    const isCard = akahuAccount?.type === "CREDITCARD";
-    const balance = current === null ? null : toFixedString(isCard ? neg(abs(current)) : current, 2);
+    // Akahu signs a credit card's current balance negative when money is owed ("The Account Model", read
+    // 3 Nov 2026), as statement lines do, so it's kept as it comes; a card in credit stays positive (decision 1291).
+    const balance = current === null ? null : toFixedString(current, 2);
     return await withOrganisationTransaction(organisation, actor, async (tx) => {
       await lockStatementAccount(tx, accountId, "feed");
       const counts = await addStatementLines(tx, accountId, null, lines, { dryRun: true });
@@ -127,19 +125,22 @@ export async function syncBankFeedAccount(
       }
       const synced = await tx.query<{ at: string }>(
         `update bank_account_settings
-            set last_synced_at = now(), last_sync_status = 'ok', last_sync_error = null,
+            set last_synced_at = now(), last_sync_status = 'ok', last_sync_error = null, last_sync_ok_at = now(), last_sync_added = $3,
                 statement_balance = coalesce($2::numeric, statement_balance),
                 statement_balance_at = case when $2::numeric is null then statement_balance_at else now() end,
                 updated_at = now()
           where account_id = $1
           returning last_synced_at as at`,
-        [accountId, balance],
+        [accountId, balance, counts.added],
       );
+      // Akahu answered with these tokens, so they work (#543).
+      await tx.query("update akahu_connections set tokens_checked_at = now() where id = $1 and status = 'active'", [prepared.connectionId]);
       return { ...counts, syncedAt: synced.rows[0].at };
     });
   } catch (error) {
     let problem = akahuProblem(error);
-    const refused = error instanceof AkahuError && (error.status === 401 || error.status === 403);
+    // Only a 401 means the tokens are wrong or revoked; a 403 is a permission problem (decision 1291).
+    const refused = error instanceof AkahuError && error.status === 401;
     try {
       await withOrganisationTransaction(organisation, actor, async (tx) => {
         // BK33: refused tokens are the login's problem, shown on its accounts and its row. Nothing is retried with another login's.

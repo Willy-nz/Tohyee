@@ -18,8 +18,13 @@ function shownBalance(value: unknown): string | null {
  * whose tokens are refused is listed in `problems` instead (BK33).
  */
 export const GET = route(async (request) => {
-  const organisationId = searchParams(request).get("organisationId");
-  const logins = await withOrganisation(request, organisationId, "admin", (tx) => allAkahuCredentials(tx));
+  const params = searchParams(request);
+  const organisationId = params.get("organisationId");
+  // One login's accounts only, for the guided setup (#543); otherwise every login's.
+  const only = params.get("connectionId");
+  const logins = await withOrganisation(request, organisationId, "admin", async (tx) =>
+    only ? [{ ...(await akahuCredentialsFor(tx, only)), tokenProblem: null }] : allAkahuCredentials(tx),
+  );
   if (logins.length === 0) await withOrganisation(request, organisationId, "admin", (tx) => akahuCredentialsFor(tx));
   const found: Array<{ login: (typeof logins)[number]; accounts: AkahuAccount[] }> = [];
   const problems: Array<{ connectionId: string; loginName: string; message: string }> = [];
@@ -48,6 +53,8 @@ export const GET = route(async (request) => {
         formattedAccount: account.formatted_account ?? null,
         type: account.type ?? null,
         status: account.status ?? null,
+        // Akahu's attributes (TRANSACTIONS etc.), so the setup can say which accounts can't give transactions (#543).
+        attributes: Array.isArray(account.attributes) ? account.attributes.filter((value): value is string => typeof value === "string") : null,
         connectionName: account.connection?.name ?? null,
         balance: shownBalance(account.balance?.current),
         linkedAccountId: linkedTo.get(account._id) ?? null,
