@@ -31,6 +31,7 @@ import { copyName, hasUnsavedChanges, recordChange, redo, redoLabel, replaceSave
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { MoreMenu } from "@/components/more-menu";
 import { useWorkspace } from "@/components/workspace";
 import { formatOptionsFor, mergeFormats, pasteFormat, SECOND_GROUPING, SECOND_GROUPING_REQUIRED, VISUAL_NAMES, type ChartFormat, type DefaultableVisual, type VisualDefaults } from "@/lib/analytics/chart-format";
 import { tileChartSpec, tileValueNames, tileWithDefaults } from "@/lib/analytics/tile-chart";
@@ -189,7 +190,7 @@ function RequireAnalytics({ organisationId, children }: { organisationId: string
         Analytics is off.{" "}
         {can("admin") ? (
           <>
-            Turn it on in <Link href="/operations/settings">Settings › Modules</Link>.
+            Turn it on in <Link href="/operations/modules">Modules</Link>.
           </>
         ) : (
           "An admin can turn it on in Settings."
@@ -681,13 +682,30 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       {embed ? null : <div className={styles.header}>
         <div>
           {editing ? (
-            <div className={ui.grid3}>
-              <Field label="Name">
-                <input value={dashboard.name} maxLength={100} onChange={(event) => change({ ...dashboard, name: event.target.value }, "rename the report", "name")} />
-              </Field>
-              <Field label="Description">
-                <input value={dashboard.description ?? ""} maxLength={500} onChange={(event) => change({ ...dashboard, description: event.target.value }, "change the description", "description")} />
-              </Field>
+            // The name is edited where it's shown (decision 1325); the description sits under it.
+            <div className={styles.inPlace}>
+              <div className={styles.reportIdentity}>
+                <IllustratedIcon name="analytics" />
+                {/* Still the page's heading while editing, so a screen reader finds it. */}
+                <h1 className={styles.title}>
+                  <input
+                    className={styles.titleInput}
+                    aria-label="Report name"
+                    value={dashboard.name}
+                    maxLength={100}
+                    required
+                    onChange={(event) => change({ ...dashboard, name: event.target.value }, "rename the report", "name")}
+                  />
+                </h1>
+              </div>
+              <input
+                className={styles.descriptionInput}
+                aria-label="Description"
+                placeholder="Add a description"
+                value={dashboard.description ?? ""}
+                maxLength={500}
+                onChange={(event) => change({ ...dashboard, description: event.target.value }, "change the description", "description")}
+              />
             </div>
           ) : (
             <>
@@ -706,26 +724,25 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
               <Button variant="secondary" onClick={() => setEditingTile("new-text")} disabled={busy || Boolean(editingTile)}>
                 + Add text or item
               </Button>
-              <Button variant="secondary" aria-expanded={theming} onClick={() => setTheming(!theming)} disabled={busy}>
-                Theme: {theme.name}
-              </Button>
               <Button
                 variant="secondary"
+                className={styles.iconButton}
                 onClick={() => step("undo")}
                 disabled={busy || Boolean(editingTile) || !history || !undoLabel(history)}
                 aria-label={history && undoLabel(history) ? `Undo ${undoLabel(history)}` : "Undo"}
                 title={history && undoLabel(history) ? `Undo ${undoLabel(history)} (Ctrl+Z)` : "Nothing to undo"}
               >
-                Undo
+                <span aria-hidden="true">↶</span>
               </Button>
               <Button
                 variant="secondary"
+                className={styles.iconButton}
                 onClick={() => step("redo")}
                 disabled={busy || Boolean(editingTile) || !history || !redoLabel(history)}
                 aria-label={history && redoLabel(history) ? `Redo ${redoLabel(history)}` : "Redo"}
                 title={history && redoLabel(history) ? `Redo ${redoLabel(history)} (Ctrl+Shift+Z)` : "Nothing to redo"}
               >
-                Redo
+                <span aria-hidden="true">↷</span>
               </Button>
               <Button onClick={() => void save()} disabled={busy || Boolean(editingTile) || !unsaved}>
                 {busy ? "Saving…" : "Save"}
@@ -742,14 +759,14 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
               >
                 {unsaved ? "Save and view" : "View"}
               </Button>
-              {unsaved ? (
-                <Button variant="secondary" onClick={() => base && change(base, "discard the changes")} disabled={busy || Boolean(editingTile)}>
-                  Discard changes
-                </Button>
-              ) : null}
-              <Button variant="danger" onClick={() => void remove()} disabled={busy || Boolean(editingTile)}>
-                Delete
-              </Button>
+              <MoreMenu
+                label="More report actions"
+                items={[
+                  { label: `Theme: ${theme.name}`, onSelect: () => setTheming(!theming), disabled: busy },
+                  ...(unsaved ? [{ label: "Discard changes", onSelect: () => base && change(base, "discard the changes"), disabled: busy || Boolean(editingTile) }] : []),
+                  { label: "Delete report", onSelect: () => void remove(), danger: true, disabled: busy || Boolean(editingTile) },
+                ]}
+              />
             </>
           ) : canEdit ? (
             <Button variant="secondary" onClick={() => void beginEditing()}>

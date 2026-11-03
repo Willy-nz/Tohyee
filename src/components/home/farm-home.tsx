@@ -224,7 +224,7 @@ function MoneyCard({ summary }: { summary: HomeSummary }) {
   return (
     <Card title="Money" href="/operations/bank-accounts">
       <div className={homeStyles.figure}><Money value={summary.cashInBank} /></div>
-      <small className={ui.muted}>Cash in bank · ledger balances, excluding credit cards</small>
+      <small className={ui.muted}>Cash in bank, excluding credit cards</small>
       <div className={homeStyles.rows}>
         <div className={homeStyles.row}><span><Link href="/operations/reports?report=payables">Bills to pay</Link>{summary.billsDueThisWeek ? ` (${summary.billsDueThisWeek} this week)` : ""}</span><span><Money value={summary.billsToPay.total} /></span></div>
         <div className={homeStyles.row}><span><Link href="/operations/reports?report=aged">Owed to you</Link></span><span><Money value={summary.owedToYou.total} /></span></div>
@@ -289,7 +289,7 @@ function SeasonCashCard({ data }: { data: FarmHomeSeasonCash }) {
   const now = [...data.months].reverse().find((month) => month.closing !== null);
   return (
     <Card title="Cash this season" href="/operations/reports/cash-flow-forecast" wide aside={<span className={homeStyles.kind}>{formatDate(data.yearStart)} – {formatDate(data.yearEnd)}</span>}>
-      <p className={ui.muted}>In the bank at each month&apos;s end, then what the books expect. Excludes credit cards.</p>
+      <p className={ui.muted}>Excludes credit cards.</p>
       <Chart
         spec={{ kind: "column", category: "month", stacked: true, series: [{ field: "actual", label: "In the bank" }, { field: "forecast", label: "Expected" }], valueFormat: "money", currency: data.currencyCode, compact: true }}
         rows={rows}
@@ -301,10 +301,6 @@ function SeasonCashCard({ data }: { data: FarmHomeSeasonCash }) {
             <div className={homeStyles.row}>
               <span>{monthName(now.month)} so far: in · out</span>
               <span><Money value={now.moneyIn} /> · <Money value={now.moneyOut ?? "0.00"} /></span>
-            </div>
-            <div className={homeStyles.row}>
-              <span><Link href="/operations/bank-accounts">In the bank today</Link></span>
-              <span><Money value={now.closing} /></span>
             </div>
           </>
         ) : null}
@@ -395,7 +391,6 @@ export function FarmHomeTiles({ organisationId }: { organisationId: string }) {
   return (
     <>
       <ImageryKeyReminder organisationId={organisationId} />
-      <p className={ui.muted}>All farms in {current?.displayName ?? "this organisation"}. Money, livestock and performance figures cover the whole organisation. <Link href="/operations/farming">Choose a farm for maps and field records</Link>.</p>
       {dashboard.error ? <Notice tone="error">{dashboard.error}</Notice> : null}
       {money.error && wantsMoney ? <Notice tone="error">Couldn&apos;t load the money figures: {money.error}</Notice> : null}
       <PageDashboardFrame

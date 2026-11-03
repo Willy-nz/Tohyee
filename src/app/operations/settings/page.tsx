@@ -3,10 +3,10 @@
 import { InfoPara, InfoTip } from "@/components/info-tip";
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RequireOrganisation } from "@/components/books";
-import { AerialPhotosSettings } from "@/components/farm-imagery";
-import { ModulesCard } from "@/components/modules";
+import { AERIAL_PHOTOS_SETTINGS } from "@/components/farm-imagery";
 import { LogoCard } from "@/components/organisation/logo-card";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -317,16 +317,25 @@ function Settings({ organisationId }: { organisationId: string }) {
           </p>
         ) : null}
       </Card>
-      <ModulesCard organisationId={organisationId} />
-      <AerialPhotosSettings organisationId={organisationId} />
     </>
   );
 }
 
+/** Old links to the aerial photo card here (…/settings#aerial-photos) go to its new place on the farm Map (decision 1324). */
+function MovedAnchors() {
+  const router = useRouter();
+  useEffect(() => {
+    if (window.location.hash === "#aerial-photos") router.replace(AERIAL_PHOTOS_SETTINGS);
+  }, [router]);
+  return null;
+}
+
+/** The organisation's own settings. All settings is the hub for everything else; Modules has its own page (decision 1324). */
 export default function SettingsPage() {
   return (
     <Page>
-      <PageHeader title="Settings" />
+      <MovedAnchors />
+      <PageHeader title="Organisation settings" />
       <RequireOrganisation>{(organisationId) => <Settings key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

@@ -121,7 +121,7 @@ export function FarmReportingSetupCard({ organisationId, yearEnd, canEdit, onSav
       {setup.error ? <Notice tone="error">{setup.error}</Notice> : null}
       {data && !data.advancedFeatures ? (
         <Notice tone="info">
-          Tracking categories are off. Turn on Advanced features under <Link href="/operations/settings">Settings</Link>, then add a category such as Farm with a value for each farm.
+          Tracking categories are off. Turn on Advanced reporting under <Link href="/operations/modules">Modules</Link>, then add a category such as Farm with a value for each farm.
         </Notice>
       ) : null}
       {data && data.advancedFeatures ? (

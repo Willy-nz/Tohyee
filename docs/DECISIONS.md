@@ -12003,7 +12003,8 @@ confirmations, who-can-see-this notices) still stays visible, as below.
       honesty note, it's now a one-line `<Notice>` under the heading: my
       mail ("only you can see your mail"), payroll reports and workforce
       budget (payroll access only), payroll access and bank file settings
-      (who can change them), sales platforms (admins connect shops), the
+      (who can change them), sales platforms (admins connect shops; shown
+      to non-admins since decision 1325), the
       server's analytics and bank-file folders (Tohyee only reads them),
       restore (nothing is overwritten), sign-ins (flagged, not blocked),
       Google sign-in (uninvited accounts can't sign in), the farm calendar
@@ -12146,3 +12147,56 @@ answer (nothing posts until a person OKs a suggestion), not yet reviewed.
       proposals (newest first) and opens one for review. Proposal and row
       ids are stable and are what the MCP tools (`list_bank_coding_proposals`,
       `get_bank_coding_proposal`) and the API use.
+
+### Screens made simpler (Jess's design brief, 3 Nov 2026; decisions 1321-1325)
+
+Items 6-10 of the review of Jess's 3 November 2026 brief ("simple purpose,
+simple architecture, simple design, simple implementation"), approved by
+her. Where she didn't say how, these follow Xero (decision 537) and are
+**not yet reviewed**.
+
+1321. **An invoice reads like Xero's.** The invoice number is the page
+      title, with its status badges. There is one primary button: Record
+      payment on an approved invoice (it opens the payment form and moves
+      focus to it), Approve on a draft. Everything else is in a "⋯" menu
+      (`MoreMenu`, the WAI-ARIA menu button pattern: arrows, Home/End,
+      Escape back to the button): Email invoice, Create credit note,
+      Download PDF (the one PDF action; the print page still works at its
+      address), Recode a line, Notes, files and history, and Void invoice…
+      (Edit and Delete draft for a draft). Void, Recode, Email and Notes
+      open their section below and move focus to it. The totals are a
+      right-hand column under the lines (subtotal excl. GST, GST, total,
+      paid, credited, amount due). The void warning stays in its section
+      and in the confirmation; the payments card only shows once there are
+      payments or the form is open.
+1322. **Home has no greeting.** The page is titled Home; the organisation
+      and year line and the farm Home's "All farms in…" sentence are gone,
+      and the farm Home's Cash this season card no longer repeats "In the
+      bank today" (the Money card shows cash in bank).
+1323. **Reports have one picker.** The 13 standard reports are one
+      "Report" list (grouped: financial statements, owed and owing, ledger,
+      budgets) instead of two rows of tabs; the address (?report=) still
+      picks the report. The report's dates and Export share one row. The
+      report's name shows once (in the picker); the card's own title stays
+      for screen readers, and the organisation, title and period block is
+      the printed heading only. The "GST return is under Tax" line is gone.
+1324. **All settings is the hub.** The Settings page is "Organisation
+      settings" (organisation, GST, logo, period locks). Modules is only on
+      its own page (links that said "Settings › Modules" go there). The LINZ
+      aerial photo key is set up on the farm Map (`?aerial=1`, linked from
+      All settings, the map's "Add aerial photos" and the key reminders);
+      the old address /operations/settings#aerial-photos goes there.
+1325. **Farm pages, Analytics, Sales.** Farm pages show their title, the
+      farm picker and the offline status on one row, which stays in view;
+      the "kept on this device" warning stays a notice below. The Map's
+      People on the map says "Only people who turned on sharing with this
+      farm" with the rest behind an (i). The Analytics report editor has
+      Save as its primary button, Undo and Redo as icon buttons (their
+      names and shortcuts unchanged), Theme, Discard changes and Delete in a
+      "⋯" menu, and the report's name and description typed where they're
+      shown. The Sales overview is gone: /operations/sales redirects to
+      Invoices, whose Awaiting payment tab shows what customers owe. Sales
+      platforms: the shop choice comes straight after the steps (no card
+      title or description), "Admins connect shops" shows only to people
+      who can't, and the "not tried with a real store" note is one line at
+      the Turn on step (and under connected shops).

@@ -527,7 +527,7 @@ export function SalesPlatformsSummary({ organisationId }: { organisationId: stri
         title="Selling on Shopify?"
         actions={<Link href={SALES_PLATFORMS_HREF}>Connect Shopify</Link>}
       >
-        <p className={ui.muted}>This is set up under Accounting settings, in Sales platforms. It hasn&apos;t been tried with a real Shopify store yet.</p>
+        <p className={ui.muted}>It hasn&apos;t been tried with a real Shopify store yet.</p>
       </Card>
     );
   }
@@ -567,9 +567,10 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {isAdmin ? null : <Notice>Admins connect shops; you can read the sync log.</Notice>}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
       {setupOpen ? (
-        <Card title={current.length === 0 ? "Connect your shop" : "Connect another shop"} description="One step at a time. Nothing goes into your accounts until you turn posting on at the end.">
+        <Card title={current.length === 0 ? undefined : "Connect another shop"}>
           <StoreSetup
             organisationId={organisationId}
             onClose={(text) => {
@@ -597,10 +598,11 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
           <ShopifyScopesCard />
         </details>
       ) : null}
-      <p className={ui.muted} style={{ margin: 0 }}>
-        This hasn&apos;t been tried against a real store&apos;s orders, refunds and payouts yet, only against the platforms&apos; documented responses. Check the first sync&apos;s log
-        carefully.
-      </p>
+      {current.length > 0 ? (
+        <p className={ui.muted} style={{ margin: 0 }}>
+          Not tried with a real store&apos;s orders, refunds and payouts yet: check the first sync&apos;s log.
+        </p>
+      ) : null}
       {earlier.length > 0 ? (
         <details className={styles.more}>
           <summary>Earlier connections ({earlier.length})</summary>

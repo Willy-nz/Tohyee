@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useSearchParams } from "next/navigation";
 import { FarmHomeTiles } from "@/components/home/farm-home";
@@ -12,26 +12,14 @@ import { useWorkspace } from "@/components/workspace";
 import { homeKindFor } from "@/lib/dashboard/defaults";
 
 function Overview({ organisationId }: { organisationId: string }) {
-  const { current, user } = useWorkspace();
+  const { current } = useWorkspace();
   const modules = useModules(organisationId);
   // FH1, decision 660: with Farming on, Home is the farm Home; ?view=business shows the business one.
   const business = useSearchParams().get("view") === "business";
   const farmHome = modules !== null && current !== null && homeKindFor({ role: current.role, farming: modules.farming === true }) === "farming";
-  const [greeting, setGreeting] = useState("Welcome");
-  useEffect(() => {
-    const update = () => {
-      const hour = new Date().getHours();
-      setGreeting(hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening");
-    };
-    update();
-    const timer = window.setInterval(update, 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
   return (
     <>
-      <PageHeader
-        title={`${greeting}, ${user.displayName.trim().split(/\s+/)[0] || user.displayName}`}
-      />
+      <PageHeader title="Home" />
       {modules === null ? null : farmHome && !business ? (
         <FarmHomeTiles organisationId={organisationId} />
       ) : (

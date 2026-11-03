@@ -351,7 +351,7 @@ export function TrackingManager({ organisationId }: { organisationId: string }) 
   if (!data.advancedFeatures) {
     return (
       <Notice tone="info">
-        Advanced reporting is off. Turn it on in <Link href="/operations/settings">Settings</Link> to use tracking categories.
+        Advanced reporting is off. Turn it on in <Link href="/operations/modules">Modules</Link> to use tracking categories.
       </Notice>
     );
   }

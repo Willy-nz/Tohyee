@@ -1914,12 +1914,13 @@ that something happened.
   imported twice. The **map** draws the paddock outlines to scale, north
   up. With an organisation's own free **LINZ Basemaps key**, **aerial
   photos** show under the outlines (#485, decisions 1060-1066). An owner or
-  admin adds it in three steps on Settings › **Aerial photos for farm maps**
-  (also on Farms and paddocks): open LINZ Basemaps, copy its API Key box,
+  admin adds it in three steps on the farm **Map** (All settings › **Aerial
+  photos for farm maps** opens it there, decision 1324; also on Farms and
+  paddocks): open LINZ Basemaps, copy its API Key box,
   paste it. Tohyee checks it straight away by loading one photo in the
   browser and says "Aerial photos are on" or what went wrong. Tohyee keeps
   the day the key was saved; from day 80 of a standard key's 90 owners and
-  admins are reminded on Farm Home and in Settings. When photos stop
+  admins are reminded on Farm Home. When photos stop
   loading, the map says so and shows the same three steps. Without a key,
   maps show the outlines on a plain background with "Add aerial photos
   (free, 1 minute)". The browser loads photos straight from LINZ, with

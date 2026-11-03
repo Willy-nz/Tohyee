@@ -613,7 +613,7 @@ export function CustomerSettings({ organisationId }: { organisationId: string })
       </Card>
       {!setup.advancedFeatures ? (
         <Notice tone="info">
-          Credit limits, customer groups, price levels and parent customers come with Advanced reporting. Turn it on in <Link href="/operations/settings">Settings › Modules</Link>.
+          Credit limits, customer groups, price levels and parent customers come with Advanced reporting. Turn it on in <Link href="/operations/modules">Modules</Link>.
         </Notice>
       ) : (
         <>

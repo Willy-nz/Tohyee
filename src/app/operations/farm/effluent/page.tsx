@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { FarmEffluent } from "@/components/farm-effluent";
 import { FarmWorkspace } from "@/components/farm-workspace";
-import { Page, PageHeader } from "@/components/ui";
+import { Page } from "@/components/ui";
 import { readEffluentLink } from "@/lib/effluent/screens";
 
 /**
@@ -15,7 +15,7 @@ import { readEffluentLink } from "@/lib/effluent/screens";
 function EffluentForLink() {
   const link = readEffluentLink(useSearchParams());
   return (
-    <FarmWorkspace linkedFarmId={link.farmId}>
+    <FarmWorkspace title="Effluent" linkedFarmId={link.farmId}>
       {(context) => <FarmEffluent organisationId={context.organisationId} farm={context.farm} link={link} />}
     </FarmWorkspace>
   );
@@ -24,7 +24,6 @@ function EffluentForLink() {
 export default function FarmEffluentPage() {
   return (
     <Page>
-      <PageHeader title="Effluent" />
       <Suspense fallback={null}>
         <EffluentForLink />
       </Suspense>

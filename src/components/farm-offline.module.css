@@ -6,6 +6,10 @@
   color: var(--text-muted);
 }
 
+.status.inline {
+  margin: 0;
+}
+
 .status a {
   display: inline-flex;
   align-items: center;
