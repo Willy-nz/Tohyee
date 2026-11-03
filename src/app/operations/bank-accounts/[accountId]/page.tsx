@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
 import { BatchesPanel } from "@/components/bank/batches";
+import { ProposalsPanel } from "@/components/bank/proposals";
 import { CurrencyMoney, OpeningBalancePanel } from "@/components/bank/foreign";
 import { FeedPanel } from "@/components/bank/feed-panel";
 import { FileFeedsPanel } from "@/components/bank/file-feeds-panel";
@@ -23,7 +24,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatDateTime } from "@/lib/format";
 
-const TABS = ["reconcile", "lines", "import", "feed", "transactions", "batches"] as const;
+const TABS = ["reconcile", "proposals", "lines", "import", "feed", "transactions", "batches"] as const;
 type Tab = (typeof TABS)[number];
 
 function BankAccountView({ organisationId, accountId }: { organisationId: string; accountId: string }) {
@@ -36,6 +37,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
   const account = detail.data.bankAccount;
   const labels: Record<Tab, string> = {
     reconcile: `Reconcile${account.unreconciledCount ? ` (${account.unreconciledCount})` : ""}`,
+    proposals: "Proposals",
     lines: "Statement lines",
     import: "Import a statement",
     feed: "Bank feed",
@@ -126,6 +128,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
           ))}
         </div>
         {tab === "reconcile" ? <ReconcilePanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
+        {tab === "proposals" ? <ProposalsPanel organisationId={organisationId} accountId={account.id} onChanged={detail.reload} /> : null}
         {tab === "lines" ? <StatementLinesPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "import" ? <ImportPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "feed" ? (
