@@ -2333,8 +2333,12 @@ that something happened.
   review (propose_bank_coding, #544); nothing posts until they approve. Full access also makes, edits and approves
   credit notes, quotes, sales and purchase orders and repeating invoices and
   bills, applies credit and records refunds, approves and pays expense
-  claims, adds and edits items, accounts, tracking, budgets and fixed assets,
-  and runs depreciation (decision 489, AIF1-AIF6); anything an approval rule
+  claims, adds and edits items, accounts, tracking, budgets, fixed assets and
+  fixed asset types (create_fixed_asset_type, update_fixed_asset_type), sets
+  an asset's tax details and Investment Boost with register_fixed_asset and
+  update_fixed_asset (the Income tax page's checks; owners and admins only,
+  shown as taxDetails on get_fixed_asset and list_fixed_assets), and runs
+  depreciation (decisions 489, 1345-1348, AIF1-AIF9); anything an approval rule
   covers still waits for a person. Payroll isn't included. A key stops working
   when it's revoked, its owner leaves the organisation or their login is
   turned off. Not yet tried against each AI app.
