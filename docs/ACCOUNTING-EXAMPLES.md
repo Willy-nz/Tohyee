@@ -20559,6 +20559,141 @@ and GST on Shopify's fees (#548 will use `isGstRegisteredOn`). Tested in
 `tests/unit/gst-registration-status.test.ts` and
 `tests/integration/gst-registration-status.test.ts`.
 
+## Personal and mixed-use bank and card accounts (MU1-MU14; built by Claude 3 Nov 2026 for #545, as Xero does, not yet reviewed)
+
+A sole trader often pays for the odd business thing with a personal card or
+account. Xero has no "mixed use" setting: the usual Xero set-up (from
+Claude's knowledge of Xero, not re-checked today) adds the personal card as
+a bank account that works as a clearing account, codes each business
+purchase to its expense with spend money, and credits the owner with the
+same amount (Owner A Funds Introduced), so the business books never carry
+the personal card's debt. Tohyee does the same for each business line, in
+one step, and keeps the household lines out of the business books.
+
+- An account is **business only** (as before), **mixed use** or
+  **personal**. A mixed-use or personal account has an **owner account**
+  (equity; 3000 Owner funds introduced to start with).
+- Its lines are never reconciled. Each one is **reviewed**: **business**,
+  **private**, **split** (part business, part private) or, for money in,
+  a **refund** of a business purchase. Reviewing a line marks it so it isn't
+  counted as waiting to be reconciled; the line itself never changes.
+- A business part posts **spend money** on the account (Dr expense, Dr GST /
+  Cr the account) and an **owner journal** (Dr the account / Cr the owner
+  account), both on the line's date. The account's balance in Tohyee stays
+  **0.00**: nothing on the card is owed by the business.
+- A refund posts **receive money** using the original's accounts and tax
+  codes, and the owner journal the other way round.
+- Undoing a review voids what it posted on the line's date and puts the
+  line back to review. The review stays in the history, marked undone.
+
+Setup: Aroha Lawn Care, Aroha Ngata's sole-trader business, NZD, the
+standard chart and codes, registered for GST from the start and confirmed
+(GSR1). 1000 Business bank account (business only); **2410 Aroha's Visa**
+(credit card, mixed use, owner account 3000); **1020 Aroha's everyday
+account** (bank, personal). Contacts Z Energy, Warehouse Stationery,
+Countdown and PB Tech. All made up.
+
+- **MU1 Choosing how an account is used.** An admin sets 2410 to mixed use
+  with owner account 3000. It's refused while 2410 has a balance in Tohyee
+  other than 0.00 or any reconciled line ("this card is already in the
+  business books"), and the owner account must be an equity account. Each
+  change is in the audit trail (`bank_account.usage_changed`). A mixed-use
+  or personal account never takes an opening balance: what Aroha owes on her
+  Visa isn't a business debt. To treat a card as a business liability, keep
+  it business only and enter its balance as for any card.
+- **MU2 A business purchase.** -46.00 Z ENERGY on 21 May on 2410, reviewed
+  as business: Z Energy, 6120 Motor vehicle expenses, GST, receipt held.
+  Spend money on 21 May: Dr 6120 **40.00** / Dr 2100 **6.00** / Cr 2410
+  46.00, and the owner journal: Dr 2410 46.00 / Cr 3000 **46.00**. 2410's
+  balance in Tohyee is **0.00**. May's GST return gets **46.00** in Box 11
+  and **6.00** purchases GST (as BK6). The line shows "Business" and isn't
+  reconciled.
+- **MU3 A private purchase.** -120.00 COUNTDOWN on 22 May, marked
+  private: nothing is posted and no GST is claimed. The line is kept as
+  imported and shows "Private".
+- **MU4 A split purchase.** -230.00 WAREHOUSE STATIONERY on 23 May:
+  business **80.50** to 6140 Printing and stationery, GST, receipt held;
+  private **149.50**. Spend money: Dr 6140 **70.00** / Dr 2100 **10.50** /
+  Cr 2410 80.50; owner journal Dr 2410 80.50 / Cr 3000 80.50. The business
+  part must be more than 0.00 and less than 230.00 (otherwise it's
+  business or private).
+- **MU5 GST needs evidence.** MU2 with GST but "I have the receipt or tax
+  invoice" not ticked is refused; Aroha can tick it or choose no GST
+  (NONE: Dr 6120 46.00 / Cr 2410 46.00, owner journal 46.00). A general
+  retailer, fuel, parking or a subscription is never assumed to be business
+  from the merchant's name: nothing is coded without a person (or a Full
+  access AI with evidence) saying so. An AI follows GSR10: `gstEvidence`
+  is required for GST while registered; while registration is unconfirmed
+  only no-GST lines (`no_gst_supply`); not registered, GST codes are
+  refused (NR2).
+- **MU6 What the books show.** After MU2-MU4: 3000 Owner funds introduced
+  **126.50** credit; 6120 40.00; 6140 70.00; GST 16.50 claimable; 2410
+  **0.00**, so the balance sheet shows no Visa debt. The 149.50 and 120.00
+  household spending isn't anywhere in the books.
+- **MU7 Paying the card from the business account.** 1000 has -500.00
+  VISA PAYMENT on 30 May; 2410 has +500.00 PAYMENT THANK YOU the same day.
+  A transfer from 1000 to 2410 is refused (it would put a balance on 2410).
+  The 1000 line is coded on the reconcile screen as spend money to 3100
+  Owner drawings, no GST: Dr 3100 **500.00** / Cr 1000 500.00. On 2410 the
+  +500.00 can only be private (or a refund, MU8): money in on a mixed-use
+  account is never expensed or income, so the purchases (MU2, MU4) are
+  the only expenses and the repayment isn't counted again. The review list
+  labels it "Looks like a payment from 1000 Business bank account".
+- **MU8 A refund.** +46.00 Z ENERGY REFUND on 2 Jun, a refund of MU2:
+  receive money Dr 2410 46.00 / Cr 6120 **40.00** / Cr 2100 **6.00**, owner
+  journal Dr 3000 **46.00** / Cr 2410 46.00. A part refund of 23.00: Cr 6120
+  20.00 / Cr 2100 3.00, owner journal 23.00. The refund's lines must use
+  the original's accounts and tax codes, and can't add up to more than the
+  original's business part not yet refunded (a second 46.00 refund of MU2 is
+  refused). A full 230.00 refund of MU4 is business **80.50** (6140, GST) and
+  private 149.50. Its GST is counted as receive money is (BK7).
+- **MU9 Undo.** Undoing MU2: the spend money is voided on **21 May** (Dr
+  2410 46.00 / Cr 6120 40.00 / Cr 2100 6.00) and the owner journal reversed
+  on 21 May (Dr 3000 46.00 / Cr 2410 46.00); the line is back to review and
+  the review shows who undid it and when. Undoing MU3 posts nothing.
+  Refused in a locked period (BK13), and while a refund of it hasn't been
+  undone ("undo the refund first").
+- **MU10 No way round it.** On 2410: matching, spend money, transfers and
+  bank rules on the reconcile screen are refused ("review it instead"); so
+  is anything that would leave its balance in Tohyee other than 0.00 (a
+  transfer, a manual journal, voiding MU2's spend money on its own).
+  "Include" on a reviewed line is refused (undo the review). A line not yet
+  reviewed can still be excluded as a duplicate (BK12).
+- **MU11 Duplicate imports.** Importing the same file again adds no lines
+  (BK2). A line flagged as a possible duplicate of a line reviewed as
+  business, split or refund can't be reviewed as business, split or refund
+  until the person says it isn't a duplicate; it can be marked private, or
+  excluded.
+- **MU12 A personal account.** Lines imported into 1020 come in **private**
+  automatically (nothing posted, not counted as waiting). Its -64.40 PB TECH
+  line can still be reviewed as business, as MU2. Changing 1020 to mixed use
+  puts the automatically private lines back to review; lines a person
+  reviewed stay as they are. Changing 2410 to personal makes its unreviewed
+  lines private.
+- **MU13 Back to business only.** 2410 can't become business only while
+  any business, split or refund review is in place (undo them first).
+  Private reviews end, and their lines stay excluded. From then on it's an
+  ordinary card: its balance, if the business takes it on, is entered as an
+  opening balance as for any card.
+- **MU14 AI.** Any key can list the lines to review and see each account's
+  use (`list_mixed_use_lines`). Only a Full access key can review lines
+  (`review_mixed_use_line`, and `review_mixed_use_lines` for up to 100 at a
+  time as a durable batch, #547), and it can undo only its own reviews
+  within 24 hours (AIB8); a person undoes the rest. No key can change how
+  an account is used.
+
+Not decided (questions for Jess and Will, not built as answers): whether
+business money paid **into** a personal account (a customer paying Aroha
+directly) should be allowed and to which owner account; whether a separate
+drawings account should take the owner side of refunds; when a receipt is
+legally needed for the GST claim (Tohyee asks for one on every GST claim);
+whether a business share of a mixed purchase should follow an
+apportionment rule (e.g. a set percentage for phone or vehicle use) rather
+than a typed amount; and how the refund of a purchase should fall in the
+GST return's boxes (Tohyee counts it as receive money, as BK7). Tested in
+`tests/integration/mixed-use-accounts.test.ts` and
+`tests/unit/mixed-use.test.ts`.
+
 ## Shopify payout deposits matched in the bank (SPR1-SPR10; built by Claude 3 Nov 2026 for #548, as Xero/A2X do, not yet reviewed)
 
 Xero leaves Shopify payouts to apps like A2X: the app posts each payout's

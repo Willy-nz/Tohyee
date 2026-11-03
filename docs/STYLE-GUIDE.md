@@ -40,7 +40,7 @@
   tried with a real X" honesty notes, accounting labels (excl./incl. GST,
   GST return box numbers in IRD's wording, account codes) and notes that
   explain why a control is locked.
-- Browser-safe value modules also include `ui/info-tip` and `ui/menu-keys`.
+- Browser-safe value modules also include `ui/info-tip`, `ui/menu-keys` and `bank/mixed-use-rules`.
 - One primary button per screen; less-used actions go in the "⋯" `MoreMenu`
   (`src/components/more-menu.tsx`, decision 1321).
 

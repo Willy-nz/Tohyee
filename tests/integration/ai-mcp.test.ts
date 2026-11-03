@@ -262,6 +262,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "get_bank_batch",
         "get_bank_coding_proposal",
         "list_bank_batches",
+        "list_mixed_use_lines",
         "list_bank_coding_proposals",
         "list_credit_notes",
         "get_credit_note",

@@ -14,6 +14,8 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
+import type { UsageAccount } from "@/lib/bank/mixed-use";
+import { UsageBadge } from "@/components/bank/mixed-use";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
@@ -95,6 +97,9 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
     includeArchived: includeArchived ? "true" : null,
   });
   const accounts = list.data?.bankAccounts ?? [];
+  // Personal and mixed-use accounts (#545): their lines are reviewed, not reconciled.
+  const usages = useApiData<{ accounts: UsageAccount[] }>("/api/bank-accounts/usage", { organisationId });
+  const usageOf = (id: string) => usages.data?.accounts.find((entry) => entry.accountId === id)?.usage ?? "business";
   const toReconcile = accounts.reduce((sum, account) => sum + account.unreconciledCount, 0);
 
   return (
@@ -145,6 +150,12 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                       <Link href={`/operations/bank-accounts/${account.id}`}>
                         {account.code} · {account.name}
                       </Link>
+                      {usageOf(account.id) !== "business" ? (
+                        <>
+                          {" "}
+                          <UsageBadge usage={usageOf(account.id)} />
+                        </>
+                      ) : null}
                       {account.isActive ? null : (
                         <>
                           {" "}
@@ -178,7 +189,9 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                     <td>{account.lastLineDate ? formatDate(account.lastLineDate) : <span className={ui.muted}>None yet</span>}</td>
                     <td>
                       {account.unreconciledCount > 0 ? (
-                        <Link href={`/operations/bank-accounts/${account.id}`}>Reconcile {account.unreconciledCount}</Link>
+                        <Link href={`/operations/bank-accounts/${account.id}`}>
+                          {usageOf(account.id) === "business" ? "Reconcile" : "Review"} {account.unreconciledCount}
+                        </Link>
                       ) : (
                         <span className={ui.muted}>Nothing</span>
                       )}

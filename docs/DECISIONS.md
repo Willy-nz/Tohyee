@@ -11985,6 +11985,73 @@ made-up answers.
       account: personal app token prefixes (still app_token_ and
       user_token_, as before), and whether a personal app can be limited to
       some accounts (Tohyee lists whatever Akahu shares).
+
+### Personal and mixed-use bank and card accounts (#545; decisions 1308-1315)
+
+Issue #545 asked for personal cards and accounts with the odd business
+purchase, without pulling household spending into the business books.
+Jess hasn't decided the ledger treatment, so it follows the usual Xero
+set-up (decision 537): the personal card as a clearing account, each
+business purchase as spend money, credited to Owner funds introduced.
+**As Xero does, not yet reviewed** (examples MU1-MU14). Tax and legal
+choices are listed in 1315 as questions, not decided.
+
+1308. **Three uses: business only, mixed use, personal (MU1).** Every
+      account starts business only, as before. An admin chooses mixed use
+      or personal, with an owner account (equity, 3000 Owner funds
+      introduced to start with), in a three-step guided setup on the
+      account. It's refused for an account already in the business books
+      (a balance or reconciled lines) and for foreign-currency accounts.
+      Tenant migration 0221 keeps it in `bank_account_usage`; each change is
+      audited.
+1309. **Reviewed, never reconciled.** A mixed-use or personal account's
+      lines are reviewed as business, private, split or (money in) a refund
+      of a business purchase. A reviewed line is excluded from
+      reconciling, so it isn't counted as waiting, and it never claims a
+      reconciled balance. The database refuses reconciling these lines and
+      keeps a reviewed line as it is until its review is undone.
+1310. **A business part is spend money plus an owner journal (MU2, MU4).**
+      Spend money on the account (Dr expense, Dr GST / Cr the account) and
+      an owner journal (Dr the account / Cr the owner account), both on the
+      line's date. The account's balance in the books is always 0.00,
+      checked by the database at commit: transfers to it, journals to it
+      and voiding its spend money on its own are refused. So the personal
+      card's debt is never a business liability, and no opening balance is
+      entered. Reusing spend money keeps GST returns, reports and voids as
+      they are.
+1311. **Money in can't be an expense or income (MU7, MU8).** Money in on
+      such an account is private (a card repayment, household money) or a
+      refund of a reviewed business purchase, which uses the original's
+      accounts and tax codes, up to what's left. Paying the card from the
+      business account is coded to Owner drawings. So a purchase and its
+      repayment are never both expensed. The review list labels money in
+      that matches a business account's money out within 2 days.
+1312. **GST only on the business part, and only with evidence (MU5).** A
+      person ticks "I have the receipt or tax invoice" to claim GST; an AI
+      follows GSR10 (`gstEvidence`, `src/lib/ai/gst-evidence.ts`), using
+      `gstStatusOn` from `src/lib/tax/registration.ts`. Nothing is coded
+      from a merchant's name.
+1313. **Undo voids on the line's date (MU9).** As AIB7 and BB5: the spend
+      or receive money is voided and the owner journal reversed on the
+      line's date; the review stays, marked undone with who and when.
+      Refused in a locked period, and while a refund of it stands.
+      Duplicates (MU11): a possible duplicate of a line in the books needs
+      "not a duplicate" before it can be business.
+1314. **AI: look for all, review for Full access (MU14).** Any key reads
+      `list_mixed_use_lines`. Full access reviews (`review_mixed_use_line`,
+      and `review_mixed_use_lines` as a durable batch of kind
+      `mixed_use_review`, #547) and undoes only its own reviews within 24
+      hours (AIB8). No key changes how an account is used. A person can
+      mark several lines private at once with the same batch.
+1315. **Questions for Jess and Will (not decided).** Whether business
+      money paid into a personal account should be allowed, and to which
+      owner account; whether refunds or repayments should use a separate
+      drawings account; when a receipt is legally needed for the GST claim
+      (Tohyee asks for one on every claim); whether mixed purchases should
+      follow a set apportionment (phone, vehicle) rather than a typed
+      amount; and which GST return boxes a purchase refund belongs in
+      (Tohyee counts it as receive money, BK7).
+
 ### Fewer words on screen (Jess's design brief, 3 Nov 2026; decisions 1316-1320)
 
 Jess (3 November 2026): "I want this to be as perfect as Linear's website
