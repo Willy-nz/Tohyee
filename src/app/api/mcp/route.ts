@@ -3,6 +3,7 @@ import { MAX_JSON_BYTES, readLimitedBytes, route } from "@/lib/api/http";
 import { MCP_FAILED_KEYS_PER_MINUTE, MCP_REQUESTS_PER_MINUTE, RequestLimiter } from "@/lib/ai/limits";
 import { handleMcpMessage, JSON_RPC, type JsonRpcResponse, protocolHeaderAccepted, rpcError } from "@/lib/ai/mcp-protocol";
 import { mcpServerFor } from "@/lib/ai/mcp-server";
+import { acceptsEventStream, eventStreamBody, TOOLS_LIST_CHANGED, ToolListSessions } from "@/lib/ai/mcp-tool-list";
 import { oauthAddresses } from "@/lib/ai/oauth/config";
 import { bearerToken, wwwAuthenticate } from "@/lib/ai/oauth/format";
 import { authenticateAccessToken } from "@/lib/ai/oauth/tokens";
@@ -28,11 +29,25 @@ import { PayloadTooLargeError } from "@/lib/errors";
  * up to its level, as its owner (src/lib/ai/write-tools.ts). A key stops when
  * revoked, when its owner leaves the organisation, or when its owner's
  * password or two-step sign-in is reset (#132).
+ *
+ * `initialize` gives the client an `Mcp-Session-Id`. With it Tohyee knows
+ * which tool list the client fetched; when the tools this connection may use
+ * change (its level, the person's role, a new release), the answer to the
+ * client's next request is an event stream with
+ * `notifications/tools/list_changed` first (decisions 1342-1344).
  */
 
 const limiter = new RequestLimiter(MCP_REQUESTS_PER_MINUTE);
 /** Wrong keys from one address (like sign-in tries); with no address known, it doesn't apply. */
 const failedKeys = new RequestLimiter(MCP_FAILED_KEYS_PER_MINUTE);
+/** Which tool list each session's client fetched (in memory; a session id also carries its version at initialize). */
+const sessions = new ToolListSessions();
+
+function methodOf(message: unknown): string | null {
+  return message && typeof message === "object" && !Array.isArray(message) && typeof (message as { method?: unknown }).method === "string"
+    ? ((message as { method: string }).method)
+    : null;
+}
 
 function tooManyFailures(): Response {
   return reply(rpcError(null, JSON_RPC.UNAUTHORIZED, "Too many wrong AI keys from this address. Wait a minute and try again."), 429, { "retry-after": "60" });
@@ -94,25 +109,53 @@ export const POST = route(async (request) => {
     return reply(rpcError(null, JSON_RPC.PARSE_ERROR, "The request body must be JSON."), 400);
   }
 
+  // A session belongs to one person in one organisation; another key of theirs (a new sign-in) keeps it.
+  const owner = `${identity.user.id}:${identity.membership.organisation.id}`;
+  const sessionId = request.headers.get("mcp-session-id");
+  const messages = Array.isArray(message) ? message : [message];
+  const methods = messages.map(methodOf);
   // The mail tools only for a Look only key its Owner gave the private-mail scope (#250, decision 618).
-  const server = mcpServerFor(identity, { privateMail: await keyCanReadMail(identity) });
+  const server = mcpServerFor(identity, {
+    privateMail: await keyCanReadMail(identity),
+    toolListSeen: methods.includes("initialize") ? null : sessions.seen(owner, sessionId),
+  });
+  const toolList = server.toolList!;
+  const headers: Record<string, string> = {};
+  if (methods.includes("initialize")) headers["mcp-session-id"] = sessions.start(owner, toolList.version);
+  else if (methods.includes("tools/list")) sessions.listed(owner, sessionId, toolList.version);
+
+  let answers: JsonRpcResponse[];
   if (Array.isArray(message)) {
     // JSON-RPC batches (MCP 2025-03-26 allowed them; later versions don't send them).
     if (message.length === 0 || message.length > 20) {
       return reply(rpcError(null, JSON_RPC.INVALID_REQUEST, "A batch must have 1 to 20 messages."), 400);
     }
-    const answers: JsonRpcResponse[] = [];
+    answers = [];
     for (const entry of message) {
       const answer = await handleMcpMessage(entry, server);
       if (answer) answers.push(answer);
     }
-    return answers.length === 0 ? new Response(null, { status: 202 }) : reply(answers);
+  } else {
+    const answer = await handleMcpMessage(message, server);
+    answers = answer ? [answer] : [];
   }
-  const answer = await handleMcpMessage(message, server);
-  return answer ? reply(answer) : new Response(null, { status: 202 });
+  if (answers.length === 0) return new Response(null, { status: 202, headers });
+
+  // The client's tool list is out of date and this request wasn't the one fetching it:
+  // tell it first, on this answer's stream (decision 1342). A tools/list in the batch is already the fresh list.
+  if (toolList.stale && !methods.includes("tools/list") && !methods.includes("initialize") && acceptsEventStream(request.headers.get("accept"))) {
+    return new Response(eventStreamBody([TOOLS_LIST_CHANGED, ...answers]), {
+      status: 200,
+      headers: { "content-type": "text/event-stream", "cache-control": "no-store", "x-accel-buffering": "no", ...headers },
+    });
+  }
+  return reply(Array.isArray(message) ? answers : answers[0], 200, headers);
 });
 
-/** No server-sent event stream and no sessions: only POST. */
+/**
+ * No GET event stream (so nothing can be pushed while the client is quiet),
+ * and a session ends by being forgotten: only POST.
+ */
 function methodNotAllowed(): Response {
   return new Response(null, { status: 405, headers: { allow: "POST" } });
 }
