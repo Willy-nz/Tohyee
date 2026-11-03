@@ -111,4 +111,16 @@ describe("standard report exports", () => {
     const sales = rows.find((candidate) => candidate.getCell(1).value === "4000 · Sales")!;
     expect(sales.getCell(1).alignment?.indent).toBe(1);
   });
+
+  it("starts a new PDF page after a custom report's page break (decision 1360)", async () => {
+    const data = report("custom-report");
+    data.tables[0].rows[0] = { ...data.tables[0].rows[0], pageBreakAfter: true };
+    const parsed = parseReportExport(JSON.parse(JSON.stringify(data)));
+    expect(parsed.tables[0].rows[0].pageBreakAfter).toBe(true);
+    expect(parsed.tables[0].rows[1].pageBreakAfter).toBeUndefined();
+    const { PDFDocument } = await import("pdf-lib");
+    const pages = (await PDFDocument.load(await reportPdf(parsed))).getPageCount();
+    const without = (await PDFDocument.load(await reportPdf(report("custom-report")))).getPageCount();
+    expect(pages).toBe(without + 1);
+  });
 });

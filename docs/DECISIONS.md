@@ -12409,3 +12409,60 @@ As Xero does, **not yet reviewed** (decision 537).
       `trial_balance` a tracking filter. A new read tool `budget_vs_actual`
       (any key) runs budget vs actual with the screen's options. All read
       through the screens' report functions, in a read-only transaction.
+
+### Editing reports like Xero (Jess, 4 Nov 2026; decisions 1359-1363)
+
+The third part of the review of Jess's request ("make the editing and look
+similar to Xero"). As Xero does, **not yet reviewed** (decision 537),
+except where 1359 says it differs on purpose.
+
+1359. **Edit layout, named versions and one default.** The standard profit
+      and loss and balance sheet have an **Edit layout** button (bookkeepers
+      and up). The first time, it starts a draft custom report from the
+      standard report's own rows and labels (`standardLayout`: Trading
+      income, Cost of sales, Gross profit, Other income, Operating expenses,
+      Net profit; Current and Non-current assets and liabilities, Net
+      assets, Equity); after that it opens the default layout. In the
+      editor's "⋯": **Save as…** (a named copy, another draft) and **Set as
+      default layout** for that report. With a default, Reports shows the
+      standard report in that layout, with the toolbar's dates, comparisons,
+      year to date and tracking filter (CR18); "⋯ Show the standard layout"
+      switches back for a look. One default per report (tenant migration
+      0225, `report_layout_defaults`); it must be a draft (a published copy
+      is frozen) and stops being the default when archived or deleted.
+      **Deliberately different from Xero**, which changes the one layout
+      for everyone and keeps no versions: here every version stays a draft
+      you can go back to.
+1360. **The editor.** One primary **Save**; changes are kept on the page
+      ("Unsaved changes") and the figures shown are a preview worked out on
+      the server, so nothing is stored until Save. Everything else is in
+      "⋯": Columns…, Add table, Add note, Save as…, Set as default, Publish,
+      Print, Archive, Delete draft. Rows: a drag handle (also the Up and Down
+      arrow keys, announced to screen readers), the name typed in place,
+      and a "⋯" per row: Change…, Hide (still counted by formulas, CR19),
+      Page break after (printing and PDF), Add note (shown under the row,
+      500 characters), Delete. Tick accounts in a group and **Group** them:
+      a new group after it, the accounts left out of the old one, and every
+      formula that used the old group uses the new one too, so no total
+      changes (CR16, `groupAccounts`, the group's `exceptCodes`). Custom
+      reports use the statement style and the same Export (PDF, CSV,
+      Excel) as the standard reports; empty groups are left out of the
+      report (shown while editing).
+1361. **× ÷ and % of.** A formula row works out a sum (as before), row ×
+      row or number, row ÷ row or number, or row % of row (CR17). In
+      decimal maths: × and ÷ keep 6 places and show 2, a % shows 1, halves
+      away from zero. Dividing by 0.00 shows a blank, never an error, and a
+      sum using a blank is blank. A % row can't be used by another formula
+      (adding a % to money mixes units). A difference column of a % row is
+      in points, with no % change. Worked example first, as asked.
+1362. **Saved reports in the picker, with favourites.** The Report picker
+      lists custom reports (drafts and published) after the standard ones,
+      and a "Favourites" group first. The star beside the picker (and on a
+      custom report) adds or removes the report for the person signed in
+      (`report_favourites`); other people's stars aren't shown (CR20).
+1363. **The AI and custom reports.** `list_custom_reports` and
+      `run_custom_report` (read only, any key): a draft is worked out now, a
+      published report gives its frozen figures. `create_custom_report_draft`
+      (Make drafts, so bookkeepers' keys and up) starts a draft from the
+      standard rows, the template or a full layout, with an idempotency key.
+      It can't publish, set a default layout or delete: a person does.

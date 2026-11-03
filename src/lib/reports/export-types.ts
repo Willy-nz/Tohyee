@@ -13,6 +13,7 @@ export const REPORT_EXPORTS = [
   "coop-share-register",
   "consolidated-profit-and-loss",
   "customer-statement",
+  "custom-report",
   "farm-benchmarks",
   "farm-benchmarks-by-farm",
   "fixed-asset-register",
@@ -37,7 +38,8 @@ export type ReportExportCell = { text: string; value?: string; numeric?: boolean
  */
 export type ReportExportRowKind = "section" | "account" | "total" | "grand";
 export const REPORT_EXPORT_ROW_KINDS: readonly ReportExportRowKind[] = ["section", "account", "total", "grand"];
-export type ReportExportRow = { cells: ReportExportCell[]; kind?: ReportExportRowKind };
+/** `pageBreakAfter`: the PDF starts a new page after this row (a custom report's page break, decision 1360). */
+export type ReportExportRow = { cells: ReportExportCell[]; kind?: ReportExportRowKind; pageBreakAfter?: boolean };
 export type ReportExportTable = { title?: string; columns: string[]; rows: ReportExportRow[] };
 
 export type ReportExportData = {

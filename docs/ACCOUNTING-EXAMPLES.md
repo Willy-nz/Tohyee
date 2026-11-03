@@ -4382,6 +4382,60 @@ document field **Channel** `Web`; its one line (4000) has line field
   the published report still shows `accounts@kobe.example.nz`; both total
   **115.00**.
 
+### Editing a report's layout like Xero (CR16-CR20)
+
+As Xero does, not yet reviewed (decisions 1359-1362, Jess's 4 Nov 2026
+request for editing like Xero's), except where it says it differs. "Edit
+layout" on the standard profit and loss or balance sheet starts a draft
+from the standard report's own rows and labels (Trading income, Cost of
+sales, Gross profit, Other income, Operating expenses, Net profit). Setup:
+the custom-report journals above, plus on 25 Jun 2026 Dr 6120 Motor vehicle
+expenses **80.00** / Cr 1000, so June's net profit is **590.00**.
+
+- **CR16** Grouping accounts. In the June layout, choosing 6120 under
+  Operating expenses and "Group" as **Vehicle costs** adds a group of 6120
+  after Operating expenses, leaves 6120 out of Operating expenses (which
+  still takes any new expense account), and adds Vehicle costs wherever a
+  formula used Operating expenses, with the same sign. Operating expenses
+  **250.00**, Vehicle costs **80.00**, Net profit still **590.00**; nothing
+  is counted twice or left out. Ungrouping is deleting the new group and
+  taking 6120 off the left-out list.
+- **CR17** × ÷ and % of. Three monthly columns ending 30 Jun 2026 (Jun,
+  May, Apr), with the CR1 journals only (June net profit **670.00**):
+  Gross margin % = Gross profit **% of** Trading income: **75.0%**,
+  **73.3%** (1,100.00 / 1,500.00 = 73.333...), **100.0%**; Net margin % =
+  Net profit % of Trading income: **55.8%** (55.833...), **73.3%**,
+  **90.0%**. Expenses incl. GST = Operating expenses **×** 1.15: **287.50**,
+  **0.00**, **115.00**. Cost per dollar of sales = Cost of sales **÷**
+  Trading income: **0.25**, **0.27** (0.2666...), **0.00**. Other income ÷
+  160 in June: 20.00 / 160 = 0.125 = **0.13** (halves away from zero).
+  **Dividing by 0.00 is blank**, never an error: Cost of sales % of Other
+  income is **1500.0%** in June and blank in May and April (other income
+  0.00); a sum using a blank is blank. All in decimal maths: × and ÷ keep
+  6 places and show 2 (money to the cent), a % shows 1. A % row can't be
+  used by another formula (refused: "it's a %"), since adding a % to money
+  mixes units. A difference column of a % row is in points (Jun less May
+  1.7) and its % change is blank.
+- **CR18** Default layout. The Edit layout draft, set as the default for
+  the profit and loss, makes Reports show it with the toolbar's options:
+  1-30 Jun 2026 gives the same Net profit **670.00** as the standard
+  report; renamed Trading income to "Sales", Reports shows "Sales";
+  compared with 1 previous month the columns are Jun 2026 and May 2026
+  (**670.00** / **1,100.00**). There's one default per report; "Save as"
+  keeps a named copy (a second draft), and setting that one replaces the
+  first as default. **Differs from Xero on purpose**: Xero changes the one
+  layout for everyone with no versions; here every version is kept as a
+  draft. A published report can't be the default (it's frozen); archiving
+  or deleting the default draft brings the standard layout back.
+- **CR19** Hiding a row, page breaks and notes. Hiding Gross profit leaves
+  it out of the report but Net profit, which uses it, is still **670.00**.
+  A row can carry a note (up to 500 characters) shown under it, and a page
+  break after it (printing and PDF start a new page). None of these changes
+  a figure.
+- **CR20** Favourites. Each person stars reports, standard or custom, to
+  list them first in the report picker; another person's stars aren't
+  shown. Starring something that isn't a report is refused.
+
 ### Comparing periods, % of trading income and tracking filters (RX1-RX6)
 
 As Xero does, not yet reviewed (decisions 1353-1355, Jess's 4 Nov 2026

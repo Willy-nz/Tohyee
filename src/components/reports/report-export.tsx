@@ -43,6 +43,8 @@ function tableData(target: ReportExportTableTarget): ReportExportTable | null {
   const bodyRows = [...table.tBodies].flatMap((body) => [...body.rows]);
   const footerRows = table.tFoot ? [...table.tFoot.rows] : [];
   for (const row of [...bodyRows, ...footerRows]) {
+    // Editor-only rows (a hidden row, the group bar) aren't part of the report.
+    if (row.dataset.exportIgnore) continue;
     const cells = [...row.cells].filter((cell) => !cell.dataset.exportIgnore).flatMap((cell) => [cellValue(cell), ...Array.from({ length: cell.colSpan - 1 }, () => ({ text: "" }))]);
     const kind = row.classList.contains(ui.reportHeading)
       ? "section"
@@ -53,7 +55,7 @@ function tableData(target: ReportExportTableTarget): ReportExportTable | null {
           : row.classList.contains(ui.reportSection)
             ? "account"
             : undefined;
-    rows.push({ cells, kind });
+    rows.push({ cells, kind, ...(row.dataset.pageBreak === "after" ? { pageBreakAfter: true } : {}) });
   }
   return { title: target.title, columns: headers, rows };
 }

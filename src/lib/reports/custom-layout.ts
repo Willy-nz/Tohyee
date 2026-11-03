@@ -52,6 +52,7 @@ export const CUSTOM_REPORT_LIMITS = {
   periods: 12,
   termsPerFormula: 50,
   accountCodesPerGroup: 200,
+  rowNoteLength: 500,
 } as const;
 
 export type ReportColumnsSetting = {
@@ -73,20 +74,60 @@ export type ReportColumnsSetting = {
 
 export type FormulaTerm = { rowId: string; sign: 1 | -1 };
 
-export type ReportRow =
-  | { id: string; kind: "heading"; label: string }
-  | {
-      id: string;
-      kind: "group";
-      label: string;
-      /** Used when `accountCodes` is empty. */
-      accountTypes: AccountType[];
-      /** When not empty, exactly these accounts. */
-      accountCodes: string[];
-      showAccounts: boolean;
-    }
-  | { id: string; kind: "formula"; label: string; terms: FormulaTerm[] }
-  | { id: string; kind: "earnings"; label: string; which: "previous" | "current" };
+/**
+ * How a formula row works it out (decision 1361, CR17): "sum" adds and
+ * takes away its terms (the default); "multiply" and "divide" take row `a`
+ * times or divided by row `b` or the number `by`; "percent" is row `a` as a
+ * % of row `b`. Dividing by 0.00 gives a blank, never an error.
+ */
+export type FormulaOperation = "sum" | "multiply" | "divide" | "percent";
+export const FORMULA_OPERATIONS: Record<FormulaOperation, string> = {
+  sum: "Add and take away rows",
+  multiply: "× (times)",
+  divide: "÷ (divided by)",
+  percent: "% of",
+};
+
+/** What every row can carry besides its figures (decision 1360). */
+export type RowExtras = {
+  /** Worked out (formulas can use it) but not shown. */
+  hidden?: boolean;
+  /** Printing and PDF start a new page after this row. */
+  pageBreakAfter?: boolean;
+  /** A short note shown under the row. */
+  note?: string;
+};
+
+export type ReportRow = RowExtras &
+  (
+    | { id: string; kind: "heading"; label: string }
+    | {
+        id: string;
+        kind: "group";
+        label: string;
+        /** Used when `accountCodes` is empty. */
+        accountTypes: AccountType[];
+        /** When not empty, exactly these accounts. */
+        accountCodes: string[];
+        /** With account types: these accounts are left out (they've been grouped elsewhere, CR16). */
+        exceptCodes?: string[];
+        showAccounts: boolean;
+      }
+    | {
+        id: string;
+        kind: "formula";
+        label: string;
+        terms: FormulaTerm[];
+        operation?: FormulaOperation;
+        /** multiply, divide and percent: the first row. */
+        a?: string;
+        /** multiply, divide and percent: the second row, or `by`. */
+        b?: string;
+        /** multiply and divide: a number instead of row `b`, e.g. "420" cows. */
+        by?: string;
+      }
+    | { id: string; kind: "earnings"; label: string; which: "previous" | "current" }
+  );
 
 export type ReportBlock =
   | { id: string; kind: "table"; title: string; rows: ReportRow[] }
@@ -155,11 +196,13 @@ export type ReportValues = Record<string, string | null>;
 
 export type ComputedLine = { code: string; name: string; values: ReportValues; accountId?: string };
 
-export type ComputedRow = {
+export type ComputedRow = RowExtras & {
   id: string;
   kind: ReportRow["kind"];
   label: string;
   values: ReportValues;
+  /** "percent" values show with a %; "number" are plain (a ratio or per-unit figure); money otherwise. */
+  format?: "money" | "number" | "percent";
   showAccounts: boolean;
   lines: ComputedLine[];
   /** A group's accounts, so its total opens their transactions together (decision 1356). */
@@ -251,6 +294,44 @@ export function newLayoutId(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}${counter.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
 }
 
+/**
+ * "Edit layout" on the standard profit and loss or balance sheet starts from
+ * this (decision 1359): the standard report's own rows and labels, so a
+ * report made from it reads exactly like the standard one until it's changed.
+ */
+export function standardLayout(base: FinancialReportBase, periodEnd: string): CustomReportLayout {
+  const layout = templateLayout(base, periodEnd);
+  const group = (id: string, label: string, accountTypes: AccountType[]): ReportRow => ({ id, kind: "group", label, accountTypes, accountCodes: [], showAccounts: true });
+  const sum = (id: string, label: string, terms: Array<[string, 1 | -1]>): ReportRow => ({ id, kind: "formula", label, terms: terms.map(([rowId, sign]) => ({ rowId, sign })) });
+  const rows: ReportRow[] =
+    base === "profit_and_loss"
+      ? [
+          group("revenue", "Trading income", ["revenue"]),
+          group("cost_of_sales", "Cost of sales", ["direct_costs"]),
+          sum("gross_profit", "Gross profit", [["revenue", 1], ["cost_of_sales", -1]]),
+          group("other_income", "Other income", ["other_income"]),
+          group("expenses", "Operating expenses", ["expense", "depreciation"]),
+          sum("net_profit", "Net profit", [["gross_profit", 1], ["other_income", 1], ["expenses", -1]]),
+        ]
+      : [
+          { id: "assets_heading", kind: "heading", label: "Assets" },
+          group("current_assets", "Current assets", ["bank", "current_asset", "inventory"]),
+          group("non_current_assets", "Non-current assets", ["fixed_asset", "non_current_asset"]),
+          sum("assets", "Total assets", [["current_assets", 1], ["non_current_assets", 1]]),
+          { id: "liabilities_heading", kind: "heading", label: "Liabilities" },
+          group("current_liabilities", "Current liabilities", ["credit_card", "current_liability"]),
+          group("non_current_liabilities", "Non-current liabilities", ["non_current_liability"]),
+          sum("liabilities", "Total liabilities", [["current_liabilities", 1], ["non_current_liabilities", 1]]),
+          sum("net_assets", "Net assets", [["assets", 1], ["liabilities", -1]]),
+          { id: "equity_heading", kind: "heading", label: "Equity" },
+          group("equity", "Equity accounts", ["equity"]),
+          { id: "previous_earnings", kind: "earnings", label: "Earnings from previous years", which: "previous" },
+          { id: "current_earnings", kind: "earnings", label: "Current year earnings", which: "current" },
+          sum("total_equity", "Total equity", [["equity", 1], ["previous_earnings", 1], ["current_earnings", 1]]),
+        ];
+  return { ...layout, blocks: [{ id: "main", kind: "table", title: "", rows }] };
+}
+
 /** A new custom report starts as a copy of the standard report (CR1, CR6). */
 export function templateLayout(base: FinancialReportBase, periodEnd: string): CustomReportLayout {
   const columns: ReportColumnsSetting = {
@@ -328,4 +409,57 @@ export function templateLayout(base: FinancialReportBase, periodEnd: string): Cu
       },
     ],
   };
+}
+
+/**
+ * Groups some of a group's accounts into a new group right after it (CR16,
+ * decision 1360), as Xero's "Group" does: the accounts are left out of the
+ * group they came from (by account type) or taken off its list (by code),
+ * and every formula that used that group uses the new one too, with the
+ * same sign, so no total changes. Returns the new layout (the old one is
+ * left as it was) and the new row's id.
+ */
+export function groupAccounts(
+  layout: CustomReportLayout,
+  blockId: string,
+  sourceRowId: string,
+  codes: string[],
+  label: string,
+  newId = newLayoutId("r"),
+): { layout: CustomReportLayout; rowId: string } {
+  const next = structuredClone(layout);
+  const block = next.blocks.find((entry) => entry.id === blockId);
+  if (!block || block.kind !== "table") throw new Error("That table isn't in the report.");
+  const index = block.rows.findIndex((row) => row.id === sourceRowId);
+  const source = block.rows[index];
+  if (!source || source.kind !== "group") throw new Error("Choose accounts in a group.");
+  if (codes.length === 0) throw new Error("Choose at least one account.");
+  if (source.accountCodes.length > 0) {
+    source.accountCodes = source.accountCodes.filter((code) => !codes.includes(code));
+    if (source.accountCodes.length === 0) source.accountCodes = [...codes]; // grouping them all: keep the old group as it is
+  } else {
+    source.exceptCodes = [...new Set([...(source.exceptCodes ?? []), ...codes])];
+  }
+  const row: ReportRow = { id: newId, kind: "group", label, accountTypes: [], accountCodes: [...codes], showAccounts: true };
+  block.rows.splice(index + 1, 0, row);
+  for (const other of block.rows) {
+    if (other.kind !== "formula" || (other.operation ?? "sum") !== "sum") continue;
+    for (const term of [...other.terms]) {
+      if (term.rowId === sourceRowId) other.terms.push({ rowId: newId, sign: term.sign });
+    }
+  }
+  return { layout: next, rowId: newId };
+}
+
+/** Moves a row to another place in its table (drag and drop, or the keyboard, decision 1360). */
+export function moveRow(layout: CustomReportLayout, blockId: string, rowId: string, toIndex: number): CustomReportLayout {
+  const next = structuredClone(layout);
+  const block = next.blocks.find((entry) => entry.id === blockId);
+  if (!block || block.kind !== "table") return next;
+  const from = block.rows.findIndex((row) => row.id === rowId);
+  if (from < 0) return next;
+  const to = Math.max(0, Math.min(block.rows.length - 1, toIndex));
+  const [row] = block.rows.splice(from, 1);
+  block.rows.splice(to, 0, row);
+  return next;
 }

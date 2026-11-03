@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
-import { Money, useAccounts } from "@/components/books";
+import { useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -11,13 +11,11 @@ import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { ACCOUNT_TYPES, type AccountType } from "@/lib/accounts/types";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
-import { accountTransactionsHref } from "@/lib/reports/drilldown";
+import { formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { CustomReport, CustomReportView } from "@/lib/reports/custom";
 import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import {
   type ComputedBlock,
-  type ComputedRow,
   CUSTOM_REPORT_BASES,
   isTransactionReportBase,
   CUSTOM_REPORT_LIMITS,
@@ -26,21 +24,28 @@ import {
   type CustomReportLayout,
   type FinancialReportBase,
   type FormulaTerm,
+  FORMULA_OPERATIONS,
+  type FormulaOperation,
+  groupAccounts,
   lastDayOfMonth,
+  moveRow,
   newLayoutId,
   PERIOD_LENGTHS,
   type PeriodLength,
   type ReportBlock,
-  type ReportColumn,
   type ReportColumnsSetting,
   type ReportRow,
   type ReportTrackingFilter,
-  type ReportValues,
 } from "@/lib/reports/custom-layout";
 import type { TrackingSetup } from "@/lib/tracking/service";
 import type { Budget } from "@/lib/budgets/service";
 import { useConfirm } from "@/components/confirm-dialog";
+import { statementAsAt, statementPeriod } from "@/lib/reports/report-dates";
+import { InfoTip } from "@/components/info-tip";
+import { CustomFiguresTable, type RowEditor } from "@/components/reports/custom-report-table";
 import { TransactionCustomReportPage } from "@/components/reports/transaction-custom-report";
+import { MoreMenu, type MoreMenuItem } from "@/components/more-menu";
+import { ExportMenu } from "@/components/reports/report-export";
 
 /**
  * Custom reports (examples CR1-CR10): the lists (drafts, published,
@@ -147,53 +152,15 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
   );
 }
 
+/** The report's period in the statement's words (decision 1350). */
 function periodSummary(figures: CustomReportFigures): string {
   const periods = figures.columns.filter((column) => column.kind === "period");
   if (periods.length === 0) return "";
   const newest = periods[0];
   if (figures.base === "balance_sheet") {
-    return periods.length === 1 ? `As at ${formatDate(newest.to)}` : `As at ${formatDate(newest.to)}, compared with ${periods.length - 1} earlier date${periods.length > 2 ? "s" : ""}`;
+    return periods.length === 1 ? statementAsAt(newest.to!) : `${statementAsAt(newest.to!)}, compared with ${periods.length - 1} earlier date${periods.length > 2 ? "s" : ""}`;
   }
-  return `${formatDate(periods[periods.length - 1].from)} to ${formatDate(newest.to)}`;
-}
-
-type CellAccounts = { accountId?: string; accountIds?: string[] };
-
-/**
- * An amount; a period or year to date amount of an account or a group opens
- * their transactions for the column's dates and the report's filter
- * (decision 1356). Differences, % and budgets don't link.
- */
-function Cell({ column, values, accounts, filter }: { column: ReportColumn; values: ReportValues; accounts?: CellAccounts; filter?: ReportTrackingFilter | null }) {
-  const value = values[column.key];
-  if (column.kind === "percent") return <td className={ui.num}>{value == null ? "" : `${value}%`}</td>;
-  const linkable =
-    accounts &&
-    (accounts.accountId || (accounts.accountIds && accounts.accountIds.length > 0)) &&
-    column.to &&
-    column.drillFrom !== undefined &&
-    (column.kind === "period" || column.kind === "year_to_date") &&
-    value != null &&
-    !/^-?0*(\.0*)?$/.test(value);
-  return (
-    <td className={ui.num}>
-      {linkable ? (
-        <Link
-          href={accountTransactionsHref({
-            ...accounts,
-            from: column.drillFrom,
-            to: column.to!,
-            trackingCategoryId: filter?.categoryId,
-            trackingValueId: filter?.valueId,
-          })}
-        >
-          <Money value={value} />
-        </Link>
-      ) : (
-        <Money value={value ?? null} />
-      )}
-    </td>
-  );
+  return periods.length === 1 ? statementPeriod(newest.from!, newest.to!) : `${statementPeriod(newest.from!, newest.to!)}, compared with ${periods.length - 1} earlier period${periods.length > 2 ? "s" : ""}`;
 }
 
 type Editing =
@@ -252,6 +219,7 @@ function ReportTable({
   busy,
   onChange,
   onEditRow,
+  onEditNote,
   onError,
   filter,
 }: {
@@ -263,41 +231,70 @@ function ReportTable({
   busy: boolean;
   onChange: (change: (layout: CustomReportLayout) => boolean | void) => void;
   onEditRow: (row: ReportRow, isNew: boolean) => void;
+  onEditNote: (row: ReportRow) => void;
   onError: (message: string) => void;
 }) {
   const confirm = useConfirm();
-  const columns = figures.columns;
-  const span = columns.length + 1 + (editable ? 1 : 0);
   const [title, setTitle] = useState(block.title);
   const tableOf = (layout: CustomReportLayout) => layout.blocks.find((entry) => entry.id === block.id) as Extract<ReportBlock, { kind: "table" }>;
+  const rowOf = (layout: CustomReportLayout, id: string) => tableOf(layout).rows.find((r) => r.id === id)!;
+  const [announce, setAnnounce] = useState("");
 
-  const actions = (row: ComputedRow) => {
-    const layoutRow = layoutBlock?.rows.find((entry) => entry.id === row.id);
-    if (!editable || !layoutRow) return null;
-    return (
-      <td className={ui.num} data-print="hide">
-        <RowButtons
-          label={row.label}
-          disabled={busy}
-          onUp={() => onChange((layout) => move(tableOf(layout).rows, tableOf(layout).rows.findIndex((r) => r.id === row.id), -1))}
-          onDown={() => onChange((layout) => move(tableOf(layout).rows, tableOf(layout).rows.findIndex((r) => r.id === row.id), 1))}
-          onEdit={() => onEditRow(structuredClone(layoutRow), false)}
-          onDelete={async () => {
-            const users = (layoutBlock?.rows ?? []).filter((r) => r.kind === "formula" && r.terms.some((term) => term.rowId === row.id));
-            if (users.length > 0) {
-              onError(`${users.map((r) => r.label).join(" and ")} ${users.length === 1 ? "uses" : "use"} ${row.label}. Change or delete ${users.length === 1 ? "it" : "them"} first.`);
-              return;
-            }
-            if (!(await confirm(`Delete the row ${row.label}?`))) return;
+  const editor: RowEditor | undefined = editable
+    ? {
+        busy,
+        rename: (rowId, label) => onChange((layout) => void (rowOf(layout, rowId).label = label)),
+        move: (rowId, toIndex) => {
+          const rows = layoutBlock?.rows ?? [];
+          if (toIndex < 0 || toIndex >= rows.length) return;
+          onChange((layout) => {
+            const moved = moveRow(layout, block.id, rowId, toIndex);
+            layout.blocks = moved.blocks;
+          });
+          const row = rows.find((entry) => entry.id === rowId);
+          setAnnounce(`${row?.label ?? "Row"} moved to row ${toIndex + 1} of ${rows.length}.`);
+          // Keep focus on the handle the person is using.
+          requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[aria-label^="Move ${CSS.escape(row?.label ?? "")}, row"]`)?.focus());
+        },
+        group: (rowId, codes, label) =>
+          onChange((layout) => {
+            const grouped = groupAccounts(layout, block.id, rowId, codes, label);
+            layout.blocks = grouped.layout.blocks;
+          }),
+        rowMenu: (row) => {
+          const layoutRow = layoutBlock?.rows.find((entry) => entry.id === row.id);
+          if (!layoutRow) return [];
+          const toggle = (field: "hidden" | "pageBreakAfter") =>
             onChange((layout) => {
-              const rows = tableOf(layout).rows;
-              rows.splice(rows.findIndex((r) => r.id === row.id), 1);
+              const target = rowOf(layout, row.id);
+              if (target[field]) delete target[field];
+              else target[field] = true;
             });
-          }}
-        />
-      </td>
-    );
-  };
+          return [
+            ...(layoutRow.kind !== "heading" ? [{ label: "Change…", onSelect: () => onEditRow(structuredClone(layoutRow), false) }] : []),
+            { label: layoutRow.hidden ? "Show" : "Hide", onSelect: () => toggle("hidden") },
+            { label: layoutRow.pageBreakAfter ? "No page break after" : "Page break after", onSelect: () => toggle("pageBreakAfter") },
+            { label: layoutRow.note ? "Change note…" : "Add note…", onSelect: () => onEditNote(structuredClone(layoutRow)) },
+            {
+              label: "Delete",
+              danger: true,
+              onSelect: async () => {
+                const users = (layoutBlock?.rows ?? []).filter((r) => r.kind === "formula" && formulaRows(r).includes(row.id));
+                if (users.length > 0) {
+                  onError(`${users.map((r) => r.label).join(" and ")} ${users.length === 1 ? "uses" : "use"} ${row.label}. Change or delete ${users.length === 1 ? "it" : "them"} first.`);
+                  return;
+                }
+                if (!(await confirm(`Delete the row ${row.label}?`))) return;
+                onChange((layout) => {
+                  const rows = tableOf(layout).rows;
+                  rows.splice(rows.findIndex((r) => r.id === row.id), 1);
+                });
+              },
+            },
+          ];
+        },
+      }
+    : undefined;
 
   return (
     <div className={ui.reportBlock}>
@@ -316,84 +313,10 @@ function ReportTable({
         </div>
       ) : null}
       {block.title ? <h3 className={`${ui.reportBlockTitle} ${editable ? ui.printOnly : ""}`}>{block.title}</h3> : null}
-      <div className={ui.tableWrap}>
-        <table className={`${ui.table} ${ui.reportTable}`}>
-          <thead>
-            <tr>
-              <th />
-              {columns.map((column) => (
-                <th key={column.key} className={ui.num}>
-                  {column.label}
-                </th>
-              ))}
-              {editable ? <th data-print="hide" /> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {block.rows.length === 0 ? (
-              <tr>
-                <td colSpan={span} className={ui.muted}>
-                  No rows yet.
-                </td>
-              </tr>
-            ) : null}
-            {block.rows.map((row) => {
-              if (row.kind === "heading") {
-                return (
-                  <tr key={row.id} className={ui.reportHeading}>
-                    <td colSpan={columns.length + 1}>{row.label}</td>
-                    {actions(row)}
-                  </tr>
-                );
-              }
-              if (row.kind === "group" && row.showAccounts) {
-                return (
-                  <Fragment key={row.id}>
-                    <tr className={ui.reportHeading}>
-                      <td colSpan={columns.length + 1}>{row.label}</td>
-                      {actions(row)}
-                    </tr>
-                    {row.lines.length === 0 ? (
-                      <tr>
-                        <td className={ui.muted} colSpan={span}>
-                          Nothing in these periods.
-                        </td>
-                      </tr>
-                    ) : null}
-                    {row.lines.map((line) => (
-                      <tr key={line.code} className={ui.reportSection}>
-                        <td>
-                          {line.code} · {line.name}
-                        </td>
-                        {columns.map((column) => (
-                          <Cell key={column.key} column={column} values={line.values} accounts={{ accountId: line.accountId }} filter={filter} />
-                        ))}
-                        {editable ? <td data-print="hide" /> : null}
-                      </tr>
-                    ))}
-                    <tr className={ui.reportTotal}>
-                      <td>Total {row.label.charAt(0).toLowerCase() + row.label.slice(1)}</td>
-                      {columns.map((column) => (
-                        <Cell key={column.key} column={column} values={row.values} accounts={{ accountIds: row.accountIds }} filter={filter} />
-                      ))}
-                      {editable ? <td data-print="hide" /> : null}
-                    </tr>
-                  </Fragment>
-                );
-              }
-              return (
-                <tr key={row.id} className={row.kind === "formula" ? ui.reportTotal : undefined}>
-                  <td>{row.label}</td>
-                  {columns.map((column) => (
-                    <Cell key={column.key} column={column} values={row.values} accounts={row.kind === "group" ? { accountIds: row.accountIds } : undefined} filter={filter} />
-                  ))}
-                  {actions(row)}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <CustomFiguresTable id={`custom-report-${block.id}`} block={block} figures={figures} filter={filter} editor={editor} />
+      <p className={ui.srOnly} role="status" aria-live="polite">
+        {announce}
+      </p>
       {editable ? (
         <div className={ui.actions} data-print="hide">
           <span className={ui.muted}>Add a row:</span>
@@ -405,12 +328,7 @@ function ReportTable({
           >
             Group of accounts
           </Button>
-          <Button
-            size="small"
-            variant="secondary"
-            disabled={busy}
-            onClick={() => onEditRow({ id: newLayoutId("r"), kind: "formula", label: "", terms: [] }, true)}
-          >
+          <Button size="small" variant="secondary" disabled={busy} onClick={() => onEditRow({ id: newLayoutId("r"), kind: "formula", label: "", terms: [] }, true)}>
             Formula
           </Button>
           <Button size="small" variant="secondary" disabled={busy} onClick={() => onEditRow({ id: newLayoutId("r"), kind: "heading", label: "" }, true)}>
@@ -430,6 +348,11 @@ function ReportTable({
       ) : null}
     </div>
   );
+}
+
+/** The rows a formula uses (browser-side copy of the server's check). */
+function formulaRows(row: Extract<ReportRow, { kind: "formula" }>): string[] {
+  return (row.operation ?? "sum") === "sum" ? row.terms.map((term) => term.rowId) : [row.a ?? "", ...(row.b ? [row.b] : [])];
 }
 
 function RowEditor({
@@ -454,7 +377,8 @@ function RowEditor({
   const [row, setRow] = useState<ReportRow>(initial);
   const [byCode, setByCode] = useState(initial.kind === "group" && initial.accountCodes.length > 0);
   const [error, setError] = useState<string | null>(null);
-  const others = table.rows.filter((entry) => entry.id !== row.id && entry.kind !== "heading");
+  // Rows a formula can use: not headings, and not a % (CR17).
+  const others = table.rows.filter((entry) => entry.id !== row.id && entry.kind !== "heading" && !(entry.kind === "formula" && entry.operation === "percent"));
   const kindName = { group: "group of accounts", formula: "formula", heading: "heading", earnings: "earnings row" }[row.kind];
 
   function save() {
@@ -464,7 +388,12 @@ function RowEditor({
       if (cleaned.accountTypes.length === 0 && cleaned.accountCodes.length === 0) return setError("Tick the account types or accounts in this group.");
       return onSave({ ...cleaned, label: row.label.trim() });
     }
-    if (row.kind === "formula" && row.terms.length === 0) return setError("Add at least one row to the formula.");
+    if (row.kind === "formula" && (row.operation ?? "sum") === "sum" && row.terms.length === 0) return setError("Add at least one row to the formula.");
+    if (row.kind === "formula" && (row.operation ?? "sum") !== "sum") {
+      if (!row.a) return setError("Choose the first row.");
+      if (!row.b && !row.by) return setError(row.operation === "percent" ? "Choose the row it's a % of." : "Choose the second row, or type a number.");
+      if (row.by && !/^-?\d+(\.\d+)?$/.test(row.by)) return setError(`${row.by} isn't a number.`);
+    }
     onSave({ ...row, label: row.label.trim() });
   }
 
@@ -526,6 +455,57 @@ function RowEditor({
           </>
         ) : null}
         {row.kind === "formula" ? (
+          <Field label="Works out">
+            <select
+              value={row.operation ?? "sum"}
+              onChange={(event) => {
+                const operation = event.target.value as FormulaOperation;
+                setRow(
+                  operation === "sum"
+                    ? { id: row.id, kind: "formula", label: row.label, terms: row.terms }
+                    : { id: row.id, kind: "formula", label: row.label, terms: [], operation, a: row.a ?? others[0]?.id, b: row.b ?? others[1]?.id ?? others[0]?.id },
+                );
+              }}
+            >
+              {(Object.keys(FORMULA_OPERATIONS) as FormulaOperation[]).map((operation) => (
+                <option key={operation} value={operation}>
+                  {FORMULA_OPERATIONS[operation]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        {row.kind === "formula" && (row.operation ?? "sum") !== "sum" ? (
+          <div className={ui.actions}>
+            <select aria-label="First row" value={row.a ?? ""} onChange={(event) => setRow({ ...row, a: event.target.value })}>
+              {others.map((other) => (
+                <option key={other.id} value={other.id}>
+                  {other.label}
+                </option>
+              ))}
+            </select>
+            <span>{row.operation === "multiply" ? "×" : row.operation === "divide" ? "÷" : "% of"}</span>
+            <select
+              aria-label="Second row"
+              value={row.by ? "" : (row.b ?? "")}
+              onChange={(event) => setRow({ ...row, b: event.target.value || undefined, by: event.target.value ? undefined : (row.by ?? "1") })}
+            >
+              {row.operation !== "percent" ? <option value="">A number</option> : null}
+              {others.map((other) => (
+                <option key={other.id} value={other.id}>
+                  {other.label}
+                </option>
+              ))}
+            </select>
+            {row.operation !== "percent" && !row.b ? (
+              <input aria-label="Number" inputMode="decimal" value={row.by ?? ""} onChange={(event) => setRow({ ...row, by: event.target.value })} style={{ maxWidth: 120 }} />
+            ) : null}
+            <InfoTip label="How it's worked out">
+              In decimal maths. Money is rounded to the cent and a % to one decimal place, halves away from zero. Dividing by 0.00 shows a blank.
+            </InfoTip>
+          </div>
+        ) : null}
+        {row.kind === "formula" && (row.operation ?? "sum") === "sum" ? (
           <>
             {row.terms.length === 0 ? <p className={ui.muted}>No rows yet.</p> : null}
             {row.terms.map((term, index) => (
@@ -778,6 +758,86 @@ function NoteBlock({
   );
 }
 
+function NoteEditor({ row, busy, onSave, onCancel }: { row: ReportRow; busy: boolean; onSave: (note: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(row.note ?? "");
+  return (
+    <Card title={`Note on ${row.label}`}>
+      <Field label="Note">
+        <textarea rows={3} maxLength={CUSTOM_REPORT_LIMITS.rowNoteLength} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
+      </Field>
+      <div className={ui.actions}>
+        <Button onClick={() => onSave(text.trim())} disabled={busy}>
+          {text.trim() ? "Keep note" : "Remove note"}
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function SaveAsForm({ initial, busy, onSave, onCancel }: { initial: string; busy: boolean; onSave: (title: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState(initial);
+  return (
+    <Card title="Save as a new report">
+      <form
+        className={ui.inlineForm}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim()) onSave(name.trim());
+        }}
+      >
+        <Field label="Name">
+          <input value={name} maxLength={CUSTOM_REPORT_LIMITS.titleLength} onChange={(event) => setName(event.target.value)} autoFocus required />
+        </Field>
+        <Button type="submit" disabled={busy || !name.trim()}>
+          Save as
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+/** Whether a report is starred, and a way to star it (decision 1362). */
+export function useFavourite(organisationId: string, reportKey: string) {
+  const list = useApiData<{ favourites: string[] }>("/api/report-favourites", { organisationId });
+  const [override, setOverride] = useState<string[] | null>(null);
+  const favourites = override ?? list.data?.favourites ?? [];
+  const on = favourites.includes(reportKey);
+  async function toggle() {
+    const result = await api<{ favourites: string[] }>("/api/report-favourites", { method: "PUT", body: { organisationId, key: reportKey, favourite: !on } });
+    setOverride(result.favourites);
+  }
+  return { on, favourites, toggle, loaded: Boolean(list.data) };
+}
+
+export function FavouriteButton({ organisationId, reportKey, name }: { organisationId: string; reportKey: string; name: string }) {
+  const favourite = useFavourite(organisationId, reportKey);
+  return <FavouriteToggle favourite={favourite} name={name} />;
+}
+
+/** The star button (aria-pressed), for a favourite state that's shared with a list. */
+export function FavouriteToggle({ favourite, name }: { favourite: ReturnType<typeof useFavourite>; name: string }) {
+  if (!favourite.loaded) return null;
+  return (
+    <button
+      type="button"
+      className={`${ui.button} ${ui.secondary} ${ui.favouriteButton}`}
+      aria-pressed={favourite.on}
+      aria-label={`Favourite: ${name}`}
+      title={favourite.on ? "In your favourites" : "Add to your favourites"}
+      onClick={() => void favourite.toggle()}
+      data-print="hide"
+    >
+      <span aria-hidden="true">{favourite.on ? "★" : "☆"}</span>
+    </button>
+  );
+}
+
 export function CustomReportPage({ organisationId, reportId }: { organisationId: string; reportId: string }) {
   const confirm = useConfirm();
   const router = useRouter();
@@ -786,13 +846,21 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);
   const budgets = useApiData<{ budgets: Budget[] }>("/api/budgets", { organisationId });
+  const defaults = useApiData<{ defaults: Array<{ base: string; reportId: string }> }>("/api/report-layouts", { organisationId });
+  const [defaultsOverride, setDefaultsOverride] = useState<Array<{ base: string; reportId: string }> | null>(null);
   const [state, setState] = useState<Loaded | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
+  const [noteFor, setNoteFor] = useState<{ blockId: string; row: ReportRow } | null>(null);
+  const [saveAs, setSaveAs] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [publishKey, setPublishKey] = useState(() => newIdempotencyKey("custom-report-publish"));
+  const [saveAsKey] = useState(() => newIdempotencyKey("custom-report-copy"));
   const [title, setTitle] = useState<string | null>(null);
+  // Changes are kept here until Save (decision 1360); the figures shown are a preview of them.
+  const [draft, setDraft] = useState<CustomReportLayout | null>(null);
+  const [preview, setPreview] = useState<CustomReportFigures | null>(null);
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
@@ -801,9 +869,13 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
     return <TransactionCustomReportPage organisationId={organisationId} loaded={currentLoaded} />;
   }
   const report = currentLoaded.report as CustomReport & { base: FinancialReportBase; layout: CustomReportLayout };
-  const figures = currentLoaded.figures as CustomReportFigures;
+  const layout = draft ?? report.layout;
+  const figures = (draft ? preview : null) ?? (currentLoaded.figures as CustomReportFigures);
   const editable = report.kind === "draft" && !report.archivedAt && can("bookkeeper");
-  const titleValue = title ?? report.title;
+  const titleValue = title ?? layout.title;
+  const defaultList = defaultsOverride ?? defaults.data?.defaults ?? [];
+  const isDefault = defaultList.some((entry) => entry.reportId === report.id);
+  const baseName = CUSTOM_REPORT_BASES[report.base].toLowerCase();
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -818,22 +890,33 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
     }
   }
 
-  /** Applies a change to a copy of the layout and saves it; the new figures come back. */
+  /** Applies a change to a copy of the layout, unsaved, and shows its figures. */
   function change(apply: (layout: CustomReportLayout) => boolean | void, after?: () => void) {
-    const layout = structuredClone(report.layout);
-    if (apply(layout) === false) return;
+    const next = structuredClone(layout);
+    if (apply(next) === false) return;
     void run(async () => {
-      const saved = await api<Loaded>(`/api/custom-reports/${report.id}`, { method: "PUT", body: { organisationId, layout, version: report.version } });
-      setState(saved);
+      const result = await api<{ figures: CustomReportFigures }>(`/api/custom-reports/${report.id}/preview`, { method: "POST", body: { organisationId, layout: next } });
+      setDraft(next);
+      setPreview(result.figures);
       setTitle(null);
       after?.();
     });
   }
 
+  const save = () =>
+    run(async () => {
+      if (!draft) return;
+      const saved = await api<Loaded>(`/api/custom-reports/${report.id}`, { method: "PUT", body: { organisationId, layout: draft, version: report.version } });
+      setState(saved);
+      setDraft(null);
+      setPreview(null);
+      setMessage("Saved.");
+    });
+
   function saveRow(blockId: string, row: ReportRow, isNew: boolean) {
     change(
-      (layout) => {
-        const table = layout.blocks.find((block) => block.id === blockId) as Extract<ReportBlock, { kind: "table" }>;
+      (next) => {
+        const table = next.blocks.find((block) => block.id === blockId) as Extract<ReportBlock, { kind: "table" }>;
         if (isNew) table.rows.push(row);
         else table.rows[table.rows.findIndex((entry) => entry.id === row.id)] = row;
       },
@@ -842,12 +925,12 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   }
 
   function moveBlock(id: string, by: -1 | 1) {
-    change((layout) => move(layout.blocks, layout.blocks.findIndex((block) => block.id === id), by));
+    change((next) => move(next.blocks, next.blocks.findIndex((block) => block.id === id), by));
   }
   async function deleteBlock(id: string, what: string) {
     if (!(await confirm(`Delete this ${what}?`))) return;
-    change((layout) => {
-      layout.blocks.splice(layout.blocks.findIndex((block) => block.id === id), 1);
+    change((next) => {
+      next.blocks.splice(next.blocks.findIndex((block) => block.id === id), 1);
     });
   }
 
@@ -863,8 +946,10 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   const setArchived = (archived: boolean) =>
     run(async () => {
       const result = await api<{ report: CustomReport }>(`/api/custom-reports/${report.id}/archive`, { method: "POST", body: { organisationId, archived } });
-      setState({ report: result.report, figures });
+      setState({ report: result.report, figures: currentLoaded.figures });
       setMessage(archived ? "Archived. It's under Reports › Archived." : "Brought back.");
+      defaults.reload();
+      setDefaultsOverride(null);
     });
   const remove = async () => {
     if (!(await confirm(`Delete the draft ${report.title}? Published copies of it stay.`))) return;
@@ -873,9 +958,44 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
       router.push("/operations/reports?view=drafts");
     });
   };
+  const setDefault = (on: boolean) =>
+    run(async () => {
+      const result = await api<{ defaults: Array<{ base: string; reportId: string }> }>("/api/report-layouts", {
+        method: "PUT",
+        body: { organisationId, base: report.base, reportId: on ? report.id : null },
+      });
+      setDefaultsOverride(result.defaults);
+      setMessage(on ? `Reports now shows the ${baseName} in this layout.` : `Reports shows the standard ${baseName} again.`);
+    });
+  const copy = (copyTitle: string) =>
+    run(async () => {
+      const result = await api<{ report: CustomReport }>("/api/custom-reports", {
+        method: "POST",
+        body: { organisationId, source: "ui", idempotencyKey: saveAsKey, base: report.base, layout: { ...layout, title: copyTitle } },
+      });
+      router.push(pageHref(result.report.id));
+    });
 
-  const tableBlocks = new Map(report.layout.blocks.filter((block) => block.kind === "table").map((block) => [block.id, block as Extract<ReportBlock, { kind: "table" }>]));
+  const tableBlocks = new Map(layout.blocks.filter((block) => block.kind === "table").map((block) => [block.id, block as Extract<ReportBlock, { kind: "table" }>]));
   const editingTable = editing?.kind === "row" ? tableBlocks.get(editing.blockId) : undefined;
+  const exportTables = figures.blocks.filter((block) => block.kind === "table").map((block) => ({ id: `custom-report-${block.id}`, title: (block as { title: string }).title || undefined }));
+  const more: MoreMenuItem[] = [
+    ...(editable
+      ? [
+          { label: "Columns…", onSelect: () => setEditing({ kind: "columns" }) },
+          { label: "Add table", onSelect: () => change((next) => void next.blocks.push({ id: newLayoutId("t"), kind: "table", title: "New table", rows: [] })) },
+          { label: "Add note", onSelect: () => change((next) => void next.blocks.push({ id: newLayoutId("n"), kind: "text", text: "Notes" })) },
+          { label: "Save as…", onSelect: () => setSaveAs(true) },
+          isDefault
+            ? { label: `Stop using as the ${baseName} layout`, onSelect: () => void setDefault(false) }
+            : { label: `Set as default layout for the ${baseName}`, disabled: Boolean(draft), onSelect: () => void setDefault(true) },
+          { label: "Publish", disabled: Boolean(draft), onSelect: () => void publish() },
+        ]
+      : []),
+    { label: "Print", onSelect: () => window.print() },
+    ...(can("bookkeeper") ? [{ label: report.archivedAt ? "Bring back" : "Archive", onSelect: () => void setArchived(!report.archivedAt) }] : []),
+    ...(can("bookkeeper") && report.kind === "draft" ? [{ label: "Delete draft", danger: true, onSelect: () => void remove() }] : []),
+  ];
 
   return (
     <>
@@ -883,6 +1003,8 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
         <Link href={`/operations/reports?view=${report.archivedAt ? "archived" : report.kind === "published" ? "published" : "drafts"}`}>← Reports</Link>
         {report.kind === "published" ? <Badge tone="blue">Published</Badge> : <Badge>Draft</Badge>}
         {report.archivedAt ? <Badge tone="amber">Archived</Badge> : null}
+        {isDefault ? <Badge tone="green">Default {baseName} layout</Badge> : null}
+        {draft ? <Badge tone="amber">Unsaved changes</Badge> : null}
       </div>
       <div data-print="hide">
         {error ? <Notice tone="error">{error}</Notice> : null}
@@ -901,64 +1023,52 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
           </Notice>
         </div>
       ) : null}
-      <div className={ui.toolbar} data-print="hide">
+      <div className={ui.toolbar} data-print="hide" role="group" aria-label="Report actions">
         {editable ? (
-          <>
-            <Button size="small" variant="secondary" disabled={busy} onClick={() => setEditing({ kind: "columns" })}>
-              Columns…
-            </Button>
-            <Button
-              size="small"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => change((layout) => void layout.blocks.push({ id: newLayoutId("t"), kind: "table", title: "New table", rows: [] }))}
-            >
-              Add table
-            </Button>
-            <Button
-              size="small"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => change((layout) => void layout.blocks.push({ id: newLayoutId("n"), kind: "text", text: "Notes" }))}
-            >
-              Add note
-            </Button>
-            <Button size="small" disabled={busy} onClick={() => void publish()}>
-              Publish
-            </Button>
-          </>
-        ) : null}
-        <Button size="small" variant="secondary" onClick={() => window.print()}>
-          Print or save as PDF
-        </Button>
-        {can("bookkeeper") ? (
-          <Button size="small" variant="secondary" disabled={busy} onClick={() => void setArchived(!report.archivedAt)}>
-            {report.archivedAt ? "Bring back" : "Archive"}
+          <Button disabled={busy || !draft} onClick={() => void save()}>
+            {busy ? "Saving…" : "Save"}
           </Button>
         ) : null}
-        {can("bookkeeper") && report.kind === "draft" ? (
-          <Button size="small" variant="danger" disabled={busy} onClick={remove}>
-            Delete
-          </Button>
-        ) : null}
-        {busy ? <span className={ui.muted}>Saving…</span> : null}
+        <FavouriteButton organisationId={organisationId} reportKey={`custom:${report.id}`} name={report.title} />
+        <MoreMenu label="More report actions" items={more} />
+        <ExportMenu organisationId={organisationId} report="custom-report" title={report.title} period={periodSummary(figures)} filters={figures.filterLabel ? [`Only lines tagged ${figures.filterLabel}`] : []} style="statement" tables={exportTables} />
+        {busy ? <span className={ui.muted}>Working…</span> : null}
       </div>
 
+      {saveAs ? <SaveAsForm initial={`${layout.title} (copy)`} busy={busy} onCancel={() => setSaveAs(false)} onSave={(name) => void copy(name)} /> : null}
+      {noteFor ? (
+        <NoteEditor
+          row={noteFor.row}
+          busy={busy}
+          onCancel={() => setNoteFor(null)}
+          onSave={(note) =>
+            change(
+              (next) => {
+                const table = next.blocks.find((block) => block.id === noteFor.blockId) as Extract<ReportBlock, { kind: "table" }>;
+                const target = table.rows.find((entry) => entry.id === noteFor.row.id)!;
+                if (note) target.note = note;
+                else delete target.note;
+              },
+              () => setNoteFor(null),
+            )
+          }
+        />
+      ) : null}
       {editing?.kind === "columns" ? (
         <ColumnsEditor
           base={report.base}
-          initial={report.layout.columns}
-          initialFilter={report.layout.filter ?? null}
+          initial={layout.columns}
+          initialFilter={layout.filter ?? null}
           tracking={tracking.data}
           budgets={budgets.data?.budgets ?? []}
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(setting, filter) =>
             change(
-              (layout) => {
-                layout.columns = setting;
-                if (filter) layout.filter = filter;
-                else delete layout.filter;
+              (next) => {
+                next.columns = setting;
+                if (filter) next.filter = filter;
+                else delete next.filter;
               },
               () => setEditing(null),
             )
@@ -980,7 +1090,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
       ) : null}
 
       <article className={ui.reportPaper}>
-        <header className={ui.reportPaperHeader}>
+        <header className={ui.statementHeading}>
           {editable ? (
             <input
               data-print="hide"
@@ -990,23 +1100,15 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
               maxLength={CUSTOM_REPORT_LIMITS.titleLength}
               onChange={(event) => setTitle(event.target.value)}
               onBlur={() => {
-                if (titleValue.trim() && titleValue.trim() !== report.title) change((layout) => void (layout.title = titleValue.trim()));
+                if (titleValue.trim() && titleValue.trim() !== layout.title) change((next) => void (next.title = titleValue.trim()));
                 else setTitle(null);
               }}
             />
           ) : null}
-          <h2 className={`${ui.reportPaperTitle} ${editable ? ui.printOnly : ""}`}>{report.title}</h2>
-          <p className={ui.reportPaperMeta}>
-            {current?.displayName}
-            <br />
-            {CUSTOM_REPORT_BASES[report.base]} · {periodSummary(figures)} · {figures.currencyCode}
-            {figures.filterLabel ? (
-              <>
-                <br />
-                Only lines tagged {figures.filterLabel}
-              </>
-            ) : null}
-          </p>
+          <h2 className={`${ui.statementTitle} ${editable ? ui.printOnly : ""}`}>{layout.title}</h2>
+          <p className={ui.statementOrg}>{current?.displayName}</p>
+          <p>{periodSummary(figures)}</p>
+          {figures.filterLabel ? <p>Only lines tagged {figures.filterLabel}</p> : null}
         </header>
         {figures.blocks.map((block) => (
           <section key={block.id} className={ui.reportPaperBlock}>
@@ -1024,7 +1126,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
             ) : null}
             {block.kind === "table" ? (
               <ReportTable
-                key={`${block.id}:${report.version}`}
+                key={`${block.id}:${report.version}:${draft ? "d" : "s"}`}
                 block={block}
                 figures={figures}
                 layoutBlock={tableBlocks.get(block.id)}
@@ -1032,8 +1134,9 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
                 busy={busy}
                 onChange={(apply) => change(apply)}
                 onEditRow={(row, isNew) => setEditing({ kind: "row", blockId: block.id, row, isNew })}
+                onEditNote={(row) => setNoteFor({ blockId: block.id, row })}
                 onError={setError}
-                filter={report.layout.filter ?? null}
+                filter={layout.filter ?? null}
               />
             ) : (
               <NoteBlock
@@ -1042,8 +1145,8 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
                 editable={editable}
                 busy={busy}
                 onSave={(text) =>
-                  change((layout) => {
-                    const note = layout.blocks.find((entry) => entry.id === block.id) as Extract<ReportBlock, { kind: "text" }>;
+                  change((next) => {
+                    const note = next.blocks.find((entry) => entry.id === block.id) as Extract<ReportBlock, { kind: "text" }>;
                     note.text = text;
                   })
                 }
@@ -1052,39 +1155,48 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
           </section>
         ))}
         {figures.blocks.length === 0 ? <Empty>This report has no tables or notes.</Empty> : null}
-        {figures.notInReport.length > 0 ? (
-          <Notice tone="warning">
-            <strong>Not in this report:</strong> these accounts have amounts but aren&apos;t in any group, so the report doesn&apos;t add up to the ledger.
-            <ul>
-              {figures.notInReport.map((line) => (
-                <li key={line.code}>
-                  {line.code} · {line.name}:{" "}
-                  {figures.columns
-                    .filter((column) => column.kind === "period" || column.kind === "year_to_date")
-                    .map((column) => `${column.label} ${line.values[column.key]}`)
-                    .join(", ")}
-                </li>
-              ))}
-            </ul>
-          </Notice>
-        ) : null}
-        {figures.inSeveralGroups.length > 0 ? (
-          <Notice tone="warning">
-            <strong>Counted more than once:</strong>
-            <ul>
-              {figures.inSeveralGroups.map((entry) => (
-                <li key={`${entry.tableTitle}:${entry.code}`}>
-                  {entry.code} · {entry.name} is in {entry.groups.join(" and ")}
-                  {entry.tableTitle ? ` (${entry.tableTitle})` : ""}.
-                </li>
-              ))}
-            </ul>
-          </Notice>
-        ) : null}
+        <ReportWarnings figures={figures} />
         <p className={ui.reportPaperFooter}>
           {report.kind === "published" ? `Published ${formatDateTime(report.publishedAt)}.` : `Worked out ${formatDateTime(figures.computedAt)} from the ledger.`}
         </p>
       </article>
+    </>
+  );
+}
+
+/** Accounts left out of a report, or counted twice, so it doesn't hide that it no longer adds up. */
+export function ReportWarnings({ figures }: { figures: CustomReportFigures }) {
+  return (
+    <>
+      {figures.notInReport.length > 0 ? (
+        <Notice tone="warning">
+          <strong>Not in this report:</strong> these accounts have amounts but aren&apos;t in any group, so the report doesn&apos;t add up to the ledger.
+          <ul>
+            {figures.notInReport.map((line) => (
+              <li key={line.code}>
+                {line.code} · {line.name}:{" "}
+                {figures.columns
+                  .filter((column) => column.kind === "period" || column.kind === "year_to_date")
+                  .map((column) => `${column.label} ${line.values[column.key]}`)
+                  .join(", ")}
+              </li>
+            ))}
+          </ul>
+        </Notice>
+      ) : null}
+      {figures.inSeveralGroups.length > 0 ? (
+        <Notice tone="warning">
+          <strong>Counted more than once:</strong>
+          <ul>
+            {figures.inSeveralGroups.map((entry) => (
+              <li key={`${entry.tableTitle}:${entry.code}`}>
+                {entry.code} · {entry.name} is in {entry.groups.join(" and ")}
+                {entry.tableTitle ? ` (${entry.tableTitle})` : ""}.
+              </li>
+            ))}
+          </ul>
+        </Notice>
+      ) : null}
     </>
   );
 }

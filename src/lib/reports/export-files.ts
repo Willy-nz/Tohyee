@@ -41,6 +41,7 @@ export function parseReportExport(input: unknown): ReportExportData {
       const cells = (row as { cells?: unknown }).cells;
       if (!Array.isArray(cells) || cells.length > columns.length) throw new ValidationError(`Report row ${rowIndex + 1} has too many cells.`);
       return {
+        ...((row as { pageBreakAfter?: unknown }).pageBreakAfter === true ? { pageBreakAfter: true } : {}),
         kind: REPORT_EXPORT_ROW_KINDS.includes((row as { kind?: unknown }).kind as ReportExportRowKind) ? (row as { kind: ReportExportRowKind }).kind : undefined,
         cells: cells.map((cell, cellIndex): ReportExportCell => {
           if (!cell || typeof cell !== "object" || Array.isArray(cell)) throw new ValidationError(`Cell ${cellIndex + 1} in report row ${rowIndex + 1} is invalid.`);
@@ -182,11 +183,21 @@ export async function reportPdf(data: ReportExportData): Promise<Uint8Array> {
       width: index === 0 ? 2.5 : 1,
       align: index === 0 ? "left" : "right",
     }));
-    const rows = table.rows.map((row) => Array.from({ length: table.columns.length }, (_, index) => row.cells[index]?.text ?? ""));
-    writer.table(columns, rows, {
-      width: CONTENT_WIDTH,
-      rowKinds: table.rows.map((row) => row.kind ?? "normal"),
-      style: data.style === "statement" ? "statement" : "grid",
+    // A page break after a row starts a new page, with the table's heading again.
+    const parts: ReportExportTable["rows"][] = [[]];
+    for (const row of table.rows) {
+      parts[parts.length - 1].push(row);
+      if (row.pageBreakAfter) parts.push([]);
+    }
+    parts.forEach((part, index) => {
+      if (part.length === 0) return;
+      if (index > 0) writer.newPage();
+      const rows = part.map((row) => Array.from({ length: table.columns.length }, (_, cell) => row.cells[cell]?.text ?? ""));
+      writer.table(columns, rows, {
+        width: CONTENT_WIDTH,
+        rowKinds: part.map((row) => row.kind ?? "normal"),
+        style: data.style === "statement" ? "statement" : "grid",
+      });
     });
     writer.space(10);
   }
