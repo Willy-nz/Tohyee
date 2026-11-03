@@ -11160,9 +11160,9 @@ and sales 1,000.00 on 15 Apr 2026). Tests: `tests/integration/period-close.test.
   as the balance sheet), and no 4000 or 6010 line (nothing this year);
   22,345.67 each side. At 30 Apr 2026 (YE2): 1000 **23,345.67** Dr, 3000
   10,000.00 Cr, 3200 **12,345.67** Cr, 4000 **1,000.00** Cr; 23,345.67 each
-  side. 4000's account transactions for 1-30 Apr 2026 still open at
-  15,000.00 Cr and close at 16,000.00 Cr; their credits in the period,
-  **1,000.00**, are its trial balance line.
+  side. 4000's account transactions for 1-30 Apr 2026 open at **0.00**
+  (the start of the financial year, ATX6; before 4 Nov 2026 they opened at
+  15,000.00 Cr) and close at **1,000.00** Cr, its trial balance line.
 - **TB3** After YE3's dividend (Dr 3200 500.00 / Cr 1000 on 20 Apr 2026), at
   30 Apr 2026: 1000 **22,845.67** Dr, 3000 10,000.00 Cr, 3200 **11,845.67**
   Cr (-500.00 posted + 12,345.67 earlier years), 4000 1,000.00 Cr;

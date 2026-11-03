@@ -241,15 +241,15 @@ describeWithDatabase("year end and period close", () => {
     expect(april.tb.rows.find((row) => row.code === "3200")).toMatchObject({ previousYearsEarnings: "12345.67" });
     expect((await w.as((tx) => balanceSheet(tx, { asAt: "2026-04-01" }))).equity.retainedEarnings.total).toBe("12345.67");
     // Each income or expense line is the account's movement in account transactions since the
-    // start of the financial year (account transactions keep every posting, so 4000's balance
-    // still runs from 15,000.00 Cr to 16,000.00 Cr).
+    // start of the financial year: income and expense accounts open at 0.00 on the first day of
+    // the year, as on the trial balance (ATX6, decision 1357), so 4000 runs from 0.00 to 1,000.00 Cr.
     const sales = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '4000'"))).rows[0].id;
     const salesThisYear = await w.as((tx) => accountTransactions(tx, { accountId: sales, from: "2026-04-01", to: "2026-04-30" }));
     expect([salesThisYear.accounts[0].opening, salesThisYear.accounts[0].totalDebit, salesThisYear.accounts[0].totalCredit, salesThisYear.accounts[0].closing]).toEqual([
-      "-15000.00",
+      "0.00",
       "0.00",
       "1000.00",
-      "-16000.00",
+      "-1000.00",
     ]);
     expect((await rowsOf("2026-04-30")).rows).toContainEqual(["4000", "0.00", "1000.00"]);
 
