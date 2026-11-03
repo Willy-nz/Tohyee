@@ -34,6 +34,7 @@ import type { CoverageFacts } from "@/lib/sales-platforms/coverage-status";
 import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
 import { startOfLocalDate } from "@/lib/sales-platforms/orders";
+import { savePayout } from "@/lib/sales-platforms/payout-store";
 import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
 import { woocommerceConnector } from "@/lib/sales-platforms/woocommerce";
@@ -1582,6 +1583,8 @@ export async function syncConnection(
           let last: string | null = null;
           for (const payout of [...payouts.payouts].sort((a, b) => Date.parse(a.issuedAt) - Date.parse(b.issuedAt))) {
             const outcome = await postPayout(tx, postContext, payout);
+            // #548: its settlement, for matching the bank deposit (nothing posted).
+            await savePayout(tx, { id: current.id, platform: current.platform, storeDomain: current.store_domain }, payout);
             if ((outcome === "waiting" || outcome === "failed") && firstOpen === null) firstOpen = payout.issuedAt;
             last = payout.issuedAt;
           }
