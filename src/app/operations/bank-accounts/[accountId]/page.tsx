@@ -76,9 +76,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
       </p>
       {usage ? (
         <p className={ui.actions} style={{ flexWrap: "wrap", alignItems: "center" }}>
-          <span>
-            {USAGE_LABELS[usage.usage]} <UsageBadge usage={usage.usage} />
-          </span>
+          {usage.usage === "business" ? <span>{USAGE_LABELS.business}</span> : <UsageBadge usage={usage.usage} />}
           {usage.ownerAccount ? <span className={ui.muted}>Owner account {usage.ownerAccount.code}</span> : null}
           {can("admin") && !changingUse ? (
             <button type="button" className={ui.linkButton} onClick={() => setChangingUse(true)}>
