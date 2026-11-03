@@ -3,9 +3,9 @@
   "items": [
     {
       "date": "2026-11-03",
-      "title": "Tohyee 0.24.0: guided shop setup",
-      "body": "Connecting Shopify or WooCommerce is now one step at a time, with suggested accounts you can add on the spot. Plus stock, shop stats and discounts from Shopify in Analytics, and a picture for every menu item.",
-      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.24.0"
+      "title": "Tohyee 0.25.0: simpler screens and smarter banking",
+      "body": "Fewer words on every screen, a guided Akahu bank feed setup, Unreconcile selected, AI bank coding you approve, Shopify payouts matched in the bank, personal and mixed-use cards, and a GST registration you confirm. Plus everything from 0.24.0: guided Shopify setup and more Shopify data in Analytics.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.25.0"
     },
     {
       "date": "2026-11-02",
