@@ -24,7 +24,7 @@ export const SALES_PLATFORM_READ_TOOLS: readonly AiTool[] = [
     name: "get_sales_platform_status",
     title: "Sales platform status",
     description:
-      "Each connected Shopify or WooCommerce store: whether customers and products sync (off means not read at all), whether posting orders, refunds and payouts to the accounts is on and from what start date, settings posting still needs, access scopes given against needed, how many records are linked, records not brought in by reason (e.g. missing_sku, missing_scope) with examples, and when it last synced. Read-only: it doesn't contact the store or change anything. Use list_sales_platform_log for the lines behind it.",
+      "Each connected Shopify or WooCommerce store: whether customers and products sync (off means not read at all; customers scope buyers means only customers who have ordered come in, with their first order), whether posting orders, refunds and payouts to the accounts is on and from what start date, settings posting still needs, access scopes given against needed, how many records are linked, records not brought in by reason (e.g. same_name_needs_check, customer_not_linked, test_customer, missing_scope) with examples, and when it last synced. Read-only: it doesn't contact the store or change anything. Use list_sales_platform_log for the lines behind it.",
     inputSchema: schema({
       connectionId: CONNECTION_ID,
       includeDisconnected: { type: "boolean", description: "Also show disconnected stores. Default false." },
