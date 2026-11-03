@@ -93,13 +93,17 @@ export function MoreMenu({ label = "More actions", items }: { label?: string; it
         >
           {items.map((item) => (
             <li key={item.label} role="none">
-              {"href" in item ? (
+              {"href" in item && item.newTab ? (
+                // A file or another tab (the PDF): a plain link, so Next doesn't prefetch it.
+                <a role="menuitem" tabIndex={-1} href={item.href} target="_blank" rel="noreferrer" className={styles.moreMenuItem} onClick={() => close(false)}>
+                  {item.label}
+                </a>
+              ) : "href" in item ? (
                 <Link
                   role="menuitem"
                   tabIndex={-1}
                   href={item.href}
                   className={styles.moreMenuItem}
-                  {...(item.newTab ? { target: "_blank", rel: "noreferrer" } : {})}
                   onClick={() => close(false)}
                 >
                   {item.label}

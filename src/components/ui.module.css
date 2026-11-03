@@ -458,7 +458,7 @@
 .totals {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 24px;
+  gap: 6px 0;
   width: min(100%, 360px);
   margin: 0 0 0 auto;
   font-variant-numeric: tabular-nums;
@@ -470,6 +470,7 @@
 
 .totals dd {
   margin: 0;
+  padding-left: 24px;
   text-align: right;
 }
 
@@ -617,6 +618,18 @@
 
 .reportPicker {
   max-width: 320px;
+}
+
+.standardReport > .card > .cardHeader {
+  justify-content: flex-start;
+}
+
+.standardReport > .card > .cardHeader > .actions {
+  flex: 1 1 auto;
+}
+
+.standardReport > .card > .cardHeader > .actions > * {
+  flex: 1 1 auto;
 }
 
 .standardReport > .card > .cardHeader .cardTitle {
