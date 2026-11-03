@@ -84,6 +84,11 @@ function ShopIcon({ platform }: { platform: SalesPlatform }) {
 }
 
 function Progress({ steps, current, done }: { steps: SetupStep[]; current: SetupStep; done: (step: SetupStep) => boolean }) {
+  return <SetupProgress steps={steps} names={STEP_NAMES} current={current} done={done} />;
+}
+
+/** The step list of a guided setup (a numbered row; "Step 2 of 5" and a bar on a phone). Shared by the bank feed setup (#543). */
+export function SetupProgress<T extends string>({ steps, names, current, done }: { steps: T[]; names: Record<T, string>; current: T; done: (step: T) => boolean }) {
   const at = steps.indexOf(current);
   return (
     <div>
@@ -93,14 +98,14 @@ function Progress({ steps, current, done }: { steps: SetupStep[]; current: Setup
           return (
             <li key={step} className={styles.progressStep} data-state={state} aria-current={step === current ? "step" : undefined}>
               <span className={styles.progressNumber} aria-hidden="true">{state === "done" ? "✓" : index + 1}</span>
-              {STEP_NAMES[step]}
+              {names[step]}
               {state === "done" ? <span className={styles.srOnly}> (done)</span> : null}
             </li>
           );
         })}
       </ol>
       <p className={styles.progressPhone}>
-        Step {at + 1} of {steps.length}: <strong>{STEP_NAMES[current]}</strong>
+        Step {at + 1} of {steps.length}: <strong>{names[current]}</strong>
       </p>
       <div className={styles.progressBar} aria-hidden="true">
         <span style={{ width: `${((at + 1) / steps.length) * 100}%` }} />

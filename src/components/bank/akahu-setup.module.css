@@ -1,0 +1,146 @@
+/* The guided Akahu setup and bank feed card (#543). Colours come from globals.css. */
+
+.accounts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.account {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.account[data-linked="yes"] {
+  background: var(--surface-sunken);
+}
+
+.accountHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.accountHead input[type="checkbox"] {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.accountName {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.note,
+.result {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--text-muted);
+}
+
+.result[data-state="ok"] {
+  color: var(--success-text);
+}
+
+.result[data-state="failed"] {
+  color: var(--danger-text);
+}
+
+/* One login on the bank feed card. */
+.login {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+.loginHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.loginHead h3 {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(0, 11em) minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .facts dd {
+    margin-bottom: 6px;
+  }
+}
+
+.feeds {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.feeds li {
+  overflow-wrap: anywhere;
+}
+
+.callout {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.callout p {
+  margin: 0;
+}
+
+.callout button {
+  justify-self: start;
+}
+
+@media (max-width: 520px) {
+  .callout button {
+    justify-self: stretch;
+  }
+}
