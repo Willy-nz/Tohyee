@@ -74,9 +74,13 @@ export const POST = route(async (request) => {
   }
 
   if (!limiter.take(identity.tokenId)) {
-    return reply(rpcError(null, JSON_RPC.INTERNAL_ERROR, "Too many requests with this key. Wait a minute and try again."), 429, {
-      "retry-after": "60",
-    });
+    // A batch the AI was working through keeps its progress (#547): resume it after this long.
+    const wait = limiter.retryAfterSeconds(identity.tokenId);
+    return reply(
+      rpcError(null, JSON_RPC.INTERNAL_ERROR, `Too many requests with this key. Wait ${wait} second${wait === 1 ? "" : "s"} and try again; a batch keeps its progress.`),
+      429,
+      { "retry-after": String(wait) },
+    );
   }
   if (!protocolHeaderAccepted(request.headers.get("mcp-protocol-version"))) {
     return reply(rpcError(null, JSON_RPC.INVALID_REQUEST, "Unsupported MCP-Protocol-Version."), 400);

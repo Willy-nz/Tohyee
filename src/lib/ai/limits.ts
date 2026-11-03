@@ -41,6 +41,13 @@ export class RequestLimiter {
     return Boolean(window && now - window.start < this.windowMs && window.count >= this.limit);
   }
 
+  /** Whole seconds until the key's window starts again (at least 1), for a Retry-After header. */
+  retryAfterSeconds(key: string, now = Date.now()): number {
+    const window = this.windows.get(key);
+    if (!window) return 1;
+    return Math.max(1, Math.ceil((window.start + this.windowMs - now) / 1000));
+  }
+
   private prune(now: number): void {
     for (const [key, window] of this.windows) {
       if (now - window.start >= this.windowMs) this.windows.delete(key);
