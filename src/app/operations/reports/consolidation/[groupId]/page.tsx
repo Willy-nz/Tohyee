@@ -10,7 +10,7 @@ export default function ConsolidationGroupPage() {
   const { groupId } = useParams<{ groupId: string }>();
   return (
     <Page>
-      <PageHeader title="Consolidation" description={<Link href="/operations/reports/consolidation">All groups</Link>} />
+      <PageHeader title="Consolidation" actions={<Link href="/operations/reports/consolidation">All groups</Link>} />
       <ConsolidationGroupView key={groupId} groupId={groupId} />
     </Page>
   );

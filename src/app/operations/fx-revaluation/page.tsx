@@ -151,8 +151,8 @@ function RevaluationForm({
         <Field label="Reference">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} required />
         </Field>
-        <Field label="Rate source" hint="e.g. RBNZ closing rate">
-          <input value={rateSource} onChange={(event) => setRateSource(event.target.value)} maxLength={100} required />
+        <Field label="Rate source">
+          <input placeholder="RBNZ closing rate" value={rateSource} onChange={(event) => setRateSource(event.target.value)} maxLength={100} required />
         </Field>
       </div>
       <div className={ui.grid2}>
@@ -490,10 +490,7 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
 export default function FxRevaluationPage() {
   return (
     <Page>
-      <PageHeader
-        title="FX revaluation"
-        description="Month-end revaluation of foreign-currency balances to the closing rate. Each run reverses itself the next day, so unrealised gains and losses aren't double counted."
-      />
+      <PageHeader title="FX revaluation" />
       <RequireOrganisation>{(organisationId) => <FxRevaluation key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

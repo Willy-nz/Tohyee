@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Money, RequireOrganisation } from "@/components/books";
+import { Money, RequireOrganisation, OrganisationActions } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { RepeatingStatusBadge } from "@/components/repeating/repeating-editor";
-import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
-import { useWorkspace } from "@/components/workspace";
+import { Button, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import type { RepeatingBillSummary } from "@/lib/repeating/bills";
 import type { RepeatingStatus } from "@/lib/repeating/runner";
@@ -76,15 +75,9 @@ function RepeatingBillList({ organisationId, filter }: { organisationId: string;
 }
 
 function RepeatingBills({ organisationId }: { organisationId: string }) {
-  const { can } = useWorkspace();
-  const router = useRouter();
   const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
-    <Card
-      title="Repeating bills"
-      description="Each template makes a bill on every scheduled date, once, by the hourly job. Missed dates are caught up the next time it runs. Nothing is paid automatically."
-      actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/repeating-bills/new")}>New repeating bill</Button> : null}
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Repeating bill status">
         {FILTERS.map((entry) => (
           <button
@@ -100,14 +93,15 @@ function RepeatingBills({ organisationId }: { organisationId: string }) {
         ))}
       </div>
       <RepeatingBillList key={filter.label} organisationId={organisationId} filter={filter} />
-    </Card>
+    </div>
   );
 }
 
 export default function RepeatingBillsPage() {
+  const router = useRouter();
   return (
     <Page>
-      <PageHeader title="Repeating bills" description="Bills from suppliers made for you every so many weeks or months, such as rent or subscriptions." />
+      <PageHeader title="Repeating bills" actions={<OrganisationActions>{({ can }) => can("bookkeeper") ? <Button onClick={() => router.push("/operations/repeating-bills/new")}>New repeating bill</Button> : null}</OrganisationActions>} />
       <RequireOrganisation>{(organisationId) => <RepeatingBills organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

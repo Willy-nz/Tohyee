@@ -48,10 +48,8 @@ export default function SignInsPage() {
   const unseen = log.data?.unseen.count ?? 0;
   return (
     <Page>
-      <PageHeader
-        title="Sign-ins"
-        description="Every sign-in attempt on this server for the last year. Anything unusual is flagged and emailed to the person and the server admins; nothing is blocked. If one wasn't them, sign them out everywhere under Users and reset their password."
-      />
+      <PageHeader title="Sign-ins" />
+      <Notice tone="warning">Unusual sign-ins are flagged and emailed, not blocked. If one wasn&apos;t them, sign them out everywhere and reset their password under Users.</Notice>
       {status ? <Notice tone="error">{status}</Notice> : null}
       {log.error ? <Notice tone="error">{log.error}</Notice> : null}
       {unseen > 0 ? (

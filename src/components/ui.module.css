@@ -33,12 +33,6 @@
   letter-spacing: -0.025em;
 }
 
-.pageDescription {
-  margin-top: 6px;
-  max-width: 72ch;
-  color: var(--text-muted);
-  font-size: var(--text-md);
-}
 
 .actions {
   display: flex;
@@ -70,6 +64,14 @@
   font-size: var(--text-lg);
   font-weight: 650;
   letter-spacing: -0.015em;
+}
+
+.cardTitle a {
+  color: inherit;
+}
+
+.cardTitle a:hover {
+  text-decoration: underline;
 }
 
 .cardDescription {
@@ -390,6 +392,13 @@
   padding: 32px 20px;
   color: var(--text-muted);
   text-align: center;
+}
+
+/* A list page's tabs and table, straight under the page header (no card around them). */
+.listSection {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
 }
 
 /* Tabs: an underline row */
@@ -1156,11 +1165,10 @@
 
 .moduleIdentity { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 
-/* Phones: the art sits beside the title only; the description uses the full width. */
+/* Phones: the art sits beside the title. */
 @media (max-width: 600px) {
   .pageHeading { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; }
   .pageHeadingCopy { display: contents; }
-  .pageHeading > .pageHeadingCopy > .pageDescription { grid-column: 1 / -1; }
   .pageHeading > [aria-hidden="true"] { width: 32px !important; height: 32px !important; }
   .pageHeading > [aria-hidden="true"] svg { width: 32px; height: 32px; }
 }

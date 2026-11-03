@@ -110,7 +110,6 @@ export function ReassignPage({ organisationId }: { organisationId: string }) {
       ) : null}
       <Card
         title="Move records to someone else"
-        description="For when someone leaves, goes on leave or changes patch. Each record moved gets a line in its history."
       >
         <form onSubmit={look} style={{ display: "grid", gap: 12 }}>
           <div className={ui.inlineForm}>
@@ -224,7 +223,7 @@ export function ReassignPage({ organisationId }: { organisationId: string }) {
         </Card>
       ) : null}
 
-      <Card title="Recent moves" description="Who moved what, and when.">
+      <Card title="Recent moves">
         {data.data && data.data.reassignments.length === 0 ? <Empty>Nothing has been moved yet.</Empty> : null}
         {(data.data?.reassignments ?? []).map((entry) => (
           <div key={entry.batchId} style={{ padding: "6px 0", borderTop: "1px solid var(--line, #e5e5e5)" }}>

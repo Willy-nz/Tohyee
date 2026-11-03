@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function DepreciationPage() {
   return (
     <Page>
-      <PageHeader title="Depreciation" description="Run depreciation to a month end, or roll back the latest run." />
+      <PageHeader title="Depreciation" />
       <RequireOrganisation>{(organisationId) => <DepreciationRuns key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

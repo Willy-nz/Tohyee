@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { useApiData } from "@/components/hooks";
-import { Badge, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { Badge, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import { dec, sum, toFixedString } from "@/lib/money/decimal";
@@ -125,10 +125,7 @@ function Overpayments({ organisationId }: { organisationId: string }) {
     return text ? `/operations/overpayments?${text}` : "/operations/overpayments";
   };
   return (
-    <Card
-      title="Customer overpayments"
-      description="Latest entered first. When a customer pays more than an invoice's amount due, the extra is credit for them: apply it to their other invoices or refund it from the overpayment's page."
-    >
+    <div className={ui.listSection}>
       <div className={ui.tabs} role="tablist" aria-label="Overpayments shown">
         {FILTERS.map((entry) => (
           <button
@@ -149,14 +146,14 @@ function Overpayments({ organisationId }: { organisationId: string }) {
         </p>
       ) : null}
       <OverpaymentList key={`${filter.slug}-${contactId ?? ""}`} organisationId={organisationId} filter={filter} contactId={contactId} />
-    </Card>
+    </div>
   );
 }
 
 export default function OverpaymentsPage() {
   return (
     <Page>
-      <PageHeader title="Overpayments" description="Money customers paid beyond what their invoices asked for, and what's left of it." />
+      <PageHeader title="Overpayments" />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <Overpayments organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>

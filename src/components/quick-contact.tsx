@@ -80,11 +80,11 @@ export function QuickContact({
             }}
           />
         </Field>
-        <Field label="Email" hint="Optional.">
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <Field label="Email">
+          <input placeholder="Optional" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
         </Field>
-        <Field label="GST number" hint="Optional. 8 or 9 digits.">
-          <input value={gstNumber} onChange={(event) => setGstNumber(event.target.value)} />
+        <Field label="GST number">
+          <input placeholder="Optional" value={gstNumber} onChange={(event) => setGstNumber(event.target.value)} />
         </Field>
       </div>
       <div className={ui.rowButtons}>

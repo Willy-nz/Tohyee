@@ -50,7 +50,6 @@ export function BankReconciliationReportView({
   return (
     <Card
       title="Bank reconciliation"
-      description="The bank's balance and Tohyee's, and the items that explain the difference: statement lines not yet in Tohyee, and transactions in Tohyee not yet on the statement."
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="Account">

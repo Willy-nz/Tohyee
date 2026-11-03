@@ -195,7 +195,6 @@ function InvoiceCredit({
   return (
     <Card
       title="Credit applied"
-      description="Credit from credit notes and overpayments lowers the amount due without posting a journal. Apply or remove it on the credit note or overpayment."
     >
       <div className={ui.tableWrap}>
         <table className={ui.table}>

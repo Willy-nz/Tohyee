@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CoopSharesPage() {
   return (
     <Page>
-      <PageHeader title="Co-op shares" description="The farm's shares in co-ops, with dividends, rebates and retentions, for the year-end pack." />
+      <PageHeader title="Co-op shares" />
       <RequireOrganisation>{(organisationId) => <CoopSharesView key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

@@ -7,7 +7,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function ExpenseClaimsPage() {
   return (
     <Page>
-      <PageHeader title="Expense claims" description="Receipts people paid for themselves, approved and then paid back." />
+      <PageHeader title="Expense claims" />
       <RequireOrganisation>{(organisationId) => <ExpenseClaimList key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

@@ -248,7 +248,6 @@ export function AccountTransactionsReport({
   return (
     <Card
       title="Account transactions"
-      description="Every posted line on an account (or all of them): the balance before, each line with its source, and the balance at the end. Balances match the trial balance."
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="Account">
@@ -423,7 +422,6 @@ export function JournalReportView({ organisationId }: { organisationId: string }
   return (
     <Card
       title="Journal report"
-      description="Every journal posted in the period, with its lines, where it came from and who posted it."
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="From">

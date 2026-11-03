@@ -27,7 +27,7 @@ function NewQuote({ organisationId }: { organisationId: string }) {
 export default function NewQuotePage() {
   return (
     <Page>
-      <PageHeader title="New quote" description="Save it as a draft first. Quotes never post to the ledger." />
+      <PageHeader title="New quote" />
       <RequireOrganisation>{(organisationId) => <NewQuote organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

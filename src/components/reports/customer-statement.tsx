@@ -261,8 +261,6 @@ export function CustomerStatements({ organisationId, initialContactId }: { organ
   return (
     <>
       <Card
-        title="Customer statement"
-        description="What a customer owes: their activity over a period, or what's outstanding on a date, aged by due date."
         actions={
           statement.data ? (
             <>

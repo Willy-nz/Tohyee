@@ -67,10 +67,8 @@ export default function ServerBankFilesPage() {
 
   return (
     <Page>
-      <PageHeader
-        title="Bank files folders"
-        description="The folder on this computer each organisation's automatic statement files come from. An organisation admin links each bank account to a folder inside it. Tohyee only reads files there; it never changes or deletes them."
-      />
+      <PageHeader title="Bank files folders" />
+      <Notice>Tohyee only reads files there; it never changes or deletes them.</Notice>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Card title="Organisations" description="Use a full path, e.g. D:\BankFiles\Glimmers. The Tohyee service needs to be able to read it. Leave blank for none.">
         {!rows ? (

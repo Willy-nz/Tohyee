@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmSequencesPage() {
   return (
     <Page>
-      <PageHeader title="Sequences" description="CRM: follow-up steps that become tasks." />
+      <PageHeader title="Sequences" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

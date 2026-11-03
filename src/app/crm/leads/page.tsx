@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmLeadsPage() {
   return (
     <Page>
-      <PageHeader title="Leads" description="CRM: enquiries to work, qualify and convert." />
+      <PageHeader title="Leads" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

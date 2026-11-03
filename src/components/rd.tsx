@@ -324,8 +324,8 @@ function ActivityForm({
     <form onSubmit={(event) => void submit(event)}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>
-        <Field label="Code" hint="Short, like C1 or S2.">
-          <input value={draft.code} maxLength={20} required onChange={(event) => set({ code: event.target.value })} />
+        <Field label="Code">
+          <input placeholder="C1" value={draft.code} maxLength={20} required onChange={(event) => set({ code: event.target.value })} />
         </Field>
         <Field label="Activity name">
           <input value={draft.name} maxLength={200} required onChange={(event) => set({ name: event.target.value })} />
@@ -551,7 +551,7 @@ const ACTION_LABELS: Record<HistoryEntry["action"], string> = {
 
 function HistoryCard({ history, title = "History" }: { history: HistoryEntry[]; title?: string }) {
   return (
-    <Card title={title} description="Every change, with who made it and when (the server's time).">
+    <Card title={title}>
       {history.length === 0 ? <Empty>No history.</Empty> : null}
       <ul>
         {history.map((entry) => (
@@ -1433,7 +1433,7 @@ function UntaggedLines({ organisationId, onChanged }: { organisationId: string; 
   const list = useRdActivities(organisationId, true);
   const [message, setMessage] = useState<string | null>(null);
   return (
-    <Card title="Lines to tag" description="Posted cost lines (bills, expense claims, spend money and journals) not tagged yet, newest first.">
+    <Card title="Lines to tag">
       <form
         className={ui.inlineForm}
         onSubmit={(event) => {

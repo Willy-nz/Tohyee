@@ -1,6 +1,7 @@
 "use client";
 
 import { type ButtonHTMLAttributes, Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useId } from "react";
+import Link from "next/link";
 import styles from "./ui.module.css";
 import { PageHeadingArt } from "./destination-art";
 
@@ -10,13 +11,16 @@ export function Page({ children }: { children: ReactNode }) {
   return <div className={styles.page}>{children}</div>;
 }
 
+/**
+ * A page's title and its main actions. There is deliberately no subtitle
+ * (decision 1316): a screen that needs one gets a clearer layout instead, and
+ * a warning or who-can-see-this note goes in a one-line <Notice> below.
+ */
 export function PageHeader({
   title,
-  description,
   actions,
 }: {
   title: string;
-  description?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
@@ -25,7 +29,6 @@ export function PageHeader({
         <PageHeadingArt />
         <div className={styles.pageHeadingCopy}>
           <h1 className={styles.pageTitle}>{title}</h1>
-          {description ? <p className={styles.pageDescription}>{description}</p> : null}
         </div>
       </div>
       {actions ? <div className={styles.actions}>{actions}</div> : null}
@@ -35,21 +38,24 @@ export function PageHeader({
 
 export function Card({
   title,
+  href,
   description,
   actions,
   children,
 }: {
   title?: string;
+  /** Makes the title the link to the page behind the card (instead of an "Open X" link). */
+  href?: string;
   description?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className={styles.card}>
-      {title || actions ? (
+      {title || actions || description ? (
         <div className={styles.cardHeader}>
           <div>
-            {title ? <h2 className={styles.cardTitle}>{title}</h2> : null}
+            {title ? <h2 className={styles.cardTitle}>{href ? <Link href={href}>{title}</Link> : title}</h2> : null}
             {description ? <p className={styles.cardDescription}>{description}</p> : null}
           </div>
           {actions ? <div className={styles.actions}>{actions}</div> : null}

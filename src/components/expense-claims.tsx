@@ -189,8 +189,8 @@ export function ExpenseClaimEditor({
   return (
     <form onSubmit={(event) => void save(event)}>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <Field label="What it's for" hint="Optional, e.g. June market trip.">
-        <input value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
+      <Field label="What it's for">
+        <input placeholder="June market trip" value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
       </Field>
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
@@ -377,8 +377,6 @@ export function ExpenseClaimList({ organisationId }: { organisationId: string })
   const list = useApiData<{ claims: ExpenseClaimSummary[] }>("/api/expense-claims", { organisationId, ...filter.query });
   return (
     <Card
-      title="Expense claims"
-      description="Receipts people paid for themselves. Approving posts the claim; paying it clears expense claims payable."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/expense-claims/new")}>New expense claim</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Expense claims">

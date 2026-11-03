@@ -114,8 +114,8 @@ export function EmployeePayRates({ organisationId, employeeId, onSaved }: { orga
               </Field>
             </>
           ) : null}
-          <Field label="Reason" hint="Optional, e.g. Annual review.">
-            <input maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Field label="Reason">
+            <input placeholder="Annual review" maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} />
           </Field>
         </div>
         <div className={ui.actions}>

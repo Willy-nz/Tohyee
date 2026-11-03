@@ -60,8 +60,6 @@ export function CoopSharesView({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="Co-op share register"
-        description="Shares held in co-ops, with each movement and each dividend, rebate and retention as the co-op's statements show them. It goes in the year-end pack. Nothing here posts to the ledger."
         actions={
           data ? (
             <Field label="Year ending">
@@ -447,8 +445,8 @@ function EntryForm({ organisationId, holdingId, mode, onSaved }: { organisationI
         )}
       </div>
       <div className={ui.inlineForm}>
-        <Field label="Source statement" hint="Which statement it comes from, e.g. “Fonterra share statement 31 May 2026”.">
-          <input value={form.sourceReference} onChange={set("sourceReference")} maxLength={200} />
+        <Field label="Source statement">
+          <input placeholder="Fonterra share statement 31 May 2026" value={form.sourceReference} onChange={set("sourceReference")} maxLength={200} />
         </Field>
         <Field label="Statement file" hint={attachments.length === 0 ? "Add the statement under Statements, notes and history below, then choose it here." : undefined}>
           <select value={form.attachmentId} onChange={set("attachmentId")} onFocus={() => files.reload()}>
@@ -487,7 +485,7 @@ function AddHoldingCard({ organisationId, onAdded }: { organisationId: string; o
     }
   }
   return (
-    <Card title="Add a co-op" description="One line per co-op and share class, e.g. Fonterra co-operative shares, Ravensdown ordinary shares or Silver Fern Farms rebate shares.">
+    <Card title="Add a co-op">
       {error ? <Notice tone="error">{error}</Notice> : null}
       <form onSubmit={save} className={ui.inlineForm}>
         <Field label="Co-op">

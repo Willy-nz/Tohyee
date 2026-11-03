@@ -306,8 +306,8 @@ function StartForm({ organisationId, farm, log, paddocks, onDone, onCancel }: Ct
             </select>
           </Field>
           {!tanker ? (
-            <Field label="Run or line" hint="As on the run sheet, e.g. Line 3.">
-              <input value={form.label} maxLength={60} onChange={(event) => set({ label: event.target.value })} />
+            <Field label="Run or line">
+              <input placeholder="Line 3" value={form.label} maxLength={60} onChange={(event) => set({ label: event.target.value })} />
             </Field>
           ) : null}
         </div>

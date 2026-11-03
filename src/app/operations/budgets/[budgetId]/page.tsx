@@ -10,7 +10,7 @@ export default function BudgetPage() {
   const { budgetId } = useParams<{ budgetId: string }>();
   return (
     <Page>
-      <PageHeader title="Budget" description="Type amounts or quick fill them, then save. Budgets never post to the ledger." />
+      <PageHeader title="Budget" />
       <p>
         <Link href="/operations/budgets">All budgets</Link>
       </p>

@@ -350,8 +350,8 @@ function RefundForm({
             required
           />
         </Field>
-        <Field label="Reference" hint="Optional, e.g. the bank transfer reference.">
-          <input value={fields.reference} onChange={(event) => set("reference", event.target.value)} maxLength={100} />
+        <Field label="Reference">
+          <input placeholder="Optional" value={fields.reference} onChange={(event) => set("reference", event.target.value)} maxLength={100} />
         </Field>
       </div>
       <div className={ui.actions}>

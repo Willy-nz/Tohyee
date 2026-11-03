@@ -12,10 +12,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function LeaveRequestsRoutePage() {
   return (
     <Page>
-      <PageHeader
-        title="Leave requests"
-        description="Ask for leave, and approve or reject the requests you look after. Approving books the leave, so the next pay run pays it."
-      />
+      <PageHeader title="Leave requests" />
       <RequireOrganisation>{(organisationId) => <LeaveRequestsPage key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

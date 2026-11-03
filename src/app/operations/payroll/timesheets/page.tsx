@@ -12,10 +12,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function TimesheetsRoutePage() {
   return (
     <Page>
-      <PageHeader
-        title="Timesheets"
-        description="Hours each day by R&D activity, Department or project. Approved timesheets split pay runs' costs and are the R&D claim's time record."
-      />
+      <PageHeader title="Timesheets" />
       <RequireOrganisation>{(organisationId) => <TimesheetsPage key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

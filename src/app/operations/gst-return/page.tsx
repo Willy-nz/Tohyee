@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function GstReturnPage() {
   return (
     <Page>
-      <PageHeader
-        title="GST return"
-        description="NZ GST101A (boxes 5-15), worked out from your documents on the organisation's GST basis."
-      />
+      <PageHeader title="GST return" />
       <RequireOrganisation>{(organisationId) => (
           <RequireGstRegistered organisationId={organisationId}>
             <GstReturnReport key={organisationId} organisationId={organisationId} />

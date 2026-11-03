@@ -53,7 +53,7 @@ export default function EditCreditNotePage() {
   const { creditNoteId } = useParams<{ creditNoteId: string }>();
   return (
     <Page>
-      <PageHeader title="Edit draft credit note" description="Drafts can be changed freely until they're approved." />
+      <PageHeader title="Edit draft credit note" />
       <RequireOrganisation>
         {(organisationId) => <EditCreditNote organisationId={organisationId} creditNoteId={creditNoteId} />}
       </RequireOrganisation>

@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function IrdPaymentsPage() {
   return (
     <Page>
-      <PageHeader
-        title="IRD payments"
-        description="What your approved pay runs owe IRD for PAYE, student loan, KiwiSaver and ESCT, when it's due, and paying it."
-      />
+      <PageHeader title="IRD payments" />
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>

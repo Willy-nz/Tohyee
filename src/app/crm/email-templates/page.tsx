@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmEmailTemplatesPage() {
   return (
     <Page>
-      <PageHeader title="Email templates" description="CRM: starting points for sales emails." />
+      <PageHeader title="Email templates" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

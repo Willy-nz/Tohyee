@@ -8,10 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmStagesPage() {
   return (
     <Page>
-      <PageHeader
-        title="Opportunity stages"
-        description="The organisation's pipeline stages: their order, type, default probability and forecast category, and which stages each opportunity record type uses."
-      />
+      <PageHeader title="Opportunity stages" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

@@ -10,7 +10,7 @@ export default function KilometreRatesPage() {
   const workspace = useWorkspace();
   return (
     <Page>
-      <PageHeader title="Kilometre rates" description="IRD's kilometre rates for mileage on expense claims, per income year and vehicle type." />
+      <PageHeader title="Kilometre rates" />
       <RequireOrganisation>
         {(organisationId) => <KilometreRates key={organisationId} organisationId={organisationId} canEdit={workspace.can("admin")} />}
       </RequireOrganisation>

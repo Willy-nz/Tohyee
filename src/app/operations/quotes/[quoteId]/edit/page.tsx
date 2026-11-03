@@ -43,7 +43,7 @@ export default function EditQuotePage() {
   const { quoteId } = useParams<{ quoteId: string }>();
   return (
     <Page>
-      <PageHeader title="Edit draft quote" description="Drafts can be changed freely until they're finalised." />
+      <PageHeader title="Edit draft quote" />
       <RequireOrganisation>{(organisationId) => <EditQuote organisationId={organisationId} quoteId={quoteId} />}</RequireOrganisation>
     </Page>
   );

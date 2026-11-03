@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function CrmDuplicatesPage() {
   return (
     <Page>
-      <PageHeader title="Duplicates" description="CRM: companies and people that look like the same one." />
+      <PageHeader title="Duplicates" />
       <RequireOrganisation>
         {(organisationId) => (
           <RequireCrm organisationId={organisationId}>

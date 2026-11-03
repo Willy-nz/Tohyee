@@ -21,11 +21,6 @@
   color: var(--text);
 }
 
-.more {
-  margin-top: auto;
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
 
 .unit {
   color: var(--text-muted);

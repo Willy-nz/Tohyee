@@ -2,7 +2,7 @@
 
 import { DateInput } from "@/components/date-input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { SimilarRecords } from "@/components/crm-similar";
 import { Money } from "@/components/books";
@@ -238,8 +238,6 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Card
-        title="Companies"
-        description="Everyone you deal with: prospects, customers and suppliers. Open one for its people, opportunities, tasks and timeline."
         actions={
           canCrm("write") && !adding ? (
             <Button size="small" onClick={() => setAdding(true)}>
@@ -527,8 +525,6 @@ export function PeoplePage({ organisationId }: { organisationId: string }) {
   });
   return (
     <Card
-      title="People"
-      description="The people you deal with, at the companies they work for."
       actions={
         <>
           <label className={ui.checkbox}>
@@ -919,8 +915,10 @@ export function OpportunityCard({
  * pick its stage to move it (CRM4, CRM9, CRMS7).
  */
 export function PipelinePage({ organisationId }: { organisationId: string }) {
-  const { canCrm } = useWorkspace();
-  const [adding, setAdding] = useState(false);
+  const router = useRouter();
+  // The page header's New opportunity button opens the form through the address (?new=1).
+  const adding = useSearchParams().get("new") === "1";
+  const setAdding = (open: boolean) => router.replace(open ? "/crm/pipeline?new=1" : "/crm/pipeline", { scroll: false });
   const [over, setOver] = useState<OpportunityStage | null>(null);
   const opportunities = useApiData<{ opportunities: Opportunity[] }>("/api/crm/opportunities", { organisationId });
   const stages = useStages(organisationId);
@@ -942,18 +940,8 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
   }
   return (
     <>
-      <Card
-        title="Pipeline"
-        description="Opportunities by stage, amounts excluding GST. Drag a card to another stage, or pick its stage. A won opportunity can make its invoice."
-        actions={
-          canCrm("write") && !adding ? (
-            <Button size="small" onClick={() => setAdding(true)}>
-              New opportunity
-            </Button>
-          ) : null
-        }
-      >
-        {adding ? (
+      {adding ? (
+        <Card title="New opportunity">
           <OpportunityForm
             organisationId={organisationId}
             onSaved={() => {
@@ -962,11 +950,12 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
             }}
             onCancel={() => setAdding(false)}
           />
-        ) : null}
-        {error ? <Notice tone="error">{error}</Notice> : null}
-        {opportunities.error ? <Notice tone="error">{opportunities.error}</Notice> : null}
-        {stages.error ? <Notice tone="error">{stages.error}</Notice> : null}
-      </Card>
+        </Card>
+      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {opportunities.error ? <Notice tone="error">{opportunities.error}</Notice> : null}
+      {stages.error ? <Notice tone="error">{stages.error}</Notice> : null}
+      <p className={ui.muted}>Amounts exclude GST.</p>
       <div className={ui.crmBoard}>
         {columns.map((column) => {
           const stage = column.key;
@@ -1262,7 +1251,7 @@ export function CrmHomePage({ organisationId }: { organisationId: string }) {
   // The CRM Home's cards (decision 662): the sales ones come from crm-home.tsx, these three from the CRM's own Home (CRM10).
   const cards: Record<string, ReactNode> = {
     my_opportunities: (
-        <Card title="My open opportunities" description="Opportunities you own that aren't won or lost, amounts excluding GST." actions={<Link href="/crm/pipeline">Pipeline</Link>}>
+        <Card title="My open opportunities" href="/crm/pipeline" description="Excluding GST.">
           {opportunities.length === 0 ? (
             <Empty>You have no open opportunities.</Empty>
           ) : (
@@ -1308,7 +1297,7 @@ export function CrmHomePage({ organisationId }: { organisationId: string }) {
         </Card>
     ),
     my_tasks: (
-        <Card title="My tasks due" description="Your tasks that aren't done and are due today or earlier." actions={<Link href="/crm/tasks">All my tasks</Link>}>
+        <Card title="My tasks due" href="/crm/tasks">
           {tasks.length === 0 ? (
             <Empty>Nothing due.</Empty>
           ) : (
@@ -1348,7 +1337,7 @@ export function CrmHomePage({ organisationId }: { organisationId: string }) {
         </Card>
     ),
     recent_activities: (
-        <Card title="Recent activities" description="The latest calls, meetings and notes logged by the team, newest first.">
+        <Card title="Recent activities">
           {activities.length === 0 ? <Empty>Nothing logged yet.</Empty> : null}
           <ol className={ui.crmTimeline}>
             {activities.map((activity) => {

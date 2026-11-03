@@ -482,7 +482,7 @@ function Inventory({ organisationId }: { organisationId: string }) {
 export default function InventoryPage() {
   return (
     <Page>
-      <PageHeader title="Stock" description="Stock movements and their journals, posted together." />
+      <PageHeader title="Stock" />
       <RequireOrganisation>{(organisationId) => <Inventory key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );
