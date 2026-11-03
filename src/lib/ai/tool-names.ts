@@ -171,7 +171,9 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "update_account", level: "full", words: "Edit an account (not archive it)" },
   { name: "create_budget", level: "full", words: "Make a budget" },
   { name: "set_budget_amounts", level: "full", words: "Set a budget's amounts" },
-  { name: "register_fixed_asset", level: "full", words: "Register a fixed asset" },
-  { name: "update_fixed_asset", level: "full", words: "Edit a fixed asset (not dispose of or archive it)" },
+  { name: "create_fixed_asset_type", level: "full", words: "Add a fixed asset type" },
+  { name: "update_fixed_asset_type", level: "full", words: "Edit a fixed asset type (not archive it)" },
+  { name: "register_fixed_asset", level: "full", words: "Register a fixed asset, with its tax details and Investment Boost" },
+  { name: "update_fixed_asset", level: "full", words: "Edit a fixed asset and its tax details and Investment Boost (not dispose of or archive it)" },
   { name: "run_depreciation", level: "full", words: "Run depreciation up to a month end" },
 ];

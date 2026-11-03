@@ -12319,3 +12319,34 @@ her. Where she didn't say how, these follow Xero (decision 537) and are
       provider's settlements against 1010 until they're gone. A tool to list
       those orders by gateway is a possible follow-up.
 
+
+### The AI can set up fixed asset types and Investment Boost (decisions 1345-1348)
+
+1345. **Fixed asset types over MCP.** A Full access key can add and edit
+      fixed asset types (create_fixed_asset_type, update_fixed_asset_type)
+      through the asset types page's service, with its checks and audit
+      events (example AIF7). Without a type no asset can be registered, so
+      an AI in a new organisation was stuck. Archiving a type stays with
+      people (decision 347). The page needs the admin role; Full access is
+      for Owners, so the key's owner always has it.
+1346. **Tax details and Investment Boost over MCP.** register_fixed_asset
+      and update_fixed_asset take an optional taxDetails object with the
+      Income tax page's fields (method, rate, tax cost, business use, date
+      first available, new, Investment Boost, opening ATV), saved through
+      the page's service, so its rules and checks apply unchanged: new (or
+      new to NZ), bought and first available on or after 22 May 2025,
+      diminishing value or straight line only (example AIF8). No new tax
+      rules. On an edit, fields left out keep what's saved, and
+      taxDetails.version must match, as on the page. Unknown fields in
+      taxDetails are refused rather than ignored, so a misnamed boost field
+      can't look as if it was saved. Registering and its tax details are one
+      transaction: if the tax details are refused, nothing is registered.
+      Tax details can be changed after book depreciation has run.
+1347. **Who sees tax details.** get_fixed_asset and list_fixed_assets show
+      taxDetails (null when none) only when the key's owner is an owner or
+      admin, as income tax is (decision 545); other keys' answers leave the
+      field out (example AIF9).
+1348. **Wording.** The Full access words (on the AI page and in
+      get_organisation's accessMeans) now say the AI adds and edits fixed
+      assets and their types, with an asset's tax details and Investment
+      Boost.
