@@ -76,8 +76,10 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
       // No default address asked for here, so no country (SPC16).
       country: null,
       updatedAt: "2026-09-30T01:00:00.000Z",
+      nameIsFallback: false,
+      tags: [],
     });
-    // No names: Shopify's display name (often the email) is used.
+    // No names: Shopify's display name (often the email) is used, marked as standing in for a name (decision 1336).
     expect(
       shopifyCustomerFromGraphql({
         id: "gid://shopify/Customer/7",
@@ -88,7 +90,7 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
         defaultEmailAddress: null,
         defaultPhoneNumber: null,
       }),
-    ).toMatchObject({ externalId: "7", name: "kim@example.co.nz", email: null, phone: null });
+    ).toMatchObject({ externalId: "7", name: "kim@example.co.nz", email: null, phone: null, nameIsFallback: true });
   });
 
   it("reads a customer webhook", () => {
@@ -102,8 +104,38 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
         updated_at: "2026-10-01T09:00:00+13:00",
         admin_graphql_api_id: "gid://shopify/Customer/1004",
       }),
-    ).toEqual({ externalId: "1004", name: "Mere Tane", email: "mere@example.co.nz", phone: null, country: null, updatedAt: "2026-09-30T20:00:00.000Z" });
+    ).toEqual({
+      externalId: "1004",
+      name: "Mere Tane",
+      email: "mere@example.co.nz",
+      phone: null,
+      country: null,
+      updatedAt: "2026-09-30T20:00:00.000Z",
+      nameIsFallback: false,
+      tags: [],
+    });
     expect(() => shopifyCustomerFromWebhook({ email: "x@example.co.nz" })).toThrow();
+  });
+
+  it("marks an email or phone standing in for a name, and reads tags (decisions 1335, 1336)", () => {
+    const base = { id: "gid://shopify/Customer/8", updatedAt: "2026-09-30T01:00:00Z", defaultPhoneNumber: null };
+    expect(
+      shopifyCustomerFromGraphql({ ...base, displayName: "pip@made-up.test", firstName: "", lastName: null, defaultEmailAddress: { emailAddress: "pip@made-up.test" }, tags: ["Test", " vip "] }),
+    ).toMatchObject({ name: "pip@made-up.test", nameIsFallback: true, tags: ["Test", "vip"] });
+    expect(shopifyCustomerFromGraphql({ ...base, displayName: "+64 21 000 0000", firstName: null, lastName: null, defaultEmailAddress: null })).toMatchObject({
+      name: "+64 21 000 0000",
+      nameIsFallback: true,
+    });
+    // Names as typed: only the spaces are tidied (a repeated surname or odd casing stays).
+    expect(shopifyCustomerFromGraphql({ ...base, displayName: "x", firstName: "  sam ", lastName: "Rua  Rua", defaultEmailAddress: null })).toMatchObject({
+      name: "sam Rua Rua",
+      nameIsFallback: false,
+    });
+    expect(shopifyCustomerFromWebhook({ id: 9, email: "pip@made-up.test", first_name: null, last_name: null, tags: "test, wholesale" })).toMatchObject({
+      name: "pip@made-up.test",
+      nameIsFallback: true,
+      tags: ["test", "wholesale"],
+    });
   });
 
   it("reads a GraphQL product's variants", () => {

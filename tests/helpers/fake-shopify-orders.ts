@@ -15,7 +15,9 @@ export const CLIENT_SECRET = "shpss_test_client_secret_glimmers";
 export const ACCESS_TOKEN = "shpat_test_token_glimmers";
 
 export type TaxFixture = { rate: number; amount: string; title?: string };
-export type CustomerFixture = { id: number; first: string; last: string; email: string | null; country?: string | null; updatedAt: string };
+export type CustomerFixture = { id: number; first: string; last: string; email: string | null; country?: string | null; updatedAt: string; tags?: string[] };
+/** A billing or shipping address's name (MailingAddress firstName, lastName). */
+export type AddressNameFixture = { first: string | null; last: string | null };
 export type VariantFixture = { id: number; title: string; sku: string | null; price: string; tracked?: boolean };
 export type ProductFixture = { id: number; title: string; updatedAt: string; variants: VariantFixture[] };
 export type LineFixture = {
@@ -52,6 +54,8 @@ export type OrderFixture = {
   total: string;
   customer: CustomerFixture | null;
   billingCountry?: string | null;
+  billingName?: AddressNameFixture;
+  shippingName?: AddressNameFixture;
   lines: LineFixture[];
   shipping?: ShippingFixture[];
   transactions: TransactionFixture[];
@@ -84,8 +88,15 @@ export function customerNode(c: CustomerFixture) {
     defaultEmailAddress: c.email ? { emailAddress: c.email } : null,
     defaultPhoneNumber: null,
     defaultAddress: c.country === undefined ? null : { countryCodeV2: c.country },
+    tags: c.tags ?? [],
   };
 }
+
+const addressName = (name: AddressNameFixture | undefined) => {
+  if (!name) return {};
+  const full = [name.first, name.last].filter(Boolean).join(" ");
+  return { firstName: name.first, lastName: name.last, name: full || null };
+};
 
 function transactionNode(t: TransactionFixture, currency = "NZD") {
   return {
@@ -116,7 +127,11 @@ export function orderNode(o: OrderFixture) {
     displayFinancialStatus: o.financialStatus,
     totalPriceSet: bag(o.total, currency),
     customer: o.customer ? customerNode(o.customer) : null,
-    billingAddress: o.billingCountry === undefined ? null : { countryCodeV2: o.billingCountry },
+    billingAddress:
+      o.billingCountry === undefined && !o.billingName
+        ? null
+        : { countryCodeV2: o.billingCountry ?? null, ...addressName(o.billingName) },
+    shippingAddress: o.shippingName ? addressName(o.shippingName) : null,
     lineItems: {
       nodes: o.lines.map((line) => ({
         id: gid("LineItem", line.id),
