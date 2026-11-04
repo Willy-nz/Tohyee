@@ -275,6 +275,18 @@ re-runs the whole sequence.
   turned on or reset, a backup code used, new backup codes, a lockout, and a
   passkey added, removed or refused.
   A failed alert never blocks the action.
+- **Time-limited access** (decisions 1466-1474): a membership can have
+  `access_starts_at` and `access_ends_at` (core database). Outside them
+  `getMembership` and `listMembershipsForUser` treat it as no membership
+  (`memberAccessCurrentSql` in `src/lib/organisations/registry.ts`), so every
+  route, AI key, AI app connection, farm app key and calendar link that looks
+  the person up is refused at its next request. Code that reads
+  `organisation_members` itself to let someone in must use the same SQL.
+  `requireOrganisationRole` then answers a signed-in member 403 with why
+  (`accessRefusal`, `src/lib/organisations/access.ts`); `/api/mcp` does the
+  same for a real, unrevoked key. Keys aren't revoked when access ends, so an
+  extension brings them back; Remove still revokes them. One owner always
+  has started access with no end.
 - Five failed sign-ins lock the account for 15 minutes. Unknown emails take
   about the same time to reject as wrong passwords (a dummy password check
   runs). A lockout message does reveal that the email has an account.

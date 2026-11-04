@@ -18,10 +18,22 @@ export const CLASS_LABELS: Record<AccountClass, string> = {
 
 /** Renders children only when an organisation is selected and ready. */
 export function RequireOrganisation({ children }: { children: (organisationId: string) => ReactNode }) {
-  const { current, user, serverSettingsUrl } = useWorkspace();
+  const { current, user, serverSettingsUrl, accessNotes } = useWorkspace();
   const hydrated = useHydrated();
   if (!hydrated) {
     return <p className={ui.muted}>Loading…</p>;
+  }
+  if (!current && accessNotes.length > 0) {
+    // Time-limited access (decision 1468): say why, not "no organisation".
+    return (
+      <Card title="No organisation open to you now">
+        {accessNotes.map((note) => (
+          <Notice key={note} tone="warning">
+            {note}
+          </Notice>
+        ))}
+      </Card>
+    );
   }
   if (!current) {
     return (

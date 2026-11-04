@@ -1,4 +1,5 @@
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { memberAccessCurrentSql } from "@/lib/organisations/registry";
 import { coreQuery } from "@/lib/db/transactions";
 import { NotFoundError } from "@/lib/errors";
 
@@ -47,7 +48,7 @@ export class MailOwner {
     if (tx.actor.via && !channel) throw notFound();
     const found = await coreQuery<{ role: string; is_active: boolean }>(
       `select m.role, u.is_active from organisation_members m join users u on u.id = m.user_id
-        where m.organisation_id = $1 and m.user_id = $2`,
+        where m.organisation_id = $1 and m.user_id = $2 and ${memberAccessCurrentSql("m")}`,
       [tx.organisationId, userId],
     );
     const row = found.rows[0];
@@ -65,7 +66,7 @@ export class MailOwner {
 /** Whether a member is an Owner with an active login now (for the scheduler, PM8). */
 export async function isActiveOwner(organisationId: string, userId: string): Promise<boolean> {
   const found = await coreQuery<{ ok: boolean }>(
-    `select (m.role = 'owner' and u.is_active) as ok from organisation_members m join users u on u.id = m.user_id
+    `select (m.role = 'owner' and u.is_active and ${memberAccessCurrentSql("m")}) as ok from organisation_members m join users u on u.id = m.user_id
       where m.organisation_id = $1 and m.user_id = $2`,
     [organisationId, userId],
   );
