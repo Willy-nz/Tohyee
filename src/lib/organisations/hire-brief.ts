@@ -141,7 +141,8 @@ export function writeBrief(facts: HireFacts, choices: HireChoices): string {
     "The books",
     "- Kept in Tohyee, a New Zealand accounting app. You'll get your own login; there's nothing to install.",
     ...(facts.modules.length ? [`- Parts in use: ${facts.modules.join(", ")}.`] : []),
-    ...(facts.bankAccounts > 0 ? [`- ${plural(facts.bankAccounts, "bank or card account")}.`] : []),
+    // Bank reconciliation's line already says how many.
+    ...(facts.bankAccounts > 0 && !tasks.includes("bank_reconciliation") ? [`- ${plural(facts.bankAccounts, "bank or card account")}.`] : []),
     "",
     "Access and time",
     `- ${ROLE_IN_BRIEF[choices.role]}`,

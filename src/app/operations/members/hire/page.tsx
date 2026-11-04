@@ -195,9 +195,11 @@ function HireHelp({ organisationId }: { organisationId: string }) {
 
       <Card title="4. When you've chosen someone" description="Invite them with the access and dates above. You can change the dates later.">
         {datesOk ? (
-          <Link className={`${ui.button} ${ui.primary}`} href={inviteHref(choices)}>
-            Invite them
-          </Link>
+          <div style={{ display: "flex" }}>
+            <Link className={`${ui.button} ${ui.primary}`} href={inviteHref(choices)}>
+              Invite them
+            </Link>
+          </div>
         ) : (
           <Notice tone="warning">Choose when their access ends first.</Notice>
         )}
