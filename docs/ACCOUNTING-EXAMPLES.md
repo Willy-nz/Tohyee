@@ -1401,7 +1401,9 @@ B1 (total 230.00, 10 May 2026), contact Z Energy.
   (Dr 1000 115.00 / Cr 1100 115.00) matches the BK1 line +115.00: nothing is
   posted, the line is **reconciled**, the count is **2**. Matching it to a
   journal line already reconciled, on another account, dated more than 60
-  days away, or not adding up to 115.00 is refused.
+  days away, or not adding up to 115.00 is refused. A voided payment and the
+  reversal that voided it aren't suggested unless asked for (SPR13, added
+  4 Nov 2026), but can still be matched when chosen.
 - **BK5** From the +115.00 line with no payment yet, paying INV-0001 115.00
   records a customer payment dated 20 May into 1000 (Dr 1000 115.00 /
   Cr 1100 115.00) and reconciles the line; INV-0001 is **paid**. From a
@@ -21062,4 +21064,63 @@ Built (decisions 1326-1333, tenant migration 0222). Tests:
 `tests/unit/sales-platform-payout-match.test.ts`,
 `tests/unit/sales-platform-setup.test.ts` and
 `tests/integration/sales-platform-payout-gateways.test.ts`.
+
+## Payout matches from a reconnected store, and what a review over MCP found (SPR11-SPR15; built by Claude 4 Nov 2026 for #570-#572 and #578, as Xero/A2X do, not yet reviewed)
+
+A read-only review of a live organisation over MCP found each payout
+listed twice, the clearing balance at double the ledger, bank suggestions
+full of voided transactions, and a store whose login was refused shown as
+up to date. Xero shows each bank feed or app connection once, with a
+"Reconnect" when the other side stops accepting its login, and its Find &
+Match leaves voided transactions out. Taken from Claude's knowledge of
+Xero; not re-checked today.
+
+Setup: as SPR1-SPR10. Made-up store and numbers.
+
+- **SPR11 A store connected again.** After 70001 is posted (SPC15) and #1003
+  (23.00, not paid out yet) is in 1010, the store is disconnected and
+  connected again as a new connection with the same accounts (1010
+  clearing, 1000 payouts). `list_sales_platform_payout_matches` lists 70001
+  **once**, under the new connection. A "SHOPIFY" 49.38 deposit on 8 Oct is
+  **matched** (one payout fits, so it isn't a choice). The clearing balance
+  is 1010's ledger balance (the trial balance), **once**, however many
+  connections use 1010. Nothing is posted.
+- **SPR12 Settlements kept before SPC38.** A payout read before the TRANSFER
+  row was left out has other **-49.38** (the payout the other way round)
+  and doesn't add up. Tenant migration 0226 takes the row out again where
+  the other parts come to the payout exactly: other **0.00**, 3
+  transactions, adds up. A settlement with any other "other" amount (say
+  -5.00) is left as it is. Nothing is posted; the payout is read again at
+  the next sync anyway (SPC39).
+- **SPR13 Voided transactions aren't suggested.** A 115.00 payment into 1000
+  is voided (its reversal, Cr 1000 115.00, on the same day) and paid again.
+  The +115.00 statement line suggests **only the live payment**, and says
+  1 voided transaction is left out; the -46.00 line doesn't suggest the
+  reversal either. Asked for ("Show voided" on screen, `includeVoided` over
+  MCP), both are listed, flagged voided, after the live ones, and a
+  dishonoured payment's pair can still be matched by choosing it (BK4).
+- **SPR14 Closest first, and fewer.** Four part payments of 10.00, 20.00,
+  30.00 and 40.00 into 1000 and a +115.00 line: suggested **40.00, 30.00,
+  20.00, 10.00** (the same amount first, then the nearest amount, then the
+  nearest date). `get_bank_line` gives 10 by default (`limit` up to 25);
+  the screen up to 25. When the line looks like a Shopify payout,
+  `get_bank_line` also gives the payout guidance SPR2-SPR10 give for it.
+- **SPR15 A refused login.** The store answers 401 to every call. The sync
+  fails and, after 3 failures in a row, pauses. The status says **behind**
+  (paused), **needs reconnecting**, with the last sync that worked (1 Oct
+  01:00) apart from the last attempt (1 Oct 02:00). The store card says
+  "Shopify no longer accepts Tohyee's login" with **Reconnect**. Reconnect
+  with wrong credentials is refused and changes nothing; with the app's
+  credentials it updates the **same** connection (still one for the
+  store), clears the failures and the next sync carries on. Nothing is
+  posted by reconnecting. A payout refused for what it is (a type Tohyee
+  doesn't post, a zero payout) is logged **skipped**, not failed: nothing
+  on Tohyee's side fixes it.
+
+Built (decisions 1369-1376, tenant migration 0226). Tests:
+`tests/integration/sales-platform-payout-reconcile.test.ts` (SPR11, SPR12,
+SPR15), `tests/integration/bank-reconciliation.test.ts` (SPR13 as BK4,
+SPR14), `tests/integration/ai-sales-platform-diagnostics.test.ts`,
+`tests/unit/sales-platform-freshness.test.ts` and
+`tests/unit/ai-no-internal-references.test.ts`.
 

@@ -7,7 +7,11 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { payoutGuidanceForLine, payoutMatchReport } from "@/lib/sales-platforms/payout-reconcile";
-import { connectStore, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { connectStore, disconnectStore, reconnectStore, syncConnection, updateConnectionSettings } from "@/lib/sales-platforms/service";
+import { salesPlatformDiagnostics } from "@/lib/sales-platforms/diagnostics";
+import { tenantMigrations } from "@/lib/db/migrations/tenant";
+import { AI_TOOLS } from "@/lib/ai/catalogue";
+import type { ToolContext } from "@/lib/ai/tools";
 import { setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
 import { createTaxCode } from "@/lib/tax/codes";
 import { CLIENT_ID, CLIENT_SECRET, fakeShopifyStore, order1001, order1002, order1003, payout70001, payout70002, refund6001, storeState } from "../helpers/fake-shopify-orders";
@@ -74,6 +78,8 @@ describeWithDatabase("Shopify payout deposits reconciled against the clearing ac
     return {
       as,
       state,
+      record,
+      actor,
       connectionId: connection.id,
       sync: (at: string) => syncConnection(record, connection.id, undefined, new Date(at)),
       /** Imports bank lines ("08/10/2026,49.38,SHOPIFY PAYOUT") and returns their ids in order. */
@@ -178,6 +184,113 @@ describeWithDatabase("Shopify payout deposits reconciled against the clearing ac
     await reconcile(w, combined.id, guidance.action!);
     const after = await w.as((tx) => payoutMatchReport(tx, { from: "2026-10-01", to: "2026-10-31" }, "2026-10-31"));
     expect(after.payouts.map((payout) => payout.bankLine?.date)).toEqual(["2026-10-15", "2026-10-15"]);
+  });
+
+  it("#570: a store connected again lists each payout once, a lone payout isn't a choice, and the clearing balance is the ledger's", async () => {
+    const w = await setup();
+    await firstPayout(w);
+    w.state.orders.push(order1003());
+    await w.sync("2026-10-09T04:00:00Z");
+    // Its login stopped working, so it was disconnected and connected again as a new connection with the same accounts.
+    await disconnectStore(w.record, w.actor, w.connectionId);
+    const again = await connectStore(
+      w.record,
+      w.actor,
+      { platform: "shopify", storeDomain: "glimmers", authMethod: "client_credentials", clientId: CLIENT_ID, clientSecret: CLIENT_SECRET },
+      { webhookOrigin: null, now: new Date("2026-10-10T00:00:00Z") },
+    );
+    await w.as((tx) =>
+      updateConnectionSettings(tx, again.id, {
+        postToAccounts: true,
+        startDate: "2026-10-01",
+        clearingAccountCode: "1010",
+        payoutAccountCode: "1000",
+        feesAccountCode: "6020",
+        salesAccountCode: "4000",
+        shippingAccountCode: "4000",
+        taxCodes: [{ rate: "15", taxCode: "GST" }],
+        untaxedTaxCode: "ZERO",
+      }),
+    );
+    const [line] = await w.bankLines("08/10/2026,49.38,SHOPIFY");
+    const report = await w.as((tx) => payoutMatchReport(tx, { from: "2026-10-01", to: "2026-10-31" }, "2026-10-31"));
+    expect(report.payouts.map((payout) => [payout.payoutId, payout.connectionId])).toEqual([["70001", again.id]]);
+    expect(report.deposits.map((deposit) => [deposit.lineId, deposit.status, "payoutIds" in deposit ? deposit.payoutIds : null])).toEqual([[line.id, "matched", ["70001"]]]);
+    // The order not yet paid out is still in the clearing account: once, as the ledger has it.
+    const ledger = await w.balance("1010");
+    expect(ledger).not.toBe("0.00");
+    expect(report.clearingBalances).toEqual([expect.objectContaining({ accountCode: "1010", balance: ledger })]);
+    // #571: get_bank_line shows the same payout for the line, with the posted transfer among its matches.
+    const tool = AI_TOOLS.find((entry) => entry.name === "get_bank_line")!;
+    const got = (await w.as((tx) => tool.run(tx, { lineId: line.id }, {} as ToolContext))) as {
+      suggestions: { platformPayout: unknown; matches: Array<{ exact: boolean; voided: boolean }>; voidedLeftOut: number };
+    };
+    expect(got.suggestions.platformPayout).toMatchObject({ status: "matched", platform: "Shopify", payoutIds: ["70001"], suggestion: { kind: "match" } });
+    expect(got.suggestions.matches[0]).toMatchObject({ exact: true, voided: false });
+    // Asked about the new connection only, it's the same.
+    const one = await w.as((tx) => payoutMatchReport(tx, { connectionId: again.id, from: "2026-10-01", to: "2026-10-31" }, "2026-10-31"));
+    expect(one.payouts).toHaveLength(1);
+    expect(one.deposits).toMatchObject([{ status: "matched" }]);
+  });
+
+  it("SPC38: the payout's own TRANSFER row isn't in its settlement; settlements kept before that are corrected by migration 0226", async () => {
+    const w = await setup();
+    await w.sync("2026-10-01T01:00:00Z");
+    w.state.orders.push(order1001({ financialStatus: "PARTIALLY_REFUNDED", updatedAt: "2026-10-05T22:00:30Z", refunds: [refund6001()] }), order1002());
+    const plain = payout70001();
+    w.state.payouts.push(payout70001({ transactions: [...plain.transactions, { id: 80009, type: "TRANSFER", amount: "-49.38", fee: "0.00", net: "-49.38", orderName: null }] }));
+    await w.sync("2026-10-07T04:00:00Z");
+    const settlement = async () => {
+      const report = await w.as((tx) => payoutMatchReport(tx, { from: "2026-10-01", to: "2026-10-31" }, "2026-10-31"));
+      return report.payouts[0].settlement;
+    };
+    expect(await settlement()).toMatchObject({ grossSales: "74.90", refunds: "-23.00", fees: "-2.52", other: "0.00", net: "49.38", transactionCount: 3, addsUp: true });
+    expect(await w.balance("1010")).toBe("0.00");
+
+    // As an earlier version kept it: the TRANSFER row under other, so other is minus the net and it doesn't add up.
+    await w.as((tx) => tx.query("update sales_platform_payouts set other_amounts = -49.38, transaction_count = 4"));
+    expect(await settlement()).toMatchObject({ other: "-49.38", addsUp: false });
+    const migration = tenantMigrations.find((entry) => entry.version === "0226")!;
+    const correction = migration.sql.slice(migration.sql.indexOf("update sales_platform_payouts"));
+    await w.as((tx) => tx.query(correction));
+    expect(await settlement()).toMatchObject({ other: "0.00", net: "49.38", transactionCount: 3, addsUp: true });
+    // A settlement with a real unknown amount is left as it is.
+    await w.as((tx) => tx.query("update sales_platform_payouts set other_amounts = -5.00"));
+    await w.as((tx) => tx.query(correction));
+    expect(await settlement()).toMatchObject({ other: "-5.00", addsUp: false });
+  });
+
+  it("#572: a store that refuses the login is behind and needs reconnecting; Reconnect on the same connection brings it back", async () => {
+    const w = await setup();
+    await w.sync("2026-10-01T01:00:00Z");
+    // The app's access was taken away in Shopify: every token Tohyee holds is refused (401).
+    w.state.tokens = [];
+    for (const at of ["2026-10-01T01:15:00Z", "2026-10-01T01:30:00Z", "2026-10-01T01:45:00Z", "2026-10-01T02:00:00Z"]) {
+      await expect(w.sync(at)).rejects.toThrow(/said 401/);
+    }
+    const status = async (now: string) => (await w.as((tx) => salesPlatformDiagnostics(tx, { connectionId: w.connectionId }, new Date(now)))).connections[0];
+    const failing = await status("2026-10-01T02:10:00Z");
+    expect(failing.status).toBe("paused");
+    expect(failing.freshness).toMatchObject({
+      lastSyncAt: "2026-10-01T02:00:00.000Z",
+      lastSuccessfulSyncAt: "2026-10-01T01:00:00.000Z",
+      behind: true,
+      needsReconnect: true,
+      failuresInARow: 4,
+    });
+
+    // Wrong credentials are refused and change nothing.
+    await expect(
+      reconnectStore(w.record, w.actor, w.connectionId, { authMethod: "client_credentials", clientId: CLIENT_ID, clientSecret: "shpss_wrong_secret_made_up" }),
+    ).rejects.toThrow(/refused these credentials/);
+    expect((await status("2026-10-01T02:10:00Z")).status).toBe("paused");
+
+    const reconnected = await reconnectStore(w.record, w.actor, w.connectionId, { authMethod: "client_credentials", clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, storeDomain: "another-shop" });
+    expect(reconnected).toMatchObject({ id: w.connectionId, status: "active", failures: 0, lastError: null, needsReconnect: false, storeDomain: "glimmers.myshopify.com" });
+    await w.sync("2026-10-01T03:00:00Z");
+    expect((await status("2026-10-01T03:05:00Z")).freshness).toMatchObject({ lastSuccessfulSyncAt: "2026-10-01T03:00:00.000Z", behind: false, needsReconnect: false });
+    // Still one connection for the store.
+    expect((await w.as((tx) => tx.query("select count(*)::int as n from sales_platform_connections"))).rows[0].n).toBe(1);
   });
 
   it("SPR9: a payout posted before #548 has no settlement but still matches; deposits before the start date stay unresolved", async () => {

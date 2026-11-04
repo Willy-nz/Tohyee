@@ -58,8 +58,13 @@ export type SalesPlatformConnection = {
   /** The store's variants linked to items, and how many of them have no SKU in the store (decision 1337). */
   productVariants: { linked: number; withoutSku: number };
   status: ConnectionStatus;
+  /** The last sync attempt, whether it worked or not. */
   lastSyncAt: string | null;
+  /** The last sync that worked (#572): what the books are up to date with. */
+  lastSuccessfulSyncAt: string | null;
   lastError: string | null;
+  /** The store refused Tohyee's login (401 or 403): only new credentials fix it (#572). */
+  needsReconnect: boolean;
   failures: number;
   /** Whether the platform was told to send webhooks here. */
   webhooksActive: boolean;

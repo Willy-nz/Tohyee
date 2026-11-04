@@ -36,6 +36,7 @@ import {
   suggestName,
   testCustomerReason,
 } from "@/lib/sales-platforms/customer-matches";
+import { needsReconnect } from "@/lib/sales-platforms/freshness";
 import { writeLog } from "@/lib/sales-platforms/log";
 import type { CoverageFacts } from "@/lib/sales-platforms/coverage-status";
 import { type ShopifyPartKey, partOffMessage, partOn } from "@/lib/sales-platforms/parts";
@@ -108,6 +109,7 @@ type ConnectionRow = {
   customers_synced_until: string | null;
   products_synced_until: string | null;
   last_sync_at: string | null;
+  last_successful_sync_at: string | null;
   last_error: string | null;
   failures: number;
   connected_by_email: string;
@@ -148,7 +150,7 @@ const accountCode = (column: string) => `(select a.code from accounts a where a.
 const COLUMNS =
   "id, platform, store_domain, store_name, store_currency, prices_include_tax, auth_method, credentials_ciphertext, " +
   "access_token_ciphertext, access_token_expires_at, webhook_key, webhook_subscription_ids, webhooks_note, sync_customers, " +
-  "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_error, failures, connected_by_email, " +
+  "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_successful_sync_at, last_error, failures, connected_by_email, " +
   "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
   "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, untaxed_tax_code_id, granted_scopes, " +
   "orders_synced_until, payouts_synced_until, extras_synced_at, stats_synced_at, customer_scope, " +
@@ -180,7 +182,9 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     productVariants: { linked: row.variants_linked, withoutSku: row.variants_without_sku },
     status: row.status,
     lastSyncAt: iso(row.last_sync_at),
+    lastSuccessfulSyncAt: iso(row.last_successful_sync_at),
     lastError: row.last_error,
+    needsReconnect: needsReconnect(row.status, row.last_error),
     failures: row.failures,
     webhooksActive: row.webhook_subscription_ids.length > 0,
     webhooksNote: row.webhooks_note,
@@ -615,6 +619,80 @@ export async function testConnection(
   }
   const connection = await withOrganisationTransaction(organisation, actor, async (tx) => toConnection(await readConnection(tx, row.id)));
   return { ok: store !== null, storeName: store?.storeName ?? null, message, connection };
+}
+
+/**
+ * Reconnect (#572): new credentials for the same store on the same
+ * connection, after the store stopped accepting the old ones (a 401 or
+ * 403). Checked with the store first (no transaction open), then saved
+ * encrypted; the failures are cleared and the connection is active again,
+ * so the next sync carries on from where the last good one stopped. The
+ * store's address can't change here: a different store is a new
+ * connection. Nothing is posted.
+ */
+export async function reconnectStore(
+  organisation: OrganisationRecord,
+  actor: Actor,
+  connectionIdInput: unknown,
+  body: Record<string, unknown>,
+  options: { webhookOrigin?: string | null; now?: Date } = {},
+): Promise<SalesPlatformConnection> {
+  requireSecrets();
+  const now = options.now ?? new Date();
+  const row = await withOrganisationTransaction(organisation, actor, async (tx) => {
+    const found = await readConnection(tx, connectionIdInput);
+    assertConnected(found);
+    return found;
+  });
+  const connector = connectorFor(row.platform);
+  const input = connector.parseConnectInput({ ...body, platform: row.platform, storeDomain: row.store_domain });
+  const context: ConnectorContext = { storeDomain: row.store_domain, credentials: input.credentials, cachedToken: null, now };
+  let token: AccessToken;
+  let store: Awaited<ReturnType<SalesPlatformConnector["checkStore"]>>;
+  try {
+    token = (await connector.accessToken(context)).token;
+    store = await connector.checkStore(context, token);
+  } catch (error) {
+    throw refusedAsValidation(error, row.platform);
+  }
+  const [tokenCiphertext, tokenExpiresAt] = tokenColumns(token);
+  await withOrganisationTransaction(organisation, actor, async (tx) => {
+    const current = await readConnection(tx, row.id, { lock: true });
+    assertConnected(current);
+    await tx.query(
+      `update sales_platform_connections
+          set auth_method = $2, credentials_ciphertext = $3, access_token_ciphertext = $4, access_token_expires_at = $5,
+              store_name = $6, store_currency = $7, prices_include_tax = $8, granted_scopes = $9,
+              status = 'active', failures = 0, last_error = null, updated_at = now()
+        where id = $1`,
+      [
+        row.id,
+        input.authMethod,
+        encryptSecret(JSON.stringify(input.credentials)),
+        tokenCiphertext,
+        tokenExpiresAt,
+        store.storeName.slice(0, 255),
+        store.currency,
+        store.pricesIncludeTax,
+        store.scopes,
+      ],
+    );
+    await writeLog(tx, row.id, {
+      source: "connection",
+      action: "connected",
+      message: `Reconnected ${store.storeName} (${row.store_domain}) with new credentials. The next sync carries on from where the last one that worked stopped.`,
+    });
+    await writeAuditEvent(tx, {
+      eventType: "sales_platform.reconnected",
+      entityType: "sales_platform_connection",
+      entityId: row.id,
+      details: { platform: row.platform, storeDomain: row.store_domain, authMethod: input.authMethod },
+    });
+  });
+  if (row.webhook_subscription_ids.length === 0 && options.webhookOrigin !== undefined) {
+    await setUpWebhooks(organisation, actor, row, context, token, options.webhookOrigin, store.scopes);
+  }
+  return withOrganisationTransaction(organisation, actor, async (tx) => toConnection(await readConnection(tx, row.id)));
 }
 
 type AccountChoice = { id: string; code: string; name: string };
@@ -1745,7 +1823,7 @@ export async function syncConnection(
                 products_synced_until = greatest(products_synced_until, $3::timestamptz),
                 orders_synced_until = case when $7::boolean then greatest(orders_synced_until, $8::timestamptz) else orders_synced_until end,
                 payouts_synced_until = coalesce($9::timestamptz, payouts_synced_until),
-                last_sync_at = $4, last_error = null, failures = 0, status = 'active',
+                last_sync_at = $4, last_successful_sync_at = $4, last_error = null, failures = 0, status = 'active',
                 access_token_ciphertext = $5, access_token_expires_at = $6, updated_at = now()
           where id = $1`,
         [

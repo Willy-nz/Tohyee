@@ -12677,3 +12677,74 @@ newest month on the right".
       ask the person to allow each tool call; that's a setting in the app, not
       in Tohyee.
 
+### Payout matches, bank suggestions and store status from an MCP review (Claude, 4 Nov 2026; decisions 1369-1376)
+
+Fixes for #570, #571, #572 and #578, found by a read-only review of a live
+organisation over MCP. No answer from Jess on these, so they do what Xero
+does (decision 537), not yet reviewed.
+
+1369. **A store's payouts are listed once, under its live connection.** A
+      store connected again gets a new connection; the old one stays,
+      disconnected, for its log. The payout match report and the reconcile
+      screen's payout guide read payouts by store, not by connection, so
+      each is listed once, shown under the store's live connection, and an
+      old disconnected connection is left out while the store has a live
+      one. A refusal logged under either connection still explains a
+      payout. The clearing balance is each clearing account's ledger
+      balance once, however many connections use it (SPR11).
+1370. **Settlements kept before the TRANSFER row was left out are corrected
+      once.** Tenant migration 0226 takes the payout's own TRANSFER row out
+      of a kept settlement where "other" is exactly the payout the other way
+      round and the other parts add up to it. Anything else stays as it was;
+      the payout is read again from the store at the next sync anyway
+      (SPR12). The posting rules of SPC38 were already right and are
+      unchanged.
+1371. **Voided transactions and their reversals aren't suggested** on the
+      bank reconcile screen or by get_bank_line, as Xero's Find & Match
+      leaves them out. How many were left out is shown, and "Show voided" (or
+      includeVoided) lists them, flagged, for a statement that shows both
+      sides of a dishonoured payment. Matching them when chosen is
+      unchanged (BK4, SPR13).
+1372. **Suggestions are closest first, and the AI gets 10.** The same amount
+      first, then the nearest amount, then the nearest date. get_bank_line
+      gives 10 by default, up to 25 with limit; the screen shows up to 25 so
+      several can be ticked to add up. get_bank_line also gives the payout
+      guidance for a line that looks like a Shopify payout (SPR14).
+1373. **The last sync that worked is kept apart from the last attempt.**
+      lastSyncAt stays the last attempt; lastSuccessfulSyncAt is new. A
+      store is "behind" while paused, failing, never synced, or not synced
+      successfully for an hour. Existing connections take it from their
+      last sync with no failures, or from the newest "Synced" line in their
+      log (which can be earlier than the real last success: a sync that
+      changed nothing logs no line).
+1374. **A refused login means Reconnect.** A 401 or 403 from the store (or
+      the token request refusing the app's client ID and secret) sets
+      needsReconnect, with an action in plain words. The store card says so
+      first and plainly, with a Reconnect button for admins (viewers are
+      told to ask an admin). Reconnect takes new credentials for the same
+      store on the same connection, checks them with the store before
+      saving anything, clears the failures and makes it active again, as
+      Xero's Reconnect does for a bank feed or app; it never changes the
+      store's address and posts nothing. Disconnecting and connecting again
+      still works, but now isn't needed.
+1375. **Payouts refused for what they are are skipped, not failed.** A
+      payout with a type Tohyee doesn't post, a zero payout, a transfer row
+      that doesn't match, or one that doesn't add up is logged "skipped":
+      nothing on Tohyee's side fixes it. A payout waiting for an account
+      to be chosen, or one whose posting hit an error, is still "failed" and
+      tried again. Reason codes are specific (unknown_payout_transaction,
+      zero_payout, too_many_transactions, unexpected_sign, posting_error,
+      account_not_set, and payout_refused_before_update for lines an earlier
+      version wrote about payouts this version posts). A missing settlement
+      says which of not_paid_yet, posted_without_settlement or not_read it
+      is, instead of an either/or.
+1376. **The AI's text carries no internal references or customers' emails.**
+      Tool descriptions, input schemas and the sales platform answers don't
+      cite issue numbers ("#548") or decision numbers; a test scans every
+      tool. Log messages the AI reads have customers' email addresses taken
+      out of the words; the record is named by externalId (and contactId
+      when the line has one). The sync log on screen is unchanged. Products'
+      withoutSku now counts the variants still skipped for having no SKU as
+      well as those linked without one (withoutSkuParts gives both), so it
+      agrees with the missing_sku problems.
+

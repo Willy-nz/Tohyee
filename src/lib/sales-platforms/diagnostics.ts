@@ -2,6 +2,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { getGstRegistration } from "@/lib/tax/registration";
 import { storeGstSetup } from "@/lib/sales-platforms/setup";
+import { syncFreshness } from "@/lib/sales-platforms/freshness";
 import { listConnections } from "@/lib/sales-platforms/service";
 import {
   ORDER_SCOPE,
@@ -36,8 +37,6 @@ export type SyncLogOutcome = keyof typeof SYNC_LOG_OUTCOMES;
 export const SYNC_LOG_ACTIONS: readonly SyncLogAction[] = [...CONNECTION_ACTIONS, ...DONE_ACTIONS, ...PROBLEM_ACTIONS];
 export const SYNC_RECORD_KINDS: readonly SyncRecordKind[] = ["customer", "product_variant", "order", "refund", "payout"];
 
-/** The catch-up sync runs every 15 minutes; an active store not synced for an hour is behind. */
-const STALE_AFTER_MS = 60 * 60 * 1000;
 const LOG_DEFAULT = 50;
 const LOG_MAX = 200;
 const EXAMPLES_PER_REASON = 3;
@@ -61,11 +60,19 @@ export function redactSecrets(text: string): string {
  * brought in. "other" when it isn't one of these; the message always says.
  */
 const REASONS: ReadonlyArray<[RegExp, string]> = [
+  // Lines an earlier version wrote about payouts it couldn't post (the payout's own transfer row, a withdrawal): this version
+  // posts them, and they're read again at the next sync (SPC38-SPC40).
+  [/has transfer transactions; only charges|is a withdrawal \(money taken from the bank\); those aren't supported yet/, "payout_refused_before_update"],
   // Payouts (SPC38-SPC41) and payment gateways (SPC42-SPC46), before the general ones below.
   [/Payout \S+ can't be posted: no .* account is chosen/, "payout_account_missing"],
+  [/Payout \S+ has an? (chargeback|reserve)\. Choose an? \w+ account/, "account_not_set"],
   [/transfer rows come to|transfer has a fee/, "payout_transfer_mismatch"],
-  [/has transactions of a type Tohyee doesn't post|a kind Tohyee doesn't know/, "unknown_payout_transaction"],
+  [/has transactions of a type Tohyee doesn't post|a kind Tohyee doesn't know|has [a-z_, ]+ transactions; only charges/, "unknown_payout_transaction"],
   [/transactions come to .* but the payout is/, "payout_doesnt_add_up"],
+  [/only payouts of more than nothing are posted/, "zero_payout"],
+  [/has more balance transactions than Tohyee reads/, "too_many_transactions"],
+  [/transaction of \S+; Tohyee expects it to be (positive|negative)/, "unexpected_sign"],
+  [/couldn't be posted: .* It's tried again at the next sync/, "posting_error"],
   [/Choose where .* payments go|only Shopify Payments payouts clear/, "payment_method_not_mapped"],
   [/more than one payment method|doesn't say which payment method/, "split_payment"],
   [/has no SKU/, "missing_sku"],
@@ -74,7 +81,7 @@ const REASONS: ReadonlyArray<[RegExp, string]> = [
   [/is archived/, "archived_in_tohyee"],
   [/has no name/, "missing_name"],
   // A customer with a same-name contact and no email match (#539): an admin checks whether they're the same person.
-  [/has the same name/, "same_name_needs_check"],
+  [/has the same name|there's already a contact called .* with a different email/, "same_name_needs_check"],
   // Decision 1335: the customer sync leaves out test customers.
   [/is a test customer/, "test_customer"],
   // An order waiting for its customer (e.g. one under "Customers to check").
@@ -98,11 +105,25 @@ export function problemReason(action: SyncLogAction, message: string): string | 
   return action === "waiting" ? "waiting" : "other";
 }
 
+/** Every reason code `problemReason` can give, for tests and the tool descriptions. */
+export const PROBLEM_REASONS: readonly string[] = [...new Set([...REASONS.map(([, reason]) => reason), "waiting", "other"])];
+
+const EMAIL = /\s*\(?\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b\)?/g;
+
+/**
+ * A log message as the AI is given it (#578): secrets removed, and
+ * customers' email addresses taken out of the words (the record is named by
+ * its externalId and contactId fields instead).
+ */
+export function messageForAi(message: string): string {
+  return redactSecrets(message).replace(EMAIL, "");
+}
+
 const hasPayouts = (connection: SalesPlatformConnection) => connection.platform === "shopify";
 
 type ImportStatus = "off" | "on" | "setup_needed" | "not_available";
 
-type Problems = Record<string, { count: number; examples: Array<{ externalId: string; loggedAt: string; message: string }> }>;
+type Problems = Record<string, { count: number; examples: Array<{ externalId: string; contactId?: string; action: SyncLogAction; loggedAt: string; message: string }> }>;
 
 type Cursors = {
   customers_synced_until: string | null;
@@ -119,9 +140,9 @@ const iso = (value: string | null): string | null => (value === null ? null : ne
  * out). Uses the log's per-record index.
  */
 async function openProblems(tx: OrgTx, connectionId: string): Promise<Partial<Record<SyncRecordKind, Problems>>> {
-  const latest = await tx.query<{ record_kind: SyncRecordKind; external_id: string; action: SyncLogAction; message: string; logged_at: string }>(
-    `select record_kind, external_id, action, message, logged_at
-       from (select distinct on (record_kind, external_id) record_kind, external_id, action, message, logged_at
+  const latest = await tx.query<{ record_kind: SyncRecordKind; external_id: string; action: SyncLogAction; message: string; logged_at: string; contact_id: string | null }>(
+    `select record_kind, external_id, action, message, logged_at, contact_id
+       from (select distinct on (record_kind, external_id) record_kind, external_id, action, message, logged_at, contact_id::text
                from sales_platform_sync_log
               where connection_id = $1 and record_kind is not null and external_id is not null
               order by record_kind, external_id, sales_platform_sync_log.id desc) latest
@@ -136,7 +157,13 @@ async function openProblems(tx: OrgTx, connectionId: string): Promise<Partial<Re
     const entry = (kind[reason] ??= { count: 0, examples: [] });
     entry.count += 1;
     if (entry.examples.length < EXAMPLES_PER_REASON) {
-      entry.examples.push({ externalId: row.external_id, loggedAt: iso(row.logged_at)!, message: redactSecrets(row.message) });
+      entry.examples.push({
+        externalId: row.external_id,
+        ...(row.contact_id ? { contactId: row.contact_id } : {}),
+        action: row.action,
+        loggedAt: iso(row.logged_at)!,
+        message: messageForAi(row.message),
+      });
     }
   }
   return result;
@@ -216,8 +243,7 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
   const missingOrderScope = scopes.applies && !connection.grantedScopes.includes(ORDER_SCOPE);
   const missingPayoutScopes = scopes.applies ? PAYOUT_SCOPES.filter((scope) => !connection.grantedScopes.includes(scope)) : [];
 
-  const lastSyncMs = connection.lastSyncAt ? Date.parse(connection.lastSyncAt) : null;
-  const stale = connection.status === "active" && (lastSyncMs === null || now.getTime() - lastSyncMs > STALE_AFTER_MS);
+  const freshness = syncFreshness(connection, now, platform);
 
   const stage1 = (kind: "customer" | "product_variant", on: boolean, until: string | null, what: string) => ({
     status: (on ? "on" : "off") as ImportStatus,
@@ -256,9 +282,7 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
     storeDomain: connection.storeDomain,
     status: connection.status,
     freshness: {
-      lastSyncAt: connection.lastSyncAt,
-      minutesSinceLastSync: lastSyncMs === null ? null : Math.max(0, Math.floor((now.getTime() - lastSyncMs) / 60000)),
-      behind: stale,
+      ...freshness,
       lastError: connection.lastError === null ? null : redactSecrets(connection.lastError),
       failuresInARow: connection.failures,
       webhooksActive: connection.webhooksActive,
@@ -273,7 +297,12 @@ async function connectionReport(tx: OrgTx, connection: SalesPlatformConnection, 
           ? { scopeMeans: `Only customers who have ordered: a contact is added when the customer's first order is posted, so customers with no orders aren't brought in (not a problem).` }
           : {}),
       },
-      products: { ...stage1("product_variant", connection.syncProducts, cursors.products_synced_until, "products"), withoutSku: connection.productVariants.withoutSku },
+      products: {
+        ...stage1("product_variant", connection.syncProducts, cursors.products_synced_until, "products"),
+        // #578: every variant known to have no SKU, whether it came in (linked by its store ID) or is still a missing_sku problem.
+        withoutSku: connection.productVariants.withoutSku + (problems.product_variant?.missing_sku?.count ?? 0),
+        withoutSkuParts: { linked: connection.productVariants.withoutSku, notBroughtIn: problems.product_variant?.missing_sku?.count ?? 0 },
+      },
       orders: {
         status: orderStatus,
         ...(orderWhy ? { why: orderWhy } : {}),
@@ -448,7 +477,7 @@ export async function readSyncLog(
         recordKind: row.record_kind,
         externalId: row.external_id,
         ...(reason ? { reason } : {}),
-        message: redactSecrets(row.message),
+        message: messageForAi(row.message),
         ...(row.contact_id ? { contactId: row.contact_id } : {}),
         ...(row.item_id ? { itemId: row.item_id } : {}),
         ...(row.document_type ? { documentType: row.document_type, documentId: row.document_id } : {}),

@@ -1709,6 +1709,20 @@ that something happened.
   clearing accounts ("Create it for me"), manual payments left owing for
   the bank feed. A gateway not chosen makes its orders wait. Orders posted
   before stay as they are. Tested with made-up Shopify-shaped responses.
+- **Store status you can trust, and a Reconnect** (#570-#572, #578,
+  SPR11-SPR15, decisions 1369-1376, tenant migration 0226; as Xero does,
+  not yet reviewed). A store connected again lists each payout once, and
+  the clearing balance in the payout report is the ledger's. The store
+  card and the AI's status show the last sync that worked apart from the
+  last attempt; a store that's paused or failing is "behind"; a store that
+  refuses Tohyee's login (401 or 403) says "Needs reconnecting" with a
+  Reconnect button that takes new credentials for the same connection.
+  Bank suggestions leave voided transactions and their reversals out
+  ("Show voided" lists them), closest amount first; the AI's get_bank_line
+  gives 10 by default and the Shopify payout a line looks like. Payouts
+  refused for what they are are logged as skipped, with specific reason
+  codes; the AI's text has no internal issue or decision numbers or
+  customers' emails.
 - **Shopify's read-only extras** (#530, SPD1-SPD11, decisions 1237-1245,
   tenant migration 0214): stock levels by location (with a Shopify vs
   Tohyee difference view on Settings › Sales platforms; Tohyee's stock is

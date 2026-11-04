@@ -15,7 +15,8 @@ import {
   startUnreconcileBatch,
   transferAndMatch,
 } from "@/lib/bank/batches";
-import { suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
+import { MOST_MATCH_SUGGESTIONS, suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
+import { payoutGuidanceForLine } from "@/lib/sales-platforms/payout-reconcile";
 import { type BankRule, createBankRule, getBankRule, listBankRules, updateBankRule } from "@/lib/bank/rules";
 import { voidBankTransaction, voidTransfer } from "@/lib/bank/transactions";
 import { type Batch, getBatch, listBatches, type RunOutcome } from "@/lib/batches/service";
@@ -435,16 +436,40 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
     title: "One bank statement line",
     level: "read",
     description:
-      "One statement line with what it's reconciled with, or, when it's unreconciled, what Tohyee suggests: posted transactions on its account it could match (exact amounts first), open invoices or bills for its exact amount, and the bank rule that applies.",
-    inputSchema: schema({ lineId: ID("statement line") }, ["lineId"]),
+      "One statement line with what it's reconciled with, or, when it's unreconciled, what Tohyee suggests: posted transactions on its account it could match (closest first: the same amount, then the nearest amount, then the nearest date; up to limit, default 10), open invoices or bills for its exact amount, the bank rule that applies, and, when the line looks like a Shopify payout, the payout guidance list_sales_platform_payout_matches gives for it (status, reason, payout IDs and the reconcile command a person could review). Voided transactions and their reversals cancel out, so they're left out unless includeVoided is true (voidedLeftOut says how many).",
+    inputSchema: schema(
+      {
+        lineId: ID("statement line"),
+        limit: { type: "integer", minimum: 1, maximum: MOST_MATCH_SUGGESTIONS, description: `How many posted transactions to suggest. Default 10, at most ${MOST_MATCH_SUGGESTIONS}.` },
+        includeVoided: { type: "boolean", description: "Also list voided transactions and their reversals (flagged voided). Default false." },
+      },
+      ["lineId"],
+    ),
     async run(tx, args) {
       const line = await getStatementLine(tx, args.lineId);
       if (line.status !== "unreconciled") return { line: lineSummary(line) };
-      const suggestions = await suggestionsForLine(tx, line.id);
+      const suggestions = await suggestionsForLine(tx, line.id, undefined, {
+        includeVoided: args.includeVoided === true,
+        limit: boundedLimit(args.limit, 10, MOST_MATCH_SUGGESTIONS),
+      });
+      const payout = await payoutGuidanceForLine(tx, line.id);
       return {
         line: lineSummary(line),
         suggestions: {
           matches: suggestions.matches,
+          voidedLeftOut: suggestions.voidedLeftOut,
+          platformPayout: payout
+            ? {
+                status: payout.status,
+                platform: payout.platformLabel,
+                reason: payout.reason,
+                evidence: payout.evidence,
+                payoutIds: payout.payouts.map((candidate) => candidate.externalId),
+                suggestion: payout.action
+                  ? { ...payout.action, note: "A suggestion for a person to review on the bank reconcile screen; this tool doesn't reconcile." }
+                  : null,
+              }
+            : null,
           documents: suggestions.documents,
           rule: suggestions.rule
             ? {
@@ -673,7 +698,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
     name: "unmatch_bank_lines",
     title: "Unreconcile bank lines",
     level: "full",
-    description: `Unreconciles up to ${MAX_BULK_LINES} statement lines, anyone's, as "Unreconcile selected" does in Tohyee (decision 1277): each goes back to be reconciled, with the rest of its split. Nothing is posted or voided; a transfer's other side stays reconciled unless you choose it too. Lines in a locked period are refused. First call it without previewHash to see what it will do and check it matches what was asked; then call it again with the previewHash it gave, and a new idempotencyKey. It's done as a batch: see get_bank_batch and resume_bank_batch.`,
+    description: `Unreconciles up to ${MAX_BULK_LINES} statement lines, anyone's, as "Unreconcile selected" does in Tohyee: each goes back to be reconciled, with the rest of its split. Nothing is posted or voided; a transfer's other side stays reconciled unless you choose it too. Lines in a locked period are refused. First call it without previewHash to see what it will do and check it matches what was asked; then call it again with the previewHash it gave, and a new idempotencyKey. It's done as a batch: see get_bank_batch and resume_bank_batch.`,
     inputSchema: schema(
       {
         lineIds: { type: "array", minItems: 1, maxItems: MAX_BULK_LINES, items: { type: "string" } },

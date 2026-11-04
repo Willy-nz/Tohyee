@@ -99,7 +99,7 @@ export const REPORT_READ_TOOLS: readonly AiTool[] = [
     title: "Custom reports",
     level: "read",
     description:
-      "Saved custom reports (decision 1363): drafts (editable, worked out from the ledger when run), published (frozen copies) or archived. Each with its id, title, the standard report it started from, and whether it's the default layout of the standard profit and loss or balance sheet.",
+      "Saved custom reports: drafts (editable, worked out from the ledger when run), published (frozen copies) or archived. Each with its id, title, the standard report it started from, and whether it's the default layout of the standard profit and loss or balance sheet.",
     inputSchema: object({ view: { type: "string", enum: ["drafts", "published", "archived"], description: "Default drafts." } }),
     async run(tx, args) {
       const reports = await listCustomReports(tx, args.view ?? "drafts");

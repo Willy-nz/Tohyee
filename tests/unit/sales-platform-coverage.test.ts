@@ -20,6 +20,8 @@ const connection = (overrides: Partial<SalesPlatformConnection> = {}): SalesPlat
   productVariants: { linked: 0, withoutSku: 0 },
   status: "active",
   lastSyncAt: "2026-11-01T01:00:00.000Z",
+  lastSuccessfulSyncAt: "2026-11-01T01:00:00.000Z",
+  needsReconnect: false,
   lastError: null,
   failures: 0,
   webhooksActive: true,
