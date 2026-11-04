@@ -29,25 +29,24 @@ home, with no monthly fee. One Tohyee server can hold many organisations, and
 **each organisation gets its own PostgreSQL database**, so each can be backed
 up, restored or moved on its own.
 
-**Accounting you can check.** Bank matches, bank rules, bills read from your
-inbox and AI drafts are suggestions until someone says OK. PostgreSQL itself
-refuses unbalanced journals and edits to posted history. Every accounting rule
-starts as a worked example with real numbers
-([more than a thousand](docs/ACCOUNTING-EXAMPLES.md)), and more than 2,000
-automated tests run them against a real database before any change is
-accepted.
+**A connected workspace.** Use accounting, CRM, analytics, people and jobs,
+and farming together. Enable the modules you need and choose what each person
+can access. Bank feeds and Shopify have their own connection and posting setup.
 
-> **Status: early development.** This README describes the current `main`
-> branch, including features ahead of packaged releases. Try a test
-> organisation first and review returns and reports before relying on them.
-> Tohyee is free software provided as is, with no warranty (see the
-> [licence](LICENSE)).
+**AI access you choose.** Compatible AI apps connect through MCP. Depending on
+the permissions you grant, they can read records, prepare drafts or post changes.
+AI proposals and posted transactions are different; review the access level
+before connecting an assistant.
 
-**Release availability, checked 31 October 2026:** the latest release is
-[v0.26.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.26.0)
-([notes](docs/releases/0.26.0.md)). Check the
-[latest release](https://github.com/Willy-nz/Tohyee/releases/latest) for what
-each download includes, or [run from source](#run-it-locally).
+> **Status: early development.** This README describes current source, which
+> may include features ahead of packaged releases. Start with a demo or test
+> organisation and review accounting outputs. Tohyee is provided as is, without
+> warranty; see the [licence](LICENSE).
+
+Get the current installer and release-specific changes from the
+[latest release](https://github.com/Willy-nz/Tohyee/releases/latest).
+The [feature register](docs/FEATURES.md) records implemented features and limits;
+[release notes](docs/releases) describe packaged versions.
 
 **Want a look first?** On the server, choose **Add demo farm…** on the
 Organisations page of the Tohyee server app (or the server settings in the
@@ -72,7 +71,7 @@ what you can use; developer and server setup instructions follow it.
 | --- | --- |
 | **Bank feeds and reconciliation**<br />Akahu, SimpleFIN, Stripe, PayPal and Wise, or statement files; suggested matches are one click. | **GST, the NZ way**<br />The GST101A return box by box, with the documents behind every figure. |
 | <img src="website/img/desk-reconcile.webp" alt="Bank reconciliation" width="420" /> | <img src="website/img/desk-gst.webp" alt="GST return" width="420" /> |
-| **Reports and year end**<br />Profit and loss, balance sheet, budgets, cash flow forecast and year-end statements as one PDF. | **Analytics like Power BI**<br />Report pages, click-to-filter, drill-down by financial year, and a PowerPoint add-in for live slides. |
+| **Reports and year end**<br />Profit and loss, balance sheet, budgets, cash flow forecast and year-end statements as one PDF. | **Interactive analytics**<br />Report pages, click-to-filter, drill-down by financial year, and a PowerPoint add-in for live slides. |
 | <img src="website/img/desk-report.webp" alt="Profit and loss report" width="420" /> | <img src="website/img/desk-analytics.webp" alt="An Analytics report" width="420" /> |
 
 Also: invoices, quotes, repeating invoices and Pay now links; bills inbox and
@@ -87,7 +86,7 @@ or ChatGPT connected by signing in.
 
 | Today | Map | Safety | Effluent | Tractor mode |
 | :---: | :---: | :---: | :---: | :---: |
-| <img src="website/img/phone-today.webp" alt="Farm Today screen on a phone" width="150" /> | <img src="website/img/phone-map.webp" alt="Farm map with paddocks coloured by days since grazed" width="150" /> | <img src="website/img/phone-safety.webp" alt="Safety overview with Call 111 and big buttons" width="150" /> | <img src="website/img/phone-effluent.webp" alt="Effluent irrigation log" width="150" /> | <img src="website/img/phone-tractor.webp" alt="A finished spreader job's coverage map" width="150" /> |
+| <img src="website/img/phone-today.webp" alt="Farm Today screen on a phone" width="150" /> | <img src="website/img/phone-map.webp" alt="Farm map with paddocks coloured by days since grazed" width="150" /> | <img src="website/img/phone-safety.webp" alt="Farm safety overview with reporting and check actions" width="150" /> | <img src="website/img/phone-effluent.webp" alt="Effluent irrigation log" width="150" /> | <img src="website/img/phone-tractor.webp" alt="A finished spreader job's coverage map" width="150" /> |
 
 - **The phone app:** add Tohyee to your home screen from your own server (no
   app store; needs its https address). Farm maps, paddocks, a year of
@@ -104,7 +103,7 @@ or ChatGPT connected by signing in.
   gate sign-in, pre-start checks, training, chemicals, a WorkSafe pack and a
   weekly copy off the farm. Records can't be quietly changed
   ([details](docs/FARM-SAFETY.md)).
-- **Effluent** (on `main`, in the next release): systems, daily irrigation
+- **Effluent:** systems, daily irrigation
   log, pond levels, checks and servicing, incidents and a council pack you
   download ([details](docs/FARM-EFFLUENT.md)).
 - **Tractor and spreader mode:** the worked area, overlaps and GPS gaps from
