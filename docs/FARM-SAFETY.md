@@ -637,3 +637,13 @@ The questions as they were:
     line (from WorkSafe's 2017 farm chemicals page).
 11. The weekly copy's wording ("Keep this email somewhere Tohyee can't
     change it") and whether a week is the right interval.
+
+## Inductions signed electronically (decision 1409)
+
+An induction can be sent to staff or contractors to sign on their phone
+(Safety › Inductions and who has signed › Send to sign electronically). The
+induction, the farm's hazards and its emergency details are written to a
+PDF; signing adds an induction sign-off here, "signed electronically", with
+the versions the PDF showed, so "sign again" works as for any other
+sign-off. See docs/E-SIGNATURES.md. Signing shows someone was told about the
+farm and its hazards, not that they can do a job safely.

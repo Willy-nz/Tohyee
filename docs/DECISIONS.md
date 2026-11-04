@@ -12999,3 +12999,26 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       the notes are still Tohyee's drafts. Who must sign, and whether
       anything must be witnessed, depends on the entity: the (i) note says
       to check, and Tohyee doesn't do witnessed signing.
+
+### E-signatures: staff paperwork (5 Nov 2026; decisions 1408-1409)
+
+1408. **Employment agreements are uploaded and kept with the employee.**
+      On a payroll employee, "Send an agreement to sign" takes the agreement
+      as a PDF (Tohyee doesn't write agreements) and sends it to the
+      employee (who must be on the list, at the email on their payroll
+      record) and anyone signing for the employer, in order or any order,
+      with reminders offered. Only people with payroll access see, send or
+      open these requests and their files, through the screens, the API or
+      the AI tools.
+1409. **An induction signed electronically is a farm sign-off, not a
+      second record.** From "Inductions and who has signed", "Send to sign
+      electronically" writes the induction, the farm's active hazards and
+      its emergency details to a PDF and sends each person their own request
+      (members, including farm staff, can sign in Tohyee). The request keeps
+      which induction version, hazards (id and version) and emergency
+      details version the PDF showed. When the person signs, an induction
+      sign-off is added to the farm's append-only safety records with
+      "signed electronically" as how they signed, the signing request and
+      the PDF's fingerprint; it's checked for "sign again" like any other
+      sign-off (decision 949). The signing certificate stays with the
+      request. Sending needs the role that keeps safety records.

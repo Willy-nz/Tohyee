@@ -646,11 +646,12 @@ export type InductionData = {
 };
 
 /** Who signed: a member signing for themselves, a member recording for someone else, or someone through the farm's sign-in link. */
-export type SignedHow = "self" | "recorded" | "link";
+export type SignedHow = "self" | "recorded" | "link" | "esign";
 export const SIGNED_HOW_LABELS: Record<SignedHow, string> = {
   self: "signed on their own login",
   recorded: "recorded for them (not their own signature)",
   link: "self-declared, no login (the farm's sign-in link, name as typed)",
+  esign: "signed electronically (identity checked by an emailed code or their Tohyee sign-in; signing certificate kept)",
 };
 /** The short label for a sign-off or sign-in through the gate link (decision 965). */
 export const SELF_DECLARED = "Self-declared, no login";
@@ -693,6 +694,9 @@ export type SignoffData = {
   /** The hazards shown when they signed: id and version (decision 949). */
   hazards: Array<{ id: string; version: number }>;
   emergencyVersion: number | null;
+  /** Signed electronically (decision 1409): the signing request, and the fingerprint of the PDF they signed. */
+  signingRequestId?: string;
+  documentSha256?: string;
   why?: string | null;
 };
 

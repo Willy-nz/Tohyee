@@ -5,6 +5,7 @@ import { DateInput } from "@/components/date-input";
 import { newOperationId } from "@/components/farm-safety";
 import { useApiData } from "@/components/hooks";
 import { pendingOf, submitThroughQueue, type SubmitResult, useOfflineQueue } from "@/components/offline-queue";
+import { InductionSigning } from "@/components/signing/staff-signing";
 import { useWorkspace } from "@/components/workspace";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
@@ -289,6 +290,7 @@ function InductionsCard({ organisationId, farm, data, onChanged, part, openInduc
                 <Button onClick={() => setReading({ id: induction.recordId, forSomeone: false })}>Read and sign</Button>
               )}
             </div>
+            {manage && data.canRecord ? <InductionSigning organisationId={organisationId} farmId={farm.id} induction={{ recordId: induction.recordId, version: induction.version, title: induction.data.title, audiences: induction.data.audiences }} onSent={onChanged} /> : null}
             {reading?.id === induction.recordId ? <ReadAndSign organisationId={organisationId} farm={farm} inductionId={induction.recordId} forSomeone={reading.forSomeone} onDone={() => { setReading(null); onChanged(); }} onCancel={() => setReading(null)} /> : null}
           </li>
         ))}
