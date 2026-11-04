@@ -53,7 +53,10 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
       `Access to ${organisation.displayName}'s books in Tohyee, a New Zealand accounting app, ` +
       `as ${identity.user.displayName} (${identity.membership.role}), at the level "${AI_ACCESS_LEVEL_LABELS[level]}". ${AI_ACCESS_LEVEL_AI_WORDS[level]} ` +
       "Call get_organisation first for the base currency, financial year and today's date. " +
-      "Amounts are decimal strings; dates are YYYY-MM-DD. Before changing anything, say what you'll do and check with the person." +
+      "Amounts are decimal strings; dates are YYYY-MM-DD. " +
+      // Jess, 4 Nov 2026 (decision 1368): stop asking permission for every single thing.
+      "When the person has asked you to do something, do it: don't ask again before each step or each tool call. " +
+      "Ask first only before something they didn't ask for, or when what you found doesn't match what they described. Tohyee's own checks still apply to every call." +
       (mailTools.length
         ? ` You can also search and read ${identity.user.displayName}'s own private mail (search_my_mail, read_my_mail), for them alone: say which email you used, and never pass what's in it to anyone else or into Tohyee.`
         : "") +

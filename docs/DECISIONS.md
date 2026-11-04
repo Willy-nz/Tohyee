@@ -12661,3 +12661,19 @@ newest month on the right".
       last choice, then oldest first. A person on another device starts
       from oldest first. If a server-side store for report settings is
       added later, this should move there.
+
+### Fewer questions from the AI (Jess, 4 Nov 2026; decision 1368)
+
+1368. **The AI doesn't ask again for what it was asked to do.** Jess: "Stop
+      asking for permission for every single thing. Fix that". The MCP server
+      instructions no longer say "Before changing anything, say what you'll do
+      and check with the person". They now tell the AI to go ahead with what
+      the person asked for, and to ask first only for something they didn't
+      ask for or when what it found doesn't match what they described. The
+      unmatch_bank_lines preview stays (a second call with its previewHash),
+      but the AI checks it against the request instead of asking the person.
+      Access levels, roles, lock dates, approval rules and every other server
+      check are unchanged. Separate from this: the AI app (e.g. Claude) may
+      ask the person to allow each tool call; that's a setting in the app, not
+      in Tohyee.
+
