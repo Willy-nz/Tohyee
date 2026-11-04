@@ -220,13 +220,13 @@ export async function batchSummaries(tx: OrgTx, batchIds: readonly string[]): Pr
 /** The newest batches of these kinds, optionally only one command source's. */
 export async function listBatches(
   tx: OrgTx,
-  options: { kinds?: readonly BatchKind[]; source?: string; limit?: number } = {},
+  options: { kinds?: readonly BatchKind[]; source?: string; limit?: number; offset?: number } = {},
 ): Promise<BatchSummary[]> {
   const ids = await tx.query<{ id: string }>(
     `select b.id::text from batches b
       where ($1::text[] is null or b.kind = any($1::text[])) and ($2::text is null or b.command_source = $2)
-      order by b.created_at desc, b.id desc limit $3`,
-    [options.kinds ? [...options.kinds] : null, options.source ?? null, Math.min(Math.max(options.limit ?? 50, 1), 200)],
+      order by b.created_at desc, b.id desc limit $3 offset $4`,
+    [options.kinds ? [...options.kinds] : null, options.source ?? null, Math.min(Math.max(options.limit ?? 50, 1), 201), Math.max(options.offset ?? 0, 0)],
   );
   return batchSummaries(
     tx,

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { boundedLimit, CURSOR, limitInput, pageAfter } from "@/lib/ai/limits";
 import type { AiTool, JsonSchema } from "@/lib/ai/tools";
 import { createCustomReport, getCustomReport, listCustomReports } from "@/lib/reports/custom";
 import { CUSTOM_REPORT_BASES, type FinancialReportBase, isTransactionReportBase, lastDayOfMonth, standardLayout, templateLayout } from "@/lib/reports/custom-layout";
@@ -8,7 +9,8 @@ import { requireIdempotencyKey } from "@/lib/validation";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { budgetVsActual } from "@/lib/reports/budget-vs-actual";
-import { balanceSheet, profitAndLoss, profitAndLossSplit, trialBalance } from "@/lib/reports/financial";
+import { balanceSheet, profitAndLossSplit, trialBalance } from "@/lib/reports/financial";
+import { budgetTable, customTable, type ReportTable, splitTable, statementTable } from "@/lib/ai/report-table";
 import { balanceSheetCompare, parseCompare, profitAndLossCompare } from "@/lib/reports/statement-compare";
 
 /**
@@ -62,14 +64,16 @@ export const TRIAL_BALANCE_SCHEMA = object({ asAt: DATE, ...TRACKING_OPTIONS });
 
 const tracking = (args: Record<string, unknown>) => ({ trackingCategoryId: args.trackingCategoryId, trackingValueId: args.trackingValueId });
 
-export function runProfitAndLoss(tx: OrgTx, args: Record<string, unknown>): Promise<unknown> {
+/** The profit and loss as columns and rows (#575), plain, compared or split by a tracking category. */
+export async function runProfitAndLoss(tx: OrgTx, args: Record<string, unknown>): Promise<ReportTable> {
   const compare = parseCompare({ compare: args.compare, compareBy: args.compareBy, order: args.order, total: args.total, ytd: args.yearToDate, percent: args.percentOfIncome });
   const input = { from: args.from, to: args.to, ...tracking(args) };
   if (args.splitBy != null && args.splitBy !== "") {
     if (compare) throw new ValidationError("Use splitBy or the compare options, not both.");
-    return profitAndLossSplit(tx, { ...input, categoryId: args.splitBy });
+    return splitTable(await profitAndLossSplit(tx, { ...input, categoryId: args.splitBy }));
   }
-  return compare ? profitAndLossCompare(tx, input, compare) : profitAndLoss(tx, input);
+  // One column is the compared report with no earlier periods: the same rows, labels and figures.
+  return statementTable(await profitAndLossCompare(tx, input, compare ?? { periods: 0, periodLength: "month" }));
 }
 
 export function runBalanceSheet(tx: OrgTx, args: Record<string, unknown>): Promise<unknown> {
@@ -90,9 +94,9 @@ export const REPORT_READ_TOOLS: readonly AiTool[] = [
     title: "Budget vs actual",
     level: "read",
     description:
-      "Budget vs actual for whole months: each profit and loss account's actual, budget, variance (actual less budget) and variance % of the budget, with section totals, gross profit and net profit. budgetId from list_budgets. from and to are months (YYYY-MM); without from it starts at the beginning of the financial year. A budget for a tracking value compares with that value's lines only; for a budget without one, a tracking filter limits the actuals (the budget stays the whole budget, and `filter` says so).",
+      "Budget vs actual for whole months, as columns (actual, budget, variance = actual less budget, variance_pct = % of the budget) and rows like profit_and_loss's. budgetId from list_budgets. from and to are months (YYYY-MM); without from it starts at the beginning of the financial year. A budget for a tracking value compares with that value's lines only; for a budget without one, a tracking filter limits the actuals (the budget stays the whole budget, and `filter` says so).",
     inputSchema: object({ budgetId: { type: "string", description: "The budget's id (from list_budgets)." }, from: MONTH, to: MONTH, ...TRACKING_OPTIONS }, ["budgetId"]),
-    run: (tx, args) => budgetVsActual(tx, { budgetId: args.budgetId, from: args.from, to: args.to, ...tracking(args) }),
+    run: async (tx, args) => budgetTable(await budgetVsActual(tx, { budgetId: args.budgetId, from: args.from, to: args.to, ...tracking(args) })),
   },
   {
     name: "list_custom_reports",
@@ -100,12 +104,14 @@ export const REPORT_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description:
       "Saved custom reports (decision 1363): drafts (editable, worked out from the ledger when run), published (frozen copies) or archived. Each with its id, title, the standard report it started from, and whether it's the default layout of the standard profit and loss or balance sheet.",
-    inputSchema: object({ view: { type: "string", enum: ["drafts", "published", "archived"], description: "Default drafts." } }),
+    inputSchema: object({ view: { type: "string", enum: ["drafts", "published", "archived"], description: "Default drafts." }, limit: limitInput(50, 200), cursor: CURSOR }),
     async run(tx, args) {
-      const reports = await listCustomReports(tx, args.view ?? "drafts");
+      const page = pageAfter(await listCustomReports(tx, args.view ?? "drafts"), (report) => report.id, args.cursor, boundedLimit(args.limit, 50, 200));
       const defaults = await listLayoutDefaults(tx);
       return {
-        reports: reports.map((report) => ({
+        more: page.more,
+        nextCursor: page.nextCursor,
+        reports: page.rows.map((report) => ({
           reportId: report.id,
           title: report.title,
           kind: report.kind,
@@ -124,11 +130,11 @@ export const REPORT_READ_TOOLS: readonly AiTool[] = [
     title: "Run a custom report",
     level: "read",
     description:
-      "A custom report's figures: a draft is worked out from the ledger now; a published report gives its frozen figures as they were when published. Columns, then each table's rows (label, kind, values by column key; a formula row's format is money, number or percent; blank values are null, e.g. dividing by 0.00).",
+      "A custom report's figures, as columns and rows like profit_and_loss's: each table's title is a heading row; a formula row's format is money, number or percent; blank values are null (e.g. dividing by 0.00). A draft is worked out from the ledger now; a published report gives its figures as they were when published.",
     inputSchema: object({ reportId: { type: "string", description: "The report's id (from list_custom_reports)." } }, ["reportId"]),
     async run(tx, args) {
       const { report, figures } = await getCustomReport(tx, args.reportId);
-      return { reportId: report.id, title: report.title, kind: report.kind, publishedAt: report.publishedAt, figures };
+      return { ...customTable(report, figures), layout: report.layout };
     },
   },
 ];
@@ -140,7 +146,7 @@ export const REPORT_WRITE_TOOLS: readonly AiTool[] = [
     title: "Start a custom report",
     level: "draft",
     description:
-      "Starts a draft custom report for a person to review in Tohyee: from the standard profit and loss or balance sheet's rows (start: standard), the custom report template (start: template), or a full layout (as run_custom_report's report.layout). Nothing is posted or published, and it doesn't become any report's default layout; a person does that. periodEnd is a month end (default this month). Send the same idempotencyKey to retry.",
+      "Starts a draft custom report for a person to review in Tohyee: from the standard profit and loss or balance sheet's rows (start: standard), the custom report template (start: template), or a full layout (as run_custom_report's layout). Nothing is posted or published, and it doesn't become any report's default layout; a person does that. periodEnd is a month end (default this month). Send the same idempotencyKey to retry.",
     inputSchema: object(
       {
         base: { type: "string", enum: Object.keys(CUSTOM_REPORT_BASES), description: "The standard report it starts from." },
