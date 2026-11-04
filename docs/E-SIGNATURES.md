@@ -60,14 +60,37 @@ main law. In short:
   witness's electronic signature identifies them, shows they witnessed it
   and is reliable enough. **Tohyee doesn't do witnessed signing**: a
   document that must be witnessed needs to be signed another way.
-- **Some documents are left out** (section 218 and Schedule 5). Sources
-  summarising Schedule 5 list, among others: wills, codicils and other
-  testamentary documents; powers of attorney and enduring powers of
-  attorney; affidavits, statutory declarations and other documents given on
-  oath or affirmation; and some notices that must be given in writing.
-  Section 218(2)(a) also leaves out laws that require a particular
-  technology, storage device or kind of communication. Deeds have their own
-  signing and witnessing rules.
+- **Consent** (section 220): no one has to use or accept an electronic
+  document without their consent, and consent can be inferred from what
+  they do. Tohyee asks each signer to tick "I agree to sign electronically".
+- **Some documents are left out** (section 218 and Schedule 5). Part 3 of
+  Schedule 5 leaves out laws about:
+  - notices that must be given to the public, or attached to a thing or
+    displayed in a place;
+  - information that must be given in writing in person or by registered
+    post;
+  - affidavits, statutory declarations and other documents given on oath
+    or affirmation;
+  - powers of attorney and enduring powers of attorney. Since 30 March 2025
+    (section 218(3)), a deed that creates a power of attorney in connection
+    with a security interest is no longer left out;
+  - wills, codicils and other testamentary documents;
+  - negotiable instruments (such as cheques and promissory notes) and bills
+    of lading;
+  - warrants for entry, search or seizure;
+  - information required by consumer information or product or services
+    safety standards under the Fair Trading Act 1986.
+
+  Parts 1 and 2 of Schedule 5 leave out the election and referendum laws,
+  the Electronic Courts and Tribunals Act 2016, and named sections of some
+  other laws (for example Credit Contracts and Consumer Finance Act 2003
+  section 83O and Passports Act 1992 section 12). Part 4 leaves out the
+  practice and procedure of the courts and many tribunals (including the
+  Disputes Tribunal and the Tenancy Tribunal), unless their own rules allow
+  electronic documents. Section 218(2)(a) also leaves out laws that require
+  a particular technology, storage device or kind of communication. Deeds
+  have their own signing and witnessing rules.
+
 - **Other bodies may set their own rules.** For example, LINZ says a pasted
   image of a signature, or one drawn on a touch screen, is unlikely to meet
   the reliability criteria for its authority and identity forms. Inland
@@ -79,30 +102,19 @@ most business documents are the kind of thing electronic signatures are
 commonly used for. For financial statements, check what your entity's
 rules and your accountant require (for example who must sign, and whether
 anything must be witnessed). Don't use Tohyee for wills, powers of attorney,
-affidavits, statutory declarations, deeds that need a witness, or anything
-else that must be witnessed.
+affidavits, statutory declarations, negotiable instruments, deeds that need
+a witness, or anything else that must be witnessed.
 
 ### Where this came from, and what wasn't checked
 
-legislation.govt.nz couldn't be opened from the sandbox this was written in
-(every request to it failed), so the act wasn't read there. What was read:
+Sections 218, 220, 226, 227 and 228 and Schedule 5 were checked against the
+Contract and Commercial Law Act 2017 as published on legislation.govt.nz,
+version as at 1 October 2026. That page noted that some amendments hadn't
+yet been incorporated; those weren't checked.
 
-- Section 227 and section 218, as reproduced on NZLII
-  (nzlii.org, consol_act/cacla2017238/s227.html and s218.html).
-- The former Electronic Transactions Act 2002 section 24 on NZLII, which
-  section 228 carries over (the CCLA's notes say so); section 228's text
-  itself wasn't read.
-- Section 226 was **not** read directly: its summary above is from LINZ's
-  guidance ("Electronic signatures for A&I forms and other documents") and
-  section 227's wording, which refers to it.
-- Schedule 5's NZLII page showed only its title ("Enactments and provisions
-  excluded from subpart 3 of Part 4"); the list of exclusions above is from
-  a law firm's summary (Duncan Cotterill, "Electronic signatures: when can I
-  use them and when can't I?") and **wasn't checked against the act**.
-- The Contract and Commercial Law (Electronic Transactions) Regulations
-  2017, on legislation.govt.nz through a summary, which set extra conditions
-  for some specific enactments.
+Not checked: the Contract and Commercial Law (Electronic Transactions)
+Regulations 2017, which set extra conditions for some specific laws, and
+the rules of other bodies (LINZ, Inland Revenue) beyond the summaries above.
 
-Tohyee doesn't claim compliance with any particular law or standard. Before
-relying on this note, have it checked against the act on
-legislation.govt.nz.
+Tohyee doesn't claim compliance with any particular law or standard. This
+note is general information, not legal advice.
