@@ -210,7 +210,8 @@ export function FarmRainfall({ organisationId, farm }: FarmContext) {
   const all = gauges.data?.gauges ?? [];
   const active = all.filter((gauge) => gauge.isActive);
   const [picked, setPicked] = useState<string | null>(null);
-  const gauge = all.find((entry) => entry.id === picked) ?? active[0] ?? null;
+  // The gauge with the most readings first: usually the farm's main one.
+  const gauge = all.find((entry) => entry.id === picked) ?? [...active].sort((a, b) => b.readings - a.readings)[0] ?? null;
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {gauges.error ? <Notice tone="error">{gauges.error}</Notice> : null}
@@ -234,7 +235,7 @@ export function FarmRainfall({ organisationId, farm }: FarmContext) {
           <small>On the Log, works with no signal</small>
         </Link>
       ) : null}
-      <RainGauges organisationId={organisationId} farm={farm} gauges={all} canRecord={canRecord} onChanged={gauges.reload} onPick={setPicked} />
+      {gauges.data ? <RainGauges organisationId={organisationId} farm={farm} gauges={all} canRecord={canRecord} onChanged={gauges.reload} onPick={setPicked} /> : null}
       {gauge && can("bookkeeper") && gauge.isActive ? <ImportRain organisationId={organisationId} gauge={gauge} onImported={gauges.reload} /> : null}
     </div>
   );
@@ -337,7 +338,7 @@ export function RainChart({ periods, label }: { periods: Period[]; label: string
     return () => observer.disconnect();
   }, []);
   const height = 200;
-  const pad = { top: 12, right: 8, bottom: 26, left: 44 };
+  const pad = { top: 24, right: 8, bottom: 26, left: 44 };
   const values = periods.flatMap((entry) => [Number(entry.current.mm ?? 0), Number(entry.lastYear.mm ?? 0)]);
   const max = Math.max(10, ...values);
   const step = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((candidate) => max / candidate <= 4) ?? 1000;
@@ -370,7 +371,7 @@ export function RainChart({ periods, label }: { periods: Period[]; label: string
             </text>
           </g>
         ))}
-        <text x={4} y={pad.top + 2} fontSize={11} fill="var(--chart-text-muted)">
+        <text x={pad.left - 6} y={11} textAnchor="end" fontSize={11} fill="var(--chart-text-muted)">
           mm
         </text>
         {periods.map((entry, index) => {
