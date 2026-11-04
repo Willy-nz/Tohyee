@@ -316,7 +316,7 @@ export function SendForSigning({
     body = (
       <div className={styles.stack}>
         <Field label="Message (optional)">
-          <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} maxLength={2000} placeholder="e.g. Here's the quote we talked about. Any questions, just reply." />
+          <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} maxLength={2000} placeholder="e.g. Here's the document we talked about. Any questions, just reply." />
         </Field>
         <Field label="Links work for (days)">
           <input type="number" min={1} max={MAX_EXPIRY_DAYS} value={days} onChange={(event) => setDays(event.target.value)} inputMode="numeric" />
