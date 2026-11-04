@@ -90,6 +90,7 @@ main law. In short:
   electronic documents. Section 218(2)(a) also leaves out laws that require
   a particular technology, storage device or kind of communication. Deeds
   have their own signing and witnessing rules.
+
 - **Other bodies may set their own rules.** For example, LINZ says a pasted
   image of a signature, or one drawn on a touch screen, is unlikely to meet
   the reliability criteria for its authority and identity forms. Inland

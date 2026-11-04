@@ -7,7 +7,13 @@
 /** The consent each signer ticks before signing, kept word for word with their signature. */
 export const CONSENT_TEXT = "I agree to sign electronically";
 
-export const SOURCE_KINDS = ["quote", "year_end", "employment", "induction", "upload"] as const;
+export const SOURCE_KINDS = [
+  "quote",
+  "year_end",
+  "employment",
+  "induction",
+  "upload",
+] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
@@ -18,7 +24,12 @@ export const SOURCE_LABELS: Record<SourceKind, string> = {
   upload: "Document",
 };
 
-export const REQUEST_STATUSES = ["sent", "completed", "declined", "voided"] as const;
+export const REQUEST_STATUSES = [
+  "sent",
+  "completed",
+  "declined",
+  "voided",
+] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 /** What a request shows as: "expired" is worked out from its expiry, never stored. */
 export type RequestState = RequestStatus | "expired";
@@ -31,7 +42,12 @@ export const STATE_LABELS: Record<RequestState, string> = {
   expired: "Expired",
 };
 
-export const SIGNER_STATUSES = ["waiting", "ready", "signed", "declined"] as const;
+export const SIGNER_STATUSES = [
+  "waiting",
+  "ready",
+  "signed",
+  "declined",
+] as const;
 export type SignerStatus = (typeof SIGNER_STATUSES)[number];
 
 export const SIGNER_STATUS_LABELS: Record<SignerStatus, string> = {
@@ -46,7 +62,10 @@ export type SigningOrder = (typeof SIGNING_ORDERS)[number];
 
 export const METHODS = ["typed", "drawn"] as const;
 export type SignatureMethod = (typeof METHODS)[number];
-export const METHOD_LABELS: Record<SignatureMethod, string> = { typed: "Typed name", drawn: "Drawn signature" };
+export const METHOD_LABELS: Record<SignatureMethod, string> = {
+  typed: "Typed name",
+  drawn: "Drawn signature",
+};
 
 /** How long a request stays open, and the most people on one. */
 export const DEFAULT_EXPIRY_DAYS = 30;
@@ -83,7 +102,15 @@ export type SignerView = {
   declinedAt: string | null;
 };
 
-export type SigningEventView = { id: string; event: string; at: string; signerId: string | null; actorEmail: string | null; ipAddress: string | null; details: Record<string, unknown> };
+export type SigningEventView = {
+  id: string;
+  event: string;
+  at: string;
+  signerId: string | null;
+  actorEmail: string | null;
+  ipAddress: string | null;
+  details: Record<string, unknown>;
+};
 
 export type SigningRequestView = {
   id: string;
@@ -112,13 +139,24 @@ export type SigningRequestView = {
   createdByEmail: string;
   createdAt: string;
   signers: SignerView[];
-  emails: Array<{ purpose: string; toEmail: string; status: string; lastError: string | null; createdAt: string }>;
+  emails: Array<{
+    purpose: string;
+    toEmail: string;
+    status: string;
+    lastError: string | null;
+    createdAt: string;
+  }>;
   events: SigningEventView[];
 };
 
 /** A request's state now: open past its expiry shows as expired. */
-export function requestState(status: RequestStatus, expiresAt: string, now = new Date()): RequestState {
-  if (status === "sent" && new Date(expiresAt).getTime() <= now.getTime()) return "expired";
+export function requestState(
+  status: RequestStatus,
+  expiresAt: string,
+  now = new Date(),
+): RequestState {
+  if (status === "sent" && new Date(expiresAt).getTime() <= now.getTime())
+    return "expired";
   return status;
 }
 
@@ -127,15 +165,29 @@ export function requestState(status: RequestStatus, expiresAt: string, now = new
  * (only once everyone before them has). Any order: everyone who hasn't
  * signed. Nobody once someone has declined.
  */
-export function signersToAsk(order: SigningOrder, signers: ReadonlyArray<{ position: number; status: SignerStatus }>): number[] {
+export function signersToAsk(
+  order: SigningOrder,
+  signers: ReadonlyArray<{ position: number; status: SignerStatus }>,
+): number[] {
   if (signers.some((signer) => signer.status === "declined")) return [];
-  const open = [...signers].sort((a, b) => a.position - b.position).filter((signer) => signer.status !== "signed");
+  const open = [...signers]
+    .sort((a, b) => a.position - b.position)
+    .filter((signer) => signer.status !== "signed");
   if (order === "any_order") return open.map((signer) => signer.position);
   return open.length ? [open[0].position] : [];
 }
 
 /** Whether a reminder is due (decision 1410): open, not expired, reminders on, and that many days since it was sent or last reminded. */
-export function reminderDue(request: { status: RequestStatus; expiresAt: string; remindEveryDays: number | null; lastRemindedAt: string | null; createdAt: string }, now = new Date()): boolean {
+export function reminderDue(
+  request: {
+    status: RequestStatus;
+    expiresAt: string;
+    remindEveryDays: number | null;
+    lastRemindedAt: string | null;
+    createdAt: string;
+  },
+  now = new Date(),
+): boolean {
   if (request.status !== "sent" || !request.remindEveryDays) return false;
   if (new Date(request.expiresAt).getTime() <= now.getTime()) return false;
   const from = new Date(request.lastRemindedAt ?? request.createdAt).getTime();
@@ -143,8 +195,12 @@ export function reminderDue(request: { status: RequestStatus; expiresAt: string;
 }
 
 /** Whether everyone has signed. */
-export function allSigned(signers: ReadonlyArray<{ status: SignerStatus }>): boolean {
-  return signers.length > 0 && signers.every((signer) => signer.status === "signed");
+export function allSigned(
+  signers: ReadonlyArray<{ status: SignerStatus }>,
+): boolean {
+  return (
+    signers.length > 0 && signers.every((signer) => signer.status === "signed")
+  );
 }
 
 /** An email address shown on the signer's page before they've proved it's theirs: a***@example.com. */
