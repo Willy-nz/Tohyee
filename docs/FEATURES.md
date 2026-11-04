@@ -2469,6 +2469,13 @@ that something happened.
   tool list and the app is told. get_organisation's `toolGroups` says which
   groups are hidden and why, and a call to a hidden tool is refused with
   the reason.
+- **Analytics: the books' codes in words** (decision 1499). In the books'
+  tables, account types show as the chart of accounts names them (Bank,
+  Current liability, Fixed asset, Other income, Revenue ...), account
+  classes as Assets, Liabilities, Equity, Income and Expenses, and
+  invoice and bill statuses as Approved and Voided: in tiles, tables,
+  pivots, chart groups, slicers, filters and the AI's answers. The data
+  keeps the code, so filters and saved reports work as before.
 - **AI: Analytics reports** (#591, decisions 1411-1420, examples
   AIA1-AIA9, tenant migration 0230). A connected AI lists the Analytics
   tables the person can use (books, CRM, Shopify, Google Analytics, Search
