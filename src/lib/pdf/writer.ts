@@ -34,7 +34,8 @@ function fontsFolder(): string {
   return process.env.TOHYEE_PDF_FONTS_DIR?.trim() || path.join(/* turbopackIgnore: true */ process.cwd(), "src", "lib", "pdf", "fonts");
 }
 
-async function loadFontFiles(): Promise<{ regular: Uint8Array; bold: Uint8Array }> {
+/** The Liberation Sans files, for other PDF code that draws onto existing pages (the signed copy, decision 1401). */
+export async function loadFontFiles(): Promise<{ regular: Uint8Array; bold: Uint8Array }> {
   fontFiles ??= Promise.all([
     readFile(path.join(fontsFolder(), "LiberationSans-Regular.ttf")),
     readFile(path.join(fontsFolder(), "LiberationSans-Bold.ttf")),

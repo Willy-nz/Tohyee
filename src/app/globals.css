@@ -149,6 +149,10 @@
   --tractor-missed: #c2255c;
   --tractor-track: #1c4f8f;
   --tractor-gap: #c92a2a;
+  /* The signature box is paper-white in both themes, so a drawn signature looks as it will print (decision 1400). */
+  --signature-paper: #ffffff;
+  --signature-ink: #14213d;
+  --signature-line: #9aa3b2;
   --tractor-map-bg: #e9efe4;
   --tractor-paddock: #4f7a3a;
 }
@@ -231,6 +235,10 @@
     --tractor-missed: #f06595;
     --tractor-track: #8fb8ff;
     --tractor-gap: #ff6b6b;
+    /* The signature box is paper-white in both themes, so a drawn signature looks as it will print (decision 1400). */
+    --signature-paper: #ffffff;
+    --signature-ink: #14213d;
+    --signature-line: #9aa3b2;
     --tractor-map-bg: #1d2620;
     --tractor-paddock: #8cc06c;
   }
@@ -313,6 +321,10 @@
   --tractor-missed: #f06595;
   --tractor-track: #8fb8ff;
   --tractor-gap: #ff6b6b;
+  /* The signature box is paper-white in both themes, so a drawn signature looks as it will print (decision 1400). */
+  --signature-paper: #ffffff;
+  --signature-ink: #14213d;
+  --signature-line: #9aa3b2;
   --tractor-map-bg: #1d2620;
   --tractor-paddock: #8cc06c;
 }

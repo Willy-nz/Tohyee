@@ -17,7 +17,7 @@ import type { PeopleNames } from "@/lib/people/names";
  */
 
 /** The tables of notices, and the prefix of their Message-IDs. Fixed names: never from input. */
-export const NOTICE_TABLES = { approval_emails: "approval", roster_emails: "roster" } as const;
+export const NOTICE_TABLES = { approval_emails: "approval", roster_emails: "roster", signing_emails: "signing" } as const;
 export type NoticeTable = keyof typeof NOTICE_TABLES;
 
 const JOB_ACTOR: Actor = { userId: null, email: "email job" };

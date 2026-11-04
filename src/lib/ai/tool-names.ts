@@ -73,6 +73,8 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "list_overpayments", level: "read", words: "Customer overpayments, with what's left" },
   { name: "list_quotes", level: "read", words: "Quotes" },
   { name: "get_quote", level: "read", words: "One quote with its lines" },
+  { name: "list_signing_requests", level: "read", words: "Documents sent to sign and who has signed (it can't send or sign)" },
+  { name: "get_signing_request", level: "read", words: "One signing request: its signers, fingerprint and history" },
   { name: "list_sales_orders", level: "read", words: "Sales orders" },
   { name: "get_sales_order", level: "read", words: "One sales order with its lines" },
   { name: "list_purchase_orders", level: "read", words: "Purchase orders" },

@@ -12902,3 +12902,85 @@ much info on one page". Built like the shop and Akahu setups she liked
       INV-0042, $1,150.00) and the organisation's name, a warning for a
       placeholder the document type doesn't have, Save, and "Reset to
       Tohyee's template" (asks first).
+
+### E-signatures: the core and quotes (Jess asked, 5 Nov 2026; decisions 1396-1406)
+
+Jess asked for a signature tool covering quotes, year-end accounts, staff
+paperwork and any PDF, with a shared core built first. Where she didn't
+say how, Tohyee follows Xero's online quotes (accept and decline online,
+then make the invoice) and the common e-signature tools' patterns (a
+one-time link, an emailed code, an audit certificate). See
+docs/E-SIGNATURES.md. Not reviewed by Jess yet.
+
+1396. **A signing request is a fixed PDF and a signer list.** The exact
+      bytes people are shown are kept, and the database works out their
+      SHA-256 (the fingerprint) and checks the request names the same one.
+      The document, its fingerprint, the title and who signs can't change
+      after it's sent (the database refuses); a new version is a new
+      request, and the old one is voided. Files, signatures and the signing
+      history are append-only, like the safety records.
+1397. **Signers are a name and an email; members are matched by email.** A
+      signer whose email is a member's is linked to their login and can also
+      sign in Tohyee, where their sign-in is the identity check. 1 to 20
+      signers, in order (each asked once the one before has signed) or any
+      order (all at once). A quote has one signer.
+1398. **A one-time link, then an emailed code.** Each signer's link carries
+      32 random bytes; only the hash is kept. It works while it's their
+      turn, until the request expires (30 days unless changed, at most 90),
+      and stops once they sign or decline, or the request is voided. Before
+      they can open the document or sign, they ask for a 6-digit code sent
+      to their address (15 minutes, 5 tries, 5 codes per link, one a
+      minute). The right code starts a one-hour session for that browser
+      tab, sent in a header, never in the address. Every refusal of a link
+      is the same "not found", and a token only works in its own
+      organisation's database.
+1399. **Signing is a typed name or a drawn signature, with consent.** The
+      signer ticks "I agree to sign electronically" and must have opened the
+      document; the page sends back the fingerprint it showed, which must
+      match. Tohyee keeps the time (the database's), the IP address, the
+      browser's user agent, the method, the typed name (asked for a drawn
+      signature too) and the drawing (a small PNG). Declining needs a
+      reason.
+1400. **Typed is the accessible way; drawing is for a pointer.** The
+      drawing box works with a mouse, pen or finger and says so to a screen
+      reader, which is pointed at typing instead. The box is paper-white in
+      both themes so a signature looks as it will print.
+1401. **The signed copy has a signature page and an audit certificate.**
+      When the last person signs, Tohyee adds a one-line stamp at the foot
+      of each original page, a page with each signature, and a certificate:
+      the document, its fingerprint, when it was sent and by whom, and for
+      each signer their email, how it was checked, when they signed, the
+      method, the IP address and browser. It's kept append-only with the
+      request.
+1402. **Checking a copy re-hashes it.** "Check a copy" works out the
+      file's SHA-256 and says "Unchanged since signing" when it's the signed
+      copy kept, "the document as it was sent" for the unsigned original,
+      or "Changed" otherwise. Nothing is saved.
+1403. **Who sees and sends.** Quote and financial statement requests:
+      viewers and up see them. Employment agreements: payroll access. Other
+      documents and inductions: bookkeepers and up. Sending, voiding and new
+      links: bookkeepers and up (with payroll access for employment). A
+      member named as a signer always sees their own request. Voiding needs
+      a reason and can't be undone.
+1404. **Sending is guided, and email only goes when it's set up.** Choose
+      the document, who signs, the message, check, send. Links, codes,
+      voids and the signed-copy links go through the organisation's own
+      email (Settings › Email) like approval and roster emails. When email
+      isn't set up (or it's the demo farm), nothing is emailed and the
+      sender is told; people without a login can't be sent to, as they'd
+      have no link or code; members can still sign in Tohyee.
+1405. **A quote accepted by signing has no invoice yet (QT9-QT11, as Xero
+      does).** As with Xero's online quotes, the customer's acceptance
+      marks the quote accepted, and someone then makes the invoice or a
+      sales order from it, once (the database allows only that). Declining
+      on the link declines the quote, with the reason. Accepting or
+      declining the quote in Tohyee voids its open request, so the link
+      stops working. A deal linked to the quote is won when its invoice or
+      sales order is made, as before. Jobs aren't made from quotes in
+      Tohyee yet, so "make a job" isn't offered.
+1406. **The AI can only look.** list_signing_requests and
+      get_signing_request, with the screens' rules on what it sees. No tool
+      sends, voids, reminds or signs: a signature is a person's own act.
+      Every signing screen and the signer's page has a short (i) note that
+      it's general information, not legal advice, and that Tohyee doesn't do
+      witnessed signing.

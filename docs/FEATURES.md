@@ -440,6 +440,23 @@ that something happened.
   only once an email of it has been accepted by the email server (below); its
   status doesn't change. A finalised quote can instead be **accepted as a
   sales order** (SO9).
+- **Online acceptance of quotes** (QT9-QT11, as Xero does, not yet
+  reviewed; decisions 1396-1406): a finalised quote's PDF is sent for the
+  customer to sign. They open a one-time link, enter a code emailed to them,
+  read the quote and sign (typed or drawn) or decline with a reason. Signing
+  accepts the quote with no invoice yet; the invoice or a sales order is made
+  from it afterwards. Accepting or declining in Tohyee voids the request.
+- **E-signatures, the core** (decisions 1396-1406, docs/E-SIGNATURES.md):
+  a signing request keeps the PDF's exact bytes and SHA-256, and a signer
+  list (members matched by email, who can also sign in Tohyee). One-time
+  links, emailed codes, typed or drawn signatures with "I agree to sign
+  electronically", the time, IP address and browser. The signed copy adds a
+  signature page and an audit certificate and is kept append-only; "Check a
+  copy" re-hashes a file to say whether it's unchanged since signing.
+  Voiding (with a reason) stops the links; documents never change after
+  sending. Emails go through Settings › Email, and none are sent when it
+  isn't set up. The AI can list and read signing requests, never sign.
+  Not tried with a real customer's mailbox yet.
 - **Sales orders, stage 1** (Sales; SO1-SO12, not yet approved by Jess),
   following NetSuite's sales orders: drafts to a customer with the same
   lines as an invoice (items, units, price levels, tracking, custom fields,

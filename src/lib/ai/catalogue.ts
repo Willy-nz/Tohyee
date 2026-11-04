@@ -7,6 +7,7 @@ import { MIXED_USE_READ_TOOLS, MIXED_USE_WRITE_TOOLS } from "@/lib/ai/mixed-use-
 import { PHOTO_READ_TOOLS, PHOTO_WRITE_TOOLS } from "@/lib/ai/photo-tools";
 import { REPORT_READ_TOOLS, REPORT_WRITE_TOOLS } from "@/lib/ai/report-tools";
 import { SALES_PLATFORM_READ_TOOLS } from "@/lib/ai/sales-platform-tools";
+import { SIGNING_READ_TOOLS } from "@/lib/ai/signing-tools";
 import { TAX_READ_TOOLS, TAX_WRITE_TOOLS } from "@/lib/ai/tax-tools";
 import { type AiTool, READ_TOOLS } from "@/lib/ai/tools";
 import { WRITE_TOOLS } from "@/lib/ai/write-tools";
@@ -23,6 +24,7 @@ export const AI_TOOLS: readonly AiTool[] = [
   ...FULL_READ_TOOLS,
   ...TAX_READ_TOOLS,
   ...SALES_PLATFORM_READ_TOOLS,
+  ...SIGNING_READ_TOOLS,
   ...WRITE_TOOLS,
   ...REPORT_WRITE_TOOLS,
   ...BANK_WRITE_TOOLS,
