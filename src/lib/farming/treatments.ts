@@ -312,7 +312,7 @@ export async function productStock(tx: OrgTx, input: { farmId?: unknown } = {}):
   if (!chemicals.length) return [];
   const ids = chemicals.map((record) => record.recordId);
   const moves = await tx.query<{ chemical_record_id: string; movement_type: "received" | "counted" | "disposed"; moved_on: string; quantity: string; unit: string; batch: string | null; note: string | null; id: string }>(
-    "select chemical_record_id::text, movement_type, moved_on::text, quantity::text, unit, batch, note, id::text from farm_product_stock where chemical_record_id = any($1::uuid[]) order by moved_on, id",
+    "select chemical_record_id::text, movement_type, moved_on::text, quantity::text, unit, batch, note, id::text from farm_product_stock s where s.chemical_record_id = any($1::uuid[]) order by s.moved_on, s.id",
     [ids],
   );
   const treatments = await tx.query<{ chemical_record_id: string; treated_on: string; quantity: string; quantity_unit: string; product: string; head: number; mob: string | null }>(
