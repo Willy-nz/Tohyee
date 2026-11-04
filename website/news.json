@@ -3,6 +3,12 @@
   "items": [
     {
       "date": "2026-11-04",
+      "title": "Tohyee 0.27.0: oldest month first and Shopify reconnect",
+      "body": "Compared months run oldest to newest, Shopify stores can be reconnected and payouts clear properly, bank suggestions skip voided journals, and the AI connection is cleaner. Plus a new website.",
+      "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.27.0"
+    },
+    {
+      "date": "2026-11-04",
       "title": "Tohyee 0.26.0: reports like Xero",
       "body": "Reports now look like financial statements, compare with earlier periods, filter by tracking, and have an Edit layout button with drag, groups and formulas. Plus Shopify payouts and Afterpay/PayPal posting properly.",
       "link": "https://github.com/Willy-nz/Tohyee/releases/tag/v0.26.0"
