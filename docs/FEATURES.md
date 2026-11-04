@@ -467,6 +467,10 @@ that something happened.
   emergency details; each person signs their own, and signing adds their
   induction sign-off to the farm's safety records as "signed
   electronically").
+- **Signing any PDF** (decision 1410): Sales › Signing lists every request,
+  and "Send a document" sends an uploaded PDF to up to 20 people, in order
+  or any order, with optional reminders (every day, 3 days or week; each
+  reminder is a new link). "Send a new version" replaces a document.
 - **Sales orders, stage 1** (Sales; SO1-SO12, not yet approved by Jess),
   following NetSuite's sales orders: drafts to a customer with the same
   lines as an invoice (items, units, price levels, tracking, custom fields,

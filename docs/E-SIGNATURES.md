@@ -28,6 +28,11 @@ lawyer.
 - **Checking later.** "Check a copy" re-hashes a file and says whether it's
   unchanged since signing.
 
+- **Where it's used.** Quotes (the customer accepts online), the year's
+  financial statements, employment agreements, farm safety inductions (a
+  signed induction becomes the farm's sign-off), and any uploaded PDF
+  (Sales › Signing), with reminders that send a new link each time.
+
 What it doesn't do: witnessed signing, digital certificates (PKI or
 "advanced" signatures), identity checks beyond email (no ID documents), or
 signing on paper.

@@ -388,8 +388,17 @@ export function kickEmailOutbox(organisationId: string): void {
 
 /** Finds organisations with emails waiting (after a restart, or retries). */
 async function scanAll(): Promise<void> {
+  // Signing reminders (decision 1410) are queued here, then sent like any signing email.
+  const { configuredOrigin } = await import("@/lib/auth/origin");
+  const { sendDueReminders } = await import("@/lib/signing/service");
+  const origin = await configuredOrigin().catch(() => null);
   for (const organisation of await listOrganisationsForJobs()) {
     if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
+    try {
+      await withOrganisationTransaction(organisation, JOB_ACTOR, (tx) => sendDueReminders(tx, origin));
+    } catch (error) {
+      console.warn(`[tohyee] Signing reminders for ${organisation.id} failed: ${error instanceof Error ? error.message : error}`);
+    }
     try {
       const waiting = await withOrganisationTransaction(organisation, JOB_ACTOR, (tx) =>
         tx.query(

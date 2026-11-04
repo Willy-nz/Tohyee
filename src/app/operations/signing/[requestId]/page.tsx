@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -23,6 +24,9 @@ export default function SigningRequestPage() {
     <Page>
       <PageHeader title="Signing request" />
       <RequireOrganisation>{(organisationId) => <Detail organisationId={organisationId} requestId={requestId} />}</RequireOrganisation>
+      <p>
+        <Link href="/operations/signing">All signing requests</Link>
+      </p>
     </Page>
   );
 }

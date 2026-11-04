@@ -326,6 +326,12 @@ export function SigningRequestDetail({ organisationId, initial, canSend }: { org
           ))}
         </ol>
       </Card>
+      {canSend && request.sourceKind === "upload" && request.state !== "completed" ? (
+        <p>
+          <Link href={`/operations/signing/new?replaces=${request.id}`}>Send a new version</Link>{" "}
+          <InfoTip label="About new versions">A sent document can&apos;t be changed. A new version is a new request with the same people; this one is voided if it&apos;s still waiting.</InfoTip>
+        </p>
+      ) : null}
       {open && canSend ? (
         <Card title="Void this request">
           {voiding ? (

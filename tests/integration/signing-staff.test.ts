@@ -55,6 +55,8 @@ describeWithDatabase("signing staff paperwork", () => {
 
   beforeAll(async () => {
     process.env.TOHYEE_SECRET_KEY = "test-secret-key-that-is-long-enough-123456";
+    // Emails are checked as queued; nothing here sends them.
+    process.env.TOHYEE_EMAIL_OUTBOX = "off";
     server = await startTestServer();
     owner = await createTestUser("staff-owner@example.com", { serverAdmin: true, displayName: "Jess" });
     bookkeeper = await createTestUser("staff-bookkeeper@example.com", { displayName: "Bex" });
