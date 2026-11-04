@@ -156,6 +156,13 @@ function requireEditor(context: ToolContext): void {
   if (!roleAtLeast(context.role, "bookkeeper")) throw new ForbiddenError("Making and changing reports needs the bookkeeper role or higher.");
 }
 
+/** The labels for the coded values that are in the answer (decision 1499), so it stays small. */
+function usedLabels(labels: Record<string, string> | undefined, values: Array<string | null | undefined>): { valueLabels?: Record<string, string> } {
+  if (!labels) return {};
+  const used = Object.fromEntries(values.flatMap((value) => (typeof value === "string" && Object.prototype.hasOwnProperty.call(labels, value) ? [[value, labels[value]]] : [])));
+  return Object.keys(used).length ? { valueLabels: used } : {};
+}
+
 /** A tile's or question's answer, cut to `rows` rows so one answer stays small. */
 function figures(result: QueryResult, rows: number) {
   if (result.pivot) {
@@ -163,6 +170,7 @@ function figures(result: QueryResult, rows: number) {
     return {
       pivot: {
         rowFields: pivot.rowFields.map((field) => field.label),
+        ...(pivot.rowFields.some((field) => field.valueLabels) ? { rowFieldLabels: pivot.rowFields.map((field, index) => usedLabels(field.valueLabels, pivot.rows.map((row) => row.dimensions[index])).valueLabels ?? null) } : {}),
         columns: pivot.columns.map((column) => ({ key: column.key, label: column.label, measure: column.measure.label, total: column.total })),
         rows: pivot.rows.slice(0, rows).map((row) => ({ kind: row.kind, dimensions: row.dimensions, cells: row.cells })),
         rowCount: pivot.rows.length,
@@ -170,9 +178,11 @@ function figures(result: QueryResult, rows: number) {
       ...(result.notes?.length ? { notes: result.notes } : {}),
     };
   }
+  const shown = result.rows.slice(0, rows);
   return {
-    columns: result.columns.map((column) => ({ key: column.key, label: column.label, format: column.format, role: column.role })),
-    rows: result.rows.slice(0, rows),
+    // A coded group's values in words (decision 1499): the rows keep the code, which is what filters use.
+    columns: result.columns.map((column) => ({ key: column.key, label: column.label, format: column.format, role: column.role, ...usedLabels(column.valueLabels, shown.map((row) => row[column.key])) })),
+    rows: shown,
     rowCount: result.rows.length,
     truncated: result.truncated || result.rows.length > rows,
     ...(result.totals ? { totals: result.totals } : {}),
