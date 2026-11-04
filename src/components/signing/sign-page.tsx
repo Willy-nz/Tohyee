@@ -223,14 +223,12 @@ export function SignPage({ organisationId, token }: { organisationId: string; to
   return (
     <main className={styles.signPage}>
       <div className={styles.signHeader}>
-        <h1>{view.title}</h1>
-        <p className={styles.from}>
-          From {view.organisationName} for {view.signerName}
-          {view.roleLabel ? `, ${view.roleLabel}` : ""}{" "}
+        <h1>
+          {view.title}{" "}
           <InfoTip label="About signing here">
-            {view.sentBy} sent this from Tohyee. The link works until {formatDateTime(view.expiresAt)}, once. {LEGAL_NOTE}
+            {view.sentBy} at {view.organisationName} sent this from Tohyee. The link works until {formatDateTime(view.expiresAt)}, once. {LEGAL_NOTE}
           </InfoTip>
-        </p>
+        </h1>
       </div>
       {view.message ? <Notice tone="info">{view.message}</Notice> : null}
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
@@ -249,7 +247,10 @@ export function SignPage({ organisationId, token }: { organisationId: string; to
               <Notice tone="warning">{view.organisationName} can&apos;t send email from Tohyee at the moment, so we can&apos;t send you a code. Ask them to check their email setup.</Notice>
             ) : (
               <>
-                <p style={{ margin: 0 }}>We&apos;ll email a 6-digit code to {view.maskedEmail}.</p>
+                <p style={{ margin: 0 }}>
+                  For {view.signerName}
+                  {view.roleLabel ? `, ${view.roleLabel}` : ""}. We&apos;ll email a 6-digit code to {view.maskedEmail}.
+                </p>
                 <div className={styles.actions}>
                   <Button variant={codeSent || view.codeSentAt ? "secondary" : "primary"} onClick={() => void sendCode()} disabled={busy}>
                     {codeSent || view.codeSentAt ? "Send a new code" : "Email me a code"}

@@ -15,77 +15,89 @@ export type SignatureValue = { method: SignatureMethod; typedName: string; signa
 function SignaturePad({ onChange, label }: { onChange: (png: string | null) => void; label: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
-  const drawn = useRef(false);
-  const last = useRef<{ x: number; y: number } | null>(null);
+  // Strokes as fractions of the box, so a resize (a phone's address bar hiding, or turning it round) redraws them rather than losing them.
+  const strokes = useRef<Array<Array<{ x: number; y: number }>>>([]);
+  const size = useRef({ width: 0, height: 0 });
 
-  const fit = useCallback(() => {
+  const paint = useCallback(() => {
     const element = canvas.current;
-    if (!element) return;
-    const ratio = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-    const box = element.getBoundingClientRect();
-    element.width = Math.round(box.width * ratio);
-    element.height = Math.round(box.height * ratio);
-    const context = element.getContext("2d");
-    if (!context) return;
-    context.scale(ratio, ratio);
+    const context = element?.getContext("2d");
+    if (!element || !context) return;
+    const { width, height } = size.current;
+    context.clearRect(0, 0, width, height);
     context.lineCap = "round";
     context.lineJoin = "round";
     context.lineWidth = 2.4;
     context.strokeStyle = getComputedStyle(element).getPropertyValue("--signature-ink").trim() || "#14213d";
-    drawn.current = false;
+    for (const stroke of strokes.current) {
+      context.beginPath();
+      stroke.forEach((point, index) => (index === 0 ? context.moveTo(point.x * width, point.y * height) : context.lineTo(point.x * width, point.y * height)));
+      if (stroke.length === 1) context.lineTo(stroke[0].x * width + 0.5, stroke[0].y * height);
+      context.stroke();
+    }
+  }, []);
+
+  const fit = useCallback(() => {
+    const element = canvas.current;
+    if (!element) return;
+    const box = element.getBoundingClientRect();
+    if (Math.round(box.width) === size.current.width && Math.round(box.height) === size.current.height) return;
+    const ratio = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+    size.current = { width: Math.round(box.width), height: Math.round(box.height) };
+    element.width = Math.round(box.width * ratio);
+    element.height = Math.round(box.height * ratio);
+    element.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
+    paint();
+  }, [paint]);
+
+  const clear = () => {
+    strokes.current = [];
+    paint();
     onChange(null);
-  }, [onChange]);
+  };
 
   useEffect(() => {
     fit();
-    // A resize (a phone turned round) clears the box: the drawing would be squashed otherwise.
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, [fit]);
 
   const point = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
-    return { x: event.clientX - box.left, y: event.clientY - box.top };
+    return { x: (event.clientX - box.left) / box.width, y: (event.clientY - box.top) / box.height };
   };
 
   const down = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     drawing.current = true;
-    last.current = point(event);
+    strokes.current.push([point(event)]);
+    paint();
   };
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawing.current || !last.current) return;
-    const context = event.currentTarget.getContext("2d");
-    if (!context) return;
-    const next = point(event);
-    context.beginPath();
-    context.moveTo(last.current.x, last.current.y);
-    context.lineTo(next.x, next.y);
-    context.stroke();
-    last.current = next;
-    drawn.current = true;
+    if (!drawing.current) return;
+    strokes.current.at(-1)?.push(point(event));
+    paint();
   };
 
   const up = () => {
     if (!drawing.current) return;
     drawing.current = false;
-    last.current = null;
-    if (drawn.current && canvas.current) onChange(canvas.current.toDataURL("image/png"));
+    if (strokes.current.length && canvas.current) onChange(canvas.current.toDataURL("image/png"));
   };
 
   return (
     <div className={styles.stack} style={{ gap: 8 }}>
       <div className={styles.pad}>
-        <canvas ref={canvas} role="img" aria-label={label} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up} />
+        <canvas ref={canvas} role="img" aria-label={label} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
         <span className={styles.padLine} aria-hidden="true" />
         <span className={styles.padHint} aria-hidden="true">
           Sign above the line
         </span>
       </div>
       <div className={styles.actions}>
-        <Button variant="secondary" size="small" onClick={fit}>
+        <Button variant="secondary" size="small" onClick={clear}>
           Clear
         </Button>
       </div>

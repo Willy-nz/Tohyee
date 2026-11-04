@@ -225,7 +225,7 @@ export function SendForSigning({
           {signers.map((signer, index) => (
             <li key={index}>
               <div className={styles.signerRow}>
-                <Field label={`Signer ${index + 1}: name`}>
+                <Field label={maxSigners === 1 ? "Name" : `Signer ${index + 1}: name`}>
                   <input value={signer.name} onChange={(event) => setSigner(index, { name: event.target.value })} maxLength={150} autoComplete="off" />
                 </Field>
                 <Field label="Email">
