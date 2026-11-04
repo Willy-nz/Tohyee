@@ -46,6 +46,7 @@ import { modelTables, questionTables, tablesWithModel, type AnalyticsModel } fro
 import { type DatePreset, isDatePreset, presetRange } from "@/lib/analytics/date-ranges";
 import { todayIsoDate } from "@/lib/dates";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { dashboardVersionDefinition, describeChange, listDashboardVersions, recordDashboardVersion, type DashboardVersion } from "@/lib/analytics/dashboard-history";
 
 /** Analytics dashboards (step 3): tiles of questions about loaded tables. */
 
@@ -508,7 +509,22 @@ export async function createDashboard(tx: OrgTx, input: Record<string, unknown>)
   );
   const id = result.rows[0].id;
   await writeAuditEvent(tx, { eventType: "analytics.dashboard_created", entityType: "analytics_dashboard", entityId: id, details: { name } });
+  // The first version in the report's edit history (decision 1414).
+  await recordDashboardVersion(tx, id, describeChange(null, { name, description: null, settings, tiles }));
   return getDashboard(tx, id);
+}
+
+/**
+ * Checks a report's settings and tiles as a save would, saving nothing
+ * (#591): the AI's tools use it to find a tile's mistakes before running it.
+ */
+export async function checkDashboardDraft(tx: OrgTx, input: { settings: unknown; tiles: unknown }): Promise<{ settings: DashboardSettings; tiles: Tile[] }> {
+  await requireAnalytics(tx);
+  const tables = await tablesWithModel(tx);
+  const settings = parseSettings(input.settings, tables);
+  const tiles = parseTiles(input.tiles, tables, settings.pages, settings.bookmarks);
+  checkParameters(settings, tiles);
+  return { settings, tiles };
 }
 
 /**
@@ -539,7 +555,7 @@ function parseExpectedVersion(input: unknown): number | null {
  * check is in the update itself, so two saves at the same moment can't both
  * win. Without it the save replaces what's there, as before.
  */
-export async function updateDashboard(tx: OrgTx, id: string, input: Record<string, unknown>): Promise<Dashboard> {
+export async function updateDashboard(tx: OrgTx, id: string, input: Record<string, unknown>, options: { change?: string } = {}): Promise<Dashboard> {
   await requireAnalytics(tx);
   const expectedVersion = parseExpectedVersion(input.expectedVersion);
   const current = await getDashboard(tx, id);
@@ -567,7 +583,38 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
     entityId: current.id,
     details: { name, tiles: tiles.length, version: current.version + 1 },
   });
+  // Every save is in the report's edit history, marked when it came through an AI (decision 1414).
+  const savedSettings = input.settings === undefined ? current.settings : settings;
+  await recordDashboardVersion(tx, current.id, options.change ?? describeChange(current, { name, description, settings: savedSettings, tiles }));
   return getDashboard(tx, current.id);
+}
+
+/** A report's edit history, newest first, for anyone who can open the report (decision 1414). */
+export async function dashboardHistory(tx: OrgTx, id: string, reader: DashboardReader = EVERYONE): Promise<{ version: number; versions: DashboardVersion[] }> {
+  await requireAnalytics(tx);
+  const dashboard = await getDashboard(tx, id, reader);
+  return { version: dashboard.version, versions: await listDashboardVersions(tx, dashboard.id, dashboard.version) };
+}
+
+/**
+ * Puts an earlier version of a report back (decision 1415): a new save with
+ * that version's name, description, settings and tiles, checked as any save
+ * is, so it's in the history too and can itself be undone.
+ */
+export async function restoreDashboardVersion(tx: OrgTx, id: string, input: Record<string, unknown>): Promise<Dashboard> {
+  await requireAnalytics(tx);
+  const version = Number(input.version);
+  if (!Number.isInteger(version) || version < 1) throw new ValidationError("Choose a version to put back.");
+  const current = await getDashboard(tx, id);
+  if (version === current.version) throw new ValidationError("That's the version the report has now.");
+  const old = await dashboardVersionDefinition(tx, current.id, version);
+  if (!old) throw new NotFoundError("That version isn't kept any more.");
+  return updateDashboard(
+    tx,
+    current.id,
+    { expectedVersion: input.expectedVersion, name: old.name, description: old.description, settings: old.settings, tiles: old.tiles },
+    { change: `Put back version ${version}` },
+  );
 }
 
 /** A dashboard tile's saved question, for reading the dashboard (what report viewers can run). */

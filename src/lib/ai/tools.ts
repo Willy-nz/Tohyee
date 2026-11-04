@@ -15,7 +15,8 @@ import { getInboxItem, getInboxItemContent, type InboxItem, listInboxPage } from
 import { getBill, listBills, type BillSummary } from "@/lib/bills/service";
 import { listContacts } from "@/lib/contacts/service";
 import { todayIsoDate } from "@/lib/dates";
-import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
+import type { Actor, OrgRunner, OrgTx } from "@/lib/db/org-transaction";
+import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { MONTH_NAMES } from "@/lib/financial-year";
 import { formatGstNumber } from "@/lib/format";
@@ -49,6 +50,13 @@ export type ToolContext = {
   grantedAccessLevel: AiAccessLevel;
   /** Over MCP: the tool-set version now, and whether the client's list is out of date (decision 1343). */
   toolList?: { version: string; stale: boolean; toolNames: readonly string[]; toolGroups?: readonly ToolGroupStatus[] };
+  /**
+   * Over MCP: the organisation and who's acting, for a tool that runs work
+   * the way a screen does outside one transaction (refreshing an Analytics
+   * source, #591, which opens its own transactions and calls out).
+   */
+  organisation?: OrganisationRecord;
+  actor?: Actor;
 };
 
 /**

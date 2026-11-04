@@ -18813,6 +18813,56 @@ books. The figures are made up.
   nearest reading of each method; on a tie, the one on or before the photo,
   then the latest recorded.
 
+## The AI's Analytics reports (AIA1-AIA9; #591, by Claude on 5 Nov 2026 when Jess said "Yes buddy you can do it. You are ai and you know what you need."; not yet reviewed)
+
+Tested in `tests/integration/ai-analytics-dashboards.test.ts` and
+`tests/unit/analytics-dashboard-history.test.ts`. Nothing here posts to the
+books. The sales are made up: Otago 2 at 10.00 on 5 March and 1 at 0.20 on
+1 April, Canterbury 1 at 0.10 on 9 March.
+
+- **AIA1 Seeing the tables.** A Look only key lists the Analytics tables
+  the person can use, each with where it comes from ("File: Sales", Tohyee
+  books, Shopify, Google Analytics and so on), its fields with their types,
+  and its saved values. The first page has a short guide: what each chart
+  needs, the filter tests for each kind of field, the date choices.
+- **AIA2 Asking a question.** Sales by region (quantity times price) is
+  **Otago 20.20, Canterbury 0.10**, exact. With the dates 1 to 31 March on
+  the order date: **Otago 20.00, Canterbury 0.10**. Adding up a text field
+  is refused: "region isn't a number". Nothing is saved.
+- **AIA3 Making a report.** A Make drafts key makes "Sales" with Sales by
+  region (bars) and Orders (a key figure: **3**). It's under Analytics ›
+  Reports for everyone who can see reports, saved as the key's owner.
+- **AIA4 A broken tile is refused.** A tile grouped by a field that isn't
+  there ("colour") is refused: "Sales by month: Group by: there's no
+  column called colour. Nothing was saved." So is a pie with two values. No
+  report is made.
+- **AIA5 Changing a report.** The AI adds Sales by month first, renames
+  Sales by region and makes it full width. Only the tiles it adds or changes
+  are run. It names the version it read; if someone has saved since, it's
+  refused and told to read the report again.
+- **AIA6 Edit history.** Each save is kept: version 1 "Made the report with
+  2 tiles" and version 2 "Added "Sales by month"; Changed "Sales by region
+  (all time)"", both "via AI key "owner-drafts"" and marked as made through
+  the AI.
+- **AIA7 Putting a version back.** A person opens History and puts version
+  1 back. It's saved as version 3, "Put back version 1", by them (not
+  through the AI): the report has Sales by region and Orders again. A
+  person's own save is kept the same way ("Renamed to "Sales report"").
+- **AIA8 Who sees what.** A Look only key can't make or change reports. A
+  member who works on one farm can't ask the farm tables a question or put
+  them on a report. Another organisation's reports and sales (Waikato,
+  495.00) never show. With Analytics off, the tools aren't offered and say
+  why. The AI never deletes a report, takes a tile off, or changes sharing,
+  sources, folders, slicers, pages or images.
+- **AIA9 Refreshing the data.** A new sale (Canterbury 3 at 1.00) is added
+  to the file. The owner's AI refreshes the report's sources: Sales,
+  **4 rows**, with when it started and finished, and Canterbury is now
+  **3.10**. The report's freshness shows the same finish time. A table
+  nothing loads is skipped with the reason. A bookkeeper's AI can't refresh
+  (owners and admins only, as in Tohyee). A source already loading is
+  refused, "That source is already loading.", and nothing starts. The
+  source's settings are unchanged.
+
 ## Income tax (#292) stage 1: taxable income, tax, provisional tax and terminal tax (ITX1-ITX10; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
 
 Tax is law, so these examples are **not** "as Xero does": they were written
