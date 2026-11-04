@@ -70,6 +70,7 @@ export function SigningRequestList({ organisationId, requests }: { organisationI
 
 function sourceHref(request: SigningRequestView): string | null {
   if (request.sourceKind === "quote" && request.sourceId) return `/operations/quotes/${request.sourceId}`;
+  if (request.sourceKind === "year_end") return "/operations/reports/financial-statements";
   return null;
 }
 

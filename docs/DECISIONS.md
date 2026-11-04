@@ -12984,3 +12984,18 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       Every signing screen and the signer's page has a short (i) note that
       it's general information, not legal advice, and that Tohyee doesn't do
       witnessed signing.
+
+### E-signatures: year-end accounts (5 Nov 2026; decision 1407)
+
+1407. **The year's statements are signed as they download.** Reports ›
+      Financial statements has a Signing card for the chosen year: the
+      statements PDF (or performance report, by the organisation's format)
+      is made at the moment it's sent and goes to the directors or officers
+      (members can be picked; each can have a "Signing as" such as
+      Director), in order or any order. The signed copy is kept with that
+      year (the request's source is the year-end date) and listed there. One
+      open request per year; "Send a new version" replaces it (the old one
+      is voided), for when figures or notes change. The send step warns when
+      the notes are still Tohyee's drafts. Who must sign, and whether
+      anything must be witnessed, depends on the entity: the (i) note says
+      to check, and Tohyee doesn't do witnessed signing.

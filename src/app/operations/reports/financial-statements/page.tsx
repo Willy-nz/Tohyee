@@ -11,6 +11,7 @@ import { todayInBrowser } from "@/lib/format";
 import { CategoriesCard, ReportFormatCard, ServicePerformanceCard } from "@/components/performance-report";
 import type { StatementNote, StatementNotes } from "@/lib/reports/financial-statements";
 import type { ReportFormat } from "@/lib/reports/performance-categories";
+import { YearEndSigning } from "@/components/signing/year-end-signing";
 
 /** The end of the last financial year that has finished, for a year ending in `endMonth`. */
 function lastYearEnd(endMonth: number, today: string): string {
@@ -147,6 +148,9 @@ function YearEndReports({ organisationId }: { organisationId: string }) {
     <div style={{ display: "grid", gap: 16 }}>
       <ReportFormatCard organisationId={organisationId} onChanged={setFormat} />
       <Download organisationId={organisationId} format={current} chosen={chosen} setYearEnd={setYearEnd} />
+      {/^\d{4}-\d{2}-\d{2}$/.test(chosen) ? (
+        <YearEndSigning key={chosen} organisationId={organisationId} yearEnd={chosen} downloadHref={`/api/reports/financial-statements?organisationId=${encodeURIComponent(organisationId)}&yearEnd=${chosen}`} />
+      ) : null}
       {current !== "special_purpose" ? (
         <Section title="Statement of service performance">
           <ServicePerformanceCard organisationId={organisationId} yearEnd={chosen} />
