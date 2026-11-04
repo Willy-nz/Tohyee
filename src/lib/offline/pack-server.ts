@@ -13,6 +13,8 @@ import { GET as calendarGet } from "@/app/api/farming/calendar/route";
 import { GET as grazingsGet } from "@/app/api/farming/farms/[farmId]/grazings/route";
 import { GET as mobsGet } from "@/app/api/farming/farms/[farmId]/mobs/route";
 import { GET as stockingGet } from "@/app/api/farming/farms/[farmId]/stocking/route";
+import { GET as timelineGet } from "@/app/api/farming/farms/[farmId]/timeline/route";
+import { GET as farmTermsGet } from "@/app/api/farming/farm-terms/route";
 import { GET as rotationGet } from "@/app/api/farming/farms/[farmId]/rotation/route";
 import { GET as breedingGet } from "@/app/api/farming/mobs/[mobId]/breeding/route";
 import { GET as treatmentsGet } from "@/app/api/farming/farms/[farmId]/treatments/route";
@@ -153,6 +155,7 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(settingsGet, "/api/farming/settings", {}, {});
       await r.read(lastFarmGet, "/api/farming/last-farm", {}, {});
       await r.read(launchersGet, "/api/farming/launchers", {}, {});
+      await r.read(farmTermsGet, "/api/farming/farm-terms", {}, {});
       break;
     case "notebook":
       await r.read(notebookGet, "/api/farm-notebook", {}, {});
@@ -175,6 +178,8 @@ export async function buildSection(request: Request, input: { organisationId: st
         await r.read(breedingGet, `/api/farming/mobs/${mobId}/breeding`, { mobId }, {});
       }
       await r.read(rotationGet, `/api/farming/farms/${farm}/rotation`, f, {});
+      // The farm timeline as it opens (decision 1446).
+      await r.read(timelineGet, `/api/farming/farms/${farm}/timeline`, f, { kinds: "mob,grazing,treatment,breeding,spray" });
       await r.read(stockingGet, `/api/farming/farms/${farm}/stocking`, f, {});
       // Treatments (withholding is on each mob) and product stock (decision 1437).
       await r.read(treatmentsGet, `/api/farming/farms/${farm}/treatments`, f, {});

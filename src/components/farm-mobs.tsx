@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BigNumber, Choices, DayChoice, Step } from "@/components/farm-log";
 import { FarmRowList } from "@/components/farm-rows";
 import { BreedingFlow, breedingTypesFor, MobBreeding, PlanRoundFlow, RotationCard, useRotation } from "@/components/farm-planning";
+import { FarmTermsCard, useFarmTerms } from "@/components/farm-timeline";
 import { ProductStockCard, TreatFlow, TreatmentsCard } from "@/components/farm-treatments";
+import { classTerm, type FarmTerms, term } from "@/lib/farming/farm-terms";
 import { BREEDING_LABELS, type BreedingType } from "@/lib/farming/planning-rules";
 import type { RotationPlan } from "@/lib/farming/planning";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
@@ -44,11 +47,11 @@ function useMobs(organisationId: string, farmId: string) {
   return useApiData<{ mobs: Mob[] }>(`/api/farming/farms/${farmId}/mobs`, { organisationId });
 }
 
-export function mobLine(mob: Mob, today: string, plan: RotationPlan | null = null): string[] {
+export function mobLine(mob: Mob, today: string, plan: RotationPlan | null = null, terms: FarmTerms = {}): string[] {
   const next = plan?.nextByMob[mob.id];
   return [
     `${mob.head.toLocaleString("en-NZ")} head`,
-    mob.className,
+    term(terms, `class:${mob.kind}.${mob.classCode}`, mob.className),
     mob.paddock ? `${paddockLabel(mob.paddock.name)} since ${shortDate(mob.paddock.inOn, today)}` : "Not in a paddock",
     mob.lastWeight ? `${mob.lastWeight.averageKg} kg ${shortDate(mob.lastWeight.date, today)}` : "",
     withholdingText(mob.withholding, today, (iso) => shortDate(iso, today)) ?? "",
@@ -73,6 +76,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   const mob = list.find((entry) => entry.id === selected) ?? null;
   const [version, setVersion] = useState(0);
   const rotation = useRotation(organisationId, farm.id, version);
+  const terms = useFarmTerms(organisationId);
   const reload = () => {
     mobs.reload();
     setVersion((value) => value + 1);
@@ -122,7 +126,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
       <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
         {done ? <Notice tone="success">{done}</Notice> : null}
         <Card
-          title="Mobs"
+          title={term(terms, "mobs")}
           actions={
             canRecord ? (
               <Button
@@ -131,7 +135,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
                   setFlow({ kind: "add" });
                 }}
               >
-                Add a mob
+                Add a {term(terms, "mob").toLowerCase()}
               </Button>
             ) : null
           }
@@ -150,7 +154,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
                     {entry.name}
                   </span>
                 ),
-                parts: mobLine(entry, today, rotation.data?.plan ?? null),
+                parts: mobLine(entry, today, rotation.data?.plan ?? null, terms),
                 onOpen: () => {
                   setSelected(entry.id);
                   requestAnimationFrame(() => document.getElementById("mob-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -167,6 +171,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
               mob={mob}
               canRecord={canRecord}
               canBooks={can("bookkeeper")}
+              terms={terms}
               onAction={(action) => {
                 setDone(null);
                 if (action === "treat") setFlow({ kind: "treat", mob });
@@ -185,12 +190,13 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
         <ProductStockCard organisationId={organisationId} farmId={farm.id} version={version} />
         {can("bookkeeper") ? <TypedMobs organisationId={organisationId} farmId={farm.id} onMade={reload} /> : null}
         {can("bookkeeper") ? <ImportMobs organisationId={organisationId} farmId={farm.id} onImported={reload} /> : null}
+        <FarmTermsCard organisationId={organisationId} />
       </div>
     </div>
   );
 }
 
-function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }: { organisationId: string; mob: Mob; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction | "treat" | `breeding:${BreedingType}`) => void; onClose: () => void }) {
+function MobCard({ organisationId, mob, canRecord, canBooks, terms, onAction, onClose }: { organisationId: string; mob: Mob; canRecord: boolean; canBooks: boolean; terms: FarmTerms; onAction: (action: MobAction | "treat" | `breeding:${BreedingType}`) => void; onClose: () => void }) {
   const today = todayInBrowser();
   const detail = useApiData<{ mob: Mob; events: MobEvent[]; weights: MobWeight[] }>(`/api/farming/mobs/${mob.id}`, { organisationId });
   const actions = MOB_ACTIONS.filter((action) => (BOOKKEEPER_ACTIONS.includes(action) ? canBooks : canRecord)).filter((action) => action !== "births" || isBirthClass(mob.kind, mob.classCode));
@@ -206,7 +212,7 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
         <dd>{mob.head.toLocaleString("en-NZ")}</dd>
         <dt>Class</dt>
         <dd>
-          {mob.kindName}: {mob.className}{" "}
+          {term(terms, `kind:${mob.kind}`, mob.kindName)}: {classTerm(terms, mob.kind, mob.classCode, mob.className)}{" "}
           <InfoTip label="Class">The IRD class the books count this mob in. Selling, buying, deaths, births and class changes here change the livestock head count too, when Livestock is on.</InfoTip>
         </dd>
         <dt>Paddock</dt>
@@ -227,7 +233,7 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
         <div className={styles.bigButtons} role="group" aria-label={`Actions for ${mob.name}`}>
           {main.map((action) => (
             <button key={action} type="button" className={styles.bigButton} onClick={() => onAction(action)}>
-              {action === "treat" ? "Treat" : MOB_ACTION_LABELS[action]}
+              {term(terms, `action:${action}`, action === "treat" ? "Treat" : MOB_ACTION_LABELS[action])}
             </button>
           ))}
         </div>
@@ -238,7 +244,7 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
             label={`More actions for ${mob.name}`}
             text="More actions"
             items={[
-              ...others.map((action) => ({ label: MOB_ACTION_LABELS[action], onSelect: () => onAction(action) })),
+              ...others.map((action) => ({ label: term(terms, `action:${action}`, MOB_ACTION_LABELS[action]), onSelect: () => onAction(action) })),
               ...(canRecord ? breedingTypesFor(mob).map((type) => ({ label: `Record ${BREEDING_LABELS[type].toLowerCase()}`, onSelect: () => onAction(`breeding:${type}`) })) : []),
             ]}
           />
@@ -246,6 +252,9 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
       ) : null}
       <MobBreeding organisationId={organisationId} mob={mob} version={`${mob.head}:${mob.classCode}`} />
       <h3>History</h3>
+      <p>
+        <Link href={`/operations/farm/timeline?farm=${mob.farmId}&mob=${mob.id}`}>Timeline for {mob.name}</Link>
+      </p>
       {detail.error ? <Notice tone="error">{detail.error}</Notice> : null}
       {events.length ? (
         <FarmRowList

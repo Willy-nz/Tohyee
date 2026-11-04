@@ -13266,3 +13266,42 @@ tells anyone where to graze.
       paddock; the map's paddock list and the paddock card show the round
       text and the next planned mob and date. The offline pack keeps the
       plan and each mob's breeding records.
+
+### Farm timeline, grazing history import, farm words and AI tools (5 Nov 2026; decisions 1445-1450)
+
+Built by Claude from the same request (examples TL1-TL5, common NZ
+practice, not yet reviewed).
+
+1445. **One timeline from the records already kept.** Farm › More › Farm
+      timeline lists, newest first: every mob event (added, moved, split,
+      merged, sold, died, born, bought, class changes, weights, counts),
+      grazings typed without a mob record (in and out), treatments with
+      their safe dates, mating, AI, scanning and pregnancy tests, and spray
+      jobs with their grazing withholding. It's worked out when asked;
+      nothing is copied into a second table. A sale or other change in the
+      books' livestock head count is marked.
+1446. **Filters.** By mob, by paddock (moves from or to it, typed grazings
+      in it, sprays on it, and treatments given while a mob was in it), by
+      what kind of record and by dates; the latest 500 at a time (2,000 at
+      most through the API). The mob card and paddock card link to it,
+      filtered.
+1447. **Grazing history imports as history.** A CSV or .xlsx with mob,
+      paddock, day in and day out (and head if known). A mob named like a
+      mob record becomes that mob's grazing and a "moved" event on its day
+      in; other names stay typed grazings. Every row needs a day out, and a
+      row that overlaps the mob's own grazings (or, for a typed grazing,
+      the paddock's) is refused, as on the screens. Sales, deaths, births
+      and purchases aren't imported: they change the books' head count, so
+      they're recorded on the mob, once. A file is imported once.
+1448. **Farm words are display only.** Admins can rename "mob", "mobs",
+      "paddock", each mob action, each kind of stock and each IRD class
+      for the farm screens. IRD's classes, the books, the stored records,
+      exports and the AI keep the standard names; a renamed class shows
+      the IRD name beside it on the mob card.
+1449. **The AI can read mobs, treatments and the timeline.** list_mobs
+      (with the stocking rate on request), list_animal_treatments and
+      farm_timeline, read only, in the Farming tool group. No AI tool
+      records a treatment or changes a mob.
+1450. **What stays out.** No NAIT, MINDA or Fonterra links (issue #513),
+      no individual animal records beyond tags typed on a treatment, and
+      no product label lookups: withholding is always as typed.

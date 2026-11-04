@@ -131,6 +131,7 @@ describeWithDatabase("offline farm packs", () => {
       // The farm's mobs (none here), each mob's card, and the stocking rate (decision 1428).
       `/api/farming/farms/${w.home}/mobs`,
       `/api/farming/farms/${w.home}/rotation`,
+      `/api/farming/farms/${w.home}/timeline`,
       `/api/farming/farms/${w.home}/stocking`,
       `/api/farming/farms/${w.home}/treatments`,
       "/api/farming/product-stock",
