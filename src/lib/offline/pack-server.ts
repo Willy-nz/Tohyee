@@ -13,6 +13,8 @@ import { GET as calendarGet } from "@/app/api/farming/calendar/route";
 import { GET as grazingsGet } from "@/app/api/farming/farms/[farmId]/grazings/route";
 import { GET as mobsGet } from "@/app/api/farming/farms/[farmId]/mobs/route";
 import { GET as stockingGet } from "@/app/api/farming/farms/[farmId]/stocking/route";
+import { GET as rotationGet } from "@/app/api/farming/farms/[farmId]/rotation/route";
+import { GET as breedingGet } from "@/app/api/farming/mobs/[mobId]/breeding/route";
 import { GET as treatmentsGet } from "@/app/api/farming/farms/[farmId]/treatments/route";
 import { GET as productStockGet } from "@/app/api/farming/product-stock/route";
 import { GET as mobGet } from "@/app/api/farming/mobs/[mobId]/route";
@@ -168,7 +170,11 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(grazingsGet, `/api/farming/farms/${farm}/grazings`, f, { open: "1" });
       // The farm's mobs and each one's card (decision 1428), so moves and weights can be recorded with no signal.
       const mobs = await r.read(mobsGet, `/api/farming/farms/${farm}/mobs`, f, {});
-      for (const mobId of ids(mobs, "mobs", "id")) await r.read(mobGet, `/api/farming/mobs/${mobId}`, { mobId }, {});
+      for (const mobId of ids(mobs, "mobs", "id")) {
+        await r.read(mobGet, `/api/farming/mobs/${mobId}`, { mobId }, {});
+        await r.read(breedingGet, `/api/farming/mobs/${mobId}/breeding`, { mobId }, {});
+      }
+      await r.read(rotationGet, `/api/farming/farms/${farm}/rotation`, f, {});
       await r.read(stockingGet, `/api/farming/farms/${farm}/stocking`, f, {});
       // Treatments (withholding is on each mob) and product stock (decision 1437).
       await r.read(treatmentsGet, `/api/farming/farms/${farm}/treatments`, f, {});

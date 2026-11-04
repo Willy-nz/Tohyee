@@ -569,6 +569,14 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
       if (!to && !mob.paddock) throw new ValidationError(`${mob.name} isn't in a paddock. Choose where it's going.`);
       await closeOpenGrazing(tx, mob, date);
       const grazingId = to ? await openGrazing(tx, mob, to, date, mob.head) : null;
+      // The move it was planned as is done (decision 1443).
+      if (to && grazingId) {
+        await tx.query(
+          `update grazing_plans set status = 'done', done_grazing_id = $3
+            where id = (select g.id from grazing_plans g where g.mob_id = $1 and g.paddock_id = $2 and g.status = 'planned' order by g.planned_on, g.id limit 1)`,
+          [mob.id, to.id, grazingId],
+        );
+      }
       await addEvent(tx, { ...base, eventType: "moved", headAfter: mob.head, fromPaddockId: mob.paddock?.id ?? null, toPaddockId: to?.id ?? null, grazingId });
       message = to ? `${mob.name} moved to ${to.name}.` : `${mob.name} is out of ${mob.paddock!.name}.`;
       // Warn, don't block (decision 1433): the paddock was sprayed and isn't safe to graze yet.

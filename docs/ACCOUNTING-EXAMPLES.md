@@ -21288,3 +21288,27 @@ in `tests/integration/farm-treatments.test.ts` and
   off litres: listed, not taken off.
 - **TRT8 A count resets stock.** Counted 3 L on 4 Oct, then 500 mL used on
   5 Oct: **2.5 L**, counted 4 Oct.
+
+## Farming: breeding records and rotation planning (BR1-BR6; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Records only: nothing posts or judges. Tested in
+`tests/integration/farm-planning.test.ts` and
+`tests/unit/farm-planning.test.ts`.
+
+- **BR1 Mating.** 520 ewes mated to the rams from 1 Apr 2026, out 15 May:
+  births from about **26 Aug** (147 days). Dairy cows mated from 20 Oct:
+  about 30 Jul 2027 (283 days).
+- **BR2 Scanning.** 500 scanned: 30 empty, 250 singles, 210 twins, 10
+  triplets: 250 + 420 + 30 = 700 foetuses, **140%**; per ewe mated (520),
+  **135%**. Numbers that don't add up to the head scanned are refused.
+- **BR3 Pregnancy test.** 188 in calf of 200 tested: **94.0%**. Cattle
+  aren't scanned for numbers, and sheep aren't pregnancy tested here.
+- **BR4 AI.** 180 inseminated to a bull code, with the technician.
+- **BR5 A planned round.** Round 30 days over A 10 ha, B 5 ha, C 15 ha
+  from 1 Nov: **A from 1 Nov for 10 days, B from 11 Nov for 5, C from 16
+  Nov for 15**. Moving the mob to A on 1 Nov ticks A off, and B is next.
+  Planning again (C then B, 20 days, from 5 Nov) cancels the rest: C 15
+  days from 5 Nov, B 5 from 20 Nov.
+- **BR6 Days since grazed against the round.** Last grazed 18 Oct, 25-day
+  round, on 5 Nov: "18 of 25 days". Last grazed 1 Oct: "35 days since
+  grazed (round 25)".
