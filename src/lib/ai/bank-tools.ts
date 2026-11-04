@@ -285,7 +285,7 @@ async function unmatchLines(run: OrgRunner, args: Record<string, unknown>, conte
         notes: item.notes,
         blocked: item.blocked,
       })),
-      next: "Tell the person what this will do. To go ahead, call unmatch_bank_lines again with the same lineIds, this previewHash and a new idempotencyKey.",
+      next: "Check this matches what the person asked for. To go ahead, call unmatch_bank_lines again with the same lineIds, this previewHash and a new idempotencyKey.",
     };
   }
   return batchAnswer(
@@ -673,7 +673,7 @@ export const BANK_WRITE_TOOLS: readonly AiTool[] = [
     name: "unmatch_bank_lines",
     title: "Unreconcile bank lines",
     level: "full",
-    description: `Unreconciles up to ${MAX_BULK_LINES} statement lines, anyone's, as "Unreconcile selected" does in Tohyee (decision 1277): each goes back to be reconciled, with the rest of its split. Nothing is posted or voided; a transfer's other side stays reconciled unless you choose it too. Lines in a locked period are refused. First call it without previewHash to see what it will do and tell the person; then call it again with the previewHash it gave, and a new idempotencyKey. It's done as a batch: see get_bank_batch and resume_bank_batch.`,
+    description: `Unreconciles up to ${MAX_BULK_LINES} statement lines, anyone's, as "Unreconcile selected" does in Tohyee (decision 1277): each goes back to be reconciled, with the rest of its split. Nothing is posted or voided; a transfer's other side stays reconciled unless you choose it too. Lines in a locked period are refused. First call it without previewHash to see what it will do and check it matches what was asked; then call it again with the previewHash it gave, and a new idempotencyKey. It's done as a batch: see get_bank_batch and resume_bank_batch.`,
     inputSchema: schema(
       {
         lineIds: { type: "array", minItems: 1, maxItems: MAX_BULK_LINES, items: { type: "string" } },
