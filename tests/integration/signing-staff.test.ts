@@ -134,7 +134,7 @@ describeWithDatabase("signing staff paperwork", () => {
     await as(owner)((tx) => saveEmergency(tx, { farmId: farm, address: "1 Made-up Road", assemblyPoint: "Cowshed yard" }));
     const induction = await as(owner)((tx) => addInduction(tx, { farmId: farm, title: "Staff induction", audiences: ["worker"], sections: [{ heading: "Bikes", text: "Helmets on. 20 km/h on the races." }] }));
     const send = (cookie: string, body: Record<string, unknown>) =>
-      inductionSigningRoute.POST(apiRequest("/api/farming/safety/induction-signing", { method: "POST", cookie, body: { organisationId: ORG, idempotencyKey: key("ind"), farmId: farm, inductionId: induction.recordId, inductionVersion: induction.version, ...body } }));
+      inductionSigningRoute.POST(apiRequest("/api/farming/safety/induction-signing", { method: "POST", cookie, body: { organisationId: ORG, idempotencyKey: key("ind"), farmId: farm, inductionId: induction.recordId, inductionVersion: induction.version, ...body } }), undefined);
     // A stale version is refused.
     expect((await send(ownerCookie, { inductionVersion: 99, signers: [{ name: "Wiremu", email: worker.email }] })).status).toBe(400);
     const response = await send(ownerCookie, { signers: [{ name: "Wiremu", email: worker.email }, { name: "Hana Contractor", email: "hana@made-up.test" }] });
