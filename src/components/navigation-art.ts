@@ -6,6 +6,7 @@ const ROUTES: Array<[string, IllustratedIconName]> = [
   ["/operations/farm/effluent", "effluent"], ["/operations/farm/safety", "safety"],
   ["/operations/farm/map", "maps"], ["/operations/farm/tractor", "location"],
   ["/operations/farm/offline", "offline"], ["/operations/farm/security", "camera"], ["/operations/farm/log", "photo"],
+  ["/operations/farm/mobs", "livestock"],
   ["/operations/farming/safety", "safety"], ["/operations/farming/calendar", "calendar"],
   ["/operations/farming/notebook", "documents"], ["/operations/farming/compare", "analytics"],
   ["/operations/farming/benchmarks", "analytics"], ["/operations/farming/import", "maps"],

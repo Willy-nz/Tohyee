@@ -226,7 +226,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
       </Card>
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
       <FarmEffluentToday organisationId={organisationId} farm={farm} />
-      <Card title="Mobs in now">
+      <Card title="Mobs in now" href="/operations/farm/mobs">
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {statuses.data && !inNow.length ? <p>No mobs recorded in a paddock.</p> : null}
         {inNow.length ? (
@@ -395,7 +395,15 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
         <dt>Cover</dt>
         <dd>{status.cover ? `${coverText(status.cover.cover)}, ${daysAgo(status.cover.measuredOn, today)} (${PASTURE_METHOD_LABELS[status.cover.method]})` : "No reading yet"}</dd>
         <dt>Mob</dt>
-        <dd>{status.inNow ? `${mobText(status.inNow.mob, status.inNow.head)}, in since ${shortDate(status.inNow.inOn, today)}` : "None in now"}</dd>
+        <dd>
+          {status.inNow ? `${mobText(status.inNow.mob, status.inNow.head)}, in since ${shortDate(status.inNow.inOn, today)}` : "None in now"}
+          {status.inNow?.mobs.some((entry) => entry.mobId) ? (
+            <>
+              {" "}
+              <Link href="/operations/farm/mobs">Mobs</Link>
+            </>
+          ) : null}
+        </dd>
         <dt>Last grazed</dt>
         <dd>{status.inNow ? "Being grazed now" : status.lastGrazedOn ? `${shortDate(status.lastGrazedOn, today)} (${daysAgo(status.lastGrazedOn, today)})` : "No grazing recorded"}</dd>
         <dt>Hazards</dt>
@@ -445,6 +453,9 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
               Mob in
             </Link>
           )}
+          <Link className={styles.bigButton} href={`/operations/farm/mobs?farm=${farm.id}`}>
+            Move a mob
+          </Link>
         </div>
       ) : null}
       <p>
@@ -465,6 +476,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/effluent", icon: "effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents, council pack", staff: true },
   { href: "/operations/farm/tractor", icon: "location", label: "Tractor mode", note: "Spreading, spraying and mowing from phone GPS", staff: true },
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
+  { href: "/operations/farm/mobs", icon: "livestock", label: "Mobs", note: "Moves, weights, sales and stocking rate", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
   { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
