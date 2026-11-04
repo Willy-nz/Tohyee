@@ -21,6 +21,7 @@ import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { Quote } from "@/lib/quotes/service";
 import type { SalesOrder } from "@/lib/sales-orders/service";
 import { useConfirm } from "@/components/confirm-dialog";
+import { QuoteSigning } from "@/components/signing/quote-signing";
 
 /** Finalise, accept, decline, copy, edit and delete (QT2-QT4, QT6). Each action has its own idempotency key. */
 function QuoteActions({
@@ -50,6 +51,9 @@ function QuoteActions({
   const suggestedRate = useLastRate(organisationId, quote.currencyCode, baseCurrency, invoiceDate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Accepted by the customer's signature, with nothing made from it yet (QT9, QT10).
+  const signedOnly = quote.status === "accepted" && quote.acceptedSigningRequestId !== null && !quote.invoiceId && !quote.salesOrderId;
+  const canMake = quote.status === "finalised" || signedOnly;
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -75,7 +79,7 @@ function QuoteActions({
   }
 
   async function accept() {
-    if (!(await confirm(`Accept ${quote.quoteNumber}? This makes a draft invoice with the quote's lines.`))) return;
+    if (!(await confirm(signedOnly ? `Make the invoice for ${quote.quoteNumber}? This makes a draft invoice with the quote's lines.` : `Accept ${quote.quoteNumber}? This makes a draft invoice with the quote's lines.`))) return;
     void run(async () => {
       const result = await api<{ quote: Quote; invoice: Invoice }>(`/api/quotes/${quote.id}/accept`, {
         method: "POST",
@@ -93,7 +97,7 @@ function QuoteActions({
   }
 
   async function acceptAsSalesOrder() {
-    if (!(await confirm(`Accept ${quote.quoteNumber} as a sales order? This makes a draft sales order with the quote's lines.`))) return;
+    if (!(await confirm(signedOnly ? `Make a sales order for ${quote.quoteNumber}? This makes a draft sales order with the quote's lines.` : `Accept ${quote.quoteNumber} as a sales order? This makes a draft sales order with the quote's lines.`))) return;
     void run(async () => {
       const result = await api<{ quote: Quote; salesOrder: SalesOrder }>(`/api/quotes/${quote.id}/sales-order`, {
         method: "POST",
@@ -140,7 +144,9 @@ function QuoteActions({
           ? "Drafts can be changed. Finalising gives the quote its number and locks it."
           : quote.status === "finalised"
             ? "When the customer answers: accepting makes a draft invoice with these lines (due on the date you give, or by the customer's payment terms), or a draft sales order; declining closes the quote."
-            : "This quote is closed. Copy it to quote again."
+            : signedOnly
+              ? "The customer accepted this quote by signing it. Make the invoice, or a sales order to invoice it in parts."
+              : "This quote is closed. Copy it to quote again."
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -157,7 +163,7 @@ function QuoteActions({
           </Button>
         </div>
       ) : null}
-      {quote.status === "finalised" ? (
+      {canMake ? (
         <>
           <div className={ui.inlineForm}>
             <Field label="Invoice date">
@@ -168,7 +174,7 @@ function QuoteActions({
             </Field>
             <ExchangeRateField currencyCode={quote.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
             <Button onClick={accept} disabled={busy || !invoiceDate}>
-              {busy ? "Working…" : "Accept and make the invoice"}
+              {busy ? "Working…" : signedOnly ? "Make the invoice" : "Accept and make the invoice"}
             </Button>
           </div>
           <div className={ui.inlineForm}>
@@ -176,14 +182,16 @@ function QuoteActions({
               <DateInput value={orderDate} min={quote.quoteDate} onChange={(event) => setOrderDate(event.target.value)} required />
             </Field>
             <Button variant="secondary" onClick={acceptAsSalesOrder} disabled={busy || !orderDate}>
-              {busy ? "Working…" : "Accept as a sales order"}
+              {busy ? "Working…" : signedOnly ? "Make a sales order" : "Accept as a sales order"}
             </Button>
           </div>
-          <div className={ui.actions}>
-            <Button variant="danger" onClick={decline} disabled={busy}>
-              Declined by the customer
-            </Button>
-          </div>
+          {signedOnly ? null : (
+            <div className={ui.actions}>
+              <Button variant="danger" onClick={decline} disabled={busy}>
+                Declined by the customer
+              </Button>
+            </div>
+          )}
         </>
       ) : null}
       <div className={ui.inlineForm}>
@@ -271,10 +279,13 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
         <p className={ui.muted}>
           Saved by {personName(quote, "createdBy") ?? "unknown"} on {formatDateTime(quote.createdAt)}.
           {quote.finalisedAt ? ` Finalised by ${personName(quote, "finalisedBy") ?? "unknown"} on ${formatDateTime(quote.finalisedAt)}.` : ""}
-          {quote.closedAt ? ` ${quote.status === "accepted" ? "Accepted" : "Declined"} by ${personName(quote, "closedBy") ?? "unknown"} on ${formatDateTime(quote.closedAt)}.` : ""}
+          {quote.closedAt
+            ? ` ${quote.status === "accepted" ? "Accepted" : "Declined"} by ${personName(quote, "closedBy") ?? "unknown"}${quote.acceptedSigningRequestId ? " (signed online)" : ""} on ${formatDateTime(quote.closedAt)}.`
+            : ""}
         </p>
       </Card>
       {can("bookkeeper") ? <QuoteActions key={quote.status} organisationId={organisationId} quote={quote} onChanged={onChanged} /> : null}
+      <QuoteSigning organisationId={organisationId} quote={quote} canSend={can("bookkeeper")} onChanged={() => details.reload()} />
       <EmailDocumentPanel
         organisationId={organisationId}
         kind="quote"

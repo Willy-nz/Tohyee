@@ -74,6 +74,8 @@ export type QuoteSummary = {
   /** The sales order made by accepting it as an order (SO9). */
   salesOrderId: string | null;
   salesOrderNumber: string | null;
+  /** The signing request the customer accepted it through (QT9); it then has no invoice or sales order until one is made (QT10). */
+  acceptedSigningRequestId: string | null;
   finalisedAt: string | null;
   finalisedByEmail: string | null;
   closedAt: string | null;
@@ -120,6 +122,7 @@ type QuoteRow = {
   invoice_number: string | null;
   sales_order_id: string | null;
   so_number: string | null;
+  accepted_signing_request_id: string | null;
   finalised_at: string | null;
   finalised_by_email: string | null;
   closed_at: string | null;
@@ -132,7 +135,7 @@ type QuoteRow = {
 const SUMMARY_SQL = `select q.id, q.status, q.quote_number, q.contact_id, c.name as contact_name, q.quote_date, q.expiry_date,
        q.reference, q.terms, q.amounts_mode, q.currency_code, q.subtotal, q.tax_total, q.total, q.custom_fields,
        q.salesperson_id, sp.name as salesperson_name, q.copied_from_quote_id, q.invoice_id, i.invoice_number,
-       q.sales_order_id, so.so_number, q.finalised_at, q.finalised_by_email, q.closed_at, q.closed_by_email, q.created_by_email, q.created_at, q.updated_at
+       q.sales_order_id, so.so_number, q.accepted_signing_request_id::text, q.finalised_at, q.finalised_by_email, q.closed_at, q.closed_by_email, q.created_by_email, q.created_at, q.updated_at
   from quotes q
   join contacts c on c.id = q.contact_id
   left join salespeople sp on sp.id = q.salesperson_id
@@ -169,6 +172,7 @@ function toSummary(row: QuoteRow, today: string): QuoteSummary {
     invoiceNumber: row.invoice_number,
     salesOrderId: row.sales_order_id,
     salesOrderNumber: row.so_number,
+    acceptedSigningRequestId: row.accepted_signing_request_id,
     finalisedAt: row.finalised_at,
     finalisedByEmail: row.finalised_by_email,
     closedAt: row.closed_at,
@@ -315,8 +319,9 @@ export async function listQuotes(
   };
 }
 
-async function findByKey(tx: OrgTx, kind: "create" | "finalise" | "close", source: string, key: string) {
+async function findByKey(tx: OrgTx, kind: "create" | "finalise" | "close" | "invoice", source: string, key: string) {
   const columns = {
+    invoice: ["invoice_command_source", "invoice_idempotency_key", "invoice_request_hash"],
     create: ["command_source", "idempotency_key", "request_hash"],
     finalise: ["finalise_command_source", "finalise_idempotency_key", "finalise_request_hash"],
     close: ["close_command_source", "close_idempotency_key", "close_request_hash"],
@@ -547,7 +552,7 @@ async function closeCommand(
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const hash = requestHash(`quote_${kind}`, { quoteId, ...payload });
   const replay = async () => {
-    const earlier = await findByKey(tx, "close", source, idempotencyKey);
+    const earlier = (await findByKey(tx, "close", source, idempotencyKey)) ?? (kind === "decline" ? null : await findByKey(tx, "invoice", source, idempotencyKey));
     if (!earlier) return null;
     assertSameRequest(earlier.hash, hash, `quote ${kind}`);
     return getQuote(tx, earlier.id);
@@ -586,7 +591,8 @@ export async function acceptQuote(
   const meanwhile = await command.replay();
   if (meanwhile) return { created: false, quote: meanwhile, invoice: await getInvoice(tx, meanwhile.invoiceId!) };
   if (current.status === "draft") throw new ConflictError("Finalise this quote before it's accepted.");
-  if (current.status !== "finalised") throw new ConflictError(`${quoteLabel(current)} is already ${current.status}.`);
+  const signedOnly = acceptedBySigningOnly(current);
+  if (current.status !== "finalised" && !signedOnly) throw new ConflictError(alreadyClosed(current));
   if (invoiceDate < current.quoteDate) throw new ValidationError(`The invoice date can't be before the quote date (${current.quoteDate}).`);
   const dueDate = sentDue ?? (await dueDateFromTerms(tx, current.contactId, invoiceDate));
   if (dueDate === null) {
@@ -605,14 +611,24 @@ export async function acceptQuote(
     salespersonId: current.salespersonId,
     ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   }, { foreignCurrency: true, feature: "Quotes" });
-  await tx.query(
-    `update quotes set status = 'accepted', invoice_id = $2, close_command_source = $3, close_idempotency_key = $4,
-            close_request_hash = $5, closed_by_user_id = $6, closed_by_email = $7, closed_at = now(), updated_at = now()
-      where id = $1`,
-    [current.id, invoice.id, command.source, command.idempotencyKey, command.hash, tx.actor.userId, tx.actor.email],
-  );
+  if (signedOnly) {
+    // Accepted by the customer's signature (QT9): the invoice is made from it now (QT10).
+    await tx.query(
+      `update quotes set invoice_id = $2, invoice_command_source = $3, invoice_idempotency_key = $4, invoice_request_hash = $5, updated_at = now()
+        where id = $1`,
+      [current.id, invoice.id, command.source, command.idempotencyKey, command.hash],
+    );
+  } else {
+    await tx.query(
+      `update quotes set status = 'accepted', invoice_id = $2, close_command_source = $3, close_idempotency_key = $4,
+              close_request_hash = $5, closed_by_user_id = $6, closed_by_email = $7, closed_at = now(), updated_at = now()
+        where id = $1`,
+      [current.id, invoice.id, command.source, command.idempotencyKey, command.hash, tx.actor.userId, tx.actor.email],
+    );
+    await closeOpenSigning(tx, current.id, "accepted");
+  }
   await writeAuditEvent(tx, {
-    eventType: "quote.accepted",
+    eventType: signedOnly ? "quote.invoiced_after_signing" : "quote.accepted",
     entityType: "quote",
     entityId: current.id,
     details: { quoteNumber: current.quoteNumber, invoiceId: invoice.id },
@@ -624,6 +640,7 @@ export async function acceptQuote(
     details: { quoteId: current.id, quoteNumber: current.quoteNumber },
   });
   // A quote made from a deal wins it (DS9, decision 502). Imported here so the CRM stays out of the quote module's load.
+  // One accepted by signing wins it now, when its invoice is made (QT10).
   const { winDealFromQuote } = await import("@/lib/crm/quote-deals");
   await winDealFromQuote(tx, current.id, { invoiceId: invoice.id });
   return { created: true, quote: await getQuote(tx, current.id), invoice };
@@ -652,7 +669,8 @@ export async function acceptQuoteAsSalesOrder(
   const meanwhile = await command.replay();
   if (meanwhile) return { created: false, quote: meanwhile, salesOrder: await orderOf(tx, meanwhile) };
   if (current.status === "draft") throw new ConflictError("Finalise this quote before it's accepted.");
-  if (current.status !== "finalised") throw new ConflictError(`${quoteLabel(current)} is already ${current.status}.`);
+  const signedOnly = acceptedBySigningOnly(current);
+  if (current.status !== "finalised" && !signedOnly) throw new ConflictError(alreadyClosed(current));
   if (orderDate < current.quoteDate) throw new ValidationError(`The order date can't be before the quote date (${current.quoteDate}).`);
   const { salesOrder } = await createSalesOrder(tx, {
     source: "quote",
@@ -665,14 +683,23 @@ export async function acceptQuoteAsSalesOrder(
     customFields: current.customFields,
     salespersonId: current.salespersonId,
   });
-  await tx.query(
-    `update quotes set status = 'accepted', sales_order_id = $2, close_command_source = $3, close_idempotency_key = $4,
-            close_request_hash = $5, closed_by_user_id = $6, closed_by_email = $7, closed_at = now(), updated_at = now()
-      where id = $1`,
-    [current.id, salesOrder.id, command.source, command.idempotencyKey, command.hash, tx.actor.userId, tx.actor.email],
-  );
+  if (signedOnly) {
+    await tx.query(
+      `update quotes set sales_order_id = $2, invoice_command_source = $3, invoice_idempotency_key = $4, invoice_request_hash = $5, updated_at = now()
+        where id = $1`,
+      [current.id, salesOrder.id, command.source, command.idempotencyKey, command.hash],
+    );
+  } else {
+    await tx.query(
+      `update quotes set status = 'accepted', sales_order_id = $2, close_command_source = $3, close_idempotency_key = $4,
+              close_request_hash = $5, closed_by_user_id = $6, closed_by_email = $7, closed_at = now(), updated_at = now()
+        where id = $1`,
+      [current.id, salesOrder.id, command.source, command.idempotencyKey, command.hash, tx.actor.userId, tx.actor.email],
+    );
+    await closeOpenSigning(tx, current.id, "accepted");
+  }
   await writeAuditEvent(tx, {
-    eventType: "quote.accepted",
+    eventType: signedOnly ? "quote.sales_order_after_signing" : "quote.accepted",
     entityType: "quote",
     entityId: current.id,
     details: { quoteNumber: current.quoteNumber, salesOrderId: salesOrder.id },
@@ -707,15 +734,64 @@ export async function declineQuote(
   const meanwhile = await command.replay();
   if (meanwhile) return { created: false, quote: meanwhile };
   if (current.status === "draft") throw new ConflictError("This quote is still a draft. Delete it instead.");
-  if (current.status !== "finalised") throw new ConflictError(`${quoteLabel(current)} is already ${current.status}.`);
+  if (current.status !== "finalised") throw new ConflictError(alreadyClosed(current));
   await tx.query(
     `update quotes set status = 'declined', close_command_source = $2, close_idempotency_key = $3, close_request_hash = $4,
             closed_by_user_id = $5, closed_by_email = $6, closed_at = now(), updated_at = now()
       where id = $1`,
     [current.id, command.source, command.idempotencyKey, command.hash, tx.actor.userId, tx.actor.email],
   );
+  await closeOpenSigning(tx, current.id, "declined");
   await writeAuditEvent(tx, { eventType: "quote.declined", entityType: "quote", entityId: current.id, details: { quoteNumber: current.quoteNumber } });
   return { created: true, quote: await getQuote(tx, current.id) };
+}
+
+/** Accepted by the customer's signature, with no invoice or sales order made from it yet (QT9). */
+function acceptedBySigningOnly(quote: QuoteSummary): boolean {
+  return quote.status === "accepted" && quote.acceptedSigningRequestId !== null && quote.invoiceId === null && quote.salesOrderId === null;
+}
+
+function alreadyClosed(quote: QuoteSummary): string {
+  if (quote.status === "accepted" && quote.invoiceId) return `${quoteLabel(quote)} is already accepted, and its invoice is made.`;
+  if (quote.status === "accepted" && quote.salesOrderId) return `${quoteLabel(quote)} is already accepted, and its sales order is made.`;
+  return `${quoteLabel(quote)} is already ${quote.status}.`;
+}
+
+/** A quote accepted or declined in Tohyee voids its open signing request (QT11), so the customer's link stops working. */
+async function closeOpenSigning(tx: OrgTx, quoteId: string, how: "accepted" | "declined"): Promise<void> {
+  const { voidOpenRequestsFor } = await import("@/lib/signing/service");
+  await voidOpenRequestsFor(tx, "quote", quoteId, `The quote was ${how} in Tohyee.`);
+}
+
+/**
+ * The customer accepted the quote by signing it online (QT9, as Xero's
+ * online quotes do): the quote is accepted with no invoice or sales order
+ * yet; one is made from it with acceptQuote or acceptQuoteAsSalesOrder
+ * (QT10). Called by the signing request when it's completed.
+ */
+export async function acceptQuoteBySigning(tx: OrgTx, quoteIdInput: string, signing: { requestId: string; signerName: string; signerEmail: string }): Promise<void> {
+  const current = await lockQuote(tx, requireId(quoteIdInput, "quoteId"));
+  if (current.status !== "finalised") throw new ConflictError(`${quoteLabel(current)} has been ${current.status === "draft" ? "changed" : current.status} since it was sent, so it can't be accepted now. Ask the business for a new quote.`);
+  await tx.query(
+    `update quotes set status = 'accepted', accepted_signing_request_id = $2, close_command_source = 'signing', close_idempotency_key = $3,
+            close_request_hash = $4, closed_by_user_id = null, closed_by_email = $5, closed_at = now(), updated_at = now()
+      where id = $1`,
+    [current.id, signing.requestId, `signing-${signing.requestId}`, requestHash("quote_signed", { quoteId: current.id, requestId: signing.requestId }), signing.signerEmail],
+  );
+  await writeAuditEvent(tx, { eventType: "quote.accepted", entityType: "quote", entityId: current.id, details: { quoteNumber: current.quoteNumber, signingRequestId: signing.requestId, signedBy: signing.signerName } });
+}
+
+/** The customer declined the quote on its signing page, with their reason (QT11). */
+export async function declineQuoteBySigning(tx: OrgTx, quoteIdInput: string, signing: { requestId: string; signerEmail: string; reason: string }): Promise<void> {
+  const current = await lockQuote(tx, requireId(quoteIdInput, "quoteId"));
+  if (current.status !== "finalised") return;
+  await tx.query(
+    `update quotes set status = 'declined', close_command_source = 'signing', close_idempotency_key = $2, close_request_hash = $3,
+            closed_by_user_id = null, closed_by_email = $4, closed_at = now(), updated_at = now()
+      where id = $1`,
+    [current.id, `signing-${signing.requestId}`, requestHash("quote_signing_declined", { quoteId: current.id, requestId: signing.requestId }), signing.signerEmail],
+  );
+  await writeAuditEvent(tx, { eventType: "quote.declined", entityType: "quote", entityId: current.id, details: { quoteNumber: current.quoteNumber, signingRequestId: signing.requestId, reason: signing.reason } });
 }
 
 /**

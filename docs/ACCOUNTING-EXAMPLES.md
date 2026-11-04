@@ -8066,10 +8066,42 @@ following month" and billing address "12 George St, Dunedin 9016".
   with no lines, an expiry date before the quote date. A viewer can see and
   print quotes but not save them.
 
+### Online acceptance by signing (QT9-QT11, as Xero does, not yet reviewed)
+
+Following Xero's online quotes: the customer accepts (or declines) online,
+the quote shows as accepted, and the invoice is made from it afterwards.
+Tohyee's online acceptance is an electronic signature (decisions
+1396-1406, docs/E-SIGNATURES.md). Same setup as QT1-QT8; the customer's
+person is Aroha Ngata (aroha@kobe-cafe.test, made up).
+
+- **QT9** QU-0001 (total **316.25**) is sent to Aroha to accept. The
+  request keeps the quote's PDF exactly as printed, and its SHA-256. Aroha
+  opens the link, enters the code emailed to her, opens the PDF, ticks "I
+  agree to sign electronically" and types her name. The quote becomes
+  **accepted**, by aroha@kobe-cafe.test (signed online), with **no
+  invoice or sales order yet**. **No journal** is posted. The signed copy
+  (the quote's pages, a signature page and a certificate) is kept with the
+  request.
+- **QT10** Making the invoice from it, dated 22 Jul 2026, makes a draft
+  invoice to Kobe Cafe dated **22 Jul 2026**, due **20 Aug 2026** (terms),
+  reference **QU-0001**, total **316.25**, linked both ways; the same key
+  again returns the same invoice, and a second invoice or a sales order is
+  refused ("already accepted, and its invoice is made"). Approving it posts
+  INV-0001: Dr 1100 **316.25** / Cr 4000 **275.00** / Cr 2100 **41.25**,
+  as in QT3. Another quote accepted by signing can instead become a draft
+  sales order (SO9).
+- **QT11** Aroha declines on the link with the reason "We went with a
+  different design.": the quote is **declined** and can't be accepted; the
+  sender is emailed the reason. A quote out for signing that's accepted or
+  declined in Tohyee voids its request ("The quote was accepted in
+  Tohyee."), so the link stops working; a quote has one open request at a
+  time.
+
 ### Not supported yet (refused rather than guessed)
 
-- Sending or emailing quotes (so no "sent" status), customer online
-  acceptance, and quote templates or themes.
+- Quote templates or themes.
+- Making a job from a quote (accepted quotes become invoices or sales
+  orders).
 - Accepting part of a quote, or invoicing a quote in stages (deposits,
   progress invoicing): accepting makes one invoice for the whole quote.
 - Linking a quote to a CRM opportunity. A won opportunity still makes its

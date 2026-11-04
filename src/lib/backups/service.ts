@@ -760,7 +760,8 @@ export async function restoreBackup(actor: AdminActor, input: RestoreInput): Pro
         queuedEmails:
           (await countIn(admin, "document_emails", "status in ('queued', 'sending')")) +
           (await countIn(admin, "approval_emails", "status in ('queued', 'sending')")) +
-          (await countIn(admin, "roster_emails", "status in ('queued', 'sending')")),
+          (await countIn(admin, "roster_emails", "status in ('queued', 'sending')")) +
+          (await countIn(admin, "signing_emails", "status in ('queued', 'sending')")),
         attachments: await countIn(admin, "record_attachments"),
         journals: await countIn(admin, "ledger_journals"),
       };

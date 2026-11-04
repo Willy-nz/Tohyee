@@ -289,6 +289,8 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
   const approvals = await sendApprovalEmails(organisation, people, options.now);
   // Then published rosters' shift emails (RS4), which are as short.
   const rosters = await sendNotices("roster_emails", organisation, people, options.now);
+  // Signing links and codes (decision 1404): someone may be waiting on the code.
+  const signing = await sendNotices("signing_emails", organisation, people, options.now);
   for (;;) {
     const now = options.now ?? new Date();
     const { rows, account, accountError } = await withOrganisationTransaction(
@@ -336,7 +338,7 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
     (tx) => tx.query<{ count: string }>("select count(*)::text as count from document_emails where status in ('queued', 'sending')"),
     { people },
   );
-  result.waiting = Number(waiting.rows[0].count) + approvals.waiting + rosters.waiting;
+  result.waiting = Number(waiting.rows[0].count) + approvals.waiting + rosters.waiting + signing.waiting;
   return result;
 }
 
@@ -393,7 +395,8 @@ async function scanAll(): Promise<void> {
         tx.query(
           `select 1 from document_emails where status in ('queued', 'sending')
            union all select 1 from approval_emails where status in ('queued', 'sending')
-           union all select 1 from roster_emails where status in ('queued', 'sending') limit 1`,
+           union all select 1 from roster_emails where status in ('queued', 'sending')
+           union all select 1 from signing_emails where status in ('queued', 'sending') limit 1`,
         ),
       );
       if ((waiting.rowCount ?? 0) > 0) pending.add(organisation.id);
