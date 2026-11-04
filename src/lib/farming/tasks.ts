@@ -94,8 +94,8 @@ async function loadTasks(tx: OrgTx, where: string, params: unknown[], today: str
   const rows = await tx.query<TaskRow>(
     `select t.id::text, t.farm_id::text, f.name as farm_name, t.title, t.note, t.assigned_to_user_id::text, t.due_on::text, t.repeat,
             t.paddock_id::text, p.name as paddock_name, t.latitude::text, t.longitude::text, t.status,
-            t.created_by_email, t.created_at::text, t.updated_by_email, t.updated_at::text,
-            d.id::text as done_id, d.done_for::text, d.done_by_email, d.done_at::text
+            t.created_by_email, to_char(t.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at, t.updated_by_email, to_char(t.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at,
+            d.id::text as done_id, d.done_for::text, d.done_by_email, to_char(d.done_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as done_at
        from farm_tasks t
        join farms f on f.id = t.farm_id
        left join paddocks p on p.id = t.paddock_id
@@ -264,7 +264,7 @@ export async function listTasks(tx: OrgTx, input: { farmId: unknown; view?: unkn
 export async function taskHistory(tx: OrgTx, idInput: unknown): Promise<Array<TaskDone & { undoneByEmail: string | null; undoneAt: string | null }>> {
   const task = await requireTask(tx, idInput, todayIsoDate());
   const rows = await tx.query<{ id: string; done_for: string; done_by_email: string; done_at: string; undone_by_email: string | null; undone_at: string | null }>(
-    "select id::text, done_for::text, done_by_email, done_at::text, undone_by_email, undone_at::text from farm_task_done where task_id = $1 order by done_at desc, id desc limit 100",
+    `select id::text, done_for::text, done_by_email, to_char(done_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as done_at, undone_by_email, to_char(undone_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as undone_at from farm_task_done where task_id = $1 order by farm_task_done.done_at desc, farm_task_done.id desc limit 100`,
     [task.id],
   );
   return rows.rows.map((row) => ({ id: row.id, doneFor: row.done_for, doneByEmail: row.done_by_email, doneAt: row.done_at, undoneByEmail: row.undone_by_email, undoneAt: row.undone_at }));

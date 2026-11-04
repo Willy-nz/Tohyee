@@ -31,6 +31,9 @@ import styles from "./farm-workspace.module.css";
 
 export const TASK_DONE_KIND = "farm.task.done";
 
+/** Today's order: overdue, then due today, then this week; the person's own first within each. */
+const RANK: Record<TaskState, number> = { overdue: 0, today: 1, soon: 2, later: 3, done: 4 };
+
 const STATE_TONE: Record<TaskState, "red" | "amber" | "blue" | "neutral" | "green"> = { overdue: "red", today: "amber", soon: "blue", later: "neutral", done: "green" };
 
 export function useFarmTasks(organisationId: string, farmId: string, view: "open" | "done" | "cancelled" = "open") {
@@ -123,7 +126,7 @@ export function FarmTasksToday({ organisationId, farm }: { organisationId: strin
   const [message, setMessage] = useState<string | null>(null);
   if (tasks.error) return <Notice tone="error">Couldn&apos;t load the farm&apos;s tasks: {tasks.error}</Notice>;
   if (!tasks.data) return null;
-  const due = tasks.data.tasks.filter((task) => task.state === "overdue" || task.state === "today" || task.state === "soon").sort((a, b) => Number(b.assignedToUserId === user.id) - Number(a.assignedToUserId === user.id) || (a.next ?? "").localeCompare(b.next ?? ""));
+  const due = tasks.data.tasks.filter((task) => task.state === "overdue" || task.state === "today" || task.state === "soon").sort((a, b) => RANK[a.state] - RANK[b.state] || Number(b.assignedToUserId === user.id) - Number(a.assignedToUserId === user.id) || (a.next ?? "").localeCompare(b.next ?? ""));
   return (
     <Card title="Tasks" description={due.length ? undefined : "Farm team jobs, with who and when."}>
       {message ? <Notice tone={message.startsWith("Not saved") ? "error" : "success"}>{message}</Notice> : null}
