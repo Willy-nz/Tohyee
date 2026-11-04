@@ -38,7 +38,7 @@ type Line = { id: string; amount: string; status: string; reconciliation: { kind
 
 const FULL_ONLY = AI_TOOLS.filter((tool) => tool.level === "full").map((tool) => tool.name).sort();
 // Farming, Livestock and Advanced reporting are off in this organisation, so their tools aren't offered (#576).
-const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
+const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false, analytics: false };
 const OFFERED_HERE = AI_TOOLS.filter((tool) => moduleHidesTool(tool.name, MODULES_HERE) === null);
 const UP_TO_POST = OFFERED_HERE.filter((tool) => tool.level !== "full").map((tool) => tool.name).sort();
 const ALL = OFFERED_HERE.map((tool) => tool.name).sort();

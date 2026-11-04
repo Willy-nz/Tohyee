@@ -27,7 +27,7 @@ type Json = Record<string, unknown>;
 
 // These keys belong to bookkeepers and viewers, so tools for owners and admins only (income tax, decision 549) aren't offered.
 // Farming, Livestock and Advanced reporting are off in this organisation, so their tools aren't either (#576).
-const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
+const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false, analytics: false };
 const offeredHere = (tool: AiTool) => !tool.minRole && moduleHidesTool(tool.name, MODULES_HERE) === null;
 const READ = AI_TOOLS.filter((tool) => tool.level === "read" && offeredHere(tool)).map((tool) => tool.name).sort();
 const DRAFT = AI_TOOLS.filter((tool) => (tool.level === "read" || tool.level === "draft") && offeredHere(tool)).map((tool) => tool.name).sort();
