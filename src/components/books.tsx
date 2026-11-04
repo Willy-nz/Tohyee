@@ -2,19 +2,13 @@
 
 import { Fragment, type ReactNode } from "react";
 import type { Account } from "@/lib/accounts/service";
-import { ACCOUNT_CLASSES, type AccountClass } from "@/lib/accounts/types";
+import { ACCOUNT_CLASS_LABELS, ACCOUNT_CLASSES, type AccountClass } from "@/lib/accounts/types";
 import { formatMoney } from "@/lib/format";
 import { useApiData, useHydrated } from "./hooks";
 import { Card, Empty, Notice, ui } from "./ui";
 import { useWorkspace } from "./workspace";
 
-export const CLASS_LABELS: Record<AccountClass, string> = {
-  asset: "Assets",
-  liability: "Liabilities",
-  equity: "Equity",
-  revenue: "Income",
-  expense: "Expenses",
-};
+export const CLASS_LABELS: Record<AccountClass, string> = ACCOUNT_CLASS_LABELS;
 
 /** Renders children only when an organisation is selected and ready. */
 export function RequireOrganisation({ children }: { children: (organisationId: string) => ReactNode }) {
