@@ -349,7 +349,7 @@ export type PhotoForAi = { photoId: string; farmId: string; farmName: string; pa
  * newest first. Leaves out where the phone was and any reading, so an
  * estimate is the AI's own look at the photo (decision 1163).
  */
-export async function photosAwaitingEstimate(tx: OrgTx, input: { farmId?: unknown; limit?: unknown }): Promise<PhotoForAi[]> {
+export async function photosAwaitingEstimate(tx: OrgTx, input: { farmId?: unknown; limit?: unknown; offset?: number }): Promise<PhotoForAi[]> {
   await requireFarming(tx);
   const visible = await visibleFarmIds(tx);
   const params: unknown[] = [visible];
@@ -360,13 +360,14 @@ export async function photosAwaitingEstimate(tx: OrgTx, input: { farmId?: unknow
     params.push(farmId);
     where += " and p.farm_id = $2";
   }
-  const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 100);
+  const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 101);
+  const offset = Math.max(Math.trunc(Number(input.offset) || 0), 0);
   const rows = await tx.query<{ id: string; farm_id: string; farm_name: string; paddock_id: string; paddock_name: string; hectares: string | null; taken_on: string; phone_file_time: string | null; photo_taken: string | null; content_type: string; size_bytes: number; note: string | null }>(
     `select p.id::text, p.farm_id::text, f.name as farm_name, p.paddock_id::text, d.name as paddock_name, d.effective_ha::text as hectares, p.taken_on::text, p.phone_file_time, p.photo_taken,
             p.content_type, p.size_bytes, p.note
        from pasture_photos p join paddocks d on d.id = p.paddock_id join farms f on f.id = p.farm_id
       where ${where}
-      order by p.taken_on desc, p.received_at desc, p.id limit ${limit}`,
+      order by p.taken_on desc, p.received_at desc, p.id limit ${limit} offset ${offset}`,
     params,
   );
   return rows.rows.map((row) => ({

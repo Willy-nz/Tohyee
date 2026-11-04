@@ -12726,3 +12726,66 @@ newest month on the right".
       ask the person to allow each tool call; that's a setting in the app, not
       in Tohyee.
 
+### One way to page, name accounts and lay out reports for the AI (#573-#575, #579; decisions 1377-1384)
+
+From a read-only review of the MCP tools. No answer from Jess on these, so
+they follow the pattern #538 set (decision 1267) and, where that has
+nothing, what Xero's API does.
+
+1377. **Every list tool pages with cursor, more and nextCursor.** Every
+      `list_*` tool and account_transactions takes `cursor` and `limit` and
+      answers `more` (true only when there is a next page) and `nextCursor`
+      (null on the last page). A cursor is opaque text: a row id where the
+      list has one, otherwise how many rows came before. The old names,
+      list_bank_lines' `offset` and list_sales_platform_log's `beforeId`, are
+      kept as other names for `cursor` for now so older prompts keep working;
+      they can go once AI apps have picked up the new tool list. The prose
+      `end` and `nextBeforeId` are gone from list_sales_platform_log's answer.
+      The payout matches page their payouts and deposits together. A unit
+      test checks every list tool's input; the MCP test checks every answer.
+1378. **Accounts by id or code.** list_accounts now gives `id` as well as
+      `code`. Tools that ask for one account take `accountId` or
+      `accountCode` (both only when they're the same account). Xero's API
+      takes either AccountID or Code the same way. A bank tool given an
+      account that isn't a bank or credit card account is refused with "...
+      is not a bank or card account" instead of an empty list. The coding
+      lines' `accountCode` (what a line is coded to) is unchanged.
+1379. **account_transactions pages its lines.** It used to cut the lines at
+      the limit with only a note. Now it pages them by cursor; the opening,
+      totals and closing balance always cover every line in the dates.
+1380. **One columns and rows shape for profit and loss style reports.**
+      profit_and_loss (one column, compared, or split by tracking),
+      budget_vs_actual and run_custom_report answer with `report`, `from`,
+      `to`, `currencyCode`, `columns` (key, kind, label) and `rows` (key,
+      kind, label, values by column key, null for a blank). A plain profit
+      and loss is the compared report with no earlier periods, so the two
+      can't drift apart. Split columns are kind `split` with their tracking
+      value; budget vs actual has `actual`, `budget`, `variance` and
+      `variance_percent` columns. The group labels are the profit and loss
+      screen's (Trading income, Cost of sales, Gross profit, Other income,
+      Operating expenses, Net profit), shared in code; the budget vs actual
+      screen said "Revenue" and "Expenses" and now says the same as the
+      profit and loss. The old answers (revenue.sections and so on) aren't
+      kept: they were only for the AI, and keeping both would double the
+      answer for no one. run_custom_report also gives the report's `layout`,
+      which create_custom_report_draft's description already pointed to.
+1381. **Every ...At time is ISO 8601 in UTC.** Tool answers are written with
+      every field ending in `At` (createdAt, lastRunAt, changedAt and so on)
+      as e.g. "2026-11-04T09:30:00.000Z", wherever it came from (a database
+      timestamp's text, or a date). `asAt` is a report's date (YYYY-MM-DD),
+      not a time, and is left as it is. The screens are unchanged.
+1382. **Shared notes once per answer.** In the payout matches, a note that's
+      the same on every payout or deposit (why it isn't in the accounts, no
+      settlement, the suggestion note, the clearing balance note) is given
+      once in `notes`, and GST notes once per status (`notes.gstByStatus`;
+      each payout keeps its `gst.status`). A note that differs between
+      payouts stays on each.
+1383. **list_mixed_use_lines with no account lists every account.** It used
+      to leave out business only accounts, so an organisation with none
+      marked mixed use got `accounts: []`. Now it lists every active bank and
+      card account with its usage; business only ones are reconciled with
+      the bank tools, as the note says.
+1384. **Paging services take an offset where they had only a limit.** The
+      bank batches, bank coding proposals, mixed-use review lines and paddock
+      photos services take an `offset` so their tools can page; the screens
+      don't use it and are unchanged.

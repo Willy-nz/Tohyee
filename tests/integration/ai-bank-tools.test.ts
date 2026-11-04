@@ -204,7 +204,18 @@ describeWithDatabase("AI keys reconciling bank lines (decision 488, AIB1-AIB8)",
     expect(one).toMatchObject({ line: { status: "unreconciled", amount: "11.11" }, suggestions: { matches: expect.any(Array), rule: null } });
     const summary = (await call(tokens.post, "reconciliation_summary")).accounts as Json[];
     expect(summary.find((account) => account.code === "1000")).toMatchObject({ oldestUnreconciled: "2026-05-01", difference: null });
-    expect(await call(tokens.post, "list_bank_rules")).toEqual({ rules: [] });
+    expect(await call(tokens.post, "list_bank_rules")).toEqual({ rules: [], more: false, nextCursor: null });
+    // #573: by code too, and a page at a time (#574) with the old offset still working.
+    const byCode = await call(tokens.post, "list_bank_lines", { accountCode: "1000", from: "2026-05-01", to: "2026-05-31", search: "READ", limit: 2 });
+    expect((byCode.lines as Line[]).map((entry) => entry.amount)).toEqual(["11.11", "-22.22"]);
+    expect(byCode).toMatchObject({ total: 3, more: true, nextCursor: "2" });
+    const rest = await call(tokens.post, "list_bank_lines", { accountCode: "1000", from: "2026-05-01", to: "2026-05-31", search: "READ", limit: 2, cursor: byCode.nextCursor });
+    expect((rest.lines as Line[]).map((entry) => entry.amount)).toEqual(["-33.33"]);
+    expect(rest).toMatchObject({ more: false, nextCursor: null });
+    const oldName = await call(tokens.post, "list_bank_lines", { accountId: bank.id, from: "2026-05-01", to: "2026-05-31", search: "READ", limit: 2, offset: 2 });
+    expect((oldName.lines as Line[]).map((entry) => entry.amount)).toEqual(["-33.33"]);
+    await expect(call(tokens.post, "list_bank_lines", { accountCode: "4000" })).rejects.toThrow(/is not a bank or card account/);
+    await expect(call(tokens.post, "list_bank_lines", {})).rejects.toThrow(/Give accountId or accountCode/);
   });
 
   it("AIB1: match_bank_line matches what's posted (nothing posted) and pays invoices, part payments included; wrong totals are refused", async () => {

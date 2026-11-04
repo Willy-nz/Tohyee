@@ -6,7 +6,8 @@ import { cashFlowForecast } from "@/lib/cash-flow/forecast";
 import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
 import { withLineIds } from "@/lib/ai/document-lines";
-import { boundedLimit, CURSOR, firstRows, pageAfter } from "@/lib/ai/limits";
+import { ACCOUNT_CODE, ACCOUNT_ID, accountFromArgs } from "@/lib/ai/account-ref";
+import { boundedLimit, CURSOR, firstRows, limitInput, pageAfter, pageByPosition } from "@/lib/ai/limits";
 import { BALANCE_SHEET_SCHEMA, PROFIT_AND_LOSS_SCHEMA, runBalanceSheet, runProfitAndLoss, runTrialBalance, TRIAL_BALANCE_SCHEMA } from "@/lib/ai/report-tools";
 import { AI_ACCESS_LEVEL_AI_WORDS, AI_ACCESS_LEVEL_LABELS, type AiAccessLevel } from "@/lib/ai/access-levels";
 import type { Role } from "@/lib/auth/roles";
@@ -317,13 +318,14 @@ export const READ_TOOLS: readonly AiTool[] = (
   {
     name: "list_accounts",
     title: "Chart of accounts",
-    description: `The chart of accounts: code, name, type, class (asset, liability, equity, revenue, expense), currency and whether it's archived. Up to ${MAX_LINES} a page; pass nextCursor back as cursor for more.`,
-    inputSchema: schema({ includeArchived: { type: "boolean", description: "Also list archived accounts. Default false." }, cursor: CURSOR }),
+    description: `The chart of accounts: id, code, name, type, class (asset, liability, equity, revenue, expense), currency and whether it's archived. Tools that ask for an account take its accountId or accountCode. Up to ${MAX_LINES} a page.`,
+    inputSchema: schema({ includeArchived: { type: "boolean", description: "Also list archived accounts. Default false." }, limit: limitInput(MAX_LINES, MAX_LINES), cursor: CURSOR }),
     async run(tx, args) {
       const accounts = await listAccounts(tx, { includeArchived: args.includeArchived === true });
       return pagedRows(
-        pageAfter(accounts, (account) => account.code, args.cursor, MAX_LINES),
+        pageAfter(accounts, (account) => account.code, args.cursor, boundedLimit(args.limit, MAX_LINES, MAX_LINES)),
         (account) => ({
+          id: account.id,
           code: account.code,
           name: account.name,
           type: account.accountType,
@@ -339,7 +341,7 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "profit_and_loss",
     title: "Profit and loss",
     description:
-      "Profit and loss (income statement) between two dates, inclusive, by section and account. Without `from` it starts at the beginning of the financial year containing `to`; without `to` it ends today. Optional, as on the screen: compare with up to 11 earlier months, quarters or years (compare, compareBy; order oldest_first, the default, or newest_first), a total and a year to date column, % of trading income, one column per value of a tracking category (splitBy), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"). With compare, total, yearToDate or percentOfIncome the answer is columns and rows; each column is the report for its own dates.",
+      "Profit and loss (income statement) between two dates, inclusive, by section and account. Without `from` it starts at the beginning of the financial year containing `to`; without `to` it ends today. Optional, as on the screen: compare with up to 11 earlier months, quarters or years (compare, compareBy; order oldest_first, the default, or newest_first), a total and a year to date column, % of trading income, one column per value of a tracking category (splitBy), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"). The answer is columns and rows, as on the screen; each period column is the report for its own dates.",
     inputSchema: PROFIT_AND_LOSS_SCHEMA,
     run: (tx, args) => runProfitAndLoss(tx, args),
   },
@@ -533,36 +535,27 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "account_transactions",
     title: "Account transactions",
     description:
-      "Every ledger line on one account between two dates (general ledger detail), with the opening balance, running balance and closing balance. Without `from` it starts at the beginning of the financial year containing `to`.",
-    inputSchema: schema(
-      {
-        accountCode: { type: "string", description: "The account code from list_accounts, e.g. 200." },
-        from: DATE,
-        to: DATE,
-        limit: { type: "integer", minimum: 1, maximum: MAX_LINES, description: `Lines to show; default 200, at most ${MAX_LINES}.` },
-      },
-      ["accountCode"],
-    ),
+      "Every ledger line on one account between two dates (general ledger detail), with the opening, running and closing balance. Give accountId or accountCode. Without `from` it starts at the beginning of the financial year containing `to`. The totals cover every line, whatever the page.",
+    inputSchema: schema({
+      accountId: ACCOUNT_ID,
+      accountCode: ACCOUNT_CODE,
+      from: DATE,
+      to: DATE,
+      limit: limitInput(200, MAX_LINES),
+      cursor: CURSOR,
+    }),
     async run(tx, args) {
-      const code = optionalString(args.accountCode, "accountCode", { maxLength: 20 });
-      if (!code) throw new ValidationError("accountCode is required.");
-      const account = (await listAccounts(tx, { includeArchived: true })).find((entry) => entry.code.toLowerCase() === code.toLowerCase());
-      if (!account) throw new NotFoundError(`There's no account with the code ${code}.`);
+      const account = await accountFromArgs(tx, args);
       const report = await accountTransactions(tx, { accountId: account.id, from: args.from, to: args.to });
-      const limit = boundedLimit(args.limit, 200, MAX_LINES);
       const detail = report.accounts[0];
-      if (!detail) return { from: report.from, to: report.to, account: { code: account.code, name: account.name }, lines: [] };
-      const kept = firstRows(detail.lines, limit);
+      const page = pageByPosition(detail?.lines ?? [], args.cursor, boundedLimit(args.limit, 200, MAX_LINES));
       return {
         from: report.from,
         to: report.to,
         currencyCode: report.currencyCode,
-        account: { code: detail.code, name: detail.name, class: detail.accountClass },
-        opening: detail.opening,
-        totalDebit: detail.totalDebit,
-        totalCredit: detail.totalCredit,
-        closing: detail.closing,
-        lines: kept.rows.map((line) => ({
+        account: { id: account.id, code: account.code, name: account.name, class: account.accountClass },
+        ...(detail ? { opening: detail.opening, totalDebit: detail.totalDebit, totalCredit: detail.totalCredit, closing: detail.closing } : {}),
+        lines: page.rows.map((line) => ({
           date: line.date,
           reference: line.reference,
           description: line.description,
@@ -571,7 +564,8 @@ export const READ_TOOLS: readonly AiTool[] = (
           credit: line.credit,
           balance: line.balance,
         })),
-        ...(kept.truncated ? { note: `Showing the first ${limit} of ${kept.total} lines; the totals cover them all.` } : {}),
+        more: page.more,
+        nextCursor: page.nextCursor,
       };
     },
   },
@@ -666,10 +660,11 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "list_consolidations",
     title: "Consolidation groups",
     description: "The consolidation groups the key's owner can see (a member of every organisation in the group): name, parent, group currency and members with their currencies.",
-    inputSchema: schema({}),
-    async run(tx) {
-      if (!tx.actor.userId) return { groups: [] };
-      return { groups: await listGroups({ id: tx.actor.userId, email: tx.actor.email }) };
+    inputSchema: schema({ limit: limitInput(50, MAX_LIST), cursor: CURSOR }),
+    async run(tx, args) {
+      const groups = tx.actor.userId ? await listGroups({ id: tx.actor.userId, email: tx.actor.email }) : [];
+      const page = pageAfter(groups, (group) => group.id, args.cursor, boundedLimit(args.limit, 50, MAX_LIST));
+      return { groups: page.rows, more: page.more, nextCursor: page.nextCursor };
     },
   },
   {
@@ -700,11 +695,14 @@ export const READ_TOOLS: readonly AiTool[] = (
     title: "Waiting for approval",
     description:
       "Bills, purchase orders and expense claims waiting for approval under an approval rule: the document, its total, the rule, the step it's at and who it's waiting for. Only people approve or decline them, in Tohyee.",
-    inputSchema: schema({}),
-    async run(tx, _args, context) {
+    inputSchema: schema({ limit: limitInput(50, MAX_LIST), cursor: CURSOR }),
+    async run(tx, args, context) {
       const requests = await listApprovalRequests(tx, { userId: tx.actor.userId, email: tx.actor.email, role: context.role });
+      const page = pageAfter(requests, (request) => request.id, args.cursor, boundedLimit(args.limit, 50, MAX_LIST));
       return {
-        requests: requests.map((request) => ({
+        more: page.more,
+        nextCursor: page.nextCursor,
+        requests: page.rows.map((request) => ({
           requestId: request.id,
           documentType: request.documentType,
           documentId: request.documentId,

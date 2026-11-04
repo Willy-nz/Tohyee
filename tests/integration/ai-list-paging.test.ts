@@ -4,7 +4,7 @@ import * as mcpRoute from "@/app/api/mcp/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { type Contact, createContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { createInvoice } from "@/lib/invoices/service";
+import { approveInvoice, createInvoice } from "@/lib/invoices/service";
 import { createItem } from "@/lib/items/service";
 import { createPurchaseOrder } from "@/lib/purchase-orders/service";
 import { createQuote } from "@/lib/quotes/service";
@@ -196,6 +196,40 @@ describeWithDatabase("AI list paging (#538, decision 1267)", () => {
     expect([...ids].sort()).toEqual([...made.items.all].sort());
     expect(new Set(ids).size).toBe(57);
     await expect(call(tokens.main, "list_items", { cursor: "999999999" })).rejects.toThrow(/Start again without a cursor/);
+  });
+
+  it("account transactions page by cursor: every line once, the totals for all of them (#574)", async () => {
+    await as(ORG, async (tx) => {
+      for (const id of made.invoices.all.slice(0, 7)) await approveInvoice(tx, id, { idempotencyKey: key("approve") });
+    });
+    const all = await call(tokens.main, "account_transactions", { accountCode: "4000", from: "2026-06-01", to: "2026-06-30" });
+    expect((all.lines as Json[]).length).toBe(7);
+    expect(all).toMatchObject({ more: false, nextCursor: null, closing: "-560.00" });
+    const seen: Json[] = [];
+    let cursor: string | undefined;
+    for (let pages = 0; pages < 10; pages += 1) {
+      const page = await call(tokens.main, "account_transactions", { accountCode: "4000", from: "2026-06-01", to: "2026-06-30", limit: 3, ...(cursor ? { cursor } : {}) });
+      seen.push(...(page.lines as Json[]));
+      expect(page).toMatchObject({ closing: "-560.00", totalCredit: all.totalCredit });
+      expect(page.more).toBe(page.nextCursor !== null);
+      if (!page.more) break;
+      cursor = String(page.nextCursor);
+    }
+    expect(seen).toEqual(all.lines);
+  });
+
+  it("every account has an id and a code, and tools take either (#573)", async () => {
+    const accounts = (await call(tokens.main, "list_accounts")).rows as Json[];
+    for (const account of accounts) expect(account).toMatchObject({ id: expect.stringMatching(/^\d+$/), code: expect.any(String) });
+    const sales = accounts.find((account) => account.code === "4000")!;
+    const byId = await call(tokens.main, "account_transactions", { accountId: sales.id, from: "2026-06-01", to: "2026-06-30" });
+    const byCode = await call(tokens.main, "account_transactions", { accountCode: "4000", from: "2026-06-01", to: "2026-06-30" });
+    expect(byId).toEqual(byCode);
+    await expect(call(tokens.main, "account_transactions", { accountId: sales.id, accountCode: "5000" })).rejects.toThrow(/different accounts/);
+    await expect(call(tokens.main, "account_transactions", {})).rejects.toThrow(/Give accountId or accountCode/);
+    const bank = accounts.find((account) => account.type === "bank")!;
+    expect(await call(tokens.main, "list_bank_lines", { accountId: bank.id })).toEqual({ lines: [], total: 0, more: false, nextCursor: null });
+    await expect(call(tokens.main, "list_bank_lines", { accountId: sales.id })).rejects.toThrow("4000 Sales is not a bank or card account.");
   });
 
   it("contacts and the chart of accounts give a cursor too", async () => {

@@ -1,3 +1,4 @@
+import { boundedLimit, CURSOR, limitInput, pageAfter } from "@/lib/ai/limits";
 import { type AiTool, DATE, schema, type ToolContext, ToolFileAnswer } from "@/lib/ai/tools";
 import { IDEMPOTENCY, idempotencyKey } from "@/lib/ai/write-tools";
 import { roleAtLeast } from "@/lib/auth/roles";
@@ -26,10 +27,16 @@ export const TAX_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     minRole: "admin",
     description: "IRD files people uploaded on the Income tax page (assessments, statements of account, provisional tax letters): file name, income year if given, note, and who added it. Owners and admins only.",
-    inputSchema: schema({}),
-    async run(tx, _args, context) {
+    inputSchema: schema({ limit: limitInput(50, 200), cursor: CURSOR }),
+    async run(tx, args, context) {
       requireTaxRole(context);
-      return { documents: await listIrdDocuments(tx), waitingProposals: (await listProposals(tx)).map((proposal) => ({ id: proposal.id, incomeYear: proposal.incomeYear, documentId: proposal.documentId })) };
+      const page = pageAfter(await listIrdDocuments(tx), (document) => document.id, args.cursor, boundedLimit(args.limit, 50, 200));
+      return {
+        documents: page.rows,
+        more: page.more,
+        nextCursor: page.nextCursor,
+        waitingProposals: (await listProposals(tx)).map((proposal) => ({ id: proposal.id, incomeYear: proposal.incomeYear, documentId: proposal.documentId })),
+      };
     },
   },
   {

@@ -1,4 +1,4 @@
-import { boundedLimit, firstRows, historyRows } from "@/lib/ai/limits";
+import { boundedLimit, CURSOR, limitInput, pageByPosition } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema } from "@/lib/ai/tools";
 import { addNotebookEntry, listNotebook, NOTEBOOK_CATEGORIES, updateNotebookEntry } from "@/lib/ai-workspace/notebook";
 import { aiFileText, listAiFiles, READ_CHUNK } from "@/lib/ai-workspace/files";
@@ -151,7 +151,20 @@ async function farmFor(tx: OrgTx, farmId: unknown): Promise<string> {
 
 const FARM_ID: JsonSchema = { type: "string", description: "The farm, from list_farms_and_paddocks. Leave out when there's only one." };
 const PADDOCK_ID: JsonSchema = { type: "string", description: "One paddock only, from list_farms_and_paddocks." };
-const LIMIT = (fallback: number): JsonSchema => ({ type: "integer", minimum: 1, description: `At most this many, newest first (default ${fallback}).` });
+const LIMIT = (fallback: number): JsonSchema => ({ type: "integer", minimum: 1, description: `At most this many a page, newest first (default ${fallback}).` });
+/** limit and cursor for a list the service gives whole (#574). */
+const PAGE = { limit: limitInput(100, 500), cursor: CURSOR };
+
+/** One page of a list the service gives whole, under its own name (#574). */
+function paged<T>(field: string, rows: readonly T[], args: Record<string, unknown>, fallback = 100, max = 500) {
+  const page = pageByPosition(rows, args.cursor, boundedLimit(args.limit, fallback, max));
+  return { [field]: page.rows, more: page.more, nextCursor: page.nextCursor };
+}
+
+/** A page of farm history (decision 901) as every list answers (#574): rows, more and nextCursor. */
+function historyPage<T>(page: { rows: T[]; next: string | null }) {
+  return { rows: page.rows, more: page.next !== null, nextCursor: page.next };
+}
 
 export const FARM_READ_TOOLS: AiTool[] = [
   {
@@ -172,8 +185,8 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List files left for the AI",
     description: "Files people have dropped in for you to read and organise (spreadsheets, exports, notes), however they're laid out.",
     level: "read",
-    inputSchema: schema(),
-    run: async (tx) => ({ files: await listAiFiles(tx) }),
+    inputSchema: schema(PAGE),
+    run: async (tx, args) => paged("files", await listAiFiles(tx), args),
   },
   {
     name: "read_ai_upload",
@@ -194,8 +207,8 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List your tables",
     description: "The tables you've made in your workspace, with their columns and row counts.",
     level: "read",
-    inputSchema: schema(),
-    run: async (tx) => ({ datasets: await listDatasets(tx) }),
+    inputSchema: schema(PAGE),
+    run: async (tx, args) => paged("datasets", await listDatasets(tx), args),
   },
   {
     name: "query_dataset",
@@ -210,8 +223,8 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List dashboards",
     description: "Dashboards over your tables.",
     level: "read",
-    inputSchema: schema(),
-    run: async (tx) => ({ dashboards: await listAiDashboards(tx) }),
+    inputSchema: schema(PAGE),
+    run: async (tx, args) => paged("dashboards", await listAiDashboards(tx), args),
   },
   {
     name: "get_ai_dashboard",
@@ -238,10 +251,10 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List livestock movements",
     description: "Recorded livestock movements between two dates, newest first.",
     level: "read",
-    inputSchema: schema({ from: DATE, to: DATE, includeVoided: { type: "boolean" }, limit: { type: "integer", minimum: 1, maximum: 2000 } }),
+    inputSchema: schema({ from: DATE, to: DATE, includeVoided: { type: "boolean" }, limit: limitInput(500, 2000), cursor: CURSOR }),
     run: async (tx, args) => {
       await requireLivestock(tx);
-      return firstRows(await listMovements(tx, { from: args.from, to: args.to, includeVoided: args.includeVoided === true }), boundedLimit(args.limit, 500, 2000));
+      return paged("movements", await listMovements(tx, { from: args.from, to: args.to, includeVoided: args.includeVoided === true }), args, 500, 2000);
     },
   },
   {
@@ -249,20 +262,20 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List suggested livestock movements",
     description: "Movements you (or another AI) suggested, and whether a person accepted or declined them.",
     level: "read",
-    inputSchema: schema({ open: { type: "boolean", description: "Only those waiting for a decision." } }),
-    run: async (tx, args) => ({ suggestions: await listLivestockSuggestions(tx, { open: args.open === true }) }),
+    inputSchema: schema({ open: { type: "boolean", description: "Only those waiting for a decision." }, ...PAGE }),
+    run: async (tx, args) => paged("suggestions", await listLivestockSuggestions(tx, { open: args.open === true }), args),
   },
   {
     name: "list_farms_and_paddocks",
     title: "List farms and paddocks",
     description: "Each farm with its current paddocks and effective areas.",
     level: "read",
-    inputSchema: schema(),
-    run: async (tx) => {
-      const farms = await listFarms(tx);
+    inputSchema: schema(PAGE),
+    run: async (tx, args) => {
+      const { farms, ...page } = paged("farms", await listFarms(tx), args) as { farms: Awaited<ReturnType<typeof listFarms>>; more: boolean; nextCursor: string | null };
       const result = [];
       for (const farm of farms) result.push({ ...farm, paddocks: (await listPaddocks(tx, { farmId: farm.id })).map((paddock) => ({ id: paddock.id, name: paddock.name, effectiveHa: paddock.effectiveHa })) });
-      return { farms: result };
+      return { farms: result, ...page };
     },
   },
   {
@@ -279,8 +292,11 @@ export const FARM_READ_TOOLS: AiTool[] = [
     description:
       "The people employed: names, job titles, start and finish dates, who they report to. Pay details are included only when the person using you has payroll access in Tohyee; IRD numbers, bank accounts and dates of birth never are. For more about people, read the notebook's people category.",
     level: "read",
-    inputSchema: schema({ includeFormer: { type: "boolean" } }),
-    run: (tx, args, context) => staffList(tx, context.role, args.includeFormer === true),
+    inputSchema: schema({ includeFormer: { type: "boolean" }, ...PAGE }),
+    run: async (tx, args, context) => {
+      const { staff, ...rest } = await staffList(tx, context.role, args.includeFormer === true);
+      return { ...rest, ...paged("staff", staff, args) };
+    },
   },
   {
     name: "list_soil_tests",
@@ -288,10 +304,10 @@ export const FARM_READ_TOOLS: AiTool[] = [
     description:
       "Soil tests as the lab reported them (results as text and number, the lab's units). Gives each current paddock's latest test and date, and the tests themselves, newest first. Tohyee doesn't judge whether a result is high or low or a test too old; say so if asked, and leave agronomic advice to the person's adviser.",
     level: "read",
-    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(100) }),
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(100), cursor: CURSOR }),
     run: async (tx, args) => {
       const farmId = await farmFor(tx, args.farmId);
-      return { latestByPaddock: await soilSummary(tx, { farmId }), tests: firstRows(await listSoilTests(tx, { farmId, paddockId: args.paddockId }), boundedLimit(args.limit, 100, 1000)) };
+      return { latestByPaddock: await soilSummary(tx, { farmId }), ...paged("tests", await listSoilTests(tx, { farmId, paddockId: args.paddockId }), args, 100, 1000) };
     },
   },
   {
@@ -299,16 +315,16 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List fertiliser products",
     description: "Fertiliser products with their N, P, K and S content (% by weight), as typed in Tohyee.",
     level: "read",
-    inputSchema: schema(),
-    run: async (tx) => ({ products: await listProducts(tx) }),
+    inputSchema: schema(PAGE),
+    run: async (tx, args) => paged("products", await listProducts(tx), args),
   },
   {
     name: "list_fertiliser_plans",
     title: "List fertiliser plans",
     description: "A farm's fertiliser plans (budgets), each with its latest version.",
     level: "read",
-    inputSchema: schema({ farmId: FARM_ID }),
-    run: async (tx, args) => ({ plans: await listPlans(tx, { farmId: await farmFor(tx, args.farmId) }) }),
+    inputSchema: schema({ farmId: FARM_ID, ...PAGE }),
+    run: async (tx, args) => paged("plans", await listPlans(tx, { farmId: await farmFor(tx, args.farmId) }), args),
   },
   {
     name: "get_fertiliser_plan",
@@ -366,24 +382,24 @@ export const FARM_READ_TOOLS: AiTool[] = [
     title: "List pasture readings",
     description: "Cover readings (kg DM/ha) by paddock and date, with the method; satellite and model readings are marked as estimates.",
     level: "read",
-    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500) }),
-    run: async (tx, args) => historyRows((await listReadings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId, limit: boundedLimit(args.limit, 500, 5000) }, { max: 5000 }))),
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500), cursor: CURSOR }),
+    run: async (tx, args) => historyPage(await listReadings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId, limit: boundedLimit(args.limit, 500, 5000), cursor: args.cursor }, { max: 5000 })),
   },
   {
     name: "list_grazings",
     title: "List grazings",
     description: "Which mob was in which paddock from the day in to the day out (none while still in), with covers before and after and what was eaten.",
     level: "read",
-    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500) }),
-    run: async (tx, args) => historyRows((await listGrazings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId, limit: boundedLimit(args.limit, 500, 5000) }, { max: 5000 }))),
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, limit: LIMIT(500), cursor: CURSOR }),
+    run: async (tx, args) => historyPage(await listGrazings(tx, { farmId: await farmFor(tx, args.farmId), paddockId: args.paddockId, limit: boundedLimit(args.limit, 500, 5000), cursor: args.cursor }, { max: 5000 })),
   },
   {
     name: "list_supplements_fed",
     title: "List supplements fed",
     description: "Supplements fed out: date, feed, quantity and unit as recorded (never converted), and kg DM where known. Buying feed is a bill, not here.",
     level: "read",
-    inputSchema: schema({ farmId: FARM_ID, limit: LIMIT(500) }),
-    run: async (tx, args) => historyRows((await listSupplements(tx, { farmId: await farmFor(tx, args.farmId), limit: boundedLimit(args.limit, 500, 5000) }, { max: 5000 }))),
+    inputSchema: schema({ farmId: FARM_ID, limit: LIMIT(500), cursor: CURSOR }),
+    run: async (tx, args) => historyPage(await listSupplements(tx, { farmId: await farmFor(tx, args.farmId), limit: boundedLimit(args.limit, 500, 5000), cursor: args.cursor }, { max: 5000 })),
   },
 ];
 

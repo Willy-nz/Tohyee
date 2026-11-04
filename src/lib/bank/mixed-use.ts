@@ -342,12 +342,13 @@ export const REVIEW_STATES = ["to_review", "reviewed", "excluded", "all"] as con
 export async function listReviewLines(
   tx: OrgTx,
   accountIdInput: unknown,
-  options: { state?: unknown; limit?: unknown; search?: unknown } = {},
+  options: { state?: unknown; limit?: unknown; search?: unknown; offset?: number } = {},
 ): Promise<{ account: UsageAccount; lines: ReviewLine[] }> {
   const account = await getAccountUsage(tx, accountIdInput);
   const state = options.state == null || options.state === "" ? "to_review" : requireOneOf(options.state, "state", REVIEW_STATES);
   const limitRaw = Number(options.limit ?? 100);
-  const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 500 ? limitRaw : 100;
+  const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 501 ? limitRaw : 100;
+  const offset = Math.max(options.offset ?? 0, 0);
   const search = optionalString(options.search, "search", { maxLength: 100 });
   const filter =
     state === "to_review"
@@ -361,8 +362,8 @@ export async function listReviewLines(
     `${LINE_SELECT}
       where l.account_id = $1 and l.status <> 'deleted' ${filter}
         and ($3::text is null or l.description ilike '%' || $3 || '%' or coalesce(l.payee, '') ilike '%' || $3 || '%')
-      order by l.line_date desc, l.id desc limit $2`,
-    [account.accountId, limit, search],
+      order by l.line_date desc, l.id desc limit $2 offset $4`,
+    [account.accountId, limit, search, offset],
   );
   return { account, lines: rows.rows.map(toReviewLine) };
 }

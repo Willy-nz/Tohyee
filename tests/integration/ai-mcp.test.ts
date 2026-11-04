@@ -4,6 +4,7 @@ import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
 import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[userId]/route";
 import { AI_TOOLS } from "@/lib/ai/catalogue";
+import { reportTableProblems } from "@/lib/ai/report-table";
 import { moduleHidesTool, type ToolModules } from "@/lib/ai/tool-modules";
 import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
@@ -41,6 +42,19 @@ const OTHER_ORG = "ai-other";
 const noContext = undefined as unknown;
 
 type Json = Record<string, unknown>;
+
+/** ISO 8601 in UTC, as every ...At field is (#579). */
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+
+/** Every non-null ...At field in an answer, with where it is. `asAt` is a report's date (YYYY-MM-DD), not a time. */
+function timestampFields(value: unknown, path = ""): Array<[string, unknown]> {
+  if (Array.isArray(value)) return value.flatMap((entry, index) => timestampFields(entry, `${path}[${index}]`));
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value as Json).flatMap(([key, entry]) => [
+    ...(key.endsWith("At") && key !== "asAt" && entry !== null && entry !== undefined && typeof entry !== "object" ? ([[`${path}.${key}`, entry]] as Array<[string, unknown]>) : []),
+    ...timestampFields(entry, `${path}.${key}`),
+  ]);
+}
 
 /** A request from an AI client: no cookie, no Origin, a bearer key. */
 function mcpRequest(body: unknown, options: { token?: string | null; cookie?: string; method?: string; headers?: Record<string, string> } = {}): Request {
@@ -354,13 +368,22 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     expect((accounts.data!.rows as Json[]).find((account) => account.code === "4000")).toMatchObject({ class: "revenue", archived: false });
 
     const pnl = await callTool(viewerToken, "profit_and_loss", { from: "2026-04-01", to: "2026-06-30" });
-    expect(pnl.data).toMatchObject({ from: "2026-04-01", to: "2026-06-30", currencyCode: "NZD", netProfit: "60.00" });
-    expect((pnl.data!.revenue as Json).total).toBe("100.00");
+    // One shape for every report (#575): columns and rows, with the screen's labels.
+    expect(pnl.data).toMatchObject({ report: "profit_and_loss", from: "2026-04-01", to: "2026-06-30", currencyCode: "NZD" });
+    expect(reportTableProblems(pnl.data)).toEqual([]);
+    expect((pnl.data!.columns as Json[]).map((column) => column.key)).toEqual(["p0"]);
+    const pnlRows = pnl.data!.rows as Json[];
+    expect(pnlRows.find((row) => row.label === "Total trading income")).toMatchObject({ values: { p0: "100.00" } });
+    expect(pnlRows.find((row) => row.label === "Net profit")).toMatchObject({ kind: "grand", values: { p0: "60.00" } });
     // Compare and % of trading income, as on the screen (decision 1358).
     const compared = await callTool(viewerToken, "profit_and_loss", { from: "2026-04-01", to: "2026-06-30", compare: 1, compareBy: "quarter", percentOfIncome: true });
     // Oldest first unless asked otherwise (decision 1366).
     expect((compared.data!.columns as Json[]).map((column) => column.label)).toEqual(["Jan - Mar 2026", "%", "Apr - Jun 2026", "%"]);
     expect((compared.data!.rows as Json[]).find((row) => row.label === "Net profit")).toMatchObject({ values: { p0: "60.00", p0_pct: "60.0" } });
+    expect(reportTableProblems(compared.data)).toEqual([]);
+    // The same section labels with or without compare.
+    const labels = (table: Json) => (table.rows as Json[]).filter((row) => row.kind !== "account").map((row) => row.label);
+    expect(labels(compared.data!)).toEqual(labels(pnl.data!));
     const newestFirst = await callTool(viewerToken, "profit_and_loss", { from: "2026-04-01", to: "2026-06-30", compare: 1, compareBy: "quarter", order: "newest_first" });
     expect((newestFirst.data!.columns as Json[]).map((column) => column.label)).toEqual(["Apr - Jun 2026", "Jan - Mar 2026"]);
     const sheet = await callTool(viewerToken, "balance_sheet", { asAt: "2026-06-30", compare: 1 });
@@ -370,7 +393,9 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     const budgets = await callTool(viewerToken, "list_budgets");
     const budgetId = (budgets.data!.budgets as Json[])[0].id as string;
     const variance = await callTool(viewerToken, "budget_vs_actual", { budgetId, from: "2026-04", to: "2026-06" });
-    expect((variance.data!.revenue as Json).total).toMatchObject({ actual: "100.00", budget: "0.00" });
+    expect(reportTableProblems(variance.data)).toEqual([]);
+    expect((variance.data!.rows as Json[]).find((row) => row.label === "Total trading income")).toMatchObject({ values: { actual: "100.00", budget: "0.00" } });
+    expect(labels(variance.data!)).toEqual(labels(pnl.data!));
 
     const invoices = await callTool(viewerToken, "list_invoices", { status: "approved" });
     expect(invoices.data!.invoices).toEqual([
@@ -387,7 +412,15 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     expect((contacts.data!.rows as Json[]).map((contact) => contact.name)).toEqual(["Kauri Supplies"]);
 
     const ledger = await callTool(viewerToken, "account_transactions", { accountCode: "4000", from: "2026-04-01", to: "2026-06-30" });
-    expect(ledger.data).toMatchObject({ account: { code: "4000" }, opening: "0.00", closing: "-100.00" });
+    expect(ledger.data).toMatchObject({ account: { code: "4000" }, opening: "0.00", closing: "-100.00", more: false, nextCursor: null });
+    // By id too (#573): the same account.
+    const salesId = (accounts.data!.rows as Json[]).find((account) => account.code === "4000")!.id;
+    expect(typeof salesId).toBe("string");
+    expect((await callTool(viewerToken, "account_transactions", { accountId: salesId, from: "2026-04-01", to: "2026-06-30" })).data).toMatchObject({ account: { code: "4000", id: salesId }, closing: "-100.00" });
+    // A non-bank account to a bank tool is refused, not an empty list.
+    const notBank = await callTool(viewerToken, "list_bank_lines", { accountId: salesId });
+    expect(notBank).toMatchObject({ isError: true });
+    expect(notBank.text).toMatch(/is not a bank or card account/);
 
     const missing = await callTool(viewerToken, "get_invoice", { number: "INV-9999" });
     expect(missing).toMatchObject({ isError: true, text: "There's no invoice numbered INV-9999." });
@@ -451,6 +484,13 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       // Livestock and Farming are off in this organisation: their tools say so (they're tested in ai-farm-workspace).
       if (result.isError && /isn't turned on|Farming is off|There's no table/.test(result.text)) continue;
       expect(result.isError, `${tool.name}: ${result.text}`).toBe(false);
+      // Every list pages one way (#574), and every ...At field is ISO 8601 UTC (#579).
+      if (tool.name.startsWith("list_") || tool.name === "account_transactions") {
+        expect(typeof result.data!.more, tool.name).toBe("boolean");
+        expect(result.data!.nextCursor === null || typeof result.data!.nextCursor === "string", tool.name).toBe(true);
+      }
+      for (const [path, value] of timestampFields(result.data)) expect(value, `${tool.name} ${path}`).toMatch(ISO_UTC);
+      if (["profit_and_loss", "budget_vs_actual", "run_custom_report"].includes(tool.name)) expect(reportTableProblems(result.data), tool.name).toEqual([]);
     }
     const gst = await callTool(viewerToken, "gst_return", args.gst_return);
     expect(gst.data).toMatchObject({ periodStart: "2026-05-01", periodEnd: "2026-06-30", boxes: expect.objectContaining({ box5: "115.00", box11: "46.00", box15: "9.00" }), transactionLineCount: 2 });

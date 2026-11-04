@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { type ReportTable, reportTableProblems } from "@/lib/ai/report-table";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -228,9 +229,13 @@ describeWithDatabase("report layouts", () => {
     expect(again).toMatchObject({ created: false, reportId: made.reportId });
     const list = (await w.as((tx) => findAiTool("list_custom_reports")!.run(tx, {}, context))) as { reports: Array<{ reportId: string; title: string; defaultLayoutFor: string | null }> };
     expect(list.reports).toEqual([expect.objectContaining({ reportId: made.reportId, title: "AI board pack", defaultLayoutFor: null })]);
-    const run = (await w.as((tx) => findAiTool("run_custom_report")!.run(tx, { reportId: made.reportId }, context))) as { figures: CustomReportFigures };
-    expect(rowsOf(run.figures)["Trading income"]).toEqual(["1200.00"]);
-    expect(rowsOf(run.figures)["Net profit"]).toEqual(["670.00"]);
+    // The same columns and rows shape as profit_and_loss (#575).
+    const run = (await w.as((tx) => findAiTool("run_custom_report")!.run(tx, { reportId: made.reportId }, context))) as ReportTable;
+    expect(reportTableProblems(run)).toEqual([]);
+    const byLabel = Object.fromEntries(run.rows.map((row) => [row.label, run.columns.map((column) => row.values[column.key])]));
+    expect(byLabel["Trading income"]).toEqual(["1200.00"]);
+    expect(byLabel["Net profit"]).toEqual(["670.00"]);
+    expect(run).toMatchObject({ report: "custom_report", reportId: made.reportId, layout: expect.objectContaining({ title: "AI board pack" }) });
     // It made no default layout and published nothing.
     expect(await w.as((tx) => listLayoutDefaults(tx))).toEqual([]);
   });
