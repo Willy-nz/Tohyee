@@ -92,6 +92,7 @@ locked.
 | Get Tohyee on this device | Opens |
 | The books, reports, settings and everything else | Needs a connection; says so |
 | Log: cover readings, mob in and out, feed, the farm walk | Kept on the device, sent later |
+| Tasks: marking a task done (Today or Tasks) | Kept on the device, sent later |
 | Safety: report a hazard, near miss or incident (with photos) | Kept on the device, sent later |
 | Safety: pre-start checks, marking your action done, signing an induction, signing in and out | Kept on the device, sent later |
 | Tractor mode: recording a job, Finish | Kept on the device fix by fix, sent later |
@@ -332,7 +333,7 @@ What it adds to the web app:
 - **Reminders as notifications**, if you turn them on (Get Tohyee on this
   device › Turn reminders on): shift the pods or irrigator at the time the
   run says, read the pond (each morning until it's read), Effluent's weekly
-  checks, servicing and Effluent WoF, your own safety actions on their due
+  checks, servicing and Effluent WoF, your own safety actions and farm tasks on their due
   day, and for admins the LINZ aerial photos key's reminder and expiry.
   Days arrive at 7 am. They're worked out by your server and set on the
   phone each time Tohyee opens, for the next two weeks; there's no push

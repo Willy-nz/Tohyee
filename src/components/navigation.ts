@@ -590,6 +590,7 @@ export const FARM_MENUS: Menu[] = [
         heading: "Records",
         links: [
           { href: "/operations/farming/calendar", label: "Farm calendar" },
+          { href: "/operations/farming/tasks", label: "Tasks" },
           { href: "/operations/farm/tractor", label: "Tractor mode" },
           { href: "/operations/farm/security", label: "Security" },
           { href: "/operations/farming/notebook", label: "Farm notebook" },
@@ -623,7 +624,7 @@ export function appForPath(app: "accounting" | "farm" | "crm" | "analytics", pat
 }
 
 /** Where farm staff may go; anywhere else in Accounting sends them to the first. */
-export const FARM_WORK_PATHS = ["/operations/farm", "/operations/farming/pasture", "/operations/farming/soil", "/operations/farming/calendar", "/operations/farming/apps", "/operations/profile"];
+export const FARM_WORK_PATHS = ["/operations/farm", "/operations/farming/pasture", "/operations/farming/soil", "/operations/farming/calendar", "/operations/farming/tasks", "/operations/farming/apps", "/operations/profile"];
 
 export function farmWorkAllowsPath(pathname: string): boolean {
   if (pathname === "/operations/farming") return true;

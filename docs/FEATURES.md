@@ -3224,6 +3224,16 @@ that something happened.
   covers before and after) and supplements fed in kg DM. Satellite and
   model readings are labelled as estimates. Records only.
 
+- **Farm team tasks** (FT1-FT7, decisions 1457-1461, tenant migration
+  0247): Farm › More › **Tasks**. A task has what needs doing, a due day,
+  and optionally who it's for (someone on that farm's team), a repeat
+  (weekly, 2-weekly, 4-weekly, monthly), a paddock, a map pin (an amber "T"
+  on the Map) and a note. Done and Undo keep who and when; a repeating task
+  moves to its next date. Today has a Tasks card with Done (works with no
+  signal), the farm calendar shows the next 30 days, and the person it's
+  for gets reminders in the Android app with their safety actions.
+  Cancelled tasks are kept.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

@@ -10,6 +10,7 @@ import { FarmEffluentToday } from "@/components/farm-effluent-care";
 import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-log";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
+import { FarmTasksToday, taskOverlays, useFarmTasks } from "@/components/farm-tasks";
 import { FarmPeopleCard, LocationSharingBanner, peopleMarkers, useFarmPeople } from "@/components/farm-locations";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
@@ -224,6 +225,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
           <Link href="/operations/farming/calendar">Open the farm calendar</Link>
         </p>
       </Card>
+      <FarmTasksToday organisationId={organisationId} farm={farm} />
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
       <FarmEffluentToday organisationId={organisationId} farm={farm} />
       <Card title="Mobs in now">
@@ -316,6 +318,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
     setPerson(id);
     requestAnimationFrame(() => document.getElementById("people-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   });
+  // Tasks pinned on the map (decision 1458): a tap opens Tasks.
+  const tasks = useFarmTasks(organisationId, farm.id);
+  overlays.push(...taskOverlays(tasks.data?.tasks ?? [], () => router.push(`/operations/farming/tasks?farm=${farm.id}`)));
   return (
     <div className={styles.grid}>
       <Card
@@ -467,6 +472,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
+  { href: "/operations/farming/tasks", icon: "checklist", label: "Tasks", note: "Jobs for the farm team, with reminders", staff: true },
   { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
   { href: "/operations/farming", icon: "maps", label: "Farms and paddocks", note: "Areas, boundaries, drawing paddocks", staff: true },
 ];
