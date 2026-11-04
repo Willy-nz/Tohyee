@@ -13111,6 +13111,20 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       the ledger) can be copied into a tile as they are. Error messages say
       which tile and what to fix.
 
+### Analytics: the books' codes in words (5 Nov 2026; decision 1499)
+
+1499. **Coded values in the books' Analytics tables are shown in words.**
+      An account type reads as the chart of accounts names it ("Current
+      liability", "Fixed asset", "Other income"), an account class as its
+      heading there ("Liabilities", "Income"), and an invoice's or bill's
+      status as "Approved" or "Voided". This covers tiles, tables, pivot
+      tables, chart groups, drill-down paths, slicers and tile filters, and
+      the AI's answers (a valueLabels list beside the rows). The tables keep
+      the code: filters, slicers, clicks, drill-downs and saved reports
+      still go by it, so nothing saved changes. A journal's source isn't
+      covered yet. (Number 1420, which was asked for, was already used by
+      #591.)
+
 ### Time-limited access for members (5 Nov 2026; decisions 1466-1474)
 
 Jess asked for a way to give someone access "for a contracted amount of
