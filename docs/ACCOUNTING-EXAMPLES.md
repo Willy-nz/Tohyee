@@ -4436,7 +4436,7 @@ expenses **80.00** / Cr 1000, so June's net profit is **590.00**.
   list them first in the report picker; another person's stars aren't
   shown. Starring something that isn't a report is refused.
 
-### Comparing periods, % of trading income and tracking filters (RX1-RX6)
+### Comparing periods, % of trading income and tracking filters (RX1-RX7)
 
 As Xero does, not yet reviewed (decisions 1353-1355, Jess's 4 Nov 2026
 request for reports like Xero's). The standard profit and loss and balance
@@ -4448,7 +4448,8 @@ report for its own dates (P3, CR9).
 Setup: the custom-report journals above (CR1-CR10, 31 March year end).
 
 - **RX1** Profit and loss for **1-30 Jun 2026** compared with **2 previous
-  months**: columns Jun 2026, May 2026, Apr 2026 (newest first). Trading
+  months**, newest first: columns Jun 2026, May 2026, Apr 2026 (oldest
+  first, the default since RX7, shows the same columns the other way). Trading
   income 4000 **1,200.00 / 1,500.00 / 1,000.00**; cost of sales 5000
   **300.00 / 400.00 / blank**; gross profit **900.00 / 1,100.00 /
   1,000.00**; other income 4200 **20.00 / blank / blank**; operating
@@ -4501,6 +4502,18 @@ Setup: the custom-report journals above (CR1-CR10, 31 March year end).
   the **whole** budget, and the report says so. For a budget set up for a
   tracking value, the filter is that value (a different one is refused):
   its actuals are already only that value's lines (BU6).
+- **RX7** Oldest first (Jess, 4 Nov 2026: "I want to be able to go oldest
+  to newest month on the right"; Xero shows newest first and has no
+  setting, so the default is Jess's choice, decision 1366). RX1's June with
+  2 previous months, Total, Year to date and % of trading income: columns
+  **Apr 2026, %, May 2026, %, Jun 2026, %, Total, %, Year to date, %**.
+  Sales **1,000.00 / 1,500.00 / 1,200.00**, Total and Year to date
+  **3,700.00**; net profit **900.00 (90.0%) / 1,100.00 (73.3%) / 670.00
+  (55.8%)**, Total **2,670.00 (72.2%)**, Year to date **2,670.00
+  (72.2%)**. Every figure and row is the same as newest first; only the
+  period columns swap round. The balance sheet of RX3: **31 May 2026
+  (7,500.00), 30 Jun 2026 (8,170.00)**. The report's period, heading and
+  each amount's link (its column's dates) don't change.
 
 ### Home
 

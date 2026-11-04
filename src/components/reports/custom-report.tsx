@@ -156,7 +156,8 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
 function periodSummary(figures: CustomReportFigures): string {
   const periods = figures.columns.filter((column) => column.kind === "period");
   if (periods.length === 0) return "";
-  const newest = periods[0];
+  // p0 is the chosen period, wherever the order puts it (decision 1366).
+  const newest = periods.find((column) => column.key === "p0") ?? periods[0];
   if (figures.base === "balance_sheet") {
     return periods.length === 1 ? statementAsAt(newest.to!) : `${statementAsAt(newest.to!)}, compared with ${periods.length - 1} earlier date${periods.length > 2 ? "s" : ""}`;
   }

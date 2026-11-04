@@ -280,7 +280,11 @@ that something happened.
   amounts and group totals open Account transactions; income and expense
   accounts there open at the start of the financial year (ATX6). The
   connected AI has the same options and a budget_vs_actual tool
-  (decisions 1353-1358, not yet reviewed).
+  (decisions 1353-1358, not yet reviewed). Compared periods run **oldest
+  first** (the chosen period on the right, then Total and Year to date);
+  **Order** next to "Each period" switches to newest first, and each
+  report remembers the last choice in that browser (RX7, decisions
+  1366-1367).
   **Edit layout** on the profit and loss and balance sheet starts from the
   standard rows; the editor has one Save (changes preview first), drag or
   arrow-key row moves, names typed in place, Group for chosen accounts,

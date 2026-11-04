@@ -336,7 +336,7 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "profit_and_loss",
     title: "Profit and loss",
     description:
-      "Profit and loss (income statement) between two dates, inclusive, by section and account. Without `from` it starts at the beginning of the financial year containing `to`; without `to` it ends today. Optional, as on the screen: compare with up to 11 earlier months, quarters or years (compare, compareBy), a total and a year to date column, % of trading income, one column per value of a tracking category (splitBy), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"). With compare, total, yearToDate or percentOfIncome the answer is columns and rows; each column is the report for its own dates.",
+      "Profit and loss (income statement) between two dates, inclusive, by section and account. Without `from` it starts at the beginning of the financial year containing `to`; without `to` it ends today. Optional, as on the screen: compare with up to 11 earlier months, quarters or years (compare, compareBy; order oldest_first, the default, or newest_first), a total and a year to date column, % of trading income, one column per value of a tracking category (splitBy), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"). With compare, total, yearToDate or percentOfIncome the answer is columns and rows; each column is the report for its own dates.",
     inputSchema: PROFIT_AND_LOSS_SCHEMA,
     run: (tx, args) => runProfitAndLoss(tx, args),
   },
@@ -344,7 +344,7 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "balance_sheet",
     title: "Balance sheet",
     description:
-      "Balance sheet as at a date (default today): assets, liabilities and equity by account, with retained earnings. Optional: compare with up to 11 earlier month, quarter or year ends (compare, compareBy; the answer is then columns and rows), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"; it only balances when both sides of each journal are tagged).",
+      "Balance sheet as at a date (default today): assets, liabilities and equity by account, with retained earnings. Optional: compare with up to 11 earlier month, quarter or year ends (compare, compareBy, order oldest_first or newest_first; the answer is then columns and rows), and a tracking filter (trackingCategoryId with trackingValueId, or \"unassigned\"; it only balances when both sides of each journal are tagged).",
     inputSchema: BALANCE_SHEET_SCHEMA,
     run: (tx, args) => runBalanceSheet(tx, args),
   },
