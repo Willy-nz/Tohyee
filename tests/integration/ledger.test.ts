@@ -144,6 +144,8 @@ describeWithDatabase("ledger", () => {
         "safety_entries",
         "safety_files",
         "sales_platform_sync_log",
+        "signing_events",
+        "signing_files",
         "stock_transfers",
         "tractor_equipment_settings",
         "tractor_job_versions",
