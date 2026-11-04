@@ -167,7 +167,7 @@ type ReadingRow = { id: string; farm_id: string; gauge_id: string; gauge_name: s
 async function loadReadings(tx: OrgTx, where: string, params: unknown[]): Promise<RainReading[]> {
   const rows = await tx.query<ReadingRow>(
     `select r.id::text, r.farm_id::text, r.gauge_id::text, g.name as gauge_name, r.read_on::text, r.mm::text, r.note, r.source,
-            r.created_by_email, r.created_at::text, r.updated_by_email, r.updated_at::text
+            r.created_by_email, to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at, r.updated_by_email, to_char(r.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
        from rainfall_readings r join rain_gauges g on g.id = r.gauge_id
       where r.status = 'active' and ${where}
       order by r.read_on desc, r.id desc`,
