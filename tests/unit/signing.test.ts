@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { buildSignedPdf, checkSignablePdf, sha256Hex } from "@/lib/signing/pdf";
 import { hashToken, newToken, parseSignature } from "@/lib/signing/service";
-import { allSigned, groupedFingerprint, maskEmail, requestState, signersToAsk, TOKEN_PATTERN } from "@/lib/signing/shared";
+import { allSigned, groupedFingerprint, maskEmail, reminderDue, requestState, signersToAsk, TOKEN_PATTERN } from "@/lib/signing/shared";
 
 /** E-signatures' pure rules (decisions 1396-1410). Made-up names only. */
 
@@ -111,5 +111,17 @@ describe("the signed copy", () => {
     const tampered = new Uint8Array(signed);
     tampered[100] ^= 1;
     expect(sha256Hex(tampered)).not.toBe(sha256Hex(signed));
+  });
+});
+
+describe("reminders", () => {
+  const base = { status: "sent" as const, expiresAt: "2026-08-01T00:00:00Z", remindEveryDays: 3, lastRemindedAt: null, createdAt: "2026-07-01T00:00:00Z" };
+  it("are due that many days after sending or the last reminder, while the request is open", () => {
+    expect(reminderDue(base, new Date("2026-07-03T23:59:59Z"))).toBe(false);
+    expect(reminderDue(base, new Date("2026-07-04T00:00:00Z"))).toBe(true);
+    expect(reminderDue({ ...base, lastRemindedAt: "2026-07-04T00:00:00Z" }, new Date("2026-07-05T00:00:00Z"))).toBe(false);
+    expect(reminderDue({ ...base, remindEveryDays: null }, new Date("2026-07-20T00:00:00Z"))).toBe(false);
+    expect(reminderDue({ ...base, status: "completed" }, new Date("2026-07-20T00:00:00Z"))).toBe(false);
+    expect(reminderDue(base, new Date("2026-08-02T00:00:00Z"))).toBe(false);
   });
 });

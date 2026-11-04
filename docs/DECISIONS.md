@@ -13022,3 +13022,19 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       the PDF's fingerprint; it's checked for "sign again" like any other
       sign-off (decision 949). The signing certificate stays with the
       request. Sending needs the role that keeps safety records.
+
+### E-signatures: any PDF, several signers and reminders (5 Nov 2026; decision 1410)
+
+1410. **Any PDF can be sent to sign, with reminders.** Sales › Signing lists
+      every request the person may see (Waiting, Signed, Declined, Expired,
+      Voided, All), and "Send a document" uploads a PDF (at most 25 MB; not
+      password-protected) for 1 to 20 people, in order or any order. A
+      reminder can be every day, 3 days or week: the email job sends each
+      person still asked a reminder with a new link (the old one stops
+      working), counted from when it was sent or last reminded, until it's
+      signed, declined, voided or expired. Nothing is sent when email isn't
+      set up. Links in reminders use the remote access address, or else the
+      address the request was sent from. A document can't be changed: "Send
+      a new version" starts a new request with the same people and voids the
+      old one if it's still waiting. Uploaded documents are seen by
+      bookkeepers and up, and by members named as signers.

@@ -267,6 +267,7 @@ export type SigningListFilter = { sourceKind?: unknown; sourceId?: unknown; stat
 
 /** Signing requests the person may see, newest first, optionally for one source (a quote, a year). */
 export async function listSigningRequests(tx: OrgTx, filter: SigningListFilter = {}): Promise<SigningRequestView[]> {
+  if (filter.state === "none") return [];
   const where: string[] = [];
   const params: unknown[] = [];
   if (filter.sourceKind !== undefined && filter.sourceKind !== null && filter.sourceKind !== "") {
@@ -435,11 +436,11 @@ export async function createSigningRequest(tx: OrgTx, input: CreateSigningInput,
   );
   const inserted = await tx.query<{ id: string }>(
     `insert into signing_requests (command_source, idempotency_key, request_hash, title, source_kind, source_id, document_file_id, document_sha256,
-                                   signing_order, message, expires_at, remind_every_days, replaces_request_id, created_by_user_id, created_by_email, source_details)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + make_interval(days => $11), $12, $13, $14, $15, $16::jsonb)
+                                   signing_order, message, expires_at, remind_every_days, replaces_request_id, created_by_user_id, created_by_email, source_details, link_origin)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + make_interval(days => $11), $12, $13, $14, $15, $16::jsonb, $17)
      on conflict (command_source, idempotency_key) do nothing
      returning id::text`,
-    [source, idempotencyKey, hash, title, input.sourceKind, input.sourceId, fileId, documentSha256, signingOrder, message, expiresInDays, remindEveryDays, replacesRequestId, tx.actor.userId, tx.actor.email, JSON.stringify(sourceDetails)],
+    [source, idempotencyKey, hash, title, input.sourceKind, input.sourceId, fileId, documentSha256, signingOrder, message, expiresInDays, remindEveryDays, replacesRequestId, tx.actor.userId, tx.actor.email, JSON.stringify(sourceDetails), /^https?:\/\/\S{1,290}$/.test(context.origin) ? context.origin.replace(/\/+$/, "") : null],
   );
   if (!inserted.rows[0]) throw new ConflictError("That request is being sent by another request. Try again.");
   const requestId = inserted.rows[0].id;
@@ -519,6 +520,37 @@ export async function resendSigningLink(tx: OrgTx, requestIdInput: unknown, sign
   await sendLink(tx, request, signer, origin, email, await organisationName(tx), "link");
   await addEvent(tx, { requestId: request.id, signerId: signer.id, event: "link_resent", actorEmail: tx.actor.email });
   return getSigningRequest(tx, request.id);
+}
+
+// Reminders --------------------------------------------------------------------------------------------
+
+/**
+ * Emails a reminder, with a new link (the old one stops working), to each
+ * signer still asked on open requests whose reminder is due (decision
+ * 1410). Run by the email job; nothing is sent when email isn't set up.
+ * `origin` is the remote access address when there is one, otherwise the
+ * address the request was sent from. Returns how many requests were
+ * reminded.
+ */
+export async function sendDueReminders(tx: OrgTx, origin: string | null, now = new Date()): Promise<number> {
+  const email = await signingEmailReadiness(tx);
+  if (!email.ready) return 0;
+  const due = await tx.query<{ id: string; link_origin: string | null }>(
+    `select id::text, link_origin from signing_requests
+      where status = 'sent' and expires_at > $1::timestamptz and remind_every_days is not null
+        and coalesce(last_reminded_at, created_at) + make_interval(days => remind_every_days) <= $1::timestamptz
+      order by signing_requests.id for update skip locked`,
+    [now.toISOString()],
+  );
+  let reminded = 0;
+  for (const row of due.rows) {
+    const address = origin ?? row.link_origin;
+    if (!address) continue;
+    await askNext(tx, row.id, address, email, "reminder");
+    await tx.query("update signing_requests set last_reminded_at = $2 where id = $1", [row.id, now.toISOString()]);
+    reminded += 1;
+  }
+  return reminded;
 }
 
 // Voiding --------------------------------------------------------------------------------------------------

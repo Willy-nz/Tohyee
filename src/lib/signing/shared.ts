@@ -134,6 +134,14 @@ export function signersToAsk(order: SigningOrder, signers: ReadonlyArray<{ posit
   return open.length ? [open[0].position] : [];
 }
 
+/** Whether a reminder is due (decision 1410): open, not expired, reminders on, and that many days since it was sent or last reminded. */
+export function reminderDue(request: { status: RequestStatus; expiresAt: string; remindEveryDays: number | null; lastRemindedAt: string | null; createdAt: string }, now = new Date()): boolean {
+  if (request.status !== "sent" || !request.remindEveryDays) return false;
+  if (new Date(request.expiresAt).getTime() <= now.getTime()) return false;
+  const from = new Date(request.lastRemindedAt ?? request.createdAt).getTime();
+  return now.getTime() - from >= request.remindEveryDays * 86_400_000;
+}
+
 /** Whether everyone has signed. */
 export function allSigned(signers: ReadonlyArray<{ status: SignerStatus }>): boolean {
   return signers.length > 0 && signers.every((signer) => signer.status === "signed");
