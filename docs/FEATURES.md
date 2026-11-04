@@ -2483,6 +2483,27 @@ that something happened.
   tool list and the app is told. get_organisation's `toolGroups` says which
   groups are hidden and why, and a call to a hidden tool is refused with
   the reason.
+- **AI: Analytics reports** (#591, decisions 1411-1420, examples
+  AIA1-AIA9, tenant migration 0230). A connected AI lists the Analytics
+  tables the person can use (books, CRM, Shopify, Google Analytics, Search
+  Console, Meta, files, databases, prepared tables) with their fields and
+  saved values (list_analytics_tables), asks one a question as a tile does
+  (run_analytics_query), and reads reports with their figures
+  (list_analytics_dashboards, get_analytics_dashboard). With Make drafts it
+  makes reports (create_analytics_dashboard) and adds, changes and reorders
+  tiles (update_analytics_dashboard), with the editor's chart kinds,
+  values, filters, dates and formats. Every tile it adds or changes is run
+  first; a broken one is refused with the reason and nothing is saved. It
+  can't delete a report, take a tile off, share it or touch sources,
+  folders, slicers, pages or images. Owners' and admins' AI can also
+  refresh a report's sources or named tables (refresh_analytics_sources),
+  through the same loads as Refresh now, changing no connection or
+  schedule; get_analytics_dashboard shows each source's freshness.
+  Offered only while Analytics is on;
+  farm tables need every farm. Every report now has **History** (bookkeepers
+  and up): each saved version, who saved it, whether it was through an AI,
+  and what changed, with "Put this version back". Tested with made-up
+  sales; not yet tried with a real AI app.
 - **AI: lossless line edits and paged lists** (#537, #538, decisions
   1263-1268). Reading a document over MCP (get_invoice, get_bill, get_quote,
   get_sales_order, get_purchase_order, the credit notes and repeating
