@@ -405,8 +405,11 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Repeating invoices",
     level: "read",
     description: "Repeating invoice templates and when each next runs.",
-    inputSchema: schema({ status: { type: "string", enum: [...REPEATING_STATUSES] }, contactId: ID("customer") }),
-    run: (tx, args) => listRepeatingInvoices(tx, { status: args.status, contactId: args.contactId }),
+    inputSchema: schema({ status: { type: "string", enum: [...REPEATING_STATUSES] }, contactId: ID("customer"), limit: LIMIT, cursor: CURSOR }),
+    async run(tx, args) {
+      const { rows, ...rest } = page((await listRepeatingInvoices(tx, { status: args.status, contactId: args.contactId })).repeatingInvoices, args);
+      return { repeatingInvoices: rows, ...rest };
+    },
   },
   {
     name: "get_repeating_invoice",
@@ -421,8 +424,11 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Repeating bills",
     level: "read",
     description: "Repeating bill templates and when each next runs.",
-    inputSchema: schema({ status: { type: "string", enum: [...REPEATING_STATUSES] }, contactId: ID("supplier") }),
-    run: (tx, args) => listRepeatingBills(tx, { status: args.status, contactId: args.contactId }),
+    inputSchema: schema({ status: { type: "string", enum: [...REPEATING_STATUSES] }, contactId: ID("supplier"), limit: LIMIT, cursor: CURSOR }),
+    async run(tx, args) {
+      const { rows, ...rest } = page((await listRepeatingBills(tx, { status: args.status, contactId: args.contactId })).repeatingBills, args);
+      return { repeatingBills: rows, ...rest };
+    },
   },
   {
     name: "get_repeating_bill",
@@ -457,8 +463,12 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Tracking categories",
     level: "read",
     description: "Tracking categories (e.g. Region) and their options.",
-    inputSchema: schema(),
-    run: (tx) => getTrackingSetup(tx),
+    inputSchema: schema({ limit: LIMIT, cursor: CURSOR }),
+    async run(tx, args) {
+      const setup = await getTrackingSetup(tx);
+      const { rows, ...rest } = page(setup.categories, args);
+      return { advancedFeatures: setup.advancedFeatures, categories: rows, ...rest };
+    },
   },
   {
     name: "list_fixed_assets",
@@ -489,9 +499,10 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Fixed asset types",
     level: "read",
     description: "Fixed asset types with their accounts and default depreciation.",
-    inputSchema: schema(),
-    async run(tx) {
-      return { types: await listFixedAssetTypes(tx) };
+    inputSchema: schema({ limit: LIMIT, cursor: CURSOR }),
+    async run(tx, args) {
+      const { rows, ...rest } = page(await listFixedAssetTypes(tx), args);
+      return { types: rows, ...rest };
     },
   },
   {
@@ -507,9 +518,10 @@ export const FULL_READ_TOOLS: readonly AiTool[] = [
     title: "Budgets",
     level: "read",
     description: "Budgets (not archived ones).",
-    inputSchema: schema(),
-    async run(tx) {
-      return { budgets: await listBudgets(tx) };
+    inputSchema: schema({ limit: LIMIT, cursor: CURSOR }),
+    async run(tx, args) {
+      const { rows, ...rest } = page(await listBudgets(tx), args);
+      return { budgets: rows, ...rest };
     },
   },
   {

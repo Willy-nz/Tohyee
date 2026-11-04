@@ -244,10 +244,14 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
     const first = await call(tokens.viewer, "list_sales_platform_log", { connectionId: shopId, limit: 200 });
     expect((first.data!.entries as Json[]).length).toBe(200);
     expect((first.data!.entries as Json[]).some((entry) => entry.externalId === "9001")).toBe(false);
-    const older = await call(tokens.viewer, "list_sales_platform_log", { connectionId: shopId, limit: 200, beforeId: first.data!.nextBeforeId });
+    expect(first.data).toMatchObject({ more: true, nextCursor: expect.any(String) });
+    const older = await call(tokens.viewer, "list_sales_platform_log", { connectionId: shopId, limit: 200, cursor: first.data!.nextCursor });
     const missing = (older.data!.entries as Json[]).find((entry) => entry.externalId === "9001");
     expect(missing).toMatchObject({ action: "skipped", recordKind: "product_variant", reason: "missing_sku" });
-    expect(older.data!.end).toBe("No older lines match.");
+    expect(older.data).toMatchObject({ more: false, nextCursor: null });
+    // The old name for the cursor still works for now (#574).
+    const oldName = await call(tokens.viewer, "list_sales_platform_log", { connectionId: shopId, limit: 200, beforeId: first.data!.nextCursor });
+    expect(oldName.data!.entries).toEqual(older.data!.entries);
 
     const problems = await call(tokens.viewer, "list_sales_platform_log", { outcome: "problem", recordKind: "product_variant" });
     expect((problems.data!.entries as Json[]).map((entry) => [entry.externalId, entry.reason])).toEqual([
@@ -257,7 +261,7 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
     ]);
     const one = await call(tokens.viewer, "list_sales_platform_log", { externalId: "9003" });
     expect((one.data!.entries as Json[]).map((entry) => entry.action)).toEqual(["linked", "skipped"]);
-    expect((await call(tokens.viewer, "list_sales_platform_log", { connectionId: offId })).data).toEqual({ entries: [], end: "No older lines match." });
+    expect((await call(tokens.viewer, "list_sales_platform_log", { connectionId: offId })).data).toEqual({ entries: [], more: false, nextCursor: null });
     expect((await call(tokens.viewer, "list_sales_platform_log", { action: "deleted" })).isError).toBe(true);
   });
 

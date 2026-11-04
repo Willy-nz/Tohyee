@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { boundedLimit } from "@/lib/ai/limits";
+import { BANK_ACCOUNT_CODE, BANK_ACCOUNT_ID, accountFromArgs } from "@/lib/ai/account-ref";
+import { boundedLimit, CURSOR, cursorOf, limitInput, pageAfter, pageByOffset, positionOf } from "@/lib/ai/limits";
 import { type AiTool, DATE, type JsonSchema, schema, type ToolContext } from "@/lib/ai/tools";
 import { getStatementLine, listBankAccounts, listStatementLines, type StatementLine } from "@/lib/bank/accounts";
 import {
@@ -381,11 +382,12 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
     level: "read",
     description:
       "Bank and credit card accounts with their statement balance (the last the bank gave), ledger balance (in the base currency) and how many statement lines are waiting to be reconciled.",
-    inputSchema: schema({ includeArchived: { type: "boolean" } }),
+    inputSchema: schema({ includeArchived: { type: "boolean" }, limit: limitInput(100, MAX_LINES), cursor: CURSOR }),
     async run(tx, args) {
       const accounts = await listBankAccounts(tx, { includeArchived: args.includeArchived === true });
+      const page = pageAfter(accounts, (account) => account.id, args.cursor, boundedLimit(args.limit, 100, MAX_LINES));
       return {
-        accounts: accounts.map((account) => ({
+        accounts: page.rows.map((account) => ({
           id: account.id,
           code: account.code,
           name: account.name,
@@ -398,6 +400,8 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
           unreconciledCount: account.unreconciledCount,
           lastLineDate: account.lastLineDate,
         })),
+        more: page.more,
+        nextCursor: page.nextCursor,
       };
     },
   },
@@ -406,29 +410,32 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
     title: "Bank statement lines",
     level: "read",
     description:
-      `Statement lines on one bank account: unreconciled lines oldest first (the order to work through them), otherwise newest first. Filter by status, dates and text or an exact amount (e.g. "-46.00"). At most ${MAX_LINES} at a time; use offset for the next page.`,
-    inputSchema: schema(
-      {
-        accountId: ID("bank account (from list_bank_accounts)"),
-        status: { type: "string", enum: ["unreconciled", "reconciled", "excluded", "all"], description: "Default unreconciled." },
-        from: DATE,
-        to: DATE,
-        search: { type: "string", description: "Text in the description, or an exact signed amount." },
-        limit: { type: "integer", minimum: 1, maximum: MAX_LINES, description: `Default 50, at most ${MAX_LINES}.` },
-        offset: { type: "integer", minimum: 0 },
-      },
-      ["accountId"],
-    ),
+      `Statement lines on one bank or card account (accountId or accountCode): unreconciled lines oldest first (the order to work through them), otherwise newest first. Filter by status, dates and text or an exact amount (e.g. "-46.00"). At most ${MAX_LINES} a page.`,
+    inputSchema: schema({
+      accountId: BANK_ACCOUNT_ID,
+      accountCode: BANK_ACCOUNT_CODE,
+      status: { type: "string", enum: ["unreconciled", "reconciled", "excluded", "all"], description: "Default unreconciled." },
+      from: DATE,
+      to: DATE,
+      search: { type: "string", description: "Text in the description, or an exact signed amount." },
+      limit: limitInput(50, MAX_LINES),
+      cursor: CURSOR,
+      offset: { type: "integer", minimum: 0, description: "Old name for cursor; use cursor." },
+    }),
     async run(tx, args) {
-      const result = await listStatementLines(tx, args.accountId, {
+      const account = await accountFromArgs(tx, args, { bank: true });
+      const limit = boundedLimit(args.limit, 50, MAX_LINES);
+      const start = positionOf(cursorOf(args, "offset"));
+      const result = await listStatementLines(tx, account.id, {
         status: args.status ?? "unreconciled",
         from: args.from,
         to: args.to,
         search: args.search,
-        limit: boundedLimit(args.limit, 50, MAX_LINES),
-        offset: args.offset,
+        limit,
+        offset: start,
       });
-      return { lines: result.lines.map(lineSummary), total: result.total };
+      const more = start + result.lines.length < result.total;
+      return { lines: result.lines.map(lineSummary), total: result.total, more, nextCursor: more ? String(start + result.lines.length) : null };
     },
   },
   {
@@ -490,9 +497,10 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
     title: "Bank rules",
     level: "read",
     description: "Bank rules, in the order they're tried, with their conditions and what they code lines to. Switched-off rules are included, marked isActive false.",
-    inputSchema: schema(),
-    async run(tx) {
-      return { rules: (await listBankRules(tx)).map(ruleSummary) };
+    inputSchema: schema({ limit: limitInput(100, MAX_LINES), cursor: CURSOR }),
+    async run(tx, args) {
+      const page = pageAfter(await listBankRules(tx), (rule) => rule.id, args.cursor, boundedLimit(args.limit, 100, MAX_LINES));
+      return { rules: page.rows.map(ruleSummary), more: page.more, nextCursor: page.nextCursor };
     },
   },
   {
@@ -552,10 +560,12 @@ export const BANK_READ_TOOLS: readonly AiTool[] = [
     name: "list_bank_batches",
     title: "Batches",
     level: "read",
-    description: "The newest batches of bank actions, with their counts. mine: only this key's own.",
-    inputSchema: schema({ mine: { type: "boolean" }, limit: { type: "integer", minimum: 1, maximum: 100 } }),
+    description: "Batches of bank actions, newest first, with their counts. mine: only this key's own.",
+    inputSchema: schema({ mine: { type: "boolean" }, limit: limitInput(20, 100), cursor: CURSOR }),
     async run(tx, args, context) {
-      return { batches: await listBatches(tx, { source: args.mine === true ? context.source : undefined, limit: boundedLimit(args.limit, 20, 100) }) };
+      const source = args.mine === true ? context.source : undefined;
+      const page = await pageByOffset(args.cursor, boundedLimit(args.limit, 20, 100), (offset, limit) => listBatches(tx, { source, limit, offset }));
+      return { batches: page.rows, more: page.more, nextCursor: page.nextCursor };
     },
   },
 ];

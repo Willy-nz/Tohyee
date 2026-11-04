@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { batchAnswer, savepointRunner } from "@/lib/ai/bank-tools";
+import { BANK_ACCOUNT_CODE, BANK_ACCOUNT_ID, accountFromArgs, namesAccount } from "@/lib/ai/account-ref";
 import { GST_EVIDENCE_FIELD } from "@/lib/ai/gst-evidence";
+import { boundedLimit, CURSOR, limitInput, pageAfter, positionOf } from "@/lib/ai/limits";
 import { type AiTool, type JsonSchema, schema } from "@/lib/ai/tools";
 import { listAccountUsage, listReviewLines, MAX_REVIEW_ACTIONS, REVIEW_STATES, reviewLine, startReviewBatch, undoReview } from "@/lib/bank/mixed-use";
 import { REVIEW_DECISIONS } from "@/lib/bank/mixed-use-rules";
@@ -65,18 +67,32 @@ export const MIXED_USE_READ_TOOLS: readonly AiTool[] = [
     title: "Lines on personal and mixed-use accounts",
     level: "read",
     description:
-      "How each bank and card account is used (business only, mixed use or personal), and, with accountId, a mixed-use or personal account's lines with their reviews. Those lines are reviewed (business, private, split or refund), never reconciled. A business part is spend money plus an owner journal, so the account's balance in the books stays 0.00. state: to_review (default), reviewed, excluded or all.",
+      "Without an account: every bank and card account with how it's used (business only, mixed use or personal). With accountId or accountCode: a mixed-use or personal account's lines with their reviews, newest first. Those lines are reviewed (business, private, split or refund), never reconciled. A business part is spend money plus an owner journal, so the account's balance in the books stays 0.00. state: to_review (default), reviewed, excluded or all.",
     inputSchema: schema({
-      accountId: { type: "string" },
+      accountId: BANK_ACCOUNT_ID,
+      accountCode: BANK_ACCOUNT_CODE,
       state: { type: "string", enum: [...REVIEW_STATES] },
       search: { type: "string" },
-      limit: { type: "integer", minimum: 1, maximum: 200 },
+      limit: limitInput(50, 200),
+      cursor: CURSOR,
     }),
     async run(tx, args) {
-      if (args.accountId == null || args.accountId === "") {
-        return { accounts: (await listAccountUsage(tx)).filter((account) => account.usage !== "business"), note: "Accounts not listed are business only: reconcile them with the bank tools." };
+      const limit = boundedLimit(args.limit, 50, 200);
+      if (!namesAccount(args)) {
+        const page = pageAfter(await listAccountUsage(tx), (account) => account.accountId, args.cursor, limit);
+        return {
+          accounts: page.rows,
+          more: page.more,
+          nextCursor: page.nextCursor,
+          note: "Business only accounts are reconciled with the bank tools; mixed use and personal accounts are reviewed here.",
+        };
       }
-      return listReviewLines(tx, args.accountId, { state: args.state, search: args.search, limit: args.limit ?? 50 });
+      const account = await accountFromArgs(tx, args, { bank: true });
+      const start = positionOf(args.cursor);
+      const found = await listReviewLines(tx, account.id, { state: args.state, search: args.search, limit: limit + 1, offset: start });
+      const lines = found.lines.slice(0, limit);
+      const more = found.lines.length > limit;
+      return { account: found.account, lines, more, nextCursor: more ? String(start + lines.length) : null };
     },
   },
 ];

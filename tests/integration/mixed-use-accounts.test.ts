@@ -365,10 +365,25 @@ describeWithDatabase("Personal and mixed-use accounts (#545, MU1-MU14)", () => {
   describe("MU14 AI and bulk", () => {
     it("look-only keys list; only Full access reviews (with evidence), and undoes only its own", async () => {
       const [aiLine, personLine, a, b] = await importLines(visa, ["11/06/2026,-46.00,Z ENERGY AI", "11/06/2026,-20.00,Z ENERGY PERSON", "12/06/2026,-9.00,KMART A", "12/06/2026,-8.00,KMART B"]);
+      // #579: with no arguments, every bank and card account with how it's used, business only ones too.
       const listed = await call(tokens.read, "list_mixed_use_lines", {});
-      expect((listed.accounts as Json[]).map((account) => account.code)).toContain("2410");
+      expect((listed.accounts as Json[]).map((account) => account.code)).toEqual(expect.arrayContaining(["2410", "1000"]));
+      expect((listed.accounts as Json[]).find((account) => account.code === "1000")).toMatchObject({ usage: "business" });
+      expect(listed).toMatchObject({ more: false, nextCursor: null });
       const lines = await call(tokens.read, "list_mixed_use_lines", { accountId: visa.id });
       expect((lines.lines as Json[]).some((entry) => entry.id === aiLine.id)).toBe(true);
+      // #573 and #574: by code, a page at a time, every line once.
+      const seen: string[] = [];
+      let cursor: unknown;
+      for (let pages = 0; pages < 20; pages += 1) {
+        const page = await call(tokens.read, "list_mixed_use_lines", { accountCode: "2410", limit: 1, ...(cursor ? { cursor } : {}) });
+        seen.push(...(page.lines as Json[]).map((entry) => String(entry.id)));
+        expect(page.more).toBe(page.nextCursor !== null);
+        if (!page.more) break;
+        cursor = page.nextCursor;
+      }
+      expect(seen).toEqual((lines.lines as Json[]).map((entry) => String(entry.id)));
+      await expect(call(tokens.read, "list_mixed_use_lines", { accountCode: "4000" })).rejects.toThrow(/is not a bank or card account/);
       await expect(call(tokens.post, "review_mixed_use_line", { lineId: aiLine.id, decision: "private" })).rejects.toThrow();
       await expect(call(tokens.full, "review_mixed_use_line", { lineId: aiLine.id, decision: "business", contactId: zEnergy.id, lines: [{ accountCode: "6120", taxCode: "GST", amount: "46.00" }] })).rejects.toThrow(
         /gstEvidence/,

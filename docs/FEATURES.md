@@ -2433,6 +2433,24 @@ that something happened.
   null on the last page; `more` is true only when there is a next page.
   Quotes, sales and purchase orders now give up to 200 a page, as the tools
   said. Tested with made-up documents only.
+- **AI: the same shapes everywhere** (#573, #574, #575, #579, decisions
+  1377-1384). Every list tool (list_* and account_transactions) takes
+  `cursor` and `limit` and returns `more` and `nextCursor`; list_bank_lines'
+  `offset` and list_sales_platform_log's `beforeId` still work for now as
+  other names for `cursor`. account_transactions pages its lines (the
+  totals still cover them all). list_accounts gives each account's id and
+  code, and the tools that ask for one account (account_transactions,
+  list_bank_lines, list_mixed_use_lines, the bank coding proposals) take
+  accountId or accountCode; a bank tool given another kind of account says
+  it isn't a bank or card account instead of answering with nothing.
+  profit_and_loss (one column, compared or split by tracking),
+  budget_vs_actual and run_custom_report all answer with `columns` and
+  `rows`, with the profit and loss screen's labels (Trading income ...
+  Operating expenses); the budget vs actual screen now uses the same
+  labels. Every `...At` time in an answer is ISO 8601 in UTC. The payout
+  matches give a note that's the same on every payout once, in `notes`.
+  list_mixed_use_lines with no account lists every bank and card account
+  with how it's used.
 - **AI: sales platform diagnostics and the connection's access** (#531,
   #532 part 3, decisions 1246-1249). get_organisation now says what the
   key or app connection may do now (Look only, Make drafts, Make and post or
