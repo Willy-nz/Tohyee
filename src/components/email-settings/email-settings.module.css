@@ -1,0 +1,239 @@
+/* Settings › Email (decisions 1391-1395). Colours come from globals.css. */
+
+.stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.stepHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 12px 16px;
+  min-width: 0;
+}
+
+.fields input,
+.fields select {
+  width: 100%;
+}
+
+.narrow {
+  max-width: 28rem;
+}
+
+/* The connected summary: the address and how, then its actions. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+
+.summaryText {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.summaryLine {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.summaryMeta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+  overflow-wrap: anywhere;
+}
+
+.testRow {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 520px) {
+  .summary > :last-child,
+  .summary > :last-child button {
+    width: 100%;
+  }
+}
+
+/* Templates: one row per document type. */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.row {
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.rowLink {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 12px 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.rowLink:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.rowName {
+  font-weight: 600;
+}
+
+.rowSubject {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .rowLink {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .rowSubject {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+/* The template editor: the fields, and a preview beside them (below on a phone). */
+.editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.editor input,
+.editor textarea {
+  width: 100%;
+}
+
+.editor textarea {
+  min-height: 16rem;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chipsLabel {
+  margin-right: 2px;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+}
+
+.chip {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
+.chip:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.preview {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  min-width: 0;
+}
+
+.previewLabel {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.previewSubject {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.previewBody {
+  margin: 0;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}

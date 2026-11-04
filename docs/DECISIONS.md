@@ -12860,3 +12860,45 @@ nothing, what Xero's API does.
       bank batches, bank coding proposals, mixed-use review lines and paddock
       photos services take an `offset` so their tools can page; the screens
       don't use it and are unchanged.
+
+### Settings › Email, step by step (Jess, 4 Nov 2026; decisions 1391-1395)
+
+Jess: "Can we make the email stuff better. Like look better and not like so
+much info on one page". Built like the shop and Akahu setups she liked
+(decisions 1250-1259, 1288-1291). The APIs and permissions are unchanged.
+
+1391. **Account and Templates are separate tabs.** Settings › Email is the
+      sending account; Settings › Email › Templates lists the templates, and
+      each opens on its own page. The account page no longer ends with every
+      template in full.
+1392. **Setting up the account is one step at a time.** Provider (Microsoft
+      365, Google, or any provider by SMTP, as tiles), then the provider's app
+      details (SMTP: the server), then signing in (SMTP: the login and
+      sender), a test email, and done. Each step saves only when its own
+      action works ("Save and continue"); choosing the provider and the SMTP
+      server save nothing. Coming back from Microsoft's or Google's sign-in
+      opens the sign-in step to confirm the from name. The test can be
+      skipped. The how-to and why sit behind (i) tips.
+1393. **Steps that need an admin at the email provider say so.** A badge on
+      the app details step: "Microsoft 365 admin" (registering the app in
+      Entra) or "Google admin" (a Workspace admin, or a personal Gmail's
+      owner), and on the SMTP server step when Microsoft 365 needs
+      Authenticated SMTP turned on. Everyone on this page is already a Tohyee
+      admin, so it's about the provider, not Tohyee.
+1394. **Set up, the account is one summary line.** "Sending as … via
+      Microsoft 365 · Connected" (or "Needs attention" with the reason: a
+      sign-in or password the server can't read, or a failed last test), the
+      from name, and Send test email, Change and Disconnect. Change runs the
+      same steps, and the old account keeps sending until they're finished.
+      Disconnect asks first. For SMTP it removes the saved account, as
+      "Remove everything" did. Hints use neutral examples (like
+      yourcompany.onmicrosoft.com) and don't show the person's own address
+      ("Blank sends it to you").
+1395. **A template opens on its own, with chips and a preview.** The list
+      shows each document type's subject on one line and whether it's
+      Tohyee's template or customised. The editor has the placeholders as
+      buttons that insert at the cursor (in the subject or the message, the
+      last one used), a preview filled with made-up values (Sam Taylor,
+      INV-0042, $1,150.00) and the organisation's name, a warning for a
+      placeholder the document type doesn't have, Save, and "Reset to
+      Tohyee's template" (asks first).

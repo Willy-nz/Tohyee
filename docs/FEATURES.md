@@ -1753,6 +1753,16 @@ that something happened.
   under More options. Settings › Email now asks how documents are sent with
   the same tiles, and hides the SMTP server details Gmail and Microsoft 365
   fill in.
+- **Settings › Email, step by step** (Jess, 4 Nov 2026, decisions
+  1391-1395): Account and Templates are separate tabs. Setting up the
+  account is a guided setup like the shop's (provider, app details or
+  server, sign in or account, test email, done), each step saving only when
+  its own action works, with a badge on the step that needs a Microsoft 365
+  or Google admin. Once set up, it's one summary line ("Sending as … via
+  Microsoft 365 · Connected") with Send test email, Change and Disconnect
+  (asks first). Templates are a list with each subject on one line; each
+  opens on its own page with placeholder buttons that insert at the cursor,
+  a preview with made-up values, and Reset to Tohyee's template.
 - **What each part brought in** (#532 parts 1 and 2, decisions 1256-1257):
   each store shows Customers, Products, Orders and Payouts as off, needs
   setting up, not synced yet, up to date, partly brought in or failed,
