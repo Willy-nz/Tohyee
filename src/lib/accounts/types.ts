@@ -2,6 +2,15 @@ export const ACCOUNT_CLASSES = ["asset", "liability", "equity", "revenue", "expe
 
 export type AccountClass = (typeof ACCOUNT_CLASSES)[number];
 
+/** Each class as the chart of accounts names it. */
+export const ACCOUNT_CLASS_LABELS: Record<AccountClass, string> = {
+  asset: "Assets",
+  liability: "Liabilities",
+  equity: "Equity",
+  revenue: "Income",
+  expense: "Expenses",
+};
+
 /** Account types, each belonging to one class. Reports group by these. */
 export const ACCOUNT_TYPES = {
   bank: { accountClass: "asset", label: "Bank" },
