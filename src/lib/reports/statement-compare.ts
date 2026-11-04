@@ -76,6 +76,19 @@ export function parseCompare(input: { compare?: unknown; compareBy?: unknown; to
   return setting;
 }
 
+/**
+ * The profit and loss's groups with the labels the screen shows (#575): the
+ * compared report, the AI's report tools and budget vs actual all use these.
+ */
+export const PROFIT_AND_LOSS_GROUPS = [
+  { key: "revenue", field: "revenue", title: "Trading income", totalLabel: "Total trading income" },
+  { key: "cost", field: "costOfSales", title: "Cost of sales", totalLabel: "Total cost of sales" },
+  { key: "other", field: "otherIncome", title: "Other income", totalLabel: "Total other income" },
+  { key: "expenses", field: "expenses", title: "Operating expenses", totalLabel: "Total operating expenses" },
+] as const;
+export const GROSS_PROFIT_LABEL = "Gross profit";
+export const NET_PROFIT_LABEL = "Net profit";
+
 type Group = { sections: Array<{ key: string; label: string; lines: Array<{ accountId: string; code: string; name: string; amount: string }>; total: string }>; total: string };
 
 /** One row per account in any column of these groups, in code order within each section. */
@@ -176,13 +189,15 @@ export async function profitAndLossCompare(
       { key: `t${key}`, kind: "total", label: totalLabel, values: { ...blank(), ...valuesOf(reports, (i) => pick(reports[i].report).total) } },
     ];
   };
+  const [revenue, cost, other, expenses] = PROFIT_AND_LOSS_GROUPS;
+  const of = (entry: (typeof PROFIT_AND_LOSS_GROUPS)[number]) => group(entry.title, entry.totalLabel, (r) => r[entry.field], entry.key);
   const rows: StatementRow[] = [
-    ...group("Trading income", "Total trading income", (r) => r.revenue, "revenue"),
-    ...group("Cost of sales", "Total cost of sales", (r) => r.costOfSales, "cost"),
-    { key: "gross", kind: "total", label: "Gross profit", values: { ...blank(), ...valuesOf(reports, (i) => reports[i].report.grossProfit) } },
-    ...group("Other income", "Total other income", (r) => r.otherIncome, "other"),
-    ...group("Operating expenses", "Total operating expenses", (r) => r.expenses, "expenses"),
-    { key: "net", kind: "grand", label: "Net profit", values: { ...blank(), ...valuesOf(reports, (i) => reports[i].report.netProfit) } },
+    ...of(revenue),
+    ...of(cost),
+    { key: "gross", kind: "total", label: GROSS_PROFIT_LABEL, values: { ...blank(), ...valuesOf(reports, (i) => reports[i].report.grossProfit) } },
+    ...of(other),
+    ...of(expenses),
+    { key: "net", kind: "grand", label: NET_PROFIT_LABEL, values: { ...blank(), ...valuesOf(reports, (i) => reports[i].report.netProfit) } },
   ];
   // Trading income per amount column, for the % columns (total column added up below).
   const income: StatementValues = { ...blank(), ...valuesOf(reports, (i) => reports[i].report.revenue.total) };

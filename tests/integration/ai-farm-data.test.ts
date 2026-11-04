@@ -70,7 +70,8 @@ describeWithDatabase("the AI reads farm data", () => {
 
     // AIW10: no farmId needed with one farm; the lab's results as reported, no judgement.
     const soil = await call(token, "list_soil_tests");
-    expect(((soil.tests as Json).rows as Json[]).map((test) => [test.paddockName, test.sampledOn, (test.results as Json[])[0].valueText])).toEqual([["12", "2026-08-15", "28"]]);
+    expect(soil).toMatchObject({ more: false, nextCursor: null });
+    expect((soil.tests as Json[]).map((test) => [test.paddockName, test.sampledOn, (test.results as Json[])[0].valueText])).toEqual([["12", "2026-08-15", "28"]]);
 
     // AIW12: FB2's paddock 12 line, worked out and not saved.
     const whatIf = await call(token, "fertiliser_what_if", { productId: ureaId, paddockId: twelveId, kgPerHa: "100", pricePerTonne: "780", spreadingPerHa: "25" });

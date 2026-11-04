@@ -312,12 +312,13 @@ export async function getProposal(tx: OrgTx, proposalIdInput: unknown, options: 
 }
 
 /** The newest proposals, optionally for one bank account, with their counts by state. */
-export async function listProposals(tx: OrgTx, options: { accountId?: unknown; limit?: number } = {}): Promise<ProposalSummary[]> {
+export async function listProposals(tx: OrgTx, options: { accountId?: unknown; limit?: number; offset?: number } = {}): Promise<ProposalSummary[]> {
   const accountId = options.accountId === undefined || options.accountId === null || options.accountId === "" ? null : requireId(options.accountId, "accountId");
   const records = (
-    await tx.query<ProposalRecord>(`${PROPOSAL_SELECT} where ($1::bigint is null or p.account_id = $1) order by p.created_at desc, p.id desc limit $2`, [
+    await tx.query<ProposalRecord>(`${PROPOSAL_SELECT} where ($1::bigint is null or p.account_id = $1) order by p.created_at desc, p.id desc limit $2 offset $3`, [
       accountId,
-      Math.min(Math.max(options.limit ?? 50, 1), 200),
+      Math.min(Math.max(options.limit ?? 50, 1), 201),
+      Math.max(options.offset ?? 0, 0),
     ])
   ).rows;
   const counts = await countsFor(

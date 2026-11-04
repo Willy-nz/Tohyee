@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { boundedLimit } from "@/lib/ai/limits";
+import { BANK_ACCOUNT_CODE, BANK_ACCOUNT_ID, accountFromArgs, namesAccount } from "@/lib/ai/account-ref";
+import { boundedLimit, CURSOR, limitInput, pageByOffset } from "@/lib/ai/limits";
 import { GST_EVIDENCE_FIELD } from "@/lib/ai/gst-evidence";
 import { type AiTool, type JsonSchema, schema } from "@/lib/ai/tools";
 import { PROPOSAL_FILTERS } from "@/lib/bank/coding-proposal-words";
@@ -53,10 +54,12 @@ export const BANK_PROPOSAL_READ_TOOLS: readonly AiTool[] = [
     name: "list_bank_coding_proposals",
     title: "Bank coding proposals",
     level: "read",
-    description: "The newest bank coding proposals, optionally for one bank account, with how many rows are proposed, approved (waiting to post), posted, failed and rejected.",
-    inputSchema: schema({ accountId: ID("bank account"), limit: { type: "integer", minimum: 1, maximum: 100 } }),
+    description: "Bank coding proposals, newest first, optionally for one bank account (accountId or accountCode), with how many rows are proposed, approved (waiting to post), posted, failed and rejected.",
+    inputSchema: schema({ accountId: BANK_ACCOUNT_ID, accountCode: BANK_ACCOUNT_CODE, limit: limitInput(20, 100), cursor: CURSOR }),
     async run(tx, args) {
-      return { proposals: await listProposals(tx, { accountId: args.accountId, limit: boundedLimit(args.limit, 20, 100) }) };
+      const accountId = namesAccount(args) ? (await accountFromArgs(tx, args, { bank: true })).id : undefined;
+      const page = await pageByOffset(args.cursor, boundedLimit(args.limit, 20, 100), (offset, limit) => listProposals(tx, { accountId, limit, offset }));
+      return { proposals: page.rows, more: page.more, nextCursor: page.nextCursor };
     },
   },
   {
@@ -80,7 +83,8 @@ export const BANK_PROPOSAL_WRITE_TOOLS: readonly AiTool[] = [
     description: `Proposes coding for up to ${MAX_PROPOSAL_ROWS} unreconciled statement lines on one bank account, for a person to review. Nothing is posted or reconciled: a person approves, edits or rejects each row in Tohyee, and only then is spend or receive money posted (for the line's full amount, GST inclusive with a tax code) and the line reconciled. Each row: lineId, contactId, accountCode, taxCode (null for no GST), and optionally description, rationale (why), confidence (0 to 1), gstEvidence and evidence (what supports it, e.g. "Receipt in the bills inbox"). A row the person can't approve as it is (no GST evidence while registered) is still kept and shown as needing a look. Rows that can't be kept (line reconciled or already in an open proposal, unknown contact or account) are listed in refused. Send the same idempotencyKey to retry; you can't approve your own proposal.`,
     inputSchema: schema(
       {
-        accountId: ID("bank account (list_bank_accounts)"),
+        accountId: BANK_ACCOUNT_ID,
+        accountCode: BANK_ACCOUNT_CODE,
         note: { type: "string", description: "A short note for the reviewer." },
         rows: {
           type: "array",
@@ -105,11 +109,12 @@ export const BANK_PROPOSAL_WRITE_TOOLS: readonly AiTool[] = [
         },
         idempotencyKey: { type: "string", pattern: "^[A-Za-z0-9._:-]{8,120}$", description: "Send the same key if you retry the same call. Made up for you if left out." },
       },
-      ["accountId", "rows"],
+      ["rows"],
     ),
     async run(tx, args, context) {
       const key = args.idempotencyKey === undefined || args.idempotencyKey === null || args.idempotencyKey === "" ? `ai-${randomBytes(12).toString("hex")}` : requireIdempotencyKey(args.idempotencyKey);
-      const { proposal, created } = await proposeBankCoding(tx, { accountId: args.accountId, rows: args.rows, note: args.note, idempotencyKey: key, source: context.source });
+      const account = await accountFromArgs(tx, args, { bank: true });
+      const { proposal, created } = await proposeBankCoding(tx, { accountId: account.id, rows: args.rows, note: args.note, idempotencyKey: key, source: context.source });
       return { created, ...proposalView(proposal) };
     },
   },

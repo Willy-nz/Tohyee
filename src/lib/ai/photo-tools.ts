@@ -1,4 +1,5 @@
 import { type AiAccessLevel, effectiveAccessLevel, levelAllows, roleCeiling } from "@/lib/ai/access-levels";
+import { boundedLimit, CURSOR, limitInput, pageByOffset } from "@/lib/ai/limits";
 import { type AiTool, schema, ToolFileAnswer } from "@/lib/ai/tools";
 import { listAiTokens } from "@/lib/ai/tokens";
 import { IDEMPOTENCY, idempotencyKey } from "@/lib/ai/write-tools";
@@ -27,9 +28,13 @@ export const PHOTO_READ_TOOLS: readonly AiTool[] = [
       "Paddock photos people took (on a farm walk, with a cover reading, or on their own) that have no cover estimate yet, newest first: the farm, paddock, its effective area, the day taken (from the phone's clock), and the photo's size. Where the phone was, and any reading, are left out so your estimate is your own. Look at one with get_pasture_photo, then propose a cover with propose_pasture_cover_estimate.",
     inputSchema: schema({
       farmId: { type: "string", description: "One farm only, from list_farms_and_paddocks." },
-      limit: { type: "integer", minimum: 1, maximum: 100, description: "At most this many (default 20)." },
+      limit: limitInput(20, 100),
+      cursor: CURSOR,
     }),
-    run: async (tx, args) => ({ photos: await photosAwaitingEstimate(tx, { farmId: args.farmId, limit: args.limit }) }),
+    async run(tx, args) {
+      const page = await pageByOffset(args.cursor, boundedLimit(args.limit, 20, 100), (offset, limit) => photosAwaitingEstimate(tx, { farmId: args.farmId, limit, offset }));
+      return { photos: page.rows, more: page.more, nextCursor: page.nextCursor };
+    },
   },
   {
     name: "get_pasture_photo",

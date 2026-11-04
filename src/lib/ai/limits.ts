@@ -78,12 +78,76 @@ export function historyRows<T>(page: { rows: T[]; next: string | null }): { rows
  * then answers with a message asking for a narrower question).
  */
 export function boundedJson(value: unknown, max = MAX_TOOL_TEXT): string | null {
-  const text = JSON.stringify(value);
+  const text = JSON.stringify(value, isoTimestamps);
   return text.length > max ? null : text;
 }
 
-/** The `cursor` input of a paged AI list (#538, decision 1267): the `nextCursor` from the page before. */
+const POSTGRES_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)(\.\d+)?(Z|[+-]\d{2}(?::?\d{2})?)$/;
+
+/**
+ * A timestamp as ISO 8601 UTC (#579, decision 1381), e.g.
+ * "2026-11-04T09:30:00.000Z", whether it came as a Date or as Postgres text
+ * ("2026-11-04 22:30:00.123456+13"). Anything else comes back unchanged.
+ */
+export function isoUtc(value: unknown): unknown {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? value : value.toISOString();
+  if (typeof value !== "string") return value;
+  const match = POSTGRES_TIMESTAMP.exec(value);
+  if (!match) return value;
+  const [, date, time, fraction = "", zone] = match;
+  const offset = zone === "Z" ? "Z" : zone.length === 3 ? `${zone}:00` : zone.includes(":") ? zone : `${zone.slice(0, 3)}:${zone.slice(3)}`;
+  const parsed = new Date(`${date}T${time.length === 5 ? `${time}:00` : time}${fraction.slice(0, 4)}${offset}`);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
+
+/** JSON.stringify's replacer for tool answers: every `...At` field is ISO 8601 UTC (#579). `asAt` is a report's date, not a time. */
+function isoTimestamps(this: unknown, key: string, value: unknown): unknown {
+  if (!key.endsWith("At") || key === "asAt") return value;
+  // JSON.stringify has already turned a Date into ISO text by now; read the original.
+  const original = this && typeof this === "object" ? (this as Record<string, unknown>)[key] : value;
+  return isoUtc(original);
+}
+
+/** The `cursor` input of a paged AI list (#538, #574, decision 1267): the `nextCursor` from the page before. */
 export const CURSOR = { type: "string", description: "nextCursor from the last page, for the next one. Keep the same filters." } as const;
+
+/** A list's `limit` input. */
+export function limitInput(fallback: number, max: number) {
+  return { type: "integer", minimum: 1, maximum: max, description: `Default ${fallback}, at most ${max}.` } as const;
+}
+
+/**
+ * The cursor a list tool was given (#574, decision 1377): `cursor`, or an
+ * older name for it (offset, beforeId) kept for now so older prompts work.
+ */
+export function cursorOf(args: Record<string, unknown>, ...aliases: string[]): unknown {
+  if (args.cursor !== undefined && args.cursor !== null && args.cursor !== "") return args.cursor;
+  for (const alias of aliases) {
+    const value = args[alias];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+}
+
+/** A position cursor: how many rows came before this page. */
+export function positionOf(cursor: unknown): number {
+  if (cursor === undefined || cursor === null || cursor === "") return 0;
+  const text = String(cursor).trim();
+  if (!/^\d{1,9}$/.test(text)) throw new ValidationError("That cursor isn't valid. Start again without a cursor.");
+  return Number(text);
+}
+
+/**
+ * One page of a list by position (#574): for lists whose rows have no id of
+ * their own, or a service that pages by offset. `nextCursor` is the number of
+ * rows shown so far, null on the last page.
+ */
+export function pageByPosition<T>(rows: readonly T[], cursor: unknown, limit: number): { rows: T[]; more: boolean; nextCursor: string | null } {
+  const start = positionOf(cursor);
+  const page = rows.slice(start, start + limit);
+  const more = start + limit < rows.length;
+  return { rows: page, more, nextCursor: more ? String(start + page.length) : null };
+}
 
 /**
  * One page of a list a service returns whole (#538, decision 1267): up to
@@ -108,4 +172,20 @@ export function pageAfter<T>(
   const page = rows.slice(start, start + limit);
   const more = start + limit < rows.length;
   return { rows: page, more, nextCursor: more && page.length > 0 ? idOf(page[page.length - 1]) : null };
+}
+
+/**
+ * One page from a service that takes an offset and a limit (#574): asks for
+ * one row more than the page to know whether there's more.
+ */
+export async function pageByOffset<T>(
+  cursor: unknown,
+  limit: number,
+  fetch: (offset: number, count: number) => Promise<T[]>,
+): Promise<{ rows: T[]; more: boolean; nextCursor: string | null }> {
+  const start = positionOf(cursor);
+  const rows = await fetch(start, limit + 1);
+  const more = rows.length > limit;
+  const page = rows.slice(0, limit);
+  return { rows: page, more, nextCursor: more ? String(start + page.length) : null };
 }

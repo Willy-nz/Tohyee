@@ -624,14 +624,14 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
               </tr>
             </thead>
             <tbody>
-              <VarianceGroup title="Revenue" group={data.revenue} totalLabel="Total revenue" actualHref={actualHref} />
+              <VarianceGroup title="Trading income" group={data.revenue} totalLabel="Total trading income" actualHref={actualHref} />
               <VarianceGroup title="Cost of sales" group={data.costOfSales} totalLabel="Total cost of sales" actualHref={actualHref} />
               <tr className={ui.reportTotal}>
                 <td>Gross profit</td>
                 <VarianceCells figures={data.grossProfit} />
               </tr>
               <VarianceGroup title="Other income" group={data.otherIncome} totalLabel="Total other income" actualHref={actualHref} />
-              <VarianceGroup title="Expenses" group={data.expenses} totalLabel="Total expenses" actualHref={actualHref} />
+              <VarianceGroup title="Operating expenses" group={data.expenses} totalLabel="Total operating expenses" actualHref={actualHref} />
             </tbody>
             <tfoot>
               <tr className={ui.reportGrand}>
