@@ -148,6 +148,7 @@ type RequestRow = {
   remind_every_days: number | null;
   last_reminded_at: Date | null;
   replaces_request_id: string | null;
+  source_details: Record<string, unknown>;
   completed_at: Date | null;
   declined_at: Date | null;
   voided_at: Date | null;
@@ -160,7 +161,7 @@ type RequestRow = {
 
 const REQUEST_SQL = `select r.id::text, r.title, r.source_kind, r.source_id, r.status, r.signing_order, r.message, r.document_file_id::text,
        d.file_name as document_name, r.document_sha256, d.size_bytes as document_bytes, r.signed_file_id::text, s.sha256 as signed_sha256,
-       r.expires_at, r.remind_every_days, r.last_reminded_at, r.replaces_request_id::text, r.completed_at, r.declined_at, r.voided_at,
+       r.expires_at, r.remind_every_days, r.last_reminded_at, r.replaces_request_id::text, r.source_details, r.completed_at, r.declined_at, r.voided_at,
        r.voided_by_email, r.void_reason, r.created_by_email, r.created_by_user_id::text, r.created_at
   from signing_requests r
   join signing_files d on d.id = r.document_file_id
@@ -367,6 +368,8 @@ export type CreateSigningInput = {
   title: unknown;
   sourceKind: SourceKind;
   sourceId: string | null;
+  /** What the document showed, for the thing it's for (an induction's versions, decision 1409). */
+  sourceDetails?: Record<string, unknown>;
   fileName: string;
   bytes: Uint8Array;
   signers: unknown;
@@ -405,7 +408,8 @@ export async function createSigningRequest(tx: OrgTx, input: CreateSigningInput,
   const fileName = (input.fileName.trim() || "document.pdf").replace(/[\\/\0\r\n]+/g, "_").slice(0, 200);
   const documentSha256 = sha256Hex(input.bytes);
   const replacesRequestId = input.replacesRequestId ? String(input.replacesRequestId) : null;
-  const hash = requestHash("signing_request", { title, sourceKind: input.sourceKind, sourceId: input.sourceId, documentSha256, signers, signingOrder, message, expiresInDays, remindEveryDays, replacesRequestId });
+  const sourceDetails = input.sourceDetails ?? {};
+  const hash = requestHash("signing_request", { title, sourceKind: input.sourceKind, sourceId: input.sourceId, sourceDetails, documentSha256, signers, signingOrder, message, expiresInDays, remindEveryDays, replacesRequestId });
 
   const earlier = await tx.query<{ id: string; request_hash: string }>("select id::text, request_hash from signing_requests where command_source = $1 and idempotency_key = $2", [source, idempotencyKey]);
   if (earlier.rows[0]) {
@@ -431,11 +435,11 @@ export async function createSigningRequest(tx: OrgTx, input: CreateSigningInput,
   );
   const inserted = await tx.query<{ id: string }>(
     `insert into signing_requests (command_source, idempotency_key, request_hash, title, source_kind, source_id, document_file_id, document_sha256,
-                                   signing_order, message, expires_at, remind_every_days, replaces_request_id, created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + make_interval(days => $11), $12, $13, $14, $15)
+                                   signing_order, message, expires_at, remind_every_days, replaces_request_id, created_by_user_id, created_by_email, source_details)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + make_interval(days => $11), $12, $13, $14, $15, $16::jsonb)
      on conflict (command_source, idempotency_key) do nothing
      returning id::text`,
-    [source, idempotencyKey, hash, title, input.sourceKind, input.sourceId, fileId, documentSha256, signingOrder, message, expiresInDays, remindEveryDays, replacesRequestId, tx.actor.userId, tx.actor.email],
+    [source, idempotencyKey, hash, title, input.sourceKind, input.sourceId, fileId, documentSha256, signingOrder, message, expiresInDays, remindEveryDays, replacesRequestId, tx.actor.userId, tx.actor.email, JSON.stringify(sourceDetails)],
   );
   if (!inserted.rows[0]) throw new ConflictError("That request is being sent by another request. Try again.");
   const requestId = inserted.rows[0].id;
@@ -716,6 +720,14 @@ function sourceHooks(kind: SourceKind): Hooks {
       async declined(tx, request, signer, reason) {
         const { declineQuoteBySigning } = await import("@/lib/quotes/service");
         await declineQuoteBySigning(tx, request.source_id!, { requestId: request.id, signerEmail: signer.email, reason });
+      },
+    };
+  }
+  if (kind === "induction") {
+    return {
+      async completed(tx, request, signers) {
+        const { recordInductionSignoff } = await import("@/lib/signing/inductions");
+        await recordInductionSignoff(tx, request, signers[0]);
       },
     };
   }

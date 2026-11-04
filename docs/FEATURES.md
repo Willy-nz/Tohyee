@@ -461,6 +461,12 @@ that something happened.
   statements sends the year's PDF to the directors or officers to sign (in
   order or any order; members can sign in Tohyee). The signed copy is kept
   with that year. A new version replaces the open request.
+- **Signing staff paperwork** (decisions 1408-1409): employment agreements
+  (an uploaded PDF, from the payroll employee, payroll access only) and
+  farm safety inductions (written to a PDF with the farm's hazards and
+  emergency details; each person signs their own, and signing adds their
+  induction sign-off to the farm's safety records as "signed
+  electronically").
 - **Sales orders, stage 1** (Sales; SO1-SO12, not yet approved by Jess),
   following NetSuite's sales orders: drafts to a customer with the same
   lines as an invoice (items, units, price levels, tracking, custom fields,

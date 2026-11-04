@@ -1,5 +1,6 @@
 "use client";
 
+import { EmploymentSigning } from "@/components/signing/staff-signing";
 import { DateInput } from "@/components/date-input";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
@@ -371,6 +372,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
           </div>
         </form>
       </Card>
+      {selectedId && current ? <EmploymentSigning key={current.id} organisationId={organisationId} employee={current} /> : null}
 
       {selectedId ? (
         <>

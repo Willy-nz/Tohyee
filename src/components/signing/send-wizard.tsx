@@ -71,6 +71,9 @@ export function SendForSigning({
   onDone,
   onCancel,
   extraReview,
+  titleDefault = "",
+  orderChoice = true,
+  sendText,
 }: {
   /** The document to sign, when it's made by Tohyee (a quote, the financial statements). */
   document: { name: string; previewHref: string | null; text: ReactNode } | null;
@@ -87,12 +90,18 @@ export function SendForSigning({
   onDone: (outcome: SendOutcome) => void;
   onCancel: () => void;
   extraReview?: ReactNode;
+  /** For an upload: the title it gets unless changed. */
+  titleDefault?: string;
+  /** Offer "in order" or "any order" (not when each person gets their own request). */
+  orderChoice?: boolean;
+  /** What the Send step says happens, instead of the usual line. */
+  sendText?: string;
 }) {
   const [step, setStep] = useState<Step>("document");
   const [signers, setSigners] = useState<SignerDraft[]>(initialSigners.length ? initialSigners : [{ name: "", email: "", roleLabel: "" }]);
   const [order, setOrder] = useState<SigningOrder>("in_order");
   const [message, setMessage] = useState("");
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(titleDefault);
   const [days, setDays] = useState(String(DEFAULT_EXPIRY_DAYS));
   const [remind, setRemind] = useState(remindersOffered ? "3" : "");
   const [file, setFile] = useState<UploadedPdf | null>(null);
@@ -236,12 +245,12 @@ export function SendForSigning({
                 </Field>
                 {maxSigners > 1 ? (
                   <div className={styles.actions}>
-                    {order === "in_order" && index > 0 ? (
+                    {orderChoice && order === "in_order" && index > 0 ? (
                       <Button variant="secondary" size="small" onClick={() => move(index, -1)} aria-label={`Move signer ${index + 1} up`}>
                         ↑
                       </Button>
                     ) : null}
-                    {order === "in_order" && index < signers.length - 1 ? (
+                    {orderChoice && order === "in_order" && index < signers.length - 1 ? (
                       <Button variant="secondary" size="small" onClick={() => move(index, 1)} aria-label={`Move signer ${index + 1} down`}>
                         ↓
                       </Button>
@@ -290,7 +299,7 @@ export function SendForSigning({
             ) : null}
           </div>
         ) : null}
-        {maxSigners > 1 && signers.length > 1 ? (
+        {orderChoice && maxSigners > 1 && signers.length > 1 ? (
           <ChoiceTiles
             label="Signing order"
             value={order}
@@ -334,12 +343,12 @@ export function SendForSigning({
           <dd>
             {signers.map((signer, index) => (
               <div key={index}>
-                {signers.length > 1 && order === "in_order" ? `${index + 1}. ` : ""}
+                {orderChoice && signers.length > 1 && order === "in_order" ? `${index + 1}. ` : ""}
                 {signer.name} ({signer.email}){signer.roleLabel ? `, ${signer.roleLabel}` : ""}
               </div>
             ))}
           </dd>
-          {signers.length > 1 ? (
+          {orderChoice && signers.length > 1 ? (
             <>
               <dt>Order</dt>
               <dd>{order === "in_order" ? "In order" : "Any order"}</dd>
@@ -363,9 +372,9 @@ export function SendForSigning({
     body = (
       <div className={styles.stack}>
         <p style={{ margin: 0 }}>
-          {emailReady
+          {sendText ?? (emailReady
             ? `Tohyee emails ${signers.length === 1 ? signers[0].name : "each person, when it's their turn,"} a link. They check it's them with an emailed code, read it, and sign.`
-            : "Email isn't set up, so nobody is emailed. Members on the list sign in Tohyee (Signing)."}{" "}
+            : "Email isn't set up, so nobody is emailed. Members on the list sign in Tohyee (Signing).")}{" "}
           <InfoTip label="About electronic signatures">{LEGAL_NOTE}</InfoTip>
         </p>
         <Notice tone="warning">Once it&apos;s sent, the document can&apos;t be changed. To change it, void the request and send a new one.</Notice>
