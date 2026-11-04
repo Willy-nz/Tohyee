@@ -60,6 +60,8 @@ type PayoutRow = {
   reconciled_line_date: string | null;
   refusal: string | null;
   orders_not_in_books: string[];
+  /** False when the payout is known only from its posted transfer (posted before settlements were kept). */
+  from_payout_row: boolean;
 };
 
 /**
@@ -72,18 +74,22 @@ type PayoutRow = {
 async function loadPayouts(tx: OrgTx, connectionIds: string[], from: string, to: string): Promise<PayoutRow[]> {
   if (connectionIds.length === 0) return [];
   const result = await tx.query<PayoutRow>(
+    // One row per store, however many connections it has had (#570): a store connected again as a new connection
+    // would otherwise list each of its payouts once per connection. Its payouts are shown under its live connection.
     `with stores as (
-       select c.id, c.platform, c.store_domain, c.payout_account_id from sales_platform_connections c where c.id = any($1::bigint[])
+       select distinct on (c.platform, c.store_domain) c.id, c.platform, c.store_domain
+         from sales_platform_connections c where c.id = any($1::bigint[])
+        order by c.platform, c.store_domain, (c.status = 'disconnected'), c.id desc
      ),
      known as (
-       select p.connection_id::text, p.platform, p.store_domain, p.external_id, p.issued_on::text, p.status, p.direction, p.currency_code,
+       select s.id::text as connection_id, p.platform, p.store_domain, p.external_id, p.issued_on::text, p.status, p.direction, p.currency_code,
               p.net::text, p.detail_read, p.gross_sales::text, p.refunds::text, p.fees::text, p.adjustments::text, p.chargebacks::text,
-              p.reserves::text, p.other_amounts::text, p.transaction_count, p.order_names
+              p.reserves::text, p.other_amounts::text, p.transaction_count, p.order_names, true as from_payout_row
          from sales_platform_payouts p join stores s on s.platform = p.platform and s.store_domain = p.store_domain
         where p.issued_on between $2::date and $3::date
        union all
-       select d.connection_id::text, d.platform, d.store_domain, d.external_id, t.transfer_date::text, 'PAID', 'DEPOSIT', t.currency_code,
-              t.amount::text, false, null, null, null, null, null, null, null, null, '{}'::text[]
+       select s.id::text, d.platform, d.store_domain, d.external_id, t.transfer_date::text, 'PAID', 'DEPOSIT', t.currency_code,
+              t.amount::text, false, null, null, null, null, null, null, null, null, '{}'::text[], false
          from sales_platform_documents d join stores s on s.platform = d.platform and s.store_domain = d.store_domain
          join bank_transfers t on t.id = d.transfer_id
         where d.record_kind = 'payout' and t.status = 'posted' and t.transfer_date between $2::date and $3::date
@@ -92,7 +98,8 @@ async function loadPayouts(tx: OrgTx, connectionIds: string[], from: string, to:
      select k.*, l.id::text as journal_line_id, l.journal_id::text as journal_id,
             rl.id::text as reconciled_line_id, rl.line_date::text as reconciled_line_date,
             (select g.message from sales_platform_sync_log g
-              where g.connection_id = k.connection_id::bigint and g.record_kind = 'payout' and g.external_id = k.external_id
+              where g.connection_id in (select c.id from sales_platform_connections c where c.platform = k.platform and c.store_domain = k.store_domain)
+                and g.record_kind = 'payout' and g.external_id = k.external_id
               order by g.id desc limit 1) as refusal,
             coalesce((select array_agg(n.name order by n.name) from unnest(k.order_names) as n(name)
                        where not exists (select 1 from sales_platform_documents o
@@ -132,6 +139,21 @@ function settlementOf(row: PayoutRow): Settlement | null {
   };
 }
 
+/**
+ * Why a payout has no settlement (#578), decided from what's known: it
+ * isn't paid yet; it was posted before Tohyee kept settlements (known only
+ * from its posted transfer); or it hasn't been read with its transactions.
+ */
+function missingSettlement(row: PayoutRow): { status: "not_paid_yet" | "posted_without_settlement" | "not_read"; note: string } {
+  if (row.status !== "PAID") {
+    return { status: "not_paid_yet", note: `The store hasn't paid this payout yet (${row.status.toLowerCase().replace(/_/g, " ")}); its settlement is read once it's paid.` };
+  }
+  if (!row.from_payout_row) {
+    return { status: "posted_without_settlement", note: "This payout was posted before Tohyee kept settlements, so only its net is known." };
+  }
+  return { status: "not_read", note: "Its transactions haven't been read from the store yet; they are at the next sync." };
+}
+
 function addMoney(a: string, b: string): string {
   return toFixedString(add(dec(a), dec(b)), 2);
 }
@@ -163,7 +185,14 @@ function candidateOf(row: PayoutRow): PayoutCandidate {
 
 /** The connections whose platform pays out (Shopify), with what posting still needs. */
 async function payoutConnections(tx: OrgTx, connectionId: string | null = null): Promise<PayoutConnection[]> {
-  const all = (await listConnections(tx)).filter((connection) => connection.platform === "shopify" && (connectionId === null || connection.id === connectionId));
+  const shopify = (await listConnections(tx)).filter((connection) => connection.platform === "shopify");
+  // #570: a store connected again is a new connection; the old, disconnected one is left out while the store has a live one.
+  const live = new Set(shopify.filter((connection) => connection.status !== "disconnected").map((connection) => connection.storeDomain.toLowerCase()));
+  const all = shopify.filter(
+    (connection) =>
+      (connectionId === null || connection.id === connectionId) &&
+      (connection.status !== "disconnected" || connection.id === connectionId || !live.has(connection.storeDomain.toLowerCase())),
+  );
   const ids = await tx.query<{ id: string; payout_account_id: string | null; clearing_name: string | null }>(
     `select c.id::text, c.payout_account_id::text, a.name as clearing_name
        from sales_platform_connections c left join accounts a on a.id = c.clearing_account_id where c.id = any($1::bigint[])`,
@@ -270,7 +299,7 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
       direction: candidate.direction,
       net: candidate.net,
       currency: candidate.currency,
-      settlement: candidate.settlement ?? { note: "Settlement detail wasn't read for this payout (posted before #548, or not paid yet)." },
+      settlement: candidate.settlement ?? missingSettlement(row),
       inAccounts: candidate.posted !== null,
       ...(candidate.refusal ? { whyNotInAccounts: candidate.refusal } : {}),
       bankLine: candidate.posted?.reconciledLineId ? { lineId: candidate.posted.reconciledLineId, date: candidate.posted.reconciledLineDate } : null,
@@ -311,12 +340,14 @@ export async function payoutMatchReport(tx: OrgTx, options: { connectionId?: unk
         : { status: "not_a_payout", reason: "Nothing on the line or its account points to a platform payout." }),
     });
   }
+  // Each clearing account once, however many connections share it (#570), so its balance is the ledger's.
   const clearing = await tx.query<{ code: string; balance: string }>(
     `select a.code, to_char(coalesce(sum(l.debit_amount - l.credit_amount), 0), 'FM999999999990.00') as balance
-       from sales_platform_connections c join accounts a on a.id = c.clearing_account_id
+       from accounts a
        left join ledger_journal_lines l on l.account_id = a.id
        left join ledger_journals j on j.id = l.journal_id and j.posting_date <= $2::date
-      where c.id = any($1::bigint[]) and (l.id is null or j.id is not null)
+      where a.id in (select c.clearing_account_id from sales_platform_connections c where c.id = any($1::bigint[]))
+        and (l.id is null or j.id is not null)
       group by a.code order by a.code`,
     [ids, to],
   );

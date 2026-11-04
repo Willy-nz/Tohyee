@@ -819,7 +819,11 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
   if (payout.status !== "PAID") return "waiting";
   const plan = planPayout(payout, posting.baseCurrency);
   if (!plan.ok) {
-    await refused(tx, context, "payout", id, plan.reason);
+    // Refused because of what the payout is (#578): skipped, not failed. Nothing on Tohyee's side fixes it; it's recorded by hand
+    // (or read again after an update, SPC39).
+    if (await log(tx, context, { action: "skipped", recordKind: "payout", externalId: id, message: plan.reason })) {
+      context.counts.skipped += 1;
+    }
     return "refused";
   }
   // Chargebacks and reserves need their accounts chosen first (SPC30). That's

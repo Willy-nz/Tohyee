@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { SALES_PLATFORMS_HREF } from "@/components/navigation";
-import { Badge, Button, Card, Empty, Notice, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
@@ -13,6 +13,8 @@ import {
   AUTH_METHOD_LABELS,
   SALES_PLATFORM_LABELS,
   type SalesPlatformConnection,
+  SHOPIFY_AUTH_METHODS,
+  type ShopifyAuthMethod,
   SYNC_LOG_ACTION_LABELS,
   type SyncLogEntry,
   type SyncResult,
@@ -293,6 +295,144 @@ export function CoverageList({
   );
 }
 
+/** "Last synced …" on the store card (#572): the last sync that worked, and the failed attempt after it if there was one. */
+export function lastSyncText(connection: Pick<SalesPlatformConnection, "lastSyncAt" | "lastSuccessfulSyncAt" | "failures">): string {
+  if (!connection.lastSyncAt) return "Not synced yet.";
+  const success = connection.lastSuccessfulSyncAt ? `Last synced ${formatDateTime(connection.lastSuccessfulSyncAt)}.` : "No sync has worked yet.";
+  if (connection.failures === 0 || connection.lastSuccessfulSyncAt === connection.lastSyncAt) return success;
+  return `${success} Last tried ${formatDateTime(connection.lastSyncAt)}, and it failed.`;
+}
+
+/**
+ * The store refused Tohyee's login (#572): said first and plainly on the
+ * store card, with the one thing that fixes it. Pure, so it's tested.
+ */
+export function ReconnectBanner({
+  connection,
+  isAdmin,
+  onReconnect,
+}: {
+  connection: Pick<SalesPlatformConnection, "platform" | "needsReconnect" | "lastSuccessfulSyncAt" | "status">;
+  isAdmin: boolean;
+  onReconnect: () => void;
+}) {
+  if (!connection.needsReconnect || connection.status === "disconnected") return null;
+  const shop = SALES_PLATFORM_LABELS[connection.platform];
+  return (
+    <Notice tone="error">
+      <strong>{shop} no longer accepts Tohyee&apos;s login.</strong> Nothing has come in{" "}
+      {connection.lastSuccessfulSyncAt ? `since ${formatDateTime(connection.lastSuccessfulSyncAt)}` : "yet"}, so the accounts may be out of date.{" "}
+      {isAdmin ? (
+        <>
+          Reconnect with the app&apos;s new credentials: what&apos;s been brought in stays, and the next sync carries on from there.
+          <div className={ui.actions} style={{ marginTop: 8 }}>
+            <Button onClick={onReconnect}>Reconnect</Button>
+          </div>
+        </>
+      ) : (
+        "Ask an admin to reconnect the store."
+      )}
+    </Notice>
+  );
+}
+
+/** New credentials for the same store (#572): checked with the store before anything is saved. */
+function ReconnectForm({
+  organisationId,
+  connection,
+  onDone,
+  onCancel,
+}: {
+  organisationId: string;
+  connection: SalesPlatformConnection;
+  onDone: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const shopify = connection.platform === "shopify";
+  const [authMethod, setAuthMethod] = useState<ShopifyAuthMethod>(
+    (SHOPIFY_AUTH_METHODS as readonly string[]).includes(connection.authMethod) ? (connection.authMethod as ShopifyAuthMethod) : "client_credentials",
+  );
+  const [first, setFirst] = useState("");
+  const [second, setSecond] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const labels = !shopify
+    ? ["Consumer key", "Consumer secret"]
+    : authMethod === "client_credentials"
+      ? ["Client ID", "Client secret"]
+      : ["Admin API access token", "API secret key"];
+  const fields = !shopify
+    ? { consumerKey: first, consumerSecret: second }
+    : authMethod === "client_credentials"
+      ? { authMethod, clientId: first, clientSecret: second }
+      : { authMethod, accessToken: first, apiSecret: second };
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/sales-platforms/connections/${connection.id}/reconnect`, { method: "POST", body: { organisationId, ...fields } });
+      onDone(`Reconnected ${connection.storeName ?? connection.storeDomain}. Choose "Sync now" to bring in what's changed.`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+      style={{ display: "grid", gap: 10 }}
+    >
+      <strong>Reconnect {connection.storeDomain}</strong>
+      <span className={ui.muted}>
+        {shopify
+          ? "Copy the app's credentials from its settings in Shopify. If you made a new app, give it the same access scopes and install it on the store first."
+          : "Make a new REST API key in WooCommerce (Settings › Advanced › REST API) and copy it here."}
+      </span>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.grid2}>
+        {shopify ? (
+          <Field label="How the app signs in">
+            <select value={authMethod} onChange={(event) => setAuthMethod(event.target.value as ShopifyAuthMethod)}>
+              {SHOPIFY_AUTH_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {method === "client_credentials" ? "Client ID and secret (Dev Dashboard app)" : "Admin API access token (older custom app)"}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        <Field label={labels[0]}>
+          <input
+            type={labels[0] === "Client ID" ? "text" : "password"}
+            value={first}
+            onChange={(event) => setFirst(event.target.value)}
+            maxLength={500}
+            autoComplete="off"
+            required
+          />
+        </Field>
+        <Field label={labels[1]} hint="Stored encrypted on this server; never shown again.">
+          <input type="password" value={second} onChange={(event) => setSecond(event.target.value)} maxLength={500} autoComplete="new-password" required />
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy || !first || !second}>
+          {busy ? "Checking…" : "Reconnect"}
+        </Button>
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function ConnectionCard({
   organisationId,
   connection,
@@ -311,7 +451,8 @@ export function ConnectionCard({
   const [showLog, setShowLog] = useState(false);
   const [logFilter, setLogFilter] = useState<LogFilter>({ kind: "", outcome: "" });
   const [setup, setSetup] = useState<SetupStep | null>(null);
-  const status = STATUS_BADGES[connection.status];
+  const [reconnecting, setReconnecting] = useState(false);
+  const status = connection.needsReconnect && connection.status !== "disconnected" ? { tone: "red" as const, text: "Needs reconnecting" } : STATUS_BADGES[connection.status];
   const connected = connection.status !== "disconnected";
   const shop = SALES_PLATFORM_LABELS[connection.platform];
   const coverage = useApiData<{ parts: KindCoverage[] }>(connected ? `/api/sales-platforms/connections/${connection.id}/parts` : null, {
@@ -427,10 +568,25 @@ export function ConnectionCard({
     >
       <div style={{ display: "grid", gap: 12 }}>
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+        {reconnecting && isAdmin && connected ? (
+          <ReconnectForm
+            organisationId={organisationId}
+            connection={connection}
+            onCancel={() => setReconnecting(false)}
+            onDone={(text) => {
+              setReconnecting(false);
+              setMessage({ tone: "success", text });
+              setLogVersion((value) => value + 1);
+              onChanged();
+            }}
+          />
+        ) : (
+          <ReconnectBanner connection={connection} isAdmin={isAdmin} onReconnect={() => setReconnecting(true)} />
+        )}
         {connected ? (
           <p className={ui.muted} style={{ margin: 0 }}>
             Connected by {connection.connectedByEmail} on {formatDateTime(connection.connectedAt)}.{" "}
-            {connection.lastSyncAt ? `Last synced ${formatDateTime(connection.lastSyncAt)}.` : "Not synced yet."}{" "}
+            {lastSyncText(connection)}{" "}
             {connection.webhooksActive ? `${shop} also sends changes as they happen.` : null}
           </p>
         ) : (
@@ -438,7 +594,8 @@ export function ConnectionCard({
             Disconnected by {connection.disconnectedByEmail} on {formatDateTime(connection.disconnectedAt)}.
           </p>
         )}
-        {connected && connection.lastError ? <Notice tone="error">The last sync failed: {connection.lastError}</Notice> : null}
+        {connected && connection.lastError && !connection.needsReconnect ? <Notice tone="error">The last sync failed: {connection.lastError}</Notice> : null}
+        {connected && connection.lastError && connection.needsReconnect ? <p className={ui.muted} style={{ margin: 0 }}>{shop} said: {connection.lastError}</p> : null}
         {connected && connection.webhooksNote ? <Notice tone="warning">{connection.webhooksNote}</Notice> : null}
         {connected ? (
           coverage.data ? (
@@ -576,14 +733,19 @@ export function SalesPlatformsSummary({ organisationId }: { organisationId: stri
     <Card title="Sales platforms" actions={<Link href={SALES_PLATFORMS_HREF}>Sales platforms</Link>}>
       <ul style={{ display: "grid", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
         {summary.connections.map((connection) => {
-          const status = STATUS_BADGES[connection.status];
+          const status = connection.needsReconnect ? { tone: "red" as const, text: "Needs reconnecting" } : STATUS_BADGES[connection.status];
           return (
             <li key={connection.id}>
               <strong>
                 {SALES_PLATFORM_LABELS[connection.platform]}: {connection.storeName ?? connection.storeDomain}
               </strong>{" "}
               <Badge tone={status.tone}>{status.text}</Badge>
-              <div className={ui.muted}>{connection.lastSyncAt ? `Last synced ${formatDateTime(connection.lastSyncAt)}.` : "Not synced yet."}</div>
+              <div className={ui.muted}>{lastSyncText(connection)}</div>
+              {connection.needsReconnect ? (
+                <div>
+                  <Link href={SALES_PLATFORMS_HREF}>Reconnect the store</Link>
+                </div>
+              ) : null}
               {connection.lastError ? <div className={ui.muted}>The last sync failed: {connection.lastError}</div> : null}
             </li>
           );

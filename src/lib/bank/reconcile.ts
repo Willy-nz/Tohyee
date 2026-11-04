@@ -680,7 +680,10 @@ export type MatchCandidate = {
 export type TransferCandidate = { lineId: string; accountId: string; accountCode: string; accountName: string; date: string; amount: string; description: string };
 
 export type LineSuggestions = {
+  /** Closest first: the same amount, then the nearest amount, then the nearest date. Voided ones only when asked for. */
   matches: MatchCandidate[];
+  /** Voided transactions and their reversals that would fit but aren't listed (#571); ask with includeVoided to see them. */
+  voidedLeftOut: number;
   /** Unreconciled lines for the opposite amount within 2 days on the organisation's other accounts, nearest date first. */
   transfers: TransferCandidate[];
   documents: Array<{ kind: "invoice" | "bill"; id: string; number: string; contactName: string; amountDue: string; date: string }>;
@@ -700,32 +703,73 @@ export type LineSuggestions = {
 /** How many days apart the two sides of a transfer between the organisation's accounts can be (#258). */
 export const TRANSFER_WINDOW_DAYS = 2;
 
+/** The most posted transactions suggested for one line. */
+export const MOST_MATCH_SUGGESTIONS = 25;
+
 /**
  * What a line could be reconciled with: unreconciled journal lines on its
- * account within the match window (same amount first), open invoices or bills
- * for its exact amount, lines on the organisation's other accounts that look
+ * account within the match window, closest first (the same amount, then
+ * the nearest amount, then the nearest date), open invoices or bills for
+ * its exact amount, lines on the organisation's other accounts that look
  * like the other side of a transfer, and the first bank rule that applies.
+ *
+ * A voided transaction and the reversal that voided it cancel out, so
+ * they're left out, as Xero leaves voided transactions out of Find & Match
+ * (#571); `includeVoided` lists them too (flagged), for the rare statement
+ * that shows both, such as a dishonoured payment (BK4).
  */
-export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?: BankRule[]): Promise<LineSuggestions> {
+export async function suggestionsForLine(
+  tx: OrgTx,
+  lineIdInput: unknown,
+  rules?: BankRule[],
+  options: { includeVoided?: boolean; limit?: number } = {},
+): Promise<LineSuggestions> {
   const line = await getStatementLine(tx, lineIdInput);
   const moneyIn = !line.amount.startsWith("-");
   const foreignLine = line.currencyCode !== tx.baseCurrency;
-  const candidates = await tx.query<CandidateRow & { voided: boolean }>(
-    `select l.id, l.journal_id, l.account_id, l.account_amount::text as amount, j.posting_date::text,
-            j.origin, j.reference, j.description, l.description as line_description, false as reconciled,
-            (j.correction_kind is not distinct from 'reversal'
-              or exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal')) as voided
-       from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
-      where l.account_id = $1
-        and ((l.debit_amount > 0) = $2)
-        and j.posting_date between $3::date - $4::integer and $3::date + $4::integer
-        and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
-        and (not $6::boolean or l.foreign_amount > 0)
-        and j.origin <> 'opening_balance'
-      order by l.account_amount = $5::numeric desc, voided, abs(j.posting_date - $3::date), l.id
-      limit 25`,
-    [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount, foreignLine],
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? MOST_MATCH_SUGGESTIONS), 1), MOST_MATCH_SUGGESTIONS);
+  const candidates = await tx.query<CandidateRow & { voided: boolean; voided_left_out: string }>(
+    `with fitting as (
+       select l.id, l.journal_id, l.account_id, l.account_amount, j.posting_date,
+              j.origin, j.reference, j.description, l.description as line_description,
+              (j.correction_kind is not distinct from 'reversal'
+                or exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal')) as voided
+         from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
+        where l.account_id = $1
+          and ((l.debit_amount > 0) = $2)
+          and j.posting_date between $3::date - $4::integer and $3::date + $4::integer
+          and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
+          and (not $6::boolean or l.foreign_amount > 0)
+          and j.origin <> 'opening_balance'
+     )
+     select f.id, f.journal_id, f.account_id, f.account_amount::text as amount, f.posting_date::text,
+            f.origin, f.reference, f.description, f.line_description, false as reconciled, f.voided,
+            (select count(*) from fitting v where v.voided)::text as voided_left_out
+       from fitting f
+      where $7::boolean or not f.voided
+      order by f.account_amount = $5::numeric desc, f.voided, abs(f.account_amount - $5::numeric), abs(f.posting_date - $3::date), f.id
+      limit $8`,
+    [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount, foreignLine, options.includeVoided === true, limit],
   );
+  const voidedLeftOut = options.includeVoided
+    ? 0
+    : candidates.rows.length > 0
+      ? Number(candidates.rows[0].voided_left_out)
+      : Number(
+          (
+            await tx.query<{ n: string }>(
+              `select count(*)::text as n
+                 from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
+                where l.account_id = $1 and ((l.debit_amount > 0) = $2)
+                  and j.posting_date between $3::date - $4::integer and $3::date + $4::integer
+                  and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
+                  and (not $5::boolean or l.foreign_amount > 0) and j.origin <> 'opening_balance'
+                  and (j.correction_kind is not distinct from 'reversal'
+                       or exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal'))`,
+              [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, foreignLine],
+            )
+          ).rows[0].n,
+        );
   // Invoices and bills in the line's currency only (FXB9, MC5).
   const documents = moneyIn
     ? await tx.query<{ id: string; number: string; contact_name: string; amount_due: string; date: string }>(
@@ -785,6 +829,7 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       exact: toFixedString(dec(row.amount), 2) === line.amount,
       voided: row.voided === true,
     })),
+    voidedLeftOut,
     documents: exactDocuments,
     transfers: transfers.rows.map((row) => ({
       lineId: row.id,

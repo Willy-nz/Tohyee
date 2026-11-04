@@ -200,24 +200,38 @@ function MatchForm({
   lookups,
   submit,
   busy,
+  onShowVoided,
 }: {
   line: StatementLine;
   suggestions: LineSuggestions;
   lookups: Lookups;
   submit: Submit;
   busy: boolean;
+  onShowVoided: () => void;
 }) {
   const [adjustment, setAdjustment] = useState<AdjustmentValue>(NO_ADJUSTMENT);
   const [chosen, setChosen] = useState<string[]>(() => {
     const exact = suggestions.matches.find((match) => match.exact && !match.voided);
     return exact ? [exact.journalLineId] : [];
   });
+  const voided =
+    suggestions.voidedLeftOut > 0 ? (
+      <p className={ui.muted} style={{ margin: 0 }}>
+        {suggestions.voidedLeftOut === 1 ? "1 voided transaction is" : `${suggestions.voidedLeftOut} voided transactions (or their reversals) are`} left out.{" "}
+        <Button variant="secondary" size="small" onClick={onShowVoided}>
+          Show voided
+        </Button>
+      </p>
+    ) : null;
   if (suggestions.matches.length === 0) {
     return (
-      <Empty>
-        Nothing posted on this account within 60 days of the line is waiting to be matched. Pay an invoice or bill, or create a
-        bank transaction instead.
-      </Empty>
+      <div style={{ display: "grid", gap: 10 }}>
+        <Empty>
+          Nothing posted on this account within 60 days of the line is waiting to be matched. Pay an invoice or bill, or create a
+          bank transaction instead.
+        </Empty>
+        {voided}
+      </div>
     );
   }
   const total = suggestions.matches
@@ -277,6 +291,7 @@ function MatchForm({
           </tbody>
         </table>
       </div>
+      {voided}
       <TotalCheck total={total} target={line.amount} />
       {needsAdjustment && foreign ? (
         <Notice tone="warning">
@@ -1078,7 +1093,12 @@ function LineReconciler({
   lookups: Lookups;
   onDone: () => void;
 }) {
-  const detail = useApiData<{ line: StatementLine; suggestions: LineSuggestions }>(`/api/statement-lines/${line.id}`, { organisationId });
+  // Voided transactions and their reversals are left out unless asked for (#571), as Xero's Find & Match does.
+  const [includeVoided, setIncludeVoided] = useState(false);
+  const detail = useApiData<{ line: StatementLine; suggestions: LineSuggestions }>(`/api/statement-lines/${line.id}`, {
+    organisationId,
+    ...(includeVoided ? { includeVoided: "1" } : {}),
+  });
   const { submit, busy, error, setError } = useCommand(organisationId, line, onDone);
   const [chosenMode, setMode] = useState<Mode | null>(null);
   const moneyIn = !line.amount.startsWith("-");
@@ -1140,7 +1160,9 @@ function LineReconciler({
           </button>
         ))}
       </div>
-      {mode === "match" ? <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} /> : null}
+      {mode === "match" ? (
+        <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} onShowVoided={() => setIncludeVoided(true)} />
+      ) : null}
       {mode === "split" ? <SplitForm line={line} otherLines={otherLines} suggestions={suggestions} submit={submit} busy={busy} /> : null}
       {mode === "payments" ? (
         <PaymentsForm

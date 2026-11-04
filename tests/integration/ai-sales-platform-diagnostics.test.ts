@@ -79,7 +79,11 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
     return ((await response.json()) as { token: string }).token;
   }
 
-  async function connection(tx: OrgTx, domain: string, values: { syncProducts: boolean; post: boolean; scopes: string[]; lastSync: string | null; lastError?: string }) {
+  async function connection(
+    tx: OrgTx,
+    domain: string,
+    values: { syncProducts: boolean; post: boolean; scopes: string[]; lastSync: string | null; lastError?: string; lastSuccess?: string; failures?: number },
+  ) {
     const ids = async (sql: string) => (await tx.query<{ id: string }>(sql)).rows.map((row) => row.id);
     const accounts = await ids("select id::text from accounts order by code limit 5");
     const untaxed = (await ids("select id::text from tax_codes order by id limit 1"))[0];
@@ -87,9 +91,10 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
       `insert into sales_platform_connections (platform, store_domain, store_name, store_currency, prices_include_tax, auth_method,
               credentials_ciphertext, access_token_ciphertext, webhook_key, sync_customers, sync_products, connected_by_email, granted_scopes,
               post_to_accounts, start_date, clearing_account_id, payout_account_id, fees_account_id, sales_account_id, shipping_account_id,
-              untaxed_tax_code_id, last_sync_at, last_error)
+              untaxed_tax_code_id, last_sync_at, last_error, last_successful_sync_at, failures, status)
        values ('shopify', $1, $1, 'NZD', true, 'client_credentials', $2, $3, $4, true, $5, 'owner@example.com', $6,
-               $7, case when $7 then date '2026-07-01' end, $8, $9, $10, $11, $12, $13, $14, $15)
+               $7, case when $7 then date '2026-07-01' end, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+               case when $17 >= 3 then 'paused' else 'active' end)
        returning id::text`,
       [
         domain,
@@ -107,6 +112,8 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
         untaxed,
         values.lastSync,
         values.lastError ?? null,
+        values.lastSuccess ?? (values.lastError ? null : values.lastSync),
+        values.failures ?? 0,
       ],
     );
     return inserted.rows[0].id;
@@ -138,6 +145,8 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
         scopes: ["read_customers", "read_products"],
         lastSync: new Date(now - 3 * 3600000).toISOString(),
         lastError: `Shopify said 401 for token ${SHOP_TOKEN}.`,
+        lastSuccess: new Date(now - 26 * 3600000).toISOString(),
+        failures: 4,
       });
       await writeLog(tx, shopId, { source: "connection", action: "webhooks", message: `Webhooks set up at https://books.example.nz/api/sales-platforms/webhooks/${ORG}/${WEBHOOK_KEY}.` });
       // An old problem: a variant with no SKU, then 220 other lines so it's on an older page.
@@ -149,6 +158,14 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
       for (let index = 0; index < 220; index += 1) {
         await writeLog(tx, shopId, { source: "sync", action: "kept", recordKind: "customer", externalId: `c${index}`, message: `Kept Tohyee's email for customer ${index}.` });
       }
+      // #578: a customer's email in the message.
+      await writeLog(tx, shopId, {
+        source: "sync",
+        action: "skipped",
+        recordKind: "customer",
+        externalId: "7001",
+        message: "Shopify customer Aroha (aroha.made-up@example.com) wasn't added: contact Aroha has the same name but a different email, so they may be different people.",
+      });
       await writeLog(tx, shopId, { source: "sync", action: "sync", message: "Synced glimmers-test.myshopify.com: 1 linked, 3 skipped." });
     });
   }, 120_000);
@@ -210,8 +227,13 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
     expect(shop.imports.orders).toMatchObject({ status: "setup_needed" });
     expect(shop.imports.orders.why).toContain("read_orders");
     expect(shop.imports.payouts).toMatchObject({ status: "setup_needed" });
-    expect(shop.freshness).toMatchObject({ behind: true });
-    expect(shop.freshness.minutesSinceLastSync).toBeGreaterThanOrEqual(179);
+    // #572: the store refused the login (401): paused, behind, needs reconnecting; the last success is before the last attempt.
+    expect(shop.freshness).toMatchObject({ behind: true, behindReason: "paused", needsReconnect: true, failuresInARow: 4 });
+    expect(shop.freshness.action).toContain("Reconnect");
+    expect(Date.parse(shop.freshness.lastSuccessfulSyncAt as string)).toBeLessThan(Date.parse(shop.freshness.lastSyncAt as string));
+    expect(shop.freshness.minutesSinceLastSuccessfulSync).toBeGreaterThanOrEqual(26 * 60 - 1);
+    // #578: withoutSku counts the variant still skipped for having no SKU.
+    expect(shop.imports.products).toMatchObject({ withoutSku: 1, withoutSkuParts: { linked: 0, notBroughtIn: 1 } });
 
     // Nothing changed.
     const after = await asOwner((tx) => tx.query<{ lines: string; changed: string }>("select (select count(*) from sales_platform_sync_log)::text as lines, (select max(updated_at) from sales_platform_connections)::text as changed"));
@@ -255,6 +277,10 @@ describeWithDatabase("AI access level and sales platform diagnostics (#531, #532
       }
     }
     expect(texts[2]).toContain("https://books.example.nz/[removed]");
+    // #578: customers' emails aren't in the words; the record is named by its externalId.
+    for (const text of texts) expect(text).not.toContain("aroha.made-up@example.com");
+    expect(texts[0]).toContain("Shopify customer Aroha wasn't added");
+    expect(texts[0]).toContain('"externalId":"7001"');
     expect(texts[0]).toContain("Shopify said 401 for token [removed].");
   });
 

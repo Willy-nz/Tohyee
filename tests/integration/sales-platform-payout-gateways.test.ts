@@ -177,7 +177,7 @@ describeWithDatabase("Shopify payouts with transfer rows and withdrawals, and pa
     w.state.payouts.push(odd);
     await w.sync("2026-10-07T04:00:00Z");
     expect(await w.payoutDoc("70001")).toBeNull();
-    expect(await w.lastLog("70001")).toMatchObject({ action: "failed", message: expect.stringContaining("(SHOP_CASH_CREDIT)") });
+    expect(await w.lastLog("70001")).toMatchObject({ action: "skipped", message: expect.stringContaining("(SHOP_CASH_CREDIT)") });
     const status = async () => (await w.as((tx) => salesPlatformDiagnostics(tx, { connectionId: w.connectionId }))).connections[0].imports.payouts;
     expect(await status()).toMatchObject({ toReadAgain: 0, problems: { unknown_payout_transaction: { count: 1 } } });
     // A later payout moves the cursor on.
@@ -207,7 +207,7 @@ describeWithDatabase("Shopify payouts with transfer rows and withdrawals, and pa
     expect(w.state.calls).toContain("balance:70009");
     expect(w.state.calls).not.toContain("balance:70001");
     expect(await w.count("bank_transfers")).toBe(transfers);
-    expect(await w.lastLog("70009")).toMatchObject({ action: "failed", message: "Payout 70009 is 0.00; only payouts of more than nothing are posted." });
+    expect(await w.lastLog("70009")).toMatchObject({ action: "skipped", message: "Payout 70009 is 0.00; only payouts of more than nothing are posted." });
     expect(await status()).toMatchObject({ toReadAgain: 0 });
   });
 
@@ -240,7 +240,7 @@ describeWithDatabase("Shopify payouts with transfer rows and withdrawals, and pa
     // A positive adjustment isn't posted: the withdrawal is refused with the reason, nothing moves.
     await w.sync("2026-10-21T04:00:00Z");
     expect(await w.payoutDoc("70010")).toBeNull();
-    expect(await w.lastLog("70010")).toMatchObject({ action: "failed", message: expect.stringContaining("adjustments in Tohyee's favour") });
+    expect(await w.lastLog("70010")).toMatchObject({ action: "skipped", message: expect.stringContaining("adjustments in Tohyee's favour") });
     // As a plain refund and fee: 23.00 + 0.40 - 10.00 = 13.40 taken from the bank, the 0.40 fee to 6020.
     w.state.payouts[1] = {
       ...w.state.payouts[1],

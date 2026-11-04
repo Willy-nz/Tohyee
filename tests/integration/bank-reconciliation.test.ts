@@ -288,7 +288,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     );
   });
 
-  it("BK4: a voided payment and its reversal can still be matched, but are flagged and listed after live transactions", async () => {
+  it("BK4: a voided payment and its reversal are left out of suggestions; asked for, they're flagged and listed after live transactions", async () => {
     const world = await afterBk1();
     const { payment: voidedPayment } = await world.asUser(bookkeeper, (tx) =>
       recordPayment(tx, world.i1.id, { idempotencyKey: key("pay-1"), paymentDate: "2026-05-20", amount: "115.00", bankAccountCode: "1000" }),
@@ -301,17 +301,42 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
       recordPayment(tx, world.i1.id, { idempotencyKey: key("pay-2"), paymentDate: "2026-05-20", amount: "115.00", bankAccountCode: "1000" }),
     );
     const moneyIn = await world.lineOn(world.bank.id, "115.00");
-    const { matches } = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyIn.id));
+    // #571: by default only the live payment; the voided one is counted, not listed.
+    const plain = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyIn.id));
+    expect(plain.matches.map((match) => [match.journalId, match.exact, match.voided])).toEqual([[live.journalId, true, false]]);
+    expect(plain.voidedLeftOut).toBe(1);
+    const { matches } = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyIn.id, undefined, { includeVoided: true }));
     expect(matches.map((match) => [match.journalId, match.exact, match.voided])).toEqual([
       [live.journalId, true, false],
       [voidedPayment.journalId, true, true],
     ]);
-    // The reversal (money out of 1000) is listed for money-out lines, flagged too.
+    // The reversal (money out of 1000) is left out for money-out lines too; asked for, it's flagged.
     const moneyOut = await world.lineOn(world.bank.id, "-46.00");
-    const reversal = (await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyOut.id))).matches.find(
+    const out = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyOut.id));
+    expect(out.matches.some((match) => match.journalId === voidJournal.voidJournalId)).toBe(false);
+    expect(out.voidedLeftOut).toBe(1);
+    const reversal = (await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyOut.id, undefined, { includeVoided: true }))).matches.find(
       (match) => match.journalId === voidJournal.voidJournalId,
     );
     expect(reversal).toMatchObject({ amount: "-115.00", voided: true });
+    // A voided pair can still be matched when chosen.
+    await world.reconcile(moneyIn.id, { kind: "match", journalLineIds: [matches[1].journalLineId] });
+  });
+
+  it("BK4 (#571): suggestions are closest first, the same amount, then the nearest amount, and limited", async () => {
+    const world = await afterBk1();
+    const journals: Record<string, string> = {};
+    for (const amount of ["10.00", "40.00", "20.00", "30.00"]) {
+      const { payment } = await world.asUser(bookkeeper, (tx) =>
+        recordPayment(tx, world.i1.id, { idempotencyKey: key(`part-${amount}`), paymentDate: "2026-05-20", amount, bankAccountCode: "1000" }),
+      );
+      journals[amount] = payment.journalId;
+    }
+    const moneyIn = await world.lineOn(world.bank.id, "115.00");
+    const all = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyIn.id));
+    expect(all.matches.map((match) => match.amount)).toEqual(["40.00", "30.00", "20.00", "10.00"]);
+    const two = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyIn.id, undefined, { limit: 2 }));
+    expect(two.matches.map((match) => match.journalId)).toEqual([journals["40.00"], journals["30.00"]]);
   });
 
   it("BK5: paying INV-0001 and B1 from lines records the payments dated the line date and reconciles", async () => {
