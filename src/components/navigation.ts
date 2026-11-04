@@ -376,7 +376,6 @@ export const NEW_ACTIONS: MenuGroup[] = [
     links: [
       { href: "/operations/invoices/new", label: "New invoice", minRole: "bookkeeper" },
       { href: "/operations/quotes/new", label: "New quote", minRole: "bookkeeper" },
-      { href: "/operations/signing/new", label: "Send a document to sign", minRole: "bookkeeper" },
       { href: "/operations/sales-orders/new", label: "New sales order", minRole: "bookkeeper" },
       { href: "/operations/credit-notes/new", label: "New credit note", minRole: "bookkeeper" },
       { href: "/operations/customer-payments/new", label: "Receive a payment", minRole: "bookkeeper" },
