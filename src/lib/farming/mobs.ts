@@ -758,7 +758,7 @@ export type UntypedMob = { mob: string; openIn: string[]; head: number | null; g
 export async function untypedMobs(tx: OrgTx, input: { farmId: unknown }): Promise<UntypedMob[]> {
   const farmId = await requireFarmId(tx, input.farmId);
   const rows = await tx.query<{ mob: string; open_in: string[] | null; head: number | null; grazings: number }>(
-    `select min(g.mob) as mob, array_remove(array_agg(case when g.out_on is null then p.name end order by p.name), null) as open_in,
+    `select (array_agg(g.mob order by g.in_on, g.id))[1] as mob, array_remove(array_agg(case when g.out_on is null then p.name end order by p.name), null) as open_in,
             (array_agg(g.head order by g.in_on desc, g.id desc))[1] as head, count(*)::int as grazings
        from grazings g join paddocks p on p.id = g.paddock_id
       where g.farm_id = $1 and g.status = 'active' and g.mob_id is null

@@ -152,14 +152,18 @@ describeWithDatabase("farm mobs", () => {
     expect((await w.as((tx) => listMobs(tx, { farmId: w.farm.id, includeClosed: true }))).length).toBe(1);
   });
 
-  it("MOB8 weights and gain; split and merge keep the head and the class", async () => {
+  it("MOB8 weights and gain", async () => {
     const w = await setup({ livestock: false });
     const steers = (await w.as((tx) => createMob(tx, { farmId: w.farm.id, name: "Steers", kind: "beef_cattle", classCode: "r2_steers_bulls", head: 80, paddockId: w.a.id, onDate: "2026-08-01" }))).mob;
     await w.asStaff((tx) => mobAction(tx, steers.id, { action: "weigh", averageKg: "412", weighedHead: 80, onDate: "2026-09-01" }));
     const weighed = await w.asStaff((tx) => mobAction(tx, steers.id, { action: "weigh", averageKg: "436.0", onDate: "2026-10-01" }));
     expect(weighed.mob.lastWeight).toMatchObject({ averageKg: "436.0", gain: { kg: "24.0", days: 30, kgPerDay: "0.80" } });
     await expect(w.as((tx) => mobAction(tx, steers.id, { action: "weigh", averageKg: "0", onDate: "2026-10-02" }))).rejects.toThrow("Average weight");
+  });
 
+  it("MOB8 split and merge keep the head and the class", async () => {
+    const w = await setup({ livestock: false });
+    const steers = (await w.as((tx) => createMob(tx, { farmId: w.farm.id, name: "Steers", kind: "beef_cattle", classCode: "r2_steers_bulls", head: 80, paddockId: w.a.id, onDate: "2026-08-01" }))).mob;
     const split = await w.asStaff((tx) => mobAction(tx, steers.id, { action: "split", head: 30, name: "Steers 2", toPaddockId: w.b.id, onDate: "2026-10-05" }));
     expect(split.mob.head).toBe(50);
     const mobs = await w.as((tx) => listMobs(tx, { farmId: w.farm.id }));

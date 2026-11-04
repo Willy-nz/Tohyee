@@ -140,6 +140,7 @@ describeWithDatabase("ledger", () => {
         "ledger_fx_revaluation_voids",
         "ledger_journal_lines",
         "ledger_journals",
+        "mob_events",
         "safety_copies",
         "safety_entries",
         "safety_files",
