@@ -293,10 +293,10 @@ export async function listSigningRequests(tx: OrgTx, filter: SigningListFilter =
 
 async function requestRow(tx: OrgTx, idInput: unknown, lock = false): Promise<RequestRow> {
   const id = typeof idInput === "string" || typeof idInput === "number" ? String(idInput) : "";
-  if (!/^[1-9][0-9]{0,17}$/.test(id)) throw new NotFoundError("That signing request wasn't found.");
+  if (!/^[1-9][0-9]{0,17}$/.test(id)) throw new NotFoundError("Signing request not found.");
   if (lock) await tx.query("select id from signing_requests where id = $1 for update", [id]);
   const row = (await tx.query<RequestRow>(`${REQUEST_SQL} where r.id = $1`, [id])).rows[0];
-  if (!row) throw new NotFoundError("That signing request wasn't found.");
+  if (!row) throw new NotFoundError("Signing request not found.");
   return row;
 }
 
@@ -304,7 +304,7 @@ async function requestRow(tx: OrgTx, idInput: unknown, lock = false): Promise<Re
 export async function getSigningRequest(tx: OrgTx, idInput: unknown): Promise<SigningRequestView> {
   const row = await requestRow(tx, idInput);
   const signers = (await loadSigners(tx, [row.id])).get(row.id) ?? [];
-  if (!(await visible(tx, row, signers))) throw new NotFoundError("That signing request wasn't found.");
+  if (!(await visible(tx, row, signers))) throw new NotFoundError("Signing request not found.");
   const view = toView(row, signers);
   const emails = await tx.query<{ purpose: string; to_email: string; status: string; last_error: string | null; created_at: Date }>(
     "select purpose, to_email, status, last_error, created_at from signing_emails where request_id = $1 order by signing_emails.id",

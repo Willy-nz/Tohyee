@@ -336,6 +336,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "get_sales_platform_status",
         "list_sales_platform_log",
         "list_sales_platform_payout_matches",
+        "list_signing_requests",
+        "get_signing_request",
       ]
         // #576: Farming, Livestock and Advanced reporting are off here, so their tools aren't offered.
         .filter((name) => moduleHidesTool(name, MODULES_HERE) === null)
