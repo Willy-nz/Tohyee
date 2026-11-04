@@ -5,6 +5,7 @@ import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
 import { privateMailTools } from "@/lib/ai/private-mail-tools";
 import type { CallToolResult, McpServer, ToolContent, ToolInfo } from "@/lib/ai/mcp-protocol";
 import { type ToolListSeen, toolListState, toolSetVersion } from "@/lib/ai/mcp-tool-list";
+import { moduleHidesTool, toolGroupStatuses, type ToolModules } from "@/lib/ai/tool-modules";
 import { ToolFileAnswer } from "@/lib/ai/tools";
 import { aiKeyVia, type AiTokenIdentity } from "@/lib/ai/tokens";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
@@ -36,14 +37,20 @@ export { aiKeyVia } from "@/lib/ai/tokens";
  * its steps in a transaction of its own, so its progress survives a lost
  * answer.
  */
-export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?: boolean; toolListSeen?: ToolListSeen } = {}): McpServer {
+export function mcpServerFor(
+  identity: AiTokenIdentity,
+  options: { privateMail?: boolean; toolListSeen?: ToolListSeen; modules?: ToolModules | null } = {},
+): McpServer {
   const organisation = identity.membership.organisation;
   const level = identity.effectiveLevel;
   const roleAllows = (tool: { minRole?: Role }) => !tool.minRole || roleAtLeast(identity.membership.role, tool.minRole);
   // The Owner's own mail, only for a Look only key they gave the private-mail scope (#250, decision 618); checked again on each call.
   const mailTools = options.privateMail ? privateMailTools(identity) : [];
   const findTool = (name: unknown) => findAiTool(name) ?? mailTools.find((tool) => tool.name === name) ?? null;
-  const tools = [...toolsForLevel(level).filter(roleAllows), ...mailTools];
+  // Only the tools for modules the organisation has on (#576, decision 1385); null (not known) hides nothing.
+  const modules = options.modules ?? null;
+  const moduleAllows = (tool: { name: string }) => moduleHidesTool(tool.name, modules) === null;
+  const tools = [...toolsForLevel(level).filter((tool) => roleAllows(tool) && moduleAllows(tool)), ...mailTools];
   const offered: ToolInfo[] = tools.map((tool) => ({ ...tool, readOnly: tool.readOnly ?? tool.level === "read" }));
   // What the client holds against what this connection has now (decisions 1342-1343).
   const toolList = toolListState(toolSetVersion(offered), options.toolListSeen);
@@ -60,12 +67,15 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
       (mailTools.length
         ? ` You can also search and read ${identity.user.displayName}'s own private mail (search_my_mail, read_my_mail), for them alone: say which email you used, and never pass what's in it to anyone else or into Tohyee.`
         : "") +
+      " Tools for modules this organisation hasn't turned on (such as Farming or Livestock) aren't offered; get_organisation's toolGroups says which are hidden and why." +
       " If what this connection may do changes, Tohyee tells your app (notifications/tools/list_changed); if a tool named here isn't in your tool list, ask your app to refresh its tools or reconnect.",
     tools: offered,
     toolList,
     unavailableTool(name) {
       const tool = findTool(name);
       if (!tool) return null;
+      const hiddenByModule = mailTools.some((mailTool) => mailTool.name === tool.name) ? null : moduleHidesTool(tool.name, modules);
+      if (hiddenByModule) return hiddenByModule;
       if (!roleAllows(tool)) return `${name} is only for owners and admins; this key's owner isn't one now.`;
       return levelAllows(level, tool.level)
         ? null
@@ -75,6 +85,7 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
       const tool = findTool(name);
       // Checked again here: tools/list and tools/call are separate requests.
       if (!tool || !levelAllows(level, tool.level) || !roleAllows(tool)) return text(`This key can't use ${name}.`, true);
+      if (!offered.some((offeredTool) => offeredTool.name === tool.name)) return text(moduleHidesTool(tool.name, modules) ?? `This key can't use ${name}.`, true);
       try {
         const people = await loadMemberNames(organisation.id);
         const actor = { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity), role: identity.membership.role };
@@ -84,7 +95,7 @@ export function mcpServerFor(identity: AiTokenIdentity, options: { privateMail?:
           source: `ai-${identity.tokenId}`,
           accessLevel: level,
           grantedAccessLevel: identity.accessLevel,
-          toolList: { ...toolList, toolNames: offered.map((offeredTool) => offeredTool.name) },
+          toolList: { ...toolList, toolNames: offered.map((offeredTool) => offeredTool.name), toolGroups: toolGroupStatuses(modules) },
         };
         const readOnly = tool.readOnly ?? tool.level === "read";
         // A tool that works in steps (a durable batch, #547) commits each step on its own.

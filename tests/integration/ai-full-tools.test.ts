@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
 import { FULL_READ_TOOLS, FULL_WRITE_TOOLS } from "@/lib/ai/full-tools";
+import { TRACKING_TOOLS } from "@/lib/ai/tool-modules";
 import { createApprovalRule } from "@/lib/approvals/rules";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { type Contact, createContact } from "@/lib/contacts/service";
@@ -152,8 +153,8 @@ describeWithDatabase("Full access AI keys outside banking (decision 489, AIF1-AI
     expect(await call(tokens.full, "update_item", { itemId: item.id, name: "Consulting (hourly)", isActive: false })).toMatchObject({ name: "Consulting (hourly)", isActive: true });
     const account = (await call(tokens.full, "create_account", { code: "6125", name: "Fuel cards", accountType: "expense" })) as { id: string };
     expect(await call(tokens.full, "update_account", { accountId: account.id, name: "Fuel card costs", isActive: false })).toMatchObject({ name: "Fuel card costs", isActive: true });
-    // Tracking needs the Advanced reporting module, as on the screen; the service's answer comes back as it is.
-    await expect(call(tokens.full, "create_tracking_category", { name: "Region" })).rejects.toThrow("Advanced reporting is off");
+    // Tracking needs the Advanced reporting module, as on the screen; with it off the tracking tools aren't offered (#576).
+    await expect(call(tokens.full, "create_tracking_category", { name: "Region" })).rejects.toThrow("Tracking categories come with Advanced reporting");
     for (const tool of FULL_WRITE_TOOLS) expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/isActive|archiv|"status"/);
   });
 
@@ -188,7 +189,8 @@ describeWithDatabase("Full access AI keys outside banking (decision 489, AIF1-AI
 
   it("AIF5: a Make and post key reads these but can't change anything or read expense claims", async () => {
     const listed = ((await rpc(tokens.post, "tools/list")).result as { tools: { name: string }[] }).tools.map((tool) => tool.name);
-    for (const tool of FULL_READ_TOOLS) expect(listed.includes(tool.name), tool.name).toBe(tool.level === "read");
+    // Tracking tools are offered only with Advanced reporting on (#576), and it's off here.
+    for (const tool of FULL_READ_TOOLS) expect(listed.includes(tool.name), tool.name).toBe(tool.level === "read" && !TRACKING_TOOLS.includes(tool.name));
     for (const tool of FULL_WRITE_TOOLS) expect(listed, tool.name).not.toContain(tool.name);
     await expect(call(tokens.post, "create_quote", { contactId: kobe.id })).rejects.toThrow(/Full access/);
     await expect(call(tokens.post, "list_expense_claims")).rejects.toThrow(/Full access/);

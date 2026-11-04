@@ -20778,6 +20778,50 @@ and GST on Shopify's fees (#548 will use `isGstRegisteredOn`). Tested in
 `tests/unit/gst-registration-status.test.ts` and
 `tests/integration/gst-registration-status.test.ts`.
 
+## The GST return for a period outside the registration (GSR11-GSR14; built by Claude 4 Nov 2026 for #577, as Xero does, not yet reviewed)
+
+A review over the AI connection found that `gst_return`, for an
+organisation not registered for GST, gave every box as 0.00 with hundreds
+of transaction lines and no word that it wasn't registered: it could be
+read as a nil return. Xero offers GST returns only while GST is set up for
+the organisation, and its first return starts at the registration date
+(from Claude's knowledge of Xero; not re-checked today). Tohyee keeps the
+GST return page open, but says so instead of showing a return. The
+wording and the "partly registered" warning are Claude's, from the issue.
+
+Setup: Kowhai Crafts, NZD, the standard chart and codes, two-monthly
+returns; registration confirmed unless a line says otherwise.
+
+- **GSR11 No registration for the period.** Not registered at all, or
+  registered from 1 Nov 2026 (or deregistered 31 Aug 2026), and the period
+  is 1 Sep - 31 Oct 2026. The GST return page shows **Not registered for
+  GST for this period** ("Kowhai Crafts has no GST return for it, and this
+  isn't a nil return") with the registration dates and a link to Settings;
+  no boxes, adjustments, late claims or Mark as filed. Filed returns still
+  list. `gst_return` gives `notRegistered: true`,
+  `registration: {status: "not_registered", registered, from, until,
+  confirmed}` and the same note, with no boxes or line count.
+- **GSR12 It can't be filed.** Marking 1 Sep - 31 Oct 2026 as filed is
+  refused with the same sentence. Nothing is stored.
+- **GSR13 A period that straddles the registration date.** Registered from
+  15 Oct 2026; the period 1 Sep - 31 Oct 2026 is worked out as before
+  (only lines with GST count, and none before 15 Oct can have GST, NR2),
+  with a warning: registered for part of this period only, 15 Oct - 31 Oct
+  2026; check the period with Inland Revenue. `registration.status` is
+  `partly_registered` with `coveredFrom` and `coveredUntil`. The same for
+  a registration that ends inside the period (NR6's final return).
+- **GSR14 Not confirmed** (#546). The return is worked out from the
+  setting, with a warning that the registration hasn't been confirmed and
+  the figures assume Settings are right; `registration.confirmed` is false.
+  A period wholly registered and confirmed shows no notice, and the tool's
+  note is just "Worked out now; nothing was filed or saved."
+
+NR4 still holds: the GST return and GST audit leave the menus while not
+registered; opening the GST return's address now shows GSR11 for the
+period instead of a page-wide notice. Tested in
+`tests/unit/gst-period-registration.test.ts` and
+`tests/integration/ai-mcp-modules.test.ts`.
+
 ## Personal and mixed-use bank and card accounts (MU1-MU14; built by Claude 3 Nov 2026 for #545, as Xero does, not yet reviewed)
 
 A sole trader often pays for the odd business thing with a personal card or

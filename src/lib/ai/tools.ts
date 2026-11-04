@@ -1,4 +1,5 @@
 import { STALE_TOOL_LIST_NOTE } from "@/lib/ai/mcp-tool-list";
+import type { ToolGroupStatus } from "@/lib/ai/tool-modules";
 import { listGroups } from "@/lib/consolidation/groups";
 import { consolidatedBalanceSheet, consolidatedBudgetVsActual, consolidatedProfitAndLoss } from "@/lib/consolidation/report";
 import { cashFlowForecast } from "@/lib/cash-flow/forecast";
@@ -47,7 +48,7 @@ export type ToolContext = {
   /** The level it was given when made, before the role cap. */
   grantedAccessLevel: AiAccessLevel;
   /** Over MCP: the tool-set version now, and whether the client's list is out of date (decision 1343). */
-  toolList?: { version: string; stale: boolean; toolNames: readonly string[] };
+  toolList?: { version: string; stale: boolean; toolNames: readonly string[]; toolGroups?: readonly ToolGroupStatus[] };
 };
 
 /**
@@ -80,9 +81,11 @@ export function connectionAccess(context: Pick<ToolContext, "accessLevel" | "gra
 export function toolListStatus(context: Pick<ToolContext, "toolList">) {
   const list = context.toolList;
   if (!list) return {};
+  // #576: which tool groups the organisation's modules offer, and why any are hidden.
+  const groups = list.toolGroups ? { toolGroups: [...list.toolGroups] } : {};
   return list.stale
-    ? { toolListVersion: list.version, toolListUpToDate: false, toolListNote: STALE_TOOL_LIST_NOTE, toolsNow: [...list.toolNames] }
-    : { toolListVersion: list.version };
+    ? { toolListVersion: list.version, toolListUpToDate: false, toolListNote: STALE_TOOL_LIST_NOTE, toolsNow: [...list.toolNames], ...groups }
+    : { toolListVersion: list.version, ...groups };
 }
 
 export type JsonSchema = Record<string, unknown>;
@@ -570,12 +573,18 @@ export const READ_TOOLS: readonly AiTool[] = (
     name: "gst_return",
     title: "GST return",
     description:
-      "Works out the GST return (GST101A boxes 5 to 15) for a period, on the organisation's GST basis, as Tohyee would. Nothing is filed or saved. Also lists filed returns that overlap the period.",
+      "Works out the GST return (GST101A boxes 5 to 15) for a period, on the organisation's GST basis, as Tohyee would. Nothing is filed or saved. Also lists filed returns that overlap the period. registration says whether GST registration covers all, part or none of the period, and whether a person has confirmed it; for a period with no registration there's no return (notRegistered: true), which isn't a nil return.",
     inputSchema: schema({ periodStart: DATE, periodEnd: DATE }, ["periodStart", "periodEnd"]),
     async run(tx, args) {
       const report = await calculateGstReturn(tx, { periodStart: args.periodStart, periodEnd: args.periodEnd });
+      // #577: no registration for any of the period, no return (not a return of zeros).
+      if (report.registration.status === "not_registered") {
+        const { periodStart, periodEnd, months, basis, currencyCode, registration, filedReturns } = report;
+        return { periodStart, periodEnd, months, basis, currencyCode, notRegistered: true, registration, filedReturns, note: registration.note };
+      }
       const { lines, ...rest } = report;
-      return { ...rest, transactionLineCount: lines.length, note: "Worked out now; nothing was filed or saved." };
+      const registrationNote = report.registration.status === "registered" && report.registration.confirmed ? "" : ` ${report.registration.note}`;
+      return { ...rest, notRegistered: false, transactionLineCount: lines.length, note: `Worked out now; nothing was filed or saved.${registrationNote}` };
     },
   },
   {

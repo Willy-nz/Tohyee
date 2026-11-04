@@ -12462,6 +12462,55 @@ removes sessions and the GET stream and adds `subscriptions/listen`).
       doesn't send the session id back gets no notification and no note;
       the person refreshes the tools or reconnects in their AI app.
 
+### The AI's tools follow the organisation's modules, and the GST return its registration (4 Nov 2026; decisions 1385-1390)
+
+Issues #576 and #577, from a read-only review over the AI connection. No
+answer from Jess; Claude's rules from the issues, following the menus and
+Xero where it has an answer. Not yet reviewed.
+
+1385. **Only the tools for modules that are on.** The MCP tool list is
+      filtered by the same switches the menus use (Settings › Modules,
+      `useModules` and `navigation.ts`): farm, pasture, soil, fertiliser,
+      farm notebook and pasture-photo tools need Farming; livestock tools
+      need Livestock; tracking tools need Advanced reporting (the tracking
+      service itself refuses without it, so Not-for-profit alone doesn't
+      bring them); everything else in the books needs Accounting. Farming
+      and Livestock need Accounting, as in the menus. get_organisation and
+      the AI's own workspace (uploads, tables, dashboards) are always
+      offered, and so are the private-mail tools a key has. The mapping is
+      by tool name in `src/lib/ai/tool-modules.ts`; a new tool counts as
+      Accounting unless it's added to a group. The modules are read on each
+      request; if the organisation's database can't be read, nothing is
+      hidden (every call fails there anyway).
+1386. **Changing a module tells the client.** The tool-set version is the
+      hash of the tools offered (1342), so turning a module on or off
+      changes it and the client's next request carries
+      `notifications/tools/list_changed`; nothing new was needed in the
+      session memory.
+1387. **Say what's hidden and refuse with the reason.** get_organisation
+      gives `toolGroups` (accounting, farming, livestock, tracking), each
+      `offered` or not with `hiddenBecause`. A call to a hidden tool is
+      refused with "<tool> isn't offered: Farming is turned off for this
+      organisation (Settings › Modules)". The issue also named CRM,
+      analytics, payroll, consolidation and projects: there are no AI tools
+      for CRM, analytics, payroll runs or projects today, and payroll and
+      consolidation have no module switch of their own (they're part of
+      Accounting; list_staff and the consolidation tools follow Accounting
+      and their own access checks). Not done.
+1388. **A period with no GST registration has no return** (#577, GSR11).
+      The GST return page and `gst_return` say so instead of showing boxes
+      of zeros; the page no longer stops at a page-wide "not registered"
+      notice, so the period's own dates decide. `registration` gives the
+      status for the period, the setting's dates and whether it's confirmed.
+1389. **It can't be marked as filed** (GSR12): it isn't a nil return.
+1390. **Straddling or unconfirmed: the return, with a warning** (GSR13,
+      GSR14). A period the registration starts or ends in is worked out as
+      before (codes outside the registration already have no GST, NR2) and
+      says which days the registration covers; Tohyee doesn't shorten the
+      period, because Inland Revenue sets the first and last return
+      periods. Unconfirmed registration shows the return with a warning,
+      matching #546 (people's own entries work as before).
+
 
 ### Reports that read like Xero's (Jess, 4 Nov 2026; decisions 1350-1352)
 

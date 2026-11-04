@@ -7,6 +7,7 @@ import { addAiFile } from "@/lib/ai-workspace/files";
 import type { SessionUser } from "@/lib/auth/sessions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
+import { setFarmingEnabled } from "@/lib/farming/paddocks";
 import { headCount, setOpenings, updateLivestockSettings } from "@/lib/livestock/movements";
 import { acceptLivestockSuggestion, declineLivestockSuggestion } from "@/lib/livestock/suggestions";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
@@ -67,6 +68,8 @@ describeWithDatabase("the AI's farm workspace", () => {
     );
     await asOwner((tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 5 }));
     await asOwner((tx) => updateLivestockSettings(tx, { enabled: true, firstYearStart: "2025-06-01" }));
+    // The farm notebook tools are offered with Farming on (#576).
+    await asOwner((tx) => setFarmingEnabled(tx, { enabled: true }));
     await asOwner((tx) => setOpenings(tx, { lines: [{ kind: "dairy_cattle", classCode: "ma_cows", head: 300, value: "750000.00" }] }));
     await makeKey(owner, "owner-drafts", "draft");
     await makeKey(owner, "owner-read", "read");

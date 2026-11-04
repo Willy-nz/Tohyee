@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -35,6 +36,7 @@ import type {
   GstReturnLine,
 } from "@/lib/reports/gst-return";
 import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
+import type { GstPeriodRegistration } from "@/lib/tax/registration";
 import { useConfirm } from "@/components/confirm-dialog";
 import { InfoTip } from "@/components/info-tip";
 
@@ -51,7 +53,58 @@ type Calculated = GstReturnFigures & {
   lateClaims: GstLateClaim[];
   /** NR6: registration ended in this period, with the fixed assets still held then. */
   registrationEnded?: { until: string; assetsHeld: Array<{ assetNumber: string; name: string; cost: string }> } | null;
+  /** #577: how much of the period GST registration covers, and whether it's confirmed. */
+  registration: GstPeriodRegistration;
 };
+
+/**
+ * What the screen says about registration for the period (#577, GSR11-GSR14):
+ * nothing when the whole period is registered and confirmed.
+ */
+function RegistrationNotice({ registration, name }: { registration: GstPeriodRegistration; name: string }) {
+  const settingsLink = (
+    <>
+      {" "}
+      <Link href="/operations/settings">Settings</Link> has the registration dates.
+    </>
+  );
+  if (registration.status === "not_registered") {
+    const why = !registration.registered
+      ? "Settings say it isn't registered for GST."
+      : registration.from !== null && registration.until !== null
+        ? `It's registered from ${formatDate(registration.from)} to ${formatDate(registration.until)}.`
+        : registration.from !== null
+          ? `It's registered from ${formatDate(registration.from)}.`
+          : registration.until !== null
+            ? `Its registration ended on ${formatDate(registration.until)}.`
+            : "";
+    return (
+      <Notice tone="info">
+        <strong>Not registered for GST for this period.</strong> {name} has no GST return for it, and this isn&apos;t a nil return. {why}
+        {registration.confirmed ? "" : " The registration hasn't been confirmed yet."}
+        {settingsLink}
+      </Notice>
+    );
+  }
+  const partly = registration.status === "partly_registered" && registration.coveredFrom && registration.coveredUntil;
+  if (!partly && registration.confirmed) return null;
+  return (
+    <Notice tone="warning">
+      {partly ? (
+        <>
+          <strong>Registered for part of this period only:</strong> {formatDate(registration.coveredFrom!)} to {formatDate(registration.coveredUntil!)}.
+          Only those dates belong on a GST return; check the period with Inland Revenue.{" "}
+        </>
+      ) : null}
+      {registration.confirmed ? null : (
+        <>
+          <strong>GST registration not confirmed.</strong> These figures assume Settings are right.
+        </>
+      )}
+      {settingsLink}
+    </Notice>
+  );
+}
 
 const DOCUMENT_LABELS: Record<GstReturnLine["documentType"], string> = {
   sales_invoice: "Invoice",
@@ -613,7 +666,7 @@ function BasisChangeNotice({
  */
 export function GstReturnReport({ organisationId }: { organisationId: string }) {
   const confirm = useConfirm();
-  const { can } = useWorkspace();
+  const { can, current: workspace } = useWorkspace();
   // Without a GST period setting or a filed return, open on the two months that ended
   // last month, not on a period still going (decision 335).
   const [start, setStart] = useState(() => monthsBefore(monthStart(todayInBrowser()), 2));
@@ -671,7 +724,10 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     };
   }, [organisationId, start, periodEnd, adjustments, excludedLateClaims, requestKey]);
   const current = report?.key === requestKey ? report : null;
-  const data = current?.data ?? null;
+  const worked = current?.data ?? null;
+  // #577: a period with no GST registration has no return: say so instead of showing boxes of zeros.
+  const notRegistered = worked?.registration.status === "not_registered";
+  const data = notRegistered ? null : worked;
   const alreadyFiled = data ? data.filedReturns.length > 0 : false;
 
   function changePeriod(nextStart: string, nextMonths: number) {
@@ -786,10 +842,10 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         </div>
         <StatementHeading title="GST return" period={statementPeriod(start, periodEnd)}>
           <p>
-            {data ? (
+            {worked ? (
               <>
-                {`${data.currencyCode} · ${GST_BASIS_LABELS[data.basis]} `}
-                <InfoTip label="GST basis">{BASIS_DESCRIPTIONS[data.basis]}</InfoTip>
+                {`${worked.currencyCode} · ${GST_BASIS_LABELS[worked.basis]} `}
+                <InfoTip label="GST basis">{BASIS_DESCRIPTIONS[worked.basis]}</InfoTip>
               </>
             ) : null}
             {filed.data ? (
@@ -804,6 +860,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
         {current?.error ? <Notice tone="error">{current.error}</Notice> : null}
         {!current ? <p className={ui.muted}>Loading…</p> : null}
+        {worked ? <RegistrationNotice registration={worked.registration} name={workspace?.displayName ?? "This organisation"} /> : null}
         {data ? (
           <>
             {alreadyFiled ? (
@@ -857,6 +914,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         />
       ) : null}
 
+      {notRegistered ? null : (
       <Card
         title="Adjustments"
         description="GST amounts for Box 9 (debit adjustments, e.g. bad debt recovered) and Box 13 (credit adjustments, e.g. bad debt written off). They're only stored when the return is filed."
@@ -895,6 +953,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
           </Button>
         </form>
       </Card>
+      )}
 
       {data ? (
         <Card title="What's in the boxes">

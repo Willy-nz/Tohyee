@@ -151,3 +151,76 @@ export function gstRegistrationSummary(
     note,
   };
 }
+
+/** How much of a GST return period the registration covers (#577, examples GSR11-GSR14). */
+export type GstPeriodRegistrationStatus = "registered" | "partly_registered" | "not_registered";
+
+export type GstPeriodRegistration = {
+  /** `registered`: every day of the period; `partly_registered`: registration starts or ends inside it; `not_registered`: no day of it. */
+  status: GstPeriodRegistrationStatus;
+  /** Whether a person has confirmed the setting (#546). Not confirmed: the figures rest on Tohyee's starting guess. */
+  confirmed: boolean;
+  /** The registration setting's own dates (null: open-ended), whether or not registered at all. */
+  registered: boolean;
+  from: string | null;
+  until: string | null;
+  /** The days of the period the registration covers, or null when it covers none. */
+  coveredFrom: string | null;
+  coveredUntil: string | null;
+  /** One plain sentence or two for the screen and the AI. */
+  note: string;
+};
+
+/**
+ * The registration for a GST return period (#577): whether it covers the
+ * whole period, part of it (registered or deregistered partway through) or
+ * none of it, and whether a person has confirmed it. The GST return screen
+ * and the AI's gst_return tool both say this instead of showing a return of
+ * zeros for a period with no registration.
+ */
+export function gstRegistrationForPeriod(
+  registration: Pick<GstRegistration, "registered" | "from" | "until" | "confirmed" | "organisationName">,
+  periodStart: string,
+  periodEnd: string,
+): GstPeriodRegistration {
+  const confirmed = registration.confirmed !== false;
+  const base = { confirmed, registered: registration.registered, from: registration.from, until: registration.until };
+  const name = registration.organisationName;
+  const period = `${periodStart} to ${periodEnd}`;
+  if (!isRegisteredDuring(registration, periodStart, periodEnd)) {
+    const why = !registration.registered
+      ? "Settings say it isn't registered for GST"
+      : registration.from !== null && periodEnd < registration.from
+        ? `it's registered for GST from ${registration.from}`
+        : `its GST registration ended ${registration.until}`;
+    return {
+      ...base,
+      status: "not_registered",
+      coveredFrom: null,
+      coveredUntil: null,
+      note:
+        `${name} isn't registered for GST for ${period} (${why}), so there's no GST return for this period: it isn't a nil return.` +
+        (confirmed ? "" : " The registration hasn't been confirmed yet; confirm it in Settings › Organisation (GST)."),
+    };
+  }
+  const coveredFrom = registration.from !== null && registration.from > periodStart ? registration.from : periodStart;
+  const coveredUntil = registration.until !== null && registration.until < periodEnd ? registration.until : periodEnd;
+  const whole = coveredFrom === periodStart && coveredUntil === periodEnd;
+  const parts: string[] = [];
+  if (!whole) {
+    const starts = coveredFrom !== periodStart ? `registration starts ${coveredFrom}` : null;
+    const ends = coveredUntil !== periodEnd ? `registration ended ${coveredUntil}` : null;
+    parts.push(
+      `${name} is registered for GST for only part of ${period} (${[starts, ends].filter(Boolean).join("; ")}). ` +
+        `Only ${coveredFrom} to ${coveredUntil} belongs on a GST return; check the period with Inland Revenue.`,
+    );
+  }
+  if (!confirmed) parts.push(`${unconfirmedMessage(name)} These figures assume the setting is right.`);
+  return {
+    ...base,
+    status: whole ? "registered" : "partly_registered",
+    coveredFrom,
+    coveredUntil,
+    note: parts.length ? parts.join(" ") : `${name} is registered for GST for the whole period.`,
+  };
+}

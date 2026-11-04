@@ -5,6 +5,7 @@ import * as mcpRoute from "@/app/api/mcp/route";
 import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[userId]/route";
 import { AI_TOOLS } from "@/lib/ai/catalogue";
 import { reportTableProblems } from "@/lib/ai/report-table";
+import { moduleHidesTool, type ToolModules } from "@/lib/ai/tool-modules";
 import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { listBankAccounts } from "@/lib/bank/accounts";
@@ -66,6 +67,9 @@ function mcpRequest(body: unknown, options: { token?: string | null; cookie?: st
     body: options.method === "GET" ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
 }
+
+/** This test's organisation: Accounting on, the optional modules off. */
+const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
 
 let rpcId = 0;
 async function rpc(token: string, method: string, rpcParams?: unknown) {
@@ -332,8 +336,13 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "get_sales_platform_status",
         "list_sales_platform_log",
         "list_sales_platform_payout_matches",
-      ].sort(),
+      ]
+        // #576: Farming, Livestock and Advanced reporting are off here, so their tools aren't offered.
+        .filter((name) => moduleHidesTool(name, MODULES_HERE) === null)
+        .sort(),
     );
+    expect(tools.map((tool) => tool.name)).not.toContain("farm_notebook");
+    expect(tools.map((tool) => tool.name)).not.toContain("livestock_overview");
     for (const tool of tools) {
       expect(tool.inputSchema.type).toBe("object");
       expect(tool.description.length).toBeGreaterThan(20);
@@ -457,6 +466,13 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     args.query_dataset = { name: "no_such_table" };
     // Tools with a minimum role (income tax, owners and admins) aren't offered to the viewer's key; ird-documents tests them.
     for (const tool of AI_TOOLS.filter((entry) => entry.level === "read" && !entry.minRole)) {
+      const hidden = moduleHidesTool(tool.name, MODULES_HERE);
+      if (hidden) {
+        // #576: a tool for a module that's off is refused with the reason (the farm tools are tested in ai-farm-*).
+        const refused = await rpc(viewerToken, "tools/call", { name: tool.name, arguments: {} });
+        expect((refused.body.error as Json).message, tool.name).toBe(hidden);
+        continue;
+      }
       const required = ((tool.inputSchema as { required?: string[] }).required ?? []).filter((name) => name.endsWith("Id"));
       if (!args[tool.name] && required.length > 0) {
         // A record this test doesn't make: still read inside the read-only transaction, and found missing.
