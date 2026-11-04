@@ -5,6 +5,7 @@ import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { Button, ui } from "@/components/ui";
 import { booleanText } from "@/lib/analytics/display";
+import { valueLabel } from "@/lib/analytics/value-labels";
 import { changeFilter, columnKind, opsFor, valueKind } from "@/lib/analytics/filters";
 import { fieldLabel } from "@/lib/analytics/labels";
 import type { ColumnInfo, Filter, FilterOp } from "@/lib/analytics/query";
@@ -191,7 +192,8 @@ function ValuePicker({
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDetailsElement>(null);
-  const show = (value: string) => (values.data?.type === "BOOLEAN" ? booleanText(value) : value);
+  // Coded values in words (decision 1499); the filter keeps the code.
+  const show = (value: string) => (values.data?.type === "BOOLEAN" ? booleanText(value) : valueLabel(table, field, value));
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: PointerEvent) => {
