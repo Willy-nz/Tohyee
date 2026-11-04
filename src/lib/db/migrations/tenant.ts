@@ -19586,6 +19586,7 @@ create table farm_product_stock (
 );
 create index farm_product_stock_chemical on farm_product_stock (chemical_record_id, moved_on, id);
 create trigger farm_product_stock_append_only before update or delete on farm_product_stock for each row execute function toeyee_forbid_mutation();
+create trigger farm_product_stock_no_truncate before truncate on farm_product_stock for each statement execute function toeyee_forbid_mutation();
 `,
   },
 ];
