@@ -108,7 +108,7 @@ export function AccessQuickActions({
 }) {
   const limited = state !== "open";
   return (
-    <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+    <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
       {limited ? (
         <>
           <Button variant="secondary" size="small" disabled={disabled} aria-label={`Extend ${name}'s access by a week`} onClick={() => onAction("extend_week")}>
