@@ -457,6 +457,10 @@ that something happened.
   sending. Emails go through Settings › Email, and none are sent when it
   isn't set up. The AI can list and read signing requests, never sign.
   Not tried with a real customer's mailbox yet.
+- **Signing the year-end accounts** (decision 1407): Reports › Financial
+  statements sends the year's PDF to the directors or officers to sign (in
+  order or any order; members can sign in Tohyee). The signed copy is kept
+  with that year. A new version replaces the open request.
 - **Sales orders, stage 1** (Sales; SO1-SO12, not yet approved by Jess),
   following NetSuite's sales orders: drafts to a customer with the same
   lines as an invoice (items, units, price levels, tracking, custom fields,
