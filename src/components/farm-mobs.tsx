@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BigNumber, Choices, DayChoice, Step } from "@/components/farm-log";
 import { FarmRowList } from "@/components/farm-rows";
+import { ProductStockCard, TreatFlow, TreatmentsCard } from "@/components/farm-treatments";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useApiData } from "@/components/hooks";
@@ -16,6 +17,7 @@ import type { ActionResult, FarmStocking, LinkableMovement, Mob, MobEvent, MobIm
 import { BOOKKEEPER_ACTIONS, CREATED_HOW, CREATED_HOW_LABELS, type CreatedHow, gainText, isBirthClass, MOB_ACTION_LABELS, MOB_ACTIONS, MOB_EVENT_LABELS, type MobAction, OFFLINE_ACTIONS } from "@/lib/farming/mob-rules";
 import type { PaddockStatus } from "@/lib/farming/paddock-status";
 import { STOCK_UNIT_SOURCE, type StockUnitFactor } from "@/lib/farming/stock-units";
+import { withheld, withholdingText } from "@/lib/farming/treatment-rules";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { classesOf, className, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "@/lib/livestock/classes";
 import { newOperationId } from "@/lib/offline/queue";
@@ -31,7 +33,7 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-type Flow = { kind: "add" } | { kind: "action"; action: MobAction; mob: Mob };
+type Flow = { kind: "add" } | { kind: "action"; action: MobAction; mob: Mob } | { kind: "treat"; mob: Mob };
 
 function useMobs(organisationId: string, farmId: string) {
   return useApiData<{ mobs: Mob[] }>(`/api/farming/farms/${farmId}/mobs`, { organisationId });
@@ -43,6 +45,7 @@ export function mobLine(mob: Mob, today: string): string[] {
     mob.className,
     mob.paddock ? `${mob.paddock.name} since ${shortDate(mob.paddock.inOn, today)}` : "Not in a paddock",
     mob.lastWeight ? `${mob.lastWeight.averageKg} kg ${shortDate(mob.lastWeight.date, today)}` : "",
+    withholdingText(mob.withholding, today) ?? "",
   ].filter(Boolean);
 }
 
@@ -61,9 +64,26 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   const [done, setDone] = useState<string | null>(null);
   const list = [...(mobs.data?.mobs ?? [])].sort((a, b) => NATURAL.compare(a.name, b.name));
   const mob = list.find((entry) => entry.id === selected) ?? null;
+  const [version, setVersion] = useState(0);
   const reload = () => {
     mobs.reload();
+    setVersion((value) => value + 1);
   };
+
+  if (flow?.kind === "treat") {
+    return (
+      <TreatFlow
+        organisationId={organisationId}
+        farm={farm}
+        mob={flow.mob}
+        onClose={(message) => {
+          setFlow(null);
+          if (message) setDone(message);
+          reload();
+        }}
+      />
+    );
+  }
 
   if (flow) {
     return (
@@ -133,7 +153,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
               canBooks={can("bookkeeper")}
               onAction={(action) => {
                 setDone(null);
-                setFlow({ kind: "action", action, mob });
+                setFlow(action === "treat" ? { kind: "treat", mob } : { kind: "action", action, mob });
               }}
               onClose={() => setSelected(null)}
             />
@@ -142,6 +162,8 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
       </div>
       <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
         <StockingCard organisationId={organisationId} farmId={farm.id} version={list.map((entry) => `${entry.id}:${entry.head}:${entry.classCode}:${entry.paddock?.id ?? ""}`).join(",")} canEdit={can("admin")} />
+        <TreatmentsCard organisationId={organisationId} farmId={farm.id} version={version} />
+        <ProductStockCard organisationId={organisationId} farmId={farm.id} version={version} />
         {can("bookkeeper") ? <TypedMobs organisationId={organisationId} farmId={farm.id} onMade={reload} /> : null}
         {can("bookkeeper") ? <ImportMobs organisationId={organisationId} farmId={farm.id} onImported={reload} /> : null}
       </div>
@@ -149,13 +171,14 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   );
 }
 
-function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }: { organisationId: string; mob: Mob; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction) => void; onClose: () => void }) {
+function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }: { organisationId: string; mob: Mob; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction | "treat") => void; onClose: () => void }) {
   const today = todayInBrowser();
   const detail = useApiData<{ mob: Mob; events: MobEvent[]; weights: MobWeight[] }>(`/api/farming/mobs/${mob.id}`, { organisationId });
   const actions = MOB_ACTIONS.filter((action) => (BOOKKEEPER_ACTIONS.includes(action) ? canBooks : canRecord)).filter((action) => action !== "births" || isBirthClass(mob.kind, mob.classCode));
   const events = detail.data?.events ?? [];
   return (
     <Card title={mob.name} actions={<Button variant="secondary" onClick={onClose}>Close</Button>}>
+      {withholdingText(mob.withholding, today) ? <Notice tone="warning">{withholdingText(mob.withholding, today)}</Notice> : null}
       <dl className={styles.facts}>
         <dt>Head</dt>
         <dd>{mob.head.toLocaleString("en-NZ")}</dd>
@@ -184,6 +207,11 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
               {MOB_ACTION_LABELS[action]}
             </button>
           ))}
+          {canRecord ? (
+            <button type="button" className={styles.bigButton} onClick={() => onAction("treat")}>
+              Treat
+            </button>
+          ) : null}
         </div>
       ) : null}
       <h3>History</h3>
@@ -564,7 +592,7 @@ type Answers = {
   movementId: string | null;
 };
 
-function stepsFor(flow: Flow): string[] {
+function stepsFor(flow: Exclude<Flow, { kind: "treat" }>): string[] {
   if (flow.kind === "add") return ["kind", "class", "head", "how", "paddockOptional", "name", "day", "review"];
   switch (flow.action) {
     case "move":
@@ -596,7 +624,7 @@ const QUESTION: Partial<Record<MobAction, string>> = {
   split: "How many go into the new mob?",
 };
 
-function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext, "organisationId" | "farm"> & { flow: Flow; mobs: Mob[]; onClose: (message: string | null) => void }) {
+function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext, "organisationId" | "farm"> & { flow: Exclude<Flow, { kind: "treat" }>; mobs: Mob[]; onClose: (message: string | null) => void }) {
   const today = todayInBrowser();
   const { queue } = useOfflineQueue(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });
@@ -766,7 +794,7 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
                 .map((entry) => ({
                   value: entry.paddockId,
                   label: entry.name,
-                  note: entry.inNow ? `${entry.inNow.mob} in` : entry.lastGrazedOn ? `grazed ${daysAgo(entry.lastGrazedOn, today)}` : "not grazed yet",
+                  note: [entry.notSafeUntil ? `not safe to graze until ${shortDate(entry.notSafeUntil.until, today)}` : null, entry.inNow ? `${entry.inNow.mob} in` : entry.lastGrazedOn ? `grazed ${daysAgo(entry.lastGrazedOn, today)}` : "not grazed yet"].filter(Boolean).join(" · "),
                 })),
               ...(step === "paddock" && mob?.paddock ? [{ value: "__out", label: "Off the paddock", note: "yards, road or another place" }] : []),
             ]}
@@ -850,6 +878,8 @@ function MobFlow({ organisationId, farm, flow, mobs, onClose }: Pick<FarmContext
             ))}
           </dl>
           {target?.inNow ? <Notice tone="info">{target.inNow.mob} is in {target.name} already. Both mobs will be there.</Notice> : null}
+          {target?.notSafeUntil ? <Notice tone="warning">{target.name} was sprayed{target.notSafeUntil.product ? ` with ${target.notSafeUntil.product}` : ""} and isn&apos;t safe to graze until {formatDate(target.notSafeUntil.until)}. You can still save the move.</Notice> : null}
+          {flow.kind === "action" && flow.action === "sell" && withheld(mob!.withholding, answers.day).meat ? <Notice tone="warning">{mob!.name} isn&apos;t safe for slaughter until {formatDate(mob!.withholding!.meatSafeOn!)}. Check where they&apos;re going before you send them.</Notice> : null}
           {books ? <Notice tone="info">This changes the books&apos; livestock head count too, when Livestock is on.</Notice> : null}
           {flow.kind === "action" && flow.action === "count" ? <Notice tone="warning">A count changes the mob only. If stock died, was sold or was born, record that instead so the books match.</Notice> : null}
         </Step>

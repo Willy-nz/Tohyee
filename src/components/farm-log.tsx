@@ -356,7 +356,7 @@ function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow:
               set({ paddockId });
               next();
             }}
-            show={(status) => (status.inNow ? `${status.inNow.mob} in` : status.cover ? `${status.cover.cover.toLocaleString("en-NZ")} · ${shortDate(status.cover.measuredOn, today)}` : "")}
+            show={(status) => [status.notSafeUntil && flow.kind === "in" ? `not safe to graze until ${shortDate(status.notSafeUntil.until, today)}` : "", status.inNow ? `${status.inNow.mob} in` : status.cover ? `${status.cover.cover.toLocaleString("en-NZ")} · ${shortDate(status.cover.measuredOn, today)}` : ""].filter(Boolean).join(" · ")}
           />
         </Step>
       );

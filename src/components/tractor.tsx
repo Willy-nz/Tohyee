@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
+import { SprayWithholdingCard } from "@/components/farm-treatments";
 import { useApiData } from "@/components/hooks";
 import { useOfflineQueue } from "@/components/offline-queue";
 import { useOnline } from "@/components/offline-support";
@@ -1355,6 +1356,7 @@ function SummaryFacts({ summary }: { summary: CoverageResult["summary"] }) {
 // A saved job on the website ------------------------------------------------------------------------------
 
 export function TractorJobReview({ organisationId, jobId }: { organisationId: string; jobId: string }) {
+  const canRecordWork = useCanRecordFarmWork();
   const loaded = useApiData<{ job: TractorJob }>(`/api/farming/tractor/jobs/${jobId}`, { organisationId });
   const imageryKey = useImageryKey(organisationId);
   const job = loaded.data?.job ?? null;
@@ -1432,6 +1434,7 @@ export function TractorJobReview({ organisationId, jobId }: { organisationId: st
         </p>
       </Card>
       <JobDetails organisationId={organisationId} job={job} paddocks={shapes} onSaved={loaded.reload} />
+      {job.operation === "spraying" && job.status === "active" ? <SprayWithholdingCard organisationId={organisationId} jobId={job.id} canEdit={canRecordWork} /> : null}
       <JobHistory job={job} />
     </div>
   );
