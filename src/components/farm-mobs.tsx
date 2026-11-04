@@ -8,13 +8,14 @@ import { useCanRecordFarmWork } from "@/components/farm-selector";
 import type { FarmContext } from "@/components/farm-workspace";
 import { useApiData } from "@/components/hooks";
 import { InfoTip } from "@/components/info-tip";
+import { MoreMenu } from "@/components/more-menu";
 import { submitThroughQueue, useOfflineQueue } from "@/components/offline-queue";
 import { Button, Card, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { daysAgo, shortDate } from "@/lib/farming/farm-words";
 import type { ActionResult, FarmStocking, LinkableMovement, Mob, MobEvent, MobImportPreview, MobWeight, UntypedMob } from "@/lib/farming/mobs";
-import { BOOKKEEPER_ACTIONS, CREATED_HOW, CREATED_HOW_LABELS, type CreatedHow, gainText, isBirthClass, MOB_ACTION_LABELS, MOB_ACTIONS, MOB_EVENT_LABELS, type MobAction, OFFLINE_ACTIONS } from "@/lib/farming/mob-rules";
+import { BOOKKEEPER_ACTIONS, paddockLabel, CREATED_HOW, CREATED_HOW_LABELS, type CreatedHow, gainText, isBirthClass, MOB_ACTION_LABELS, MOB_ACTIONS, MOB_EVENT_LABELS, type MobAction, OFFLINE_ACTIONS } from "@/lib/farming/mob-rules";
 import type { PaddockStatus } from "@/lib/farming/paddock-status";
 import { STOCK_UNIT_SOURCE, type StockUnitFactor } from "@/lib/farming/stock-units";
 import { withheld, withholdingText } from "@/lib/farming/treatment-rules";
@@ -43,9 +44,9 @@ export function mobLine(mob: Mob, today: string): string[] {
   return [
     `${mob.head.toLocaleString("en-NZ")} head`,
     mob.className,
-    mob.paddock ? `${mob.paddock.name} since ${shortDate(mob.paddock.inOn, today)}` : "Not in a paddock",
+    mob.paddock ? `${paddockLabel(mob.paddock.name)} since ${shortDate(mob.paddock.inOn, today)}` : "Not in a paddock",
     mob.lastWeight ? `${mob.lastWeight.averageKg} kg ${shortDate(mob.lastWeight.date, today)}` : "",
-    withholdingText(mob.withholding, today) ?? "",
+    withholdingText(mob.withholding, today, (iso) => shortDate(iso, today)) ?? "",
   ].filter(Boolean);
 }
 
@@ -176,9 +177,12 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
   const detail = useApiData<{ mob: Mob; events: MobEvent[]; weights: MobWeight[] }>(`/api/farming/mobs/${mob.id}`, { organisationId });
   const actions = MOB_ACTIONS.filter((action) => (BOOKKEEPER_ACTIONS.includes(action) ? canBooks : canRecord)).filter((action) => action !== "births" || isBirthClass(mob.kind, mob.classCode));
   const events = detail.data?.events ?? [];
+  const MAIN: Array<MobAction | "treat"> = ["move", "weigh", "treat", "deaths"];
+  const main = MAIN.filter((action) => action === "treat" || actions.includes(action));
+  const others = actions.filter((action) => !MAIN.includes(action));
   return (
     <Card title={mob.name} actions={<Button variant="secondary" onClick={onClose}>Close</Button>}>
-      {withholdingText(mob.withholding, today) ? <Notice tone="warning">{withholdingText(mob.withholding, today)}</Notice> : null}
+      {withholdingText(mob.withholding, today) ? <Notice tone="warning">{withholdingText(mob.withholding, today, (iso) => shortDate(iso, today))}</Notice> : null}
       <dl className={styles.facts}>
         <dt>Head</dt>
         <dd>{mob.head.toLocaleString("en-NZ")}</dd>
@@ -188,7 +192,7 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
           <InfoTip label="Class">The IRD class the books count this mob in. Selling, buying, deaths, births and class changes here change the livestock head count too, when Livestock is on.</InfoTip>
         </dd>
         <dt>Paddock</dt>
-        <dd>{mob.paddock ? `${mob.paddock.name}, in ${shortDate(mob.paddock.inOn, today)} (${daysAgo(mob.paddock.inOn, today)})` : "Not in a paddock"}</dd>
+        <dd>{mob.paddock ? `${paddockLabel(mob.paddock.name)}, in ${shortDate(mob.paddock.inOn, today)} (${daysAgo(mob.paddock.inOn, today)})` : "Not in a paddock"}</dd>
         <dt>Weight</dt>
         <dd>{mob.lastWeight ? `${mob.lastWeight.averageKg} kg average on ${shortDate(mob.lastWeight.date, today)}${mob.lastWeight.gain ? `, ${gainText(mob.lastWeight.gain)}` : ""}` : "Not weighed yet"}</dd>
         <dt>Stock units</dt>
@@ -200,18 +204,19 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
           </>
         ) : null}
       </dl>
-      {actions.length ? (
+      {canRecord ? (
+        // The field work first, as big buttons; the rest in the "⋯" menu (decision 1321).
         <div className={styles.bigButtons} role="group" aria-label={`Actions for ${mob.name}`}>
-          {actions.map((action) => (
+          {main.map((action) => (
             <button key={action} type="button" className={styles.bigButton} onClick={() => onAction(action)}>
-              {MOB_ACTION_LABELS[action]}
+              {action === "treat" ? "Treat" : MOB_ACTION_LABELS[action]}
             </button>
           ))}
-          {canRecord ? (
-            <button type="button" className={styles.bigButton} onClick={() => onAction("treat")}>
-              Treat
-            </button>
-          ) : null}
+        </div>
+      ) : null}
+      {others.length ? (
+        <div className={styles.actions}>
+          <MoreMenu label={`More actions for ${mob.name}`} text="More actions" items={others.map((action) => ({ label: MOB_ACTION_LABELS[action], onSelect: () => onAction(action) }))} />
         </div>
       ) : null}
       <h3>History</h3>
@@ -286,7 +291,7 @@ function StockingCard({ organisationId, farmId, version, canEdit }: { organisati
           {data.paddocks.length ? (
             <FarmRowList
               label="Stocking by paddock"
-              rows={data.paddocks.map((paddock) => ({ key: paddock.paddockId, title: paddock.name, parts: [paddock.suPerHa ? `${paddock.suPerHa} SU/ha` : "No area", paddock.headPerHa ? `${paddock.headPerHa} head/ha` : "", paddock.mobs.join(", ")] }))}
+              rows={data.paddocks.map((paddock) => ({ key: paddock.paddockId, title: paddockLabel(paddock.name), parts: [paddock.suPerHa ? `${paddock.suPerHa} SU/ha` : "No area", paddock.headPerHa ? `${paddock.headPerHa} head/ha` : "", paddock.mobs.join(", ")] }))}
             />
           ) : null}
           <details open={editing} onToggle={(event) => setEditing((event.target as HTMLDetailsElement).open)}>

@@ -46,9 +46,9 @@ export function withheld(withholding: Withholding | null, today: string): { meat
 }
 
 /** Words for a mob's withholding on `today`, or null when none is in force. */
-export function withholdingText(withholding: Withholding | null, today: string): string | null {
+export function withholdingText(withholding: Withholding | null, today: string, date: (iso: string) => string = (iso) => iso): string | null {
   const now = withheld(withholding, today);
-  const parts = [now.meat ? `safe for slaughter from ${withholding!.meatSafeOn}` : null, now.milk ? `milk safe from ${withholding!.milkSafeFrom}` : null].filter(Boolean);
+  const parts = [now.meat ? `safe for slaughter from ${date(withholding!.meatSafeOn!)}` : null, now.milk ? `milk safe from ${date(withholding!.milkSafeFrom!)}` : null].filter(Boolean);
   return parts.length ? `Withholding: ${parts.join("; ")}` : null;
 }
 

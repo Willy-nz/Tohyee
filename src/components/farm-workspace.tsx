@@ -399,7 +399,7 @@ function PaddockMobsWithholding({ organisationId, farmId, paddockId }: { organis
   if (!here.length) return null;
   return (
     <Notice tone="warning">
-      {here.map((mob) => `${mob.name}: ${withholdingText(mob.withholding, today)!.replace(/^Withholding: /, "")}`).join(". ")}.
+      {here.map((mob) => `${mob.name}: ${withholdingText(mob.withholding, today, (iso) => shortDate(iso, today))!.replace(/^Withholding: /, "")}`).join(". ")}.
     </Notice>
   );
 }
