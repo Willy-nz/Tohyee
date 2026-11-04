@@ -33,6 +33,11 @@ up, restored or moved on its own.
 and farming together. Enable the modules you need and choose what each person
 can access. Bank feeds and Shopify have their own connection and posting setup.
 
+**Accounting you can check.** Bank matches, bank rules, bills from your
+inbox and AI drafts are suggestions until someone says OK. The database itself
+refuses unbalanced journals and edits to posted history, and every accounting
+rule starts as a [worked example](docs/ACCOUNTING-EXAMPLES.md) with a test.
+
 **AI access you choose.** Compatible AI apps connect through MCP. Depending on
 the permissions you grant, they can read records, prepare drafts or post changes.
 AI proposals and posted transactions are different; review the access level
@@ -43,8 +48,9 @@ before connecting an assistant.
 > organisation and review accounting outputs. Tohyee is provided as is, without
 > warranty; see the [licence](LICENSE).
 
-Get the current installer and release-specific changes from the
-[latest release](https://github.com/Willy-nz/Tohyee/releases/latest).
+Latest release: [v0.26.0](https://github.com/Willy-nz/Tohyee/releases/tag/v0.26.0)
+([notes](docs/releases/0.26.0.md)). Get the installer and what each download
+includes from the [latest release](https://github.com/Willy-nz/Tohyee/releases/latest).
 The [feature register](docs/FEATURES.md) records implemented features and limits;
 [release notes](docs/releases) describe packaged versions.
 
