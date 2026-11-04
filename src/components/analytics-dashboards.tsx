@@ -21,6 +21,7 @@ import { useAnalyticsEmbed } from "@/components/analytics/embed-context";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
+import { DashboardHistoryCard } from "@/components/analytics/dashboard-history";
 import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
 import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/conditional";
 import { columnHeaderRows, columnPathText, initiallyCollapsed, isGroupRow, steppedRows, visibleWithCollapsed } from "@/lib/analytics/matrix";
@@ -322,6 +323,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [conflict, setConflict] = useState<{ updatedByEmail: string; updatedAt: string } | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper") && !embed);
   const [sharing, setSharing] = useState(false);
+  // The report's edit history (decision 1414): saved versions, by people and through an AI.
+  const [showHistory, setShowHistory] = useState(false);
   const [theming, setTheming] = useState(false);
   // The format painter (#376): a tile's format, copied to paste on others.
   const [copied, setCopied] = useState<{ from: string; title: string; format: ChartFormat | undefined } | null>(null);
@@ -716,6 +719,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         </div>
         <div className={ui.rowButtons}>
           {canEdit ? <Button variant="secondary" aria-expanded={sharing} onClick={() => setSharing(!sharing)}>Share</Button> : null}
+          {canEdit ? <Button variant="secondary" aria-expanded={showHistory} onClick={() => setShowHistory(!showHistory)}>History</Button> : null}
           {canEdit && editing ? (
             <>
               <Button variant="secondary" onClick={() => setEditingTile("new")} disabled={busy || Boolean(editingTile) || !tables.data?.tables.length}>
@@ -870,6 +874,19 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       />}
 
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
+      {showHistory && canEdit ? (
+        <DashboardHistoryCard
+          organisationId={organisationId}
+          dashboardId={dashboard.id}
+          version={base?.version ?? dashboard.version}
+          unsaved={unsaved}
+          onRestored={(restored) => {
+            setSaved(restored);
+            setHistory(null);
+            setConflict(null);
+          }}
+        />
+      ) : null}
 
       {theming && editing && canEdit ? (
         <ThemePanel

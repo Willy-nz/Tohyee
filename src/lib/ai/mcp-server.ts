@@ -27,6 +27,23 @@ function fileContent(file: ToolFileAnswer["file"]): ToolContent {
 
 export { aiKeyVia } from "@/lib/ai/tokens";
 
+/**
+ * What the AI is told about Analytics (#591, decision 1419), only when its
+ * tools are offered: it can build reports itself instead of sending the
+ * person to do it.
+ */
+export function analyticsWords(offered: readonly string[]): string {
+  if (!offered.includes("list_analytics_tables") && !offered.includes("list_analytics_dashboards")) return "";
+  const builds = offered.includes("create_analytics_dashboard");
+  return (
+    " Analytics: list_analytics_tables gives the tables this person can use (the books, Shopify, Google Analytics, Meta, files and databases) with their fields and a guide to tiles; " +
+    "run_analytics_query asks one a question, and get_analytics_dashboard reads a report with its figures." +
+    (builds
+      ? " You can build Analytics reports yourself: create_analytics_dashboard makes one and update_analytics_dashboard adds, changes and reorders tiles. Every tile is run before it's saved, and each change goes into the report's History, marked as made through the AI, where a person can put an earlier version back. People delete reports, take tiles off and change sharing in Tohyee."
+      : "")
+  );
+}
+
 
 /**
  * The MCP server for one AI key: its owner's organisation, as its owner, one
@@ -67,6 +84,7 @@ export function mcpServerFor(
       (mailTools.length
         ? ` You can also search and read ${identity.user.displayName}'s own private mail (search_my_mail, read_my_mail), for them alone: say which email you used, and never pass what's in it to anyone else or into Tohyee.`
         : "") +
+      analyticsWords(offered.map((tool) => tool.name)) +
       " Tools for modules this organisation hasn't turned on (such as Farming or Livestock) aren't offered; get_organisation's toolGroups says which are hidden and why." +
       " If what this connection may do changes, Tohyee tells your app (notifications/tools/list_changed); if a tool named here isn't in your tool list, ask your app to refresh its tools or reconnect.",
     tools: offered,

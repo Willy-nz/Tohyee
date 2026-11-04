@@ -26,9 +26,11 @@ export type ToolModules = {
   reporting: boolean;
   /** Not-for-profit: fund tracking. */
   notForProfit: boolean;
+  /** Analytics (#591): its own module, apart from Accounting. */
+  analytics: boolean;
 };
 
-export type ToolGroupKey = "accounting" | "farming" | "livestock" | "tracking";
+export type ToolGroupKey = "accounting" | "farming" | "livestock" | "tracking" | "analytics";
 
 type ToolGroup = {
   key: ToolGroupKey;
@@ -93,6 +95,16 @@ export const TRACKING_TOOLS: readonly string[] = [
   "update_tracking_option",
 ];
 
+/** Analytics reports and their tables (#591): the Analytics app (Settings › Modules › Analytics), apart from Accounting. */
+export const ANALYTICS_TOOLS: readonly string[] = [
+  "list_analytics_tables",
+  "run_analytics_query",
+  "list_analytics_dashboards",
+  "get_analytics_dashboard",
+  "create_analytics_dashboard",
+  "update_analytics_dashboard",
+];
+
 const GROUPS: readonly ToolGroup[] = [
   {
     key: "farming",
@@ -118,6 +130,12 @@ const GROUPS: readonly ToolGroup[] = [
         : modules.reporting
           ? null
           : "Tracking categories come with Advanced reporting, which is turned off for this organisation (Settings › Modules).",
+  },
+  {
+    key: "analytics",
+    label: "Analytics (reports over the books, Shopify, Google, Meta, files and databases)",
+    tools: ANALYTICS_TOOLS,
+    hiddenBecause: (modules) => (modules.analytics ? null : "Analytics is turned off for this organisation (Settings › Modules)."),
   },
 ];
 
@@ -158,6 +176,7 @@ type ModuleRow = {
   livestock_enabled: boolean;
   advanced_features: boolean;
   not_for_profit_enabled: boolean;
+  analytics_enabled: boolean;
 };
 
 /** The switches from organisation_settings, as useModules (the menus) reads them: Farming and Livestock need Accounting. */
@@ -169,12 +188,13 @@ export function toolModulesFrom(row: ModuleRow): ToolModules {
     livestock: accounting && row.livestock_enabled === true,
     reporting: row.advanced_features === true,
     notForProfit: row.not_for_profit_enabled === true,
+    analytics: row.analytics_enabled === true,
   };
 }
 
 export async function loadToolModules(tx: OrgTx): Promise<ToolModules> {
   const result = await tx.query<ModuleRow>(
-    `select accounting_enabled, advanced_features, not_for_profit_enabled,
+    `select accounting_enabled, advanced_features, not_for_profit_enabled, analytics_enabled,
             coalesce((select enabled from livestock_settings where id = true), false) as livestock_enabled,
             coalesce((select enabled from farming_settings where id = true), false) as farming_enabled
        from organisation_settings where id = true`,
@@ -182,5 +202,5 @@ export async function loadToolModules(tx: OrgTx): Promise<ToolModules> {
   const row = result.rows[0];
   return row
     ? toolModulesFrom(row)
-    : { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
+    : { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false, analytics: false };
 }
