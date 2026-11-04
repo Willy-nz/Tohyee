@@ -3224,6 +3224,15 @@ that something happened.
   covers before and after) and supplements fed in kg DM. Satellite and
   model readings are labelled as estimates. Records only.
 
+- **Farm map assets and measuring** (MA1-MA6, decisions 1462-1465, tenant
+  migration 0248): on Farm › Map, **Farm assets** puts troughs, gates,
+  water points, sheds, bores, tanks, yards and culverts on the map as
+  points, and fences, pipes, races and drains as lines (with their length),
+  each with a name and note; removed ones are kept. **Measure** gives a
+  tapped distance (m, km) or a drawn area (m², ha), saving nothing. Layer
+  buttons turn hazards, effluent, assets, rain gauges, tasks and people on
+  or off, remembered on the device.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed
