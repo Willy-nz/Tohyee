@@ -13039,6 +13039,79 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       old one if it's still waiting. Uploaded documents are seen by
       bookkeepers and up, and by members named as signers.
 
+### The AI builds Analytics reports (#591; Claude, 5 Nov 2026, when Jess said "Yes buddy you can do it. You are ai and you know what you need."; decisions 1411-1420, examples AIA1-AIA9)
+
+1411. **The AI uses the Analytics editor's own reports.** Six report tools:
+      list_analytics_tables, run_analytics_query, list_analytics_dashboards
+      and get_analytics_dashboard (Look only), and
+      create_analytics_dashboard and update_analytics_dashboard (Make
+      drafts). Tiles take the same shape the editor saves (chart kind,
+      question, format, dates, width and height), checked and saved by the
+      same code, so there's no second engine and a report the AI makes opens
+      and edits in Tohyee like any other.
+1412. **Making and changing reports is "Make drafts", as the AI's own
+      dashboards are.** It needs the bookkeeper role or higher, the same as
+      saving a report in Tohyee. Reading needs any role.
+1413. **Every tile the AI adds or changes is run before it's saved.** The
+      editor's checks come first (a pie shows one value, the fields exist),
+      then the tile is worked out on the data in the report's dates. The
+      first that fails is refused with its position, title and what's
+      wrong, and nothing is saved. Tiles it didn't touch aren't run again,
+      as in Tohyee. A tile that runs but has no rows saves, with a warning.
+1414. **Reports keep an edit history on the server** (tenant migration
+      0230). Every save, by a person or through an AI, keeps the version
+      with who saved it, how ("via AI key ..." or "via AI app ..."), when and
+      what changed in a few words. History marks the AI's versions. Each
+      report starts with the version it had when this was added. The newest
+      100 versions are kept. Undo and Redo while editing (decision 691) stay
+      as they were.
+1415. **A person puts an earlier version back from History.** It's saved
+      as a new version ("Put back version 1"), checked like any save and
+      named as the version it started from, so it can be undone the same
+      way. Only people do it, in Tohyee; the AI has no undo tool. An image
+      that has since been taken off a report can't come back with it: the
+      save says to upload it again.
+1416. **The AI sees what its person sees in Analytics.** The tools are
+      offered only while Analytics is on (a new module group, decision
+      1385). Tables and questions are for viewers and up; report viewers
+      only get reports shared with them. Farm tables need every farm
+      (decision 744): they aren't listed, asked or put on a report through
+      the AI. Each organisation's reports and data stay in its own database.
+1417. **What the AI never does with reports.** It doesn't delete a report,
+      take a tile off, change sharing, connect or change sources, folders,
+      themes, slicers, pages, bookmarks or images. Taking a tile off is
+      left to people because the AI can already change a wrong tile, and a
+      person can see what's gone before it goes.
+1418. **The AI can't save over someone's change, and is told what it can
+      do.** update_analytics_dashboard takes the version it read; if anyone
+      has saved since, it's refused and told to read the report again. The
+      save itself also checks the version, as the editor's does (decision
+      690). When the Analytics tools are offered, the server's instructions
+      say what they do and, with Make drafts, that it can build reports
+      itself and that each change goes into History. "Make drafts" now says
+      it makes and changes Analytics reports.
+1419. **The AI can refresh Analytics data, as Refresh now does** (Jess:
+      "Can you refresh data sources too?"). refresh_analytics_sources loads
+      the latest data for every source a report's tiles read, or for named
+      tables, through the same loads as Load now and Refresh now (the books
+      and CRM, Shopify, Google Analytics, Search Console, Meta, files,
+      databases and prepared tables). In Tohyee only owners and admins
+      refresh, so the tool is Make drafts and owners and admins only. It
+      waits for each load and says when it started and finished, the rows
+      loaded, or why not (for example "That source is already loading.",
+      the same guard as the screens). A failed load keeps the last good
+      data. It never changes a connection, its sign-in, its query or its
+      schedule. get_analytics_dashboard now gives each source's freshness
+      (last refreshed, failed, still running), which is how to check
+      afterwards.
+1420. **Answers stay small and easy to fill in.** Figures come back as
+      exact text, cut to a number of rows (20 a tile, 100 a question by
+      default). The guide comes once, on the first page of tables. Each
+      table's saved values (such as the books' revenue, which is negative in
+      the ledger) can be copied into a tile as they are. Error messages say
+      which tile and what to fix.
+
+
 ### Farm mobs (5 Nov 2026; decisions 1421-1430)
 
 Built by Claude when Jess asked to compare Tohyee with a mob-based
