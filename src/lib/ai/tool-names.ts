@@ -126,6 +126,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "suggest_report_commentary", level: "draft", words: "Suggest a commentary on the cash flow forecast or a consolidated report (a person checks it)" },
   { name: "create_analytics_dashboard", level: "draft", words: "Make an Analytics report (every tile is checked by running it first)" },
   { name: "update_analytics_dashboard", level: "draft", words: "Change an Analytics report: name, dates, add, change and reorder tiles (not take tiles off, share it or delete it); each change is in the report's History" },
+  { name: "refresh_analytics_sources", level: "draft", words: "Load the latest data into Analytics for a report or tables (owners and admins only; it can't change connections or schedules)" },
   { name: "approve_invoice", level: "post", words: "Approve a draft invoice (it's numbered and posted)" },
   { name: "approve_bill", level: "post", words: "Approve a draft bill (it's posted)" },
   { name: "post_draft_journal", level: "post", words: "Post a draft journal" },

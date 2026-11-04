@@ -61,7 +61,7 @@ const SALES_BY_MONTH = {
 };
 const ORDERS = { title: "Orders", visual: "kpi", width: "quarter", query: { table: "sales", measures: [{ label: "Orders", aggregate: "count" }] } };
 
-/** The AI builds Analytics reports (#591, examples AIA1-AIA8, decisions 1411-1420; not yet reviewed). */
+/** The AI builds Analytics reports (#591, examples AIA1-AIA9, decisions 1411-1420; not yet reviewed). */
 describeWithDatabase("the AI's Analytics reports", () => {
   let server: TestServer;
   let owner: SessionUser;
@@ -283,5 +283,41 @@ describeWithDatabase("the AI's Analytics reports", () => {
     await settingsRoute.PATCH(apiRequest(`/api/organisations/${OTHER}/settings`, { method: "PATCH", cookie: ownerCookie, body: { analyticsEnabled: false } }), params({ organisationId: OTHER }));
     const off = await rpc(tokens["other-read"], "tools/call", { name: "list_analytics_dashboards", arguments: {} });
     expect(JSON.stringify(off)).toContain("Analytics is turned off for this organisation");
+  });
+
+  it("AIA9: an owner's AI refreshes a report's sources the way Load now does; a bookkeeper's can't, and a source already loading is left alone", async () => {
+    const refused = await rpc(tokens["books-drafts"], "tools/call", { name: "refresh_analytics_sources", arguments: { tables: ["sales"] } });
+    expect(JSON.stringify(refused)).toMatch(/only for owners and admins/);
+    const sourceBefore = await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query<{ updated_at: Date; columns: unknown }>("select updated_at, columns from analytics_sources"));
+
+    // A new sale in the file: the refresh loads it.
+    fs.appendFileSync(path.join(root, "here", "sales.csv"), "2026-04-02,Canterbury,3,1.00\n");
+    const refreshed = await call(tokens["owner-drafts"], "refresh_analytics_sources", { dashboardId, tables: ["nope"] });
+    expect(refreshed.refreshed).toEqual([
+      expect.objectContaining({ source: "Sales", tables: ["sales"], status: "ok", rowsLoaded: "4", startedAt: expect.stringMatching(/Z$/), finishedAt: expect.stringMatching(/Z$/) }),
+    ]);
+    const answer = await call(tokens["viewer-read"], "run_analytics_query", { query: SALES_BY_REGION.query });
+    expect(answer.rows).toEqual([
+      { category: "Otago", m0: "20.200000" },
+      { category: "Canterbury", m0: "3.100000" },
+    ]);
+    const read = await call(tokens["viewer-read"], "get_analytics_dashboard", { dashboardId });
+    expect(read.freshness).toEqual([expect.objectContaining({ name: "Sales", tables: ["sales"], refreshedAt: (refreshed.refreshed as Json[])[0].finishedAt, failedAt: null, running: false })]);
+
+    // Tables named instead of a report; one nothing loads is skipped with the reason.
+    const named = await call(tokens["owner-drafts"], "refresh_analytics_sources", { tables: ["sales", "made_up"] });
+    expect(named.skipped).toEqual([{ table: "made_up", reason: "There's no source that loads this table." }]);
+
+    // Already loading: refused the same way as in Tohyee, nothing started.
+    await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) =>
+      tx.query("insert into analytics_load_runs (source_id, source_name, table_name, file_name, trigger) select id, name, table_name, file_name, 'schedule' from analytics_sources"),
+    );
+    const busy = await call(tokens["owner-drafts"], "refresh_analytics_sources", { tables: ["sales"] });
+    expect(busy.refreshed).toEqual([expect.objectContaining({ source: "Sales", status: "not started", error: "That source is already loading." })]);
+    await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query("delete from analytics_load_runs where status = 'running'"));
+
+    // Only the data: the source's definition is as it was.
+    const sourceAfter = await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) => tx.query<{ updated_at: Date; columns: unknown }>("select updated_at, columns from analytics_sources"));
+    expect(sourceAfter.rows).toEqual(sourceBefore.rows);
   });
 });

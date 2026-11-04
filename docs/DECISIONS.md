@@ -13039,9 +13039,9 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       old one if it's still waiting. Uploaded documents are seen by
       bookkeepers and up, and by members named as signers.
 
-### The AI builds Analytics reports (#591; Claude, 5 Nov 2026, when Jess said "Yes buddy you can do it. You are ai and you know what you need."; decisions 1411-1420, examples AIA1-AIA8)
+### The AI builds Analytics reports (#591; Claude, 5 Nov 2026, when Jess said "Yes buddy you can do it. You are ai and you know what you need."; decisions 1411-1420, examples AIA1-AIA9)
 
-1411. **The AI uses the Analytics editor's own reports.** Six tools:
+1411. **The AI uses the Analytics editor's own reports.** Six report tools:
       list_analytics_tables, run_analytics_query, list_analytics_dashboards
       and get_analytics_dashboard (Look only), and
       create_analytics_dashboard and update_analytics_dashboard (Make
@@ -13082,15 +13082,28 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       themes, slicers, pages, bookmarks or images. Taking a tile off is
       left to people because the AI can already change a wrong tile, and a
       person can see what's gone before it goes.
-1418. **The AI can't save over someone's change.** update_analytics_dashboard
-      takes the version it read; if anyone has saved since, it's refused and
-      told to read the report again. The save itself also checks the
-      version, as the editor's does (decision 690).
-1419. **The AI is told it can build reports.** When the Analytics tools are
-      offered, the server's instructions say what they do and, with Make
-      drafts, that it can build reports itself and that each change goes
-      into History. "Make drafts" now says it makes and changes Analytics
-      reports.
+1418. **The AI can't save over someone's change, and is told what it can
+      do.** update_analytics_dashboard takes the version it read; if anyone
+      has saved since, it's refused and told to read the report again. The
+      save itself also checks the version, as the editor's does (decision
+      690). When the Analytics tools are offered, the server's instructions
+      say what they do and, with Make drafts, that it can build reports
+      itself and that each change goes into History. "Make drafts" now says
+      it makes and changes Analytics reports.
+1419. **The AI can refresh Analytics data, as Refresh now does** (Jess:
+      "Can you refresh data sources too?"). refresh_analytics_sources loads
+      the latest data for every source a report's tiles read, or for named
+      tables, through the same loads as Load now and Refresh now (the books
+      and CRM, Shopify, Google Analytics, Search Console, Meta, files,
+      databases and prepared tables). In Tohyee only owners and admins
+      refresh, so the tool is Make drafts and owners and admins only. It
+      waits for each load and says when it started and finished, the rows
+      loaded, or why not (for example "That source is already loading.",
+      the same guard as the screens). A failed load keeps the last good
+      data. It never changes a connection, its sign-in, its query or its
+      schedule. get_analytics_dashboard now gives each source's freshness
+      (last refreshed, failed, still running), which is how to check
+      afterwards.
 1420. **Answers stay small and easy to fill in.** Figures come back as
       exact text, cut to a number of rows (20 a tile, 100 a question by
       default). The guide comes once, on the first page of tables. Each

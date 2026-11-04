@@ -40,6 +40,9 @@ export function analyticsWords(offered: readonly string[]): string {
     "run_analytics_query asks one a question, and get_analytics_dashboard reads a report with its figures." +
     (builds
       ? " You can build Analytics reports yourself: create_analytics_dashboard makes one and update_analytics_dashboard adds, changes and reorders tiles. Every tile is run before it's saved, and each change goes into the report's History, marked as made through the AI, where a person can put an earlier version back. People delete reports, take tiles off and change sharing in Tohyee."
+      : "") +
+    (offered.includes("refresh_analytics_sources")
+      ? " refresh_analytics_sources loads the latest data for a report's sources or named tables, as Refresh now does; it never changes a connection or schedule."
       : "")
   );
 }
@@ -114,6 +117,8 @@ export function mcpServerFor(
           accessLevel: level,
           grantedAccessLevel: identity.accessLevel,
           toolList: { ...toolList, toolNames: offered.map((offeredTool) => offeredTool.name), toolGroups: toolGroupStatuses(modules) },
+          organisation,
+          actor,
         };
         const readOnly = tool.readOnly ?? tool.level === "read";
         // A tool that works in steps (a durable batch, #547) commits each step on its own.

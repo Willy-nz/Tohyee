@@ -32,15 +32,26 @@ import { QUICK_KINDS } from "@/lib/analytics/quick-calcs";
 import { effectiveDates } from "@/lib/analytics/report-filters";
 import { listMeasures } from "@/lib/analytics/saved-measures";
 import { GSC_TABLES } from "@/lib/analytics/search-console-reports";
-import { listShapedTables } from "@/lib/analytics/shaped-tables";
 import { SHOPIFY_TABLES } from "@/lib/analytics/shopify-tables";
-import { listSources, requireAnalytics } from "@/lib/analytics/sources";
+import { listShapedTables } from "@/lib/analytics/shaped-tables";
+import { type LoadRun, listSources, requireAnalytics, runLoad } from "@/lib/analytics/sources";
+import { BOOKS_TABLE_NAME, refreshBooks } from "@/lib/analytics/books";
+import { reportLoadFacts, loadKeyOf } from "@/lib/analytics/freshness";
+import { refreshGa } from "@/lib/analytics/google-analytics";
+import { GA_LOAD_TABLE_NAME } from "@/lib/analytics/google-analytics-reports";
+import { refreshMeta } from "@/lib/analytics/meta";
+import { META_LOAD_TABLE_NAME } from "@/lib/analytics/meta-reports";
+import { refreshGsc } from "@/lib/analytics/search-console";
+import { GSC_LOAD_TABLE_NAME } from "@/lib/analytics/search-console-reports";
+import { runShapedTableAndDependents } from "@/lib/analytics/shaped-tables";
+import { refreshShopify } from "@/lib/analytics/shopify";
+import { SHOPIFY_LOAD_TABLE_NAME } from "@/lib/analytics/shopify-tables";
 import { TIME_PERIODS } from "@/lib/analytics/time-intelligence";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { ForbiddenError, HttpError, ValidationError } from "@/lib/errors";
 
 /*
- * The AI's Analytics tools (#591, examples AIA1-AIA8, decisions 1411-1420).
+ * The AI's Analytics tools (#591, examples AIA1-AIA9, decisions 1411-1420).
  * The AI reads the tables a person can use in Analytics (the books, Shopify,
  * Google, Meta, files and databases, and prepared tables), asks them
  * questions the way a tile does, reads reports with their figures, and makes
@@ -50,6 +61,8 @@ import { ForbiddenError, HttpError, ValidationError } from "@/lib/errors";
  * Each save goes into the report's edit history marked "via AI key ...", so
  * a person can see it and put an earlier version back. It never deletes a
  * report, takes a tile off, changes sharing, sources, folders or themes.
+ * Owners' and admins' AI can refresh sources through the screens' own loads
+ * (decision 1419), which only fetch data again.
  * The figures are worked out from the Analytics file, outside any database
  * transaction, as the screens do (runSteps).
  */
@@ -395,6 +408,8 @@ const REPORT_DATES: JsonSchema = {
   properties: { preset: { type: "string", enum: DATE_PRESETS.map((preset) => preset.value) }, from: DATE, to: DATE },
 };
 
+const BUILT_IN_NAMES: Record<string, string> = { books: "Books and CRM", shopify: "Shopify", ga: "Google Analytics", gsc: "Google Search Console", meta: "Meta" };
+
 // --- The tools ---------------------------------------------------------------
 
 /** A tool that works in steps (figures are worked out between transactions); `run` does it all in one, for callers with a transaction. */
@@ -516,7 +531,8 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
       const facts = await run(async (tx) => {
         await requireAnalytics(tx);
         const dashboard = await getDashboard(tx, String(args.dashboardId ?? ""), readerOf(tx, context));
-        return { organisationId: tx.organisationId, dashboard, dates: await dateContext(tx), model: await loadModel(tx), hidden: await hiddenFarmTables(tx) };
+        const freshness = (await reportLoadFacts(tx, dashboard)).map(({ name, tables, refreshedAt, failedAt, running }) => ({ name, tables, refreshedAt, failedAt, running }));
+        return { organisationId: tx.organisationId, dashboard, freshness, dates: await dateContext(tx), model: await loadModel(tx), hidden: await hiddenFarmTables(tx) };
       });
       const { dashboard } = facts;
       const tiles = typeof args.page === "string" && args.page ? dashboard.tiles.filter((tile) => tilePage(tile, dashboard.settings.pages) === args.page) : dashboard.tiles;
@@ -525,6 +541,8 @@ export const ANALYTICS_READ_TOOLS: AiTool[] = [
       return {
         dashboard: dashboardSummary(dashboard),
         slicers: dashboard.settings.slicers.map((slicer) => ({ table: slicer.table, field: slicer.field, label: slicer.label })),
+        // When each source was last refreshed, and whether a refresh failed or is running (decision 698).
+        freshness: facts.freshness,
         tiles: runs.map((entry) => ({ ...tileOut(entry.tile), ...(entry.result ? { figures: figures(entry.result, rows) } : {}), ...(entry.error ? { error: entry.error } : {}) })),
       };
     },
@@ -641,6 +659,103 @@ export const ANALYTICS_WRITE_TOOLS: AiTool[] = [
         }),
       );
       return saved(dashboard, checked.runs);
+    },
+  }),
+  stepped({
+    name: "refresh_analytics_sources",
+    title: "Refresh Analytics data",
+    description:
+      "Loads the latest data into Analytics now, as Refresh now and Load now do in Tohyee: for the tables you name, or every source a report's tiles read. It only fetches data again: it never changes a connection, its sign-in, its query or its schedule. Each source answers when it started and finished, the rows loaded, or why it didn't (for example it's already loading). It waits until each load is done; get_analytics_dashboard's freshness shows the state afterwards. Owners and admins only, as in Tohyee.",
+    level: "draft",
+    minRole: "admin",
+    inputSchema: schema({
+      dashboardId: { type: "string", description: "Refresh every source this report's tiles read." },
+      tables: { type: "array", maxItems: 20, items: { type: "string" }, description: "Or the tables to refresh (list_analytics_tables names them)." },
+    }),
+    async runSteps(run, args, context) {
+      if (!roleAtLeast(context.role, "admin")) throw new ForbiddenError("Refreshing Analytics data is for owners and admins, as in Tohyee.");
+      if (!context.organisation || !context.actor) throw new ValidationError("Refreshing data needs a connection to Tohyee.");
+      const plan = await run(async (tx) => {
+        await requireAnalytics(tx);
+        let tables: string[];
+        if (args.dashboardId !== undefined && args.dashboardId !== null && args.dashboardId !== "") {
+          const dashboard = await getDashboard(tx, String(args.dashboardId));
+          tables = [...new Set(dashboard.tiles.flatMap((tile) => (tile.query ? [tile.query.table] : [])))];
+          if (tables.length === 0) throw new ValidationError("That report has no tiles that read a table.");
+        } else if (Array.isArray(args.tables) && args.tables.length) {
+          tables = [...new Set(args.tables.map(String))];
+        } else {
+          throw new ValidationError("Give dashboardId or tables.");
+        }
+        const sources = await listSources(tx);
+        const shapes = await listShapedTables(tx);
+        const hidden = await hiddenFarmTables(tx);
+        // One load for each source, however many of its tables were named.
+        const loads = new Map<string, { label: string; tables: string[]; kind: string; id?: string }>();
+        const skipped: Array<{ table: string; reason: string }> = [];
+        for (const table of tables) {
+          if (hidden?.has(table)) {
+            skipped.push({ table, reason: "Farm tables are for members who see every farm." });
+            continue;
+          }
+          const key = loadKeyOf(table).tableName;
+          const builtIn: Record<string, string> = { [BOOKS_TABLE_NAME]: "books", [SHOPIFY_LOAD_TABLE_NAME]: "shopify", [GA_LOAD_TABLE_NAME]: "ga", [GSC_LOAD_TABLE_NAME]: "gsc", [META_LOAD_TABLE_NAME]: "meta" };
+          const source = sources.find((entry) => entry.tableName === table);
+          const shape = shapes.find((entry) => entry.tableName === table);
+          const plan = builtIn[key]
+            ? { key, kind: builtIn[key], label: BUILT_IN_NAMES[builtIn[key]] }
+            : source
+              ? { key: `source-${source.id}`, kind: "source", id: source.id, label: source.name }
+              : shape
+                ? { key: `shape-${shape.id}`, kind: "shape", id: shape.id, label: shape.name }
+                : null;
+          if (!plan) {
+            skipped.push({ table, reason: "There's no source that loads this table." });
+            continue;
+          }
+          const entry = loads.get(plan.key) ?? { label: plan.label, tables: [], kind: plan.kind, ...(plan.id ? { id: plan.id } : {}) };
+          entry.tables.push(table);
+          loads.set(plan.key, entry);
+        }
+        return { loads: [...loads.values()], skipped };
+      });
+      const organisation = context.organisation;
+      const actor = context.actor;
+      const results = [];
+      for (const load of plan.loads) {
+        try {
+          const loaded: LoadRun | Awaited<ReturnType<typeof runShapedTableAndDependents>> =
+            load.kind === "books"
+              ? await refreshBooks(organisation, actor, "manual")
+              : load.kind === "shopify"
+                ? await refreshShopify(organisation, actor, "manual")
+                : load.kind === "ga"
+                  ? await refreshGa(organisation, actor, "manual")
+                  : load.kind === "gsc"
+                    ? await refreshGsc(organisation, actor, "manual")
+                    : load.kind === "meta"
+                      ? await refreshMeta(organisation, actor, "manual")
+                      : load.kind === "source"
+                        ? await runLoad(organisation, actor, load.id!, "manual")
+                        : await runShapedTableAndDependents(organisation, actor, load.id!);
+          results.push({
+            source: loaded.sourceName,
+            tables: load.tables,
+            status: loaded.status,
+            startedAt: loaded.startedAt,
+            finishedAt: loaded.finishedAt,
+            rowsLoaded: loaded.rowsLoaded,
+            ...(loaded.error ? { error: loaded.error } : {}),
+          });
+        } catch (error) {
+          results.push({ source: load.label, tables: load.tables, status: "not started", error: problem(error) });
+        }
+      }
+      return {
+        refreshed: results,
+        ...(plan.skipped.length ? { skipped: plan.skipped } : {}),
+        note: "A load that fails leaves the last good data in place. Nothing about the sources' connections or schedules was changed.",
+      };
     },
   }),
 ];

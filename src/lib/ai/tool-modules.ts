@@ -103,6 +103,7 @@ export const ANALYTICS_TOOLS: readonly string[] = [
   "get_analytics_dashboard",
   "create_analytics_dashboard",
   "update_analytics_dashboard",
+  "refresh_analytics_sources",
 ];
 
 const GROUPS: readonly ToolGroup[] = [

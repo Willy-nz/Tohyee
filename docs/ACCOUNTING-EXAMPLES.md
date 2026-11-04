@@ -18813,7 +18813,7 @@ books. The figures are made up.
   nearest reading of each method; on a tie, the one on or before the photo,
   then the latest recorded.
 
-## The AI's Analytics reports (AIA1-AIA8; #591, by Claude on 5 Nov 2026 when Jess said "Yes buddy you can do it. You are ai and you know what you need."; not yet reviewed)
+## The AI's Analytics reports (AIA1-AIA9; #591, by Claude on 5 Nov 2026 when Jess said "Yes buddy you can do it. You are ai and you know what you need."; not yet reviewed)
 
 Tested in `tests/integration/ai-analytics-dashboards.test.ts` and
 `tests/unit/analytics-dashboard-history.test.ts`. Nothing here posts to the
@@ -18854,6 +18854,14 @@ books. The sales are made up: Otago 2 at 10.00 on 5 March and 1 at 0.20 on
   495.00) never show. With Analytics off, the tools aren't offered and say
   why. The AI never deletes a report, takes a tile off, or changes sharing,
   sources, folders, slicers, pages or images.
+- **AIA9 Refreshing the data.** A new sale (Canterbury 3 at 1.00) is added
+  to the file. The owner's AI refreshes the report's sources: Sales,
+  **4 rows**, with when it started and finished, and Canterbury is now
+  **3.10**. The report's freshness shows the same finish time. A table
+  nothing loads is skipped with the reason. A bookkeeper's AI can't refresh
+  (owners and admins only, as in Tohyee). A source already loading is
+  refused, "That source is already loading.", and nothing starts. The
+  source's settings are unchanged.
 
 ## Income tax (#292) stage 1: taxable income, tax, provisional tax and terminal tax (ITX1-ITX10; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
 
