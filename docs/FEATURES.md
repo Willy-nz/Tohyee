@@ -964,7 +964,12 @@ that something happened.
   NetSuite's tax periods: the GST return opens on the next period, and Home
   and the period close use it (GP1-GP6, not yet approved by Jess).
 - **GST return** (NZ GST101A, boxes 5-15) on the invoice, payments or hybrid
-  basis, for 1, 2 or 6 whole calendar months, under Reports. Worked out from
+  basis, for 1, 2 or 6 whole calendar months, under Reports. For a period
+  with no GST registration it says so instead of showing boxes of zeros
+  (it isn't a nil return, and it can't be marked as filed); a period the
+  registration starts or ends in, or one whose registration isn't
+  confirmed, shows a warning. The AI's gst_return says the same
+  (`registration`, `notRegistered`; #577, GSR11-GSR14). Worked out from
   sales invoices, sales credit notes, bills, supplier credit notes and spend
   or receive money. On the invoice basis each document counts on its own
   date when approved and the other way on its void date; on the payments
@@ -2402,7 +2407,13 @@ that something happened.
   get_organisation says the tool list is out of date until the app fetches
   it again; calls are always checked against the level now (decisions
   1342-1344). An app that ignores this needs its tools refreshed or the
-  connection reconnected.
+  connection reconnected. Only the tools for modules the organisation has
+  on are offered (#576, decisions 1385-1387): farm tools need Farming,
+  livestock tools Livestock, tracking tools Advanced reporting, and the
+  rest of the books Accounting; turning a module on or off changes the
+  tool list and the app is told. get_organisation's `toolGroups` says which
+  groups are hidden and why, and a call to a hidden tool is refused with
+  the reason.
 - **AI: lossless line edits and paged lists** (#537, #538, decisions
   1263-1268). Reading a document over MCP (get_invoice, get_bill, get_quote,
   get_sales_order, get_purchase_order, the credit notes and repeating

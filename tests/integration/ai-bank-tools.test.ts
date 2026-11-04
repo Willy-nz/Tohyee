@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
 import { AI_TOOLS } from "@/lib/ai/catalogue";
+import { moduleHidesTool, type ToolModules } from "@/lib/ai/tool-modules";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createBankAccount, listBankAccounts, listStatementLines, type BankAccount } from "@/lib/bank/accounts";
 import { importStatementFile } from "@/lib/bank/imports";
@@ -36,8 +37,11 @@ type Json = Record<string, unknown>;
 type Line = { id: string; amount: string; status: string; reconciliation: { kind: string; items: { journalId: string }[] } | null };
 
 const FULL_ONLY = AI_TOOLS.filter((tool) => tool.level === "full").map((tool) => tool.name).sort();
-const UP_TO_POST = AI_TOOLS.filter((tool) => tool.level !== "full").map((tool) => tool.name).sort();
-const ALL = AI_TOOLS.map((tool) => tool.name).sort();
+// Farming, Livestock and Advanced reporting are off in this organisation, so their tools aren't offered (#576).
+const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
+const OFFERED_HERE = AI_TOOLS.filter((tool) => moduleHidesTool(tool.name, MODULES_HERE) === null);
+const UP_TO_POST = OFFERED_HERE.filter((tool) => tool.level !== "full").map((tool) => tool.name).sort();
+const ALL = OFFERED_HERE.map((tool) => tool.name).sort();
 
 let rpcId = 0;
 async function rpc(token: string, method: string, rpcParams?: unknown) {

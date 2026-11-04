@@ -55,7 +55,8 @@ describeWithDatabase("the AI reads farm data", () => {
   });
 
   it("AIW14 with Farming off, the tools say so", async () => {
-    await expect(call(token, "list_fertiliser_products")).rejects.toThrow("Farming is off");
+    // #576: with Farming off the farm tools aren't offered, and a call says why.
+    await expect(call(token, "list_fertiliser_products")).rejects.toThrow("Farming is turned off for this organisation");
   });
 
   it("AIW10-AIW13 soil tests, fertiliser and pasture, with the only farm chosen for the AI", async () => {

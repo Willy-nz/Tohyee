@@ -8,7 +8,9 @@ import { oauthAddresses } from "@/lib/ai/oauth/config";
 import { bearerToken, wwwAuthenticate } from "@/lib/ai/oauth/format";
 import { authenticateAccessToken } from "@/lib/ai/oauth/tokens";
 import { looksLikeAiToken } from "@/lib/ai/token-format";
-import { authenticateAiToken, type AiTokenIdentity } from "@/lib/ai/tokens";
+import { loadToolModules, type ToolModules } from "@/lib/ai/tool-modules";
+import { aiKeyVia, authenticateAiToken, type AiTokenIdentity } from "@/lib/ai/tokens";
+import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { keyCanReadMail } from "@/lib/private-mail/ai";
 import { sessionMetaFrom } from "@/lib/auth/sessions";
 import { PayloadTooLargeError } from "@/lib/errors";
@@ -78,6 +80,25 @@ async function identify(token: string | null): Promise<AiTokenIdentity | null> {
   return authenticateAccessToken(token);
 }
 
+/**
+ * The organisation's module switches, for the tool list (#576, decision 1385).
+ * If the organisation's database can't be read now, nothing is hidden: every
+ * call opens that database anyway, and fails there with its own message.
+ */
+async function modulesFor(identity: AiTokenIdentity): Promise<ToolModules | null> {
+  try {
+    return await withOrganisationTransaction(
+      identity.membership.organisation,
+      { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity) },
+      loadToolModules,
+      { readOnly: true },
+    );
+  } catch (error) {
+    console.error("[tohyee] MCP: couldn't read the organisation's modules for the tool list:", error);
+    return null;
+  }
+}
+
 export const POST = route(async (request) => {
   const address = sessionMetaFrom(request).ipAddress;
   if (address && failedKeys.spent(address)) return tooManyFailures();
@@ -117,6 +138,7 @@ export const POST = route(async (request) => {
   // The mail tools only for a Look only key its Owner gave the private-mail scope (#250, decision 618).
   const server = mcpServerFor(identity, {
     privateMail: await keyCanReadMail(identity),
+    modules: await modulesFor(identity),
     toolListSeen: methods.includes("initialize") ? null : sessions.seen(owner, sessionId),
   });
   const toolList = server.toolList!;

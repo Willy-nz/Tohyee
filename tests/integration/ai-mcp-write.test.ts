@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
 import { AI_TOOLS } from "@/lib/ai/catalogue";
+import { moduleHidesTool, type ToolModules } from "@/lib/ai/tool-modules";
+import type { AiTool } from "@/lib/ai/tools";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact, type Contact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -24,10 +26,13 @@ const noContext = undefined as unknown;
 type Json = Record<string, unknown>;
 
 // These keys belong to bookkeepers and viewers, so tools for owners and admins only (income tax, decision 549) aren't offered.
-const READ = AI_TOOLS.filter((tool) => tool.level === "read" && !tool.minRole).map((tool) => tool.name).sort();
-const DRAFT = AI_TOOLS.filter((tool) => (tool.level === "read" || tool.level === "draft") && !tool.minRole).map((tool) => tool.name).sort();
+// Farming, Livestock and Advanced reporting are off in this organisation, so their tools aren't either (#576).
+const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
+const offeredHere = (tool: AiTool) => !tool.minRole && moduleHidesTool(tool.name, MODULES_HERE) === null;
+const READ = AI_TOOLS.filter((tool) => tool.level === "read" && offeredHere(tool)).map((tool) => tool.name).sort();
+const DRAFT = AI_TOOLS.filter((tool) => (tool.level === "read" || tool.level === "draft") && offeredHere(tool)).map((tool) => tool.name).sort();
 /** Everything up to "Make and post"; Full access tools are in ai-bank-tools.test.ts (decision 488). */
-const ALL = AI_TOOLS.filter((tool) => tool.level !== "full" && !tool.minRole).map((tool) => tool.name).sort();
+const ALL = AI_TOOLS.filter((tool) => tool.level !== "full" && offeredHere(tool)).map((tool) => tool.name).sort();
 
 let rpcId = 0;
 async function rpc(token: string, method: string, rpcParams?: unknown) {

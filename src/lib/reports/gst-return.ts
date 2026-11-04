@@ -1,4 +1,4 @@
-import { getGstRegistration } from "@/lib/tax/registration";
+import { getGstRegistration, gstRegistrationForPeriod } from "@/lib/tax/registration";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
@@ -977,6 +977,8 @@ export async function calculateGstReturn(
     basisChange: await basisChangeFor(tx, basis, periodStart),
     /** NR6: GST registration ended in this period; the fixed assets still held then, as a reminder (not worked out). */
     registrationEnded: await registrationEndedIn(tx, periodStart, periodEnd),
+    /** #577 (GSR11-GSR14): whether the registration covers all, part or none of the period, and whether it's confirmed. */
+    registration: gstRegistrationForPeriod(await getGstRegistration(tx), periodStart, periodEnd),
   };
 }
 
@@ -1191,6 +1193,9 @@ export async function fileGstReturn(
     assertSameRequest(existing.rows[0].request_hash, hash, "GST return");
     return { created: false, gstReturn: await getGstReturn(tx, existing.rows[0].id) };
   }
+  // #577 (GSR12): a period with no GST registration has no return to file; it isn't a nil return.
+  const registration = gstRegistrationForPeriod(await getGstRegistration(tx), periodStart, periodEnd);
+  if (registration.status === "not_registered") throw new ValidationError(registration.note);
   const overlapping = await overlappingReturns(tx, periodStart, periodEnd);
   if (overlapping.length > 0) {
     const filed = overlapping[0];
