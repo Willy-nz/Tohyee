@@ -15,6 +15,7 @@ import { listSoilTests, soilSummary } from "@/lib/farming/soil";
 import { farmStocking, listMobs } from "@/lib/farming/mobs";
 import { farmTimeline } from "@/lib/farming/timeline";
 import { listTreatments } from "@/lib/farming/treatments";
+import { listRainReadings, rainfallOverview } from "@/lib/farming/rainfall";
 import { ValidationError } from "@/lib/errors";
 import { getPaddock, listFarms, listPaddocks } from "@/lib/farming/paddocks";
 import { financialYearEnd } from "@/lib/financial-year";
@@ -438,6 +439,18 @@ export const FARM_READ_TOOLS: AiTool[] = [
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, limit: LIMIT(500), cursor: CURSOR }),
     run: async (tx, args) => historyPage(await listSupplements(tx, { farmId: await farmFor(tx, args.farmId), limit: boundedLimit(args.limit, 500, 5000), cursor: args.cursor }, { max: 5000 })),
+  },
+  {
+    name: "rainfall",
+    title: "Rainfall",
+    description:
+      "Rain recorded in the farm's own rain gauges, in mm: for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. Tohyee keeps no outside weather data.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, onDate: DATE, from: DATE, to: DATE }),
+    run: async (tx, args) =>
+      args.from || args.to
+        ? { readings: await listRainReadings(tx, { farmId: await farmFor(tx, args.farmId), from: args.from, to: args.to ?? todayIsoDate() }) }
+        : { gauges: await rainfallOverview(tx, { farmId: args.farmId, onDate: args.onDate }) },
   },
 ];
 

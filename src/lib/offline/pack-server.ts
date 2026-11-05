@@ -40,6 +40,7 @@ import { GET as tractorEquipmentGet } from "@/app/api/farming/tractor/equipment/
 import { GET as tractorJobsGet } from "@/app/api/farming/tractor/jobs/route";
 import { GET as planGet } from "@/app/api/farming/plans/[planId]/route";
 import { GET as productsGet } from "@/app/api/farming/products/route";
+import { GET as rainGaugesGet } from "@/app/api/farming/farms/[farmId]/rain-gauges/route";
 import { GET as effluentCareGet } from "@/app/api/farming/effluent/care/route";
 import { GET as effluentLogGet } from "@/app/api/farming/effluent/log/route";
 import { GET as effluentTodayGet } from "@/app/api/farming/effluent/today/route";
@@ -165,6 +166,8 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(paddockStatusGet, `/api/farming/farms/${farm}/paddock-status`, f, { onDate: today });
       // Each paddock's own page on Farms and paddocks (#477).
       for (const paddockId of ids(paddocks, "paddocks", "id")) await r.read(paddockGet, `/api/farming/paddocks/${paddockId}`, { paddockId }, {});
+      // Rain gauges, for the map and the Log's rain reading with no signal (decision 1452).
+      await r.read(rainGaugesGet, `/api/farming/farms/${farm}/rain-gauges`, f, {});
       break;
     }
     case "pasture": {

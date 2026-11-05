@@ -333,6 +333,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_animal_treatments",
         "farm_timeline",
         "list_supplements_fed",
+        "rainfall",
         "list_pasture_photos_awaiting_estimate",
         "get_pasture_photo",
         "list_staff",

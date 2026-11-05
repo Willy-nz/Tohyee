@@ -66,6 +66,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "list_animal_treatments", level: "read", words: "The animal treatment register" },
   { name: "farm_timeline", level: "read", words: "The farm timeline: moves, treatments, sales, weights, scanning and sprays" },
   { name: "list_supplements_fed", level: "read", words: "Supplements fed out" },
+  { name: "rainfall", level: "read", words: "Rainfall from the farm's rain gauges, by month and season, with last year's" },
   { name: "list_pasture_photos_awaiting_estimate", level: "read", words: "Paddock photos with no cover estimate yet, on the farms you can see" },
   { name: "get_pasture_photo", level: "read", words: "Look at one paddock photo (the picture itself)" },
   { name: "list_staff", level: "read", words: "Staff names, jobs and start dates; pay only for people with payroll access" },

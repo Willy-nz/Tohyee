@@ -13125,6 +13125,53 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       covered yet. (Number 1420, which was asked for, was already used by
       #591.)
 
+### Rainfall (5 Nov 2026; decisions 1451-1456; RF1-RF8)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), rainfall among them. Claude's calls, not yet
+reviewed; no other farm or accounting app was copied.
+
+1451. **Rain gauges belong to a farm.** A farm can have any number, each
+      with a name (once a farm), an optional note and an optional place on
+      the map (a blue "R" dot on the Map tab; tapping it opens Rainfall).
+      Farm staff and up add and change gauges. A gauge isn't deleted: it's
+      retired, keeps its readings and history, and takes no new readings
+      until it's brought back.
+1452. **One reading a gauge a day, from the Log.** Farm › Log › **Rain
+      gauge** asks which gauge, which day (today, yesterday or another
+      past day) and the mm, with a **No rain (0 mm)** button. It goes
+      through the device's one queue (decision 1008) with its own
+      operation id, so it works with no signal and is never kept twice;
+      the farm's gauges are in the offline farm pack's map section. A day
+      already read for that gauge is refused with the reading it has
+      ("change that reading instead"), and so is a future day. Millimetres
+      are to one place, 0 to 2,000, kept as decimals (never floats).
+1453. **A day with no reading is unknown, not dry.** Totals add the days
+      with a reading and always say "N of M days read", so a gap shows.
+      A dry day is a typed 0.
+1454. **Readings are changed, backdated and removed with who and when.**
+      Farm staff and up change a reading's day, mm or note; the reading
+      shows who changed it and when, and the audit log keeps the old
+      values. Bookkeepers and up remove a reading entered by mistake; it's
+      kept, marked removed with who and when. A past day can also be added
+      under Rainfall › Readings.
+1455. **History by month and season, beside the same time last year.**
+      Rainfall shows this month so far, this season so far and the last
+      12 months, then 12 months or 4 seasons as columns and a table, each
+      with the same period a year earlier. A period still going is compared
+      with the same days last year (1-5 Nov 2026 with 1-5 Nov 2025);
+      29 February becomes 28 February. Seasons are New Zealand's
+      (spring Sep-Nov, summer Dec-Feb, autumn Mar-May, winter Jun-Aug).
+      Readings are in Analytics as `tohyee_farm_rainfall`, and a connected
+      AI has a read-only `rainfall` tool.
+1456. **Importing, and no outside weather.** Bookkeepers and up import a
+      gauge's readings from CSV or Excel (date and mm columns, guessed and
+      changeable), with a preview: a bad date or figure, a future day, a
+      day twice in the file and a day the gauge already has are skipped
+      with the reason. The same file can't be imported twice for a gauge.
+      Tohyee fetches no weather data from anywhere; every figure is the
+      farm's own.
+
 
 
 ### Farm mobs (5 Nov 2026; decisions 1421-1430)
