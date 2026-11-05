@@ -3288,7 +3288,25 @@ that something happened.
   same time last year, with how many days have a reading (a missing day is
   never counted as dry). Bookkeepers import a gauge's readings from CSV or
   Excel with a preview. In Analytics as `tohyee_farm_rainfall`; the AI has
-  a read-only `rainfall` tool. No outside weather data is fetched.
+  a read-only `rainfall` tool. No outside weather data is mixed in (the
+  MetService forecast below is kept apart).
+
+- **MetService weather forecast** (WX1-WX10, decisions 1541-1550, tenant
+  migrations 0257-0258): each organisation uses its own MetService key.
+  Settings › Farm › **Weather (MetService)** (admins) walks through what it
+  costs (MetService's API units, paid to MetService), getting a key, pasting
+  and testing it, each farm's pin (the middle of its paddocks to start),
+  what to fetch (rain, temperature, wind, gusts) with a units estimate, and
+  turning it on. Today has a **Weather forecast** card (the next 48 hours
+  and 7 days, frost and heavy rain flags, when it was updated) and More has
+  a **Weather** page by the hour; both carry "This data was provided by
+  MetService Limited." Refreshed every 3 hours by default; a refused key or
+  no units left stops refreshing. Only the latest forecast is kept (24
+  hours at most), never offline. An admin whose organisation has
+  MetService's written permission can keep forecast records, and with a
+  second switch compare them with a rain gauge, and have them in Analytics
+  (`tohyee_farm_weather_forecasts`) and the AI (`weather_forecast_records`).
+  Not yet tried against MetService's live service.
 
 - **Farm team tasks** (FT1-FT7, decisions 1457-1461, tenant migration
   0247): Farm › More › **Tasks**. A task has what needs doing, a due day,

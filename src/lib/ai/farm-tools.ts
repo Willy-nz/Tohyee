@@ -13,6 +13,7 @@ import { fertiliserWhatIf, parseWhatIf } from "@/lib/farming/fertiliser-what-if"
 import { listGrazings, listReadings, listSupplements, pastureSummary } from "@/lib/farming/pasture";
 import { listSoilTests, soilSummary } from "@/lib/farming/soil";
 import { listRainReadings, rainfallOverview } from "@/lib/farming/rainfall";
+import { listForecastRecords } from "@/lib/weather/service";
 import { ValidationError } from "@/lib/errors";
 import { getPaddock, listFarms, listPaddocks } from "@/lib/farming/paddocks";
 import { financialYearEnd } from "@/lib/financial-year";
@@ -406,13 +407,25 @@ export const FARM_READ_TOOLS: AiTool[] = [
     name: "rainfall",
     title: "Rainfall",
     description:
-      "Rain recorded in the farm's own rain gauges, in mm, by rain day (a 9 am reading is the day before's rain): for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. Tohyee keeps no outside weather data.",
+      "Rain recorded in the farm's own rain gauges, in mm, by rain day (a 9 am reading is the day before's rain): for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. MetService forecasts aren't in this tool: see weather_forecast_records.",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, onDate: DATE, from: DATE, to: DATE }),
     run: async (tx, args) =>
       args.from || args.to
         ? { readings: await listRainReadings(tx, { farmId: await farmFor(tx, args.farmId), from: args.from, to: args.to ?? todayIsoDate() }) }
         : { gauges: await rainfallOverview(tx, { farmId: args.farmId, onDate: args.onDate }) },
+  },
+  {
+    name: "weather_forecast_records",
+    title: "MetService forecast records",
+    description:
+      "MetService forecasts the organisation kept as records for one farm, newest first: when each was fetched, the farm's pin, and hour by hour the rain (mm), temperature (degrees C), wind and gusts (km/h) and wind direction (degrees). Only available when an admin has said the organisation has MetService's written permission to keep forecast records and that it covers combining them with the farm's own records; otherwise it's refused. Tohyee doesn't give the AI the latest forecast without that permission. Whenever you show or use these numbers, say: \"This data was provided by MetService Limited.\"",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, from: DATE, to: DATE, limit: LIMIT(20) }),
+    run: async (tx, args) => ({
+      attribution: "This data was provided by MetService Limited.",
+      records: await listForecastRecords(tx, { farmId: await farmFor(tx, args.farmId), from: args.from, to: args.to, limit: boundedLimit(args.limit, 20, 200) }),
+    }),
   },
 ];
 

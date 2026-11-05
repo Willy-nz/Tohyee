@@ -1,0 +1,173 @@
+/* Settings › Farm › Weather (MetService) (decisions 1541-1550). */
+
+.page {
+  display: grid;
+  gap: 16px;
+  max-width: 880px;
+  min-width: 0;
+}
+
+.stepHeading {
+  margin: 16px 0 8px;
+  font-size: var(--text-lg);
+}
+
+.stepHeading:focus {
+  outline: none;
+}
+
+.body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.body p,
+.body ul,
+.body ol {
+  margin: 0;
+}
+
+.body ul,
+.body ol {
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+.body h3 {
+  margin: 4px 0 0;
+  font-size: var(--text-base);
+}
+
+.walkthrough {
+  display: grid;
+  gap: 10px;
+}
+
+.purpose {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.inline > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.inlineButtons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex: none;
+}
+
+.body .farms {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.farm {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface);
+}
+
+.pin {
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 8px 30px;
+}
+
+.fieldset {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.fieldset legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.estimate {
+  padding: 10px 12px;
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.summary dt {
+  color: var(--text-muted);
+}
+
+.summary dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .pin {
+    padding-left: 0;
+  }
+
+  .summary {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .summary dd {
+    margin-bottom: 6px;
+  }
+}

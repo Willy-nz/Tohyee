@@ -20,6 +20,7 @@ import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
 import { PaddockMap } from "@/components/farming";
 import { PaddockPhotoDiary } from "@/components/pasture-photos";
+import { WeatherForecastCard } from "@/components/weather-forecast";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Notice, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -228,6 +229,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
           <Link href="/operations/farming/calendar">Open the farm calendar</Link>
         </p>
       </Card>
+      <WeatherForecastCard organisationId={organisationId} farm={farm} />
       <FarmTasksToday organisationId={organisationId} farm={farm} />
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
       <FarmEffluentToday organisationId={organisationId} farm={farm} />
@@ -530,6 +532,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/mobs", icon: "livestock", label: "Mobs", note: "Moves, weights, sales and stocking rate", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/rainfall", icon: "effluent", label: "Rainfall", note: "Rain gauges, by month and season", staff: true },
+  { href: "/operations/farm/weather", icon: "weather", label: "Weather", note: "MetService forecast for the next 7 days", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
   { href: "/operations/farming/tasks", icon: "checklist", label: "Tasks", note: "Jobs for the farm team, with reminders", staff: true },
   { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
