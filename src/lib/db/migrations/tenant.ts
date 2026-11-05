@@ -19551,6 +19551,8 @@ create table animal_treatments (
   animals text check (animals is null or length(animals) between 1 and 500),
   head integer not null check (head between 1 and 100000),
   treated_on date not null,
+  -- The time it was given, in the farm's local time, when known: milk withholding then counts from it exactly.
+  given_time time,
   product text not null check (length(product) between 1 and 150),
   -- The product in Safety's chemical register, when it's there (its stock is then reduced).
   chemical_record_id uuid,

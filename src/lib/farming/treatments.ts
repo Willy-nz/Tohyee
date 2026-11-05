@@ -8,7 +8,7 @@ import { requireFarmAccess } from "@/lib/farming/access";
 import { MOB_EVENT_LABELS } from "@/lib/farming/mob-rules";
 import { getMob, loadEvents } from "@/lib/farming/mobs";
 import { requireFarming } from "@/lib/farming/paddocks";
-import { LABEL_NOTE, meatSafeOn, milkSafeFrom, STOCK_UNITS, toBase } from "@/lib/farming/treatment-rules";
+import { LABEL_NOTE, meatSafeOn, type MilkBasis, milkBasis, milkBasisText, milkSafeFrom, parseTimeGiven, safeText, STOCK_UNITS, toBase } from "@/lib/farming/treatment-rules";
 import { requestHash } from "@/lib/idempotency";
 import { className } from "@/lib/livestock/classes";
 import { add, dec, parseDecimalInput, sub, toPlainString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
@@ -44,7 +44,11 @@ export type Treatment = {
   meatWithholdingDays: number | null;
   milkWithholdingHours: number | null;
   meatSafeOn: string | null;
+  /** A date (no time given: counted from the end of the treatment day) or a local "YYYY-MM-DDTHH:MM" (from the time given). */
   milkSafeFrom: string | null;
+  /** The time given, local "HH:MM", when known. */
+  givenTime: string | null;
+  milkBasis: MilkBasis;
   reason: string | null;
   givenBy: string;
   status: "active" | "removed";
@@ -79,6 +83,7 @@ type TreatmentRow = {
   animals: string | null;
   head: number;
   treated_on: string;
+  given_time: string | null;
   product: string;
   chemical_record_id: string | null;
   batch: string | null;
@@ -97,7 +102,7 @@ type TreatmentRow = {
 
 async function loadTreatments(tx: OrgTx, where: string, params: unknown[], limit = 2000): Promise<Treatment[]> {
   const rows = await tx.query<TreatmentRow>(
-    `select t.id::text, t.farm_id::text, t.mob_id::text, m.name as mob_name, m.kind as mob_kind, m.class_code as mob_class, t.animals, t.head, t.treated_on::text,
+    `select t.id::text, t.farm_id::text, t.mob_id::text, m.name as mob_name, m.kind as mob_kind, m.class_code as mob_class, t.animals, t.head, t.treated_on::text, to_char(t.given_time, 'HH24:MI') as given_time,
             t.product, t.chemical_record_id::text, t.batch, t.dose, t.quantity::text, t.quantity_unit, t.meat_withholding_days as meat,
             t.milk_withholding_hours as milk, t.reason, t.given_by, t.status, t.removed_reason, t.created_by_email, t.created_at::text
        from animal_treatments t left join mobs m on m.id = t.mob_id
@@ -122,7 +127,9 @@ async function loadTreatments(tx: OrgTx, where: string, params: unknown[], limit
     meatWithholdingDays: row.meat,
     milkWithholdingHours: row.milk,
     meatSafeOn: meatSafeOn(row.treated_on, row.meat),
-    milkSafeFrom: milkSafeFrom(row.treated_on, row.milk),
+    milkSafeFrom: milkSafeFrom(row.treated_on, row.milk, row.given_time),
+    givenTime: row.given_time,
+    milkBasis: milkBasis(row.given_time),
     reason: row.reason,
     givenBy: row.given_by,
     status: row.status,
@@ -155,6 +162,8 @@ export async function recordTreatment(tx: OrgTx, input: Record<string, unknown>)
   if (!head) throw new ValidationError("Say how many were treated.");
   if (mobHead !== null && head > mobHead) throw new ValidationError(`The mob has ${mobHead} head; ${head} can't be treated.`);
   const treatedOn = input.treatedOn === undefined || input.treatedOn === null || input.treatedOn === "" ? todayIsoDate() : parseIsoDate(input.treatedOn, "Treated on");
+  const givenTime = parseTimeGiven(typeof input.givenTime === "string" ? input.givenTime : input.givenTime == null ? null : String(input.givenTime));
+  if (givenTime === undefined) throw new ValidationError("Time given must be a time like 7:30 (24-hour), or blank.");
   let chemicalRecordId: string | null = null;
   let product = optionalString(input.product, "Product", { maxLength: 150 });
   if (input.chemicalRecordId) {
@@ -174,7 +183,7 @@ export async function recordTreatment(tx: OrgTx, input: Record<string, unknown>)
   const givenBy = requireString(input.givenBy, "Who gave it", { maxLength: 100 });
   const operationId = input.operationId === undefined || input.operationId === null || input.operationId === "" ? null : typeof input.operationId === "string" && UUID.test(input.operationId) ? input.operationId.toLowerCase() : null;
   if (input.operationId && !operationId) throw new ValidationError("operationId must be a UUID.");
-  const hash = requestHash("animal_treatment", { farmId, mobId, animals, head, treatedOn, product, chemicalRecordId, dose, batch, quantity, quantityUnit, meat, milk, reason, givenBy });
+  const hash = requestHash("animal_treatment", { farmId, mobId, animals, head, treatedOn, givenTime, product, chemicalRecordId, dose, batch, quantity, quantityUnit, meat, milk, reason, givenBy });
   if (operationId) {
     const earlier = await tx.query<{ id: string; request_hash: string | null; created_by_email: string }>("select id::text, request_hash, created_by_email from animal_treatments where operation_id = $1", [operationId]);
     if (earlier.rows[0]) {
@@ -184,13 +193,13 @@ export async function recordTreatment(tx: OrgTx, input: Record<string, unknown>)
   }
   const row = await tx.query<{ id: string }>(
     `insert into animal_treatments (farm_id, mob_id, animals, head, treated_on, product, chemical_record_id, batch, dose, quantity, quantity_unit,
-       meat_withholding_days, milk_withholding_hours, reason, given_by, operation_id, request_hash, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, $13, $14, $15, $16, $17, $18) returning id::text`,
-    [farmId, mobId, animals, head, treatedOn, product, chemicalRecordId, batch, dose, quantity, quantityUnit, meat, milk, reason, givenBy, operationId, operationId ? hash : null, tx.actor.email],
+       meat_withholding_days, milk_withholding_hours, reason, given_by, operation_id, request_hash, created_by_email, given_time)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11, $12, $13, $14, $15, $16, $17, $18, $19::time) returning id::text`,
+    [farmId, mobId, animals, head, treatedOn, product, chemicalRecordId, batch, dose, quantity, quantityUnit, meat, milk, reason, givenBy, operationId, operationId ? hash : null, tx.actor.email, givenTime],
   );
   await writeAuditEvent(tx, { eventType: "farming.treatment_recorded", entityType: "animal_treatment", entityId: row.rows[0].id, details: { farmId, mobId, head, treatedOn, product, meat, milk } });
   const treatment = (await loadTreatments(tx, "t.id = $1", [row.rows[0].id]))[0];
-  const safe = [treatment.meatSafeOn ? `safe for slaughter from ${treatment.meatSafeOn}` : null, treatment.milkSafeFrom ? `milk safe from ${treatment.milkSafeFrom}` : null].filter(Boolean);
+  const safe = [treatment.meatSafeOn ? `safe for slaughter from ${treatment.meatSafeOn}` : null, treatment.milkSafeFrom ? `milk safe from ${safeText(treatment.milkSafeFrom)} (${milkBasisText(treatment.givenTime)})` : null].filter(Boolean);
   return { treatment, message: `Treatment recorded${safe.length ? `: ${safe.join(", ")}` : ". No withholding was entered"}.` };
 }
 
@@ -423,11 +432,11 @@ export async function treatmentRegisterFile(tx: OrgTx, input: { farmId: unknown;
   const farm = await farmName(tx, treatments[0]?.farmId ?? requireId(input.farmId, "farmId"));
   const from = input.from ? String(input.from) : null;
   const to = input.to ? String(input.to) : null;
-  const header = ["Date", "Mob or animals", "Head", "Product", "Batch", "Dose", "Quantity used", "Reason", "Given by", "Meat WHP (days)", "Safe for slaughter from", "Milk WHP (hours)", "Milk safe from", "Recorded by"];
+  const header = ["Date", "Time given", "Mob or animals", "Head", "Product", "Batch", "Dose", "Quantity used", "Reason", "Given by", "Meat WHP (days)", "Safe for slaughter from", "Milk WHP (hours)", "Milk safe from", "Milk counted", "Recorded by"];
   const rows = treatments
     .slice()
     .reverse()
-    .map((t) => [t.treatedOn, [t.mobName, t.animals].filter(Boolean).join(": "), String(t.head), t.product, t.batch ?? "", t.dose, t.quantity ? `${t.quantity} ${t.quantityUnit}` : "", t.reason ?? "", t.givenBy, t.meatWithholdingDays === null ? "not entered" : String(t.meatWithholdingDays), t.meatSafeOn ?? "", t.milkWithholdingHours === null ? "not entered" : String(t.milkWithholdingHours), t.milkSafeFrom ?? "", t.createdByEmail]);
+    .map((t) => [t.treatedOn, t.givenTime ?? "", [t.mobName, t.animals].filter(Boolean).join(": "), String(t.head), t.product, t.batch ?? "", t.dose, t.quantity ? `${t.quantity} ${t.quantityUnit}` : "", t.reason ?? "", t.givenBy, t.meatWithholdingDays === null ? "not entered" : String(t.meatWithholdingDays), t.meatSafeOn ?? "", t.milkWithholdingHours === null ? "not entered" : String(t.milkWithholdingHours), t.milkSafeFrom ? safeText(t.milkSafeFrom) : "", t.milkSafeFrom ? milkBasisText(t.givenTime) : "", t.createdByEmail]);
   const base = `treatment-register-${farm.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase()}`;
   if (format === "csv") return { fileName: `${base}.csv`, contentType: "text/csv; charset=utf-8", content: toCsv([header, ...rows]) };
   const columns: Column[] = [
@@ -443,7 +452,7 @@ export async function treatmentRegisterFile(tx: OrgTx, input: { farmId: unknown;
   const pdfRows = treatments
     .slice()
     .reverse()
-    .map((t) => [t.treatedOn, [t.mobName, t.animals].filter(Boolean).join(": "), String(t.head), `${t.product}${t.batch ? `, ${t.batch}` : ""}`, t.dose, t.givenBy, t.meatSafeOn ?? (t.meatWithholdingDays === null ? "not entered" : ""), t.milkSafeFrom ?? (t.milkWithholdingHours === null ? "not entered" : "")]);
+    .map((t) => [t.treatedOn, [t.mobName, t.animals].filter(Boolean).join(": "), String(t.head), `${t.product}${t.batch ? `, ${t.batch}` : ""}`, t.dose, t.givenBy, t.meatSafeOn ?? (t.meatWithholdingDays === null ? "not entered" : ""), t.milkSafeFrom ? `${safeText(t.milkSafeFrom)} (${milkBasisText(t.givenTime)})` : t.milkWithholdingHours === null ? "not entered" : ""]);
   return { fileName: `${base}.pdf`, contentType: "application/pdf", content: await pdfOf("Animal treatment register", farm, period(from, to), [LABEL_NOTE], columns, pdfRows) };
 }
 

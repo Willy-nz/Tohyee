@@ -21362,8 +21362,15 @@ in `tests/integration/farm-treatments.test.ts` and
 - **TRT1 Safe for slaughter.** Milkers (200) treated on 1 Oct 2026 with a
   meat withholding of 14 days: **safe for slaughter from 15 Oct**. A blank
   withholding is "not entered", and nil is 0.
-- **TRT2 Milk safe from.** 96 hours from 1 Oct: counted from the end of 1
-  Oct, **6 Oct**. 36 hours: 4 Oct. Nil (0): 1 Oct.
+- **TRT2 Milk safe from, with no time given.** 96 hours from 1 Oct:
+  counted from the end of 1 Oct, **6 Oct**, shown "from end of day, no time
+  given". 36 hours: 4 Oct. Nil (0): 1 Oct.
+- **TRT2a Milk safe from a time given** (Jess, 5 Nov 2026). Given at 7:30
+  am on 1 Oct with 96 hours: **7:30 am on 5 Oct**, shown "from 7:30 am".
+  6:00 pm on 1 Oct with 36 hours: 6:00 am on 3 Oct. The time is the farm's
+  local time and the hours are real hours, so 8:00 am on 26 Sep 2026 plus
+  48 hours, across the start of daylight saving, is 9:00 am on 28 Sep. The
+  register shows the time given and which way the milk date was counted.
 - **TRT3 Withholding follows the animals.** Treated 1 Oct with 28 days: 20
   split off on 5 Oct as "Culls" carry **29 Oct**, and so does the mob they
   merge into on 6 Oct. A mob split off before 1 Oct doesn't.

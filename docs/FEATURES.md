@@ -3281,7 +3281,7 @@ that something happened.
 - **Treatments and withholding** (decisions 1431-1438, TRT1-TRT8, tenant
   migration 0234; common NZ practice, not yet reviewed): treat a mob from
   its card (product from Safety's chemical register or typed, dose,
-  quantity, batch, who, meat and milk withholding from the label). Each
+  quantity, batch, who, the time given if known, and meat and milk withholding from the label; milk counts from the time given exactly, or from the end of the day without one). Each
   mob shows "safe for slaughter from" and "milk safe from", carried through
   splits and merges, with warnings on sales and on its paddock. A spraying
   tractor job takes the label's grazing withholding, and its paddocks show

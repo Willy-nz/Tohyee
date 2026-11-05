@@ -13258,7 +13258,12 @@ practice, not yet reviewed).
       one in: blank is "not entered", and nil is 0. Safe for slaughter
       from is the treatment day plus the days. The time of treatment isn't
       kept, so milk hours count from the end of the treatment day (96
-      hours from 1 Oct is 6 Oct). A mob's safe dates are the latest of its
+      hours from 1 Oct is 6 Oct). Jess, 5 Nov 2026: a treatment can have an
+      optional time given, in the farm's local time; with it, milk is safe
+      from that time plus the label's hours, exactly (7:30 am on 1 Oct plus
+      96 hours is 7:30 am on 5 Oct), and the screens say which was used
+      ("from 7:30 am" or "from end of day, no time given"). It goes through
+      the device's queue like the rest of the treatment. A mob's safe dates are the latest of its
       own treatments and of mobs its animals came from by a split or merge
       after the treatment.
 1433. **Warn, don't block.** A mob in a withholding period shows it on its

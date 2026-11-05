@@ -17,8 +17,8 @@ export type MobWithholding = Withholding & { treatmentIds: string[] };
  * withholding with it.
  */
 export async function mobWithholdings(tx: OrgTx, farmId: string): Promise<Map<string, MobWithholding>> {
-  const treatments = await tx.query<{ id: string; mob_id: string; treated_on: string; meat: number | null; milk: number | null }>(
-    `select t.id::text, t.mob_id::text, t.treated_on::text, t.meat_withholding_days as meat, t.milk_withholding_hours as milk
+  const treatments = await tx.query<{ id: string; mob_id: string; treated_on: string; given_time: string | null; meat: number | null; milk: number | null }>(
+    `select t.id::text, t.mob_id::text, t.treated_on::text, to_char(t.given_time, 'HH24:MI') as given_time, t.meat_withholding_days as meat, t.milk_withholding_hours as milk
        from animal_treatments t where t.farm_id = $1 and t.status = 'active' and t.mob_id is not null
         and (t.meat_withholding_days is not null or t.milk_withholding_hours is not null)`,
     [farmId],
@@ -38,7 +38,7 @@ export async function mobWithholdings(tx: OrgTx, farmId: string): Promise<Map<st
     if (current.treatmentIds.includes(row.id)) return;
     result.set(mobId, {
       meatSafeOn: laterDate(current.meatSafeOn, meatSafeOn(row.treated_on, row.meat)),
-      milkSafeFrom: laterDate(current.milkSafeFrom, milkSafeFrom(row.treated_on, row.milk)),
+      milkSafeFrom: laterDate(current.milkSafeFrom, milkSafeFrom(row.treated_on, row.milk, row.given_time)),
       treatmentIds: [...current.treatmentIds, row.id],
     });
   };
