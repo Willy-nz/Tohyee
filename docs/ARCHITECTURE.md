@@ -1817,6 +1817,19 @@ FTPS server inside the Tohyee process, started only when
 through remote access (HTTP only), so cameras on the internet need a public
 address and port forwarding.
 
+Satellite vegetation (#612, decisions 1520-1540;
+docs/SATELLITE-VEGETATION.md) adds one low-priority worker
+(`src/lib/farming/vegetation/jobs.ts`, every minute, at most 3 jobs and 20
+seconds a tick, one job at a time across the server;
+`TOHYEE_VEGETATION_SCHEDULER=off` stops it). Jobs are rows in
+`vegetation_jobs` with a unique key, a checkpoint, bounded retries and
+backoff. Pictures are files in `TOHYEE_VEGETATION_DIR` (not database rows;
+not in the database backups; they can be fetched again), removed after the
+organisation's retention. The numbers (`vegetation_observations`) are in
+the organisation's database, append-only, tied to the paddock boundary
+version used. The provider's OAuth secret is a `_ciphertext` column. No
+network calls inside a database transaction.
+
 Still to come for other jobs: a general transactional outbox.
 
 ## Backups and restore

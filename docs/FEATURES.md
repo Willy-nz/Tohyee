@@ -3321,6 +3321,20 @@ that something happened.
   buttons turn hazards, effluent, assets, rain gauges, tasks and people on
   or off, remembered on the device.
 
+- **Satellite vegetation: the pipeline** (#612, decisions 1520-1537, tenant
+  migration 0253; docs/SATELLITE-VEGETATION.md): optional, free Sentinel-2
+  pictures of a farm's paddocks from the organisation's own Copernicus
+  account, worked into greenness (NDVI) a paddock: mean and median, clear
+  pixels and clear share, tied to the paddock boundary version used. Cloud
+  and shadow are missing, never zero; small and narrow paddocks are
+  flagged. One quiet worker checks each farm about once a day, with
+  idempotent jobs, checkpoints, retries, and pauses at the monthly budget,
+  the storage limit or a full disk. Pictures are files on the data disk
+  with a retention; the numbers stay. A "Test one farm" measure for the
+  pilot. Greenness, not feed: no kg DM/ha. The Copernicus connection is
+  not yet tried against the live service; made-up demo pictures stand in
+  for tests and the demo farm.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

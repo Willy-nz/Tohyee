@@ -97,5 +97,6 @@ export function describeSecretColumn(table: string): string {
   if (table.startsWith("analytics")) return "analytics connections";
   if (table.startsWith("crm") || table.includes("lead")) return "CRM mail connections";
   if (table === "users") return "two-step sign-in";
+  if (table.startsWith("vegetation")) return "the satellite imagery account (Copernicus)";
   return table.replace(/_/g, " ");
 }
