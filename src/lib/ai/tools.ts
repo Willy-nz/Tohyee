@@ -106,6 +106,8 @@ export class ToolFileAnswer {
   constructor(
     readonly answer: unknown,
     readonly file: { uri: string; fileName: string; contentType: string; content: Buffer },
+    /** More files after the first, in the order the answer names them (BCS photos and the farm's reference photos). */
+    readonly more: ReadonlyArray<{ uri: string; fileName: string; contentType: string; content: Buffer }> = [],
   ) {}
 }
 

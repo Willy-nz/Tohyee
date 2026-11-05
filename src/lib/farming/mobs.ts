@@ -21,6 +21,7 @@ import {
   mobName,
   weightGain,
 } from "@/lib/farming/mob-rules";
+import { animalsIn, animalsOut, checkTaggedFit, requireTaggedIn, taggedIds } from "@/lib/farming/animal-mobs";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { fileRows, importSource } from "@/lib/farming/soil";
 import { factorsWith, type StockUnitFactor, type Stocking, stocking } from "@/lib/farming/stock-units";
@@ -29,7 +30,7 @@ import { mobWithholdings, paddockWithholdings } from "@/lib/farming/withholding"
 import { requestHash } from "@/lib/idempotency";
 import { className, findClass, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "@/lib/livestock/classes";
 import { getLivestockSettings, getMovement, recordMovement } from "@/lib/livestock/movements";
-import { add, cmp, dec, parseDecimalInput, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, divide, parseDecimalInput, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { asRecord, optionalId, optionalString, requireArray, requireId, requireOneOf } from "@/lib/validation";
 
 /*
@@ -59,6 +60,8 @@ export type Mob = {
   classCode: string;
   className: string;
   head: number;
+  /** Animals on the register in this mob now (decision 1482): never more than head. */
+  tagged: number;
   tagColour: string | null;
   status: "active" | "closed";
   closedOn: string | null;
@@ -149,6 +152,7 @@ type MobRow = {
   kind: LivestockKind;
   class_code: string;
   head: number;
+  tagged: number;
   tag_colour: string | null;
   status: "active" | "closed";
   closed_on: string | null;
@@ -168,6 +172,7 @@ async function loadMobs(tx: OrgTx, where: string, params: unknown[]): Promise<Mo
   const rows = await tx.query<MobRow>(
     `select m.id::text, m.farm_id::text, m.name, m.kind, m.class_code, m.head, m.tag_colour, m.status, m.closed_on::text,
             (select min(e.event_date) from mob_events e where e.mob_id = m.id)::text as created_on,
+            (select count(*)::int from animal_mobs am where am.mob_id = m.id and am.to_on is null) as tagged,
             g.paddock_id::text, p.name as paddock_name, g.in_on::text, g.id::text as grazing_id
        from mobs m
        left join grazings g on g.mob_id = m.id and g.status = 'active' and g.out_on is null
@@ -204,6 +209,7 @@ async function loadMobs(tx: OrgTx, where: string, params: unknown[]): Promise<Mo
       classCode: row.class_code,
       className: className(row.kind, row.class_code),
       head: row.head,
+      tagged: row.tagged,
       tagColour: row.tag_colour,
       status: row.status,
       closedOn: row.closed_on,
@@ -300,7 +306,7 @@ export async function listMobs(tx: OrgTx, input: { farmId: unknown; includeClose
   return loadMobs(tx, `m.farm_id = $1 ${closed ? "" : "and m.status = 'active'"}`, [farmId]);
 }
 
-async function mobRow(tx: OrgTx, idInput: unknown, lock = false): Promise<Mob> {
+export async function mobRow(tx: OrgTx, idInput: unknown, lock = false): Promise<Mob> {
   await requireFarming(tx);
   const id = requireId(idInput, "mobId");
   if (lock) await tx.query("select 1 from mobs where id = $1 for update", [id]);
@@ -350,7 +356,7 @@ type EventInput = {
   requestHash?: string | null;
 };
 
-async function addEvent(tx: OrgTx, input: EventInput): Promise<string> {
+export async function addEvent(tx: OrgTx, input: EventInput): Promise<string> {
   try {
     const row = await tx.query<{ id: string }>(
       `insert into mob_events (mob_id, farm_id, event_type, event_date, head_change, head_after, created_how, from_class_code, to_class_code, other_mob_id,
@@ -422,7 +428,7 @@ async function closeOpenGrazing(tx: OrgTx, mob: Mob, onDate: string): Promise<vo
   await tx.query("update grazings set out_on = $2 where id = $1 and out_on is null", [mob.paddock.grazingId, onDate]);
 }
 
-async function setHead(tx: OrgTx, mob: Mob, head: number, onDate: string): Promise<void> {
+export async function setHead(tx: OrgTx, mob: Mob, head: number, onDate: string): Promise<void> {
   if (head === 0) {
     await closeOpenGrazing(tx, mob, onDate);
     await tx.query("update mobs set head = 0, status = 'closed', closed_on = $2 where id = $1", [mob.id, onDate]);
@@ -585,17 +591,21 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
       break;
     }
     case "weigh": {
-      const averageKg = parseDecimalInput(input.averageKg, "Average weight", { maxScale: 1 });
+      // A weigh session by tag (decision 1486, AN7): the average is worked out from each tag's weight.
+      const session = await tagSession(tx, mob, input, date);
+      const averageKg = session ? session.averageKg : parseDecimalInput(input.averageKg, "Average weight", { maxScale: 1 });
       if (cmp(dec(averageKg), ZERO_DECIMAL) <= 0 || cmp(dec(averageKg), dec("2000")) > 0) throw new ValidationError("Average weight must be more than 0 and at most 2,000 kg.");
-      const weighedHead = input.weighedHead === undefined || input.weighedHead === null || input.weighedHead === "" ? null : requireHead(input.weighedHead, "Head weighed");
+      const weighedHead = session ? session.weightIds.length : input.weighedHead === undefined || input.weighedHead === null || input.weighedHead === "" ? null : requireHead(input.weighedHead, "Head weighed");
       if (weighedHead && weighedHead > mob.head) throw new ValidationError(`${mob.name} has ${mob.head} head; ${weighedHead} can't be weighed.`);
-      await addEvent(tx, { ...base, eventType: "weighed", headAfter: mob.head, averageKg, weighedHead });
-      message = `Weight recorded for ${mob.name}.`;
+      const eventId = await addEvent(tx, { ...base, eventType: "weighed", headAfter: mob.head, averageKg, weighedHead });
+      if (session) await tx.query("update animal_weights set mob_event_id = $2 where id = any($1::bigint[])", [session.weightIds, eventId]);
+      message = session ? `Weight recorded for ${mob.name}: ${averageKg} kg average of ${session.weightIds.length} tagged.` : `Weight recorded for ${mob.name}.`;
       break;
     }
     case "count": {
       const head = requireHead(input.head, "Head counted");
       if (head === mob.head) throw new ValidationError(`${mob.name} already has ${head} head.`);
+      await checkTaggedFit(tx, mob, head, 0);
       await setHead(tx, mob, head, date);
       await addEvent(tx, { ...base, eventType: "counted", headChange: head - mob.head, headAfter: head });
       message = `${mob.name} now has ${head} head. The books' head count isn't changed by a count: record deaths, sales or births for those.`;
@@ -606,10 +616,14 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
       const head = requireHead(input.head);
       if (head > mob.head) throw new ValidationError(`${mob.name} has ${mob.head} head.`);
       const amount = action === "sell" ? optionalAmount(input.amount) : null;
+      const after = mob.head - head;
+      // Tagged animals that went are named, so the register and the head count agree (decision 1484).
+      const leaving = await requireTaggedIn(tx, mob, input.animalIds, head);
+      await checkTaggedFit(tx, mob, after, leaving.length);
       const linked = await movementFor(tx, { type: MOVEMENT_FOR_ACTION[action]!, mob, head, date, amount, movementId: input.movementId, key, note });
       livestock = linked.livestock;
-      const after = mob.head - head;
-      await addEvent(tx, { ...base, eventType: action === "sell" ? "sold" : "died", headChange: -head, headAfter: after, livestockMovementId: linked.movementId, amount });
+      const eventId = await addEvent(tx, { ...base, eventType: action === "sell" ? "sold" : "died", headChange: -head, headAfter: after, livestockMovementId: linked.movementId, amount });
+      await animalsOut(tx, { animalIds: leaving, mobId: mob.id, onDate: date, how: action === "sell" ? "sold" : "died", eventId });
       await setHead(tx, mob, after, date);
       message = `${head} ${action === "sell" ? "sold" : "died"} from ${mob.name}${after === 0 ? `; ${mob.name} is closed` : ""}.`;
       // A sale within a withholding period is a warning, not a block (decision 1433): the person knows where the stock is going.
@@ -651,6 +665,8 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
         const taken = await tx.query("select 1 from mobs where farm_id = $1 and status = 'active' and lower(name) = lower($2)", [mob.farmId, name]);
         if (taken.rowCount) throw new ConflictError(`There's already a mob called ${name} on this farm.`);
       }
+      const leaving = await requireTaggedIn(tx, mob, input.animalIds, head);
+      await checkTaggedFit(tx, mob, mob.head - head, leaving.length);
       const to = input.toPaddockId ? await requirePaddock(tx, input.toPaddockId, mob.farmId) : mob.paddock ? await requirePaddock(tx, mob.paddock.id, mob.farmId) : null;
       const made = await tx.query<{ id: string }>(
         "insert into mobs (farm_id, name, kind, class_code, head, tag_colour, created_by_email) values ($1, $2, $3, $4, $5, $6, $7) returning id::text",
@@ -658,8 +674,10 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
       );
       const newMob = await mobRow(tx, made.rows[0].id);
       const grazingId = to ? await openGrazing(tx, newMob, to, date, head) : null;
-      await addEvent(tx, { ...base, eventType: "split_out", headChange: -head, headAfter: mob.head - head, otherMobId: newMob.id });
-      await addEvent(tx, { mobId: newMob.id, farmId: mob.farmId, eventDate: date, eventType: "split_in", headChange: head, headAfter: head, createdHow: "split", otherMobId: mob.id, toPaddockId: to?.id ?? null, grazingId, note });
+      const outId = await addEvent(tx, { ...base, eventType: "split_out", headChange: -head, headAfter: mob.head - head, otherMobId: newMob.id });
+      const inId = await addEvent(tx, { mobId: newMob.id, farmId: mob.farmId, eventDate: date, eventType: "split_in", headChange: head, headAfter: head, createdHow: "split", otherMobId: mob.id, toPaddockId: to?.id ?? null, grazingId, note });
+      await animalsOut(tx, { animalIds: leaving, mobId: mob.id, onDate: date, how: "split", eventId: outId });
+      await animalsIn(tx, { animalIds: leaving, mobId: newMob.id, onDate: date, how: "split", eventId: inId });
       await setHead(tx, mob, mob.head - head, date);
       message = `${head} split from ${mob.name} into ${newMob.name}${to ? ` in ${to.name}` : ""}.`;
       break;
@@ -674,8 +692,12 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
         throw new ValidationError(`${mob.name} is ${mob.className.toLowerCase()} and ${into.name} is ${into.className.toLowerCase()}. Change one's class first: a mob is one class.`);
       }
       if (into.head + mob.head > MAX_HEAD) throw new ValidationError("A mob can have at most 100,000 head.");
-      await addEvent(tx, { ...base, eventType: "merged_out", headChange: -mob.head, headAfter: 0, otherMobId: into.id });
-      await addEvent(tx, { mobId: into.id, farmId: into.farmId, eventDate: date, eventType: "merged_in", headChange: mob.head, headAfter: into.head + mob.head, otherMobId: mob.id, note });
+      const outId = await addEvent(tx, { ...base, eventType: "merged_out", headChange: -mob.head, headAfter: 0, otherMobId: into.id });
+      const inId = await addEvent(tx, { mobId: into.id, farmId: into.farmId, eventDate: date, eventType: "merged_in", headChange: mob.head, headAfter: into.head + mob.head, otherMobId: mob.id, note });
+      // Every tagged animal goes with its mob (decision 1484).
+      const tagged = await taggedIds(tx, mob.id);
+      await animalsOut(tx, { animalIds: tagged, mobId: mob.id, onDate: date, how: "merged", eventId: outId });
+      await animalsIn(tx, { animalIds: tagged, mobId: into.id, onDate: date, how: "merged", eventId: inId });
       await setHead(tx, into, into.head + mob.head, date);
       await setHead(tx, mob, 0, date);
       message = `${mob.name} merged into ${into.name}, which now has ${into.head + mob.head} head.`;
@@ -684,6 +706,40 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
   }
   await writeAuditEvent(tx, { eventType: `farming.mob_${action}`, entityType: "mob", entityId: mob.id, details: { ...rest, onDate: date } });
   return { mob: await mobRow(tx, mob.id), events: await loadEvents(tx, "e.mob_id = $1", [mob.id], 5), livestock, message: `${message}${LIVESTOCK_WORDS[livestock]}` };
+}
+
+/**
+ * A weigh session by tag (decision 1486, AN7): `animalWeights` ([{animalId,
+ * kg}]) records each tagged animal's weight now; `fromTagWeights` uses the
+ * weights already recorded that day for animals in the mob (from quick
+ * entry) that aren't in a session yet. The mob's average is worked out
+ * from them, to one place. Null when it's a plain average.
+ */
+async function tagSession(tx: OrgTx, mob: Mob, input: Record<string, unknown>, date: string): Promise<{ averageKg: string; weightIds: string[] } | null> {
+  const ids: string[] = [];
+  if (Array.isArray(input.animalWeights) && input.animalWeights.length) {
+    if (input.animalWeights.length > 20000) throw new ValidationError("A weigh session can have at most 20,000 weights.");
+    const animalIds = input.animalWeights.map((raw) => requireId(asRecord(raw, "A weight").animalId, "animalId"));
+    await requireTaggedIn(tx, mob, animalIds, mob.head);
+    if (new Set(animalIds).size !== animalIds.length) throw new ValidationError("Each animal is weighed once in a session.");
+    for (const raw of input.animalWeights) {
+      const line = asRecord(raw, "A weight");
+      const kg = parseDecimalInput(line.kg, "A weight", { maxScale: 1 });
+      if (cmp(dec(kg), ZERO_DECIMAL) <= 0 || cmp(dec(kg), dec("2000")) > 0) throw new ValidationError("A weight must be more than 0 and at most 2,000 kg.");
+      const row = await tx.query<{ id: string }>("insert into animal_weights (farm_id, animal_id, weighed_on, kg, source, created_by_email) values ($1, $2, $3, $4::numeric, 'typed', $5) returning id::text", [mob.farmId, requireId(line.animalId, "animalId"), date, kg, tx.actor.email]);
+      ids.push(row.rows[0].id);
+    }
+  } else if (input.fromTagWeights === true) {
+    const rows = await tx.query<{ id: string }>(
+      `select w.id::text from animal_weights w join animal_mobs am on am.animal_id = w.animal_id and am.mob_id = $1 and am.to_on is null
+        where w.weighed_on = $2 and w.status = 'active' and w.mob_event_id is null order by w.id for update of w`,
+      [mob.id, date],
+    );
+    if (!rows.rows.length) throw new ValidationError(`No tag weights for ${mob.name} on ${date} that aren't in a session already.`);
+    ids.push(...rows.rows.map((row) => row.id));
+  } else return null;
+  const total = await tx.query<{ total: string }>("select sum(kg)::text as total from animal_weights where id = any($1::bigint[])", [ids]);
+  return { averageKg: toFixedString(divide(dec(total.rows[0].total), dec(String(ids.length)), 1), 1), weightIds: ids };
 }
 
 /** Renames a mob or changes its tag colour (name and tag aren't history). */

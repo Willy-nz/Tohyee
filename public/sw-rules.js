@@ -21,6 +21,8 @@
     "/operations/farm/more": "More",
     "/operations/farm/offline": "Offline on this device",
     "/operations/farm/tractor": "Tractor mode",
+    "/operations/farm/animals": "Animals",
+    "/operations/farm/animals/quick": "Quick entry",
     "/operations/farming": "Farms and paddocks",
     "/operations/farming/pasture": "Pasture and feed",
     "/operations/farming/soil": "Soil tests",

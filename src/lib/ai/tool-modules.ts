@@ -75,11 +75,17 @@ export const FARMING_TOOLS: readonly string[] = [
   "list_mobs",
   "list_animal_treatments",
   "farm_timeline",
+  "list_animals",
+  "get_animal",
+  "mob_bcs",
   "list_supplements_fed",
   "rainfall",
   "list_pasture_photos_awaiting_estimate",
   "get_pasture_photo",
   "propose_pasture_cover_estimate",
+  "list_bcs_photos_to_score",
+  "get_bcs_photos_to_score",
+  "suggest_bcs",
 ];
 
 /** Livestock: the Accounting › Livestock links (module "livestock"). */

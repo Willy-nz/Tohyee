@@ -13410,3 +13410,152 @@ practice, not yet reviewed).
 1450. **What stays out.** No NAIT, MINDA or Fonterra links (issue #513),
       no individual animal records beyond tags typed on a treatment, and
       no product label lookups: withholding is always as typed.
+
+### Animals, weights and body condition scores (5 Nov 2026; decisions 1481-1495)
+
+Built by Claude when Jess asked to add body condition scores and weights
+and "link it to the cow". Records of animals, their weights and their
+scores; Tohyee itself estimates nothing from photos. The head count rules
+are common NZ farm practice and Claude's, not yet reviewed (examples
+AN1-AN9 and BCS1-BCS8). Decision 1450's "no individual animal records" is
+replaced by these.
+
+1481. **The animal register.** An animal is on one farm, with a kind (the
+      IRD kinds mobs use: dairy and beef cattle, sheep, red and other deer,
+      and angora, cashmere and dairy goats), a visual tag and optionally an
+      EID or NAIT number. The EID is a field only: nothing is sent to NAIT
+      (issue #513). Also sex (female, male, castrated), breed, birth date,
+      a dam and a sire (another animal on the farm, or typed: a sire name
+      or AI bull code; a typed tag that matches one animal links to it),
+      and a status: on farm, missing, sold or dead. A tag (and an EID) is
+      used once among animals on the farm; sold and dead animals free
+      theirs. Animals are never deleted. Farm staff add and change them.
+1482. **One mob at a time, one head count.** An animal is in at most one
+      mob, with its history (in and out dates and how) kept. A mob's head
+      is the one count: tagging an animal into a mob (adding it, importing
+      it, or a correction) changes no head and no livestock movement, and
+      a mob can't have more tagged animals than head. A mob with animal
+      records shows "N of M head tagged". A correction says which mob an
+      animal is in, with no head change; it needs room in the mob.
+1483. **Moving tagged animals.** "Move to another mob" takes the head with
+      the animals: the mobs get "tagged animals moved to/from" events and
+      their head changes by the number moved. Only mobs of the same farm,
+      kind and IRD class are offered, so the books' head count doesn't
+      change and no livestock movement is made; a different class needs a
+      class change first. A mob left with no head is closed. Withholding
+      from treatments goes with them to the receiving mob, as it does for a
+      merge (decision 1432): it warns, it doesn't block.
+1484. **Sales, deaths, splits, merges and counts of tagged animals go
+      through the mob.** The mob's sell and deaths steps (and split) ask
+      which tagged animals went, when the mob has any. Those animals are
+      marked sold or dead with the mob's event, so there's still one head
+      count and one livestock movement. A step that would leave more
+      tagged animals than head is refused until enough tags are chosen; a
+      count below the tagged animals is refused too. A merge takes every
+      tagged animal along. An animal's status can't be set to sold or dead
+      on its own. Missing keeps it in its mob, counted, until a death,
+      sale or count is recorded; found puts it back.
+1485. **An animal's page.** Its details, the mobs it was in and how, its
+      weights with gain per day, its BCS with the trend and targets, photos
+      and AI suggestions, treatments (those whose typed animals name its
+      tag or EID, and those given to its whole mob while it was in it),
+      the mob's mating, AI, scanning and pregnancy tests while it was in
+      it (marked as the mob's, not its own result), the mob's paddock
+      moves while it was in it, and its offspring. Worked out when asked.
+      Animals import from CSV or .xlsx (tag, EID, sex, breed, birth date,
+      dam, sire, mob, kind), previewed, once per file, each tagged into its
+      mob only while the mob has room; a dam tag that matches no animal is
+      kept as typed and counted in the preview.
+1486. **Weights per animal and quick entry.** A weight is kg to one place
+      on a day, with gain per day from the one before (MOB8's rule). A
+      mob's weigh session can be made from tags: each tagged animal's
+      weight, or the weights recorded that day in quick entry, and the
+      mob's average is worked out from them to one place (half up). Quick
+      entry is a phone screen: type a tag or EID, enter a score and/or a
+      weight, next. Each entry goes through the device's queue (decision
+      912), and the screen, the register and the scales are in the offline
+      farm pack. The app has no camera scanner, so tags are typed; an EID
+      reader that types like a keyboard works the same. A tag that isn't
+      on the register is said, never added.
+1487. **BCS scales are per kind, and a farm setting.** Dairy cattle:
+      DairyNZ's 1-10 scale, in half points (DairyNZ, Body condition score
+      reference guide, 2024). Beef cattle: 1-10, as Beef + Lamb New
+      Zealand's "Beef cow BCS" uses. Sheep: 1-5, half points (Beef + Lamb
+      New Zealand, Ewe body condition scoring, fact sheet 201, October
+      2022). Deer: 1-5, mostly in half points (Deer Industry New Zealand,
+      Deer Hub, body condition score). Goats: no NZ body publishes a
+      scale, so 1-5 is used, as for sheep: not sure, so admins can change
+      any kind's scale for a farm. Each record keeps the scale it was
+      given on, so a change never alters old scores; trends and targets
+      use the farm's scale now.
+1488. **A score is an animal's or a mob's.** An animal's is in half points.
+      A mob's is an average (to one place, half up, as DairyNZ reports herd
+      averages) with optionally how many were scored, or a quick tally of
+      how many at each score, whose head-weighted average is worked out (12
+      at 4.0, 30 at 4.5 and 8 at 5.0 is 4.5). A tally can't have more head
+      than the mob. A mob's trend shows its own records and, for days its
+      tagged animals were scored while in it, their average (the mob's own
+      record wins on the same day). Farm staff record scores, also with no
+      signal; bookkeepers and up remove one (kept, with the reason).
+1489. **Targets only from a recognised NZ source, on its own scale.** Dairy
+      cows (DairyNZ): calving 5.0 for mature cows and 5.5 for first and
+      second calvers; at least 4.0 and 4.5 at mating. Beef cows (Beef +
+      Lamb New Zealand, mature British-breed cows): calving 5, mating at
+      least 6, weaning 7, and 4 the minimum for all cows (dairy-cross cows
+      0.5 lower, which isn't shown). Ewes (Beef + Lamb New Zealand): 3 or
+      better all year. Deer (Deer Industry New Zealand): below 2 needs a
+      vet or action now; no targets. Goats: none. A farm that changes a
+      kind's scale sees no targets. Targets are a guide, shown as lines on
+      the trend and listed with their source.
+1490. **Photos and other tools' scores.** BCS photos are kept in the farm's
+      photo store (the one safety records use, with the phone's queue,
+      compression and camera date, decision 1012), with a score or to score
+      later. Scores and weights from other BCS or weighing tools import by
+      tag (or EID) and date from CSV or .xlsx: previewed, once per file;
+      unmatched tags are listed and skipped, never added. Tohyee itself
+      doesn't estimate a score or a weight from a photo.
+1491. **AI suggestions, from the person's own AI.** Jess asked for AI
+      scoring from photos (5 Nov 2026). Tohyee calls no AI: the person's
+      own connected AI (decision 1163's pattern) reads the photos and
+      suggests with suggest_bcs, at the "Make drafts" level: the score on
+      the farm's scale in half points, optionally a liveweight, its reason
+      and the reference photos it compared against. One suggestion per
+      photo; the same idempotency key finds the first. A suggestion is
+      labelled "AI estimate from a photo, not a trained BCS assessment"
+      everywhere, and the screens say to check by eye, especially the
+      weight.
+1492. **A person decides.** "Suggested scores" on the animal and the mob
+      shows the photo beside each suggestion with Accept, Change and
+      Decline (farm staff and up, as for recording a score). Accepting
+      makes a normal BCS record dated the photo's day, noting it came from
+      an AI suggestion (and the AI's own score if changed) and who
+      accepted it; the weight is saved only if ticked, marked as from a
+      photo (an animal's weight, or a mob weighing noted "estimated from a
+      photo by AI, not weighed"). Declining records nothing. A suggestion
+      waiting or declined never counts in averages, trends, targets,
+      Analytics or the AI's own reads.
+1493. **The farm's reference photos.** A person marks a photo of a score
+      given by eye as a reference: an animal's photo takes its record's
+      score; a mob's photo needs the score typed. A score from an AI
+      suggestion can't be a reference. References are per kind, scale and
+      score, and only the organisation's own (its own database), from farms
+      the person can see. The scales card shows which scores have
+      references ("references for 4.0, 5.0; none for 1.0, 1.5 …") and says
+      that references from the farm's own stock, scored by eye, make AI
+      suggestions better. No outside photos are bundled: the (i) names the
+      official guides.
+1494. **What the AI reads.** list_bcs_photos_to_score (photos with no score
+      and no suggestion); get_bcs_photos_to_score (up to 3 photos of one
+      animal or mob as images, then up to 2 reference photos for each score
+      on that kind's scale, newest first and this farm's first, with the
+      scale's descriptions and targets; photos over 3.5 MB, or past 16 MB
+      in all, aren't sent and are listed); list_animals, get_animal and
+      mob_bcs. All read only, in the Farming tool group. An MCP answer can
+      now carry more than one image.
+1495. **Analytics, the offline pack and what stays out.** Analytics gets
+      tohyee_farm_animals, tohyee_farm_animal_weights and tohyee_farm_bcs
+      (accepted scores only). The offline pack keeps the register and the
+      scales. Not built: estimates from photos inside Tohyee, NAIT links
+      (#513), each animal's own mating or scanning result (the stack
+      records those per mob), a camera barcode scanner, and BCS and weights
+      on the farm timeline.
