@@ -21507,3 +21507,45 @@ Tested in `tests/integration/farm-mob-corrections.test.ts`.
   rising three-year and older steers and bulls: a mob reclass to mixed-age
   cows linking it is refused through the API (400, nothing changed); to the
   movement's own class it's accepted and no second movement is made.
+
+## Farming: treatments, withholding and product stock (TRT1-TRT8; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Records only: nothing posts. Withholding periods are what the person typed
+from the product's label; Tohyee never supplies one (decision 1432). Tested
+in `tests/integration/farm-treatments.test.ts` and
+`tests/unit/farm-treatments.test.ts`.
+
+- **TRT1 Safe for slaughter.** Milkers (200) treated on 1 Oct 2026 with a
+  meat withholding of 14 days: **safe for slaughter from 15 Oct**. A blank
+  withholding is "not entered", and nil is 0.
+- **TRT2 Milk safe from, with no time given.** 96 hours from 1 Oct:
+  counted from the end of 1 Oct, **6 Oct**, shown "from end of day, no time
+  given". 36 hours: 4 Oct. Nil (0): 1 Oct.
+- **TRT2a Milk safe from a time given** (Jess, 5 Nov 2026). Given at 7:30
+  am on 1 Oct with 96 hours: **7:30 am on 5 Oct**, shown "from 7:30 am".
+  6:00 pm on 1 Oct with 36 hours: 6:00 am on 3 Oct. The time is the farm's
+  local time and the hours are real hours, so 8:00 am on 26 Sep 2026 plus
+  48 hours, across the start of daylight saving, is 9:00 am on 28 Sep. The
+  register shows the time given and which way the milk date was counted.
+- **TRT3 Withholding follows the animals.** Treated 1 Oct with 28 days: 20
+  split off on 5 Oct as "Culls" carry **29 Oct**, and so does the mob they
+  merge into on 6 Oct. A mob split off before 1 Oct doesn't.
+- **TRT4 Warn, don't block.** Selling 5 of that mob on 10 Oct is saved,
+  with "Warning: … within a withholding period (safe for slaughter from
+  2026-10-29)".
+- **TRT5 A sprayed paddock.** A spraying job on paddock B finished at
+  23:30 UTC on 1 Oct (2 Oct in New Zealand), with 14 days from the label:
+  B is **not safe to graze until 16 Oct**, on the map, its card and the
+  paddock list. A move into B on 10 Oct is saved with a warning. From 16
+  Oct the flag is gone. A new figure (7 days) replaces it (9 Oct).
+- **TRT6 Audit files.** The treatment register and the stock movement
+  history download as CSV and PDF for a date range. The register's row:
+  date, mob or animals, head, product, batch, dose, quantity used, reason,
+  given by, meat withholding (days), safe for slaughter from, milk
+  withholding (hours), milk safe from, recorded by.
+- **TRT7 Product stock.** Drench X in the chemical register: 5 L received
+  on 20 Sep; a treatment used 250 mL (0.25 L) on 1 Oct; a spray job
+  declared 2 L on 3 Oct: **2.75 L on hand**. 3 doses on 2 Oct can't come
+  off litres: listed, not taken off.
+- **TRT8 A count resets stock.** Counted 3 L on 4 Oct, then 500 mL used on
+  5 Oct: **2.5 L**, counted 4 Oct.

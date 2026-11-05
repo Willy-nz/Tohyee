@@ -13,6 +13,8 @@ import { GET as calendarGet } from "@/app/api/farming/calendar/route";
 import { GET as grazingsGet } from "@/app/api/farming/farms/[farmId]/grazings/route";
 import { GET as mobsGet } from "@/app/api/farming/farms/[farmId]/mobs/route";
 import { GET as stockingGet } from "@/app/api/farming/farms/[farmId]/stocking/route";
+import { GET as treatmentsGet } from "@/app/api/farming/farms/[farmId]/treatments/route";
+import { GET as productStockGet } from "@/app/api/farming/product-stock/route";
 import { GET as mobGet } from "@/app/api/farming/mobs/[mobId]/route";
 import { GET as paddockStatusGet } from "@/app/api/farming/farms/[farmId]/paddock-status/route";
 import { GET as paddocksGet } from "@/app/api/farming/farms/[farmId]/paddocks/route";
@@ -219,6 +221,9 @@ export async function buildSection(request: Request, input: { organisationId: st
       const mobs = await r.read(mobsGet, `/api/farming/farms/${farm}/mobs`, f, {});
       for (const mobId of ids(mobs, "mobs", "id")) await r.read(mobGet, `/api/farming/mobs/${mobId}`, { mobId }, {});
       await r.read(stockingGet, `/api/farming/farms/${farm}/stocking`, f, {});
+      // Treatments (withholding is on each mob) and product stock (decision 1437).
+      await r.read(treatmentsGet, `/api/farming/farms/${farm}/treatments`, f, {});
+      await r.read(productStockGet, "/api/farming/product-stock", {}, { farmId: farm });
       await readHistory(r, supplementsGet, `/api/farming/farms/${farm}/supplements`, f, "supplements", since);
       await readHistory(r, readingsGet, `/api/farming/farms/${farm}/pasture/readings`, f, "readings", since);
       // Each paddock's card: its readings and grazings, trimmed to the months kept.

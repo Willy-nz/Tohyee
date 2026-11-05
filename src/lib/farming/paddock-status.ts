@@ -4,6 +4,7 @@ import { parseIsoDate } from "@/lib/dates";
 import { requireFarmAccess } from "@/lib/farming/access";
 import { requireFarming } from "@/lib/farming/paddocks";
 import { isEstimate, type PastureMethod } from "@/lib/farming/pasture-rules";
+import { paddockWithholdings } from "@/lib/farming/withholding";
 import { requireId } from "@/lib/validation";
 
 /*
@@ -27,6 +28,8 @@ export type PaddockStatus = {
   /** The day the last mob came out, on or before the date (null when in now and never grazed before, or never grazed). */
   lastGrazedOn: string | null;
   cover: { cover: number; measuredOn: string; method: PastureMethod; estimate: boolean } | null;
+  /** Sprayed, with a grazing withholding from the label: the first day it's safe to graze (decision 1433). */
+  notSafeUntil: { until: string; product: string | null; jobId: string } | null;
 };
 
 export async function paddockStatuses(tx: OrgTx, input: { farmId: unknown; onDate: unknown }): Promise<PaddockStatus[]> {
@@ -70,6 +73,7 @@ export async function paddockStatuses(tx: OrgTx, input: { farmId: unknown; onDat
       order by p.name, p.id`,
     [farmId, onDate],
   );
+  const withheld = await paddockWithholdings(tx, farmId, onDate);
   return rows.rows.map((row) => ({
     paddockId: row.id,
     name: row.name,
@@ -77,5 +81,6 @@ export async function paddockStatuses(tx: OrgTx, input: { farmId: unknown; onDat
     inNow: row.grazing_id ? { grazingId: row.grazing_id, mob: row.mob!, head: row.head, inOn: row.in_on!, mobs: row.mobs ?? [] } : null,
     lastGrazedOn: row.last_out,
     cover: row.cover === null ? null : { cover: row.cover, measuredOn: row.measured_on!, method: row.method!, estimate: isEstimate(row.method!) },
+    notSafeUntil: withheld.has(row.id) ? { until: withheld.get(row.id)!.until, product: withheld.get(row.id)!.product, jobId: withheld.get(row.id)!.jobId } : null,
   }));
 }

@@ -24,6 +24,8 @@ import {
 import { requireFarming } from "@/lib/farming/paddocks";
 import { fileRows, importSource } from "@/lib/farming/soil";
 import { factorsWith, type StockUnitFactor, type Stocking, stocking } from "@/lib/farming/stock-units";
+import { type Withholding, withholdingText } from "@/lib/farming/treatment-rules";
+import { mobWithholdings, paddockWithholdings } from "@/lib/farming/withholding";
 import { requestHash } from "@/lib/idempotency";
 import { className, findClass, KIND_NAMES, LIVESTOCK_KINDS, type LivestockKind } from "@/lib/livestock/classes";
 import { getLivestockSettings, getMovement, recordMovement, voidMovement } from "@/lib/livestock/movements";
@@ -64,6 +66,8 @@ export type Mob = {
   lastWeight: MobWeight | null;
   stockUnits: string | null;
   createdOn: string;
+  /** Safe dates from its treatments' withholding (decision 1432); null with none recorded. */
+  withholding: Withholding | null;
 };
 
 export type MobEvent = {
@@ -185,6 +189,8 @@ async function loadMobs(tx: OrgTx, where: string, params: unknown[]): Promise<Mo
       )
     : { rows: [] };
   const factors = await loadFactors(tx);
+  const withholdings = new Map<string, Withholding>();
+  for (const farmId of new Set(rows.rows.map((row) => row.farm_id))) for (const [mobId, value] of await mobWithholdings(tx, farmId)) withholdings.set(mobId, value);
   return rows.rows.map((row) => {
     const own = weights.rows.filter((weight) => weight.mob_id === row.id);
     const last = own[0];
@@ -214,6 +220,7 @@ async function loadMobs(tx: OrgTx, where: string, params: unknown[]): Promise<Mo
         : null,
       stockUnits: su.stockUnits,
       createdOn: row.created_on ?? "",
+      withholding: withholdings.has(row.id) ? { meatSafeOn: withholdings.get(row.id)!.meatSafeOn, milkSafeFrom: withholdings.get(row.id)!.milkSafeFrom } : null,
     };
   });
 }
@@ -576,6 +583,9 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
       const grazingId = to ? await openGrazing(tx, mob, to, date, mob.head) : null;
       await addEvent(tx, { ...base, eventType: "moved", headAfter: mob.head, fromPaddockId: mob.paddock?.id ?? null, toPaddockId: to?.id ?? null, grazingId });
       message = to ? `${mob.name} moved to ${to.name}.` : `${mob.name} is out of ${mob.paddock!.name}.`;
+      // Warn, don't block (decision 1433): the paddock was sprayed and isn't safe to graze yet.
+      const sprayed = to ? (await paddockWithholdings(tx, mob.farmId, date)).get(to.id) : null;
+      if (sprayed) message += ` Warning: ${to!.name} isn't safe to graze until ${sprayed.until}${sprayed.product ? ` (sprayed with ${sprayed.product})` : ""}.`;
       break;
     }
     case "weigh": {
@@ -606,6 +616,9 @@ export async function mobAction(tx: OrgTx, mobIdInput: unknown, input: Record<st
       await addEvent(tx, { ...base, eventType: action === "sell" ? "sold" : "died", headChange: -head, headAfter: after, livestockMovementId: linked.movementId, amount });
       await setHead(tx, mob, after, date);
       message = `${head} ${action === "sell" ? "sold" : "died"} from ${mob.name}${after === 0 ? `; ${mob.name} is closed` : ""}.`;
+      // A sale within a withholding period is a warning, not a block (decision 1433): the person knows where the stock is going.
+      const held = action === "sell" ? withholdingText(mob.withholding, date) : null;
+      if (held) message += ` Warning: ${mob.name} is within a withholding period (${held.replace(/^Withholding: /, "")}).`;
       break;
     }
     case "births":

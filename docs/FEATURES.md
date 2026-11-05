@@ -3378,6 +3378,18 @@ that something happened.
   Wi-Fi-only downloads (browsers can't reliably tell) and pasture cover
   estimates (#612 Phase 3, a separate piece of work).
 
+- **Treatments and withholding** (decisions 1431-1438, TRT1-TRT8, tenant
+  migration 0234; common NZ practice, not yet reviewed): treat a mob from
+  its card (product from Safety's chemical register or typed, dose,
+  quantity, batch, who, the time given if known, and meat and milk withholding from the label; milk counts from the time given exactly, or from the end of the day without one). Each
+  mob shows "safe for slaughter from" and "milk safe from", carried through
+  splits and merges, with warnings on sales and on its paddock. A spraying
+  tractor job takes the label's grazing withholding, and its paddocks show
+  "not safe to graze until" on the map, the paddock card and mob moves
+  (warnings, never blocks). Product stock on hand for each chemical, less
+  treatments and spray jobs. The treatment register and the stock movement
+  history download as CSV or PDF for farm assurance and processor audits.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

@@ -121,3 +121,8 @@ export function classFrom(kind: LivestockKind, text: string): string | null {
 export function isBirthClass(kind: string, classCode: string): boolean {
   return findClass(kind, classCode)?.birth === true;
 }
+
+/** "Paddock 4" for a paddock named by number, else its name ("Back flat"). */
+export function paddockLabel(name: string): string {
+  return /^\d/.test(name) ? `Paddock ${name}` : name;
+}
