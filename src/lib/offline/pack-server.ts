@@ -37,6 +37,7 @@ import { GET as tractorJobsGet } from "@/app/api/farming/tractor/jobs/route";
 import { GET as planGet } from "@/app/api/farming/plans/[planId]/route";
 import { GET as productsGet } from "@/app/api/farming/products/route";
 import { GET as rainGaugesGet } from "@/app/api/farming/farms/[farmId]/rain-gauges/route";
+import { GET as farmTasksGet } from "@/app/api/farming/farms/[farmId]/tasks/route";
 import { GET as effluentCareGet } from "@/app/api/farming/effluent/care/route";
 import { GET as effluentLogGet } from "@/app/api/farming/effluent/log/route";
 import { GET as effluentTodayGet } from "@/app/api/farming/effluent/today/route";
@@ -210,6 +211,8 @@ export async function buildSection(request: Request, input: { organisationId: st
       await r.read(calendarGet, "/api/farming/calendar", {}, { view: "check", farmId: farm });
       // The safety dates shown above the calendar (#477).
       await r.read(safetyDueGet, "/api/farming/safety/due", {}, { from: today, to: daysAhead(today, 92) });
+      // The farm's tasks, for Today's Tasks card with no signal (decision 1460).
+      await r.read(farmTasksGet, `/api/farming/farms/${farm}/tasks`, f, {});
       break;
     }
     case "plans": {

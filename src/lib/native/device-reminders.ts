@@ -9,6 +9,7 @@ import { keyAge } from "@/lib/farming/imagery";
 import { getFarmingSettings, listFarms } from "@/lib/farming/paddocks";
 import type { DeviceReminder } from "@/lib/native/reminders-shared";
 import { openActions } from "@/lib/safety/reports";
+import { myTasks } from "@/lib/farming/tasks";
 
 /*
  * The signed-in person's reminders for the Android app to put on the phone
@@ -19,6 +20,7 @@ import { openActions } from "@/lib/safety/reports";
  * - read the pond, each morning until it's read;
  * - Effluent's weekly checks, servicing and Effluent WoF, on their days;
  * - the person's own open safety actions, on the day they're due;
+ * - the person's own farm tasks, on the day they're next due (decision 1459);
  * - the LINZ aerial photos key, the day the reminder starts and the day it
  *   runs out (admins, who are the ones who can renew it).
  *
@@ -72,6 +74,12 @@ export async function deviceReminders(tx: OrgTx, organisationId: string): Promis
     if (action.state === "done" || !action.data.due || (action.farmId && !names.has(action.farmId))) continue;
     const farmName = action.farmId ? names.get(action.farmId) : null;
     reminders.push({ key: `action-${action.recordId}`, kind: "action", organisationId, title: `Safety action due: ${action.data.title}`, body: `${farmName ? `${farmName}: ` : ""}due ${action.data.due}.`, farmId: action.farmId ?? null, path: safetyPath(action.farmId ?? null), at: null, date: action.data.due < today ? today : action.data.due });
+  }
+
+  // The person's own farm tasks (decision 1459), on farms they work on; overdue ones are told about today.
+  for (const task of await myTasks(tx, { today })) {
+    if (!names.has(task.farmId) || !task.next) continue;
+    reminders.push({ key: `task-${task.id}`, kind: "task", organisationId, title: `Task: ${task.title}`, body: `${task.farmName}: ${task.next < today ? `was due ${task.next}` : `due ${task.next}`}${task.paddockName ? `, paddock ${task.paddockName}` : ""}.`, farmId: task.farmId, path: `/operations/farming/tasks?farm=${encodeURIComponent(task.farmId)}`, at: null, date: task.next < today ? today : task.next });
   }
 
   const role = tx.actor.role;

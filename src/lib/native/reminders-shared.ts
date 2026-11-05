@@ -6,7 +6,7 @@
  * is stored and no push server is used. Pure and browser-safe.
  */
 
-export const DEVICE_REMINDER_KINDS = ["shift", "pond", "check", "service", "wof", "action", "linz_key"] as const;
+export const DEVICE_REMINDER_KINDS = ["shift", "pond", "check", "service", "wof", "action", "task", "linz_key"] as const;
 export type DeviceReminderKind = (typeof DEVICE_REMINDER_KINDS)[number];
 
 export const DEVICE_REMINDER_LABELS: Record<DeviceReminderKind, string> = {
@@ -16,6 +16,7 @@ export const DEVICE_REMINDER_LABELS: Record<DeviceReminderKind, string> = {
   service: "Effluent servicing",
   wof: "Effluent Warrant of Fitness",
   action: "Your safety actions",
+  task: "Your farm tasks",
   linz_key: "Aerial photos key running out",
 };
 
