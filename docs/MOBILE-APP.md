@@ -91,7 +91,7 @@ locked.
 | Your farms' information (below) | Kept automatically; shown as **last known** |
 | Get Tohyee on this device | Opens |
 | The books, reports, settings and everything else | Needs a connection; says so |
-| Log: cover readings, mob in and out, feed, the farm walk | Kept on the device, sent later |
+| Log: cover readings, mob in and out, feed, the farm walk, rain gauge readings | Kept on the device, sent later |
 | Tasks: marking a task done (Today or Tasks) | Kept on the device, sent later |
 | Safety: report a hazard, near miss or incident (with photos) | Kept on the device, sent later |
 | Safety: pre-start checks, marking your action done, signing an induction, signing in and out | Kept on the device, sent later |

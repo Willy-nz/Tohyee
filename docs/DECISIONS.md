@@ -13039,6 +13039,139 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       old one if it's still waiting. Uploaded documents are seen by
       bookkeepers and up, and by members named as signers.
 
+### The AI builds Analytics reports (#591; Claude, 5 Nov 2026, when Jess said "Yes buddy you can do it. You are ai and you know what you need."; decisions 1411-1420, examples AIA1-AIA9)
+
+1411. **The AI uses the Analytics editor's own reports.** Six report tools:
+      list_analytics_tables, run_analytics_query, list_analytics_dashboards
+      and get_analytics_dashboard (Look only), and
+      create_analytics_dashboard and update_analytics_dashboard (Make
+      drafts). Tiles take the same shape the editor saves (chart kind,
+      question, format, dates, width and height), checked and saved by the
+      same code, so there's no second engine and a report the AI makes opens
+      and edits in Tohyee like any other.
+1412. **Making and changing reports is "Make drafts", as the AI's own
+      dashboards are.** It needs the bookkeeper role or higher, the same as
+      saving a report in Tohyee. Reading needs any role.
+1413. **Every tile the AI adds or changes is run before it's saved.** The
+      editor's checks come first (a pie shows one value, the fields exist),
+      then the tile is worked out on the data in the report's dates. The
+      first that fails is refused with its position, title and what's
+      wrong, and nothing is saved. Tiles it didn't touch aren't run again,
+      as in Tohyee. A tile that runs but has no rows saves, with a warning.
+1414. **Reports keep an edit history on the server** (tenant migration
+      0230). Every save, by a person or through an AI, keeps the version
+      with who saved it, how ("via AI key ..." or "via AI app ..."), when and
+      what changed in a few words. History marks the AI's versions. Each
+      report starts with the version it had when this was added. The newest
+      100 versions are kept. Undo and Redo while editing (decision 691) stay
+      as they were.
+1415. **A person puts an earlier version back from History.** It's saved
+      as a new version ("Put back version 1"), checked like any save and
+      named as the version it started from, so it can be undone the same
+      way. Only people do it, in Tohyee; the AI has no undo tool. An image
+      that has since been taken off a report can't come back with it: the
+      save says to upload it again.
+1416. **The AI sees what its person sees in Analytics.** The tools are
+      offered only while Analytics is on (a new module group, decision
+      1385). Tables and questions are for viewers and up; report viewers
+      only get reports shared with them. Farm tables need every farm
+      (decision 744): they aren't listed, asked or put on a report through
+      the AI. Each organisation's reports and data stay in its own database.
+1417. **What the AI never does with reports.** It doesn't delete a report,
+      take a tile off, change sharing, connect or change sources, folders,
+      themes, slicers, pages, bookmarks or images. Taking a tile off is
+      left to people because the AI can already change a wrong tile, and a
+      person can see what's gone before it goes.
+1418. **The AI can't save over someone's change, and is told what it can
+      do.** update_analytics_dashboard takes the version it read; if anyone
+      has saved since, it's refused and told to read the report again. The
+      save itself also checks the version, as the editor's does (decision
+      690). When the Analytics tools are offered, the server's instructions
+      say what they do and, with Make drafts, that it can build reports
+      itself and that each change goes into History. "Make drafts" now says
+      it makes and changes Analytics reports.
+1419. **The AI can refresh Analytics data, as Refresh now does** (Jess:
+      "Can you refresh data sources too?"). refresh_analytics_sources loads
+      the latest data for every source a report's tiles read, or for named
+      tables, through the same loads as Load now and Refresh now (the books
+      and CRM, Shopify, Google Analytics, Search Console, Meta, files,
+      databases and prepared tables). In Tohyee only owners and admins
+      refresh, so the tool is Make drafts and owners and admins only. It
+      waits for each load and says when it started and finished, the rows
+      loaded, or why not (for example "That source is already loading.",
+      the same guard as the screens). A failed load keeps the last good
+      data. It never changes a connection, its sign-in, its query or its
+      schedule. get_analytics_dashboard now gives each source's freshness
+      (last refreshed, failed, still running), which is how to check
+      afterwards.
+1420. **Answers stay small and easy to fill in.** Figures come back as
+      exact text, cut to a number of rows (20 a tile, 100 a question by
+      default). The guide comes once, on the first page of tables. Each
+      table's saved values (such as the books' revenue, which is negative in
+      the ledger) can be copied into a tile as they are. Error messages say
+      which tile and what to fix.
+
+### Analytics: the books' codes in words (5 Nov 2026; decision 1499)
+
+1499. **Coded values in the books' Analytics tables are shown in words.**
+      An account type reads as the chart of accounts names it ("Current
+      liability", "Fixed asset", "Other income"), an account class as its
+      heading there ("Liabilities", "Income"), and an invoice's or bill's
+      status as "Approved" or "Voided". This covers tiles, tables, pivot
+      tables, chart groups, drill-down paths, slicers and tile filters, and
+      the AI's answers (a valueLabels list beside the rows). The tables keep
+      the code: filters, slicers, clicks, drill-downs and saved reports
+      still go by it, so nothing saved changes. A journal's source isn't
+      covered yet. (Number 1420, which was asked for, was already used by
+      #591.)
+
+### Rainfall (5 Nov 2026; decisions 1451-1456; RF1-RF8)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), rainfall among them. Claude's calls, not yet
+reviewed; no other farm or accounting app was copied.
+
+1451. **Rain gauges belong to a farm.** A farm can have any number, each
+      with a name (once a farm), an optional note and an optional place on
+      the map (a blue "R" dot on the Map tab; tapping it opens Rainfall).
+      Farm staff and up add and change gauges. A gauge isn't deleted: it's
+      retired, keeps its readings and history, and takes no new readings
+      until it's brought back.
+1452. **One reading a gauge a day, from the Log.** Farm › Log › **Rain
+      gauge** asks which gauge, which day (today, yesterday or another
+      past day) and the mm, with a **No rain (0 mm)** button. It goes
+      through the device's one queue (decision 1008) with its own
+      operation id, so it works with no signal and is never kept twice;
+      the farm's gauges are in the offline farm pack's map section. A day
+      already read for that gauge is refused with the reading it has
+      ("change that reading instead"), and so is a future day. Millimetres
+      are to one place, 0 to 2,000, kept as decimals (never floats).
+1453. **A day with no reading is unknown, not dry.** Totals add the days
+      with a reading and always say "N of M days read", so a gap shows.
+      A dry day is a typed 0.
+1454. **Readings are changed, backdated and removed with who and when.**
+      Farm staff and up change a reading's day, mm or note; the reading
+      shows who changed it and when, and the audit log keeps the old
+      values. Bookkeepers and up remove a reading entered by mistake; it's
+      kept, marked removed with who and when. A past day can also be added
+      under Rainfall › Readings.
+1455. **History by month and season, beside the same time last year.**
+      Rainfall shows this month so far, this season so far and the last
+      12 months, then 12 months or 4 seasons as columns and a table, each
+      with the same period a year earlier. A period still going is compared
+      with the same days last year (1-5 Nov 2026 with 1-5 Nov 2025);
+      29 February becomes 28 February. Seasons are New Zealand's
+      (spring Sep-Nov, summer Dec-Feb, autumn Mar-May, winter Jun-Aug).
+      Readings are in Analytics as `tohyee_farm_rainfall`, and a connected
+      AI has a read-only `rainfall` tool.
+1456. **Importing, and no outside weather.** Bookkeepers and up import a
+      gauge's readings from CSV or Excel (date and mm columns, guessed and
+      changeable), with a preview: a bad date or figure, a future day, a
+      day twice in the file and a day the gauge already has are skipped
+      with the reason. The same file can't be imported twice for a gauge.
+      Tohyee fetches no weather data from anywhere; every figure is the
+      farm's own.
+
 ### Farm team tasks (5 Nov 2026; decisions 1457-1461; FT1-FT7)
 
 Jess asked for the farm features Tohyee was missing against a mob-based

@@ -19415,6 +19415,94 @@ create index signing_requests_reminders on signing_requests (last_reminded_at) w
 `,
   },
   {
+    version: "0230",
+    name: "analytics_dashboard_history",
+    sql: `
+-- A report's edit history (#591, decision 1414): every saved version, who
+-- saved it and how (in Tohyee, or through an AI key or AI app), and what
+-- changed, so a person can see a change and put an earlier version back.
+-- Each report starts with the version it has now.
+create table analytics_dashboard_history (
+  id bigserial primary key,
+  dashboard_id bigint not null references analytics_dashboards (id) on delete cascade,
+  version integer not null check (version >= 1),
+  name text not null,
+  description text,
+  settings jsonb not null check (jsonb_typeof(settings) = 'object'),
+  tiles jsonb not null check (jsonb_typeof(tiles) = 'array'),
+  saved_by_email text not null,
+  saved_via text check (saved_via is null or length(saved_via) <= 300),
+  change text not null check (length(change) between 1 and 500),
+  saved_at timestamptz not null default now(),
+  unique (dashboard_id, version)
+);
+insert into analytics_dashboard_history (dashboard_id, version, name, description, settings, tiles, saved_by_email, change, saved_at)
+  select id, version, name, description, settings, tiles, updated_by_email, 'As it was when edit history started', updated_at from analytics_dashboards;
+`,
+  },
+  {
+    version: "0246",
+    name: "rainfall",
+    sql: `
+-- Rainfall (decisions 1451-1456): rain gauges on a farm, optionally placed
+-- on the map, and one reading a gauge a day in millimetres, typed, sent
+-- from a phone through the offline queue (operation id), or imported. Edits
+-- keep who and when; a reading entered by mistake is removed and kept.
+create table rain_gauges (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  name text not null check (length(name) between 1 and 100),
+  note text check (note is null or length(note) between 1 and 500),
+  latitude numeric(9, 6) check (latitude is null or latitude between -90 and 90),
+  longitude numeric(9, 6) check (longitude is null or longitude between -180 and 180),
+  check ((latitude is null) = (longitude is null)),
+  is_active boolean not null default true,
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  updated_by_email text,
+  updated_at timestamptz
+);
+create unique index rain_gauges_name on rain_gauges (farm_id, lower(name));
+
+create table rainfall_readings (
+  id bigserial primary key,
+  farm_id bigint not null references farms(id),
+  gauge_id bigint not null references rain_gauges(id),
+  read_on date not null,
+  mm numeric(6, 1) not null check (mm >= 0 and mm <= 2000),
+  note text check (note is null or length(note) between 1 and 200),
+  source text not null check (length(source) between 1 and 200),
+  status text not null default 'active' check (status in ('active', 'removed')),
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  updated_by_email text,
+  updated_at timestamptz,
+  removed_by_email text,
+  removed_at timestamptz,
+  operation_id uuid unique,
+  request_hash text,
+  check ((operation_id is null) = (request_hash is null))
+);
+create unique index rainfall_readings_one_a_day on rainfall_readings (gauge_id, read_on) where status = 'active';
+create index rainfall_readings_farm on rainfall_readings (farm_id, read_on) where status = 'active';
+create trigger rain_gauges_no_delete before delete on rain_gauges for each row execute function toeyee_forbid_delete();
+create trigger rainfall_readings_no_delete before delete on rainfall_readings for each row execute function toeyee_forbid_delete();
+
+-- A file of readings is imported once a gauge (its fingerprint is kept).
+create table rainfall_imports (
+  id bigserial primary key,
+  gauge_id bigint not null references rain_gauges(id),
+  file_name text not null check (length(file_name) between 1 and 200),
+  sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  imported integer not null check (imported >= 0),
+  skipped integer not null check (skipped >= 0),
+  created_by_email text not null,
+  created_at timestamptz not null default now(),
+  unique (gauge_id, sha256)
+);
+`,
+  },
+  {
     version: "0247",
     name: "farm_tasks",
     sql: `

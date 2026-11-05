@@ -2469,6 +2469,34 @@ that something happened.
   tool list and the app is told. get_organisation's `toolGroups` says which
   groups are hidden and why, and a call to a hidden tool is refused with
   the reason.
+- **Analytics: the books' codes in words** (decision 1499). In the books'
+  tables, account types show as the chart of accounts names them (Bank,
+  Current liability, Fixed asset, Other income, Revenue ...), account
+  classes as Assets, Liabilities, Equity, Income and Expenses, and
+  invoice and bill statuses as Approved and Voided: in tiles, tables,
+  pivots, chart groups, slicers, filters and the AI's answers. The data
+  keeps the code, so filters and saved reports work as before.
+- **AI: Analytics reports** (#591, decisions 1411-1420, examples
+  AIA1-AIA9, tenant migration 0230). A connected AI lists the Analytics
+  tables the person can use (books, CRM, Shopify, Google Analytics, Search
+  Console, Meta, files, databases, prepared tables) with their fields and
+  saved values (list_analytics_tables), asks one a question as a tile does
+  (run_analytics_query), and reads reports with their figures
+  (list_analytics_dashboards, get_analytics_dashboard). With Make drafts it
+  makes reports (create_analytics_dashboard) and adds, changes and reorders
+  tiles (update_analytics_dashboard), with the editor's chart kinds,
+  values, filters, dates and formats. Every tile it adds or changes is run
+  first; a broken one is refused with the reason and nothing is saved. It
+  can't delete a report, take a tile off, share it or touch sources,
+  folders, slicers, pages or images. Owners' and admins' AI can also
+  refresh a report's sources or named tables (refresh_analytics_sources),
+  through the same loads as Refresh now, changing no connection or
+  schedule; get_analytics_dashboard shows each source's freshness.
+  Offered only while Analytics is on;
+  farm tables need every farm. Every report now has **History** (bookkeepers
+  and up): each saved version, who saved it, whether it was through an AI,
+  and what changed, with "Put this version back". Tested with made-up
+  sales; not yet tried with a real AI app.
 - **AI: lossless line edits and paged lists** (#537, #538, decisions
   1263-1268). Reading a document over MCP (get_invoice, get_bill, get_quote,
   get_sales_order, get_purchase_order, the credit notes and repeating
@@ -3224,6 +3252,19 @@ that something happened.
   covers before and after) and supplements fed in kg DM. Satellite and
   model readings are labelled as estimates. Records only.
 
+- **Rainfall** (RF1-RF8, decisions 1451-1456, tenant migration 0246):
+  Farm › More › **Rainfall**. A farm has rain gauges (named, with a note,
+  optionally placed on the map as a blue "R"). Farm › Log › **Rain gauge**
+  records a day's mm from a phone, with **No rain (0 mm)**, through the
+  device's queue, so it works with no signal and is kept once. Readings can
+  be changed and backdated, with who and when kept; bookkeepers remove one
+  entered by mistake (kept). Rainfall shows this month, this season and the
+  last 12 months, and a chart and table by month or season, each beside the
+  same time last year, with how many days have a reading (a missing day is
+  never counted as dry). Bookkeepers import a gauge's readings from CSV or
+  Excel with a preview. In Analytics as `tohyee_farm_rainfall`; the AI has
+  a read-only `rainfall` tool. No outside weather data is fetched.
+
 - **Farm team tasks** (FT1-FT7, decisions 1457-1461, tenant migration
   0247): Farm › More › **Tasks**. A task has what needs doing, a due day,
   and optionally who it's for (someone on that farm's team), a repeat
@@ -3302,7 +3343,7 @@ that something happened.
   it once. The pages themselves still need a signal to open: there's no
   offline app yet (decision 913 says how it would work). Not kept in
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
-  deaths.
+  deaths. (Rainfall is kept now: see Rainfall above.)
 
 - **Tohyee for Android** (#502, decisions 1140-1152;
   [MOBILE-APP.md](MOBILE-APP.md#the-android-app)): an optional Android app

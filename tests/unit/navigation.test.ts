@@ -388,6 +388,7 @@ describe("farm staff (decision 904)", () => {
     expect(menus.at(-1)!.groups.flatMap((group) => group.links.map((link) => link.href))).toEqual([
       "/operations/farming",
       "/operations/farming/pasture",
+      "/operations/farming/rainfall",
       "/operations/farming/soil",
       "/operations/farming/calendar",
       "/operations/farming/tasks",
@@ -406,6 +407,7 @@ describe("farm staff (decision 904)", () => {
   it("are sent back to farm pages from anywhere else", () => {
     expect(farmWorkAllowsPath("/operations/farming")).toBe(true);
     expect(farmWorkAllowsPath("/operations/farming/pasture")).toBe(true);
+    expect(farmWorkAllowsPath("/operations/farming/rainfall")).toBe(true);
     expect(farmWorkAllowsPath("/operations/profile")).toBe(true);
     expect(farmWorkAllowsPath("/operations/farm/map")).toBe(true);
     for (const path of ["/operations", "/operations/invoices", "/operations/farming/benchmarks", "/operations/farming/fertiliser", "/operations/farming/notebook", "/operations/livestock"]) expect(farmWorkAllowsPath(path)).toBe(false);
