@@ -31,11 +31,14 @@ type Workspace = {
   canCrm(need: "read" | "write" | "admin"): boolean;
   /** Where server settings open on the server computer (for server admins); null if they're off. */
   serverSettingsUrl: string | null;
+  /** Why organisations with access dates are hidden now (decision 1468): "Your access to … ended on …". */
+  accessNotes: string[];
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
 const STORAGE_KEY = "tohyee.currentOrganisation";
 const listeners = new Set<() => void>();
+const NO_NOTES: string[] = [];
 
 /**
  * Each tab keeps its own organisation (#143, Jess, 5 Oct 2026): this tab's
@@ -68,11 +71,13 @@ export function WorkspaceProvider({
   user,
   organisations,
   serverSettingsUrl = null,
+  accessNotes = NO_NOTES,
   children,
 }: {
   user: WorkspaceUser;
   organisations: WorkspaceOrganisation[];
   serverSettingsUrl?: string | null;
+  accessNotes?: string[];
   children: ReactNode;
 }) {
   const storedId = useSyncExternalStore(subscribe, readStoredOrganisation, () => null);
@@ -98,8 +103,9 @@ export function WorkspaceProvider({
       can: (role: Role) => (current ? roleAtLeast(current.role, role) : false),
       canCrm: (need: "read" | "write" | "admin") => (current ? crmAllows(current.role, need) : false),
       serverSettingsUrl,
+      accessNotes,
     }),
-    [user, organisations, current, selectOrganisation, serverSettingsUrl],
+    [user, organisations, current, selectOrganisation, serverSettingsUrl, accessNotes],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

@@ -700,7 +700,13 @@ export async function restoreBackup(actor: AdminActor, input: RestoreInput): Pro
       throw new ConflictError(`There's already a database called ${databaseName} on this PostgreSQL server. Choose another ID for the copy.`);
     }
     const members = source
-      ? (await client.query<{ user_id: string; role: string }>("select user_id, role from organisation_members where organisation_id = $1", [source.id])).rows
+      ? (
+          await client.query<{ user_id: string; role: string; access_starts_at?: string | null; access_ends_at?: string | null }>(
+            // Time-limited access (decision 1474) comes with the copy, so an ended member stays ended.
+            "select user_id, role, access_starts_at, access_ends_at from organisation_members where organisation_id = $1",
+            [source.id],
+          )
+        ).rows
       : [];
     if (input.ownerEmail != null && input.ownerEmail !== "") {
       const owner = await client.query<{ id: string }>("select id from users where email = $1 and is_active", [normaliseEmail(input.ownerEmail)]);
@@ -719,7 +725,10 @@ export async function restoreBackup(actor: AdminActor, input: RestoreInput): Pro
       [id, displayName, databaseName, source?.baseCurrency ?? null, actor.id, `Restored from a backup made ${made.date}.`],
     );
     for (const member of members) {
-      await client.query("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3)", [id, member.user_id, member.role]);
+      await client.query(
+        "insert into organisation_members (organisation_id, user_id, role, access_starts_at, access_ends_at) values ($1, $2, $3, $4, $5)",
+        [id, member.user_id, member.role, member.access_starts_at ?? null, member.access_ends_at ?? null],
+      );
     }
     await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
       eventType: "organisation.restored_from_backup",
@@ -761,7 +770,8 @@ export async function restoreBackup(actor: AdminActor, input: RestoreInput): Pro
           (await countIn(admin, "document_emails", "status in ('queued', 'sending')")) +
           (await countIn(admin, "approval_emails", "status in ('queued', 'sending')")) +
           (await countIn(admin, "roster_emails", "status in ('queued', 'sending')")) +
-          (await countIn(admin, "signing_emails", "status in ('queued', 'sending')")),
+          (await countIn(admin, "signing_emails", "status in ('queued', 'sending')")) +
+          (await countIn(admin, "access_emails", "status in ('queued', 'sending')")),
         attachments: await countIn(admin, "record_attachments"),
         journals: await countIn(admin, "ledger_journals"),
       };
