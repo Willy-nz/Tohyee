@@ -9,8 +9,10 @@ import { makeNumberFormatter } from "@/lib/analytics/chart-format";
  * Money has the minus first, as everywhere else in Tohyee: -$27.00 (#328).
  * True and false are Yes and No (decision 577).
  */
-export function showValue(value: string | null, column: Pick<ResultColumn, "format"> & { number?: ResultColumn["number"] }): string {
+export function showValue(value: string | null, column: Pick<ResultColumn, "format"> & { number?: ResultColumn["number"]; valueLabels?: ResultColumn["valueLabels"] }): string {
   if (value === null) return "";
+  // A coded value in words (decision 1499), e.g. "Current liability".
+  if (column.valueLabels && Object.prototype.hasOwnProperty.call(column.valueLabels, value)) return column.valueLabels[value];
   // The field's own format (decision 775), for numbers: shown, never used to work anything out.
   if (column.number && (column.format === "money" || column.format === "number" || column.format === "integer")) {
     return makeNumberFormatter(column.number, column.format === "money" ? "money" : "number")(value);

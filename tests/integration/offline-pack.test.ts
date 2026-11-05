@@ -122,7 +122,7 @@ describeWithDatabase("offline farm packs", () => {
 
   it("keeps the map, pasture and calendar for the farm, with a year of history", async () => {
     const map = await section(worker, "map", w.home);
-    expect(map.body.entries.map((entry) => entry.path)).toEqual([`/api/farming/farms/${w.home}/paddocks`, `/api/farming/farms/${w.home}/paddock-status`, `/api/farming/paddocks/${w.paddock}`, `/api/farming/farms/${w.home}/map-assets`]);
+    expect(map.body.entries.map((entry) => entry.path)).toEqual([`/api/farming/farms/${w.home}/paddocks`, `/api/farming/farms/${w.home}/paddock-status`, `/api/farming/paddocks/${w.paddock}`, `/api/farming/farms/${w.home}/rain-gauges`, `/api/farming/farms/${w.home}/map-assets`]);
     const pasture = await section(worker, "pasture", w.home);
     expect(pasture.body.entries.map((entry) => entry.path)).toEqual([
       `/api/farming/farms/${w.home}/pasture`,
@@ -134,7 +134,7 @@ describeWithDatabase("offline farm packs", () => {
     ]);
     const calendar = await section(worker, "calendar", w.home);
     expect(calendar.status).toBe(200);
-    expect(calendar.body.entries.map((entry) => `${entry.path} ${entry.query.view ?? "range"}`)).toEqual(["/api/farming/calendar range", "/api/farming/calendar check", "/api/farming/safety/due range"]);
+    expect(calendar.body.entries.map((entry) => `${entry.path} ${entry.query.view ?? "range"}`)).toEqual(["/api/farming/calendar range", "/api/farming/calendar check", "/api/farming/safety/due range", `/api/farming/farms/${w.home}/tasks range`]);
   });
 
   it("keeps what the farm sections' screens read: soil histories, tractor machines and jobs (#477)", async () => {

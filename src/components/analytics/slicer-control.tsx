@@ -5,6 +5,7 @@ import { DateInput } from "@/components/date-input";
 import { useApiData } from "@/components/hooks";
 import { Button, ui } from "@/components/ui";
 import { booleanText } from "@/lib/analytics/display";
+import { valueLabel } from "@/lib/analytics/value-labels";
 import { rangeText, type SlicerRange, type SlicerSetting } from "@/lib/analytics/slicers";
 import styles from "./slicer-control.module.css";
 
@@ -44,7 +45,8 @@ export function SlicerControl({
   const values = useApiData<{ values: string[]; type?: string }>(ranged || hierarchy ? null : "/api/analytics/values", { organisationId, dashboardId, table: slicer.table, field: slicer.field });
   const pairs = useApiData<{ pairs: Array<[string, string]> }>(hierarchy ? "/api/analytics/values" : null, { organisationId, dashboardId, table: slicer.table, field: slicer.field, child: slicer.child ?? "" });
   // Yes/No columns show Yes and No; what's sent stays true and false (decision 577).
-  const show = (value: string) => (values.data?.type === "BOOLEAN" ? booleanText(value) : value);
+  // Coded values in words, as the chart of accounts names them (decision 1499); what's sent stays the code.
+  const show = (value: string) => (values.data?.type === "BOOLEAN" ? booleanText(value) : valueLabel(slicer.table, slicer.field, value));
   const list = values.data?.values ?? [];
   const className = [styles.slicer, slicer.look?.size === "small" ? styles.small : slicer.look?.size === "large" ? styles.large : "", slicer.look?.width === "wide" ? styles.wide : ""].filter(Boolean).join(" ");
   const label = <span className={styles.slicerLabel} id={`slicer-${slicer.table}-${slicer.field}`}>{slicer.label}</span>;
@@ -98,7 +100,7 @@ export function SlicerControl({
     control = (
       <Menu label={slicer.label} summary={summary}>
         {hierarchy ? (
-          <Hierarchy pairs={pairs.data?.pairs ?? []} chosen={chosen} childChosen={childChosen ?? []} onChange={onChange} onChildChange={onChildChange ?? (() => undefined)} />
+          <Hierarchy pairs={pairs.data?.pairs ?? []} parentName={(value) => valueLabel(slicer.table, slicer.field, value)} childName={(value) => valueLabel(slicer.table, slicer.child ?? "", value)} chosen={chosen} childChosen={childChosen ?? []} onChange={onChange} onChildChange={onChildChange ?? (() => undefined)} />
         ) : (
           <Ticks values={list} show={show} chosen={chosen} onChange={onChange} search={style === "search"} label={slicer.label} />
         )}
@@ -168,7 +170,7 @@ function Ticks({ values, show, chosen, onChange, search, label }: { values: stri
 }
 
 /** Two levels: ticking a first-level value chooses all of it; its second-level values can be chosen one by one. */
-function Hierarchy({ pairs, chosen, childChosen, onChange, onChildChange }: { pairs: Array<[string, string]>; chosen: string[]; childChosen: string[]; onChange: (values: string[]) => void; onChildChange: (values: string[]) => void }) {
+function Hierarchy({ pairs, parentName, childName, chosen, childChosen, onChange, onChildChange }: { pairs: Array<[string, string]>; parentName: (value: string) => string; childName: (value: string) => string; chosen: string[]; childChosen: string[]; onChange: (values: string[]) => void; onChildChange: (values: string[]) => void }) {
   const parents = [...new Set(pairs.map(([parent]) => parent))];
   const [open, setOpen] = useState<string[]>([]);
   return (
@@ -179,18 +181,18 @@ function Hierarchy({ pairs, chosen, childChosen, onChange, onChildChange }: { pa
         return (
           <div key={parent}>
             <span className={styles.parentRow}>
-              <button type="button" className={styles.toggle} aria-expanded={expanded} aria-label={`${expanded ? "Close" : "Open"} ${parent}`} onClick={() => setOpen(expanded ? open.filter((entry) => entry !== parent) : [...open, parent])}>
+              <button type="button" className={styles.toggle} aria-expanded={expanded} aria-label={`${expanded ? "Close" : "Open"} ${parentName(parent)}`} onClick={() => setOpen(expanded ? open.filter((entry) => entry !== parent) : [...open, parent])}>
                 {expanded ? "−" : "+"}
               </button>
               <label className={ui.checkbox}>
-                <input type="checkbox" checked={chosen.includes(parent)} onChange={(event) => onChange(event.target.checked ? [...chosen, parent] : chosen.filter((entry) => entry !== parent))} /> {parent}
+                <input type="checkbox" checked={chosen.includes(parent)} onChange={(event) => onChange(event.target.checked ? [...chosen, parent] : chosen.filter((entry) => entry !== parent))} /> {parentName(parent)}
               </label>
             </span>
             {expanded ? (
               <div className={styles.children}>
                 {children.map((child) => (
                   <label key={child} className={ui.checkbox}>
-                    <input type="checkbox" checked={childChosen.includes(child)} onChange={(event) => onChildChange(event.target.checked ? [...childChosen, child] : childChosen.filter((entry) => entry !== child))} /> {child}
+                    <input type="checkbox" checked={childChosen.includes(child)} onChange={(event) => onChildChange(event.target.checked ? [...childChosen, child] : childChosen.filter((entry) => entry !== child))} /> {childName(child)}
                   </label>
                 ))}
               </div>

@@ -18813,6 +18813,56 @@ books. The figures are made up.
   nearest reading of each method; on a tie, the one on or before the photo,
   then the latest recorded.
 
+## The AI's Analytics reports (AIA1-AIA9; #591, by Claude on 5 Nov 2026 when Jess said "Yes buddy you can do it. You are ai and you know what you need."; not yet reviewed)
+
+Tested in `tests/integration/ai-analytics-dashboards.test.ts` and
+`tests/unit/analytics-dashboard-history.test.ts`. Nothing here posts to the
+books. The sales are made up: Otago 2 at 10.00 on 5 March and 1 at 0.20 on
+1 April, Canterbury 1 at 0.10 on 9 March.
+
+- **AIA1 Seeing the tables.** A Look only key lists the Analytics tables
+  the person can use, each with where it comes from ("File: Sales", Tohyee
+  books, Shopify, Google Analytics and so on), its fields with their types,
+  and its saved values. The first page has a short guide: what each chart
+  needs, the filter tests for each kind of field, the date choices.
+- **AIA2 Asking a question.** Sales by region (quantity times price) is
+  **Otago 20.20, Canterbury 0.10**, exact. With the dates 1 to 31 March on
+  the order date: **Otago 20.00, Canterbury 0.10**. Adding up a text field
+  is refused: "region isn't a number". Nothing is saved.
+- **AIA3 Making a report.** A Make drafts key makes "Sales" with Sales by
+  region (bars) and Orders (a key figure: **3**). It's under Analytics ›
+  Reports for everyone who can see reports, saved as the key's owner.
+- **AIA4 A broken tile is refused.** A tile grouped by a field that isn't
+  there ("colour") is refused: "Sales by month: Group by: there's no
+  column called colour. Nothing was saved." So is a pie with two values. No
+  report is made.
+- **AIA5 Changing a report.** The AI adds Sales by month first, renames
+  Sales by region and makes it full width. Only the tiles it adds or changes
+  are run. It names the version it read; if someone has saved since, it's
+  refused and told to read the report again.
+- **AIA6 Edit history.** Each save is kept: version 1 "Made the report with
+  2 tiles" and version 2 "Added "Sales by month"; Changed "Sales by region
+  (all time)"", both "via AI key "owner-drafts"" and marked as made through
+  the AI.
+- **AIA7 Putting a version back.** A person opens History and puts version
+  1 back. It's saved as version 3, "Put back version 1", by them (not
+  through the AI): the report has Sales by region and Orders again. A
+  person's own save is kept the same way ("Renamed to "Sales report"").
+- **AIA8 Who sees what.** A Look only key can't make or change reports. A
+  member who works on one farm can't ask the farm tables a question or put
+  them on a report. Another organisation's reports and sales (Waikato,
+  495.00) never show. With Analytics off, the tools aren't offered and say
+  why. The AI never deletes a report, takes a tile off, or changes sharing,
+  sources, folders, slicers, pages or images.
+- **AIA9 Refreshing the data.** A new sale (Canterbury 3 at 1.00) is added
+  to the file. The owner's AI refreshes the report's sources: Sales,
+  **4 rows**, with when it started and finished, and Canterbury is now
+  **3.10**. The report's freshness shows the same finish time. A table
+  nothing loads is skipped with the reason. A bookkeeper's AI can't refresh
+  (owners and admins only, as in Tohyee). A source already loading is
+  refused, "That source is already loading.", and nothing starts. The
+  source's settings are unchanged.
+
 ## Income tax (#292) stage 1: taxable income, tax, provisional tax and terminal tax (ITX1-ITX10; from IRD's published rules, read by Claude 16 Oct 2026, not yet reviewed by an accountant)
 
 Tax is law, so these examples are **not** "as Xero does": they were written
@@ -21200,6 +21250,85 @@ SPR14), `tests/integration/ai-sales-platform-diagnostics.test.ts`,
 `tests/unit/sales-platform-freshness.test.ts` and
 `tests/unit/ai-no-internal-references.test.ts`.
 
+
+## Farming: rainfall (RF1-RF8; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
+
+Records only: nothing posts to the books, and Tohyee fetches no outside
+weather. Decisions 1451-1456. Tested in `tests/unit/rainfall-rules.test.ts`
+and `tests/integration/rainfall.test.ts`.
+
+- **RF1 Gauges.** Home farm has "Cowshed" (placed at 170.5, -45.87) and
+  "Hill". A second "cowshed" on the farm is refused. Hill is retired: it
+  keeps its readings, isn't offered on the Log, and a reading for it is
+  refused ("Hill is retired").
+- **RF2 A day's reading.** Cowshed, 3 Nov 2026, 12.5 mm, sent by farm staff
+  from a phone with an operation id. Sent again with the same id, the first
+  reading comes back and nothing new is kept; the same id with 13 mm is
+  refused. A second reading for Cowshed on 3 Nov is refused ("Cowshed
+  already has 12.5 mm on 2026-11-03. Change that reading instead."), and so
+  is 6 Nov when today is 5 Nov. Millimetres: "12" is 12.0, "4.5 mm" is 4.5,
+  1.25 (two places), -1 and 2,000.1 are refused. A dry day is 0, typed.
+- **RF3 Changed and removed.** The 3 Nov reading changed to 2 Nov, 14.0 mm,
+  note "Overflowed a bit": it shows who changed it and when, and the audit
+  log keeps 12.5 as before. Farm staff can't remove a reading; a bookkeeper
+  removes a 99 mm typo on 30 Oct, which is kept marked removed, and 30 Oct
+  is free for 2.0 mm.
+- **RF4 Who sees what.** Farm staff see and record for their farms' gauges
+  only; another farm's gauge is "not found".
+- **RF5 Totals beside last year.** Readings 1 Nov 2025 10.0, 20 Nov 2025
+  40.0, 10 Jan 2025 11.0, 10 Jan 2026 22.0, 30 Oct 2026 2.0, 2 Nov 2026
+  14.0; today 5 Nov 2026. **This month** 14.0 mm (1 of 5 days read) against
+  **10.0 mm** for 1-5 Nov 2025 (20 Nov 2025 is later in the month, so not
+  counted): "4 mm more than last year". **Last 12 months** (6 Nov 2025 to
+  5 Nov 2026) **78.0 mm** (40 + 22 + 2 + 14) against **21.0 mm** (6 Nov 2024
+  to 5 Nov 2025: 11 + 10). By month, Oct 2026 is 2.0 mm. A day with no
+  reading isn't counted as dry; each total says how many days were read.
+- **RF6 Seasons.** New Zealand's: spring Sep-Nov, summer Dec-Feb, autumn
+  Mar-May, winter Jun-Aug. 15 Jan 2027 is in "Summer 2026-27" (1 Dec 2026 to
+  28 Feb 2027). From RF5, Summer 2025-26 is **22.0 mm** against **11.0 mm**
+  for Summer 2024-25. Spring 2026 so far runs 1 Sep to 5 Nov 2026. A year
+  before 29 Feb 2028 is 28 Feb 2027.
+- **RF7 Import.** A CSV with "Date,Rainfall (mm)": 01/11/2025 10,
+  2025-11-20 40.0, 02/11/2026 5, 2026-01-10 22, 2026-01-10 1, 2025-01-10 11,
+  03/03/2026 lots, 2026-03-04 (blank). Preview: 4 to import, 4 skipped (row
+  4: Cowshed already has 14.0 mm that day; row 6: the day is in the file
+  twice; row 8: "lots" isn't millimetres; row 9: no figure). Importing
+  keeps the 4; the same file again is refused.
+- **RF8 Elsewhere.** The AI's read-only `rainfall` tool gives each gauge's
+  totals (RF5-RF6), or the day readings for a date range. Analytics has
+  `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
+  sum to 99.0 mm over 6 readings for Cowshed.
+
+## Farming: farm team tasks (FT1-FT7; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
+
+Records only: nothing posts to the books. Decisions 1457-1461. Tested in
+`tests/unit/farm-tasks.test.ts` and `tests/integration/farm-tasks.test.ts`.
+
+- **FT1 Who a task can be for.** Home farm and Runoff; Tama is farm staff
+  on Home farm, Mere on Runoff, Rangi a viewer. A Home farm task can be for
+  Aroha (the owner) or Tama, not Mere (not on the farm) or Rangi (can't
+  tick tasks off). A paddock from Runoff, or a repeat "daily", is refused.
+  Tama adds "Check the trough", from Mon 2 Nov 2026, every week, for Tama,
+  paddock 12, pinned on the map. Rangi can't add tasks; Mere can't see
+  Home farm's.
+- **FT2 Cancelled.** "Spray thistles" cancelled is kept under Cancelled,
+  out of To do, and can't be marked done until it's opened again.
+- **FT3 A one-off** is due on its day until done, then it's under Done.
+- **FT4 Done.** On Thu 5 Nov, "Check the trough" is overdue (due 2 Nov).
+  Tama marks it done for 2 Nov: it's due Mon 9 Nov ("this week"). Sent
+  again (a phone's queue), nothing more is kept. Done "for 16 Nov" is
+  refused: "This task is now due 2026-11-09". A weekly task done late for
+  23 Nov is next due 30 Nov (9 and 16 Nov aren't owed). A monthly task
+  from 31 Jan is due 28 Feb, then 31 Mar.
+- **FT5 Undo.** Undoing the 2 Nov Done makes it due 2 Nov again; the Done
+  is kept with who undid it.
+- **FT6 Calendar.** From 5 to 30 Nov: "Move the bull" (Runoff, due 1 Nov,
+  not done) on 5 Nov marked overdue; "Check the trough" on 9, 16, 23 and
+  30 Nov. Tama, on Home farm only, sees only "Check the trough".
+- **FT7 Reminders.** Mere's Android reminders include "Task: Move the
+  bull" (told about today, as it's overdue), opening Tasks on Runoff;
+  Tama's include "Task: Check the trough". Tasks for nobody in particular
+  remind nobody.
 
 ## Farming: map assets and measuring (MA1-MA6; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
 

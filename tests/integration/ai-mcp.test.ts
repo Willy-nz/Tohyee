@@ -5,7 +5,7 @@ import * as mcpRoute from "@/app/api/mcp/route";
 import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[userId]/route";
 import { AI_TOOLS } from "@/lib/ai/catalogue";
 import { reportTableProblems } from "@/lib/ai/report-table";
-import { moduleHidesTool, type ToolModules } from "@/lib/ai/tool-modules";
+import { moduleHidesTool, toolGroupOf, type ToolModules } from "@/lib/ai/tool-modules";
 import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { listBankAccounts } from "@/lib/bank/accounts";
@@ -69,7 +69,7 @@ function mcpRequest(body: unknown, options: { token?: string | null; cookie?: st
 }
 
 /** This test's organisation: Accounting on, the optional modules off. */
-const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false };
+const MODULES_HERE: ToolModules = { accounting: true, farming: false, livestock: false, reporting: false, notForProfit: false, analytics: false };
 
 let rpcId = 0;
 async function rpc(token: string, method: string, rpcParams?: unknown) {
@@ -330,6 +330,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_pasture_readings",
         "list_grazings",
         "list_supplements_fed",
+        "rainfall",
         "list_pasture_photos_awaiting_estimate",
         "get_pasture_photo",
         "list_staff",
@@ -338,6 +339,10 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_sales_platform_payout_matches",
         "list_signing_requests",
         "get_signing_request",
+        "list_analytics_tables",
+        "run_analytics_query",
+        "list_analytics_dashboards",
+        "get_analytics_dashboard",
       ]
         // #576: Farming, Livestock and Advanced reporting are off here, so their tools aren't offered.
         .filter((name) => moduleHidesTool(name, MODULES_HERE) === null)
@@ -467,10 +472,15 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     args.preview_depreciation = { periodEnd: "2026-06-30" };
     args.query_dataset = { name: "no_such_table" };
     // Tools with a minimum role (income tax, owners and admins) aren't offered to the viewer's key; ird-documents tests them.
+    const refusedGroups = new Set<string>();
     for (const tool of AI_TOOLS.filter((entry) => entry.level === "read" && !entry.minRole)) {
       const hidden = moduleHidesTool(tool.name, MODULES_HERE);
       if (hidden) {
         // #576: a tool for a module that's off is refused with the reason (the farm tools are tested in ai-farm-*).
+        // One call for each hidden group, so the test stays under the key's rate limit (#591 added the Analytics group).
+        const group = toolGroupOf(tool.name)?.key ?? "none";
+        if (refusedGroups.has(group)) continue;
+        refusedGroups.add(group);
         const refused = await rpc(viewerToken, "tools/call", { name: tool.name, arguments: {} });
         expect((refused.body.error as Json).message, tool.name).toBe(hidden);
         continue;

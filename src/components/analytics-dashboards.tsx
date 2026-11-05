@@ -21,6 +21,7 @@ import { useAnalyticsEmbed } from "@/components/analytics/embed-context";
 import { ReportFreshnessLine } from "@/components/analytics/report-freshness";
 import { isTohyee, ReportThemeStyle, reportTheme } from "@/components/analytics/report-theme";
 import { ThemePanel } from "@/components/analytics/theme-panel";
+import { DashboardHistoryCard } from "@/components/analytics/dashboard-history";
 import { FormattedCell, tableLook, totalRowClass } from "@/components/analytics/table-look";
 import { columnRange, tableTotals, visiblePivotRows } from "@/lib/analytics/conditional";
 import { columnHeaderRows, columnPathText, initiallyCollapsed, isGroupRow, steppedRows, visibleWithCollapsed } from "@/lib/analytics/matrix";
@@ -82,6 +83,7 @@ import type {
 import { api, apiDownload, ApiError, errorMessage } from "@/lib/client/api";
 import { DATE_PRESETS, type DatePreset, isDatePreset, matchingPreset, presetRange } from "@/lib/analytics/date-ranges";
 import { booleanText, showValue } from "@/lib/analytics/display";
+import { valueLabel } from "@/lib/analytics/value-labels";
 import { filterComplete } from "@/lib/analytics/filters";
 import { changeMeasure, fieldLabel, measureLabel, tableDescription, tableLabel } from "@/lib/analytics/labels";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
@@ -322,6 +324,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const [conflict, setConflict] = useState<{ updatedByEmail: string; updatedAt: string } | null>(null);
   const [editing, setEditing] = useState(startEditing && can("bookkeeper") && !embed);
   const [sharing, setSharing] = useState(false);
+  // The report's edit history (decision 1414): saved versions, by people and through an AI.
+  const [showHistory, setShowHistory] = useState(false);
   const [theming, setTheming] = useState(false);
   // The format painter (#376): a tile's format, copied to paste on others.
   const [copied, setCopied] = useState<{ from: string; title: string; format: ChartFormat | undefined } | null>(null);
@@ -573,7 +577,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const groupText = (tile: Tile, value: string | null) => {
     const level = grouping(tile);
     if (!level) return value ?? "(blank)";
-    const shownValue = value === null ? "(blank)" : level.grain ? periodLabel(value, level.grain, dates.financialYearEndMonth) : value === "true" || value === "false" ? booleanText(value) : value;
+    const shownValue = value === null ? "(blank)" : level.grain ? periodLabel(value, level.grain, dates.financialYearEndMonth) : value === "true" || value === "false" ? booleanText(value) : (tile.query ? valueLabel(tile.query.table, level.field, value) : value);
     return `${fieldLabel(level.field)}: ${shownValue}`;
   };
   const pickedTile = picked ? pageTiles.find((tile) => tile.id === picked.tileId) : undefined;
@@ -716,6 +720,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         </div>
         <div className={ui.rowButtons}>
           {canEdit ? <Button variant="secondary" aria-expanded={sharing} onClick={() => setSharing(!sharing)}>Share</Button> : null}
+          {canEdit ? <Button variant="secondary" aria-expanded={showHistory} onClick={() => setShowHistory(!showHistory)}>History</Button> : null}
           {canEdit && editing ? (
             <>
               <Button variant="secondary" onClick={() => setEditingTile("new")} disabled={busy || Boolean(editingTile) || !tables.data?.tables.length}>
@@ -870,6 +875,19 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
       />}
 
       {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
+      {showHistory && canEdit ? (
+        <DashboardHistoryCard
+          organisationId={organisationId}
+          dashboardId={dashboard.id}
+          version={base?.version ?? dashboard.version}
+          unsaved={unsaved}
+          onRestored={(restored) => {
+            setSaved(restored);
+            setHistory(null);
+            setConflict(null);
+          }}
+        />
+      ) : null}
 
       {theming && editing && canEdit ? (
         <ThemePanel
@@ -1077,7 +1095,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                         on={drillMode[tile.id] === true}
                         path={(drills[tile.id]?.path ?? []).map((value, at) => {
                           const level = tile.drill!.levels[at];
-                          return value === null ? "(blank)" : level.grain ? periodLabel(value, level.grain, dates.financialYearEndMonth) : value;
+                          return value === null ? "(blank)" : level.grain ? periodLabel(value, level.grain, dates.financialYearEndMonth) : tile.query ? valueLabel(tile.query.table, level.field, value) : value;
                         })}
                         current={levelName(grouping(tile))}
                         onToggle={() => setDrillMode({ ...drillMode, [tile.id]: !drillMode[tile.id] })}
@@ -1756,11 +1774,18 @@ function TileFigures({
   highlight?: { value: string | null } | null;
 }) {
   const yearEndMonth = useContext(YearEndMonth);
-  // Yes/No groups are named Yes and No on the chart too (decision 577).
-  const yesNo = result.columns.some((column) => column.key === "category" && column.format === "boolean");
-  const grain = result.columns.find((column) => column.key === "category")?.grain;
+  // Yes/No groups are named Yes and No on the chart too (decision 577), and coded groups in words (decision 1499).
+  const categoryColumn = result.columns.find((column) => column.key === "category");
+  const breakdownColumn = result.columns.find((column) => column.key === "breakdown");
+  const yesNo = categoryColumn?.format === "boolean";
+  const grain = categoryColumn?.grain;
+  const word = (column: ResultColumn | undefined, value: string | null | undefined) =>
+    value === null || value === undefined || !column ? value : column.format === "boolean" ? booleanText(value) : (column.valueLabels?.[value] ?? value);
+  const renamed = yesNo || Boolean(categoryColumn?.valueLabels) || Boolean(breakdownColumn?.valueLabels);
   // Year, quarter and week groups are named for people on the chart; the rows keep their dates (for projections and clicks).
-  const named = yesNo ? result.rows.map((row) => ({ ...row, category: row.category === null ? null : booleanText(row.category) })) : result.rows;
+  const named = renamed
+    ? result.rows.map((row) => ({ ...row, category: word(categoryColumn, row.category) ?? null, ...(breakdownColumn ? { breakdown: word(breakdownColumn, row.breakdown) ?? null } : {}) }))
+    : result.rows;
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(named, measures[0]?.key ?? "m0") : named;
   // Each group as drawn, back to its value as the server gave it (for clicks), and which to highlight.
   const rawOf = new Map(named.map((row, index) => [String(row.category), result.rows[index].category ?? null]));

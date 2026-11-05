@@ -10,7 +10,9 @@ import { FarmEffluentToday } from "@/components/farm-effluent-care";
 import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-log";
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
+import { FarmTasksToday, taskOverlays, useFarmTasks } from "@/components/farm-tasks";
 import { FarmPeopleCard, LocationSharingBanner, peopleMarkers, useFarmPeople } from "@/components/farm-locations";
+import { gaugeOverlays, useRainGauges } from "@/components/farm-rainfall";
 import { assetOverlays, FarmAssetsCard, type MapDrawing, MapLayerToggles, MeasureCard, shownOverlays, useMapAssets, useMapLayers } from "@/components/farm-map-assets";
 import { type MapLayer, overlayLayer } from "@/lib/farming/map-assets-rules";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
@@ -226,6 +228,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
           <Link href="/operations/farming/calendar">Open the farm calendar</Link>
         </p>
       </Card>
+      <FarmTasksToday organisationId={organisationId} farm={farm} />
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
       <FarmEffluentToday organisationId={organisationId} farm={farm} />
       <Card title="Mobs in now">
@@ -311,6 +314,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   // Where each effluent system's pods or irrigator were last moved (#487): a tap opens the irrigation log.
   const effluent = useEffluentLog(organisationId, farm.id);
   overlays.push(...lastMovedOverlays(effluent.data?.lastMoved ?? []).map((overlay) => ({ ...overlay, onSelect: () => router.push(effluentHref({ farmId: farm.id, screen: "log" })) })));
+  // Rain gauges placed on the map (decision 1451): a tap opens Rainfall.
+  const gauges = useRainGauges(organisationId, farm.id);
+  overlays.push(...gaugeOverlays(gauges.data?.gauges ?? [], () => router.push(`/operations/farming/rainfall?farm=${farm.id}`)));
   // Farm members who chose to share their location (#498 item 7): a tap opens their card under People on the map.
   const people = useFarmPeople(organisationId, farm.id);
   const [person, setPerson] = useState<string | null>(null);
@@ -318,6 +324,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
     setPerson(id);
     requestAnimationFrame(() => document.getElementById("people-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   });
+  // Tasks pinned on the map (decision 1458): a tap opens Tasks.
+  const tasks = useFarmTasks(organisationId, farm.id);
+  overlays.push(...taskOverlays(tasks.data?.tasks ?? [], () => router.push(`/operations/farming/tasks?farm=${farm.id}`)));
   // Farm assets (decision 1462): a tap picks it in Farm assets.
   const assets = useMapAssets(organisationId, farm.id);
   const [asset, setAsset] = useState<string | null>(null);
@@ -508,7 +517,9 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/tractor", icon: "location", label: "Tractor mode", note: "Spreading, spraying and mowing from phone GPS", staff: true },
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
+  { href: "/operations/farming/rainfall", icon: "effluent", label: "Rainfall", note: "Rain gauges, by month and season", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
+  { href: "/operations/farming/tasks", icon: "checklist", label: "Tasks", note: "Jobs for the farm team, with reminders", staff: true },
   { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
   { href: "/operations/farming", icon: "maps", label: "Farms and paddocks", note: "Areas, boundaries, drawing paddocks", staff: true },
 ];
