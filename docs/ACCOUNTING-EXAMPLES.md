@@ -21329,3 +21329,56 @@ Records only: nothing posts to the books. Decisions 1457-1461. Tested in
   bull" (told about today, as it's overdue), opening Tasks on Runoff;
   Tama's include "Task: Check the trough". Tasks for nobody in particular
   remind nobody.
+
+## Farming: mobs and the livestock head count (MOB1-MOB10; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+A mob is a group of one IRD class on a farm (decision 1421). Where it is
+comes from its grazing. Head changes the books count by (sold, died, born,
+bought, class change) are livestock movements, so the head count is kept
+once. Tested in `tests/integration/farm-mobs.test.ts` and
+`tests/unit/farm-mobs.test.ts`.
+
+- **MOB1 A mob already on the farm.** "Milkers", dairy cattle, mixed-age
+  cows, 200 head, into paddock A on 1 Jul 2026: a mob and a grazing in A
+  from 1 Jul. **No livestock movement**: the cows are in the opening
+  position or counted already.
+- **MOB2 A move is a grazing out and in.** Milkers to paddock B on 4 Jul:
+  A's grazing gets a day out of 4 Jul and B gets a grazing from 4 Jul,
+  both the mob's. A move dated before the mob went into A is refused.
+  Two mob records can share B: the map shows "Milkers + Bulls" and 204
+  head. A paddock with a grazing typed with only a mob name can't take a
+  mob, and a typed grazing can't go into a paddock with a mob in it.
+- **MOB3 A sale.** Livestock on from 1 Jun 2026 with 300 mixed-age cows
+  in the opening. Milkers (300) sell 20 for $36,000.00 excl. GST on 10
+  Aug: a **sale movement of 20 mixed-age cows, $36,000.00**, linked to the
+  mob's event, and the mob has 280. Sent again with the same operation
+  id: nothing new. The same id with 21 head: refused.
+- **MOB4 Deaths.** 2 die on 12 Aug: a **death movement of 2**; the mob has
+  278. Farm staff can record deaths but not sales (decision 1423).
+- **MOB5 Births.** Births only go into a youngest class: a calves mob
+  (rising one-year heifers, 30 born, added 15 Aug as "born") makes a
+  **birth movement of 30**, and 12 more born on 25 Aug **another of 12**.
+  Births on the mixed-age cows are refused.
+- **MOB6 A class change.** In-calf heifers, rising two-year, 60 head, to
+  mixed-age cows on 1 Sep: a **reclass movement of 60** from rising
+  two-year heifers to mixed-age cows. The year's head count for
+  mixed-age cows: opening 300, sold 20, died 2, class change in 60,
+  closing **338**; rising one-year heifers births **42**.
+- **MOB7 Linking a movement already recorded.** A sale of 15 mixed-age
+  cows for $27,000.00 on 10 Aug is in Livestock (from an invoice). The
+  mob's sale links it: **no second movement**, the mob loses 15, and the
+  year shows 15 sold. A different head or date is refused, and so is
+  linking the same movement twice.
+- **MOB8 Weights and gain.** Steers weighed 412.0 kg average on 1 Sep and
+  436.0 kg on 1 Oct: **+24.0 kg over 30 days, 0.80 kg a day**. A split
+  of 30 into "Steers 2" leaves 50; merging it back gives 80 and closes
+  Steers 2 (and its grazing). Mobs of different classes can't merge.
+- **MOB9 A typed mob name becomes a mob record.** "Hoggets" in A 1-5 Jul
+  (400) and "hoggets" in B from 5 Jul (390): a mob of 390 ewe hoggets in
+  B, and both grazings become its.
+- **MOB10 Stocking rate.** A 10.00 ha, B 5.00 ha, C 8.00 ha. 30 mixed-age
+  dairy cows (8.0 SU) in B, 120 mixed-age ewes (1.0) in A and 5 rams
+  (0.8) not in a paddock: B **240.0 SU, 48.0 SU/ha, 6.0 head/ha**; A
+  120.0 SU, 12.0 SU/ha; the farm **364.0 SU on 23.00 ha, 15.8 SU/ha, 6.7
+  head/ha**. 20 head on a typed grazing in C aren't counted, and said.
+  With the cows' factor changed to 7.3, the farm is 343.0 SU.

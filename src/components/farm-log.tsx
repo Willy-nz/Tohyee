@@ -186,7 +186,7 @@ function DraftList({ drafts, stored, onDismiss }: { drafts: Draft[]; stored: boo
 
 // One question a screen ------------------------------------------------------------------------------------------
 
-function Step({ title, question, step, steps, children, onBack, onNext, nextLabel = "Next", nextDisabled, onSkip }: { title: string; question: string; step: number; steps: number; children: ReactNode; onBack: () => void; onNext?: () => void; nextLabel?: string; nextDisabled?: boolean; onSkip?: () => void }) {
+export function Step({ title, question, step, steps, children, onBack, onNext, nextLabel = "Next", nextDisabled, onSkip }: { title: string; question: string; step: number; steps: number; children: ReactNode; onBack: () => void; onNext?: () => void; nextLabel?: string; nextDisabled?: boolean; onSkip?: () => void }) {
   return (
     <Card title={title} description={`Step ${step} of ${steps}`}>
       <form
@@ -218,7 +218,7 @@ function Step({ title, question, step, steps, children, onBack, onNext, nextLabe
   );
 }
 
-function Choices<T extends string>({ options, value, onPick }: { options: Array<{ value: T; label: ReactNode; note?: string }>; value: T | null; onPick: (value: T) => void }) {
+export function Choices<T extends string>({ options, value, onPick }: { options: Array<{ value: T; label: ReactNode; note?: string }>; value: T | null; onPick: (value: T) => void }) {
   return (
     <div className={styles.bigButtons}>
       {options.map((option) => (
@@ -231,7 +231,7 @@ function Choices<T extends string>({ options, value, onPick }: { options: Array<
   );
 }
 
-function BigNumber({ value, onChange, label, unit }: { value: string; onChange: (value: string) => void; label: string; unit: string }) {
+export function BigNumber({ value, onChange, label, unit }: { value: string; onChange: (value: string) => void; label: string; unit: string }) {
   return (
     <label style={{ display: "grid", gap: 6 }}>
       <span className={ui.muted}>{label}</span>
@@ -243,7 +243,7 @@ function BigNumber({ value, onChange, label, unit }: { value: string; onChange: 
   );
 }
 
-function DayChoice({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function DayChoice({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const today = todayInBrowser();
   const yesterday = addDays(today, -1);
   return (

@@ -3289,6 +3289,19 @@ that something happened.
   for gets reminders in the Android app with their safety actions.
   Cancelled tasks are kept.
 
+- **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
+  NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
+  IRD class, head, tag colour, paddock and last weight) with quick actions
+  as one-question steps: move, record a weight, deaths, births, split,
+  merge, sell, add bought stock, change class and correct the count. A
+  move is a grazing out and in. Sales, deaths, births, purchases and class
+  changes make or link the livestock movement when Livestock is on, so the
+  head count is kept once. Stocking rate now (SU/ha and head/ha) per
+  paddock and for the farm, with stock unit factors admins can change.
+  Mob names typed on grazings can be made mob records, and mobs can be
+  imported from CSV or Excel. Moves, weights, deaths, births and counts
+  work offline through the device's queue.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

@@ -13290,3 +13290,73 @@ reconciliation). Tohyee's existing limits are the role, payroll access
 (PE9-PE13), the farms each member works on (decision 744), camera access and
 dashboards shared with report viewers. A narrower "areas" permission is a
 separate piece of work (proposed in the pull request).
+
+
+
+
+### Farm mobs (5 Nov 2026; decisions 1421-1430)
+
+Built by Claude when Jess asked to compare Tohyee with a mob-based
+livestock and grazing app and add what Tohyee missed. The rules are common
+NZ farm practice and Claude's, not yet reviewed (examples MOB1-MOB10).
+
+1421. **A mob is one IRD class on one farm.** A mob record has a farm, a
+      kind and IRD class (the classes the books already count by), head,
+      and optionally a name and tag colour. With no name its class is its
+      name. A mixed group is split into one mob per class, so every head
+      in a mob is counted in one class. Mobs are closed, never deleted, and
+      what happens to them is kept as append-only mob events.
+1422. **Where a mob is comes from its grazing.** A mob has no paddock
+      field: its open grazing says where it is, so a move closes that
+      grazing (the day out) and opens one in the new paddock (the day in),
+      and grazings, the map's days since grazed and pasture growth keep
+      working unchanged. Several mob records may share a paddock; a mob is
+      in one paddock at a time. A grazing typed with only a mob name keeps
+      the old rule (nothing else in the paddock with it), and a mob can't
+      move into a paddock that has one.
+1423. **Who can do what.** Field work (move, weigh, deaths, births, split,
+      merge, count, and adding a mob already on the farm) is farm work:
+      farm staff and bookkeepers and up. Selling, buying and class changes
+      change what the books count and value, so they need the bookkeeper
+      role, as livestock movements already do.
+1424. **Stock units.** No NZ body publishes one official stock unit table,
+      and Beef + Lamb NZ's survey reports use stock units without printing
+      factors. The defaults are the widely used livestock unit table as
+      published by RuralFind (1 SU = a 55 kg ewe rearing one lamb), one
+      factor per IRD class, with the table row each uses. Where the table
+      has no row for a class (wethers, in-calf dairy heifers, young
+      cashmere and dairy goats, young red stags) the nearest row is used
+      and marked "check". Admins can change any factor; a blank goes back
+      to the default. Stocking rate is stock units and head per effective
+      hectare (mapped where none is typed), for each paddock with mobs in
+      it and for the farm over its active paddocks. Head on grazings with
+      no mob record has no class, so it isn't counted, and the screen says
+      how many.
+1425. **One head count, not two.** Sold, died, born, bought and class
+      changes on a mob make the livestock movement (MOB3-MOB6), or link
+      one already recorded from an invoice or bill (MOB7), when Livestock
+      is on. A movement belongs to one mob event at most. With Livestock
+      off, only the mob changes and the screen says the books weren't
+      changed. The books' own rules still apply (no class below zero,
+      locked periods, approved valuations).
+1426. **Adding a mob already on the farm changes no head count.** It's in
+      the opening position or counted already. "Bought" and "born" make a
+      purchase or birth. A count ("Correct the count") changes the mob
+      only and says to record deaths, sales or births instead where that's
+      what happened.
+1427. **Weights are a mob's average.** A weighing is an average kg (to one
+      place) and optionally how many were weighed. The gain is the change
+      since the mob's weighing before, over the days between.
+1428. **Moves and field work keep with no signal.** Moves, weights, deaths,
+      births and counts go through the device's queue with an operation
+      id, so a resend finds the first. The offline pack keeps the farm's
+      mobs, each mob's card and the stocking rate.
+1429. **Typed mob names become mob records on request.** "Mob names on
+      grazings" lists names typed on grazings with no mob record. Making
+      one a record gives it a kind, class and head, and every grazing on
+      the farm typed with that name (ignoring case) becomes the mob's. A
+      name in two paddocks now is refused until one is out or renamed.
+1430. **Importing mobs.** A CSV or .xlsx of mobs already on the farm:
+      kind (or species), IRD class (code or name), head, and optionally
+      name, paddock, tag colour and date. A preview shows each row's
+      problem; a file is imported once. Imported mobs change no head count.
