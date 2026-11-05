@@ -19856,7 +19856,8 @@ create trigger bcs_records_no_delete before delete on bcs_records for each row e
 create table bcs_photos (
   id bigserial primary key,
   farm_id bigint not null references farms(id),
-  file_id uuid not null unique references safety_files(id),
+  -- The photo in safety_files (checked when added; no foreign key, so safety_files stays append-only and its truncate guard answers first).
+  file_id uuid not null unique,
   animal_id bigint references animals(id),
   mob_id bigint references mobs(id),
   taken_on date not null,
