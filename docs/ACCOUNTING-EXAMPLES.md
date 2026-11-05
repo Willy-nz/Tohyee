@@ -21382,3 +21382,28 @@ once. Tested in `tests/integration/farm-mobs.test.ts` and
   120.0 SU, 12.0 SU/ha; the farm **364.0 SU on 23.00 ha, 15.8 SU/ha, 6.7
   head/ha**. 20 head on a typed grazing in C aren't counted, and said.
   With the cows' factor changed to 7.3, the farm is 343.0 SU.
+
+## Farming: map assets and measuring (MA1-MA6; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
+
+Records only. Decisions 1462-1465. Tested in `tests/unit/map-assets.test.ts`
+and `tests/integration/map-assets.test.ts`.
+
+- **MA1 Points.** Tama (farm staff on Home farm) adds "Trough in 12", a
+  trough at 169.8045125, -46.1805267 (kept to six places: 169.804513,
+  -46.180527), note "Ballcock sticks". A trough with no place, a kind
+  "windmill" and a longitude of 200 are refused. Rangi (a viewer) sees it
+  but can't add one; Tama can't see Runoff's.
+- **MA2 Lines.** "Boundary fence" through (169.8, -46.18) twice, (169.801,
+  -46.18) and (169.801, -46.181): the repeated point is dropped, and it's
+  **188 m** long (77 m east, 111 m south). One point, or two the same, is
+  refused, and a fence can't be changed into a gate.
+- **MA3 Changed and removed.** Renamed "Trough, paddock 12" and moved: the
+  note stays, and who changed it is kept. The fence removed is kept, marked
+  removed by Tama, and is no longer on the map.
+- **MA4 Distance.** 0.01° of latitude at 46° S is **1,112 m**; 640.4 m
+  shows "640 m", 1,249 m "1.25 km".
+- **MA5 Area.** Corners 0.001° apart (about 77 m × 111 m) close to **0.86
+  ha**, shown as "8,5xx m² (0.86 ha)"; 12.344 ha shows "12.34 ha". Fewer
+  than three corners is no area.
+- **MA6 Layers.** Assets, rain gauges and tasks are told apart by their map
+  ids, effluent by its blue, and everything else is a hazard.

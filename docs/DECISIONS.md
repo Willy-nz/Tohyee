@@ -13392,3 +13392,32 @@ a hiring site itself is #593, for later.
 1480. **Lengths are whole days.** 1 week, 2 weeks, 1 month or 3 months from
       the start date, ending at the end of the day before the same date (10
       Nov for 1 month is until 9 Dec), or a chosen end date.
+
+### Farm map assets and measuring (5 Nov 2026; decisions 1462-1465; MA1-MA6)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), map assets and measuring among them. Claude's
+calls, not yet reviewed. Built on the farm map and geometry.ts.
+
+1462. **Farm assets are points or lines on a farm's map.** Points: trough,
+      gate, water point, shed, bore, tank, yards, culvert or bridge, other.
+      Lines: fence, water pipe, race or track, drain, other (2 to 500
+      points; a point repeated straight after itself is dropped). Each has
+      a name and an optional note, and a line shows its length. They're
+      purple, with a letter (Tr, G, W, F, P…) so they're told apart without
+      colour. Farm staff and up add, change and remove them on their farms;
+      viewers see them. A point stays a point and a line stays a line.
+      Removing keeps the asset, marked removed with who and when. They're
+      in the offline farm pack's map section.
+1463. **Measuring saves nothing.** Map › Measure: Distance adds up the legs
+      tapped (and lists each); Area closes the shape tapped and gives its
+      area and the distance round it. Undo last point and Clear.
+1464. **Units.** Distances and areas are geodesic on WGS84 (GeographicLib),
+      as paddock areas are. Under 1 km a distance is in whole metres, then
+      km to two places; under a hectare an area is in m² with the hectares
+      beside it, then hectares to two places.
+1465. **Layers.** The Map tab has buttons to turn each kind of mark on or
+      off: hazards, effluent, farm assets, rain gauges, tasks and people
+      sharing their location, for the kinds the farm has. The choice is
+      remembered on that device only. Paddock colours aren't a layer: the
+      "Colour paddocks by" switch already chooses them.
