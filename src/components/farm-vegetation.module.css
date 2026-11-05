@@ -165,16 +165,19 @@
   gap: 8px;
 }
 
+/* Not flex: bold words and (i) buttons inside an item must stay in the sentence. */
 .need li {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
+  position: relative;
+  padding-left: 32px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .need li::before {
   content: "✓";
-  flex: none;
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 22px;
   height: 22px;
   border-radius: 50%;
