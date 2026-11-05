@@ -109,6 +109,7 @@ function TaskLine({ organisationId, farm, task, canRecord, onChanged, onOpen, op
           </span>
         </span>
         <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {task.needsReassigning ? <Badge tone="amber">Needs reassigning</Badge> : null}
           <Badge tone={STATE_TONE[task.state]}>{TASK_STATE_LABELS[task.state]}</Badge>
           {pending ? <Badge>Waiting to send</Badge> : canRecord ? <DoneButton organisationId={organisationId} farm={farm} task={task} onDone={(message) => onChanged(message)} /> : null}
         </span>
@@ -173,7 +174,7 @@ export function FarmTasksDue({ organisationId }: { organisationId: string }) {
       <ul style={{ margin: 0, paddingLeft: 18 }}>
         {data.data.items.map((item) => (
           <li key={item.key}>
-            <strong>{formatDate(item.date)}</strong> {item.overdue ? <Badge tone="red">Overdue</Badge> : null} {item.title}
+            <strong>{formatDate(item.date)}</strong> {item.overdue ? <Badge tone="red">Overdue</Badge> : null} {item.needsReassigning ? <Badge tone="amber">Needs reassigning</Badge> : null} {item.title}
             <span className={ui.muted}>
               {" "}
               · {item.farmName}
@@ -302,7 +303,10 @@ function TaskDetail({ organisationId, farm, task, canRecord, onChanged, onClose 
           {task.repeat ? `, from ${formatDate(task.dueOn)}` : ""})
         </dd>
         <dt>For</dt>
-        <dd>{task.assignedToName ?? "Anyone on the farm team"}</dd>
+        <dd>
+          {task.assignedToName ?? "Anyone on the farm team"}
+          {task.needsReassigning ? <span className={ui.muted}> (can&apos;t sign in now: their access has ended or hasn&apos;t started. Change the task to give it to someone else.)</span> : null}
+        </dd>
         {task.paddockName ? (
           <>
             <dt>Paddock</dt>
@@ -402,6 +406,10 @@ function TaskForm({ organisationId, farm, task, onClose, onSaved }: { organisati
           <Field label="For">
             <select value={form.assignedToUserId} onChange={(event) => setForm({ ...form, assignedToUserId: event.target.value })}>
               <option value="">Anyone on the farm team</option>
+              {/* Kept as it is until someone picks another person (decision 1513). */}
+              {task?.assignedToUserId && team.data && !team.data.people.some((person) => person.userId === task.assignedToUserId) ? (
+                <option value={task.assignedToUserId}>{task.assignedToName ?? "A former member"} (can&apos;t sign in now)</option>
+              ) : null}
               {(team.data?.people ?? []).map((person) => (
                 <option key={person.userId} value={person.userId}>
                   {person.name}

@@ -13431,3 +13431,43 @@ calls, not yet reviewed. Built on the farm map and geometry.ts.
       sharing their location, for the kinds the farm has. The choice is
       remembered on that device only. Paddock colours aren't a layer: the
       "Colour paddocks by" switch already chooses them.
+
+### "What they did" paging and who tasks can be for (5 Nov 2026; decisions 1510-1514)
+
+Fixes for items 3 and 4 of the review in #609. Claude's calls, not yet
+reviewed. No migration.
+
+1510. **"What they did" pages by a cursor, not a time.** The list has one
+      fixed order: time to the microsecond, newest first; then books events
+      before server events at the same instant; then the higher event id
+      first. "Older" sends back the last entry's place in that order (time,
+      stream and id), so events that share a time, in one stream or across
+      both, each show once. Before this, the next page started strictly
+      before the last time shown, so the rest of a batch written at one
+      instant was skipped. A cursor that isn't one Tohyee made is refused
+      with "Go back to Newest".
+1511. **Hidden events stay hidden on every page.** Private mail (decision
+      571), and payroll for someone without payroll access, are left out
+      before the page is cut, so they're never counted, shown or used as a
+      cursor. Pages are still 100 entries.
+1512. **A task can only be for someone whose access is current.** The
+      people offered for a task, and the server's check when a task is
+      added or its person is changed, use the same rule as signing in
+      (decision 1467): after their start, before their end, login on. Ended
+      and not-yet-started members aren't offered, and are refused with why
+      ("Hemi's access to this organisation has ended…", "Ana's access
+      starts on …"). The check runs when the person changes: other changes
+      to a task keep who it's for.
+1513. **Open tasks for someone who can't sign in are flagged, not changed.**
+      A task still to do whose person's access has ended or not started, or
+      whose login is off or who was removed, shows "Needs reassigning" on
+      Tasks, Today and the farm calendar. Nothing is deleted or moved: it
+      stays theirs until someone picks another person (the change is in
+      the task's history), and the flag goes if their access is extended.
+      Done and cancelled tasks aren't flagged, so their history is as it
+      was.
+1514. **No tasks ahead of someone's start, for now.** Tohyee has no rule for
+      giving work to someone before their access starts, so it's refused
+      with the date it starts and "give it to them once their access
+      starts". If that's wanted later, it would check the task's due day
+      against their access dates, not just the login.
