@@ -14,6 +14,8 @@ import { listGrazings, listReadings, listSupplements, pastureSummary } from "@/l
 import { listSoilTests, soilSummary } from "@/lib/farming/soil";
 import { listRainReadings, rainfallOverview } from "@/lib/farming/rainfall";
 import { listForecastRecords } from "@/lib/weather/service";
+import { getFarmVegetation, getPaddockTrend, type PaddockObservation } from "@/lib/farming/vegetation/service";
+import { FLAG_WORDS, QUALITY_WORDS } from "@/lib/farming/vegetation/rules";
 import { ValidationError } from "@/lib/errors";
 import { getPaddock, listFarms, listPaddocks } from "@/lib/farming/paddocks";
 import { financialYearEnd } from "@/lib/financial-year";
@@ -426,6 +428,47 @@ export const FARM_READ_TOOLS: AiTool[] = [
       attribution: "This data was provided by MetService Limited.",
       records: await listForecastRecords(tx, { farmId: await farmFor(tx, args.farmId), from: args.from, to: args.to, limit: boundedLimit(args.limit, 20, 200) }),
     }),
+  },
+  {
+    name: "paddock_greenness",
+    title: "Paddock greenness from satellite",
+    description:
+      "Satellite greenness (NDVI; higher is greener, usually 0.2 to 0.9 on pasture) for a farm's paddocks, from Sentinel-2 pictures: each date's acquisition time (the satellite's, UTC; not when it was fetched), mean and median NDVI, clear pixels (about 10 m × 10 m each) of the paddock's total, the clear share (coveragePct), quality (good, low_coverage, too_small, no_data), flags (small, narrow_or_edge), change since the previous clear date (over pixels clear on both), and whether it's for the paddock's current boundary. A date with no clear view has null greenness: unknown, never 0; don't fill it in. Only 'good' dates are reliable to compare. NDVI is greenness, not feed: it must not be converted to kg DM/ha, pasture cover or feed available, and if asked, say it can't be. With paddockId, that paddock's dates (from and to optional); otherwise every paddock on the farm's latest mostly clear date, or on sceneId's date. Made-up demo pictures are labelled as such.",
+    level: "read",
+    inputSchema: schema({ farmId: FARM_ID, paddockId: PADDOCK_ID, sceneId: { type: "string", description: "A date's id, from an earlier answer's dates." }, from: DATE, to: DATE }),
+    run: async (tx, args) => {
+      const forAi = (observation: PaddockObservation) => ({
+        paddockId: observation.paddockId,
+        paddock: observation.paddockName,
+        acquiredAt: observation.acquiredAt,
+        meanNdvi: observation.meanNdvi,
+        medianNdvi: observation.medianNdvi,
+        validPixels: observation.validPixels,
+        totalPixels: observation.totalPixels,
+        coveragePct: observation.coveragePct,
+        quality: observation.quality,
+        flags: observation.flags,
+        changeNdvi: observation.changeNdvi,
+        currentBoundary: observation.currentBoundary,
+        uncertainty: [QUALITY_WORDS[observation.quality], ...observation.flags.map((flag) => FLAG_WORDS[flag]), observation.currentBoundary ? null : "For the paddock's earlier boundary"].filter(Boolean).join(". "),
+      });
+      const note = "Greenness (NDVI), not feed available. Never convert it to kg DM/ha.";
+      if (args.paddockId) {
+        const trend = await getPaddockTrend(tx, args.paddockId, { from: typeof args.from === "string" ? args.from : undefined, to: typeof args.to === "string" ? args.to : undefined });
+        return { note, paddock: trend.paddockName, attribution: trend.attribution, observations: trend.observations.map(forAi) };
+      }
+      const vegetation = await getFarmVegetation(tx, await farmFor(tx, args.farmId), { sceneId: args.sceneId });
+      return {
+        note,
+        farm: vegetation.farmName,
+        state: vegetation.state,
+        attribution: vegetation.attribution,
+        thresholds: vegetation.thresholds,
+        date: vegetation.scene ? { sceneId: vegetation.scene.id, acquiredAt: vegetation.scene.acquiredAt, farmClearPct: vegetation.scene.farmValidPct, mostlyClear: vegetation.scene.usable, processingBaseline: vegetation.scene.processingBaseline, processorVersion: vegetation.scene.processorVersion } : null,
+        dates: vegetation.scenes.slice(0, 60).map((scene) => ({ sceneId: scene.id, acquiredAt: scene.acquiredAt, farmClearPct: scene.farmValidPct, mostlyClear: scene.usable })),
+        observations: vegetation.observations.map(forAi),
+      };
+    },
   },
 ];
 

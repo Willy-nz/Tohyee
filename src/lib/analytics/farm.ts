@@ -3,6 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { dec, toFixedString } from "@/lib/money/decimal";
 import { readRainfallTables } from "@/lib/analytics/farm-rainfall";
 import { readWeatherTables } from "@/lib/analytics/farm-weather";
+import { readVegetationTables } from "@/lib/analytics/farm-vegetation";
 
 /*
  * Farm data in the organisation's analytics file (#249 stage 1, decision
@@ -327,6 +328,7 @@ export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
   tables.push(...(await readRainfallTables(tx)));
   // Only with both MetService permission switches on (decision 1549).
   tables.push(...(await readWeatherTables(tx)));
+  tables.push(...(await readVegetationTables(tx)));
 
   return tables;
 }

@@ -185,6 +185,19 @@ made here, so none are quoted. Run this on the server Tohyee runs on.
 Report back the figures from steps 2 and 4: they replace guesses in this
 page.
 
+## Offline, Analytics, the AI
+
+- **Offline:** a farm's offline map keeps the latest clear picture and up to
+  3 earlier ones (2 MB at most), with their dates, legend and attribution,
+  and each paddock's trend. Shown from the device, the map says so and
+  since when. Wi-Fi-only downloads aren't built (browsers on iPhones can't
+  tell Wi-Fi from mobile data).
+- **Analytics:** `tohyee_farm_paddock_greenness`, a row a paddock a date.
+  Like the other farm tables, only for members who see every farm.
+- **The AI:** the read-only `paddock_greenness` tool. It gets the numbers,
+  their dates, how clear they were and what makes them uncertain, and is
+  told never to turn greenness into kg DM/ha. It never sees the connection.
+
 ## Files and backups
 
 | What | Where | Backed up? |

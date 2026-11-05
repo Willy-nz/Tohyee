@@ -47,6 +47,7 @@ const TABLES: Record<string, TableText> = {
   tohyee_farm_supplements: { label: "Supplements fed", noun: "supplements fed", description: "Supplements fed out by paddock." },
   tohyee_farm_rainfall: { label: "Rainfall", noun: "rain readings", description: "Rain gauge readings by day, in mm." },
   tohyee_farm_weather_forecasts: { label: "Weather forecast records", noun: "forecast hours", description: "Kept MetService forecasts, an hour a row. This data was provided by MetService Limited." },
+  tohyee_farm_paddock_greenness: { label: "Paddock greenness", noun: "paddock satellite dates", description: "Satellite greenness (NDVI) by paddock and date, with how much was clear. Greenness, not feed: blank is no clear view." },
   // Google Analytics (decision 607).
   ...Object.fromEntries(GA_REPORTS.map((report) => [report.table, { label: report.label, noun: report.noun, description: report.description }])),
   // Google Search Console (decision 1181).
