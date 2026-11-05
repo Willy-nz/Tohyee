@@ -6,7 +6,8 @@ import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/or
 import { EMAIL_HISTORY_ENTITY, loadEmailSubject, type StatementOptions } from "@/lib/email/documents";
 import { emailSummary, renderEmailHtml } from "@/lib/email/html";
 import { explainOpenError, openSender, saveSenderTokens, type Sender, type SendingVia } from "@/lib/email/sender";
-import { readSendingAccount, type SendingAccount } from "@/lib/email/settings";
+import { getOrganisationEmailSettings, readSendingAccount, type SendingAccount } from "@/lib/email/settings";
+import { queueAccessReminders } from "@/lib/organisations/access";
 import { type InlineImage, newMessageId } from "@/lib/email/smtp";
 import type { EmailDocumentKind } from "@/lib/email/templates";
 import { HttpError } from "@/lib/errors";
@@ -291,6 +292,8 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
   const rosters = await sendNotices("roster_emails", organisation, people, options.now);
   // Signing links and codes (decision 1404): someone may be waiting on the code.
   const signing = await sendNotices("signing_emails", organisation, people, options.now);
+  // Reminders that someone's time-limited access ends soon (decision 1471).
+  const access = await sendNotices("access_emails", organisation, people, options.now);
   for (;;) {
     const now = options.now ?? new Date();
     const { rows, account, accountError } = await withOrganisationTransaction(
@@ -338,7 +341,7 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
     (tx) => tx.query<{ count: string }>("select count(*)::text as count from document_emails where status in ('queued', 'sending')"),
     { people },
   );
-  result.waiting = Number(waiting.rows[0].count) + approvals.waiting + rosters.waiting + signing.waiting;
+  result.waiting = Number(waiting.rows[0].count) + approvals.waiting + rosters.waiting + signing.waiting + access.waiting;
   return result;
 }
 
@@ -400,12 +403,22 @@ async function scanAll(): Promise<void> {
       console.warn(`[tohyee] Signing reminders for ${organisation.id} failed: ${error instanceof Error ? error.message : error}`);
     }
     try {
+      // Time-limited access ending in 3 days (decision 1471): queued here, sent like any notice.
+      await withOrganisationTransaction(organisation, JOB_ACTOR, async (tx) => {
+        if (organisation.demo || !(await getOrganisationEmailSettings(tx)).configured) return;
+        await queueAccessReminders(tx, origin, organisation.displayName);
+      });
+    } catch (error) {
+      console.warn(`[tohyee] Access reminders for ${organisation.id} failed: ${error instanceof Error ? error.message : error}`);
+    }
+    try {
       const waiting = await withOrganisationTransaction(organisation, JOB_ACTOR, (tx) =>
         tx.query(
           `select 1 from document_emails where status in ('queued', 'sending')
            union all select 1 from approval_emails where status in ('queued', 'sending')
            union all select 1 from roster_emails where status in ('queued', 'sending')
-           union all select 1 from signing_emails where status in ('queued', 'sending') limit 1`,
+           union all select 1 from signing_emails where status in ('queued', 'sending')
+           union all select 1 from access_emails where status in ('queued', 'sending') limit 1`,
         ),
       );
       if ((waiting.rowCount ?? 0) > 0) pending.add(organisation.id);

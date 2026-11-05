@@ -311,7 +311,14 @@ export async function recoverPeople(
       )
     ).rows,
     codes: (await client.query<{ user_id: string; code_hash: string; created_at: Date }>("select user_id::text, code_hash, created_at from user_backup_codes where used_at is null")).rows,
-    members: (await client.query<{ organisation_id: string; user_id: string; role: string }>("select organisation_id, user_id::text, role from organisation_members")).rows,
+    // Time-limited access (decision 1474), in backups made since it was added: an ended member stays ended.
+    members: (
+      await client.query<{ organisation_id: string; user_id: string; role: string; access_starts_at: string | null; access_ends_at: string | null }>(
+        (await client.query("select 1 from information_schema.columns where table_name = 'organisation_members' and column_name = 'access_ends_at'")).rowCount
+          ? "select organisation_id, user_id::text, role, access_starts_at, access_ends_at from organisation_members"
+          : "select organisation_id, user_id::text, role, null::timestamptz as access_starts_at, null::timestamptz as access_ends_at from organisation_members",
+      )
+    ).rows,
     organisations: (await client.query<{ id: string; display_name: string }>("select id, display_name from organisations order by display_name, organisations.id")).rows,
     settings: (await client.query<{ key: string }>("select key from server_settings order by key")).rows.map((row) => row.key),
     // Sign in with Google links (#424), in backups made since it was added.
@@ -459,7 +466,7 @@ export async function recoverPeople(
       }
       if (user.replacesId) {
         await client.query(
-          "insert into organisation_members (organisation_id, user_id, role) select organisation_id, $2, role from organisation_members where user_id = $1 on conflict do nothing",
+          "insert into organisation_members (organisation_id, user_id, role, access_starts_at, access_ends_at) select organisation_id, $2, role, access_starts_at, access_ends_at from organisation_members where user_id = $1 on conflict do nothing",
           [user.replacesId, user.id],
         );
         await client.query("delete from users where id = $1", [user.replacesId]);
@@ -469,9 +476,9 @@ export async function recoverPeople(
       if (!plan.memberships.some((m) => m.organisationId === member.organisation_id && m.email === (fromBackup.users.find((u) => u.id === member.user_id)?.email ?? member.user_id))) continue;
       // A membership handed over from the replaced account takes the backup's role (decision 854).
       await client.query(
-        `insert into organisation_members (organisation_id, user_id, role) values ($1, $2, $3)
-         on conflict (organisation_id, user_id) do update set role = excluded.role, updated_at = now()`,
-        [member.organisation_id, member.user_id, member.role],
+        `insert into organisation_members (organisation_id, user_id, role, access_starts_at, access_ends_at) values ($1, $2, $3, $4, $5)
+         on conflict (organisation_id, user_id) do update set role = excluded.role, access_starts_at = excluded.access_starts_at, access_ends_at = excluded.access_ends_at, updated_at = now()`,
+        [member.organisation_id, member.user_id, member.role, member.access_starts_at, member.access_ends_at],
       );
     }
     // Every organisation still has an Owner.
