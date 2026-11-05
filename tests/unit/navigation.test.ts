@@ -392,6 +392,7 @@ describe("farm staff (decision 904)", () => {
       "/operations/farming/rainfall",
       "/operations/farming/soil",
       "/operations/farming/calendar",
+      "/operations/farming/tasks",
       "/operations/farm/timeline",
       "/operations/farm/tractor",
       "/operations/farm/security",

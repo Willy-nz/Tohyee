@@ -7,7 +7,7 @@ const ROUTES: Array<[string, IllustratedIconName]> = [
   ["/operations/farm/map", "maps"], ["/operations/farm/tractor", "location"],
   ["/operations/farm/offline", "offline"], ["/operations/farm/security", "camera"], ["/operations/farm/log", "photo"],
   ["/operations/farm/mobs", "livestock"], ["/operations/farm/timeline", "clock"],
-  ["/operations/farming/safety", "safety"], ["/operations/farming/calendar", "calendar"],
+  ["/operations/farming/safety", "safety"], ["/operations/farming/calendar", "calendar"], ["/operations/farming/tasks", "checklist"],
   ["/operations/farming/notebook", "documents"], ["/operations/farming/compare", "analytics"],
   ["/operations/farming/benchmarks", "analytics"], ["/operations/farming/import", "maps"],
   ["/operations/farming/soil", "flask"], ["/operations/farming/co-op-shares", "coins"], ["/operations/farming/apps", "apps"],

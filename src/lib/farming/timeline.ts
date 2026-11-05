@@ -10,7 +10,7 @@ import { MOB_EVENT_LABELS, type MobEventType, mobName, paddockLabel } from "@/li
 import { requireFarming } from "@/lib/farming/paddocks";
 import { BREEDING_LABELS, type BreedingType, inCalfPercent, scanningPercent } from "@/lib/farming/planning-rules";
 import { fileRows, importSource } from "@/lib/farming/soil";
-import { meatSafeOn, milkSafeFrom } from "@/lib/farming/treatment-rules";
+import { meatSafeOn, milkBasisText, milkSafeFrom, safeText } from "@/lib/farming/treatment-rules";
 import { className } from "@/lib/livestock/classes";
 import { asRecord, optionalId, requireArray, requireString } from "@/lib/validation";
 
@@ -151,8 +151,8 @@ export async function farmTimeline(tx: OrgTx, input: { farmId: unknown; mobId?: 
   }
 
   if (kinds.includes("treatment")) {
-    const rows = await tx.query<{ id: string; mob_id: string | null; name: string | null; kind: string | null; class_code: string | null; animals: string | null; head: number; treated_on: string; product: string; dose: string; meat: number | null; milk: number | null; paddock_id: string | null }>(
-      `select t.id::text, t.mob_id::text, m.name, m.kind, m.class_code, t.animals, t.head, t.treated_on::text, t.product, t.dose,
+    const rows = await tx.query<{ id: string; mob_id: string | null; name: string | null; kind: string | null; class_code: string | null; animals: string | null; head: number; treated_on: string; given_time: string | null; product: string; dose: string; meat: number | null; milk: number | null; paddock_id: string | null }>(
+      `select t.id::text, t.mob_id::text, m.name, m.kind, m.class_code, t.animals, t.head, t.treated_on::text, to_char(t.given_time, 'HH24:MI') as given_time, t.product, t.dose,
               t.meat_withholding_days as meat, t.milk_withholding_hours as milk,
               (select g.paddock_id::text from grazings g where g.mob_id = t.mob_id and g.status = 'active' and g.in_on <= t.treated_on and (g.out_on is null or g.out_on >= t.treated_on) order by g.in_on desc limit 1) as paddock_id
          from animal_treatments t left join mobs m on m.id = t.mob_id
@@ -164,14 +164,14 @@ export async function farmTimeline(tx: OrgTx, input: { farmId: unknown; mobId?: 
       if (paddockId && row.paddock_id !== paddockId) continue;
       const name = row.mob_id ? mobName({ name: row.name, kind: row.kind ?? "", classCode: row.class_code ?? "" }) : null;
       const meat = meatSafeOn(row.treated_on, row.meat);
-      const milk = milkSafeFrom(row.treated_on, row.milk);
+      const milk = milkSafeFrom(row.treated_on, row.milk, row.given_time);
       items.push({
         key: `t${row.id}`,
         date: row.treated_on,
         kind: "treatment",
         what: "treatment",
         title: `${name ?? row.animals}: treated with ${row.product}`,
-        detail: [`${row.head} head, ${row.dose}`, meat ? `safe for slaughter from ${meat}` : null, milk ? `milk safe from ${milk}` : null].filter(Boolean).join(" · "),
+        detail: [`${row.head} head, ${row.dose}`, meat ? `safe for slaughter from ${meat}` : null, milk ? `milk safe from ${safeText(milk)} (${milkBasisText(row.given_time)})` : null].filter(Boolean).join(" · "),
         mobId: row.mob_id,
         mobName: name,
         paddockIds: row.paddock_id ? [row.paddock_id] : [],
