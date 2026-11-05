@@ -21261,12 +21261,15 @@ and `tests/integration/rainfall.test.ts`.
   "Hill". A second "cowshed" on the farm is refused. Hill is retired: it
   keeps its readings, isn't offered on the Log, and a reading for it is
   refused ("Hill is retired").
-- **RF2 A day's reading.** Cowshed, 3 Nov 2026, 12.5 mm, sent by farm staff
+- **RF2 A day's reading.** A reading is for the rain day, the day before the
+  9 am reading (Jess, 5 Nov 2026): read on the morning of 5 Nov 2026, it's
+  4 Nov's rain, and the Log says "Rain to 9 am today, recorded for
+  Wednesday 4 Nov". On 5 Nov the latest rain day is 4 Nov: 5 Nov and 6 Nov
+  are refused. Cowshed, rain day 3 Nov 2026, 12.5 mm, sent by farm staff
   from a phone with an operation id. Sent again with the same id, the first
   reading comes back and nothing new is kept; the same id with 13 mm is
   refused. A second reading for Cowshed on 3 Nov is refused ("Cowshed
-  already has 12.5 mm on 2026-11-03. Change that reading instead."), and so
-  is 6 Nov when today is 5 Nov. Millimetres: "12" is 12.0, "4.5 mm" is 4.5,
+  already has 12.5 mm on 2026-11-03. Change that reading instead."). Millimetres: "12" is 12.0, "4.5 mm" is 4.5,
   1.25 (two places), -1 and 2,000.1 are refused. A dry day is 0, typed.
 - **RF3 Changed and removed.** The 3 Nov reading changed to 2 Nov, 14.0 mm,
   note "Overflowed a bit": it shows who changed it and when, and the audit
@@ -21293,7 +21296,9 @@ and `tests/integration/rainfall.test.ts`.
   03/03/2026 lots, 2026-03-04 (blank). Preview: 4 to import, 4 skipped (row
   4: Cowshed already has 14.0 mm that day; row 6: the day is in the file
   twice; row 8: "lots" isn't millimetres; row 9: no figure). Importing
-  keeps the 4; the same file again is refused.
+  keeps the 4, on the dates in the file as they are (not moved a day: a
+  file's dates should already be rain days); the same file again is
+  refused. A row dated today or later is skipped.
 - **RF8 Elsewhere.** The AI's read-only `rainfall` tool gives each gauge's
   totals (RF5-RF6), or the day readings for a date range. Analytics has
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7

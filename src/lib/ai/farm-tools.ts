@@ -406,7 +406,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
     name: "rainfall",
     title: "Rainfall",
     description:
-      "Rain recorded in the farm's own rain gauges, in mm: for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. Tohyee keeps no outside weather data.",
+      "Rain recorded in the farm's own rain gauges, in mm, by rain day (a 9 am reading is the day before's rain): for each active gauge (or one farm's), this month, this season and the last 12 months to a date, by month and by NZ season, each with the same time last year and how many days have a reading (a day with no reading is unknown, not dry). With from and to, the day readings themselves for one farm. Tohyee keeps no outside weather data.",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, onDate: DATE, from: DATE, to: DATE }),
     run: async (tx, args) =>

@@ -13137,14 +13137,22 @@ reviewed; no other farm or accounting app was copied.
       Farm staff and up add and change gauges. A gauge isn't deleted: it's
       retired, keeps its readings and history, and takes no new readings
       until it's brought back.
-1452. **One reading a gauge a day, from the Log.** Farm › Log › **Rain
-      gauge** asks which gauge, which day (today, yesterday or another
-      past day) and the mm, with a **No rain (0 mm)** button. It goes
+1452. **One reading a gauge a day, from the Log, for the day before.**
+      A gauge read at 9 am holds the rain to 9 am, and the reading is
+      recorded for the day before, as official 9 am records are (Jess,
+      5 Nov 2026: "Day before"). Farm › Log › **Rain gauge** asks which
+      gauge, which morning it was read (this morning, yesterday morning or
+      another) and the mm, with a **No rain (0 mm)** button, and says
+      "Rain to 9 am today, recorded for Wednesday 4 Nov". Readings are kept
+      and shown by that rain day, so the latest there can be is yesterday.
+      Changing or adding a past reading under Rainfall asks for the rain day
+      itself. An imported file's dates are used as they are (they should be
+      rain days, as official records are). It goes
       through the device's one queue (decision 1008) with its own
       operation id, so it works with no signal and is never kept twice;
       the farm's gauges are in the offline farm pack's map section. A day
       already read for that gauge is refused with the reading it has
-      ("change that reading instead"), and so is a future day. Millimetres
+      ("change that reading instead"), and so is today or a later day. Millimetres
       are to one place, 0 to 2,000, kept as decimals (never floats).
 1453. **A day with no reading is unknown, not dry.** Totals add the days
       with a reading and always say "N of M days read", so a gap shows.
