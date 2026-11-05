@@ -1,6 +1,8 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { type FormEvent, Suspense, useRef, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -14,6 +16,18 @@ import type { Member } from "@/lib/organisations/members";
 import { useConfirm } from "@/components/confirm-dialog";
 import { MemberCameraAccess } from "@/components/farm-security";
 import { MemberFarms } from "@/components/member-farms";
+import {
+  AccessDateFields,
+  type AccessFilter,
+  type AccessFormValue,
+  AccessHelp,
+  AccessLabel,
+  AccessQuickActions,
+  accessBody,
+  accessFormFrom,
+  matchesAccessFilter,
+  NO_ACCESS_LIMIT,
+} from "@/components/member-access";
 
 const ROLE_HELP: Record<Role, string> = {
   farm_worker: "Records field work (cover readings, grazings, feed, soil samples) on the farms you choose for them, and sees their paddocks and farm calendar. Nothing of the books.",
@@ -37,6 +51,41 @@ function Members({ organisationId }: { organisationId: string }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("bookkeeper");
   const isOwner = current?.role === "owner";
+  const params = useSearchParams();
+  // Time-limited access (decisions 1466-1474).
+  const [limitInvite, setLimitInvite] = useState(false);
+  const [inviteAccess, setInviteAccess] = useState<AccessFormValue>(NO_ACCESS_LIMIT);
+  const [filter, setFilter] = useState<AccessFilter>(() => {
+    const asked = params.get("access");
+    return asked === "ending" || asked === "ended" || asked === "limited" ? asked : "all";
+  });
+  const [editing, setEditing] = useState<{ member: Member; value: AccessFormValue } | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  function chooseDates(member: Member) {
+    setEditing({ member, value: accessFormFrom(member.accessFrom, member.accessUntil) });
+    setTimeout(() => editorRef.current?.querySelector("input")?.focus(), 0);
+  }
+
+  async function accessAction(member: Member, action: "extend_week" | "extend_month" | "end_now") {
+    if (action === "end_now" && !(await confirm(`End ${member.displayName}'s access now? Their keys and AI apps stop too. Nothing they did is removed, and you can give access again later.`))) return;
+    const done = { extend_week: "extended by a week", extend_month: "extended by a month", end_now: "ended" }[action];
+    await run(() => api(`/api/organisations/${organisationId}/members/${member.userId}/access`, { method: "POST", body: { action } }), `${member.displayName}'s access is ${done}.`);
+  }
+
+  async function saveDates(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const { member, value } = editing;
+    try {
+      await api(`/api/organisations/${organisationId}/members/${member.userId}/access`, { method: "PUT", body: accessBody(value) });
+      setStatus({ tone: "success", text: `Saved ${member.displayName}'s access dates.` });
+      setEditing(null);
+      members.reload();
+    } catch (caught) {
+      setStatus({ tone: "error", text: errorMessage(caught) });
+    }
+  }
 
   async function run(action: () => Promise<unknown>, success: string) {
     try {
@@ -60,11 +109,13 @@ function Members({ organisationId }: { organisationId: string }) {
     try {
       const result = await api<{ invitation: InvitationOutcome | null }>(`/api/organisations/${organisationId}/members`, {
         method: "POST",
-        body: { email: to, displayName: name, role },
+        body: { email: to, displayName: name, role, ...(limitInvite ? accessBody(inviteAccess) : {}) },
       });
       showInvitation("invite", to, role, result.invitation);
       setEmail("");
       setName("");
+      setInviteAccess(NO_ACCESS_LIMIT);
+      setLimitInvite(false);
     } catch (caught) {
       setShownLink(null);
       setStatus({ tone: "error", text: errorMessage(caught) });
@@ -86,6 +137,7 @@ function Members({ organisationId }: { organisationId: string }) {
   }
 
   const waiting = handover.data?.handover ?? null;
+  const shown = (members.data?.members ?? []).filter((member) => matchesAccessFilter(member.accessState, filter));
   return (
     <>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
@@ -146,8 +198,43 @@ function Members({ organisationId }: { organisationId: string }) {
           </Field>
           <Button type="submit">Invite</Button>
         </form>
+        <p>
+          <label style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={limitInvite} onChange={(event) => setLimitInvite(event.target.checked)} />
+            Only for certain dates
+          </label>{" "}
+          <AccessHelp />
+        </p>
+        {limitInvite ? <AccessDateFields idPrefix="invite-access" value={inviteAccess} onChange={setInviteAccess} /> : null}
       </Card>
-      <Card title="People with access">
+      {editing ? (
+        <div ref={editorRef}>
+          <Card title={`Access dates for ${editing.member.displayName}`} description="Leave a date empty for no limit. An end in the past ends their access now.">
+            <form onSubmit={(event) => void saveDates(event)}>
+              <AccessDateFields idPrefix="edit-access" value={editing.value} onChange={(value) => setEditing({ ...editing, value })} />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button type="submit">Save dates</Button>
+                <Button variant="secondary" onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      ) : null}
+      <Card
+        title="People with access"
+        actions={
+          <Field label="Show">
+            <select value={filter} onChange={(event) => setFilter(event.target.value as AccessFilter)}>
+              <option value="all">Everyone</option>
+              <option value="ending">Access ending in 3 days</option>
+              <option value="limited">Access with dates</option>
+              <option value="ended">Access ended</option>
+            </select>
+          </Field>
+        }
+      >
         {members.error ? <Notice tone="error">{members.error}</Notice> : null}
         <div className={ui.tableWrap}>
           <table className={`${ui.table} ${ui.stackOnPhone}`}>
@@ -156,14 +243,23 @@ function Members({ organisationId }: { organisationId: string }) {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Access</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {(members.data?.members ?? []).map((member) => {
+              {shown.length === 0 && members.data ? (
+                <tr>
+                  <td colSpan={5} className={ui.muted}>
+                    Nobody matches this filter.
+                  </td>
+                </tr>
+              ) : null}
+              {shown.map((member) => {
                 const locked = member.role === "owner" && !isOwner;
+                const ended = member.accessState === "ended";
                 return (
-                  <tr key={member.userId}>
+                  <tr key={member.userId} style={ended ? { opacity: 0.6 } : undefined}>
                     <td data-label="Name">
                       {member.displayName} {member.userId === user.id ? <Badge tone="blue">You</Badge> : null}{" "}
                       {member.invited ? <Badge tone="amber">Invited</Badge> : null}{" "}
@@ -171,6 +267,11 @@ function Members({ organisationId }: { organisationId: string }) {
                       {member.invited && member.invitationSentAt ? (
                         <div className={ui.muted}>Sent {formatDateTime(member.invitationSentAt)}</div>
                       ) : null}
+                      <div>
+                        <Link href={`/operations/members/activity?user=${member.userId}`} aria-label={`What ${member.displayName} did`}>
+                          What they did
+                        </Link>
+                      </div>
                     </td>
                     <td data-label="Email" style={{ overflowWrap: "anywhere" }}>{member.email}</td>
                     <td data-label="Role">
@@ -195,6 +296,18 @@ function Members({ organisationId }: { organisationId: string }) {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td data-label="Access">
+                      <AccessLabel state={member.accessState} from={member.accessFrom} until={member.accessUntil} />
+                      <div style={{ marginTop: 6 }}>
+                        <AccessQuickActions
+                          name={member.displayName}
+                          state={member.accessState}
+                          disabled={locked}
+                          onAction={(action) => void accessAction(member, action)}
+                          onChooseDates={() => chooseDates(member)}
+                        />
+                      </div>
                     </td>
                     <td className={ui.num}>
                       {member.invited ? (
@@ -254,7 +367,9 @@ export default function MembersPage() {
   return (
     <Page>
       <PageHeader title="People and roles" />
-      <RequireOrganisation>{(organisationId) => <Members key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>{(organisationId) => <Members key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }

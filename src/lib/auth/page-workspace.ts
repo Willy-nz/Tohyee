@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getPageSession } from "@/lib/auth/page-session";
 import { twoStepRequired } from "@/lib/auth/sessions";
 import { RECOVERY_KIT_REMINDER, recoveryKitNeedsSaving } from "@/lib/backups/recovery-kit";
+import { accessMessagesForUser } from "@/lib/organisations/access";
 import { listMembershipsForUser } from "@/lib/organisations/registry";
 import { localAdminUrl } from "@/lib/server-admin/local";
 
@@ -29,7 +30,9 @@ export async function loadPageWorkspace() {
           : organisation.migrationStatus,
     isDemo: Boolean(organisation.demo),
   }));
-  const warnings: string[] = [];
+  // Organisations hidden because of their access dates (decision 1468), and why.
+  const accessNotes = await accessMessagesForUser(session.user.id);
+  const warnings: string[] = [...accessNotes];
   if (session.user.isServerAdmin && !twoStepRequired()) {
     warnings.push(
       "Two-step sign-in is off: this server has no TOHYEE_SECRET_KEY, so people sign in with a password only. Set it (32+ random characters) in the server's environment and restart Tohyee before letting anyone in from outside your network. The Windows installer sets it when you update.",
@@ -43,5 +46,6 @@ export async function loadPageWorkspace() {
     organisations,
     serverSettingsUrl: session.user.isServerAdmin ? localAdminUrl() : null,
     warnings,
+    accessNotes,
   };
 }
