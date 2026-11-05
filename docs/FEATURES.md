@@ -156,7 +156,8 @@ that something happened.
   soon. The member and the owners and admins get an email (when Settings ›
   Email is set up) and a notice 3 days before it ends. Ended members stay
   listed, greyed, with **What they did** (their actions in this
-  organisation); nothing is deleted. One owner always keeps access with no
+  organisation, 100 at a time with **Older**; every action shows once,
+  even when many share a time, decisions 1510-1511); nothing is deleted. One owner always keeps access with no
   end. There's no way yet to limit someone to one area (for example only
   bank reconciliation): use the role, payroll access and farms.
 - **Hire help** (decisions 1475-1480): Settings › Hire help writes a job
@@ -3298,6 +3299,10 @@ that something happened.
   signal), the farm calendar shows the next 30 days, and the person it's
   for gets reminders in the Android app with their safety actions.
   Only bookkeepers and up cancel a task; cancelled tasks are kept.
+  A task can only be given to someone whose access is current (decisions
+  1512-1514); an open task for someone whose access has ended or not
+  started shows **Needs reassigning** on Tasks, Today and the calendar,
+  and stays theirs until someone changes it.
 
 - **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
   NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
