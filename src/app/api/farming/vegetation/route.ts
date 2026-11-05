@@ -1,11 +1,12 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { demoProviderAllowed } from "@/lib/farming/vegetation/http";
-import { getVegetationSettings, updateVegetationSettings } from "@/lib/farming/vegetation/service";
+import { getVegetationSettings, listVegetationFarms, updateVegetationSettings } from "@/lib/farming/vegetation/service";
 
 /** GET: satellite vegetation's connection, limits, this month's use and the last test (owners and admins; never the secret). */
 export const GET = route(async (request) => {
   const result = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", async (tx, { membership }) => ({
     settings: await getVegetationSettings(tx),
+    farms: await listVegetationFarms(tx),
     demoAllowed: demoProviderAllowed(membership.organisation),
   }));
   return json(result);
