@@ -131,6 +131,11 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
               mob={mob}
               canRecord={canRecord}
               canBooks={can("bookkeeper")}
+              mobs={list}
+              onChanged={(message) => {
+                setDone(message);
+                reload();
+              }}
               onAction={(action) => {
                 setDone(null);
                 setFlow({ kind: "action", action, mob });
@@ -149,7 +154,7 @@ export function FarmMobs({ organisationId, farm }: FarmContext) {
   );
 }
 
-function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }: { organisationId: string; mob: Mob; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction) => void; onClose: () => void }) {
+function MobCard({ organisationId, mob, mobs, canRecord, canBooks, onAction, onChanged, onClose }: { organisationId: string; mob: Mob; mobs: Mob[]; canRecord: boolean; canBooks: boolean; onAction: (action: MobAction) => void; onChanged: (message: string) => void; onClose: () => void }) {
   const today = todayInBrowser();
   const detail = useApiData<{ mob: Mob; events: MobEvent[]; weights: MobWeight[] }>(`/api/farming/mobs/${mob.id}`, { organisationId });
   const actions = MOB_ACTIONS.filter((action) => (BOOKKEEPER_ACTIONS.includes(action) ? canBooks : canRecord)).filter((action) => action !== "births" || isBirthClass(mob.kind, mob.classCode));
@@ -195,12 +200,75 @@ function MobCard({ organisationId, mob, canRecord, canBooks, onAction, onClose }
             key: event.id,
             title: shortDate(event.eventDate, today),
             parts: [eventText(event), event.livestockMovementId ? "in the head count" : ""],
+            details: canBooks && isReversible(event) && !reversedIds(events).has(event.id) ? (
+              <ReverseEvent organisationId={organisationId} mob={mob} mobs={mobs} event={event} onDone={onChanged} />
+            ) : undefined,
           }))}
         />
       ) : (
         <p className={ui.muted}>{detail.data ? "Nothing yet." : "Loading…"}</p>
       )}
     </Card>
+  );
+}
+
+/** A sale, death, birth, purchase or class change, or a mob added as bought or born, can be reversed (#609). */
+function isReversible(event: MobEvent): boolean {
+  return ["sold", "died", "born", "bought", "reclass"].includes(event.eventType) || (event.eventType === "created" && (event.createdHow === "bought" || event.createdHow === "born"));
+}
+
+function reversedIds(events: MobEvent[]): Set<string> {
+  return new Set(events.filter((event) => event.reversesEventId).map((event) => event.reversesEventId!));
+}
+
+/**
+ * Reversing an event (#609, decisions 1500-1503): the mob and the books'
+ * livestock movement together, with why. If the mob has changed since,
+ * Tohyee asks which mob the animals go back into.
+ */
+function ReverseEvent({ organisationId, mob, mobs, event, onDone }: { organisationId: string; mob: Mob; mobs: Mob[]; event: MobEvent; onDone: (message: string) => void }) {
+  const [reason, setReason] = useState("");
+  const [intoMobId, setIntoMobId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const same = mobs.filter((entry) => entry.kind === mob.kind && entry.status === "active");
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<ActionResult>(`/api/farming/mobs/${mob.id}/actions`, { method: "POST", body: { organisationId, action: "reverse", eventId: event.id, reason, intoMobId: intoMobId || null } });
+      onDone(result.message);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Field label="Why it's being reversed">
+        <input value={reason} maxLength={300} placeholder="e.g. entered twice" onChange={(changed) => setReason(changed.target.value)} />
+      </Field>
+      {event.eventType !== "reclass" ? (
+        <Field label="Back into">
+          <select value={intoMobId} onChange={(changed) => setIntoMobId(changed.target.value)}>
+            <option value="">{mob.name}</option>
+            {same.filter((entry) => entry.id !== mob.id).map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      <div className={styles.actions}>
+        <Button variant="danger" disabled={busy || !reason.trim()} onClick={() => void send()}>
+          Reverse this
+        </Button>
+        <InfoTip label="Reversing">It adds a reversal to the history (nothing is deleted) and voids the books&apos; livestock movement in the same step. If the mob has moved, split, merged or closed since, choose the mob the animals go back into.</InfoTip>
+      </div>
+    </div>
   );
 }
 
@@ -218,6 +286,8 @@ export function eventText(event: MobEvent): string {
     case "merged_out":
     case "merged_in":
       return `${label} ${event.otherMobName ?? ""}: ${Math.abs(event.headChange)} head`;
+    case "reversed":
+      return `${label}: ${event.headChange > 0 ? "+" : ""}${event.headChange} head${event.otherMobName ? ` (from ${event.otherMobName})` : ""}${event.note ? `, ${event.note}` : ""}`;
     case "created":
       return `${label}: ${event.headAfter} head${event.toPaddockName ? ` in ${event.toPaddockName}` : ""}`;
     default:

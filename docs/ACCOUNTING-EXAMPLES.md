@@ -21415,3 +21415,28 @@ and `tests/integration/map-assets.test.ts`.
   than three corners is no area.
 - **MA6 Layers.** Assets, rain gauges and tasks are told apart by their map
   ids, effluent by its blue, and everything else is a hazard.
+
+## Farming: correcting a mob's head count change (MOB11-MOB14; #609, built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
+
+Tested in `tests/integration/farm-mob-corrections.test.ts`.
+
+- **MOB11 Reversing a sale.** 100 mixed-age cows in the books and in
+  "Milkers". Selling 10 from the mob makes a sale movement of 10: books 90,
+  mob 90. Voiding that movement on its own is refused ("Reverse the sale on
+  Milkers instead"): books and mob stay at 90. Reversing the sale on the
+  mob, with a reason, voids the movement ("Mob sale reversed: …") and adds
+  a "reversed" event of +10: **books 100, mob 100**, and the sale is still
+  in the mob's history. A second reversal is refused.
+- **MOB12 Invoice and bill links.** A sale of 10 linked from an approved
+  invoice line, and a purchase of 5 from a bill line, each linked to the
+  mob: voiding either movement alone is refused. Reversing both on the mob
+  voids both and puts the mob back to 100; the invoice line can be linked
+  again.
+- **MOB13 After the mob changed.** Milkers sold 10, then split 30 off as
+  "Culls": the reversal asks which mob, refuses one of another class, and
+  puts the 10 into Culls (40; Milkers stays 60; books sold 0). A mob that's
+  closed (all sold) and a mob that's moved since also ask which mob.
+- **MOB14 A linked class change.** A movement of 40 breeding bulls to
+  rising three-year and older steers and bulls: a mob reclass to mixed-age
+  cows linking it is refused through the API (400, nothing changed); to the
+  movement's own class it's accepted and no second movement is made.
