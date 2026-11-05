@@ -29,6 +29,8 @@ import {
   NO_ACCESS_LIMIT,
 } from "@/components/member-access";
 
+const isoOrEmpty = (value: string | null) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "");
+
 const ROLE_HELP: Record<Role, string> = {
   farm_worker: "Records field work (cover readings, grazings, feed, soil samples) on the farms you choose for them, and sees their paddocks and farm calendar. Nothing of the books.",
   sales_rep: "Uses the CRM only: every company and person, and their own deals, tasks and forecast. Nothing of the books.",
@@ -49,12 +51,19 @@ function Members({ organisationId }: { organisationId: string }) {
   const [shownLink, setShownLink] = useState<{ email: string; url: string; expiresAt: string; localOnly: boolean } | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("bookkeeper");
-  const isOwner = current?.role === "owner";
   const params = useSearchParams();
+  // "Invite them" from Hire help (decision 1479) fills in the role and dates.
+  const prefilled = params.get("invite") === "1";
+  const [role, setRole] = useState<Role>(() => {
+    const asked = params.get("role");
+    return prefilled && (asked === "viewer" || asked === "bookkeeper" || asked === "admin") ? asked : "bookkeeper";
+  });
+  const isOwner = current?.role === "owner";
   // Time-limited access (decisions 1466-1474).
-  const [limitInvite, setLimitInvite] = useState(false);
-  const [inviteAccess, setInviteAccess] = useState<AccessFormValue>(NO_ACCESS_LIMIT);
+  const [limitInvite, setLimitInvite] = useState(() => prefilled && Boolean(params.get("from") || params.get("until")));
+  const [inviteAccess, setInviteAccess] = useState<AccessFormValue>(() =>
+    prefilled ? { ...NO_ACCESS_LIMIT, from: isoOrEmpty(params.get("from")), until: isoOrEmpty(params.get("until")) } : NO_ACCESS_LIMIT,
+  );
   const [filter, setFilter] = useState<AccessFilter>(() => {
     const asked = params.get("access");
     return asked === "ending" || asked === "ended" || asked === "limited" ? asked : "all";
@@ -179,7 +188,9 @@ function Members({ organisationId }: { organisationId: string }) {
       <Card
         title="Invite someone"
         description="If they don't have a login yet, Tohyee makes one that only opens this organisation, and emails them a link to set it up."
+        actions={<Link href="/operations/members/hire">Hire help: write a job brief</Link>}
       >
+        {prefilled ? <Notice tone="success">The role and dates from your brief are filled in. Add their name and email, then press Invite.</Notice> : null}
         <form className={ui.inlineForm} onSubmit={(event) => void invite(event)}>
           <Field label="Name">
             <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" required />
