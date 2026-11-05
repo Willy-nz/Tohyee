@@ -22,6 +22,10 @@
  * And the farm calendar's mailbox checks every 15 minutes (#319; off with
  * TOHYEE_FARM_MAIL_SCHEDULER=off).
  *
+ * And satellite vegetation (#612): one low-priority worker that checks each
+ * farm with pictures turned on about once a day and fetches new dates (off
+ * with TOHYEE_VEGETATION_SCHEDULER=off).
+ *
  * And the farm security cameras (#508): the hourly media clean-up (off with
  * TOHYEE_CAMERA_CLEANUP=off) and, when TOHYEE_CAMERA_FTP_PORT is set, the
  * camera upload receiver.
@@ -179,6 +183,16 @@ export async function register() {
   if (process.env.TOHYEE_FARM_MAIL_SCHEDULER !== "off") {
     const { startFarmMailScheduler } = await import("@/lib/farming/calendar");
     startFarmMailScheduler();
+  }
+
+  // Satellite vegetation (#612, decision 1529): one low-priority worker, only for organisations that connected an imagery account.
+  if (process.env.TOHYEE_VEGETATION_SCHEDULER !== "off") {
+    try {
+      const { startVegetationScheduler } = await import("@/lib/farming/vegetation/jobs");
+      startVegetationScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Satellite vegetation couldn't start:", error instanceof Error ? error.message : error);
+    }
   }
 
   // The farm safety records' weekly copy off the farm (#446, decision 958).
