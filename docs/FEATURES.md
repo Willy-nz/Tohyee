@@ -3255,7 +3255,8 @@ that something happened.
 - **Rainfall** (RF1-RF8, decisions 1451-1456, tenant migration 0246):
   Farm › More › **Rainfall**. A farm has rain gauges (named, with a note,
   optionally placed on the map as a blue "R"). Farm › Log › **Rain gauge**
-  records a day's mm from a phone, with **No rain (0 mm)**, through the
+  records the mm read that morning for the day before (the rain to 9 am,
+  as official records do), with **No rain (0 mm)**, through the
   device's queue, so it works with no signal and is kept once. Readings can
   be changed and backdated, with who and when kept; bookkeepers remove one
   entered by mistake (kept). Rainfall shows this month, this season and the
