@@ -21298,3 +21298,34 @@ and `tests/integration/rainfall.test.ts`.
   totals (RF5-RF6), or the day readings for a date range. Analytics has
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
   sum to 99.0 mm over 6 readings for Cowshed.
+
+## Farming: farm team tasks (FT1-FT7; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
+
+Records only: nothing posts to the books. Decisions 1457-1461. Tested in
+`tests/unit/farm-tasks.test.ts` and `tests/integration/farm-tasks.test.ts`.
+
+- **FT1 Who a task can be for.** Home farm and Runoff; Tama is farm staff
+  on Home farm, Mere on Runoff, Rangi a viewer. A Home farm task can be for
+  Aroha (the owner) or Tama, not Mere (not on the farm) or Rangi (can't
+  tick tasks off). A paddock from Runoff, or a repeat "daily", is refused.
+  Tama adds "Check the trough", from Mon 2 Nov 2026, every week, for Tama,
+  paddock 12, pinned on the map. Rangi can't add tasks; Mere can't see
+  Home farm's.
+- **FT2 Cancelled.** "Spray thistles" cancelled is kept under Cancelled,
+  out of To do, and can't be marked done until it's opened again.
+- **FT3 A one-off** is due on its day until done, then it's under Done.
+- **FT4 Done.** On Thu 5 Nov, "Check the trough" is overdue (due 2 Nov).
+  Tama marks it done for 2 Nov: it's due Mon 9 Nov ("this week"). Sent
+  again (a phone's queue), nothing more is kept. Done "for 16 Nov" is
+  refused: "This task is now due 2026-11-09". A weekly task done late for
+  23 Nov is next due 30 Nov (9 and 16 Nov aren't owed). A monthly task
+  from 31 Jan is due 28 Feb, then 31 Mar.
+- **FT5 Undo.** Undoing the 2 Nov Done makes it due 2 Nov again; the Done
+  is kept with who undid it.
+- **FT6 Calendar.** From 5 to 30 Nov: "Move the bull" (Runoff, due 1 Nov,
+  not done) on 5 Nov marked overdue; "Check the trough" on 9, 16, 23 and
+  30 Nov. Tama, on Home farm only, sees only "Check the trough".
+- **FT7 Reminders.** Mere's Android reminders include "Task: Move the
+  bull" (told about today, as it's overdue), opening Tasks on Runoff;
+  Tama's include "Task: Check the trough". Tasks for nobody in particular
+  remind nobody.
