@@ -3335,6 +3335,16 @@ that something happened.
   not yet tried against the live service; made-up demo pictures stand in
   for tests and the demo farm.
 
+- **Satellite vegetation: setup and the map** (#612, decision 1539): Farm ›
+  Map › Satellite vegetation walks owners and admins through it one step a
+  screen (the free Copernicus account, the OAuth client, Test connection,
+  a farm and its boundaries, Test one farm with a preview, the budget,
+  turning it on), saving progress. The farm map gets Aerial / Vegetation /
+  Change, the capture date and other dates, a fixed legend with missing
+  coverage striped grey, the greenness note and the Copernicus
+  attribution; a tapped paddock shows its numbers and trend. The help is in
+  docs/SATELLITE-VEGETATION.md.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

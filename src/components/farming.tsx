@@ -167,7 +167,10 @@ export function PaddockMap({
   overlays = [],
   people = [],
   offerImagery = false,
+  raster = null,
 }: {
+  /** A dated picture laid over the aerial photo and under the outlines (satellite vegetation, decision 1532): a PNG on the map's own Web Mercator grid, so it's placed by its corners. */
+  raster?: { href: string; bounds: [number, number, number, number] } | null;
   /** Farm members sharing their location (#498), drawn over everything else. */
   people?: MapPersonMarker[];
   /** No key is set: say "Add aerial photos (free, 1 minute)" under the outlines (decision 1060). */
@@ -280,6 +283,13 @@ export function PaddockMap({
                   onError={() => setFailed((was) => ({ key: viewKey, count: (was.key === viewKey ? was.count : 0) + 1 }))}
                 />
               ))
+            : null}
+          {raster
+            ? (() => {
+                const [left, top] = view.project([raster.bounds[0], raster.bounds[3]]);
+                const [right, bottom] = view.project([raster.bounds[2], raster.bounds[1]]);
+                return <image href={raster.href} x={left} y={top} width={right - left} height={bottom - top} preserveAspectRatio="none" style={{ imageRendering: "pixelated", pointerEvents: "none" }} />;
+              })()
             : null}
           {shaped.map((paddock) => {
             const rings = outlines(paddock.geometry!);

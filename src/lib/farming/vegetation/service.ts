@@ -311,6 +311,33 @@ export async function setFarmVegetation(tx: OrgTx, farmIdInput: unknown, input: 
   return farmSetup(tx, farm.id);
 }
 
+export type SetupFarm = FarmSetup & { farmName: string; paddocks: number; withBoundary: number; mappedHa: string; smallPaddocks: string[] };
+
+/** Every active farm with its satellite setup, for the setup steps (owners and admins see every farm). */
+export async function listVegetationFarms(tx: OrgTx): Promise<SetupFarm[]> {
+  await requireFarming(tx);
+  const visible = await visibleFarmIds(tx);
+  const farms = await tx.query<{ id: string; name: string; paddocks: number }>(
+    "select f.id::text, f.name, (select count(*)::int from paddocks p where p.farm_id = f.id and p.status = 'active') as paddocks from farms f where f.is_active and ($1::bigint[] is null or f.id = any($1::bigint[])) order by lower(f.name), f.id",
+    [visible],
+  );
+  const result: SetupFarm[] = [];
+  for (const farm of farms.rows) {
+    const boundaries = await currentBoundaries(tx, farm.id);
+    const total = boundaries.reduce((sum, boundary) => sum + Number(boundary.mappedHa), 0);
+    result.push({
+      ...(await farmSetup(tx, farm.id)),
+      farmName: farm.name,
+      paddocks: farm.paddocks,
+      withBoundary: boundaries.length,
+      mappedHa: total.toFixed(2),
+      // Under 0.6 ha is about 60 pixels: likely flagged small (decision 1530).
+      smallPaddocks: boundaries.filter((boundary) => Number(boundary.mappedHa) < 0.6).map((boundary) => boundary.name),
+    });
+  }
+  return result;
+}
+
 // Jobs ------------------------------------------------------------------------------------------
 
 /** Adds a job unless one with the same key exists (decision 1534): asking twice is one job. True when added. */

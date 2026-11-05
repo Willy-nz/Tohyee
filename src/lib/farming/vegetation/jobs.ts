@@ -483,7 +483,7 @@ export function kickVegetation(organisation: OrganisationRecord): void {
  * preview comes back for the screen. Counted in the month's usage like any
  * fetch. Only owners and admins can run it, and only once a minute.
  */
-export async function testOneFarm(organisation: OrganisationRecord, actor: Actor, farmIdInput: unknown, options: { providerFactory?: ProviderFactory; now?: Date; connection?: { provider: ProviderId; clientId: string; clientSecret: string } } = {}): Promise<{ result: PilotResult; preview: string | null }> {
+export async function testOneFarm(organisation: OrganisationRecord, actor: Actor, farmIdInput: unknown, options: { providerFactory?: ProviderFactory; now?: Date; connection?: { provider: ProviderId; clientId: string; clientSecret: string } } = {}): Promise<{ result: PilotResult; preview: string | null; bounds: [number, number, number, number] }> {
   const now = options.now ?? new Date();
   const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const farm = await requireVegetationFarm(tx, farmIdInput);
@@ -560,5 +560,5 @@ export async function testOneFarm(organisation: OrganisationRecord, actor: Actor
     await tx.query("update vegetation_jobs set status = $2, finished_at = now(), units_spent = $3, requests = $4, bytes_fetched = $5, last_error = $6 where job_key = $1", [prepared.jobKey, result.error ? "failed" : "done", units, requests, result.bytes, result.error]);
     await saveLastTest(tx, result);
   });
-  return { result, preview };
+  return { result, preview, bounds: gridLonLatBox(prepared.grid) };
 }

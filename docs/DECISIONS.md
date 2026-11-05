@@ -13572,3 +13572,29 @@ reach it). See docs/SATELLITE-VEGETATION.md.
       observation. Tohyee's own measurements of a farm's cost weren't made
       here (no access to the service), so none are given: this is how
       they're made.
+
+### Satellite vegetation: guided setup and the map (#612; 5 Nov 2026; decision 1539)
+
+Jess asked (5 Nov 2026): "make it easy to guide me through setting up that
+pasture thing".
+
+1539. **Setup, one thing a screen.** Farm › Map › Satellite vegetation, for
+      owners and admins: what you'll need (about 10 minutes), what it shows,
+      making the free Copernicus account, making the OAuth client (numbered
+      steps with the page and button, and a note that the site's buttons
+      may be named slightly differently), pasting the client ID and secret
+      with a "Where do I find this?" (i) on each, **Test connection**
+      (wrong ID or secret, account not activated, allowance used up,
+      unreachable, each in plain words) before Save, choosing a farm and
+      confirming its boundaries on a map, **Test one farm** with a preview,
+      the budget, turning it on, and "Done: here's what happens next". The
+      step is remembered on the device and never runs ahead of what the
+      server says is done, so someone can stop and come back. The test
+      makes one tiny request (4 × 4 pixels) so a used-up allowance or an
+      account that can't process shows now. On the map, Aerial /
+      Vegetation / Change sit with the layer buttons, with the capture
+      date, the date picker, the fixed legend, the note and the
+      attribution; tapping a paddock shows its greenness, clear share,
+      change and a trend on a fixed 0-1 scale (clear dates joined, partly
+      hidden ones hollow, no clear view as grey ticks), with a table. Other
+      members see the farms' state and the map once it's on.

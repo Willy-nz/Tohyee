@@ -24,6 +24,94 @@ reading and Tohyee never turns it into kg DM/ha.
 - The aerial photos (LINZ) stay for detail. The satellite layer is a dated
   overlay on top.
 
+## Setting it up (about 10 minutes)
+
+Farm › Map › **Satellite vegetation** (owners and admins). One thing a
+screen; your progress is saved, so you can stop at any step and come back.
+
+**What you'll need:** an email address you can open now, a second tab for
+the Copernicus website, your paddock boundaries in Tohyee, and about 10
+minutes.
+
+> The buttons on the Copernicus site may be named slightly differently:
+> these steps were written from the Copernicus documentation and couldn't
+> be checked against the live site.
+
+### 1. Make a free Copernicus account
+
+1. Open **dataspace.copernicus.eu**.
+2. At the top right, choose **Login**. On the sign-in page, choose
+   **Register**.
+3. Fill in your name, email, a password and your country. If it asks what
+   you'll use it for, choose something like *Agriculture*. Tick the terms
+   and choose **Register**.
+4. Open the email from Copernicus (look in junk mail too) and choose the
+   link to **confirm your email address**. The account doesn't work until
+   you do.
+5. Sign in once at dataspace.copernicus.eu to check it works.
+
+### 2. Make the key Tohyee uses (an OAuth client)
+
+1. Open the **Sentinel Hub dashboard**
+   (shapps.dataspace.copernicus.eu/dashboard) and sign in with the same
+   account.
+2. In the menu on the left, choose **User settings**.
+3. Under **OAuth clients**, choose **Create** (it may be a **+** button).
+4. Name it *Tohyee*. Leave it to never expire if you can, otherwise choose
+   the longest. Choose **Create**.
+5. **Copy the client ID and client secret now.** The secret is shown only
+   once.
+
+### 3. Paste it in and test it
+
+Paste the **Client ID** and **Client secret** into Tohyee and press **Test
+connection**. Nothing is saved until the test works. Then press **Save**.
+
+| What the test says | What to do |
+| --- | --- |
+| Wrong client ID or secret | Check you copied the whole secret. If it's lost, make a new client (step 2) and use that. |
+| The account isn't activated yet | Confirm your email (step 1.4), wait a few minutes, test again. |
+| This month's free allowance is used up | It starts again next month. Nothing is charged. |
+| Copernicus couldn't be reached | Check the server has internet access, then try again. |
+
+The secret is kept encrypted on your server. Tohyee never shows it again,
+and it isn't sent to your browser, the logs or the AI.
+
+### 4. Choose a farm and check its paddocks
+
+Pick one farm whose boundaries you trust. Tohyee shows its paddocks on a
+map. The box around them (plus 50 m) is all that's sent to Copernicus: no
+names, records, stock or money. Paddocks without a boundary get no numbers;
+paddocks under 0.6 ha will be flagged small. Press **These boundaries are
+right**.
+
+### 5. Test one farm
+
+Press **Test one farm**. Tohyee fetches the clearest picture of the last 30
+days and shows a preview on the map, with what it downloaded, how long it
+took, the server's memory and the processing units it used.
+
+### 6. Set a budget
+
+Processing units and requests a month, storage on the server, and how many
+days to keep pictures. Tohyee stops at these limits and says so; it never
+goes over and never switches to a paid service.
+
+### 7. Turn it on
+
+Press **Turn on satellite vegetation**.
+
+### Done: what happens next
+
+- The first pictures arrive within a day if it isn't cloudy. The last few
+  weeks come first, a few at a time, so the books stay quick.
+- After that it checks once a day. A new clear picture comes every few
+  days, less often in cloudy weather.
+- On the farm map, choose **Vegetation** (greenness) or **Change** (since
+  the date before). Tap a paddock for its numbers and trend.
+- If it pauses (budget used up, or the account stops working), the map and
+  the Satellite vegetation page say why and what to do.
+
 ## What it costs
 
 The pictures are free (Copernicus Sentinel data licence). Fetching them uses
