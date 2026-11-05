@@ -3345,6 +3345,16 @@ that something happened.
   attribution; a tapped paddock shows its numbers and trend. The help is in
   docs/SATELLITE-VEGETATION.md.
 
+- **Satellite vegetation: farms, offline, Analytics and the AI** (#612,
+  decisions 1538 and 1540): an overview of every farm you can see; the
+  latest clear picture and up to 3 earlier ones (2 MB at most) and each
+  paddock's trend in the offline map pack; `tohyee_farm_paddock_greenness`
+  in Analytics (members who see every farm); and a read-only
+  `paddock_greenness` AI tool with acquisition time, clear share and
+  uncertainty, which never converts greenness to kg DM/ha. Not built:
+  Wi-Fi-only downloads (browsers can't reliably tell) and pasture cover
+  estimates (#612 Phase 3, a separate piece of work).
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed

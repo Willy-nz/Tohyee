@@ -13598,3 +13598,34 @@ pasture thing".
       change and a trend on a fixed 0-1 scale (clear dates joined, partly
       hidden ones hollow, no clear view as grey ticks), with a table. Other
       members see the farms' state and the map once it's on.
+
+### Satellite vegetation: farms, offline, Analytics and the AI (#612; 5 Nov 2026; decisions 1538 and 1540)
+
+1538. **Scoped like every farm record.** Every satellite read, picture,
+      export, trend, overview, offline pack, Analytics table and AI answer
+      goes through the farm access rules (decision 744): a farm a person
+      can't see is "not found", the same as one that doesn't exist, and
+      another organisation's are never reached (one database each).
+      Satellite vegetation › Your farms lists each farm the person can see
+      with its state, latest clear date and how many paddocks were clear
+      enough. The CSV export carries "Greenness (NDVI), not feed
+      available. Blank means no clear view, not zero." and the
+      attribution. Analytics gets `tohyee_farm_paddock_greenness` (a row a
+      paddock a date, with clear pixels, `valid_coverage_pct`, quality and
+      boundary), only for members who see every farm, like the other
+      `tohyee_farm_` tables. The AI's read-only `paddock_greenness` tool
+      gives acquisition time, clear share, quality, flags and an
+      uncertainty note per paddock; its description says NDVI must not be
+      converted to kg DM/ha, pasture cover or feed available. It never sees
+      the connection or its secret.
+1540. **Offline: small and dated.** A farm's offline map keeps the latest
+      clear picture and up to 3 earlier ones, at most 2 MB of them, with
+      their capture dates, quality, legend facts and attribution (the
+      pictures travel inside the answers), and each paddock's trend. A
+      date that doesn't fit is left out and named. Shown from the device,
+      the map says "Kept on this device since …: there may be newer
+      satellite pictures". Offline access follows the pack's own rules
+      (14-day offline session, sign-out clears it); a device that's offline
+      can't hear about a revoked access until it reconnects. Wi-Fi-only
+      downloads aren't built: browsers on iPhones can't tell Wi-Fi from
+      mobile data, so the 2 MB cap is the control.

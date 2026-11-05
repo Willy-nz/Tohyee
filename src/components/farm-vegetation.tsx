@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { InfoTip } from "@/components/info-tip";
 import { useApiData } from "@/components/hooks";
 import { PaddockMap } from "@/components/farming";
 import { Badge, Button, Card, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { api, errorMessage } from "@/lib/client/api";
+import { api, errorMessage, offlineServedSnapshot, subscribeOfflineServed } from "@/lib/client/api";
 import type { Paddock } from "@/lib/farming/paddocks";
 import type { ConnectionProblem } from "@/lib/farming/vegetation/provider";
 import {
@@ -145,8 +145,16 @@ export function VegetationMapNotes({ organisationId, answer, picture, onScene, c
   const scene = vegetation.scene;
   const words = STATE_WORDS[vegetation.state];
   const earlier = scene?.changeFromSceneId ? vegetation.scenes.find((entry) => entry.id === scene.changeFromSceneId) : null;
+  // Kept on this device (decision 1540): say so, and when, so it isn't taken for the newest.
+  const served = useSyncExternalStore(subscribeOfflineServed, offlineServedSnapshot, () => new Map<string, string>());
+  const savedAt = served.get(`/api/farming/farms/${vegetation.farmId}/vegetation`) ?? null;
   return (
     <div className={styles.notes}>
+      {savedAt ? (
+        <Notice tone="warning">
+          <strong>Kept on this device</strong> since {nzDateTime(savedAt)}. There may be newer satellite pictures. Only the latest clear date and a few earlier ones are kept here.
+        </Notice>
+      ) : null}
       {vegetation.state !== "ready" ? (
         <Notice tone={words.tone === "success" ? "info" : words.tone}>
           <strong>{words.title}.</strong> {vegetation.state === "quota_paused" && vegetation.pausedReason ? PAUSE_WORDS[vegetation.pausedReason] : vegetation.state === "reconnect" && vegetation.connectionError ? `${words.body} (${vegetation.connectionError})` : words.body}{" "}
