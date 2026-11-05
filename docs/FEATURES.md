@@ -3278,7 +3278,8 @@ that something happened.
 - **Rainfall** (RF1-RF8, decisions 1451-1456, tenant migration 0246):
   Farm › More › **Rainfall**. A farm has rain gauges (named, with a note,
   optionally placed on the map as a blue "R"). Farm › Log › **Rain gauge**
-  records a day's mm from a phone, with **No rain (0 mm)**, through the
+  records the mm read that morning for the day before (the rain to 9 am,
+  as official records do), with **No rain (0 mm)**, through the
   device's queue, so it works with no signal and is kept once. Readings can
   be changed and backdated, with who and when kept; bookkeepers remove one
   entered by mistake (kept). Rainfall shows this month, this season and the
@@ -3296,7 +3297,7 @@ that something happened.
   moves to its next date. Today has a Tasks card with Done (works with no
   signal), the farm calendar shows the next 30 days, and the person it's
   for gets reminders in the Android app with their safety actions.
-  Cancelled tasks are kept.
+  Only bookkeepers and up cancel a task; cancelled tasks are kept.
 
 - **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
   NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
@@ -3310,6 +3311,15 @@ that something happened.
   Mob names typed on grazings can be made mob records, and mobs can be
   imported from CSV or Excel. Moves, weights, deaths, births and counts
   work offline through the device's queue.
+
+- **Farm map assets and measuring** (MA1-MA6, decisions 1462-1465, tenant
+  migration 0248): on Farm › Map, **Farm assets** puts troughs, gates,
+  water points, sheds, bores, tanks, yards and culverts on the map as
+  points, and fences, pipes, races and drains as lines (with their length),
+  each with a name and note; removed ones are kept. **Measure** gives a
+  tapped distance (m, km) or a drawn area (m², ha), saving nothing. Layer
+  buttons turn hazards, effluent, assets, rain gauges, tasks and people on
+  or off, remembered on the device.
 
 - **Treatments and withholding** (decisions 1431-1438, TRT1-TRT8, tenant
   migration 0234; common NZ practice, not yet reviewed): treat a mob from

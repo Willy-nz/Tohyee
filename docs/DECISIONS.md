@@ -13137,14 +13137,22 @@ reviewed; no other farm or accounting app was copied.
       Farm staff and up add and change gauges. A gauge isn't deleted: it's
       retired, keeps its readings and history, and takes no new readings
       until it's brought back.
-1452. **One reading a gauge a day, from the Log.** Farm › Log › **Rain
-      gauge** asks which gauge, which day (today, yesterday or another
-      past day) and the mm, with a **No rain (0 mm)** button. It goes
+1452. **One reading a gauge a day, from the Log, for the day before.**
+      A gauge read at 9 am holds the rain to 9 am, and the reading is
+      recorded for the day before, as official 9 am records are (Jess,
+      5 Nov 2026: "Day before"). Farm › Log › **Rain gauge** asks which
+      gauge, which morning it was read (this morning, yesterday morning or
+      another) and the mm, with a **No rain (0 mm)** button, and says
+      "Rain to 9 am today, recorded for Wednesday 4 Nov". Readings are kept
+      and shown by that rain day, so the latest there can be is yesterday.
+      Changing or adding a past reading under Rainfall asks for the rain day
+      itself. An imported file's dates are used as they are (they should be
+      rain days, as official records are). It goes
       through the device's one queue (decision 1008) with its own
       operation id, so it works with no signal and is never kept twice;
       the farm's gauges are in the offline farm pack's map section. A day
       already read for that gauge is refused with the reading it has
-      ("change that reading instead"), and so is a future day. Millimetres
+      ("change that reading instead"), and so is today or a later day. Millimetres
       are to one place, 0 to 2,000, kept as decimals (never floats).
 1453. **A day with no reading is unknown, not dry.** Totals add the days
       with a reading and always say "N of M days read", so a gap shows.
@@ -13185,9 +13193,11 @@ second reminder system.
       2 weeks, 4 weeks or month, the farm calendar's repeats), a paddock, a
       pin on the map and a note. "Who it's for" is someone who can record
       farm work and see that farm (farm staff, bookkeepers and up); viewers
-      can't tick a task off, so they aren't offered. Farm staff and up add,
-      change and cancel tasks on their farms; viewers see them. A cancelled
-      task is kept (Cancelled) and can be opened again; nothing is deleted.
+      can't tick a task off, so they aren't offered. Farm staff and up add
+      and change tasks on their farms and mark them done or undone; viewers
+      see them. Only bookkeepers and up cancel a task, or open a cancelled
+      one again: farm staff can't, even for a task they added (Jess, 5 Nov
+      2026). A cancelled task is kept (Cancelled); nothing is deleted.
 1458. **Pins show on the Map.** An open task with a pin is an amber "T" on
       the Map tab; tapping it opens Tasks.
 1459. **Reminders are the person's own, in the Android app.** The phone's
@@ -13392,6 +13402,35 @@ a hiring site itself is #593, for later.
 1480. **Lengths are whole days.** 1 week, 2 weeks, 1 month or 3 months from
       the start date, ending at the end of the day before the same date (10
       Nov for 1 month is until 9 Dec), or a chosen end date.
+
+### Farm map assets and measuring (5 Nov 2026; decisions 1462-1465; MA1-MA6)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), map assets and measuring among them. Claude's
+calls, not yet reviewed. Built on the farm map and geometry.ts.
+
+1462. **Farm assets are points or lines on a farm's map.** Points: trough,
+      gate, water point, shed, bore, tank, yards, culvert or bridge, other.
+      Lines: fence, water pipe, race or track, drain, other (2 to 500
+      points; a point repeated straight after itself is dropped). Each has
+      a name and an optional note, and a line shows its length. They're
+      purple, with a letter (Tr, G, W, F, P…) so they're told apart without
+      colour. Farm staff and up add, change and remove them on their farms;
+      viewers see them. A point stays a point and a line stays a line.
+      Removing keeps the asset, marked removed with who and when. They're
+      in the offline farm pack's map section.
+1463. **Measuring saves nothing.** Map › Measure: Distance adds up the legs
+      tapped (and lists each); Area closes the shape tapped and gives its
+      area and the distance round it. Undo last point and Clear.
+1464. **Units.** Distances and areas are geodesic on WGS84 (GeographicLib),
+      as paddock areas are. Under 1 km a distance is in whole metres, then
+      km to two places; under a hectare an area is in m² with the hectares
+      beside it, then hectares to two places.
+1465. **Layers.** The Map tab has buttons to turn each kind of mark on or
+      off: hazards, effluent, farm assets, rain gauges, tasks and people
+      sharing their location, for the kinds the farm has. The choice is
+      remembered on that device only. Paddock colours aren't a layer: the
+      "Colour paddocks by" switch already chooses them.
 
 
 ### Farm treatments, withholding and product stock (5 Nov 2026; decisions 1431-1438)

@@ -89,7 +89,9 @@ describeWithDatabase("rainfall", () => {
     expect((await call(owner, readingsRoute.POST as Handler, `/api/farming/farms/${w.runoff}/rainfall`, { farmId: w.runoff }, "POST", { gaugeId: w.gauge, readOn: "2026-11-02", mm: "1" })).status).toBe(409);
     const run = as(owner);
     await expect(run((tx) => addRainReading(tx, { gaugeId: w.gauge, readOn: "2026-11-03", mm: "4" }))).rejects.toThrow("Cowshed already has 12.5 mm on 2026-11-03");
-    await expect(run((tx) => addRainReading(tx, { gaugeId: w.gauge, readOn: "2026-11-06", mm: "4" }, { today: "2026-11-05" }))).rejects.toThrow("hasn't happened yet");
+    // A rain day is the day before the 9 am reading (Jess, 5 Nov 2026): on 5 Nov the latest is 4 Nov.
+    await expect(run((tx) => addRainReading(tx, { gaugeId: w.gauge, readOn: "2026-11-05", mm: "4" }, { today: "2026-11-05" }))).rejects.toThrow("the latest is 2026-11-04. Today's rain is read tomorrow morning.");
+    await expect(run((tx) => addRainReading(tx, { gaugeId: w.gauge, readOn: "2026-11-06", mm: "4" }, { today: "2026-11-05" }))).rejects.toThrow("the latest is 2026-11-04");
     w.reading = (first.body.reading as { id: string }).id;
   });
 

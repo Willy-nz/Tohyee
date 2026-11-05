@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparedText, monthTotals, mmText, parseMm, rainTotals, seasonOf, seasonTotals, spanTotal, tryMm, yearEarlier } from "@/lib/farming/rainfall-rules";
+import { comparedText, latestRainDay, monthTotals, mmText, parseMm, rainDayFor, rainTotals, readDayFor, seasonOf, seasonTotals, spanTotal, tryMm, yearEarlier } from "@/lib/farming/rainfall-rules";
 
 /** Rainfall's rules (RF2, RF5, RF6; decisions 1451-1456, not yet reviewed). */
 describe("rainfall rules", () => {
@@ -65,6 +65,14 @@ describe("rainfall rules", () => {
     expect(seasons.map((season) => season.label)).toEqual(["Summer 2025-26", "Autumn 2026", "Winter 2026", "Spring 2026"]);
     expect([seasons[0].current.mm, seasons[0].lastYear.mm, seasons[0].lastYear.from]).toEqual(["22.0", "11.0", "2024-12-01"]);
     expect(comparedText(seasons[0])).toBe("11 mm more than last year");
+  });
+
+  it("RF2 a reading is for the rain day: the day before the 9 am reading", () => {
+    expect(rainDayFor("2026-11-05")).toBe("2026-11-04");
+    expect(rainDayFor("2026-03-01")).toBe("2026-02-28");
+    expect(rainDayFor("2027-01-01")).toBe("2026-12-31");
+    expect(readDayFor("2026-11-04")).toBe("2026-11-05");
+    expect(latestRainDay("2026-11-05")).toBe("2026-11-04");
   });
 
   it("RF5 a year earlier from 29 February is 28 February", () => {

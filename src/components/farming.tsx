@@ -82,10 +82,12 @@ export function LinzAttribution() {
 export type MapOverlay = {
   id: string;
   label: string;
-  /** "effluent" (blue) is an effluent block, "buffer" (light red) a buffer round a no-apply zone (#487). */
-  tone: "danger" | "warning" | "effluent" | "buffer";
+  /** "effluent" (blue) is an effluent block, "buffer" (light red) a buffer round a no-apply zone (#487), "asset" (purple) a farm asset (decision 1462). */
+  tone: "danger" | "warning" | "effluent" | "buffer" | "asset";
   point?: Position | null;
   ring?: Position[] | null;
+  /** An open line, e.g. a fence or water pipe (decision 1462), with its letter at its middle. */
+  line?: Position[] | null;
   /** How a point shows: a warning triangle (the default) or a dot with a short label, e.g. an irrigator's place (#487). */
   marker?: "warning" | "dot";
   short?: string;
@@ -121,6 +123,7 @@ const OVERLAY_COLOURS = {
   warning: { fill: "rgba(230, 150, 0, 0.25)", stroke: "#b86e00" },
   effluent: { fill: "rgba(30, 95, 174, 0.22)", stroke: "#1d5fae" },
   buffer: { fill: "rgba(200, 30, 30, 0.10)", stroke: "#c81e1e" },
+  asset: { fill: "rgba(105, 77, 175, 0.2)", stroke: "#694daf" },
 } as const;
 
 /** New Zealand, for a farm with no shapes yet. */
@@ -157,6 +160,7 @@ export function PaddockMap({
   onSelect,
   imageryKey,
   drawing,
+  drawingShape = "area",
   onMapTap,
   fills,
   label = "Map of the paddocks",
@@ -177,6 +181,8 @@ export function PaddockMap({
   onSelect?: (id: string) => void;
   imageryKey?: string | null;
   drawing?: Position[] | null;
+  /** How `drawing` is drawn: a shape's corners (the default), an open line (measuring a distance, a fence), or one point. */
+  drawingShape?: "area" | "line" | "point";
   onMapTap?: (position: Position) => void;
   overlays?: MapOverlay[];
 }) {
@@ -202,7 +208,13 @@ export function PaddockMap({
   const labelSize = Math.max(14, Math.min(36, (13 * MAP_WIDTH) / Math.max(shownWidth, 1)));
   const shaped = paddocks.filter((paddock) => paddock.geometry);
   const overlayShapes: PaddockGeometry[] = overlays.flatMap((overlay) =>
-    overlay.ring && overlay.ring.length > 3 ? [{ type: "Polygon" as const, coordinates: [overlay.ring] }] : overlay.point ? [{ type: "Polygon" as const, coordinates: [[overlay.point, overlay.point, overlay.point, overlay.point]] }] : [],
+    overlay.ring && overlay.ring.length > 3
+      ? [{ type: "Polygon" as const, coordinates: [overlay.ring] }]
+      : overlay.line && overlay.line.length > 1
+        ? [{ type: "Polygon" as const, coordinates: [[...overlay.line, overlay.line[0]]] }]
+        : overlay.point
+          ? [{ type: "Polygon" as const, coordinates: [[overlay.point, overlay.point, overlay.point, overlay.point]] }]
+          : [],
   );
   const box = bounds([...shaped.map((paddock) => paddock.geometry!), ...overlayShapes]);
   const imagery = Boolean(imageryKey);
@@ -314,6 +326,26 @@ export function PaddockMap({
             return (
               <g key={overlay.id} onClick={selectable ? () => (dragged.current ? undefined : overlay.onSelect!()) : undefined} style={{ cursor: selectable ? "pointer" : undefined }}>
                 <title>{overlay.label}</title>
+                {overlay.line && overlay.line.length > 1 ? (
+                  <>
+                    {/* A wide clear line under it, so a fence is easy to tap. */}
+                    <polyline points={overlay.line.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join(" ")} fill="none" stroke="transparent" strokeWidth={16} />
+                    <polyline points={overlay.line.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join(" ")} fill="none" stroke={colours.stroke} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                    {overlay.short
+                      ? (() => {
+                          const [x, y] = view.project(overlay.line[Math.floor((overlay.line.length - 1) / 2)]);
+                          return (
+                            <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}>
+                              <circle r={9} fill={colours.stroke} stroke="#ffffff" strokeWidth={2} />
+                              <text y={3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#ffffff" style={{ pointerEvents: "none" }}>
+                                {overlay.short.slice(0, 2)}
+                              </text>
+                            </g>
+                          );
+                        })()
+                      : null}
+                  </>
+                ) : null}
                 {overlay.ring && overlay.ring.length > 3 ? (
                   <path d={`M${overlay.ring.map((point) => view.project(point).map((value) => value.toFixed(1)).join(",")).join("L")}Z`} fill={colours.fill} stroke={colours.stroke} strokeWidth={overlay.tone === "buffer" ? 1.5 : 2.5} strokeDasharray={overlay.tone === "effluent" ? undefined : "8 4"} />
                 ) : null}
@@ -370,11 +402,11 @@ export function PaddockMap({
           })}
           {drawing && drawing.length > 0 ? (
             <g style={{ pointerEvents: "none" }}>
-              {drawing.length > 2 ? (
+              {drawing.length > 2 && drawingShape === "area" ? (
                 <polygon points={drawing.map((point) => view.project(point).join(",")).join(" ")} fill="rgba(255, 140, 0, 0.25)" stroke="none" />
               ) : null}
-              <polyline points={drawing.map((point) => view.project(point).join(",")).join(" ")} fill="none" stroke="#ff8c00" strokeWidth={3} />
-              {drawing.length > 2 ? (
+              {drawingShape !== "point" ? <polyline points={drawing.map((point) => view.project(point).join(",")).join(" ")} fill="none" stroke="#ff8c00" strokeWidth={3} /> : null}
+              {drawing.length > 2 && drawingShape === "area" ? (
                 <line
                   x1={view.project(drawing[drawing.length - 1])[0]}
                   y1={view.project(drawing[drawing.length - 1])[1]}

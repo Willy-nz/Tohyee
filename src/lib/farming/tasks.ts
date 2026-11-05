@@ -2,7 +2,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { canSeeFarm, requireFarmAccess, visibleFarmIds } from "@/lib/farming/access";
 import { REPEATS, type Repeat } from "@/lib/farming/calendar-shared";
 import type { Position } from "@/lib/farming/geometry";
@@ -18,7 +18,7 @@ import { optionalString, requireId, requireOneOf, requireString } from "@/lib/va
  * and undone keep who and when. Reminders are the Android app's (the
  * assigned person's own, like safety actions), and the tasks show on
  * Today and the farm calendar. Farm staff and up add, change and tick
- * tasks on their farms; viewers see them.
+ * tasks on their farms; bookkeepers and up cancel them; viewers see them.
  */
 
 export type FarmTeamMember = { userId: string; name: string; role: string };
@@ -205,6 +205,10 @@ export async function updateTask(tx: OrgTx, idInput: unknown, input: Record<stri
   const today = options.today ?? todayIsoDate();
   const task = await requireTask(tx, idInput, today);
   const status = input.status === undefined ? task.status : requireOneOf(input.status, "Status", ["open", "cancelled"] as const);
+  // Cancelling, and opening a cancelled task again, is for bookkeepers and up (Jess, 5 Nov 2026; decision 1457). Farm staff tick tasks done and undone.
+  if (status !== task.status && !(tx.actor.role && roleAtLeast(tx.actor.role, "bookkeeper"))) {
+    throw new ForbiddenError(status === "cancelled" ? "Cancelling a task needs the bookkeeper role or higher. Mark it done, or ask a bookkeeper or the owner." : "Opening a cancelled task again needs the bookkeeper role or higher.");
+  }
   const fields = await parseFields(tx, task.farmId, input, task);
   await tx.query(
     `update farm_tasks set title = $2, note = $3, assigned_to_user_id = $4, due_on = $5, repeat = $6, paddock_id = $7, latitude = $8, longitude = $9, status = $10, updated_by_email = $11, updated_at = now() where id = $1`,
