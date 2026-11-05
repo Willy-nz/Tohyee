@@ -888,6 +888,7 @@ export function AppShell({
   organisations,
   serverSettingsUrl = null,
   warnings = [],
+  accessNotes = [],
   children,
 }: {
   /** Which app's top bar and menus to show. */
@@ -898,10 +899,12 @@ export function AppShell({
   serverSettingsUrl?: string | null;
   /** Server problems shown on every page (only passed for server admins). */
   warnings?: string[];
+  /** Organisations the person can't open now because of their access dates (decision 1468), and why. */
+  accessNotes?: string[];
   children: ReactNode;
 }) {
   return (
-    <WorkspaceProvider user={user} organisations={organisations} serverSettingsUrl={serverSettingsUrl}>
+    <WorkspaceProvider user={user} organisations={organisations} serverSettingsUrl={serverSettingsUrl} accessNotes={accessNotes}>
       <Shell app={app} warnings={warnings}>
         {children}
       </Shell>

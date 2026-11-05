@@ -13211,3 +13211,215 @@ second reminder system.
       date after the one done: dates missed before it aren't owed. Undo
       takes back the latest Done, keeping who undid it and when. Every
       Done and Undo is listed on the task.
+### Time-limited access for members (5 Nov 2026; decisions 1466-1474)
+
+Jess asked for a way to give someone access "for a contracted amount of
+time" (for example a bookkeeper hired through a hiring site). There's no
+answer from Jess on the details, and Xero has no time-limited access, so
+these follow what NetSuite does with a user's access end date, kept to
+Tohyee's own roles. None of this is accounting behaviour, so there's no
+worked example.
+
+1466. **Access can have a start and an end.** When inviting someone, or
+      later from People and roles, an owner or admin can set "Access from"
+      and "Access until", each a date with an optional time. Empty means no
+      limit. Times are in the server's business time zone (Pacific/Auckland
+      unless `TOHYEE_TIME_ZONE` says otherwise): Tohyee has no
+      per-organisation time zone. "Until 12 Dec" with no time lasts the whole
+      of 12 Dec. They're stored on the membership (`organisation_members.
+      access_starts_at` and `access_ends_at`, core migration 0024) as
+      instants; the end is the first moment they can't get in.
+1467. **The check is in one place: getMembership.** A membership before its
+      start or after its end is treated as no membership by
+      `getMembership` and `listMembershipsForUser`
+      (`src/lib/organisations/registry.ts`, `memberAccessCurrentSql`). Every
+      route (`requireOrganisationRole`, so `withOrganisation` and the CRM,
+      farm and payroll wrappers), the PowerPoint add-in, AI keys, AI app
+      connections (and swapping an OAuth code for one), farm app keys and
+      calendar links already go through it, so all of them are refused at
+      the next request with nothing more to remember. The few places that
+      read `organisation_members` themselves to let someone in (private mail
+      owners, group reports, approvers) use the same SQL. Requests already
+      under way finish.
+1468. **Refusals say why.** A signed-in member gets 403 with "Your access to
+      <organisation> ended on <date>. Ask <owner> to extend it." (or "starts
+      on <date> … if you need it sooner"), naming the first owner with no
+      end date. Their organisation list leaves the organisation out and the
+      pages show the same sentence instead of "no organisation". The MCP
+      endpoint says the same for a real, unrevoked key or AI app token; other
+      key types (farm app keys) get their usual refusal. Only the member
+      gets this, and they already know the organisation.
+1469. **Keys aren't revoked when access ends.** Outside the dates they're
+      refused; if access is extended, the same keys and AI apps work again,
+      as NetSuite's do when an end date is moved. Remove (as before) still
+      revokes them for good. Ended members keep their payroll access record;
+      payroll is refused with everything else.
+1470. **Extend and End now are one click.** +1 week and +1 month count from
+      the current end, or from today when it has already ended; a time of
+      day is kept. "Dates" chooses any start and end. End now ends it at
+      once (and drops a start that hasn't come). Each change is in the
+      server's audit trail with the dates before and after.
+1471. **Reminders 3 days before.** The email job (every 10 minutes) queues an
+      email to the member and to each owner and admin with access now, 3
+      days before the end, through the organisation's own email (Settings ›
+      Email; nothing is queued when it isn't set up, or for the demo farm).
+      One each per end time (`access_emails`, tenant migration 0251), so an
+      Extend brings a new one. The top-bar notices show the same while it's
+      within 3 days: owners and admins see everyone's, linking to People and
+      roles filtered to ending access; the member sees their own.
+1472. **People and roles shows access, and what they did.** Each person
+      shows "Access until 12 Dec", "Ended 12 Dec", "Starts 1 Dec" or "No end
+      date", with a filter (everyone, ending in 3 days, with dates, ended).
+      Ended members stay listed, greyed, until someone presses Remove:
+      nothing is deleted. "What they did" lists one member's own actions in
+      this organisation (its audit trail and the server's audit trail for
+      it), newest first, for owners and admins. It shows what and when, not
+      details; private mail (decision 571) is never shown, and payroll
+      events only to someone with payroll access. Tohyee had no
+      organisation-wide audit log page before this.
+1473. **One owner always keeps lasting access.** An organisation always has
+      an owner whose access has started and has no end. Giving the last such
+      owner an end date (or End now) is refused, as are role changes and
+      removals that would leave none. Only owners change an owner's dates,
+      as with roles.
+1474. **Dates travel with the membership.** Restoring an organisation as a
+      copy, and recovering people from a server backup, keep each
+      membership's dates (backups made before this have none), so an ended
+      member doesn't come back by a restore.
+
+Not built: limiting a member to one area (for example only bank
+reconciliation). Tohyee's existing limits are the role, payroll access
+(PE9-PE13), the farms each member works on (decision 744), camera access and
+dashboards shared with report viewers. A narrower "areas" permission is a
+separate piece of work (proposed in the pull request).
+
+
+
+
+### Farm mobs (5 Nov 2026; decisions 1421-1430)
+
+Built by Claude when Jess asked to compare Tohyee with a mob-based
+livestock and grazing app and add what Tohyee missed. The rules are common
+NZ farm practice and Claude's, not yet reviewed (examples MOB1-MOB10).
+
+1421. **A mob is one IRD class on one farm.** A mob record has a farm, a
+      kind and IRD class (the classes the books already count by), head,
+      and optionally a name and tag colour. With no name its class is its
+      name. A mixed group is split into one mob per class, so every head
+      in a mob is counted in one class. Mobs are closed, never deleted, and
+      what happens to them is kept as append-only mob events.
+1422. **Where a mob is comes from its grazing.** A mob has no paddock
+      field: its open grazing says where it is, so a move closes that
+      grazing (the day out) and opens one in the new paddock (the day in),
+      and grazings, the map's days since grazed and pasture growth keep
+      working unchanged. Several mob records may share a paddock; a mob is
+      in one paddock at a time. A grazing typed with only a mob name keeps
+      the old rule (nothing else in the paddock with it), and a mob can't
+      move into a paddock that has one.
+1423. **Who can do what.** Field work (move, weigh, deaths, births, split,
+      merge, count, and adding a mob already on the farm) is farm work:
+      farm staff and bookkeepers and up. Selling, buying and class changes
+      change what the books count and value, so they need the bookkeeper
+      role, as livestock movements already do.
+1424. **Stock units.** No NZ body publishes one official stock unit table,
+      and Beef + Lamb NZ's survey reports use stock units without printing
+      factors. The defaults are the widely used livestock unit table as
+      published by RuralFind (1 SU = a 55 kg ewe rearing one lamb), one
+      factor per IRD class, with the table row each uses. Where the table
+      has no row for a class (wethers, in-calf dairy heifers, young
+      cashmere and dairy goats, young red stags) the nearest row is used
+      and marked "check". Admins can change any factor; a blank goes back
+      to the default. Stocking rate is stock units and head per effective
+      hectare (mapped where none is typed), for each paddock with mobs in
+      it and for the farm over its active paddocks. Head on grazings with
+      no mob record has no class, so it isn't counted, and the screen says
+      how many.
+1425. **One head count, not two.** Sold, died, born, bought and class
+      changes on a mob make the livestock movement (MOB3-MOB6), or link
+      one already recorded from an invoice or bill (MOB7), when Livestock
+      is on. A movement belongs to one mob event at most. With Livestock
+      off, only the mob changes and the screen says the books weren't
+      changed. The books' own rules still apply (no class below zero,
+      locked periods, approved valuations).
+1426. **Adding a mob already on the farm changes no head count.** It's in
+      the opening position or counted already. "Bought" and "born" make a
+      purchase or birth. A count ("Correct the count") changes the mob
+      only and says to record deaths, sales or births instead where that's
+      what happened.
+1427. **Weights are a mob's average.** A weighing is an average kg (to one
+      place) and optionally how many were weighed. The gain is the change
+      since the mob's weighing before, over the days between.
+1428. **Moves and field work keep with no signal.** Moves, weights, deaths,
+      births and counts go through the device's queue with an operation
+      id, so a resend finds the first. The offline pack keeps the farm's
+      mobs, each mob's card and the stocking rate.
+1429. **Typed mob names become mob records on request.** "Mob names on
+      grazings" lists names typed on grazings with no mob record. Making
+      one a record gives it a kind, class and head, and every grazing on
+      the farm typed with that name (ignoring case) becomes the mob's. A
+      name in two paddocks now is refused until one is out or renamed.
+1430. **Importing mobs.** A CSV or .xlsx of mobs already on the farm:
+      kind (or species), IRD class (code or name), head, and optionally
+      name, paddock, tag colour and date. A preview shows each row's
+      problem; a file is imported once. Imported mobs change no head count.
+### Hire help: a job brief from the books (5 Nov 2026; decisions 1475-1480)
+
+The second part of Jess's request: "make it easy to hire them". The link to
+a hiring site itself is #593, for later.
+
+1475. **Hire help is a page beside People and roles.** Settings › People and
+      access › Hire help (and a link on People and roles), for owners and
+      admins, who are the ones who invite people. Four guided steps: what
+      needs doing, access and how long, the brief, then invite.
+1476. **Facts come from the books, as counts and periods only.** Bank and
+      card lines not reconciled (how many, the first and last month, how
+      many months), how many active bank and card accounts, whether GST is
+      registered, how often it's filed and on which basis, the month the
+      year ends, which modules are on, and how many active employees (only
+      for someone with payroll access). Read when the page opens; nothing is
+      stored.
+1477. **The brief never has private details.** No organisation name,
+      customer or supplier names, payees, amounts or bank details: only the
+      counts and periods above, the tasks ticked, the access level and the
+      dates. The person sees it in an editable box and changes it before
+      copying; once they change it, later changes to their choices don't
+      overwrite it until they ask.
+1478. **No hiring site is named or linked.** The page says "post it on the
+      hiring site you use". Hiring sites' brand rules limit how their names
+      are used, and #593 is where a real link would be built.
+1479. **"Invite them" fills in People and roles.** It opens the invite with
+      the role (viewer, bookkeeper or admin) and the access dates already
+      set (time-limited access, decision 1466). The person still types the
+      name and email and presses Invite; nothing is sent from Hire help.
+1480. **Lengths are whole days.** 1 week, 2 weeks, 1 month or 3 months from
+      the start date, ending at the end of the day before the same date (10
+      Nov for 1 month is until 9 Dec), or a chosen end date.
+
+### Farm map assets and measuring (5 Nov 2026; decisions 1462-1465; MA1-MA6)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), map assets and measuring among them. Claude's
+calls, not yet reviewed. Built on the farm map and geometry.ts.
+
+1462. **Farm assets are points or lines on a farm's map.** Points: trough,
+      gate, water point, shed, bore, tank, yards, culvert or bridge, other.
+      Lines: fence, water pipe, race or track, drain, other (2 to 500
+      points; a point repeated straight after itself is dropped). Each has
+      a name and an optional note, and a line shows its length. They're
+      purple, with a letter (Tr, G, W, F, P…) so they're told apart without
+      colour. Farm staff and up add, change and remove them on their farms;
+      viewers see them. A point stays a point and a line stays a line.
+      Removing keeps the asset, marked removed with who and when. They're
+      in the offline farm pack's map section.
+1463. **Measuring saves nothing.** Map › Measure: Distance adds up the legs
+      tapped (and lists each); Area closes the shape tapped and gives its
+      area and the distance round it. Undo last point and Clear.
+1464. **Units.** Distances and areas are geodesic on WGS84 (GeographicLib),
+      as paddock areas are. Under 1 km a distance is in whole metres, then
+      km to two places; under a hectare an area is in m² with the hectares
+      beside it, then hectares to two places.
+1465. **Layers.** The Map tab has buttons to turn each kind of mark on or
+      off: hazards, effluent, farm assets, rain gauges, tasks and people
+      sharing their location, for the kinds the farm has. The choice is
+      remembered on that device only. Paddock colours aren't a layer: the
+      "Colour paddocks by" switch already chooses them.

@@ -13,6 +13,8 @@ import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
 import { FarmTasksToday, taskOverlays, useFarmTasks } from "@/components/farm-tasks";
 import { FarmPeopleCard, LocationSharingBanner, peopleMarkers, useFarmPeople } from "@/components/farm-locations";
 import { gaugeOverlays, useRainGauges } from "@/components/farm-rainfall";
+import { assetOverlays, FarmAssetsCard, type MapDrawing, MapLayerToggles, MeasureCard, shownOverlays, useMapAssets, useMapLayers } from "@/components/farm-map-assets";
+import { type MapLayer, overlayLayer } from "@/lib/farming/map-assets-rules";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
@@ -229,7 +231,7 @@ export function FarmToday({ organisationId, farm }: FarmContext) {
       <FarmTasksToday organisationId={organisationId} farm={farm} />
       <FarmSafetyToday organisationId={organisationId} farm={farm} />
       <FarmEffluentToday organisationId={organisationId} farm={farm} />
-      <Card title="Mobs in now">
+      <Card title="Mobs in now" href="/operations/farm/mobs">
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {statuses.data && !inNow.length ? <p>No mobs recorded in a paddock.</p> : null}
         {inNow.length ? (
@@ -325,8 +327,24 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   // Tasks pinned on the map (decision 1458): a tap opens Tasks.
   const tasks = useFarmTasks(organisationId, farm.id);
   overlays.push(...taskOverlays(tasks.data?.tasks ?? [], () => router.push(`/operations/farming/tasks?farm=${farm.id}`)));
+  // Farm assets (decision 1462): a tap picks it in Farm assets.
+  const assets = useMapAssets(organisationId, farm.id);
+  const [asset, setAsset] = useState<string | null>(null);
+  overlays.push(...assetOverlays(assets.data?.assets ?? [], (id) => {
+    setAsset(id);
+    requestAnimationFrame(() => document.getElementById("assets-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }));
+  // Layers (decision 1464): each kind of thing on the map can be turned off; remembered on this device.
+  const layers = useMapLayers();
+  const present = [...new Set<MapLayer>([...overlays.map(overlayLayer), ...(markers.length ? (["people"] as const) : [])])];
+  const shown = shownOverlays(overlays, layers.isOn);
+  const shownPeople = layers.isOn("people") ? markers : [];
+  // Measuring or placing an asset: taps on the map go to it (decision 1463).
+  const [drawing, setDrawing] = useState<MapDrawing | null>(null);
+  const [measuring, setMeasuring] = useState(false);
   return (
     <div className={styles.grid}>
+      <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
       <Card
         title="Paddocks"
         description={
@@ -336,20 +354,44 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
         </>
       }
         actions={
-          <Link className={styles.bigButton} href={`/operations/farm/tractor?farm=${farm.id}`}>
-            Tractor mode
-          </Link>
+          <>
+            <button type="button" className={styles.bigButton} aria-pressed={measuring} onClick={() => setMeasuring(!measuring)}>
+              Measure
+            </button>
+            <Link className={styles.bigButton} href={`/operations/farm/tractor?farm=${farm.id}`}>
+              Tractor mode
+            </Link>
+          </>
         }
       >
         <ColouringSwitch value={colouring} onChange={setColouring} />
+        <MapLayerToggles present={present} isOn={layers.isOn} toggle={layers.toggle} />
         {statuses.error ? <Notice tone="error">{statuses.error}</Notice> : null}
         {shapes.data && statuses.data ? (
-          <PaddockMap paddocks={shaped} selected={selected} onSelect={setSelected} imageryKey={imageryKey} offerImagery={noKey} fills={fills} overlays={overlays} people={markers} label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${overlays.length} hazards${markers.length ? ` and ${markers.length} people sharing their location (listed under People on the map)` : ""}`} />
+          <PaddockMap
+            paddocks={shaped}
+            selected={selected}
+            onSelect={setSelected}
+            imageryKey={imageryKey}
+            offerImagery={noKey}
+            fills={fills}
+            overlays={shown}
+            people={shownPeople}
+            drawing={drawing?.points ?? null}
+            drawingShape={drawing?.shape}
+            onMapTap={drawing?.onTap}
+            label={`Map of the paddocks, coloured by ${colouring === "grazed" ? "days since grazed" : "cover reading age"}, with ${shown.length} hazards, assets and other marks${shownPeople.length ? ` and ${shownPeople.length} people sharing their location (listed under People on the map)` : ""}${drawing ? ". Tap to add a point" : ""}`}
+          />
         ) : (
           <p className={ui.muted}>Loading…</p>
         )}
         <Legend colouring={colouring} />
       </Card>
+      {measuring ? <MeasureCard onDrawing={setDrawing} onClose={() => setMeasuring(false)} /> : null}
+      <div id="assets-card" style={{ scrollMarginTop: 64 }}>
+        {assets.data && !measuring ? <FarmAssetsCard organisationId={organisationId} farm={farm} assets={assets.data.assets} selected={asset} onSelect={setAsset} onChanged={assets.reload} onDrawing={setDrawing} /> : null}
+      </div>
+      </div>
       <div>
         <div id="paddock-card" style={{ scrollMarginTop: 64 }}>
           {status ? <PaddockCard organisationId={organisationId} farm={farm} status={status} hazards={activeHazards} onClose={() => setSelected(null)} /> : null}
@@ -404,7 +446,15 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
         <dt>Cover</dt>
         <dd>{status.cover ? `${coverText(status.cover.cover)}, ${daysAgo(status.cover.measuredOn, today)} (${PASTURE_METHOD_LABELS[status.cover.method]})` : "No reading yet"}</dd>
         <dt>Mob</dt>
-        <dd>{status.inNow ? `${mobText(status.inNow.mob, status.inNow.head)}, in since ${shortDate(status.inNow.inOn, today)}` : "None in now"}</dd>
+        <dd>
+          {status.inNow ? `${mobText(status.inNow.mob, status.inNow.head)}, in since ${shortDate(status.inNow.inOn, today)}` : "None in now"}
+          {status.inNow?.mobs.some((entry) => entry.mobId) ? (
+            <>
+              {" "}
+              <Link href="/operations/farm/mobs">Mobs</Link>
+            </>
+          ) : null}
+        </dd>
         <dt>Last grazed</dt>
         <dd>{status.inNow ? "Being grazed now" : status.lastGrazedOn ? `${shortDate(status.lastGrazedOn, today)} (${daysAgo(status.lastGrazedOn, today)})` : "No grazing recorded"}</dd>
         <dt>Hazards</dt>
@@ -454,6 +504,9 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
               Mob in
             </Link>
           )}
+          <Link className={styles.bigButton} href={`/operations/farm/mobs?farm=${farm.id}`}>
+            Move a mob
+          </Link>
         </div>
       ) : null}
       <p>
@@ -474,6 +527,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/effluent", icon: "effluent", label: "Effluent", note: "Irrigation log, ponds, checks, incidents, council pack", staff: true },
   { href: "/operations/farm/tractor", icon: "location", label: "Tractor mode", note: "Spreading, spraying and mowing from phone GPS", staff: true },
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
+  { href: "/operations/farm/mobs", icon: "livestock", label: "Mobs", note: "Moves, weights, sales and stocking rate", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
   { href: "/operations/farming/rainfall", icon: "effluent", label: "Rainfall", note: "Rain gauges, by month and season", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
