@@ -1,3 +1,4 @@
+import { valueLabelsFor } from "@/lib/analytics/value-labels";
 import { ValidationError } from "@/lib/errors";
 import { DECIMAL_RESULT, exactAverageSql, exactDivideSql } from "@/lib/analytics/decimal-sql";
 import { formulaKeepsMoney, formulaRefs, parseFormula, type FormulaNode } from "@/lib/analytics/formula";
@@ -195,6 +196,8 @@ export type ResultColumn = {
   grain?: Grain;
   /** The value's field's own format (decision 775), when a chart hasn't chosen one. */
   number?: NumberFormat;
+  /** A coded group's values in words (decision 1499), e.g. current_liability is "Current liability"; the rows keep the code. */
+  valueLabels?: Record<string, string>;
 };
 export type PivotColumn = {
   key: string;
@@ -293,6 +296,13 @@ const OPS: readonly FilterOp[] = FILTER_OPS;
 const FIRST_OPS: readonly FilterOp[] = ["eq", "neq", "in", "contains", "gt", "gte", "lt", "lte"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const NUMBER = /^-?\d+(\.\d+)?$/;
+
+/** A group's value labels when its field is coded (decision 1499); dates never are. */
+function labelsOf(table: string, group: { field: string; grain?: unknown }): { valueLabels?: Record<string, string> } {
+  if (group.grain) return {};
+  const labels = valueLabelsFor(table, group.field);
+  return labels ? { valueLabels: labels } : {};
+}
 
 export function quoteIdentifier(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
@@ -929,6 +939,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       format: query.groupBy.grain ? "date" : formatOfType(types.get(query.groupBy.field)!),
       role: "category",
       ...(query.groupBy.grain ? { grain: query.groupBy.grain } : {}),
+      ...labelsOf(query.table, query.groupBy),
     });
   }
   let second = "";
@@ -940,6 +951,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
       label: query.breakdown.field,
       format: query.breakdown.grain ? "date" : formatOfType(types.get(query.breakdown.field)!),
       role: "category",
+      ...labelsOf(query.table, query.breakdown),
     });
   }
   /** A quick calculation's format (decision 770): a share as a percentage, a rank as a whole number, a money average as money. */
@@ -1269,12 +1281,14 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
     label: dimension.field,
     format: dimension.grain ? "date" : formatOfType(types.get(dimension.field)!),
     role: "category",
+    ...labelsOf(query.table, dimension),
   }));
   const columnFields = columnDimensions.map((dimension, index): ResultColumn => ({
     key: index === 0 ? "pivot_column" : `pivot_column_${index}`,
     label: dimension.field,
     format: dimension.grain ? "date" : formatOfType(types.get(dimension.field)!),
     role: "category",
+    ...labelsOf(query.table, dimension),
   }));
   const columnField = columnFields[0] ?? null;
   const measures = query.measures.map((measure, index): ResultColumn => ({

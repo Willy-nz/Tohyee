@@ -5,6 +5,7 @@ import { type ReactNode, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { operationId, useFarmDrafts } from "@/components/farm-drafts";
 import { EffluentLogButtons } from "@/components/farm-effluent-log";
+import { LogRainfall } from "@/components/farm-rainfall";
 import { LogSafetyReport } from "@/components/farm-safety-reports";
 import { PasturePhotoPicker, type PickedPhoto } from "@/components/pasture-photos";
 import { useCanRecordFarmWork } from "@/components/farm-selector";
@@ -30,7 +31,7 @@ import styles from "./farm-workspace.module.css";
 
 const NATURAL = new Intl.Collator("en-NZ", { numeric: true, sensitivity: "base" });
 
-type Flow = { kind: "cover" | "in" | "out" | "feed" | "photo"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" } | { kind: "safety"; type: "hazard" | "near_miss" | "incident" };
+type Flow = { kind: "cover" | "in" | "out" | "feed" | "photo"; paddockId?: string | null; grazingId?: string | null } | { kind: "walk" } | { kind: "rain" } | { kind: "safety"; type: "hazard" | "near_miss" | "incident" };
 
 const STATUS_TONE: Record<DraftStatus, "neutral" | "green" | "amber"> = { saved: "neutral", synced: "green", attention: "amber" };
 
@@ -66,6 +67,8 @@ export function FarmLog(context: FarmContext) {
       ? { kind: record, paddockId: params.get("paddock"), grazingId: params.get("grazing") }
       : record === "walk"
         ? { kind: "walk" }
+        : record === "rain"
+          ? { kind: "rain" }
         : record === "hazard" || record === "near_miss" || record === "incident"
           ? { kind: "safety", type: record }
           : null;
@@ -73,6 +76,8 @@ export function FarmLog(context: FarmContext) {
   const canRecord = useCanRecordFarmWork();
   if (!canRecord) return <Notice tone="info">Recording farm work needs the farm staff or bookkeeper role. An owner or admin can change your role.</Notice>;
   if (flow?.kind === "walk") return <FarmWalk {...context} onClose={() => setFlow(null)} />;
+  // Rainfall (decision 1452): through the device's queue, so it works with no signal.
+  if (flow?.kind === "rain") return <LogRainfall organisationId={context.organisationId} farm={context.farm} onClose={() => setFlow(null)} />;
   // Safety reports (#446, decision 962): the Safety page's report, saved on the phone first.
   if (flow?.kind === "safety") return <LogSafetyReport organisationId={context.organisationId} farm={context.farm} type={flow.type} onClose={() => setFlow(null)} />;
   if (flow) return <QuickLog {...context} flow={flow} onClose={() => setFlow(null)} />;
@@ -113,6 +118,10 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
             Paddock photo
             <small>For the photo diary or a cover estimate</small>
           </button>
+          <button type="button" className={styles.bigButton} onClick={() => onStart({ kind: "rain" })}>
+            Rain gauge
+            <small>Today&apos;s rain in mm</small>
+          </button>
         </div>
         <h3>Safety</h3>
         <div className={styles.bigButtons}>
@@ -130,7 +139,7 @@ function LogHome({ organisationId, farm, onStart }: FarmContext & { onStart: (fl
           </button>
         </div>
         <EffluentLogButtons organisationId={organisationId} farm={farm} buttonClass={styles.bigButtons} itemClass={styles.bigButton} />
-        <p className={ui.muted}>Not kept in Tohyee yet: rainfall, voice notes, animal treatments, and births and deaths.</p>
+        <p className={ui.muted}>Not kept in Tohyee yet: voice notes, animal treatments, and births and deaths.</p>
       </Card>
       <Card title="On this phone" description="Each record is saved here first, then sent. Nothing is lost without a signal.">
         <StorageWarning stored={stored} waiting={store.drafts.filter((draft) => draft.status === "saved").length} onRetry={retryStorage} onSend={() => void sync()} />
@@ -272,7 +281,7 @@ function stepsFor(kind: "cover" | "in" | "out" | "feed" | "photo", given: { padd
 
 const TITLES = { cover: "Cover reading", in: "Mob in", out: "Mob out", feed: "Feed", photo: "Paddock photo" } as const;
 
-function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" }>; onClose: () => void }) {
+function QuickLog({ organisationId, farm, flow, onClose }: FarmContext & { flow: Exclude<Flow, { kind: "walk" } | { kind: "safety" } | { kind: "rain" }>; onClose: () => void }) {
   const today = todayInBrowser();
   const { store, change, sync, stored, retryStorage } = useFarmDrafts(organisationId);
   const statuses = useApiData<{ paddocks: PaddockStatus[] }>(`/api/farming/farms/${farm.id}/paddock-status`, { organisationId, onDate: today });

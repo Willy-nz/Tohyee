@@ -13111,6 +13111,104 @@ docs/E-SIGNATURES.md. Not reviewed by Jess yet.
       the ledger) can be copied into a tile as they are. Error messages say
       which tile and what to fix.
 
+### Analytics: the books' codes in words (5 Nov 2026; decision 1499)
+
+1499. **Coded values in the books' Analytics tables are shown in words.**
+      An account type reads as the chart of accounts names it ("Current
+      liability", "Fixed asset", "Other income"), an account class as its
+      heading there ("Liabilities", "Income"), and an invoice's or bill's
+      status as "Approved" or "Voided". This covers tiles, tables, pivot
+      tables, chart groups, drill-down paths, slicers and tile filters, and
+      the AI's answers (a valueLabels list beside the rows). The tables keep
+      the code: filters, slicers, clicks, drill-downs and saved reports
+      still go by it, so nothing saved changes. A journal's source isn't
+      covered yet. (Number 1420, which was asked for, was already used by
+      #591.)
+
+### Rainfall (5 Nov 2026; decisions 1451-1456; RF1-RF8)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), rainfall among them. Claude's calls, not yet
+reviewed; no other farm or accounting app was copied.
+
+1451. **Rain gauges belong to a farm.** A farm can have any number, each
+      with a name (once a farm), an optional note and an optional place on
+      the map (a blue "R" dot on the Map tab; tapping it opens Rainfall).
+      Farm staff and up add and change gauges. A gauge isn't deleted: it's
+      retired, keeps its readings and history, and takes no new readings
+      until it's brought back.
+1452. **One reading a gauge a day, from the Log.** Farm › Log › **Rain
+      gauge** asks which gauge, which day (today, yesterday or another
+      past day) and the mm, with a **No rain (0 mm)** button. It goes
+      through the device's one queue (decision 1008) with its own
+      operation id, so it works with no signal and is never kept twice;
+      the farm's gauges are in the offline farm pack's map section. A day
+      already read for that gauge is refused with the reading it has
+      ("change that reading instead"), and so is a future day. Millimetres
+      are to one place, 0 to 2,000, kept as decimals (never floats).
+1453. **A day with no reading is unknown, not dry.** Totals add the days
+      with a reading and always say "N of M days read", so a gap shows.
+      A dry day is a typed 0.
+1454. **Readings are changed, backdated and removed with who and when.**
+      Farm staff and up change a reading's day, mm or note; the reading
+      shows who changed it and when, and the audit log keeps the old
+      values. Bookkeepers and up remove a reading entered by mistake; it's
+      kept, marked removed with who and when. A past day can also be added
+      under Rainfall › Readings.
+1455. **History by month and season, beside the same time last year.**
+      Rainfall shows this month so far, this season so far and the last
+      12 months, then 12 months or 4 seasons as columns and a table, each
+      with the same period a year earlier. A period still going is compared
+      with the same days last year (1-5 Nov 2026 with 1-5 Nov 2025);
+      29 February becomes 28 February. Seasons are New Zealand's
+      (spring Sep-Nov, summer Dec-Feb, autumn Mar-May, winter Jun-Aug).
+      Readings are in Analytics as `tohyee_farm_rainfall`, and a connected
+      AI has a read-only `rainfall` tool.
+1456. **Importing, and no outside weather.** Bookkeepers and up import a
+      gauge's readings from CSV or Excel (date and mm columns, guessed and
+      changeable), with a preview: a bad date or figure, a future day, a
+      day twice in the file and a day the gauge already has are skipped
+      with the reason. The same file can't be imported twice for a gauge.
+      Tohyee fetches no weather data from anywhere; every figure is the
+      farm's own.
+
+### Farm team tasks (5 Nov 2026; decisions 1457-1461; FT1-FT7)
+
+Jess asked for the farm features Tohyee was missing against a mob-based
+livestock app (5 Nov 2026), general team tasks among them. Claude's calls,
+not yet reviewed. Built on the existing paths: the Android app's reminders
+(as safety actions are), the Today tab and the farm calendar. There's no
+second reminder system.
+
+1457. **A task is a job for the farm team, on one farm.** It has what needs
+      doing, a due day, and optionally who it's for, a repeat (every week,
+      2 weeks, 4 weeks or month, the farm calendar's repeats), a paddock, a
+      pin on the map and a note. "Who it's for" is someone who can record
+      farm work and see that farm (farm staff, bookkeepers and up); viewers
+      can't tick a task off, so they aren't offered. Farm staff and up add,
+      change and cancel tasks on their farms; viewers see them. A cancelled
+      task is kept (Cancelled) and can be opened again; nothing is deleted.
+1458. **Pins show on the Map.** An open task with a pin is an amber "T" on
+      the Map tab; tapping it opens Tasks.
+1459. **Reminders are the person's own, in the Android app.** The phone's
+      reminders (decisions 1146-1148) now include the signed-in person's
+      tasks on farms they work on, the morning of the day each is next
+      due, and today for an overdue one, beside their safety actions. Like
+      the rest, they're worked out from the records each time and never
+      stored. Tasks for anyone (nobody named) don't remind anyone.
+1460. **On Today and the farm calendar.** Today has a Tasks card with the
+      farm's tasks overdue, due today and in the next 7 days (the person's
+      own first) and a Done button; the farm calendar shows tasks due in the
+      next 30 days on every farm the person can see, an overdue one on
+      today. The farm's tasks are in the offline farm pack.
+1461. **Done and undone keep who and when.** Done records who and when for
+      the day the task was due, and goes through the device's queue, so it
+      works with no signal; sent twice, it's kept once. If the task has
+      already moved on (someone else ticked it), a stale Done is refused
+      with the day it's now due. A repeating task then moves to its next
+      date after the one done: dates missed before it aren't owed. Undo
+      takes back the latest Done, keeping who undid it and when. Every
+      Done and Undo is listed on the task.
 ### Time-limited access for members (5 Nov 2026; decisions 1466-1474)
 
 Jess asked for a way to give someone access "for a contracted amount of

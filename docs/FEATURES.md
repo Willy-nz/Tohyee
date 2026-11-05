@@ -2492,6 +2492,13 @@ that something happened.
   tool list and the app is told. get_organisation's `toolGroups` says which
   groups are hidden and why, and a call to a hidden tool is refused with
   the reason.
+- **Analytics: the books' codes in words** (decision 1499). In the books'
+  tables, account types show as the chart of accounts names them (Bank,
+  Current liability, Fixed asset, Other income, Revenue ...), account
+  classes as Assets, Liabilities, Equity, Income and Expenses, and
+  invoice and bill statuses as Approved and Voided: in tiles, tables,
+  pivots, chart groups, slicers, filters and the AI's answers. The data
+  keeps the code, so filters and saved reports work as before.
 - **AI: Analytics reports** (#591, decisions 1411-1420, examples
   AIA1-AIA9, tenant migration 0230). A connected AI lists the Analytics
   tables the person can use (books, CRM, Shopify, Google Analytics, Search
@@ -3268,6 +3275,29 @@ that something happened.
   covers before and after) and supplements fed in kg DM. Satellite and
   model readings are labelled as estimates. Records only.
 
+- **Rainfall** (RF1-RF8, decisions 1451-1456, tenant migration 0246):
+  Farm › More › **Rainfall**. A farm has rain gauges (named, with a note,
+  optionally placed on the map as a blue "R"). Farm › Log › **Rain gauge**
+  records a day's mm from a phone, with **No rain (0 mm)**, through the
+  device's queue, so it works with no signal and is kept once. Readings can
+  be changed and backdated, with who and when kept; bookkeepers remove one
+  entered by mistake (kept). Rainfall shows this month, this season and the
+  last 12 months, and a chart and table by month or season, each beside the
+  same time last year, with how many days have a reading (a missing day is
+  never counted as dry). Bookkeepers import a gauge's readings from CSV or
+  Excel with a preview. In Analytics as `tohyee_farm_rainfall`; the AI has
+  a read-only `rainfall` tool. No outside weather data is fetched.
+
+- **Farm team tasks** (FT1-FT7, decisions 1457-1461, tenant migration
+  0247): Farm › More › **Tasks**. A task has what needs doing, a due day,
+  and optionally who it's for (someone on that farm's team), a repeat
+  (weekly, 2-weekly, 4-weekly, monthly), a paddock, a map pin (an amber "T"
+  on the Map) and a note. Done and Undo keep who and when; a repeating task
+  moves to its next date. Today has a Tasks card with Done (works with no
+  signal), the farm calendar shows the next 30 days, and the person it's
+  for gets reminders in the Android app with their safety actions.
+  Cancelled tasks are kept.
+
 - **The AI reads farm data** (AIW10-AIW14, decision 560): a connected AI
   can read soil tests, fertiliser products and plans, pasture cover,
   readings, grazings and supplements fed, and work out a proposed
@@ -3336,7 +3366,7 @@ that something happened.
   it once. The pages themselves still need a signal to open: there's no
   offline app yet (decision 913 says how it would work). Not kept in
   Tohyee yet: rainfall, photos and voice notes, treatments, births and
-  deaths.
+  deaths. (Rainfall is kept now: see Rainfall above.)
 
 - **Tohyee for Android** (#502, decisions 1140-1152;
   [MOBILE-APP.md](MOBILE-APP.md#the-android-app)): an optional Android app
