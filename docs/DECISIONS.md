@@ -13360,3 +13360,35 @@ NZ farm practice and Claude's, not yet reviewed (examples MOB1-MOB10).
       kind (or species), IRD class (code or name), head, and optionally
       name, paddock, tag colour and date. A preview shows each row's
       problem; a file is imported once. Imported mobs change no head count.
+### Hire help: a job brief from the books (5 Nov 2026; decisions 1475-1480)
+
+The second part of Jess's request: "make it easy to hire them". The link to
+a hiring site itself is #593, for later.
+
+1475. **Hire help is a page beside People and roles.** Settings › People and
+      access › Hire help (and a link on People and roles), for owners and
+      admins, who are the ones who invite people. Four guided steps: what
+      needs doing, access and how long, the brief, then invite.
+1476. **Facts come from the books, as counts and periods only.** Bank and
+      card lines not reconciled (how many, the first and last month, how
+      many months), how many active bank and card accounts, whether GST is
+      registered, how often it's filed and on which basis, the month the
+      year ends, which modules are on, and how many active employees (only
+      for someone with payroll access). Read when the page opens; nothing is
+      stored.
+1477. **The brief never has private details.** No organisation name,
+      customer or supplier names, payees, amounts or bank details: only the
+      counts and periods above, the tasks ticked, the access level and the
+      dates. The person sees it in an editable box and changes it before
+      copying; once they change it, later changes to their choices don't
+      overwrite it until they ask.
+1478. **No hiring site is named or linked.** The page says "post it on the
+      hiring site you use". Hiring sites' brand rules limit how their names
+      are used, and #593 is where a real link would be built.
+1479. **"Invite them" fills in People and roles.** It opens the invite with
+      the role (viewer, bookkeeper or admin) and the access dates already
+      set (time-limited access, decision 1466). The person still types the
+      name and email and presses Invite; nothing is sent from Hire help.
+1480. **Lengths are whole days.** 1 week, 2 weeks, 1 month or 3 months from
+      the start date, ending at the end of the day before the same date (10
+      Nov for 1 month is until 9 Dec), or a chosen end date.

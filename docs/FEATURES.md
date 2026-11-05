@@ -159,6 +159,15 @@ that something happened.
   organisation); nothing is deleted. One owner always keeps access with no
   end. There's no way yet to limit someone to one area (for example only
   bank reconciliation): use the role, payroll access and farms.
+- **Hire help** (decisions 1475-1480): Settings › Hire help writes a job
+  brief for hiring a bookkeeper or other help. Tick what needs doing (bank
+  reconciliation, GST return, catch-up, year-end, payroll, set-up); Tohyee
+  adds facts from the books as counts and periods only (lines not
+  reconciled and which months, bank accounts, GST period and basis, modules
+  on). Choose the access and how long, check and edit the brief, copy it and
+  post it on the hiring site you use. **Invite them** opens the invite on
+  People and roles with the role and dates filled in. No names, amounts or
+  bank details go in the brief.
 - **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
   settings (including a temporary rate reduction approved by IRD, with its

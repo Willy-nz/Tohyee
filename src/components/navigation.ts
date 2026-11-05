@@ -329,6 +329,7 @@ export const SETTINGS: MenuGroup[] = [
     heading: "People and access",
     links: [
       { href: "/operations/members", label: "People and roles", minRole: "admin" },
+      { href: "/operations/members/hire", label: "Hire help", minRole: "admin" },
       { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
       { href: "/operations/settings/approval-rules", label: "Approval rules" },
     ],
