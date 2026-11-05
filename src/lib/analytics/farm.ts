@@ -1,6 +1,7 @@
 import type { TableCopy } from "@/lib/analytics/engine";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { dec, toFixedString } from "@/lib/money/decimal";
+import { readRainfallTables } from "@/lib/analytics/farm-rainfall";
 
 /*
  * Farm data in the organisation's analytics file (#249 stage 1, decision
@@ -321,6 +322,8 @@ export async function readFarmTables(tx: OrgTx): Promise<TableCopy[]> {
     // A quantity in kg DM is its own kg DM (PF6).
     rows: supplements.rows.map((row) => [row.id, row.farm, row.paddock_id, row.paddock, row.fed_on, row.feed, row.quantity, row.unit, row.unit === "kg_dm" ? row.quantity : row.kg_dm, row.mob, row.note]),
   });
+
+  tables.push(...(await readRainfallTables(tx)));
 
   return tables;
 }

@@ -11,6 +11,7 @@ import { lastMovedOverlays, useEffluentLog } from "@/components/farm-effluent-lo
 import { hazardOverlays } from "@/components/farm-safety";
 import { FarmSafetyTab, FarmSafetyToday } from "@/components/farm-safety-tab";
 import { FarmPeopleCard, LocationSharingBanner, peopleMarkers, useFarmPeople } from "@/components/farm-locations";
+import { gaugeOverlays, useRainGauges } from "@/components/farm-rainfall";
 import { FarmOfflineStatus, OFFLINE_PAGE } from "@/components/farm-offline";
 import { FarmRowList } from "@/components/farm-rows";
 import { FarmSelector, useCanRecordFarmWork, useSelectedFarm } from "@/components/farm-selector";
@@ -309,6 +310,9 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   // Where each effluent system's pods or irrigator were last moved (#487): a tap opens the irrigation log.
   const effluent = useEffluentLog(organisationId, farm.id);
   overlays.push(...lastMovedOverlays(effluent.data?.lastMoved ?? []).map((overlay) => ({ ...overlay, onSelect: () => router.push(effluentHref({ farmId: farm.id, screen: "log" })) })));
+  // Rain gauges placed on the map (decision 1451): a tap opens Rainfall.
+  const gauges = useRainGauges(organisationId, farm.id);
+  overlays.push(...gaugeOverlays(gauges.data?.gauges ?? [], () => router.push(`/operations/farming/rainfall?farm=${farm.id}`)));
   // Farm members who chose to share their location (#498 item 7): a tap opens their card under People on the map.
   const people = useFarmPeople(organisationId, farm.id);
   const [person, setPerson] = useState<string | null>(null);
@@ -478,6 +482,7 @@ const FARM_WORK: MoreLink[] = [
   { href: "/operations/farm/security", icon: "camera", label: "Security", note: "Camera photos and clips", staff: true },
   { href: "/operations/farm/mobs", icon: "livestock", label: "Mobs", note: "Moves, weights, sales and stocking rate", staff: true },
   { href: "/operations/farming/pasture", icon: "farm", label: "Pasture and feed", note: "Readings, grazings and feed", staff: true },
+  { href: "/operations/farming/rainfall", icon: "effluent", label: "Rainfall", note: "Rain gauges, by month and season", staff: true },
   { href: "/operations/farming/calendar", icon: "calendar", label: "Farm calendar", note: "Jobs, due dates and reminders", staff: true },
   { href: "/operations/farming/soil", icon: "flask", label: "Soil tests", staff: true },
   { href: "/operations/farming", icon: "maps", label: "Farms and paddocks", note: "Areas, boundaries, drawing paddocks", staff: true },
