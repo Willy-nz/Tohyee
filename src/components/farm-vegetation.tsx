@@ -393,7 +393,8 @@ export function TrendChart({ trend }: { trend: PaddockTrend }) {
 type SettingsAnswer = { settings: VegetationSettings; farms: SetupFarm[]; demoAllowed: boolean };
 const STEP_KEY = "tohyee.vegetationSetupStep";
 
-function useSavedStep(organisationId: string): [string | null, (step: SetupStep) => void, boolean] {
+/** "finished": the Done screen was seen and Finish pressed, so the page opens on the farms and settings. */
+function useSavedStep(organisationId: string): [string | null, (step: SetupStep | "finished") => void, boolean] {
   const [saved, setSaved] = useState<string | null>(null);
   const [read, setRead] = useState(false);
   useEffect(() => {
@@ -439,7 +440,8 @@ export function SatelliteVegetationPage({ organisationId }: { organisationId: st
   const [step, setStep] = useState<SetupStep | null>(null);
   const [managing, setManaging] = useState(false);
   const progress = settings.data ? progressOf(settings.data) : null;
-  const current = step ?? (progress && read ? resumeStep(saved, progress) : null);
+  const finished = saved === "finished";
+  const current = step ?? (progress && read ? resumeStep(finished ? "done" : saved, progress) : null);
   const go = (next: SetupStep) => {
     setStep(next);
     save(next);
@@ -463,15 +465,22 @@ export function SatelliteVegetationPage({ organisationId }: { organisationId: st
   }
   if (settings.error) return <Notice tone="error">{settings.error}</Notice>;
   if (!settings.data || !current || !progress) return <p className={ui.muted}>Loading…</p>;
-  const done = current === "done" && progress.enabled;
+  // Settings once it's on and the Done screen has been seen (decision 1539); the steps again on request.
+  const done = progress.enabled && finished && step === null && !managing;
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {done && !managing ? (
+      {done ? (
         <>
           <Overview rows={overview.data?.farms ?? null} error={overview.error} />
-          <Manage organisationId={organisationId} answer={settings.data} onChanged={reload} onSetUp={() => go("farm")} />
+          <Manage organisationId={organisationId} answer={settings.data} onChanged={reload} onSetUp={() => go("connect")} />
           <p>
-            <Button variant="secondary" onClick={() => setManaging(true)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setManaging(true);
+                go("need");
+              }}
+            >
               See the setup steps again
             </Button>
           </p>
@@ -486,7 +495,8 @@ export function SatelliteVegetationPage({ organisationId }: { organisationId: st
           onChanged={reload}
           onFinish={() => {
             setManaging(false);
-            go("done");
+            setStep(null);
+            save("finished");
           }}
         />
       )}
@@ -889,8 +899,8 @@ function TestFigures({ result }: { result: PilotResult }) {
         </span>
       </div>
       <div className={styles.figure}>
-        <strong>{result.unitsSpent !== null ? result.unitsSpent.toFixed(3) : `about ${result.unitsEstimated.toFixed(3)}`}</strong>
-        <span>{result.provider === "demo" ? "Processing units (none for made-up pictures)" : result.unitsSpent !== null ? "Processing units Copernicus charged" : "Processing units (an estimate: Copernicus didn't say)"}</span>
+        <strong>{result.provider === "demo" ? "None" : result.unitsSpent !== null ? result.unitsSpent.toFixed(3) : `about ${result.unitsEstimated.toFixed(3)}`}</strong>
+        <span>{result.provider === "demo" ? `Processing units (made-up pictures use none; about ${result.unitsEstimated.toFixed(3)} for a real one this size)` : result.unitsSpent !== null ? "Processing units Copernicus charged" : "Processing units (an estimate: Copernicus didn't say)"}</span>
       </div>
       <div className={styles.figure}>
         <strong>
@@ -928,9 +938,11 @@ function TestStep({ organisationId, farms, farmId, lastTest, onChanged }: { orga
       <p>
         Tohyee fetches one picture of <strong>{farm.farmName}</strong>: the clearest date in the last 30 days. It shows what it cost, so you know before turning it on.
       </p>
-      <Button disabled={busy} onClick={run}>
-        {busy ? "Testing… (this can take a minute)" : result ? "Test again" : "Test one farm"}
-      </Button>
+      <div>
+        <Button disabled={busy} onClick={run}>
+          {busy ? "Testing… (this can take a minute)" : result ? "Test again" : "Test one farm"}
+        </Button>
+      </div>
       {error ? (
         <div className={styles.check}>
           <Notice tone="error">{error}</Notice>
@@ -984,8 +996,9 @@ function BudgetStep({ organisationId, settings, onChanged }: { organisationId: s
       <p>Tohyee stops fetching when it reaches these limits, and tells you. It never goes over and never switches to a paid service.</p>
       {perPicture !== null ? (
         <Notice tone="info">
-          One picture of {settings.lastTest?.farmName} used {settings.lastTest?.unitsSpent !== null ? "" : "about "}
-          {perPicture.toFixed(3)} processing units in the test. With 6 to 12 dates a month, that&apos;s about {(perPicture * 6).toFixed(1)} to {(perPicture * 12).toFixed(1)} units a month for that farm, plus the first {settings.historyDays} days once.
+          {settings.lastTest?.provider === "demo"
+            ? `Made-up pictures use none. A real picture of ${settings.lastTest.farmName} this size would use about ${perPicture.toFixed(3)} processing units (the published rule; not measured).`
+            : `One picture of ${settings.lastTest?.farmName} used ${settings.lastTest?.unitsSpent !== null ? "" : "about "}${perPicture.toFixed(3)} processing units in the test.`} With 6 to 12 dates a month, that&apos;s about {(perPicture * 6).toFixed(1)} to {(perPicture * 12).toFixed(1)} units a month for that farm, plus the first {settings.historyDays} days once.
         </Notice>
       ) : null}
       <div className={styles.form}>
