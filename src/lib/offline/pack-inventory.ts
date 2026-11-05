@@ -34,7 +34,7 @@ export const PACK_SECTIONS: SectionInfo[] = [
   { key: "organisation", label: "Farms and settings", includes: "The farms you can see, which farm you were on, map settings and farm app tiles.", perFarm: false },
   { key: "safety", label: "Safety", includes: "Emergency details, hazards and no-go zones, reports and actions (never injury or medical details), what needs doing.", perFarm: true },
   { key: "map", label: "Map and paddocks", includes: "Paddocks with their boundaries and areas, each paddock's last known cover, mob and grazing, rain gauges, and farm assets (troughs, gates, fences and the like).", perFarm: true },
-  { key: "pasture", label: "Pasture, grazing and feed", includes: "Farm cover and wedge, cover readings, grazings and feed for the last 12 months, and mobs in now.", perFarm: true },
+  { key: "pasture", label: "Pasture, grazing and feed", includes: "Farm cover and wedge, cover readings, grazings and feed for the last 12 months, mobs in now, and the farm's mobs with their history.", perFarm: true },
   { key: "calendar", label: "Calendar and jobs", includes: "Your farm calendar from 12 months back to 3 months ahead (no email text), and the farm's tasks.", perFarm: true },
   { key: "equipment", label: "Equipment and checklists", includes: "Machines, their checklists, last known status and recent checks; chemicals with safety data sheets.", perFarm: true },
   { key: "people", label: "Inductions and training", includes: "Inductions to read and sign, with the farm's hazards and emergency details, and training.", perFarm: true },

@@ -159,6 +159,15 @@ that something happened.
   organisation); nothing is deleted. One owner always keeps access with no
   end. There's no way yet to limit someone to one area (for example only
   bank reconciliation): use the role, payroll access and farms.
+- **Hire help** (decisions 1475-1480): Settings › Hire help writes a job
+  brief for hiring a bookkeeper or other help. Tick what needs doing (bank
+  reconciliation, GST return, catch-up, year-end, payroll, set-up); Tohyee
+  adds facts from the books as counts and periods only (lines not
+  reconciled and which months, bank accounts, GST period and basis, modules
+  on). Choose the access and how long, check and edit the brief, copy it and
+  post it on the hiring site you use. **Invite them** opens the invite on
+  People and roles with the role and dates filled in. No names, amounts or
+  bank details go in the brief.
 - **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
   settings (including a temporary rate reduction approved by IRD, with its
@@ -3288,6 +3297,19 @@ that something happened.
   signal), the farm calendar shows the next 30 days, and the person it's
   for gets reminders in the Android app with their safety actions.
   Cancelled tasks are kept.
+
+- **Mobs** (decisions 1421-1430, MOB1-MOB10, tenant migration 0233; common
+  NZ practice, not yet reviewed): Farm › More › Mobs lists each mob (one
+  IRD class, head, tag colour, paddock and last weight) with quick actions
+  as one-question steps: move, record a weight, deaths, births, split,
+  merge, sell, add bought stock, change class and correct the count. A
+  move is a grazing out and in. Sales, deaths, births, purchases and class
+  changes make or link the livestock movement when Livestock is on, so the
+  head count is kept once. Stocking rate now (SU/ha and head/ha) per
+  paddock and for the farm, with stock unit factors admins can change.
+  Mob names typed on grazings can be made mob records, and mobs can be
+  imported from CSV or Excel. Moves, weights, deaths, births and counts
+  work offline through the device's queue.
 
 - **Farm map assets and measuring** (MA1-MA6, decisions 1462-1465, tenant
   migration 0248): on Farm › Map, **Farm assets** puts troughs, gates,
