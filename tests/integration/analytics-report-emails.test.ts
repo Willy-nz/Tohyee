@@ -220,6 +220,18 @@ describeWithDatabase("report emails (decision 362)", () => {
     try { expect(await runDueReportEmailChecks()).toEqual([]); }
     finally { await coreQuery("update users set is_active=true where id=$1", [actor.userId]); }
   });
+  it("does not schedule checks once the mailbox owner's access has ended (decision 1467)", async () => {
+    mocks.messages = [];
+    await inOrganisation(orgId, actor, (tx) => tx.query("update analytics_report_mailboxes set last_check_at=now()-interval '2 days',lease_id=null,lease_until=null where id=$1", [mailboxId]));
+    // A time the nightly check is due (as in the scheduling test above).
+    const due = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    due.setUTCHours(18, 0, 0, 0);
+    await coreQuery("update organisation_members set access_ends_at=now()-interval '1 hour' where organisation_id=$1 and user_id=$2", [orgId, actor.userId]);
+    try { expect(await runDueReportEmailChecks(due)).toEqual([]); }
+    finally { await coreQuery("update organisation_members set access_ends_at=null where organisation_id=$1 and user_id=$2", [orgId, actor.userId]); }
+    // With access current again, the same check runs.
+    expect(await runDueReportEmailChecks(due)).toMatchObject([{ mailboxId, status: "ok" }]);
+  });
   it("saves Excel attachments and skips unsupported PDFs", async () => {
     const pdf = attachment("report.pdf", "PDF data");
     const workbook = new ExcelJS.Workbook();
