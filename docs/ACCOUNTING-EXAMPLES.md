@@ -21349,14 +21349,14 @@ API hasn't been tried live from Tohyee: these use the made-up forecast
   nothing more is charged, until a test says Connected. A rate limit or an
   outage is tried again at the next refresh. Removing the key deletes the
   kept forecast.
-- **WX8 Records, with permission.** Off: two refreshes keep 0 records. An
-  admin ticks "I have MetService's written permission to keep forecast
-  records", with the date (1 Oct 2026), a reference ("Email from
-  MetService, 1 October") and the PDF: recorded with who and when, and in
-  the audit log. Two more refreshes keep 2 records (and still 1 latest
-  forecast). A viewer can't turn it on.
-- **WX9 Combining** needs the second switch, "My permission covers
-  combining with my other farm data", which needs the first. Until then
+- **WX8 Records, with acknowledgement.** Off: two refreshes keep 0 records.
+  An admin acknowledges responsibility for complying with MetService's terms
+  and enables records without a permission date, reference or uploaded file.
+  Missing/false acknowledgements and non-admin requests are refused. The
+  acknowledgement, actor and time are audited; no permission evidence is
+  invented. Two more refreshes keep 2 records (and still 1 latest forecast).
+- **WX9 Combining** needs the feature switch, "Use records in comparisons,
+  Analytics and AI", which needs records enabled. Until then
   Forecast vs your rain gauge, Analytics' `tohyee_farm_weather_forecasts`
   and the AI's `weather_forecast_records` are refused or empty. With it:
   a rain day (9 am to 9 am, as a gauge is read) compares the gauge's

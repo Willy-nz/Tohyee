@@ -199,28 +199,25 @@ describeWithDatabase("MetService weather forecast", () => {
     expect(audit.rows[0].details.forecastsDeleted).toBe(1);
   });
 
-  it("WX8 records are kept only with the permission switch on, which is recorded with who and when", async () => {
+  it("WX8 records need an acknowledgement, not permission paperwork, and record who and when", async () => {
     await call(owner, keyRoute.PUT as Handler, "/api/farming/weather/key", "PUT", { key: KEY });
     await call(owner, testRoute.POST as Handler, "/api/farming/weather/test", "POST", {});
     await call(owner, weatherRoute.PATCH as Handler, "/api/farming/weather", "PATCH", { enabled: true });
     await refreshWeather(await organisation(), WEATHER_ACTOR, { now: new Date(Date.now() + 200 * 3_600_000) });
     expect((await as(keptForecastCount)).records).toBe(0);
-    const form = new FormData();
-    form.set("organisationId", ORG);
-    form.set("grantedOn", "2026-10-01");
-    form.set("reference", "Email from MetService, 1 October");
-    form.set("file", new Blob([new TextEncoder().encode("%PDF-1.4 made-up permission")], { type: "application/pdf" }), "permission.pdf");
-    const refused = await recordsRoute.POST(new Request("http://tohyee.test/api/farming/weather/records", { method: "POST", headers: { cookie: await sessionCookieFor(viewer), origin: "http://tohyee.test" }, body: form }), undefined as never);
+    const refused = await call(viewer, recordsRoute.POST as Handler, "/api/farming/weather/records", "POST", { acknowledged: true });
     expect(refused.status).toBe(403);
-    const form2 = new FormData();
-    for (const [name, value] of form.entries()) form2.set(name, value);
-    const response = await recordsRoute.POST(new Request("http://tohyee.test/api/farming/weather/records", { method: "POST", headers: { cookie: await sessionCookieFor(owner), origin: "http://tohyee.test" }, body: form2 }), undefined as never);
+    for (const acknowledged of [undefined, false, "true"]) {
+      const missing = await call(owner, recordsRoute.POST as Handler, "/api/farming/weather/records", "POST", { acknowledged });
+      expect(missing.status).toBe(400);
+    }
+    const response = await call(owner, recordsRoute.POST as Handler, "/api/farming/weather/records", "POST", { acknowledged: true });
     expect(response.status).toBe(200);
-    const setup = ((await response.json()) as { setup: { permission: Record<string, unknown> } }).setup;
-    expect(setup.permission).toMatchObject({ keepRecords: true, grantedOn: "2026-10-01", reference: "Email from MetService, 1 October", setByEmail: "weather-owner@example.com", combine: false, file: { fileName: "permission.pdf" } });
-    const audit = await as((tx) => tx.query<{ actor_email: string; details: { grantedOn: string } }>("select actor_email, details from audit_events where event_type = 'weather.records_turned_on'"));
+    expect(response.body.setup.permission).toMatchObject({ keepRecords: true, grantedOn: null, reference: null, setByEmail: "weather-owner@example.com", combine: false, file: null });
+    const audit = await as((tx) => tx.query<{ actor_email: string; details: Record<string, unknown> }>("select actor_email, details from audit_events where event_type = 'weather.records_turned_on'"));
     expect(audit.rows).toHaveLength(1);
-    expect(audit.rows[0]).toMatchObject({ actor_email: "weather-owner@example.com", details: { grantedOn: "2026-10-01" } });
+    expect(audit.rows[0]).toMatchObject({ actor_email: "weather-owner@example.com", details: { acknowledged: true } });
+    expect(audit.rows[0].details).not.toHaveProperty("grantedOn");
     await refreshWeather(await organisation(), WEATHER_ACTOR, { now: new Date(Date.now() + 210 * 3_600_000) });
     await refreshWeather(await organisation(), WEATHER_ACTOR, { now: new Date(Date.now() + 220 * 3_600_000) });
     expect(await as(keptForecastCount)).toEqual({ cache: 1, records: 2 });
@@ -231,7 +228,7 @@ describeWithDatabase("MetService weather forecast", () => {
     expect(tool.level).toBe("read");
     // Records on, combining off: nothing combined.
     expect((await call(worker, compareRoute.GET as Handler, `/api/farming/weather/compare?farmId=${farmId}`)).status).toBe(409);
-    await expect(as((tx) => tool.run(tx, { farmId }, {} as never))).rejects.toThrow("covers keeping and combining");
+    await expect(as((tx) => tool.run(tx, { farmId }, {} as never))).rejects.toThrow("Enable forecast records and combining");
     expect(await as(readWeatherTables)).toEqual([]);
     const seen = await call(worker, forecastRoute.GET as Handler, `/api/farming/weather/forecast?farmId=${farmId}`);
     expect(seen.body.forecast.combine).toBe(false);

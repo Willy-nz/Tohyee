@@ -13834,3 +13834,16 @@ practice, not yet reviewed).
       born, bought, class changes, counts) download as CSV or PDF for a
       date range, for farm assurance and processor audits. Nothing is sent
       anywhere.
+
+## Weather records acknowledgement — owner request, 6 November 2026
+
+Supersedes the permission-paperwork requirements of decisions 1547 and 1549.
+Enabling forecast records requires one acknowledgement: "I'm responsible for
+ensuring my use complies with MetService's terms." No date, reference or upload
+is required. This records responsibility, not a claim that written permission
+was obtained. MetService's terms still apply. Audit the actor, time and exact
+acknowledgement; preserve any previously supplied documents and details.
+The separate combining control is a feature choice labelled "Use records in
+comparisons, Analytics and AI", with external AI access explained. Both features
+remain off by default; existing admin/farm access and deletion controls remain.
+Migration 0259 removes the old database requirement for permission details.

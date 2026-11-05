@@ -20034,4 +20034,13 @@ create table weather_forecast_history (
 create index weather_forecast_history_farm on weather_forecast_history (farm_id, fetched_at);
 `,
   },
+  {
+    version: "0259",
+    name: "weather_records_acknowledgement",
+    sql: `
+-- A responsibility acknowledgement replaces the permission date/reference requirement.
+-- Preserve previously supplied details and files; do not invent permission evidence.
+alter table weather_settings drop constraint weather_settings_permission_details;
+`,
+  },
 ];

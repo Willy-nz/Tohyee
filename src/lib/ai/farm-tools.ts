@@ -421,7 +421,7 @@ export const FARM_READ_TOOLS: AiTool[] = [
     name: "weather_forecast_records",
     title: "MetService forecast records",
     description:
-      "MetService forecasts the organisation kept as records for one farm, newest first: when each was fetched, the farm's pin, and hour by hour the rain (mm), temperature (degrees C), wind and gusts (km/h) and wind direction (degrees). Only available when an admin has said the organisation has MetService's written permission to keep forecast records and that it covers combining them with the farm's own records; otherwise it's refused. Tohyee doesn't give the AI the latest forecast without that permission. Whenever you show or use these numbers, say: \"This data was provided by MetService Limited.\"",
+      "MetService forecasts the organisation kept as records for one farm, newest first: when each was fetched, the farm's pin, and hour by hour the rain (mm), temperature (degrees C), wind and gusts (km/h) and wind direction (degrees). Only available when an admin has enabled forecast records and their use in comparisons, Analytics and AI; otherwise it's refused. The admin acknowledges responsibility for compliance with MetService's terms; Tohyee does not verify permission. This tool returns retained records, not the latest-forecast cache. Whenever you show or use these numbers, say: \"This data was provided by MetService Limited.\"",
     level: "read",
     inputSchema: schema({ farmId: FARM_ID, from: DATE, to: DATE, limit: LIMIT(20) }),
     run: async (tx, args) => ({

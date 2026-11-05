@@ -1,17 +1,11 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
-import { optionalFormFile, readUploadForm } from "@/lib/api/upload";
 import { dropWeatherAnalytics } from "@/lib/weather/analytics-drop";
 import { deleteForecastRecords, turnOffRecords, turnOnRecords } from "@/lib/weather/service";
 
-/**
- * POST (multipart form): turns keeping forecast records on, for an
- * organisation with MetService's written permission (decision 1547):
- * `organisationId`, `grantedOn`, `reference` and optionally `file`. Admins.
- */
+/** POST: enables records after an admin's responsibility acknowledgement. No permission paperwork. */
 export const POST = route(async (request) => {
-  const form = await readUploadForm(request);
-  const file = await optionalFormFile(form);
-  const setup = await withOrganisation(request, form.get("organisationId"), "admin", (tx) => turnOnRecords(tx, { grantedOn: form.get("grantedOn"), reference: form.get("reference"), file }));
+  const body = await readJson(request);
+  const setup = await withOrganisation(request, body.organisationId, "admin", (tx) => turnOnRecords(tx, { acknowledged: body.acknowledged }));
   return json({ setup });
 });
 

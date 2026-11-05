@@ -301,7 +301,7 @@ export function WeatherForecastCard({ organisationId, farm }: { organisationId: 
   );
 }
 
-/** The Weather page (WX4-WX6, WX9): the next 48 hours by the hour, the week, and (with both permissions) forecast vs rain gauge. */
+/** The Weather page (WX4-WX6, WX9): the next 48 hours by the hour, the week, and (with records and combining enabled) forecast vs rain gauge. */
 export function WeatherPage({ organisationId, farm }: { organisationId: string; farm: Farm }) {
   const { can } = useWorkspace();
   const admin = can("admin");
@@ -357,7 +357,7 @@ export function WeatherPage({ organisationId, farm }: { organisationId: string; 
   );
 }
 
-/** Forecast vs your rain gauge (WX9): only shown when an admin has turned on both permission switches. */
+/** Forecast vs your rain gauge (WX9): only shown when an admin has turned on records and combining. */
 function ForecastVsGauge({ organisationId, farm }: { organisationId: string; farm: Farm }) {
   const [state, setState] = useState<{ gauge: { id: string; name: string } | null; days: GaugeComparisonDay[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -378,7 +378,7 @@ function ForecastVsGauge({ organisationId, farm }: { organisationId: string; far
         <>
           Rain days, 9 am to 9 am, as your gauge reads them.{" "}
           <InfoTip label="About this comparison">
-            The forecast for each day is the last one fetched before the day began, from the forecast records kept with your MetService permission. An admin turned this on, saying the permission covers combining forecasts with your own farm records.
+            The forecast for each day is the last one fetched before the day began. An admin enabled keeping records and comparing them with your rain gauge.
           </InfoTip>
         </>
       }
