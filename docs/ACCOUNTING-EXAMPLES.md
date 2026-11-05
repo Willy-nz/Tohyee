@@ -21304,7 +21304,7 @@ and `tests/integration/rainfall.test.ts`.
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
   sum to 99.0 mm over 6 readings for Cowshed.
 
-## Farming: MetService weather forecast (WX1-WX10; built by Claude 5 Nov 2026 when Jess asked for MetService forecasts with each farm's own key, Claude's rules, not yet reviewed)
+## Farming: MetService weather forecast (WX1-WX11; built by Claude 5 Nov 2026 when Jess asked for MetService forecasts with each farm's own key, Claude's rules, not yet reviewed)
 
 Records only: nothing posts to the books. Decisions 1541-1550. MetService's
 API hasn't been tried live from Tohyee: these use the made-up forecast
@@ -21368,6 +21368,8 @@ API hasn't been tried live from Tohyee: these use the made-up forecast
   by default (2 records gone, in the audit log); combining goes off, the
   Analytics table goes, and refreshes keep no more records. Keeping them
   for now is a choice, with "Delete them now" offered after.
+- **WX11 Backups.** With 1 latest forecast and 2 records kept, a backup has
+  the forecast table empty and both records (Jess, 6 Nov 2026).
 
 ## Farming: farm team tasks (FT1-FT7; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
 

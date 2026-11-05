@@ -7,6 +7,8 @@ import * as recordsRoute from "@/app/api/farming/weather/records/route";
 import * as refreshRoute from "@/app/api/farming/weather/refresh/route";
 import * as testRoute from "@/app/api/farming/weather/test/route";
 import { findAiTool } from "@/lib/ai/catalogue";
+import { startPgTool } from "@/lib/backups/pg-tools";
+import { pgDumpArgs } from "@/lib/backups/service";
 import { readWeatherTables } from "@/lib/analytics/farm-weather";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
@@ -253,6 +255,24 @@ describeWithDatabase("MetService weather forecast", () => {
     expect(rows[0].at(-1)).toBe("This data was provided by MetService Limited.");
     const audit = await as((tx) => tx.query("select 1 from audit_events where event_type = 'weather.combine_turned_on' and actor_email = 'weather-owner@example.com'"));
     expect(audit.rowCount).toBe(1);
+  });
+
+  it("WX11 a backup has no latest forecast, but keeps forecast records", async () => {
+    expect(await as(keptForecastCount)).toEqual({ cache: 1, records: 2 });
+    const dump = startPgTool("pg_dump", pgDumpArgs("plain"), (await organisation()).databaseName);
+    dump.child.stdin?.end();
+    let text = "";
+    dump.child.stdout!.setEncoding("utf8");
+    dump.child.stdout!.on("data", (chunk: string) => {
+      text += chunk;
+    });
+    await dump.done;
+    // The table is there (so a restore works), but none of its rows.
+    expect(text).toContain("CREATE TABLE public.weather_forecast_cache");
+    expect(text).not.toMatch(/COPY public\.weather_forecast_cache/);
+    // Records kept with MetService's permission are backed up.
+    const records = text.slice(text.indexOf("COPY public.weather_forecast_history"));
+    expect(records.split("\n\\.")[0].split("\n").length - 1).toBe(2);
   });
 
   it("WX10 turning records off deletes them by default, and turns combining off", async () => {

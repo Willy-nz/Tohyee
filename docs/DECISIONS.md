@@ -13505,7 +13505,7 @@ Built by Claude from issue #609 with the coordinator's preferred design
 1505. **Migration 0252** adds the "reversed" event type and the link to the
       event reversed, once each.
 
-### MetService weather forecast (5 Nov 2026; decisions 1541-1550; WX1-WX10)
+### MetService weather forecast (5 Nov 2026; decisions 1541-1550; WX1-WX11)
 
 Built by Claude when Jess asked for MetService forecasts where each farm
 gets its own key ("Ok so can we make that and each farmer can get their own
@@ -13532,8 +13532,11 @@ has been tried against the live API yet; Claude's rules, not yet reviewed.
       old, when the key is removed or refused, when the forecast is turned
       off, when the farm's pin moves or when what's fetched changes. It
       isn't put in offline packs or saved on devices: with no connection a
-      page shows what it loaded, with its age. Backups still copy the
-      database as it is at the time (see the PR's open questions).
+      page shows what it loaded, with its age. Nightly backups leave it
+      out (backed up empty, like shared farm locations); records kept with
+      MetService's permission stay in (Jess, 6 Nov 2026, accepting the
+      suggested default; she also kept records when the key is removed,
+      and the frost and heavy-rain thresholds, as built).
 1544. **Refreshing.** Every 1, 3 (default), 6 or 12 hours, from a job that
       looks every 10 minutes (off with TOHYEE_WEATHER_SCHEDULER=off). One
       request a farm, so one farm's failure doesn't stop the others.
