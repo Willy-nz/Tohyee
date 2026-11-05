@@ -6,7 +6,7 @@ import { className, findClass, KIND_NAMES, LIVESTOCK_CLASSES, LIVESTOCK_KINDS, t
  * no server imports.
  */
 
-export const MOB_EVENT_TYPES = ["created", "moved", "split_out", "split_in", "merged_out", "merged_in", "sold", "died", "born", "bought", "reclass", "weighed", "counted", "closed"] as const;
+export const MOB_EVENT_TYPES = ["created", "moved", "split_out", "split_in", "merged_out", "merged_in", "sold", "died", "born", "bought", "reclass", "weighed", "counted", "closed", "reversed"] as const;
 export type MobEventType = (typeof MOB_EVENT_TYPES)[number];
 
 export const MOB_EVENT_LABELS: Record<MobEventType, string> = {
@@ -24,6 +24,7 @@ export const MOB_EVENT_LABELS: Record<MobEventType, string> = {
   weighed: "Weighed",
   counted: "Counted",
   closed: "Closed",
+  reversed: "Reversed",
 };
 
 /** What can be done to a mob, in the order the screen offers them. */

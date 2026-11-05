@@ -13637,3 +13637,36 @@ reviewed. No migration.
       with the date it starts and "give it to them once their access
       starts". If that's wanted later, it would check the task's due day
       against their access dates, not just the login.
+
+### Mob corrections (#609 items 1 and 2; 5 Nov 2026; decisions 1500-1505)
+
+Built by Claude from issue #609 with the coordinator's preferred design
+(examples MOB11-MOB14, common NZ practice, not yet reviewed).
+
+1500. **A mob's livestock movement isn't voided on its own.** Voiding a
+      livestock movement that's a mob's sale, death, birth, purchase or
+      class change (made by the mob, or linked from an invoice or bill) is
+      refused, naming the mob and the event and saying to reverse it on the
+      mob. An account sale's void comes through the same check. Otherwise
+      the books' head count and the mob's would differ.
+1501. **Reversing is one step on both.** On the mob's history, "Reverse
+      this" (bookkeepers and up, with a reason) adds a "reversed" event that
+      names the one it reverses (history is never edited) and voids the
+      movement, in one transaction, with an audit entry. If anything
+      refuses (a locked period, an approved valuation, a class going below
+      zero), nothing changes. An event is reversed once at most; its
+      invoice or bill line can then be linked again.
+1502. **No blind add-back.** If the mob has since moved, split, merged,
+      changed class or closed, the person chooses the mob the animals go
+      back into (or come out of). It must be active, on the same farm and of
+      the movement's class; a mob with fewer head than a birth or purchase
+      being reversed is refused.
+1503. **A class change is reversed only on an unchanged mob.** If the mob
+      has moved, split, merged or closed since, or isn't in the new class
+      now, it's refused: change its class again instead.
+1504. **A linked class change must be the same change.** Linking an existing
+      reclass movement checks its new class too, beside its type, kind,
+      class, head, date and void. A mismatch is refused before anything
+      changes: no mob, event or movement.
+1505. **Migration 0252** adds the "reversed" event type and the link to the
+      event reversed, once each.
