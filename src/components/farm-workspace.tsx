@@ -30,7 +30,9 @@ import type { FarmAppLauncher } from "@/lib/farming/launchers";
 import { bandsFor, MAP_COLOURINGS, type MapColouring, paddockBand } from "@/lib/farming/map-colours";
 import type { PaddockStatus } from "@/lib/farming/paddock-status";
 import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
+import type { Mob } from "@/lib/farming/mobs";
 import type { GrazingRecord, PastureReading } from "@/lib/farming/pasture";
+import { withholdingText } from "@/lib/farming/treatment-rules";
 import { PASTURE_METHOD_LABELS } from "@/lib/farming/pasture-rules";
 import { todayInBrowser } from "@/lib/format";
 import { effluentHref } from "@/lib/effluent/screens";
@@ -315,6 +317,8 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
   // Where each effluent system's pods or irrigator were last moved (#487): a tap opens the irrigation log.
   const effluent = useEffluentLog(organisationId, farm.id);
   overlays.push(...lastMovedOverlays(effluent.data?.lastMoved ?? []).map((overlay) => ({ ...overlay, onSelect: () => router.push(effluentHref({ farmId: farm.id, screen: "log" })) })));
+  // Sprayed paddocks not safe to graze yet (decision 1433): outlined, and a tap opens the paddock.
+  overlays.push(...sprayOverlays(list, shaped, today, setSelected));
   // Rain gauges placed on the map (decision 1451): a tap opens Rainfall.
   const gauges = useRainGauges(organisationId, farm.id);
   overlays.push(...gaugeOverlays(gauges.data?.gauges ?? [], () => router.push(`/operations/farming/rainfall?farm=${farm.id}`)));
@@ -428,7 +432,7 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
                     {entry.name}
                   </span>
                 ),
-                parts: [entry.cover ? `${entry.cover.cover.toLocaleString("en-NZ")} · ${shortDate(entry.cover.measuredOn, today)}` : "No cover", entry.inNow ? `${entry.inNow.mob} in` : entry.lastGrazedOn ? `grazed ${shortDate(entry.lastGrazedOn, today)}` : null],
+                parts: [entry.cover ? `${entry.cover.cover.toLocaleString("en-NZ")} · ${shortDate(entry.cover.measuredOn, today)}` : "No cover", entry.inNow ? `${entry.inNow.mob} in` : entry.lastGrazedOn ? `grazed ${shortDate(entry.lastGrazedOn, today)}` : null, entry.notSafeUntil ? `not safe to graze until ${shortDate(entry.notSafeUntil.until, today)}` : null],
                 onOpen: () => {
                   setSelected(entry.paddockId);
                   // The card opens above the list: bring it into view.
@@ -440,6 +444,30 @@ export function FarmMapTab({ organisationId, farm }: FarmContext) {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** Sprayed paddocks with a grazing withholding still in force, as warning outlines on the map. */
+function sprayOverlays(statuses: PaddockStatus[], shapes: Paddock[], today: string, onSelect: (id: string) => void) {
+  return statuses
+    .filter((status) => status.notSafeUntil)
+    .flatMap((status) => {
+      const geometry = shapes.find((paddock) => paddock.id === status.paddockId)?.geometry;
+      const ring = geometry ? (geometry.type === "Polygon" ? geometry.coordinates[0] : geometry.coordinates[0]?.[0]) : null;
+      return ring ? [{ id: `spray-${status.paddockId}`, label: `${status.name}: not safe to graze until ${shortDate(status.notSafeUntil!.until, today)}`, tone: "warning" as const, ring, onSelect: () => onSelect(status.paddockId) }] : [];
+    });
+}
+
+/** The withholding of mobs in this paddock now (decision 1432). */
+function PaddockMobsWithholding({ organisationId, farmId, paddockId }: { organisationId: string; farmId: string; paddockId: string }) {
+  const today = todayInBrowser();
+  const mobs = useApiData<{ mobs: Mob[] }>(`/api/farming/farms/${farmId}/mobs`, { organisationId });
+  const here = (mobs.data?.mobs ?? []).filter((mob) => mob.paddock?.id === paddockId && withholdingText(mob.withholding, today));
+  if (!here.length) return null;
+  return (
+    <Notice tone="warning">
+      {here.map((mob) => `${mob.name}: ${withholdingText(mob.withholding, today, (iso) => shortDate(iso, today))!.replace(/^Withholding: /, "")}`).join(". ")}.
+    </Notice>
   );
 }
 
@@ -458,6 +486,13 @@ export function PaddockCard({ organisationId, farm, status, hazards = [], onClos
   const logHref = (record: string, extra = "") => `/operations/farm/log?record=${record}&paddock=${status.paddockId}${extra}`;
   return (
     <Card title={`Paddock ${status.name}`} description={`${farm.name}${status.hectares ? ` · ${status.hectares} ha` : ""}`} actions={<Button variant="secondary" onClick={onClose}>Close</Button>}>
+      {status.notSafeUntil ? (
+        <Notice tone="warning">
+          Not safe to graze until {shortDate(status.notSafeUntil.until, today)}
+          {status.notSafeUntil.product ? `: sprayed with ${status.notSafeUntil.product}` : ""}. <Link href={`/operations/farm/tractor/${status.notSafeUntil.jobId}`}>The spray job</Link>
+        </Notice>
+      ) : null}
+      <PaddockMobsWithholding organisationId={organisationId} farmId={farm.id} paddockId={status.paddockId} />
       <dl className={styles.facts}>
         <dt>Cover</dt>
         <dd>{status.cover ? `${coverText(status.cover.cover)}, ${daysAgo(status.cover.measuredOn, today)} (${PASTURE_METHOD_LABELS[status.cover.method]})` : "No reading yet"}</dd>

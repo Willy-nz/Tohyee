@@ -13701,3 +13701,60 @@ Built by Claude from issue #609 with the coordinator's preferred design
       changes: no mob, event or movement.
 1505. **Migration 0252** adds the "reversed" event type and the link to the
       event reversed, once each.
+
+
+### Farm treatments, withholding and product stock (5 Nov 2026; decisions 1431-1438)
+
+Built by Claude from the same request (examples TRT1-TRT8, common NZ
+practice, not yet reviewed).
+
+1431. **A treatment is what was given, to whom, by whom.** A mob (all or
+      some of it, with the tags of the ones treated) or animals by tag; the
+      product (from Safety's chemical register, or typed); dose; quantity
+      used; batch; reason; who gave it (typed, as it may be a vet or
+      contractor); and the date. Farm staff can record treatments, also
+      with no signal. Only bookkeepers and up remove one, which is kept
+      and marked removed with the reason.
+1432. **Withholding comes from the label, as typed.** Meat withholding is in
+      days and milk in hours, as most labels give them. Tohyee never fills
+      one in: blank is "not entered", and nil is 0. Safe for slaughter
+      from is the treatment day plus the days. The time of treatment isn't
+      kept, so milk hours count from the end of the treatment day (96
+      hours from 1 Oct is 6 Oct). Jess, 5 Nov 2026: a treatment can have an
+      optional time given, in the farm's local time; with it, milk is safe
+      from that time plus the label's hours, exactly (7:30 am on 1 Oct plus
+      96 hours is 7:30 am on 5 Oct), and the screens say which was used
+      ("from 7:30 am" or "from end of day, no time given"). It goes through
+      the device's queue like the rest of the treatment. A mob's safe dates are the latest of its
+      own treatments and of mobs its animals came from by a split or merge
+      after the treatment.
+1433. **Warn, don't block.** A mob in a withholding period shows it on its
+      line, its card and its paddock's card, and selling it or recording
+      its sale warns. A sprayed paddock still in its grazing withholding is
+      outlined on the map, says "not safe to graze until" on its card and
+      in the paddock list, and a mob move (or a typed mob in) into it
+      warns. Nothing is refused: the person may know more (a label's
+      exceptions, stock going to a different market).
+1434. **Spray withholding belongs to the spray job.** A spraying tractor job
+      gets the label's grazing withholding in days, counted from the New
+      Zealand date spraying finished, for the job's paddocks. A new figure
+      replaces the old (kept, marked removed); a withdrawn job doesn't
+      count. Farm staff and bookkeepers set it, like the job.
+1435. **One product list.** Animal-health and chemical products are Safety's
+      chemical register: there's no second list. A typed product is kept on
+      the treatment only, and the screen says to add it to the register to
+      track stock.
+1436. **Stock on hand is worked out, not typed over.** For each chemical:
+      the last count, plus what's been received, less what was thrown out,
+      and less what treatments and spray jobs since then say they used.
+      mL and g are counted as L and kg; a use in another unit (doses
+      against litres) isn't taken off and is listed. Receipts, counts and
+      throwing out are append-only.
+1437. **Offline.** The offline pack keeps the farm's treatments and product
+      stock; each mob's withholding is on its card.
+1438. **Audit files.** The treatment register (every active treatment with
+      its withholding and safe dates) and the stock movement history (every
+      mob event bar weighings: added, moved, split, merged, sold, died,
+      born, bought, class changes, counts) download as CSV or PDF for a
+      date range, for farm assurance and processor audits. Nothing is sent
+      anywhere.
