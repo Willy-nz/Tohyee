@@ -15,7 +15,7 @@ import { addDays, shortDate } from "@/lib/farming/farm-words";
 import type { Position } from "@/lib/farming/geometry";
 import type { Farm, FarmingSettings, Paddock } from "@/lib/farming/paddocks";
 import type { RainGauge, RainImportPreview, RainReading, RainfallSummary } from "@/lib/farming/rainfall";
-import { comparedText, mmText, type Period, tryMm } from "@/lib/farming/rainfall-rules";
+import { comparedText, latestRainDay, mmText, type Period, rainDayFor, readDayFor, tryMm } from "@/lib/farming/rainfall-rules";
 import { formatDateTime, todayInBrowser } from "@/lib/format";
 import { newOperationId } from "@/lib/offline/queue";
 import styles from "./farm-workspace.module.css";
@@ -63,7 +63,9 @@ export function LogRainfall({ organisationId, farm, onClose }: { organisationId:
   const { queue } = useOfflineQueue(organisationId);
   const active = (gauges.data?.gauges ?? []).filter((gauge) => gauge.isActive);
   const [gaugeId, setGaugeId] = useState<string | null>(null);
-  const [readOn, setReadOn] = useState(today);
+  // The morning the gauge was read; the reading is for the day before (decision 1452).
+  const [readDay, setReadDay] = useState(today);
+  const readOn = rainDayFor(readDay);
   const [mm, setMm] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,7 +109,7 @@ export function LogRainfall({ organisationId, farm, onClose }: { organisationId:
           <>
             Read the gauge, then empty it.{" "}
             <InfoTip label="About rain readings">
-              A reading is the rain since the gauge was last emptied, usually read each morning, put on the day you read it. Type 0 on a dry day: a day with no reading counts as unknown, not dry. Change or backdate a reading under Rainfall.
+              Read the gauge at 9 am: it holds the rain to 9 am, and is recorded for the day before, like official rainfall records. Read on Tuesday morning, it&apos;s Monday&apos;s rain. Type 0 on a dry day: a day with no reading counts as unknown, not dry. Change or backdate a reading under Rainfall.
             </InfoTip>
           </>
         }
@@ -153,22 +155,25 @@ export function LogRainfall({ organisationId, farm, onClose }: { organisationId:
               </p>
             )}
             <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-              <legend className={ui.muted}>Day</legend>
+              <legend className={ui.muted}>When you read the gauge</legend>
               <div className={styles.bigButtons}>
                 {[
-                  { value: today, label: "Today" },
-                  { value: addDays(today, -1), label: "Yesterday" },
+                  { value: today, label: "This morning" },
+                  { value: addDays(today, -1), label: "Yesterday morning" },
                 ].map((option) => (
-                  <button key={option.value} type="button" className={styles.bigButton} aria-pressed={readOn === option.value} style={readOn === option.value ? { borderColor: "var(--accent)", boxShadow: "inset 0 0 0 2px var(--accent)" } : undefined} onClick={() => setReadOn(option.value)}>
+                  <button key={option.value} type="button" className={styles.bigButton} aria-pressed={readDay === option.value} style={readDay === option.value ? { borderColor: "var(--accent)", boxShadow: "inset 0 0 0 2px var(--accent)" } : undefined} onClick={() => setReadDay(option.value)}>
                     {option.label}
                     <small>{shortDate(option.value, today)}</small>
                   </button>
                 ))}
               </div>
               <label style={{ display: "grid", gap: 4, marginTop: 8 }}>
-                <span className={ui.muted}>Another day</span>
-                <DateInput value={readOn} max={today} onChange={(event) => setReadOn(event.target.value || today)} />
+                <span className={ui.muted}>Another morning</span>
+                <DateInput value={readDay} max={today} onChange={(event) => setReadDay(event.target.value || today)} />
               </label>
+              <p role="status" style={{ margin: "8px 0 0", fontWeight: 600 }}>
+                Rain to 9 am {readDay === today ? "today" : shortDate(readDay, today)}, recorded for {new Date(`${readOn}T00:00:00Z`).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })}.
+              </p>
             </fieldset>
             <label style={{ display: "grid", gap: 6 }}>
               <span className={ui.muted}>Rain in the gauge</span>
@@ -183,7 +188,7 @@ export function LogRainfall({ organisationId, farm, onClose }: { organisationId:
             </Field>
             <div className={styles.actions}>
               <Button type="submit" disabled={busy || value === null || !chosen}>
-                Save {value !== null ? mmText(value) : ""}
+                Save {value !== null ? `${mmText(value)} for ${shortDate(readOn, today)}` : ""}
               </Button>
               <Button variant="secondary" disabled={busy || !chosen} onClick={() => void save("0.0")}>
                 No rain (0 mm)
@@ -432,6 +437,7 @@ function RainReadings({ organisationId, farm, gauge, canRecord, canRemove, onCha
   return (
     <Card
       title="Readings"
+      description="Each day is the rain to 9 am the next morning."
       actions={
         canRecord && gauge.isActive ? (
           <Button variant="secondary" onClick={() => setAdding(!adding)} aria-expanded={adding}>
@@ -446,7 +452,7 @@ function RainReadings({ organisationId, farm, gauge, canRecord, canRemove, onCha
           path={`/api/farming/farms/${farm.id}/rainfall`}
           method="POST"
           extra={{ gaugeId: gauge.id }}
-          initial={{ readOn: addDays(today, -1), mm: "", note: "" }}
+          initial={{ readOn: latestRainDay(today), mm: "", note: "" }}
           onDone={() => {
             setAdding(false);
             changed();
@@ -532,8 +538,8 @@ function ReadingForm({ organisationId, path, method, extra = {}, initial, onRemo
       }}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <Field label="Day">
-        <DateInput value={form.readOn} max={today} onChange={(event) => setForm({ ...form, readOn: event.target.value })} required />
+      <Field label="Rain day" hint={form.readOn ? `Read the morning of ${shortDate(readDayFor(form.readOn), today)}` : "The day before the gauge was read"}>
+        <DateInput value={form.readOn} max={latestRainDay(today)} onChange={(event) => setForm({ ...form, readOn: event.target.value })} required />
       </Field>
       <Field label="Rain (mm)">
         <input inputMode="decimal" value={form.mm} onChange={(event) => setForm({ ...form, mm: event.target.value })} required style={{ width: "8ch" }} />
@@ -747,7 +753,7 @@ function ImportRain({ organisationId, gauge, onImported }: { organisationId: str
     <Card title={`Import readings for ${gauge.name}`}>
       <details>
         <summary className={ui.linkButton}>Import a file</summary>
-        <p className={ui.muted}>A CSV or Excel file with a row a day: the date, and the rain in mm. Days {gauge.name} already has are skipped. Check the preview; nothing is saved until you import.</p>
+        <p className={ui.muted}>A CSV or Excel file with a row a day: the date, and the rain in mm. The dates are used as they are, so use the rain day (the day before a 9 am reading), as official records do. Days {gauge.name} already has are skipped. Check the preview; nothing is saved until you import.</p>
         {error ? <Notice tone="error">{error}</Notice> : null}
         {done ? <Notice tone="success">{done}</Notice> : null}
         <div className={ui.inlineForm}>

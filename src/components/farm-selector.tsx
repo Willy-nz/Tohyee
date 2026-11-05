@@ -22,7 +22,8 @@ const selection = createFarmSelectionStore(() => window.sessionStorage);
 export function useSelectedFarm(organisationId: string, farms: Farm[], linkedFarmId: string | null = null) {
   const { user } = useWorkspace();
   const stored = useSyncExternalStore(selection.subscribe, () => selection.read(user.id, organisationId), () => null);
-  const [linked, setLinked] = useState(linkedFarmId);
+  // An empty `?farm=` (a link cut short) is no farm, not a farm that has gone: it falls back to the last farm.
+  const [linked, setLinked] = useState(linkedFarmId || null);
   const wanted = linked ?? stored;
   const activeCount = farms.filter((entry) => entry.isActive).length;
   // Only asked when there's a real choice and none made in this tab.

@@ -9,6 +9,10 @@ import { add, cmp, dec, parseDecimalInput, sub, toFixedString, ZERO_DECIMAL } fr
  * - A reading is the rain in one gauge for one day, in millimetres to one
  *   place (0 to 2,000). No rain is 0, typed: a day with no reading is
  *   unknown, never counted as dry.
+ * - The day is the rain day: a gauge read at 9 am is the rain to 9 am, and
+ *   is recorded for the day before, as official 9 am records are (Jess,
+ *   5 Nov 2026). Read on 5 November, it's 4 November's rain. A rain day
+ *   is over once the next morning's reading is due, so today can't be one.
  * - Totals add the readings in a period. Each says how many of its days
  *   have a reading, so a gap shows.
  * - "Same time last year" is the same days a year earlier. A period still
@@ -45,6 +49,21 @@ export function mmText(mm: string | null): string {
 }
 
 export type DayReading = { readOn: string; mm: string };
+
+/** The rain day a gauge read on `readDay` (the morning) is recorded for: the day before. */
+export function rainDayFor(readDay: string): string {
+  return new Date(Date.parse(`${readDay}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+/** The morning a rain day is read: the day after. */
+export function readDayFor(rainDay: string): string {
+  return new Date(Date.parse(`${rainDay}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+/** The latest rain day there can be a reading for: yesterday (read this morning). */
+export function latestRainDay(today: string): string {
+  return rainDayFor(today);
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

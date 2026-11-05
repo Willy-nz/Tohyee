@@ -21261,12 +21261,15 @@ and `tests/integration/rainfall.test.ts`.
   "Hill". A second "cowshed" on the farm is refused. Hill is retired: it
   keeps its readings, isn't offered on the Log, and a reading for it is
   refused ("Hill is retired").
-- **RF2 A day's reading.** Cowshed, 3 Nov 2026, 12.5 mm, sent by farm staff
+- **RF2 A day's reading.** A reading is for the rain day, the day before the
+  9 am reading (Jess, 5 Nov 2026): read on the morning of 5 Nov 2026, it's
+  4 Nov's rain, and the Log says "Rain to 9 am today, recorded for
+  Wednesday 4 Nov". On 5 Nov the latest rain day is 4 Nov: 5 Nov and 6 Nov
+  are refused. Cowshed, rain day 3 Nov 2026, 12.5 mm, sent by farm staff
   from a phone with an operation id. Sent again with the same id, the first
   reading comes back and nothing new is kept; the same id with 13 mm is
   refused. A second reading for Cowshed on 3 Nov is refused ("Cowshed
-  already has 12.5 mm on 2026-11-03. Change that reading instead."), and so
-  is 6 Nov when today is 5 Nov. Millimetres: "12" is 12.0, "4.5 mm" is 4.5,
+  already has 12.5 mm on 2026-11-03. Change that reading instead."). Millimetres: "12" is 12.0, "4.5 mm" is 4.5,
   1.25 (two places), -1 and 2,000.1 are refused. A dry day is 0, typed.
 - **RF3 Changed and removed.** The 3 Nov reading changed to 2 Nov, 14.0 mm,
   note "Overflowed a bit": it shows who changed it and when, and the audit
@@ -21293,7 +21296,9 @@ and `tests/integration/rainfall.test.ts`.
   03/03/2026 lots, 2026-03-04 (blank). Preview: 4 to import, 4 skipped (row
   4: Cowshed already has 14.0 mm that day; row 6: the day is in the file
   twice; row 8: "lots" isn't millimetres; row 9: no figure). Importing
-  keeps the 4; the same file again is refused.
+  keeps the 4, on the dates in the file as they are (not moved a day: a
+  file's dates should already be rain days); the same file again is
+  refused. A row dated today or later is skipped.
 - **RF8 Elsewhere.** The AI's read-only `rainfall` tool gives each gauge's
   totals (RF5-RF6), or the day readings for a date range. Analytics has
   `tohyee_farm_rainfall` (a row a reading, removed ones left out): RF1-RF7
@@ -21311,8 +21316,11 @@ Records only: nothing posts to the books. Decisions 1457-1461. Tested in
   Tama adds "Check the trough", from Mon 2 Nov 2026, every week, for Tama,
   paddock 12, pinned on the map. Rangi can't add tasks; Mere can't see
   Home farm's.
-- **FT2 Cancelled.** "Spray thistles" cancelled is kept under Cancelled,
-  out of To do, and can't be marked done until it's opened again.
+- **FT2 Cancelled.** Tama adds "Spray thistles" but can't cancel it
+  ("Cancelling a task needs the bookkeeper role or higher"); he can still
+  change its note. Aroha (the owner) cancels it: it's kept under Cancelled,
+  out of To do, and can't be marked done until a bookkeeper or above opens
+  it again (Tama can't). Jess, 5 Nov 2026.
 - **FT3 A one-off** is due on its day until done, then it's under Done.
 - **FT4 Done.** On Thu 5 Nov, "Check the trough" is overdue (due 2 Nov).
   Tama marks it done for 2 Nov: it's due Mon 9 Nov ("this week"). Sent
@@ -21382,6 +21390,31 @@ once. Tested in `tests/integration/farm-mobs.test.ts` and
   120.0 SU, 12.0 SU/ha; the farm **364.0 SU on 23.00 ha, 15.8 SU/ha, 6.7
   head/ha**. 20 head on a typed grazing in C aren't counted, and said.
   With the cows' factor changed to 7.3, the farm is 343.0 SU.
+
+## Farming: map assets and measuring (MA1-MA6; built by Claude 5 Nov 2026 when Jess asked for the missing farm features, Claude's rules, not yet reviewed)
+
+Records only. Decisions 1462-1465. Tested in `tests/unit/map-assets.test.ts`
+and `tests/integration/map-assets.test.ts`.
+
+- **MA1 Points.** Tama (farm staff on Home farm) adds "Trough in 12", a
+  trough at 169.8045125, -46.1805267 (kept to six places: 169.804513,
+  -46.180527), note "Ballcock sticks". A trough with no place, a kind
+  "windmill" and a longitude of 200 are refused. Rangi (a viewer) sees it
+  but can't add one; Tama can't see Runoff's.
+- **MA2 Lines.** "Boundary fence" through (169.8, -46.18) twice, (169.801,
+  -46.18) and (169.801, -46.181): the repeated point is dropped, and it's
+  **188 m** long (77 m east, 111 m south). One point, or two the same, is
+  refused, and a fence can't be changed into a gate.
+- **MA3 Changed and removed.** Renamed "Trough, paddock 12" and moved: the
+  note stays, and who changed it is kept. The fence removed is kept, marked
+  removed by Tama, and is no longer on the map.
+- **MA4 Distance.** 0.01° of latitude at 46° S is **1,112 m**; 640.4 m
+  shows "640 m", 1,249 m "1.25 km".
+- **MA5 Area.** Corners 0.001° apart (about 77 m × 111 m) close to **0.86
+  ha**, shown as "8,5xx m² (0.86 ha)"; 12.344 ha shows "12.34 ha". Fewer
+  than three corners is no area.
+- **MA6 Layers.** Assets, rain gauges and tasks are told apart by their map
+  ids, effluent by its blue, and everything else is a hazard.
 
 ## Farming: treatments, withholding and product stock (TRT1-TRT8; built by Claude 5 Nov 2026, common NZ practice, not yet reviewed)
 
