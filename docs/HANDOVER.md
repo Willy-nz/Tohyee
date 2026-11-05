@@ -173,7 +173,7 @@ kind".)
   the review fixes (#174, #175 and this release). Jess to publish the
   `v0.7.0` release on main (pushing the tag starts the release workflows);
   the release notes are below.
-- **0.28.0 ready to publish from main** (5 Nov 2026): #585-#590, #592, #594-#598, #600, #602, #604-#606, #610, #611. Notes in docs/releases/0.28.0.md.
+- **0.28.0 ready to publish from main** (5 Nov 2026): #585-#590, #592, #594-#598, #599, #600, #602, #604-#606, #610, #611, #613-#615. Notes in docs/releases/0.28.0.md.
 - **0.27.0 ready to publish from main** (4 Nov 2026): #566-#569, #580-#582. Notes in docs/releases/0.27.0.md.
 - **0.26.0 ready to publish from main** (4 Nov 2026): #558-#564. Notes in docs/releases/0.26.0.md.
 - **0.25.0 ready to publish from main** (3 Nov 2026): includes unpublished 0.24.0 plus #549–#556. Notes in docs/releases/0.25.0.md.
