@@ -13758,3 +13758,40 @@ practice, not yet reviewed).
       born, bought, class changes, counts) download as CSV or PDF for a
       date range, for farm assurance and processor audits. Nothing is sent
       anywhere.
+
+### Farm breeding records and rotation planning (5 Nov 2026; decisions 1439-1444)
+
+Built by Claude from the same request (examples BR1-BR6, common NZ
+practice, not yet reviewed). Records only: nothing judges a result or
+tells anyone where to graze.
+
+1439. **Breeding records belong to a mob.** Mating (joining: in and out
+      dates, the rams or bulls as a mob or typed), AI (sire or semen code,
+      technician, head), scanning and pregnancy tests. Farm staff record
+      them, also with no signal; bookkeepers and up remove one (kept).
+1440. **Scanning is for sheep, goats and deer; pregnancy tests for cattle.**
+      A scan is empty, singles, twins and triplets or more, adding up to
+      the head scanned. Scanning % is foetuses for every 100 ewes scanned
+      (rounded to a whole number), and also per ewe mated when the mob's
+      latest mating before the scan gives the head mated. In-calf % is in
+      calf of tested, to one place.
+1441. **Expected births are a guide.** A mating shows "births from about"
+      its start plus the kind's average gestation (sheep and goats 147-150
+      days, cattle 283, red deer 233). It's a date to plan around, not a
+      record.
+1442. **The round length is the farm's.** One number of days per farm, the
+      time the farmer aims for between grazings. Beside each paddock's
+      days since grazed it reads "18 of 25 days", or "35 days since grazed
+      (round 25)": facts, not "ready" or "overdue".
+1443. **A planned round shares the round by area.** Choosing a mob, its
+      paddocks in order (longest since grazed offered first), the start
+      and the round gives each paddock its share of the days by effective
+      area, rounded, at least one, with the last taking what's left. A
+      paddock with no area counts as the average of the rest. Planning a
+      mob again cancels its earlier planned moves (kept). A move to the
+      mob's next planned paddock marks that plan done. Plans never move
+      anything themselves.
+1444. **Where the plan shows.** Each mob's line shows its next planned
+      paddock; the map's paddock list and the paddock card show the round
+      text and the next planned mob and date. The offline pack keeps the
+      plan and each mob's breeding records.
