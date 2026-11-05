@@ -170,3 +170,20 @@ export async function listMembershipsForUser(userId: string): Promise<Membership
   );
   return result.rows.map((row) => ({ organisation: toOrganisationRecord(row), role: row.role }));
 }
+
+/**
+ * The members of an organisation whose access is current now (decision
+ * 1467's rule, memberAccessCurrentSql), with their login switched on. For
+ * lists of people to give work to (task assignees, decision 1512): someone
+ * before their start or after their end can't sign in to do it.
+ */
+export async function currentMemberUserIds(organisationId: string): Promise<Set<string>> {
+  const result = await coreQuery<{ user_id: string }>(
+    `select m.user_id::text as user_id
+       from organisation_members m
+       join users u on u.id = m.user_id
+      where m.organisation_id = $1 and u.is_active and ${memberAccessCurrentSql("m")}`,
+    [organisationId],
+  );
+  return new Set(result.rows.map((row) => row.user_id));
+}
