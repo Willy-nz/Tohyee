@@ -19,7 +19,7 @@ import { coreQuery } from "@/lib/db/transactions";
 import { ConflictError, ForbiddenError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { localParts } from "@/lib/backups/service";
 import { assertPublicMailHost } from "@/lib/analytics/mail-host";
-import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
+import { getOrganisation, memberAccessCurrentSql, type OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 
 export type ReportMailbox = {
@@ -431,7 +431,7 @@ export async function runDueReportEmailChecks(now = new Date()): Promise<ReportE
       for (const mailbox of due) {
         const membership = await coreQuery(
           `select 1 from organisation_members m join users u on u.id=m.user_id
-           where m.organisation_id=$1 and m.user_id=$2 and m.role in ('owner','admin') and u.is_active`,
+           where m.organisation_id=$1 and m.user_id=$2 and m.role in ('owner','admin') and u.is_active and ${memberAccessCurrentSql("m")}`,
           [organisationId, mailbox.owner_user_id]);
         if (!membership.rowCount) continue;
         try {
